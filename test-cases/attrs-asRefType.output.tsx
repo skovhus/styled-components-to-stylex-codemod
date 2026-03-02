@@ -36,7 +36,13 @@ type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "
 // 1. HTMLLabelElement-specific props like htmlFor
 // 2. ref with type RefObject<HTMLLabelElement>
 function Label(props: LabelProps) {
-  return <Text {...props} as="label" {...stylex.props(styles.label)} />;
+  const { children, ref, ...rest } = props;
+
+  return (
+    <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
+      {children}
+    </Text>
+  );
 }
 
 export function FormField() {

@@ -192,6 +192,10 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectForwardedAsHandling(j, lastEmitted);
       }
+      if (d.supportsRefProp) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectExplicitRefForwarding(j, lastEmitted);
+      }
 
       // Post-process: add readOnly destructuring and JSX props when [readonly] is used.
       // Note: [disabled] stays as a StyleX :disabled pseudo-class (semantically equivalent),
@@ -448,6 +452,10 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
         const lastEmitted = emitted[emitted.length - 1] as any;
         injectForwardedAsHandling(j, lastEmitted);
       }
+      if (d.supportsRefProp) {
+        const lastEmitted = emitted[emitted.length - 1] as any;
+        injectExplicitRefForwarding(j, lastEmitted);
+      }
 
       // Post-process: add pseudo-alias guard props to destructuring
       if (pseudoGuardPropsLink.length > 0) {
@@ -627,6 +635,102 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
 // ---------------------------------------------------------------------------
 // Post-processing helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Ensure emitted wrappers forward refs explicitly:
+ *   Destructuring: `{ ..., ...rest }` -> `{ ..., ref, ...rest }`
+ *   JSX: `<Tag {...rest} ...>` -> `<Tag ref={ref} {...rest} ...>`
+ */
+function injectExplicitRefForwarding(j: JSCodeshift, fnDecl: unknown): void {
+  if (!fnDecl || typeof fnDecl !== "object") {
+    return;
+  }
+
+  const queue: unknown[] = [fnDecl];
+  while (queue.length > 0) {
+    const node = queue.pop();
+    if (!node || typeof node !== "object") {
+      continue;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    const n = node as Record<string, unknown>;
+
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
+      const properties = n.properties as unknown[];
+      const hasRef = properties.some((p: unknown) => {
+        if (!p || typeof p !== "object") {
+          return false;
+        }
+        const prop = p as Record<string, unknown>;
+        if (prop.type !== "Property") {
+          return false;
+        }
+        const key = prop.key as Record<string, unknown> | undefined;
+        return key?.type === "Identifier" && key.name === "ref";
+      });
+      if (!hasRef) {
+        const restIdx = properties.findIndex(
+          (p: unknown) =>
+            !!p &&
+            typeof p === "object" &&
+            ((p as Record<string, unknown>).type === "RestElement" ||
+              (p as Record<string, unknown>).type === "RestProperty" ||
+              (p as Record<string, unknown>).type === "SpreadProperty"),
+        );
+        const insertIdx = restIdx >= 0 ? restIdx : properties.length;
+        const id = j.identifier("ref");
+        const prop = j.property("init", id, id);
+        (prop as unknown as Record<string, unknown>).shorthand = true;
+        properties.splice(insertIdx, 0, prop);
+      }
+    }
+
+    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
+      const attrs = n.attributes as unknown[];
+      const hasRefAttr = attrs.some((a: unknown) => {
+        if (!a || typeof a !== "object") {
+          return false;
+        }
+        const attr = a as Record<string, unknown>;
+        if (attr.type !== "JSXAttribute") {
+          return false;
+        }
+        const nameNode = attr.name as Record<string, unknown> | undefined;
+        return nameNode?.type === "JSXIdentifier" && nameNode.name === "ref";
+      });
+      if (!hasRefAttr) {
+        const spreadIdx = attrs.findIndex(
+          (a: unknown) =>
+            !!a &&
+            typeof a === "object" &&
+            (a as Record<string, unknown>).type === "JSXSpreadAttribute",
+        );
+        const insertIdx = spreadIdx >= 0 ? spreadIdx : attrs.length;
+        attrs.splice(
+          insertIdx,
+          0,
+          j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
+        );
+      }
+    }
+
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
 
 /**
  * Inject extra destructured props (e.g., `disabled`, `readOnly`) into an

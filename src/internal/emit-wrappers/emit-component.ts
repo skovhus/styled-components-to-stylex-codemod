@@ -660,7 +660,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       needsSxVar ||
       isPolymorphicComponentWrapper ||
       defaultAttrs.length > 0 ||
-      shouldLowerForwardedAs;
+      shouldLowerForwardedAs ||
+      (d.supportsRefProp ?? false);
     const includeChildren =
       !isPolymorphicComponentWrapper && emitter.hasJsxChildrenUsage(d.localName);
 
@@ -669,6 +670,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
       const sxId = j.identifier("sx");
+      const refId = j.identifier("ref");
       const restId = j.identifier("rest");
       const componentId = j.identifier("Component");
       const forwardedAsId = j.identifier("forwardedAs");
@@ -701,6 +703,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [patternProp("style", styleId)] : []),
           ...(allowSxProp ? [patternProp("sx", sxId)] : []),
+          ...((d.supportsRefProp ?? false) ? [patternProp("ref", refId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
         destructureProps,
@@ -754,6 +757,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           propExprFor: (prop) => j.identifier(prop),
         }),
       );
+      if (d.supportsRefProp ?? false) {
+        openingAttrs.push(
+          j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)),
+        );
+      }
       // NOTE: staticAttrs are added AFTER {...rest} below so they override caller props
       // (matching styled-components semantics where .attrs() values always win).
       const forwardedProps = new Set<string>();

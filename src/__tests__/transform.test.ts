@@ -1466,6 +1466,41 @@ export const App = () => <Box $color="red">Hello</Box>;
     };
 
     const source = `
+import styled from 'styled-components';
+export const Box = styled.div\`
+  color: red;
+\`;
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRef },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("ref?: React.Ref<HTMLDivElement>");
+  });
+
+  it("should explicitly destructure and forward ref when wrapper supports external refs", async () => {
+    const adapterWithRef = {
+      styleMerger: null,
+      externalInterface() {
+        return { styles: false, as: false, ref: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
 import * as React from "react";
 import styled from 'styled-components';
 export const Box = styled.div\`
@@ -1484,9 +1519,54 @@ export const App = () => {
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("ref?: React.Ref<HTMLDivElement>");
-    expect(result.code).toMatch(/const\s*\{\s*children,\s*\.\.\.rest\s*\}\s*=\s*props;/);
-    expect(result.code).toMatch(/<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
+    expect(result.code).toMatch(/const\s*\{\s*children,\s*ref,\s*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toMatch(/<div\s+ref=\{ref\}\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
+  });
+
+  it("should explicitly destructure and forward ref for component wrappers", async () => {
+    const adapterWithRef = {
+      styleMerger: null,
+      externalInterface() {
+        return { styles: false, as: false, ref: true } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Base(props: React.ComponentProps<"div">) {
+  return <div {...props} />;
+}
+
+export const Wrapped = styled(Base)\`
+  color: red;
+\`;
+
+export const App = () => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  return <Wrapped ref={ref}>Hello</Wrapped>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRef },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s*\{[^}]*\bref\b[^}]*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toContain("ref={ref}");
   });
 
   it("should not include ref in type when externalInterface returns ref: false", async () => {

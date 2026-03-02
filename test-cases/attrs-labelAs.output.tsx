@@ -29,7 +29,13 @@ type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "
  * Uses .attrs({ as: "label" }) to set the element type.
  */
 export function Label(props: LabelProps) {
-  return <Text {...props} as="label" {...stylex.props(styles.label)} />;
+  const { children, ref, ...rest } = props;
+
+  return (
+    <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
+      {children}
+    </Text>
+  );
 }
 
 export function FormField() {
