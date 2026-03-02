@@ -138,12 +138,6 @@ describe("runPrepass createExternalInterface", () => {
       'import styled from "styled-components";\nimport * as React from "react";\nexport const FocusBox = styled.div`outline: none;`;\nexport const App = () => { const ref = React.useRef(null); return <FocusBox ref={ref} />; };',
     );
 
-    // Component consumed with ref via aliased import (cross-file)
-    writeFileSync(
-      path.join(componentsDir, "SearchBox.tsx"),
-      'import styled from "styled-components";\nexport const SearchBox = styled.input`padding: 4px;`;',
-    );
-
     // --- Consumer files ---
     const consumersDir = path.join(fixtureDir, "consumers");
     mkdirSync(consumersDir, { recursive: true });
@@ -238,18 +232,6 @@ describe("runPrepass createExternalInterface", () => {
       'import * as React from "react";\nimport { TextInput } from "../components/TextInput";\nexport const App = () => { const ref = React.useRef(null); return <TextInput ref={ref} />; };',
     );
 
-    // Consumer that uses `ref` prop on SearchBox via aliased import
-    writeFileSync(
-      path.join(consumersDir, "aliased-ref.tsx"),
-      'import * as React from "react";\nimport { SearchBox as MySearch } from "../components/SearchBox";\nexport const App = () => { const ref = React.useRef(null); return <MySearch ref={ref} />; };',
-    );
-
-    // Consumer that uses `as` prop on SearchBox via aliased import (to test as-alias too)
-    writeFileSync(
-      path.join(consumersDir, "aliased-as.tsx"),
-      'import { SearchBox as MySearch } from "../components/SearchBox";\nexport const App = () => <MySearch as="textarea" />;',
-    );
-
     // Consumer that passes className to a non-exported component (should NOT trigger styles: true)
     writeFileSync(
       path.join(consumersDir, "non-exported-className.tsx"),
@@ -328,11 +310,6 @@ describe("runPrepass createExternalInterface", () => {
           "ref": false,
           "styles": true,
         },
-        "components/SearchBox.tsx:SearchBox": {
-          "as": true,
-          "ref": true,
-          "styles": false,
-        },
         "components/Tag.tsx:Tag": {
           "as": false,
           "ref": false,
@@ -390,18 +367,6 @@ describe("runPrepass createExternalInterface", () => {
     const focusBoxPath = realpathSync(path.join(fixtureDir, "components/FocusBox.tsx"));
     const key = `${focusBoxPath}:FocusBox`;
     expect(result.get(key)?.ref).toBe(true);
-  });
-
-  it("detects ref usage via aliased import", () => {
-    const searchBoxPath = realpathSync(path.join(fixtureDir, "components/SearchBox.tsx"));
-    const key = `${searchBoxPath}:SearchBox`;
-    expect(result.get(key)?.ref).toBe(true);
-  });
-
-  it("detects as usage via aliased import", () => {
-    const searchBoxPath = realpathSync(path.join(fixtureDir, "components/SearchBox.tsx"));
-    const key = `${searchBoxPath}:SearchBox`;
-    expect(result.get(key)?.as).toBe(true);
   });
 });
 

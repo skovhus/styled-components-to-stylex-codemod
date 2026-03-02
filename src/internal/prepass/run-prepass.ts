@@ -244,28 +244,22 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    // --- as-prop and ref-prop detection ---
-    // Build alias map lazily (only when needed for as/ref prop scanning)
-    let aliasMap: Map<string, string> | undefined;
-    const resolveTagName = (tagName: string): string => {
-      aliasMap ??= buildLocalToImportedMap(source);
-      return aliasMap.get(tagName) ?? tagName;
-    };
-
+    // --- as-prop detection ---
     if (hasAsProp) {
       JSX_AS_COMPONENT_RE.lastIndex = 0;
       for (const m of source.matchAll(JSX_AS_COMPONENT_RE)) {
         if (m[1]) {
-          addToSetMap(asUsages, resolveTagName(m[1]), filePath);
+          addToSetMap(asUsages, m[1], filePath);
         }
       }
     }
 
+    // --- ref-prop detection ---
     if (hasRefProp) {
       JSX_REF_COMPONENT_RE.lastIndex = 0;
       for (const m of source.matchAll(JSX_REF_COMPONENT_RE)) {
         if (m[1]) {
-          addToSetMap(refUsages, resolveTagName(m[1]), filePath);
+          addToSetMap(refUsages, m[1], filePath);
         }
       }
     }
