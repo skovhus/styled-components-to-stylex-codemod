@@ -150,7 +150,7 @@ describe("public API runtime validation (DX)", () => {
     await expect(runTransform({ adapter: {} } as any)).rejects.toThrowError(/`files` is required/);
   });
 
-  it("runTransform: throws when typeHelpersFile is invalid", async () => {
+  it("runTransform: throws when typeHelpersModule is invalid", async () => {
     await expect(
       runTransform({
         files: "src/**/*.tsx",
@@ -162,9 +162,29 @@ describe("public API runtime validation (DX)", () => {
           externalInterface: () => ({ styles: false, as: false, ref: false }),
           styleMerger: null,
         },
-        typeHelpersFile: 123 as any,
+        typeHelpersModule: 123 as any,
       }),
-    ).rejects.toThrowError(/typeHelpersFile/);
+    ).rejects.toThrowError(/typeHelpersModule/);
+  });
+
+  it("runTransform: throws when typeHelpersModule.outputFilePath is not absolute", async () => {
+    await expect(
+      runTransform({
+        files: "src/**/*.tsx",
+        consumerPaths: null,
+        adapter: {
+          resolveValue: () => undefined,
+          resolveCall: () => undefined,
+          resolveSelector: () => undefined,
+          externalInterface: () => ({ styles: false, as: false, ref: false }),
+          styleMerger: null,
+        },
+        typeHelpersModule: {
+          moduleSpecifier: "./stylex-codemod",
+          outputFilePath: "src/stylex-codemod.d.ts",
+        },
+      }),
+    ).rejects.toThrowError(/absolute path/);
   });
 
   it("runTransform: throws a helpful message when consumerPaths is missing", async () => {

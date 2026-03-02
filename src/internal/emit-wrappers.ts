@@ -25,6 +25,7 @@ export function emitWrappers(args: {
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
   emitOpaquePolymorphicHelpersExternally?: boolean;
+  typeHelpersModuleSpecifier?: string;
 }): { needsOpaquePolymorphicHelpers: boolean } {
   const {
     root,
@@ -40,6 +41,7 @@ export function emitWrappers(args: {
     emptyStyleKeys,
     ancestorSelectorParents,
     emitOpaquePolymorphicHelpersExternally,
+    typeHelpersModuleSpecifier,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
@@ -61,6 +63,7 @@ export function emitWrappers(args: {
     emptyStyleKeys,
     ancestorSelectorParents,
     emitOpaquePolymorphicHelpersExternally,
+    typeHelpersModuleSpecifier,
   });
 
   const emitted: ASTNode[] = [];

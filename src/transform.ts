@@ -72,14 +72,16 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       }
     }
     if (result.needsOpaquePolymorphicHelpers) {
-      const typeHelpersFilePath = (options as Record<string, unknown>).typeHelpersFilePath as
-        | string
-        | undefined;
+      const typeHelpersOutputFilePath = (options as Record<string, unknown>)
+        .typeHelpersOutputFilePath as string | undefined;
       const typeHelperFiles = (options as Record<string, unknown>).typeHelperFiles as
         | Map<string, string>
         | undefined;
-      if (typeHelpersFilePath && typeHelperFiles) {
-        typeHelperFiles.set(typeHelpersFilePath, buildOpaquePolymorphicHelpersDtsFileContent());
+      if (typeHelpersOutputFilePath && typeHelperFiles) {
+        typeHelperFiles.set(
+          typeHelpersOutputFilePath,
+          buildOpaquePolymorphicHelpersDtsFileContent(),
+        );
       }
     }
 

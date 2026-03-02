@@ -4,7 +4,7 @@
  */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
@@ -78,14 +78,17 @@ export interface RunTransformOptions {
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
 
   /**
-   * Optional path to a global declaration file for shared codemod helper types.
+   * Optional module/output config for shared codemod helper types.
    *
-   * When set, generated wrappers reference global opaque polymorphic helper aliases
-   * from this file instead of inlining long helper type declarations per transformed file.
+   * - `moduleSpecifier` controls how transformed files import helper types.
+   * - `outputFilePath` is the absolute path where the generated `.d.ts` file is written.
    *
-   * @example "src/stylex-codemod.d.ts"
+   * When set, generated wrappers import shared opaque polymorphic helper aliases
+   * instead of inlining long helper type declarations per transformed file.
+   *
+   * @example { moduleSpecifier: "./stylex-codemod", outputFilePath: "/abs/path/src/stylex-codemod.d.ts" }
    */
-  typeHelpersFile?: string | null;
+  typeHelpersModule?: { moduleSpecifier: string; outputFilePath: string } | null;
 
   /**
    * Commands to run after transformation to format the output files.
@@ -219,18 +222,36 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dryRun = false,
     print = false,
     parser = "tsx",
-    typeHelpersFile = null,
+    typeHelpersModule = null,
     formatterCommands,
     maxExamples,
   } = options;
 
-  if (typeHelpersFile !== null) {
-    if (typeof typeHelpersFile !== "string" || typeHelpersFile.trim() === "") {
+  if (typeHelpersModule !== null) {
+    const moduleSpecifier = (typeHelpersModule as { moduleSpecifier?: unknown }).moduleSpecifier;
+    const outputFilePath = (typeHelpersModule as { outputFilePath?: unknown }).outputFilePath;
+    if (typeof moduleSpecifier !== "string" || moduleSpecifier.trim() === "") {
       throw new Error(
         [
-          "runTransform(options): `typeHelpersFile` must be a non-empty string or null.",
-          `Received: typeHelpersFile=${describeValue(typeHelpersFile)}`,
-          'Example: typeHelpersFile: "src/stylex-codemod.d.ts"',
+          "runTransform(options): `typeHelpersModule.moduleSpecifier` must be a non-empty string.",
+          `Received: moduleSpecifier=${describeValue(moduleSpecifier)}`,
+          'Example: typeHelpersModule: { moduleSpecifier: "./stylex-codemod", outputFilePath: "/abs/path/src/stylex-codemod.d.ts" }',
+        ].join("\n"),
+      );
+    }
+    if (typeof outputFilePath !== "string" || outputFilePath.trim() === "") {
+      throw new Error(
+        [
+          "runTransform(options): `typeHelpersModule.outputFilePath` must be a non-empty absolute path string.",
+          `Received: outputFilePath=${describeValue(outputFilePath)}`,
+        ].join("\n"),
+      );
+    }
+    if (!isAbsolute(outputFilePath)) {
+      throw new Error(
+        [
+          "runTransform(options): `typeHelpersModule.outputFilePath` must be an absolute path.",
+          `Received: outputFilePath=${outputFilePath}`,
         ].join("\n"),
       );
     }
@@ -467,7 +488,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Map populated by the per-file transform to collect sidecar .stylex.ts files
   const sidecarFiles = new Map<string, string>();
   const typeHelperFiles = new Map<string, string>();
-  const resolvedTypeHelpersFilePath = typeHelpersFile ? resolve(typeHelpersFile) : null;
+  const typeHelpersModuleSpecifier = typeHelpersModule?.moduleSpecifier;
+  const typeHelpersOutputFilePath = typeHelpersModule?.outputFilePath;
 
   // Map populated by the per-file transform to collect bridge results for consumer patching
   const bridgeResults = new Map<
@@ -487,7 +509,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     crossFilePrepassResult,
     sidecarFiles,
     typeHelperFiles,
-    typeHelpersFilePath: resolvedTypeHelpersFilePath ?? undefined,
+    typeHelpersModuleSpecifier: typeHelpersModuleSpecifier ?? undefined,
+    typeHelpersOutputFilePath: typeHelpersOutputFilePath ?? undefined,
     bridgeResults,
     transformedFiles,
     // Programmatic use passes an Adapter object (functions). That cannot be

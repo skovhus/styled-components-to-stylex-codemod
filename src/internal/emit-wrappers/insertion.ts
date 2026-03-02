@@ -234,6 +234,20 @@ export function insertEmittedWrappers(args: {
     ensureReactBinding({ root, j, useNamespaceStyle: true });
   }
 
+  if (
+    emitTypes &&
+    emitter.emitOpaquePolymorphicHelpersExternally &&
+    emitter.needsOpaquePolymorphicHelpers &&
+    emitter.typeHelpersModuleSpecifier
+  ) {
+    ensureTypeImportSpecifier({
+      root,
+      j,
+      moduleSpecifier: emitter.typeHelpersModuleSpecifier,
+      typeName: "__StylexCodemodOpaquePolymorphicProps",
+    });
+  }
+
   // Add configured theme hook import when needed for theme boolean conditionals.
   if (needsUseThemeImport) {
     const { functionName: themeHookFunctionName, importSource: themeHookImportSource } =
@@ -310,4 +324,44 @@ function toModuleSpecifier(from: ImportSource, filePath: string): string {
     relativePath = `./${relativePath}`;
   }
   return relativePath;
+}
+
+function ensureTypeImportSpecifier(args: {
+  root: WrapperEmitter["root"];
+  j: WrapperEmitter["j"];
+  moduleSpecifier: string;
+  typeName: string;
+}): void {
+  const { root, j, moduleSpecifier, typeName } = args;
+  const importsFromModule = root.find(j.ImportDeclaration, {
+    source: { value: moduleSpecifier },
+  } as any);
+  const hasTypeSpecifier =
+    importsFromModule
+      .find(j.ImportSpecifier)
+      .filter((specifierPath: any) => {
+        const importedName =
+          specifierPath.node.imported?.name ?? specifierPath.node.imported?.value;
+        const localName = specifierPath.node.local?.name ?? importedName;
+        return localName === typeName;
+      })
+      .size() > 0;
+  if (hasTypeSpecifier) {
+    return;
+  }
+  const typeImport = j.importDeclaration(
+    [j.importSpecifier(j.identifier(typeName))],
+    j.literal(moduleSpecifier),
+  );
+  (typeImport as any).importKind = "type";
+  if (importsFromModule.size() > 0) {
+    importsFromModule.at(importsFromModule.size() - 1).insertAfter(typeImport);
+    return;
+  }
+  const firstImport = root.find(j.ImportDeclaration).at(0);
+  if (firstImport.size() > 0) {
+    firstImport.insertAfter(typeImport);
+    return;
+  }
+  root.get().node.program.body.unshift(typeImport);
 }

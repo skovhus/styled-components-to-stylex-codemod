@@ -46,6 +46,7 @@ type WrapperEmitterArgs = {
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
   emitOpaquePolymorphicHelpersExternally?: boolean;
+  typeHelpersModuleSpecifier?: string;
 };
 
 export class WrapperEmitter {
@@ -62,6 +63,7 @@ export class WrapperEmitter {
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
   readonly emitOpaquePolymorphicHelpersExternally: boolean;
+  readonly typeHelpersModuleSpecifier?: string;
   needsOpaquePolymorphicHelpers = false;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
@@ -89,6 +91,7 @@ export class WrapperEmitter {
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
     this.emitOpaquePolymorphicHelpersExternally =
       args.emitOpaquePolymorphicHelpersExternally ?? false;
+    this.typeHelpersModuleSpecifier = args.typeHelpersModuleSpecifier;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 

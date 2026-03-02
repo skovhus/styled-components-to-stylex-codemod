@@ -77,10 +77,14 @@ export interface TransformOptions extends Options {
    */
   crossFileInfo?: CrossFileInfo;
   /**
-   * Absolute path to a global .d.ts file where opaque polymorphic helper types should be emitted.
-   * When provided, wrappers reference global helper aliases instead of inlining them per-file.
+   * Module specifier to use when importing shared opaque polymorphic helper types.
+   * Example: "./stylex-codemod" or "@company/stylex-codemod-helpers".
    */
-  typeHelpersFilePath?: string;
+  typeHelpersModuleSpecifier?: string;
+  /**
+   * Absolute file path where shared opaque polymorphic helper declarations are written.
+   */
+  typeHelpersOutputFilePath?: string;
 }
 
 /**

@@ -81,7 +81,10 @@ describe("runTransform (e2e)", () => {
       dryRun: false,
       print: false,
       parser: "tsx",
-      typeHelpersFile,
+      typeHelpersModule: {
+        moduleSpecifier: "./stylex-codemod",
+        outputFilePath: typeHelpersFile,
+      },
     });
 
     expect(result.errors).toBe(0);
@@ -90,9 +93,12 @@ describe("runTransform (e2e)", () => {
     const actual = await readFile(targetFile, "utf-8");
     const helpers = await readFile(typeHelpersFile, "utf-8");
 
+    expect(actual).toContain(
+      'import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";',
+    );
     expect(actual).toContain("__StylexCodemodOpaquePolymorphicProps<");
     expect(actual).not.toContain("type __StylexCodemodFastOmit<");
-    expect(helpers).toContain("declare global {");
+    expect(helpers).toContain("export type __StylexCodemodFastOmit<");
     expect(helpers).toContain("type __StylexCodemodOpaquePolymorphicProps<");
   });
 });

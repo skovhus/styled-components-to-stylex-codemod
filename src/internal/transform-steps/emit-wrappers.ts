@@ -30,6 +30,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
     emitOpaquePolymorphicHelpersExternally: ctx.emitOpaquePolymorphicHelpersExternally,
+    typeHelpersModuleSpecifier: ctx.typeHelpersModuleSpecifier,
   });
   if (emitted.needsOpaquePolymorphicHelpers) {
     ctx.needsOpaquePolymorphicHelpers = true;

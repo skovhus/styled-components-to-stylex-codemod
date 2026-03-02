@@ -32,7 +32,7 @@ import {
   sortVariantEntriesBySpecificity,
   TAG_TO_HTML_ELEMENT,
 } from "./type-helpers.js";
-import { OPAQUE_POLYMORPHIC_HELPER_LINES } from "./opaque-polymorphic-helper-types.js";
+import { OPAQUE_POLYMORPHIC_HELPER_INLINE_LINES } from "./opaque-polymorphic-helper-types.js";
 import {
   getDeclaratorId,
   isFunctionNode,
@@ -74,7 +74,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       opaquePolymorphicHelpersEmitted = true;
       return;
     }
-    const helperTypes = j(OPAQUE_POLYMORPHIC_HELPER_LINES.join("\n")).get().node.program
+    const helperTypes = j(OPAQUE_POLYMORPHIC_HELPER_INLINE_LINES.join("\n")).get().node.program
       .body as ASTNode[];
     emitted.push(...helperTypes);
     opaquePolymorphicHelpersEmitted = true;

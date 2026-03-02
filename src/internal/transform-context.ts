@@ -96,6 +96,8 @@ export class TransformContext {
   needsOpaquePolymorphicHelpers = false;
   /** Whether opaque polymorphic helper types should be emitted to an external .d.ts file. */
   emitOpaquePolymorphicHelpersExternally: boolean;
+  /** Module specifier used for importing opaque polymorphic helper types. */
+  typeHelpersModuleSpecifier?: string;
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
@@ -162,7 +164,8 @@ export class TransformContext {
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
-    this.emitOpaquePolymorphicHelpersExternally = !!options.typeHelpersFilePath;
+    this.emitOpaquePolymorphicHelpersExternally = !!options.typeHelpersOutputFilePath;
+    this.typeHelpersModuleSpecifier = options.typeHelpersModuleSpecifier;
 
     // Wire cross-file info from options
     if (options.crossFileInfo) {
