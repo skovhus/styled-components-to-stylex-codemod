@@ -2,10 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/flex";
 
-type TooltipContainerProps = Omit<
+type TooltipContainerProps = { position: "top" | "bottom" } & Omit<
   React.ComponentPropsWithRef<typeof Flex>,
   "className" | "style"
-> & { position: "top" | "bottom" };
+>;
 
 function TooltipContainer(props: TooltipContainerProps) {
   const { children, position, ...rest } = props;

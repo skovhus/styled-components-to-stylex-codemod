@@ -2,11 +2,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/flex";
 
-type ContainerProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style"> & {
+type ContainerProps = {
   $open: boolean;
   $duration: number;
   $delay: number;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 function Container(props: ContainerProps) {
   const { children, $duration, $delay, $open, ...rest } = props;

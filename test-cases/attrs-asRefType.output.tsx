@@ -27,10 +27,10 @@ function Text<C extends React.ElementType = "span">(
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 // When .attrs({ as: "label" }) is used, the component should accept:
 // 1. HTMLLabelElement-specific props like htmlFor

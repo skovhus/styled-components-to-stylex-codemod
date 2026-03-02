@@ -964,7 +964,7 @@ export class WrapperEmitter {
       omitted.push('"style"');
     }
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    const composed = this.joinIntersection(baseMaybeOmitted, literal);
+    const composed = this.joinIntersection(literal, baseMaybeOmitted);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
 
@@ -1026,7 +1026,7 @@ export class WrapperEmitter {
       omitted.push('"style"');
     }
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    return literal !== "{}" ? this.joinIntersection(baseMaybeOmitted, literal) : baseMaybeOmitted;
+    return literal !== "{}" ? this.joinIntersection(literal, baseMaybeOmitted) : baseMaybeOmitted;
   }
 
   isPropRequiredInPropsTypeLiteral(propsType: any, propName: string): boolean {

@@ -19,10 +19,10 @@ function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.St
   );
 }
 
-type LabelProps = Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style"> & {
+type LabelProps = {
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-};
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 /**
  * Label component that can be used with htmlFor to target an input.

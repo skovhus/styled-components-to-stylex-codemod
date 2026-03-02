@@ -3,10 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { motion } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
-type ComponentWrapperProps = Omit<
+type ComponentWrapperProps = { $isOpen: boolean } & Omit<
   React.ComponentPropsWithRef<typeof motion.div>,
   "className" | "style"
-> & { $isOpen: boolean };
+>;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
   const { children, $isOpen, ...rest } = props;
@@ -21,10 +21,10 @@ function ComponentWrapper(props: ComponentWrapperProps) {
   );
 }
 
-type HighlightedAvatarProps = Omit<
+type HighlightedAvatarProps = { $highlightColor?: string } & Omit<
   React.ComponentPropsWithRef<typeof UserAvatar>,
   "className" | "style"
-> & { $highlightColor?: string };
+>;
 
 function HighlightedAvatar(props: HighlightedAvatarProps) {
   const { $highlightColor, ...rest } = props;

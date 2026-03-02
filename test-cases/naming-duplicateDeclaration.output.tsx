@@ -3,10 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
-  React.ComponentPropsWithRef<C>,
-  keyof ({ $size: number } & React.ComponentProps<"div">)
+  { $size: number } & React.ComponentProps<"div">,
+  "as"
 > &
-  Omit<{ $size: number } & React.ComponentProps<"div">, "as"> & {
+  Omit<React.ComponentPropsWithRef<C>, keyof ({ $size: number } & React.ComponentProps<"div">)> & {
     sx?: stylex.StyleXStyles;
     as?: C;
   };

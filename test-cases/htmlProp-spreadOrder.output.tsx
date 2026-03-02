@@ -23,7 +23,7 @@ export function SecureThumbnail(props: Props) {
 // The explicit attr foo="1" should stay between {...a} and {...b}
 type BoxProps = { className?: string };
 
-function Box(props: React.ComponentProps<"div"> & { "data-test"?: string }) {
+function Box(props: { "data-test"?: string } & React.ComponentProps<"div">) {
   const { className, children, style, ...rest } = props;
 
   return (

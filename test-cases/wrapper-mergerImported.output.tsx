@@ -4,11 +4,11 @@ import { mergedSx } from "./lib/mergedSx";
 import { Loading } from "./lib/loading";
 
 export function StyledLoading(
-  props: React.ComponentPropsWithRef<typeof Loading> & {
+  props: {
     className?: string;
     style?: React.CSSProperties;
     sx?: stylex.StyleXStyles;
-  },
+  } & React.ComponentPropsWithRef<typeof Loading>,
 ) {
   const { className, style, sx, ...rest } = props;
 

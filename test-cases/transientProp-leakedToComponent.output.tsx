@@ -15,9 +15,10 @@ function SubmitButton(props: {
   );
 }
 
-type StyledSubmitButtonProps = Omit<React.ComponentPropsWithRef<typeof SubmitButton>, "style"> & {
-  $hasLabel: boolean;
-};
+type StyledSubmitButtonProps = { $hasLabel: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof SubmitButton>,
+  "style"
+>;
 
 // .attrs sets onlyIcon to undefined, and styled wraps with $hasLabel prop
 function StyledSubmitButton(props: StyledSubmitButtonProps) {
