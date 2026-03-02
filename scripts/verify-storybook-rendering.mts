@@ -512,18 +512,24 @@ let completedCount = 0;
 
 console.log(`Checking ${testCases.length} test case(s) with ${workerCount} workers...\n`);
 
+const isTTY = process.stdout.isTTY ?? false;
+
 async function worker(workerPage: Page) {
   while (nextIndex < testCases.length) {
     const idx = nextIndex++;
     const tc = testCases[idx]!;
     results[idx] = await processTestCase(workerPage, tc);
     completedCount++;
-    process.stdout.write(`\r  Progress: ${completedCount}/${testCases.length}`);
+    if (isTTY) {
+      process.stdout.write(`\r  Progress: ${completedCount}/${testCases.length}`);
+    }
   }
 }
 
 await Promise.all(workerPages.map(worker));
-process.stdout.write("\r" + " ".repeat(40) + "\r"); // clear progress line
+if (isTTY) {
+  process.stdout.write("\r" + " ".repeat(40) + "\r"); // clear progress line
+}
 
 // ---------------------------------------------------------------------------
 // Cleanup
@@ -534,14 +540,8 @@ server.close();
 // ---------------------------------------------------------------------------
 // Print results
 // ---------------------------------------------------------------------------
-let failCount = 0;
-let expectedFailCount = 0;
-
 for (const r of results) {
   const isExpected = r.status !== "pass" && EXPECTED_FAILURES.has(r.name);
-  if (isExpected) {
-    expectedFailCount++;
-  }
   const icon =
     r.status === "pass"
       ? "\x1b[32m\u2713\x1b[0m"
@@ -556,9 +556,6 @@ for (const r of results) {
   if (r.message) {
     console.log(`    ${r.message}`);
   }
-  if (r.status !== "pass" && !isExpected) {
-    failCount++;
-  }
 }
 
 // Warn about expected failures that now pass (should be removed from the list)
@@ -571,18 +568,34 @@ for (const name of EXPECTED_FAILURES) {
   }
 }
 
-const totalFailing = failCount + expectedFailCount;
+// Collect unexpected failures for the summary
+const unexpectedFailures = results.filter(
+  (r) => r.status !== "pass" && !EXPECTED_FAILURES.has(r.name),
+);
+const expectedFailures = results.filter(
+  (r) => r.status !== "pass" && EXPECTED_FAILURES.has(r.name),
+);
+
+const totalFailing = unexpectedFailures.length + expectedFailures.length;
 const parts = [`${results.length} checked, ${results.length - totalFailing} passed`];
-if (expectedFailCount > 0) {
-  parts.push(`\x1b[33m${expectedFailCount} known\x1b[0m`);
+if (expectedFailures.length > 0) {
+  parts.push(`\x1b[33m${expectedFailures.length} known\x1b[0m`);
 }
-if (failCount > 0) {
-  parts.push(`\x1b[31m${failCount} failed\x1b[0m`);
+if (unexpectedFailures.length > 0) {
+  parts.push(`\x1b[31m${unexpectedFailures.length} failed\x1b[0m`);
 }
 console.log(`\n${parts.join(", ")}`);
 
-if (saveDiffs && totalFailing > 0) {
-  console.log(`Diff images saved to ${diffsDir}/`);
+// Print unexpected failures at the end so they're easy to find
+if (unexpectedFailures.length > 0) {
+  console.log(`\n\x1b[31mFailed test cases:\x1b[0m`);
+  for (const r of unexpectedFailures) {
+    console.log(`  \x1b[31m\u2717\x1b[0m ${r.name}: ${r.message ?? r.status}`);
+  }
 }
 
-process.exit(failCount > 0 ? 1 : 0);
+if (saveDiffs && totalFailing > 0) {
+  console.log(`\nDiff images saved to ${diffsDir}/`);
+}
+
+process.exit(unexpectedFailures.length > 0 ? 1 : 0);
