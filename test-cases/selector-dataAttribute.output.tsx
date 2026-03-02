@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function Box(
-  props: { "data-visible"?: any } & Pick<React.ComponentProps<"div">, "style" | "children">,
+  props: { "data-visible"?: string } & Pick<React.ComponentProps<"div">, "style" | "children">,
 ) {
   const { children, style, ...rest } = props;
 

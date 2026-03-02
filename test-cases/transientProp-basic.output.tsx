@@ -29,7 +29,7 @@ function StyledLink(props: StyledLinkProps) {
   );
 }
 
-type PointProps = { "data-testid"?: any } & Pick<
+type PointProps = { "data-testid"?: string } & Pick<
   React.ComponentProps<"div">,
   "style" | "children"
 > & { $size?: number };

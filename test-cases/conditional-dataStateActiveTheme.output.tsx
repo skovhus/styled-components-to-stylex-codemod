@@ -18,7 +18,7 @@ function Container(props: Pick<React.ComponentProps<"div">, "children">) {
   );
 }
 
-function Tab(props: { "data-state"?: any } & Pick<React.ComponentProps<"button">, "children">) {
+function Tab(props: { "data-state"?: string } & Pick<React.ComponentProps<"button">, "children">) {
   const { children, ...rest } = props;
 
   return (

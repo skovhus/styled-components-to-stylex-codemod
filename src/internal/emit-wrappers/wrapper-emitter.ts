@@ -885,7 +885,8 @@ export class WrapperEmitter {
       if (!needsBroadAttrs && !attr.startsWith("$") && !attr.includes("-")) {
         pickedAttrKeys.push(attr);
       } else {
-        lines.push(`${this.toTypeKey(attr)}?: any`);
+        const attrType = attr.startsWith("data-") ? "string" : "any";
+        lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
       }
     }
 
