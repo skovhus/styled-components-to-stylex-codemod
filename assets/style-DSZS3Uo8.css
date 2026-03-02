@@ -10,6 +10,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-height {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-backgroundColor {
   syntax: "*";
   inherits: false
@@ -56,11 +61,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-zIndex {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-height {
   syntax: "*";
   inherits: false
 }
@@ -237,6 +237,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes x5ou7kv-B {
+  to {
+    stroke-dashoffset: 0;
   }
 }
 
@@ -1407,6 +1413,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-fill-mode: both;
 }
 
+.x10e4vud:not(#\#):not(#\#):not(#\#) {
+  animation-fill-mode: forwards;
+}
+
 .x1c9dlo5:not(#\#):not(#\#):not(#\#) {
   animation-iteration-count: 1, infinite;
 }
@@ -1445,6 +1455,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1aerksh:not(#\#):not(#\#):not(#\#) {
   animation-name: x1wc8ddo-B;
+}
+
+.xk7vdms:not(#\#):not(#\#):not(#\#) {
+  animation-name: x5ou7kv-B;
 }
 
 .x4m40g7:not(#\#):not(#\#):not(#\#) {
@@ -1593,6 +1607,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xg3y8ke:not(#\#):not(#\#):not(#\#) {
   background-color: #ecf2ff;
+}
+
+.x18jlpol:not(#\#):not(#\#):not(#\#) {
+  background-color: #eee;
 }
 
 .xmblloc:not(#\#):not(#\#):not(#\#) {
@@ -2051,6 +2069,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: var(--x-color);
 }
 
+.x1fu1dji:not(#\#):not(#\#):not(#\#) {
+  color: var(--x151jeba) !important;
+}
+
 .xvbvf6b:not(#\#):not(#\#):not(#\#) {
   color: var(--x151jeba);
 }
@@ -2091,6 +2113,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   column-gap: var(--x-columnGap);
 }
 
+.x4s5kx9:not(#\#):not(#\#):not(#\#) {
+  container-name: sidebar;
+}
+
+.x12h1iku:not(#\#):not(#\#):not(#\#) {
+  container-type: inline-size;
+}
+
 .xv5twrn:not(#\#):not(#\#):not(#\#) {
   cursor: move;
 }
@@ -2125,6 +2155,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x3nfvp2:not(#\#):not(#\#):not(#\#) {
   display: inline-flex;
+}
+
+.x1s85apg:not(#\#):not(#\#):not(#\#) {
+  display: none;
 }
 
 .xzhxl4x:not(#\#):not(#\#):not(#\#) {
@@ -2229,6 +2263,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xngnso2:not(#\#):not(#\#):not(#\#) {
   font-size: 1.5rem;
+}
+
+.x1018pbw:not(#\#):not(#\#):not(#\#) {
+  font-size: 10px !important;
 }
 
 .x1k6wstc:not(#\#):not(#\#):not(#\#) {
@@ -2509,6 +2547,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   scrollbar-width: thin;
 }
 
+.xygcfu0:not(#\#):not(#\#):not(#\#) {
+  stroke-dasharray: 100;
+}
+
+.x1ll7nqp:not(#\#):not(#\#):not(#\#) {
+  stroke-dashoffset: 100px;
+}
+
 .x1owpc8m:not(#\#):not(#\#):not(#\#) {
   stroke-linecap: round;
 }
@@ -2593,6 +2639,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   transform: scaleY(3.27);
 }
 
+.x152b20o:not(#\#):not(#\#):not(#\#) {
+  transform: translateY(-50%)translateX(-8px)scale(.9);
+}
+
+.x1jyv21j:not(#\#):not(#\#):not(#\#) {
+  transform: translateY(-50%)translateX(0)scale(1);
+}
+
 .x1ahifba:not(#\#):not(#\#):not(#\#) {
   transition-delay: 0s;
 }
@@ -2666,7 +2720,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
+.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
@@ -3093,6 +3147,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
   .x1wknhqi.x1wknhqi:not(#\#):not(#\#):not(#\#) {
     white-space: nowrap;
+  }
+}
+
+@container sidebar (width >= 300px) {
+  .x16fd72j.x16fd72j:not(#\#):not(#\#):not(#\#) {
+    display: flex;
   }
 }
 
@@ -3610,8 +3670,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-bottom: 0;
 }
 
+.x1a8lsjc:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 10px;
+}
+
+.xsag5q8:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 12px;
+}
+
 .x1sgudl8:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-bottom: 48px;
+}
+
+.xwib8y2:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 8px;
 }
 
 .x1uhho1l:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -3636,6 +3708,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x17apdc0:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-right: var(--scrollbar-width, 12px);
+}
+
+.xexx8yu:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-top: 0;
 }
 
 .x1p5oq8j:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -3832,8 +3908,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-bottom-color: var(--settings-list-view-border-color);
 }
 
-.xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#), .x14ums3o.x14ums3o:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
+.x1gwdp34:not(:last-child):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-color: var(--xy9b778);
+}
+
+.xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#), .x14ums3o.x14ums3o:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#), .x137r021:not(:last-child):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-style: solid;
+}
+
+.x1q8zilx:not(:last-child):not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-width: 1px;
 }
 
 .x1ecct6m.x1ecct6m:where(.x-default-marker:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -4004,142 +4088,158 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-.x1trksyw:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+@media (width <= 640px) {
+  .x1xdgjpz.x1xdgjpz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    padding-inline: 16px;
+  }
+}
+
+.x1trksyw:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   inset: 0 4px;
 }
 
-.x2coff9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x2coff9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   border-radius: 50%;
 }
 
-.xfiu4hc:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.xfiu4hc:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   border-radius: 50%;
 }
 
-.x1hoezp8:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x1hoezp8:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   border-radius: 6px;
 }
 
-.x1whbebe:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+@media (width <= 640px) {
+  .xyhzg9w.xyhzg9w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    padding-bottom: 0;
+  }
+
+  .x1sdy3oo.x1sdy3oo:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    padding-top: 0;
+  }
+}
+
+.x1whbebe:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   transition: background-color .2s ease-in-out;
 }
 
-.x1hzk0bc:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x1hzk0bc:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   -webkit-appearance: none;
 }
 
-.x1kup9pb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x1kup9pb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   background-color: #ff69b4;
 }
 
-.x41ep5t:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .xcepk8r:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.x41ep5t:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .xcepk8r:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   background-color: #bf4f7480;
 }
 
-.x15uv3wf:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x15uv3wf:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   background-color: var(--Badge-after-backgroundColor);
 }
 
-.x1lik0o9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x1lik0o9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   background-color: var(--x1xv87x1);
 }
 
-.xyijama:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
+.xyijama:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
   color: #999;
 }
 
-.xjjra0k:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
+.xjjra0k:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
   color: #bf4f74;
 }
 
-.x3p1z5f:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
+.x3p1z5f:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
   color: var(--x151jeba);
 }
 
-.x1jr4o8h:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x1jr4o8h:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   content: " ↗";
 }
 
-.x1s928wv:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1cpjm7i:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.x1s928wv:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1cpjm7i:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   content: "";
 }
 
-.xatca5b:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.xatca5b:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   content: "🔥";
 }
 
-.x5pni9w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x5pni9w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   cursor: pointer;
 }
 
-.x2n74j5:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x2n74j5:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   font-size: .8em;
 }
 
-.xefv9yz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
+.xefv9yz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::placeholder {
   font-style: italic;
 }
 
-.x1j6awrg:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1hmns74:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.x1j6awrg:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1hmns74:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   position: absolute;
 }
 
-.xi4xitw:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.xi4xitw:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   z-index: -1;
 }
 
-.xitxdhh:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x12maryy:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.xitxdhh:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x12maryy:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   z-index: 1;
 }
 
-.x3ipgi3:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
+.x3ipgi3:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
   background-color: var(--x3iwu70);
 }
 
-.x22q2bb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
+.x22q2bb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
   transition-duration: 0s;
 }
 
-.x1r5olde:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x1r5olde:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   bottom: -12px;
 }
 
-.x1v4l21s:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x1v4l21s:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   height: 16px;
 }
 
-.xf8dsx9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1yd0sln:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.xf8dsx9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1yd0sln:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   height: 8px;
 }
 
-.x17cx49:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1wlytlt:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.x17cx49:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1wlytlt:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   left: 0;
 }
 
-.xnbfe2x:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.xnbfe2x:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   right: 0;
 }
 
-.xgwp28c:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.xgwp28c:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   top: -12px;
 }
 
-.x1m1drc7:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x1m1drc7:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   top: 0;
 }
 
-.x1eir19f:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x1eir19f:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   width: 10px;
 }
 
-.x1xow3sz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
+.x1xow3sz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   width: 16px;
 }
 
-.xaaqaoq:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .xmp3d9r:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+.xaaqaoq:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .xmp3d9r:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   width: 48px;
 }
 
-.x10mnas6:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x10mnas6:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   width: 8px;
 }
