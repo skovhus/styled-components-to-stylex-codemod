@@ -38,8 +38,11 @@ export const VOID_TAGS = new Set([
 // Used to generate correct ref types for .attrs({ as: "tag" }) patterns
 export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   a: "HTMLAnchorElement",
+  article: "HTMLElement",
+  aside: "HTMLElement",
   button: "HTMLButtonElement",
   div: "HTMLDivElement",
+  footer: "HTMLElement",
   form: "HTMLFormElement",
   h1: "HTMLHeadingElement",
   h2: "HTMLHeadingElement",
@@ -47,10 +50,13 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   h4: "HTMLHeadingElement",
   h5: "HTMLHeadingElement",
   h6: "HTMLHeadingElement",
+  header: "HTMLElement",
+  hr: "HTMLHRElement",
   img: "HTMLImageElement",
   input: "HTMLInputElement",
   label: "HTMLLabelElement",
   li: "HTMLLIElement",
+  main: "HTMLElement",
   nav: "HTMLElement",
   ol: "HTMLOListElement",
   p: "HTMLParagraphElement",
@@ -58,8 +64,22 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   select: "HTMLSelectElement",
   span: "HTMLSpanElement",
   table: "HTMLTableElement",
+  td: "HTMLTableCellElement",
   textarea: "HTMLTextAreaElement",
+  th: "HTMLTableCellElement",
   ul: "HTMLUListElement",
+  // SVG elements
+  circle: "SVGCircleElement",
+  ellipse: "SVGEllipseElement",
+  g: "SVGGElement",
+  line: "SVGLineElement",
+  path: "SVGPathElement",
+  polygon: "SVGPolygonElement",
+  polyline: "SVGPolylineElement",
+  rect: "SVGRectElement",
+  svg: "SVGSVGElement",
+  text: "SVGTextElement",
+  use: "SVGUseElement",
 };
 
 export function getAttrsAsString(d: StyledDecl): string | null {

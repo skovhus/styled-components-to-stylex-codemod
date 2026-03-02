@@ -707,6 +707,15 @@ export class WrapperEmitter {
     // so `{ a } & { b }` becomes `{ a, b }` instead.
     const merged: string[] = [];
     let pendingMembers: string[] = [];
+    const seenKeys = new Set<string>();
+    const addMember = (member: string): void => {
+      const key = member.replace(/\??\s*:.*$/, "").trim();
+      if (seenKeys.has(key)) {
+        return;
+      }
+      seenKeys.add(key);
+      pendingMembers.push(member);
+    };
     const flush = (): void => {
       if (pendingMembers.length === 0) {
         return;
@@ -717,11 +726,14 @@ export class WrapperEmitter {
           : `{\n  ${pendingMembers.join(",\n  ")}\n}`,
       );
       pendingMembers = [];
+      seenKeys.clear();
     };
     for (const part of xs) {
       const members = extractObjectLiteralMembers(part);
       if (members) {
-        pendingMembers.push(...members);
+        for (const m of members) {
+          addMember(m);
+        }
       } else {
         flush();
         merged.push(part);
@@ -925,9 +937,10 @@ export class WrapperEmitter {
           ? `{ ${lines[0]} }`
           : "{}";
 
+    const intrinsicBase = `React.ComponentProps<"${tagName}">`;
     const pickExpr =
       pickedAttrKeys.length > 0
-        ? `Pick<React.ComponentProps<"${tagName}">, ${pickedAttrKeys.map((k) => `"${k}"`).join(" | ")}>`
+        ? `Pick<${intrinsicBase}, ${pickedAttrKeys.map((k) => `"${k}"`).join(" | ")}>`
         : undefined;
 
     if (!needsBroadAttrs) {
@@ -938,15 +951,16 @@ export class WrapperEmitter {
         return narrowResult;
       }
       if (VOID_TAGS.has(tagName)) {
-        const base = `React.ComponentProps<"${tagName}">`;
-        const omitted: string[] = [];
+        const omittedVoid: string[] = [];
         if (!allowClassNameProp) {
-          omitted.push('"className"');
+          omittedVoid.push('"className"');
         }
         if (!allowStyleProp) {
-          omitted.push('"style"');
+          omittedVoid.push('"style"');
         }
-        const baseType = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+        const baseType = omittedVoid.length
+          ? `Omit<${intrinsicBase}, ${omittedVoid.join(" | ")}>`
+          : intrinsicBase;
         if (allowSxProp) {
           return this.joinIntersection(baseType, `{ ${SX_PROP_TYPE_TEXT} }`);
         }
@@ -955,7 +969,6 @@ export class WrapperEmitter {
       return narrowResult;
     }
 
-    const base = `React.ComponentProps<"${tagName}">`;
     const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');
@@ -963,7 +976,9 @@ export class WrapperEmitter {
     if (!allowStyleProp) {
       omitted.push('"style"');
     }
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+    const baseMaybeOmitted = omitted.length
+      ? `Omit<${intrinsicBase}, ${omitted.join(" | ")}>`
+      : intrinsicBase;
     const composed = this.joinIntersection(literal, baseMaybeOmitted);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
