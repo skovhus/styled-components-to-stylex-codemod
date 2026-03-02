@@ -1,10 +1,12 @@
 import * as React from "react";
-import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";
+import type { PolymorphicComponentProps } from "./stylex-codemod";
 import * as stylex from "@stylexjs/stylex";
 import { Text } from "./lib/text";
 
-type HeaderTitleProps<C extends React.ElementType = typeof Text> =
-  __StylexCodemodOpaquePolymorphicProps<React.ComponentPropsWithRef<typeof Text>, C>;
+type HeaderTitleProps<C extends React.ElementType = typeof Text> = PolymorphicComponentProps<
+  React.ComponentPropsWithRef<typeof Text>,
+  C
+>;
 
 export function HeaderTitle<C extends React.ElementType = typeof Text>(props: HeaderTitleProps<C>) {
   const { as: Component = Text, ...rest } = props;

@@ -7,7 +7,7 @@ export type __StylexCodemodAsTargetProps<C extends React.ElementType> = __Stylex
   React.ComponentPropsWithRef<C>,
   "className" | "style" | "as" | "forwardedAs"
 >;
-export type __StylexCodemodOpaquePolymorphicProps<
+export type PolymorphicComponentProps<
   BaseProps,
   C extends React.ElementType,
   ForwardedAsC extends React.ElementType | void = void,

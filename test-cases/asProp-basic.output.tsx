@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";
+import type { PolymorphicComponentProps } from "./stylex-codemod";
 import * as stylex from "@stylexjs/stylex";
 import { Text } from "./lib/text";
 
@@ -16,8 +16,10 @@ function Button<C extends React.ElementType = "button">(
   );
 }
 
-type StyledTextProps<C extends React.ElementType = typeof Text> =
-  __StylexCodemodOpaquePolymorphicProps<React.ComponentPropsWithRef<typeof Text>, C>;
+type StyledTextProps<C extends React.ElementType = typeof Text> = PolymorphicComponentProps<
+  React.ComponentPropsWithRef<typeof Text>,
+  C
+>;
 
 // Pattern 2: styled(Component) where Component has custom props (like variant)
 // When used with as="label", the component's props must be preserved

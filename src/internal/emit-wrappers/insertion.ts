@@ -244,7 +244,7 @@ export function insertEmittedWrappers(args: {
       root,
       j,
       moduleSpecifier: emitter.typeHelpersModuleSpecifier,
-      typeName: "__StylexCodemodOpaquePolymorphicProps",
+      typeName: "PolymorphicComponentProps",
     });
   }
 

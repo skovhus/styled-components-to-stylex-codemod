@@ -93,12 +93,10 @@ describe("runTransform (e2e)", () => {
     const actual = await readFile(targetFile, "utf-8");
     const helpers = await readFile(typeHelpersFile, "utf-8");
 
-    expect(actual).toContain(
-      'import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";',
-    );
-    expect(actual).toContain("__StylexCodemodOpaquePolymorphicProps<");
+    expect(actual).toContain('import type { PolymorphicComponentProps } from "./stylex-codemod";');
+    expect(actual).toContain("PolymorphicComponentProps<");
     expect(actual).not.toContain("type __StylexCodemodFastOmit<");
     expect(helpers).toContain("export type __StylexCodemodFastOmit<");
-    expect(helpers).toContain("type __StylexCodemodOpaquePolymorphicProps<");
+    expect(helpers).toContain("type PolymorphicComponentProps<");
   });
 });

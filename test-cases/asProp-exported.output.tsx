@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";
+import type { PolymorphicComponentProps } from "./stylex-codemod";
 import * as stylex from "@stylexjs/stylex";
 
 export function ContentViewContainer<C extends React.ElementType = "div">(
@@ -27,10 +27,7 @@ interface CustomProps {
 }
 
 type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> =
-  __StylexCodemodOpaquePolymorphicProps<
-    React.ComponentPropsWithRef<typeof BaseComponent> & CustomProps,
-    C
-  >;
+  PolymorphicComponentProps<React.ComponentPropsWithRef<typeof BaseComponent> & CustomProps, C>;
 
 export function StyledWrapper<C extends React.ElementType = typeof BaseComponent>(
   props: StyledWrapperProps<C>,

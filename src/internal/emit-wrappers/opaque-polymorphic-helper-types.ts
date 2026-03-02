@@ -7,7 +7,7 @@ export const OPAQUE_POLYMORPHIC_HELPER_INLINE_LINES = [
   "type __StylexCodemodFastOmit<T, K extends PropertyKey> = Omit<T, K>;",
   "type __StylexCodemodSubstitute<A, B> = __StylexCodemodFastOmit<A, keyof B> & B;",
   'type __StylexCodemodAsTargetProps<C extends React.ElementType> = __StylexCodemodFastOmit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">;',
-  "type __StylexCodemodOpaquePolymorphicProps<BaseProps, C extends React.ElementType, ForwardedAsC extends React.ElementType | void = void> = NoInfer<[ForwardedAsC] extends [React.ElementType] ? __StylexCodemodSubstitute<BaseProps, __StylexCodemodSubstitute<__StylexCodemodAsTargetProps<ForwardedAsC>, __StylexCodemodAsTargetProps<C>>> : __StylexCodemodSubstitute<BaseProps, __StylexCodemodAsTargetProps<C>>> & { as?: C } & ([ForwardedAsC] extends [React.ElementType] ? { forwardedAs?: ForwardedAsC } : {});",
+  "type PolymorphicComponentProps<BaseProps, C extends React.ElementType, ForwardedAsC extends React.ElementType | void = void> = NoInfer<[ForwardedAsC] extends [React.ElementType] ? __StylexCodemodSubstitute<BaseProps, __StylexCodemodSubstitute<__StylexCodemodAsTargetProps<ForwardedAsC>, __StylexCodemodAsTargetProps<C>>> : __StylexCodemodSubstitute<BaseProps, __StylexCodemodAsTargetProps<C>>> & { as?: C } & ([ForwardedAsC] extends [React.ElementType] ? { forwardedAs?: ForwardedAsC } : {});",
 ] as const;
 
 const OPAQUE_POLYMORPHIC_HELPER_MODULE_LINES = OPAQUE_POLYMORPHIC_HELPER_INLINE_LINES.map((line) =>

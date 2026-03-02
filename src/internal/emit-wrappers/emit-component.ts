@@ -70,7 +70,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       opaquePolymorphicHelpersEmitted = true;
       return;
     }
-    if (emitter.typeExistsInFile("__StylexCodemodOpaquePolymorphicProps")) {
+    if (emitter.typeExistsInFile("PolymorphicComponentProps")) {
       opaquePolymorphicHelpersEmitted = true;
       return;
     }
@@ -302,7 +302,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               ...(explicit ? [explicit] : []),
             );
             const forwardedArg = needsForwardedAsTargetParam ? ", ForwardedAsC" : "";
-            return `__StylexCodemodOpaquePolymorphicProps<${baseWithCustomProps}, C${forwardedArg}>`;
+            return `PolymorphicComponentProps<${baseWithCustomProps}, C${forwardedArg}>`;
           };
           const typeText = wrappedComponentHasAs
             ? buildKnownBasePolymorphicType()

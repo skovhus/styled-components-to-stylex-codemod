@@ -1,10 +1,12 @@
 import * as React from "react";
-import type { __StylexCodemodOpaquePolymorphicProps } from "./stylex-codemod";
+import type { PolymorphicComponentProps } from "./stylex-codemod";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/inline-base-flex";
 
-type ContainerProps<C extends React.ElementType = typeof Flex> =
-  __StylexCodemodOpaquePolymorphicProps<React.ComponentPropsWithRef<typeof Flex>, C>;
+type ContainerProps<C extends React.ElementType = typeof Flex> = PolymorphicComponentProps<
+  React.ComponentPropsWithRef<typeof Flex>,
+  C
+>;
 
 function Container<C extends React.ElementType = typeof Flex>(props: ContainerProps<C>) {
   const { as: Component = Flex, ...rest } = props;
