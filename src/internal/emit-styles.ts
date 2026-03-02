@@ -700,9 +700,17 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   return variantDecl;
 }
 
-/** Returns true when `s` is a non-empty string that represents a finite number. */
+/**
+ * Returns true when `s` is a canonical numeric string (round-trips through Number).
+ * Rejects non-canonical forms like "08", "0x10", "1e2" where `String(Number(s)) !== s`,
+ * since emitting those as numeric keys would change the lookup semantics.
+ */
 function isFiniteNumericString(s: string): boolean {
-  return s !== "" && Number.isFinite(Number(s));
+  if (s === "") {
+    return false;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && String(n) === s;
 }
 
 // ---------------------------------------------------------------------------
