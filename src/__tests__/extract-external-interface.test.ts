@@ -822,7 +822,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         },
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,
-          "ref": false,
+          "ref": true,
           "styles": false,
         },
         "test-cases/htmlProp-element.input.tsx:TextColor": {

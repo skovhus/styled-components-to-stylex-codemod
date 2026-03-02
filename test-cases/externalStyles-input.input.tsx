@@ -15,11 +15,15 @@ export const StyledInput = styled.input`
 `;
 
 // Usage: should pass through all input props
-export const App = () => (
-  <>
-    <StyledInput placeholder="Type here" value="hello" onChange={() => {}} />
-    <StyledInput as="textarea" placeholder="Textarea mode" />
-    {/* Children should be forwarded when using as prop with non-void element */}
-    <StyledInput as="button">Click me</StyledInput>
-  </>
-);
+export const App = () => {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  return (
+    <>
+      <StyledInput ref={inputRef} placeholder="Type here" value="hello" onChange={() => {}} />
+      <StyledInput as="textarea" placeholder="Textarea mode" />
+      {/* Children should be forwarded when using as prop with non-void element */}
+      <StyledInput as="button">Click me</StyledInput>
+    </>
+  );
+};
