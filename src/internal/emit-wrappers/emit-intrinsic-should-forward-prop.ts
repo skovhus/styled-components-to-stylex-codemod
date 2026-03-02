@@ -152,8 +152,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const explicitPropNames = d.propsType
       ? emitter.getExplicitPropNames(d.propsType)
       : new Set<string>();
-    // Skip style-driving / consumed props in narrow types — they appear in
-    // extrasTypeText instead, preventing them from being Pick-ed from ComponentProps.
+    // SFP consumed/dropped props are custom component props (not standard element
+    // attrs), so they must be excluded from Pick<ComponentProps>.
     const skipProps = new Set([...explicitPropNames, ...extraProps]);
     const extrasTypeText = (() => {
       // If input provided an explicit props type, prefer it and avoid emitting `any` overrides
@@ -166,15 +166,14 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       }
       const lines: string[] = [];
       for (const p of extraProps) {
-        // Only emit valid identifier keys (fixtures use simple identifiers like `hasError` / `$foo`).
         if (!isValidIdentifier(p)) {
           continue;
         }
-        lines.push(`  ${p}?: any;`);
+        const attrType = p.startsWith("data-") ? "string" : "any";
+        lines.push(`  ${p}?: ${attrType};`);
       }
       const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
       if (dropPrefixFromFilter === "$") {
-        // Allow any `$...` transient prop when the filter is prefix-based.
         return `${literal} & { [K in \`$\${string}\`]?: any }`;
       }
       return literal;

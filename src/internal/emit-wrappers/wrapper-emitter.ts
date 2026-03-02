@@ -882,12 +882,15 @@ export class WrapperEmitter {
       if (skipProps?.has(attr)) {
         continue;
       }
-      if (!needsBroadAttrs && !attr.startsWith("$") && !attr.includes("-")) {
-        pickedAttrKeys.push(attr);
-      } else {
-        const attrType = attr.startsWith("data-") ? "string" : "any";
-        lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
+      if (!attr.startsWith("$") && !attr.includes("-")) {
+        if (!needsBroadAttrs) {
+          pickedAttrKeys.push(attr);
+        }
+        // When needsBroadAttrs, ComponentProps base already covers this attr
+        continue;
       }
+      const attrType = attr.startsWith("data-") ? "string" : "any";
+      lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
     }
 
     const literal =

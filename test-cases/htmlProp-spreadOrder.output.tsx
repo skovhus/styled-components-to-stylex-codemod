@@ -8,7 +8,7 @@ type Props = {
 };
 
 // Original styled component - spread props first, then override src
-function Thumbnail(props: React.ComponentProps<"img"> & { src?: any }) {
+function Thumbnail(props: React.ComponentProps<"img">) {
   const { className, style, ...rest } = props;
 
   return <img {...rest} {...mergedSx(styles.thumbnail, className, style)} />;

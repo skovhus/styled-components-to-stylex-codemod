@@ -544,10 +544,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...staticAttrNames,
       ]);
 
-      // Skip style-driving props in baseTypeText — they appear in
-      // customStyleDrivingPropsTypeText instead, preventing them from
-      // being Pick-ed from ComponentProps (they're custom, not element attrs).
-      const skipProps = new Set([...explicitPropNames, ...handledProps]);
+      // Skip explicitly-typed and custom style-driving props in baseTypeText.
+      // Standard-looking handled props (non-$, no hyphens) stay out of skipProps
+      // so they flow through to Pick<ComponentProps> with proper types.
+      const skipProps = new Set([
+        ...explicitPropNames,
+        ...[...handledProps].filter((k) => k.startsWith("$") || k.includes("-")),
+      ]);
       const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName,
@@ -597,9 +600,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const customStyleDrivingPropsTypeText = (() => {
         // These are props that influence styles/attrs and are consumed by the wrapper.
-        // They are often not part of intrinsic element props (e.g. `hasError`, `$size`),
-        // so we keep them in the public props type even when we otherwise rely on
-        // React's intrinsic props typing for pass-through props.
+        // Standard-looking props (non-$, no hyphens) are omitted here — they flow
+        // through to Pick<ComponentProps> in baseTypeText with proper types.
+        // Only truly custom props ($-prefixed, hyphenated) are listed here.
         const keys = new Set<string>();
         const addIfString = (k: unknown) => {
           if (typeof k === "string") {
@@ -625,12 +628,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             k !== "className" &&
             k !== "style" &&
             k !== "as" &&
-            k !== "forwardedAs",
+            k !== "forwardedAs" &&
+            !explicitPropNames.has(k) &&
+            (k.startsWith("$") || k.includes("-")),
         );
         if (filtered.length === 0) {
           return "{}";
         }
-        const lines = filtered.map((k) => `  ${k}?: any;`);
+        const lines = filtered.map((k) => {
+          const attrType = k.startsWith("data-") ? "string" : "any";
+          return `  ${k}?: ${attrType};`;
+        });
         return `{\n${lines.join("\n")}\n}`;
       })();
 
