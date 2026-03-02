@@ -791,7 +791,11 @@ function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>
         // Allow `background: "none"` — this is a CSS reset value that StyleX accepts
         // as-is; expanding to `backgroundColor: "none"` would be invalid CSS.
         const val = (style as Record<string, unknown>)[prop];
-        if (prop === "background" && val === "none") {
+        if (
+          prop === "background" &&
+          typeof val === "string" &&
+          val.replace(/ !important$/, "") === "none"
+        ) {
           continue;
         }
         throw new Error(
