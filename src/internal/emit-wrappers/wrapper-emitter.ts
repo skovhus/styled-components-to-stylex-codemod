@@ -680,20 +680,8 @@ export class WrapperEmitter {
       return t;
     }
     if (
-      t.startsWith("React.ComponentProps<") ||
-      t.startsWith("React.ComponentPropsWithRef<") ||
-      t.startsWith("React.HTMLAttributes<") ||
-      t.startsWith("React.AnchorHTMLAttributes<") ||
-      t.startsWith("React.ButtonHTMLAttributes<") ||
-      t.startsWith("React.InputHTMLAttributes<") ||
-      t.startsWith("React.ImgHTMLAttributes<") ||
-      t.startsWith("React.LabelHTMLAttributes<") ||
-      t.startsWith("React.SelectHTMLAttributes<") ||
-      t.startsWith("React.TextareaHTMLAttributes<") ||
+      /^React\.ComponentProps(?:WithRef)?</.test(t) ||
       /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?</.test(
-        t,
-      ) ||
-      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\..*HTMLAttributes</.test(
         t,
       )
     ) {
@@ -753,31 +741,6 @@ export class WrapperEmitter {
 
   private toTypeKey(name: string): string {
     return this.isValidTypeKeyIdentifier(name) ? name : JSON.stringify(name);
-  }
-
-  reactIntrinsicAttrsType(tagName: string): string {
-    switch (tagName) {
-      case "a":
-        return "React.AnchorHTMLAttributes<HTMLAnchorElement>";
-      case "button":
-        return "React.ButtonHTMLAttributes<HTMLButtonElement>";
-      case "div":
-        return "React.HTMLAttributes<HTMLDivElement>";
-      case "input":
-        return 'React.ComponentProps<"input">';
-      case "img":
-        return "React.ImgHTMLAttributes<HTMLImageElement>";
-      case "label":
-        return "React.LabelHTMLAttributes<HTMLLabelElement>";
-      case "select":
-        return "React.SelectHTMLAttributes<HTMLSelectElement>";
-      case "span":
-        return "React.HTMLAttributes<HTMLSpanElement>";
-      case "textarea":
-        return "React.TextareaHTMLAttributes<HTMLTextAreaElement>";
-      default:
-        return "React.HTMLAttributes<HTMLElement>";
-    }
   }
 
   getExplicitPropNames(propsType: AstNodeOrNull): Set<string> {
@@ -950,7 +913,7 @@ export class WrapperEmitter {
         return this.joinIntersection(literal, pickExpr);
       }
       if (VOID_TAGS.has(tagName)) {
-        const base = this.reactIntrinsicAttrsType(tagName);
+        const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
@@ -967,7 +930,7 @@ export class WrapperEmitter {
       return this.joinIntersection(literal, pickExpr);
     }
 
-    const base = this.reactIntrinsicAttrsType(tagName);
+    const base = `React.ComponentProps<"${tagName}">`;
     const omitted: string[] = [];
     if (!allowClassNameProp) {
       omitted.push('"className"');

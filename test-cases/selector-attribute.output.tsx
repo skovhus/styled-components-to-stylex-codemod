@@ -12,7 +12,9 @@ function Input(props: InputProps) {
   );
   return <input type={type} readOnly={readOnly} {...rest} {...sx} />;
 }
-type LinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">;
+type LinkProps = React.PropsWithChildren<
+  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
+>;
 function Link(props: LinkProps) {
   const { href, target, children, ...rest } = props;
   const isHttps = href?.startsWith("https");

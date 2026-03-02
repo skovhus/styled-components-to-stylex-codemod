@@ -211,7 +211,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           return emitter.joinIntersection(narrowBase, extrasTypeText);
         }
         if (VOID_TAGS.has(tagName)) {
-          const base = emitter.reactIntrinsicAttrsType(tagName);
+          const base = `React.ComponentProps<"${tagName}">`;
           const omitted: string[] = [];
           if (!allowClassNameProp) {
             omitted.push('"className"');
