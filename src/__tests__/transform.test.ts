@@ -3719,3 +3719,83 @@ export const App = () => (
     expect(result.code).not.toContain("{e: React.");
   });
 });
+
+describe("backgroundImage URL preservation", () => {
+  it("should not modify URL/data URI values that happen to contain gradient-like text", () => {
+    // This URL contains unencoded gradient-like text (linear-gradient() as comment/text)
+    // that matches the gradient regex but should NOT trigger whitespace normalization
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-image: url("icon-linear-gradient(test).svg");
+\`;
+
+export const App = () => <Box>URL Background</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "backgroundImage-urlPreservation.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The URL should be preserved exactly as-is, not modified by gradient normalization
+    expect(result.code).toContain("icon-linear-gradient(test).svg");
+  });
+
+  it("should not corrupt whitespace in data URIs with embedded gradient-like text", () => {
+    // A data URI with content that happens to match gradient patterns should not be modified
+    // The space after "linear-gradient(" should be preserved, not collapsed
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-image: url("data:text/plain,linear-gradient(  test  )");
+\`;
+
+export const App = () => <Box>Data URI Background</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "backgroundImage-dataUriPreservation.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The whitespace inside the URL payload should be preserved exactly
+    // If the bug exists, it would collapse "  test  " to " test "
+    expect(result.code).toContain("linear-gradient(  test  )");
+  });
+
+  it("should still normalize actual gradient values with whitespace", () => {
+    const source = `
+import styled from "styled-components";
+
+// prettier-ignore
+const Box = styled.div\`
+  background-image: linear-gradient(
+    to right,
+    red,
+    blue
+  );
+\`;
+
+export const App = () => <Box>Gradient Background</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "backgroundImage-gradientNormalize.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Multiline gradient should be normalized to single line
+    expect(result.code).toContain("linear-gradient(to right, red, blue)");
+    // Should not contain newlines in the gradient
+    expect(result.code).not.toMatch(/linear-gradient\([^)]*\n[^)]*\)/);
+  });
+});
