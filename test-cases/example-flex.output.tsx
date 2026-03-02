@@ -82,10 +82,16 @@ export const flexPropKeys = [
 /**
  * Generic flexbox div component.
  */
-export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "className">) {
+export function Flex<C extends React.ElementType = "div">(
+  props: FlexProps &
+    Omit<React.ComponentPropsWithRef<C>, keyof FlexProps> & { sx?: stylex.StyleXStyles; as?: C },
+) {
   const {
+    as: Component = "div",
+    className,
     children,
     style,
+    sx,
     column,
     reverse,
     center,
@@ -107,7 +113,7 @@ export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "class
   } = props;
 
   return (
-    <div
+    <Component
       {...rest}
       {...mergedSx(
         [
@@ -137,13 +143,14 @@ export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "class
           overflowHidden ? styles.flexOverflowHidden : undefined,
           noMinWidth ? styles.flexNoMinWidth : undefined,
           noMinHeight ? styles.flexNoMinHeight : undefined,
+          sx,
         ],
-        undefined,
+        className,
         style,
       )}
     >
       {children}
-    </div>
+    </Component>
   );
 }
 
@@ -156,6 +163,12 @@ export function FlexSpacer(props: { ref?: React.Ref<HTMLDivElement>; children?: 
       {children}
     </div>
   );
+}
+
+export function Content(
+  props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">,
+) {
+  return <Flex {...props} {...stylex.props(styles.content)} />;
 }
 
 export const App = () => (
@@ -278,15 +291,29 @@ export const App = () => (
       <div style={{ padding: 8, backgroundColor: "#bf744f", color: "white" }}>D</div>
     </Flex>
 
-    {/* INLINE STYLE BUG: style prop should override class-based flexDirection */}
-    <Flex style={{ backgroundColor: "#ffe0e0", padding: 8, flexDirection: "column" }}>
+    {/* Style prop should override class-based flexDirection */}
+    <Flex
+      style={{
+        backgroundColor: "#ffe0e0",
+        padding: 8,
+        flexDirection: "column",
+      }}
+    >
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>
         style flexDirection=column (should be column)
       </div>
       <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Item</div>
     </Flex>
 
-    {/* INLINE STYLE BUG: style prop should override class-based display */}
+    <Content
+      as="input"
+      onChange={(e) => console.log("Changed to" + e.target.value)}
+      value="Hello"
+    />
+
+    <Flex as="div" />
+
+    {/* Style prop should override class-based display */}
     <Flex
       style={{
         backgroundColor: "#ffe0e0",
@@ -302,7 +329,14 @@ export const App = () => (
     </Flex>
 
     {/* FlexSpacer pushes items apart */}
-    <div style={{ display: "flex", gap: 8, backgroundColor: "#e0e0e0", padding: 8 }}>
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        backgroundColor: "#e0e0e0",
+        padding: 8,
+      }}
+    >
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Before</div>
       <FlexSpacer />
       <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>After</div>
@@ -373,6 +407,9 @@ const styles = stylex.create({
   flexSpacer: {
     display: "flex",
     flex: "auto",
+  },
+  content: {
+    backgroundColor: "cyan",
   },
 });
 
