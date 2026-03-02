@@ -3,12 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 // Chained pseudo-selectors with :not()
-function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+function Input(props: Pick<React.ComponentProps<"input">, "disabled" | "placeholder">) {
   return <input {...props} {...stylex.props(styles.input)} />;
 }
 
 // Checkbox with chained pseudos
-function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+function Checkbox(props: Pick<React.ComponentProps<"input">, "disabled" | "type">) {
   return <input {...props} {...stylex.props(styles.checkbox)} />;
 }
 

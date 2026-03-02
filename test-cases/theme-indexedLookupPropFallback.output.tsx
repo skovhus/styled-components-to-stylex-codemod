@@ -5,7 +5,8 @@ import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type ViewProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type ViewProps = {
+  children?: React.ReactNode;
   backgroundColor: Color;
 };
 

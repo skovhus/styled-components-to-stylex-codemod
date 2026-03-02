@@ -1,9 +1,11 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ErrorMessageProps = React.PropsWithChildren<{
+type ErrorMessageProps = {
+  ref?: React.Ref<HTMLDivElement>;
+  children?: React.ReactNode;
   $inline?: boolean;
-}>;
+};
 
 function ErrorMessage(props: ErrorMessageProps) {
   const { children, $inline, ...rest } = props;

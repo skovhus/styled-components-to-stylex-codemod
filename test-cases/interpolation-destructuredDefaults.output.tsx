@@ -1,7 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = {
+  children?: React.ReactNode;
   color?: string;
 };
 
@@ -18,7 +19,8 @@ function Button(props: ButtonProps) {
   );
 }
 
-type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type CardProps = {
+  children?: React.ReactNode;
   size?: number;
 };
 
@@ -39,7 +41,8 @@ function Card(props: CardProps) {
   );
 }
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
+  children?: React.ReactNode;
   margin?: number;
 };
 

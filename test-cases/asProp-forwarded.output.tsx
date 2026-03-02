@@ -3,9 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 function Button<C extends React.ElementType = "button">(
-  props: React.ComponentPropsWithRef<C> & { sx?: stylex.StyleXStyles; as?: C } & {
-    forwardedAs?: React.ElementType;
-  },
+  props: React.ComponentPropsWithRef<C> & {
+    sx?: stylex.StyleXStyles;
+    as?: C;
+  } & { forwardedAs?: React.ElementType },
 ) {
   const { as: Component = "button", forwardedAs, className, children, style, sx, ...rest } = props;
 

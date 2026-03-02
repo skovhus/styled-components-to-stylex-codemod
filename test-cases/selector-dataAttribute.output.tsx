@@ -2,7 +2,11 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function Box(props: Omit<React.ComponentProps<"div">, "className">) {
+function Box(props: {
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+  "data-visible"?: any;
+}) {
   const { children, style, ...rest } = props;
 
   return (

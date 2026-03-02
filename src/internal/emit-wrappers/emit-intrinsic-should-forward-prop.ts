@@ -152,6 +152,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const explicitPropNames = d.propsType
       ? emitter.getExplicitPropNames(d.propsType)
       : new Set<string>();
+    // Skip style-driving / consumed props in narrow types — they appear in
+    // extrasTypeText instead, preventing them from being Pick-ed from ComponentProps.
+    const skipProps = new Set([...explicitPropNames, ...extraProps]);
     const extrasTypeText = (() => {
       // If input provided an explicit props type, prefer it and avoid emitting `any` overrides
       // for the same keys (e.g. `color?: string` should not become `color?: any`).
@@ -201,7 +204,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             allowClassNameProp,
             allowStyleProp,
             allowSxProp,
-            skipProps: explicitPropNames,
+            skipProps,
             includeRef: d.supportsRefProp ?? false,
             forceNarrow: true,
           });
@@ -236,11 +239,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         allowClassNameProp,
         allowStyleProp,
         allowSxProp,
-        skipProps: explicitPropNames,
+        skipProps,
         includeRef: useSlimType ? (d.supportsRefProp ?? false) : true,
         forceNarrow: useSlimType,
       });
-      return inferred;
+      // For slim types, intersect with extrasTypeText to include
+      // style-driving props (which were excluded from skipProps/Pick).
+      return useSlimType ? emitter.joinIntersection(inferred, extrasTypeText) : inferred;
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 
@@ -277,7 +282,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             allowClassNameProp,
             allowStyleProp,
             allowSxProp,
-            skipProps: explicitPropNames,
+            skipProps,
             includeRef: d.supportsRefProp ?? false,
             forceNarrow: true,
           });

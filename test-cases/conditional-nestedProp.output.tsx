@@ -11,9 +11,7 @@ type User = {
   name: string;
 };
 
-type BadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
-  user: User;
-};
+type BadgeProps = Omit<React.ComponentProps<"div">, "className" | "style"> & { user: User };
 
 export function Badge(props: BadgeProps) {
   const { children, user, ...rest } = props;

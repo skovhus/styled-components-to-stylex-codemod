@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type ImgProps = Omit<React.ComponentProps<"img">, "className" | "style"> & {
+type ImgProps = Pick<React.ComponentProps<"img">, "src"> & {
   $isInactive?: boolean;
   $disabled?: boolean;
 };

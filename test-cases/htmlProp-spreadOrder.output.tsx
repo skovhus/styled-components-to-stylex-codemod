@@ -8,7 +8,7 @@ type Props = {
 };
 
 // Original styled component - spread props first, then override src
-function Thumbnail(props: React.ComponentProps<"img">) {
+function Thumbnail(props: React.ImgHTMLAttributes<HTMLImageElement> & { src?: any }) {
   const { className, style, ...rest } = props;
 
   return <img {...rest} {...mergedSx(styles.thumbnail, className, style)} />;
@@ -23,7 +23,7 @@ export function SecureThumbnail(props: Props) {
 // The explicit attr foo="1" should stay between {...a} and {...b}
 type BoxProps = { className?: string };
 
-function Box(props: React.ComponentProps<"div">) {
+function Box(props: React.HTMLAttributes<HTMLDivElement> & { "data-test"?: any }) {
   const { className, children, style, ...rest } = props;
 
   return (

@@ -2,10 +2,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type CardContainerProps = React.PropsWithChildren<{
+type CardContainerProps = {
+  children?: React.ReactNode;
   checked: boolean;
   disabled?: boolean;
-}>;
+};
 
 function CardContainer(props: CardContainerProps) {
   const { children, disabled, checked } = props;

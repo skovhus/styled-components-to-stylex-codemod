@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type TitleTextProps = React.PropsWithChildren<{
+type TitleTextProps = {
+  children?: React.ReactNode;
   $oneLine?: boolean;
-}>;
+};
 
 // Destructured default should preserve `undefined` semantics:
 // omitted $oneLine uses the default true branch.
@@ -23,9 +24,10 @@ function TitleText(props: TitleTextProps) {
   );
 }
 
-type ColorTitleTextProps = React.PropsWithChildren<{
+type ColorTitleTextProps = {
+  children?: React.ReactNode;
   $oneLine?: boolean;
-}>;
+};
 
 // When the same prop also drives another interpolation, wrapper-level defaulting
 // must not be hoisted globally (it would change the second interpolation semantics).

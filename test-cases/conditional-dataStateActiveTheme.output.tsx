@@ -18,7 +18,7 @@ function Container(props: { children?: React.ReactNode }) {
   );
 }
 
-function Tab(props: Omit<React.ComponentProps<"button">, "className" | "style">) {
+function Tab(props: { children?: React.ReactNode; "data-state"?: any }) {
   const { children, ...rest } = props;
 
   return (

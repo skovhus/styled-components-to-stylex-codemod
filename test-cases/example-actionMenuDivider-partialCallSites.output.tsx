@@ -7,7 +7,6 @@ import { mergedSx } from "./lib/mergedSx";
 type TextDividerContainerProps = {
   className?: string;
   style?: React.CSSProperties;
-  ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   noMinWidth?: any;
 };

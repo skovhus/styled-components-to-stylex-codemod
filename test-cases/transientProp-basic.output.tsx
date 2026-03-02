@@ -1,9 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type CompProps = React.PropsWithChildren<{
+type CompProps = {
+  children?: React.ReactNode;
   $draggable?: boolean;
-}>;
+};
 
 function Comp(props: CompProps) {
   const { children, $draggable } = props;
@@ -21,9 +22,7 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style"> & {
-  $red?: boolean;
-};
+type StyledLinkProps = Omit<React.ComponentPropsWithRef<typeof Link>, "style"> & { $red?: boolean };
 
 function StyledLink(props: StyledLinkProps) {
   const { className, $red, ...rest } = props;
@@ -33,7 +32,10 @@ function StyledLink(props: StyledLinkProps) {
   );
 }
 
-type PointProps = Omit<React.ComponentProps<"div">, "className"> & {
+type PointProps = {
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+  "data-testid"?: any;
   $size?: number;
 };
 

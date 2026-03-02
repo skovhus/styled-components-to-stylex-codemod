@@ -9,7 +9,7 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
-type InputProps = Omit<React.ComponentProps<"input">, "className" | "style"> & {
+type InputProps = Pick<React.ComponentProps<"input">, "placeholder"> & {
   $padding?: string;
   $small?: boolean;
 };

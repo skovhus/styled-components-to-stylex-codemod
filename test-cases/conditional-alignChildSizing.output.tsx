@@ -4,7 +4,9 @@ import { mergedSx } from "./lib/mergedSx";
 
 type Align = "top" | "center" | "bottom";
 
-type ContainerProps = Omit<React.ComponentProps<"div">, "className"> & {
+type ContainerProps = {
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
   align: Align;
   $property?: "width" | "height";
 };

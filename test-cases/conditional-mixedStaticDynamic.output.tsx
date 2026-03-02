@@ -17,9 +17,7 @@ function Wrapper(props: { children?: React.ReactNode }) {
   return <div {...stylex.props(styles.wrapper)}>{props.children}</div>;
 }
 
-function Container(
-  props: ContainerProps & Omit<React.ComponentProps<"div">, "className" | "style">,
-) {
+function Container(props: ContainerProps & { children?: React.ReactNode }) {
   const { children, $sidebarCollapsed, $position } = props;
 
   return (

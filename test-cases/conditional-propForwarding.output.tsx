@@ -5,9 +5,7 @@ import { Flex } from "./lib/flex";
 type TooltipContainerProps = Omit<
   React.ComponentPropsWithRef<typeof Flex>,
   "className" | "style"
-> & {
-  position: "top" | "bottom";
-};
+> & { position: "top" | "bottom" };
 
 function TooltipContainer(props: TooltipContainerProps) {
   const { children, position, ...rest } = props;

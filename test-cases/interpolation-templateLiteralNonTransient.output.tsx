@@ -1,7 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
+  children?: React.ReactNode;
   size?: number;
 };
 

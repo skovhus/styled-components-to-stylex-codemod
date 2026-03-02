@@ -1,9 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type TitleProps = React.PropsWithChildren<{
+type TitleProps = {
+  children?: React.ReactNode;
   $upsideDown?: boolean;
-}>;
+};
 
 function Title(props: TitleProps) {
   const { children, $upsideDown } = props;
@@ -15,10 +16,11 @@ function Title(props: TitleProps) {
   );
 }
 
-type BoxProps = React.PropsWithChildren<{
+type BoxProps = {
+  children?: React.ReactNode;
   $isActive?: boolean;
   $isDisabled?: boolean;
-}>;
+};
 
 function Box(props: BoxProps) {
   const { children, $isActive, $isDisabled } = props;

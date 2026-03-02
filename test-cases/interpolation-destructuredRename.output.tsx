@@ -1,7 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = {
+  children?: React.ReactNode;
   color?: string;
 };
 
@@ -16,9 +17,10 @@ function Button(props: ButtonProps) {
   );
 }
 
-type CardProps = React.PropsWithChildren<{
+type CardProps = {
+  children?: React.ReactNode;
   padding?: string;
-}>;
+};
 
 // Destructured prop with default value
 function Card(props: CardProps) {
@@ -31,9 +33,10 @@ function Card(props: CardProps) {
   );
 }
 
-type BoxProps = React.PropsWithChildren<{
+type BoxProps = {
+  children?: React.ReactNode;
   margin?: string;
-}>;
+};
 
 // Renamed destructured prop with default value
 function Box(props: BoxProps) {

@@ -2,7 +2,8 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
+  children?: React.ReactNode;
   position: "top" | "bottom";
 };
 

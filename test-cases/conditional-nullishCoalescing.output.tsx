@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DividerProps = Omit<React.ComponentProps<"hr">, "className" | "style"> & {
+type DividerProps = {
   $color?: string;
 };
 

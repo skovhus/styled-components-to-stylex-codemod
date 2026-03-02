@@ -510,16 +510,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const explicitPropNames = d.propsType
         ? emitter.getExplicitPropNames(d.propsType)
         : new Set<string>();
-      const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
-        d,
-        tagName,
-        allowClassNameProp,
-        allowStyleProp,
-        allowSxProp,
-        skipProps: explicitPropNames,
-        includeRef: willForwardRef,
-        forceNarrow: useSlimType,
-      });
 
       const variantPropsForType = new Set([
         ...Object.keys(d.variantStyleKeys ?? {}).flatMap((when: string) => {
@@ -553,6 +543,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...invertedPropsForType,
         ...staticAttrNames,
       ]);
+
+      // Skip style-driving props in baseTypeText — they appear in
+      // customStyleDrivingPropsTypeText instead, preventing them from
+      // being Pick-ed from ComponentProps (they're custom, not element attrs).
+      const skipProps = new Set([...explicitPropNames, ...handledProps]);
+      const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
+        d,
+        tagName,
+        allowClassNameProp,
+        allowStyleProp,
+        allowSxProp,
+        skipProps,
+        includeRef: willForwardRef,
+        forceNarrow: useSlimType,
+      });
       const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const needsRestForType =
         !!d.usedAsValue ||

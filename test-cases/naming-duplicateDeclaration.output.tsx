@@ -4,16 +4,12 @@ import { mergedSx } from "./lib/mergedSx";
 
 type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
   React.ComponentPropsWithRef<C>,
-  keyof (React.ComponentProps<"div"> & {
-    $size: number;
-  })
+  keyof (React.ComponentProps<"div"> & { $size: number })
 > &
-  Omit<
-    React.ComponentProps<"div"> & {
-      $size: number;
-    },
-    "as"
-  > & { sx?: stylex.StyleXStyles; as?: C };
+  Omit<React.ComponentProps<"div"> & { $size: number }, "as"> & {
+    sx?: stylex.StyleXStyles;
+    as?: C;
+  };
 
 /** A container that scales based on a dynamic size prop */
 function SizeBox<C extends React.ElementType = "div">(

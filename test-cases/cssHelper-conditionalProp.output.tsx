@@ -25,9 +25,7 @@ function Flex(props: FlexProps) {
   );
 }
 
-type ContainerProps = React.ComponentPropsWithRef<typeof Flex> & {
-  $color?: string;
-};
+type ContainerProps = React.ComponentPropsWithRef<typeof Flex> & { $color?: string };
 
 export function Container(props: ContainerProps) {
   const { className, children, style, $color, ...rest } = props;

@@ -1,9 +1,11 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type MixedBackgroundProps = React.PropsWithChildren<{
+type MixedBackgroundProps = {
+  ref?: React.Ref<HTMLDivElement>;
+  children?: React.ReactNode;
   $useGradient: boolean;
-}>;
+};
 
 // This pattern mixes gradients (which need backgroundImage) and colors
 // (which need backgroundColor) in the same conditional. Each variant
@@ -23,9 +25,10 @@ function MixedBackground(props: MixedBackgroundProps) {
   );
 }
 
-type NestedColorBackgroundProps = React.PropsWithChildren<{
+type NestedColorBackgroundProps = {
+  children?: React.ReactNode;
   $color: "red" | "blue" | "default";
-}>;
+};
 
 // Nested ternary with all colors (homogeneous) but using || in the default condition
 // Tests that "!(A || B)" condition parsing produces valid identifier suffixes

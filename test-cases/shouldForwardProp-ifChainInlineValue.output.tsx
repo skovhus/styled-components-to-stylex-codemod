@@ -2,7 +2,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type FlexContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type FlexContainerProps = {
+  children?: React.ReactNode;
   column?: boolean;
   reverse?: boolean;
 };

@@ -713,7 +713,38 @@ export class WrapperEmitter {
     if (xs.length === 1 && xs[0]) {
       return xs[0];
     }
-    return xs.join(" & ");
+    // Merge consecutive object-literal parts into a single literal
+    // so `{ a } & { b }` becomes `{ a, b }` instead.
+    const merged: string[] = [];
+    let pendingMembers: string[] = [];
+    const flush = (): void => {
+      if (pendingMembers.length === 0) {
+        return;
+      }
+      merged.push(
+        pendingMembers.length === 1
+          ? `{ ${pendingMembers[0]} }`
+          : `{\n  ${pendingMembers.join(",\n  ")}\n}`,
+      );
+      pendingMembers = [];
+    };
+    for (const part of xs) {
+      const members = extractObjectLiteralMembers(part);
+      if (members) {
+        pendingMembers.push(...members);
+      } else {
+        flush();
+        merged.push(part);
+      }
+    }
+    flush();
+    if (merged.length === 0) {
+      return "{}";
+    }
+    if (merged.length === 1 && merged[0]) {
+      return merged[0];
+    }
+    return merged.join(" & ");
   }
 
   private isValidTypeKeyIdentifier(name: string): boolean {
@@ -869,6 +900,8 @@ export class WrapperEmitter {
       lines.push(SX_PROP_TYPE_TEXT);
     }
 
+    // Attrs that can be Pick-ed from React.ComponentProps<"tag"> for proper types
+    const pickedAttrKeys: string[] = [];
     for (const attr of [...used].sort((a, b) => a.localeCompare(b))) {
       if (attr === "*" || attr === "children") {
         continue;
@@ -886,7 +919,16 @@ export class WrapperEmitter {
       if (skipProps?.has(attr)) {
         continue;
       }
-      lines.push(`${this.toTypeKey(attr)}?: any`);
+      // In the narrow path, use Pick<ComponentProps> for standard element attrs
+      // to get proper types instead of `any`.  Keep `any` for:
+      // - data-*/aria-* (string-keyed, not named props in React types)
+      // - $-prefixed (transient/custom)
+      // - broad-attrs path (the base type already provides correct types)
+      if (!needsBroadAttrs && !attr.startsWith("$") && !attr.includes("-")) {
+        pickedAttrKeys.push(attr);
+      } else {
+        lines.push(`${this.toTypeKey(attr)}?: any`);
+      }
     }
 
     const literal =
@@ -896,11 +938,16 @@ export class WrapperEmitter {
           ? `{ ${lines[0]} }`
           : "{}";
 
+    const pickExpr =
+      pickedAttrKeys.length > 0
+        ? `Pick<React.ComponentProps<"${tagName}">, ${pickedAttrKeys.map((k) => `"${k}"`).join(" | ")}>`
+        : undefined;
+
     if (!needsBroadAttrs) {
       // When forceNarrow is set, return the slim literal for all tags
       // (including void tags like input/img).
       if (forceNarrow) {
-        return literal;
+        return this.joinIntersection(literal, pickExpr);
       }
       if (VOID_TAGS.has(tagName)) {
         const base = this.reactIntrinsicAttrsType(tagName);
@@ -917,7 +964,7 @@ export class WrapperEmitter {
         }
         return baseType;
       }
-      return literal;
+      return this.joinIntersection(literal, pickExpr);
     }
 
     const base = this.reactIntrinsicAttrsType(tagName);
@@ -1595,4 +1642,33 @@ export class WrapperEmitter {
   }): void {
     seb.collectDestructurePropsFromStyleFns(this, args);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Non-exported helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * If `typeText` is a simple `{ prop?: type; … }` object literal, returns the
+ * individual member strings.  Returns `null` for any other shape (Pick, Omit,
+ * intersections, mapped types, etc.).
+ */
+function extractObjectLiteralMembers(typeText: string): string[] | null {
+  const t = typeText.trim();
+  if (!t.startsWith("{") || !t.endsWith("}")) {
+    return null;
+  }
+  const inner = t.slice(1, -1).trim();
+  if (!inner) {
+    return null;
+  }
+  // Reject complex types that happen to be wrapped in braces
+  // (mapped types with `[`, arrow types)
+  if (inner.includes("[") || inner.includes("=>")) {
+    return null;
+  }
+  return inner
+    .split(/[;,]\s*/)
+    .map((m) => m.trim())
+    .filter(Boolean);
 }

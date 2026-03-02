@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type OptionLabelProps = React.PropsWithChildren<{
+type OptionLabelProps = {
+  children?: React.ReactNode;
   $disabled?: boolean;
-}>;
+};
 
 function OptionLabel(props: OptionLabelProps) {
   const { children, $disabled } = props;

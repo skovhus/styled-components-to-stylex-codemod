@@ -1,7 +1,8 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = Omit<React.ComponentProps<"button">, "className" | "style"> & {
+type ButtonProps = {
+  children?: React.ReactNode;
   color?: string;
   size?: "small" | "large";
 };
@@ -24,9 +25,9 @@ function Button(props: ButtonProps) {
   );
 }
 
-type LinkProps = Omit<React.ComponentProps<"a">, "className" | "style"> & {
-  isActive?: boolean;
-};
+type LinkProps = { children?: React.ReactNode } & Pick<React.ComponentProps<"a">, "href"> & {
+    isActive?: boolean;
+  };
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
@@ -39,7 +40,8 @@ function Link(props: LinkProps) {
   );
 }
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
+  children?: React.ReactNode;
   $background?: string;
   $padding?: string;
 };
@@ -62,7 +64,8 @@ function Box(props: BoxProps) {
   );
 }
 
-type CardProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type CardProps = {
+  children?: React.ReactNode;
   variant?: "primary" | "secondary";
   elevation?: number;
   rounded?: boolean;

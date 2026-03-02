@@ -2,7 +2,8 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type BoxProps = {
+  children?: React.ReactNode;
   enabled: boolean;
 };
 

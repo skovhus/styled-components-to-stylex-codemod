@@ -2,9 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
 
-type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
-  size: number;
-};
+type ContainerProps = Omit<React.ComponentProps<"div">, "className" | "style"> & { size: number };
 
 export function Container(props: ContainerProps) {
   const { children, size, ...rest } = props;
