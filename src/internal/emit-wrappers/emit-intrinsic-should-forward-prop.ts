@@ -720,9 +720,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
     const openingAttrs: JsxAttr[] = [];
     if (d.supportsRefProp ?? false) {
-      openingAttrs.push(
-        j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)),
-      );
+      openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
     }
     if (includeRest) {
       openingAttrs.push(j.jsxSpreadAttribute(restId));

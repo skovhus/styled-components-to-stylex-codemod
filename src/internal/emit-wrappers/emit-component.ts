@@ -758,9 +758,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }),
       );
       if (d.supportsRefProp ?? false) {
-        openingAttrs.push(
-          j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)),
-        );
+        openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
       }
       // NOTE: staticAttrs are added AFTER {...rest} below so they override caller props
       // (matching styled-components semantics where .attrs() values always win).
