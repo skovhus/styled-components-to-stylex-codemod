@@ -45,6 +45,7 @@ const adapter = defineAdapter({
 await runTransform({
   files: "src/**/*.tsx",
   consumerPaths: null, // set to a glob to enable cross-file selector support
+  typeHelpersFile: "src/stylex-codemod.d.ts", // optional: emit shared helper types once
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -177,6 +178,7 @@ const adapter = defineAdapter({
 await runTransform({
   files: "src/**/*.tsx",
   consumerPaths: null,
+  typeHelpersFile: "src/stylex-codemod.d.ts",
   adapter,
   dryRun: false,
   parser: "tsx",
@@ -214,6 +216,23 @@ await runTransform({
 
 - Files in **both** `files` and `consumerPaths` use the **marker sidecar** strategy (both consumer and target are transformed, using `stylex.defineMarker()`).
 - Files in `consumerPaths` but **not** in `files` use the **bridge** strategy (a stable `className` is added to the converted component so unconverted consumers' selectors still work).
+
+#### Shared type helper declarations (`typeHelpersFile`)
+
+When wrappers need polymorphic helper types, the codemod can either inline those aliases into every transformed file or emit them once to a shared declaration file.
+
+Set `typeHelpersFile` to keep output wrappers shorter:
+
+```ts
+await runTransform({
+  files: "src/**/*.tsx",
+  consumerPaths: null,
+  typeHelpersFile: "src/stylex-codemod.d.ts",
+  adapter,
+});
+```
+
+The codemod writes (or updates) that `.d.ts` file with global helper aliases and transformed files reference those aliases instead of inlining the helper declarations.
 
 #### Auto-detecting external interface usage (experimental)
 

@@ -54,4 +54,45 @@ describe("runTransform (e2e)", () => {
 
     expect(await normalizeCode(actual)).toBe(await normalizeCode(expected));
   });
+
+  it("writes shared polymorphic type helpers to configured declaration file", async () => {
+    const repoRoot = join(__dirname, "..", "..");
+    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
+
+    const fixtureName = "asProp-crossFileInputEvent";
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-e2e-"));
+    const fixtureDir = join(tmp, fixtureName);
+    const fixtureLibDir = join(fixtureDir, "lib");
+    await mkdir(fixtureLibDir, { recursive: true });
+
+    const inputSrc = join(testCasesDir, `${fixtureName}.input.tsx`);
+    const targetFile = join(fixtureDir, "App.tsx");
+    await copyFile(inputSrc, targetFile);
+    await copyFile(
+      join(testCasesDir, "lib", "inline-base-flex.tsx"),
+      join(fixtureLibDir, "inline-base-flex.tsx"),
+    );
+
+    const typeHelpersFile = join(fixtureDir, "stylex-codemod.d.ts");
+    const result = await runTransform({
+      files: targetFile,
+      consumerPaths: null,
+      adapter: fixtureAdapter,
+      dryRun: false,
+      print: false,
+      parser: "tsx",
+      typeHelpersFile,
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(1);
+
+    const actual = await readFile(targetFile, "utf-8");
+    const helpers = await readFile(typeHelpersFile, "utf-8");
+
+    expect(actual).toContain("__StylexCodemodOpaquePolymorphicProps<");
+    expect(actual).not.toContain("type __StylexCodemodFastOmit<");
+    expect(helpers).toContain("declare global {");
+    expect(helpers).toContain("type __StylexCodemodOpaquePolymorphicProps<");
+  });
 });

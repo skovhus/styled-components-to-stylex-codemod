@@ -78,6 +78,16 @@ export interface RunTransformOptions {
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
 
   /**
+   * Optional path to a global declaration file for shared codemod helper types.
+   *
+   * When set, generated wrappers reference global opaque polymorphic helper aliases
+   * from this file instead of inlining long helper type declarations per transformed file.
+   *
+   * @example "src/stylex-codemod.d.ts"
+   */
+  typeHelpersFile?: string | null;
+
+  /**
    * Commands to run after transformation to format the output files.
    * Each command string will be invoked with the transformed file paths appended as arguments.
    * @example ["pnpm prettier --write", "pnpm eslint --fix"]
@@ -209,9 +219,22 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     dryRun = false,
     print = false,
     parser = "tsx",
+    typeHelpersFile = null,
     formatterCommands,
     maxExamples,
   } = options;
+
+  if (typeHelpersFile !== null) {
+    if (typeof typeHelpersFile !== "string" || typeHelpersFile.trim() === "") {
+      throw new Error(
+        [
+          "runTransform(options): `typeHelpersFile` must be a non-empty string or null.",
+          `Received: typeHelpersFile=${describeValue(typeHelpersFile)}`,
+          'Example: typeHelpersFile: "src/stylex-codemod.d.ts"',
+        ].join("\n"),
+      );
+    }
+  }
 
   if (maxExamples !== undefined) {
     Logger.setMaxExamples(maxExamples);
@@ -443,6 +466,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Map populated by the per-file transform to collect sidecar .stylex.ts files
   const sidecarFiles = new Map<string, string>();
+  const typeHelperFiles = new Map<string, string>();
+  const resolvedTypeHelpersFilePath = typeHelpersFile ? resolve(typeHelpersFile) : null;
 
   // Map populated by the per-file transform to collect bridge results for consumer patching
   const bridgeResults = new Map<
@@ -461,6 +486,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     adapter: adapterWithLogging,
     crossFilePrepassResult,
     sidecarFiles,
+    typeHelperFiles,
+    typeHelpersFilePath: resolvedTypeHelpersFilePath ?? undefined,
     bridgeResults,
     transformedFiles,
     // Programmatic use passes an Adapter object (functions). That cannot be
@@ -474,6 +501,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     for (const [sidecarPath, content] of sidecarFiles) {
       const merged = mergeSidecarContent(sidecarPath, content);
       await writeFile(sidecarPath, merged, "utf-8");
+    }
+  }
+
+  // Write shared codemod type helper declaration files
+  if (typeHelperFiles.size > 0 && !dryRun) {
+    for (const [typeHelpersPath, content] of typeHelperFiles) {
+      await writeFile(typeHelpersPath, content, "utf-8");
     }
   }
 
@@ -503,7 +537,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Run formatter commands if specified and files were transformed (not in dry run mode)
   if (formatterCommands && formatterCommands.length > 0 && result.ok > 0 && !dryRun) {
-    await runFormatters(formatterCommands, filePaths);
+    const formatterTargets = [...filePaths, ...typeHelperFiles.keys()];
+    await runFormatters(formatterCommands, formatterTargets);
   }
 
   const report = Logger.createReport();

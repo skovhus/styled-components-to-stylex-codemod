@@ -32,6 +32,7 @@ import {
   sortVariantEntriesBySpecificity,
   TAG_TO_HTML_ELEMENT,
 } from "./type-helpers.js";
+import { OPAQUE_POLYMORPHIC_HELPER_LINES } from "./opaque-polymorphic-helper-types.js";
 import {
   getDeclaratorId,
   isFunctionNode,
@@ -64,18 +65,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (!emitTypes || opaquePolymorphicHelpersEmitted) {
       return;
     }
+    if (emitter.emitOpaquePolymorphicHelpersExternally) {
+      emitter.needsOpaquePolymorphicHelpers = true;
+      opaquePolymorphicHelpersEmitted = true;
+      return;
+    }
     if (emitter.typeExistsInFile("__StylexCodemodOpaquePolymorphicProps")) {
       opaquePolymorphicHelpersEmitted = true;
       return;
     }
-    const helperTypes = j(
-      [
-        "type __StylexCodemodFastOmit<T, K extends PropertyKey> = Omit<T, K>;",
-        "type __StylexCodemodSubstitute<A, B> = __StylexCodemodFastOmit<A, keyof B> & B;",
-        'type __StylexCodemodAsTargetProps<C extends React.ElementType> = __StylexCodemodFastOmit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">;',
-        "type __StylexCodemodOpaquePolymorphicProps<BaseProps, C extends React.ElementType, ForwardedAsC extends React.ElementType | void = void> = NoInfer<[ForwardedAsC] extends [React.ElementType] ? __StylexCodemodSubstitute<BaseProps, __StylexCodemodSubstitute<__StylexCodemodAsTargetProps<ForwardedAsC>, __StylexCodemodAsTargetProps<C>>> : __StylexCodemodSubstitute<BaseProps, __StylexCodemodAsTargetProps<C>>> & { as?: C } & ([ForwardedAsC] extends [React.ElementType] ? { forwardedAs?: ForwardedAsC } : {});",
-      ].join("\n"),
-    ).get().node.program.body as ASTNode[];
+    const helperTypes = j(OPAQUE_POLYMORPHIC_HELPER_LINES.join("\n")).get().node.program
+      .body as ASTNode[];
     emitted.push(...helperTypes);
     opaquePolymorphicHelpersEmitted = true;
   };

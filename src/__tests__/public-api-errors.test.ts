@@ -150,6 +150,23 @@ describe("public API runtime validation (DX)", () => {
     await expect(runTransform({ adapter: {} } as any)).rejects.toThrowError(/`files` is required/);
   });
 
+  it("runTransform: throws when typeHelpersFile is invalid", async () => {
+    await expect(
+      runTransform({
+        files: "src/**/*.tsx",
+        consumerPaths: null,
+        adapter: {
+          resolveValue: () => undefined,
+          resolveCall: () => undefined,
+          resolveSelector: () => undefined,
+          externalInterface: () => ({ styles: false, as: false, ref: false }),
+          styleMerger: null,
+        },
+        typeHelpersFile: 123 as any,
+      }),
+    ).rejects.toThrowError(/typeHelpersFile/);
+  });
+
   it("runTransform: throws a helpful message when consumerPaths is missing", async () => {
     await expect(runTransform({ files: "src/**/*.tsx", adapter: {} } as any)).rejects.toThrowError(
       /`consumerPaths` is required/,

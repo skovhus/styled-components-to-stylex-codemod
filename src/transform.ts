@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve as pathResolve } from "node:path";
 import { realpathSync } from "node:fs";
 
 import { Logger } from "./internal/logger.js";
+import { buildOpaquePolymorphicHelpersDtsFileContent } from "./internal/emit-wrappers/opaque-polymorphic-helper-types.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
   CrossFileInfo,
@@ -68,6 +69,17 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         const dir = dirname(file.path);
         const fileBase = basename(file.path).replace(/\.\w+$/, "");
         sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+      }
+    }
+    if (result.needsOpaquePolymorphicHelpers) {
+      const typeHelpersFilePath = (options as Record<string, unknown>).typeHelpersFilePath as
+        | string
+        | undefined;
+      const typeHelperFiles = (options as Record<string, unknown>).typeHelperFiles as
+        | Map<string, string>
+        | undefined;
+      if (typeHelpersFilePath && typeHelperFiles) {
+        typeHelperFiles.set(typeHelpersFilePath, buildOpaquePolymorphicHelpersDtsFileContent());
       }
     }
 

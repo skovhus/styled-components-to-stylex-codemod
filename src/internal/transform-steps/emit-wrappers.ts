@@ -16,7 +16,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     return CONTINUE;
   }
 
-  emitWrappers({
+  const emitted = emitWrappers({
     root: ctx.root,
     j: ctx.j,
     filePath: ctx.file.path,
@@ -29,7 +29,11 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     themeHook: ctx.adapter.themeHook,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
+    emitOpaquePolymorphicHelpersExternally: ctx.emitOpaquePolymorphicHelpersExternally,
   });
+  if (emitted.needsOpaquePolymorphicHelpers) {
+    ctx.needsOpaquePolymorphicHelpers = true;
+  }
 
   return CONTINUE;
 }

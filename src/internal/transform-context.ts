@@ -92,6 +92,10 @@ export class TransformContext {
   sidecarStylexContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
+  /** When true, wrappers requested shared global opaque polymorphic helper types. */
+  needsOpaquePolymorphicHelpers = false;
+  /** Whether opaque polymorphic helper types should be emitted to an external .d.ts file. */
+  emitOpaquePolymorphicHelpersExternally: boolean;
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
@@ -158,6 +162,7 @@ export class TransformContext {
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
+    this.emitOpaquePolymorphicHelpersExternally = !!options.typeHelpersFilePath;
 
     // Wire cross-file info from options
     if (options.crossFileInfo) {

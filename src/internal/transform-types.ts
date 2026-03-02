@@ -22,6 +22,8 @@ export interface TransformResult {
   sidecarContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
+  /** True when emitted code references global opaque polymorphic helper types. */
+  needsOpaquePolymorphicHelpers?: boolean;
 }
 
 /** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
@@ -74,6 +76,11 @@ export interface TransformOptions extends Options {
    * When present, enables cross-file component selector handling.
    */
   crossFileInfo?: CrossFileInfo;
+  /**
+   * Absolute path to a global .d.ts file where opaque polymorphic helper types should be emitted.
+   * When provided, wrappers reference global helper aliases instead of inlining them per-file.
+   */
+  typeHelpersFilePath?: string;
 }
 
 /**

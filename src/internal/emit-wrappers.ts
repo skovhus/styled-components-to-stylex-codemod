@@ -24,7 +24,8 @@ export function emitWrappers(args: {
   themeHook?: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
-}): void {
+  emitOpaquePolymorphicHelpersExternally?: boolean;
+}): { needsOpaquePolymorphicHelpers: boolean } {
   const {
     root,
     j,
@@ -38,11 +39,12 @@ export function emitWrappers(args: {
     themeHook,
     emptyStyleKeys,
     ancestorSelectorParents,
+    emitOpaquePolymorphicHelpersExternally,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
   if (wrapperDecls.length === 0) {
-    return;
+    return { needsOpaquePolymorphicHelpers: false };
   }
 
   const emitter = new WrapperEmitter({
@@ -58,6 +60,7 @@ export function emitWrappers(args: {
     themeHook: themeHook ?? DEFAULT_THEME_HOOK,
     emptyStyleKeys,
     ancestorSelectorParents,
+    emitOpaquePolymorphicHelpersExternally,
   });
 
   const emitted: ASTNode[] = [];
@@ -92,4 +95,6 @@ export function emitWrappers(args: {
     needsReactTypeImport,
     needsUseThemeImport,
   });
+
+  return { needsOpaquePolymorphicHelpers: emitter.needsOpaquePolymorphicHelpers };
 }
