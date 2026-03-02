@@ -1,0 +1,1 @@
+import{j as r}from"./index-DVp2x69r.js";import{E as t}from"./external-component-Dsasr6ms.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
