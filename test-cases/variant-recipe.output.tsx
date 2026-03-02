@@ -10,7 +10,9 @@ type Props = {
   disabled?: boolean;
 };
 
-function Button(props: Pick<React.ComponentProps<"button">, "ref" | "children"> & Props) {
+function Button(
+  props: React.PropsWithChildren<Props & Pick<React.ComponentProps<"button">, "ref" | "children">>,
+) {
   const { children, size = "small", color = "secondary", disabled, ...rest } = props;
 
   return (

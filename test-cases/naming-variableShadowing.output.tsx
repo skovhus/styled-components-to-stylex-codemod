@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type ContainerProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
   align: string;
+  style?: React.CSSProperties;
 }>;
 
 // When a local variable named `styles` exists, the generated stylex constant

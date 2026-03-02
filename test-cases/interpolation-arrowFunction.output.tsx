@@ -21,7 +21,9 @@ function GradientBox(props: GradientBoxProps) {
   );
 }
 
-type TabItemProps = Pick<React.ComponentProps<"div">, "ref" | "children"> & { $isActive?: boolean };
+type TabItemProps = React.PropsWithChildren<
+  { $isActive?: boolean } & Pick<React.ComponentProps<"div">, "ref" | "children">
+>;
 
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {

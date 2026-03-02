@@ -15,10 +15,10 @@ export type Props = {
 
 function StyledBadge(
   props: React.PropsWithChildren<
-    {
+    Props & {
       className?: string;
       style?: React.CSSProperties;
-    } & Props
+    }
   >,
 ) {
   const { className, children, style, ...rest } = props;

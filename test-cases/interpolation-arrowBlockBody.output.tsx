@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type BoxProps = React.PropsWithChildren<{
-  style?: React.CSSProperties;
   $large?: boolean;
+  style?: React.CSSProperties;
 }>;
 
 // Arrow function with block body (contains comment)

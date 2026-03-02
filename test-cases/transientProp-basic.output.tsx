@@ -32,9 +32,9 @@ function StyledLink(props: StyledLinkProps) {
 }
 
 type PointProps = React.PropsWithChildren<{
+  $size?: number;
   "data-testid"?: string;
   style?: React.CSSProperties;
-  $size?: number;
 }>;
 
 // Pattern 3: Transient prop with dynamic value passed to inlined component

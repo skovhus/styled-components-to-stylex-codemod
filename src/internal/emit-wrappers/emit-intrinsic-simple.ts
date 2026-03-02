@@ -665,7 +665,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         if (useSlimType) {
           // Non-exported with explicit type: intersect the user type with only
           // the actually-used element props.
-          const combined = emitter.joinIntersection(baseTypeText, explicit, sxTypeIntersection);
+          const combined = emitter.joinIntersection(explicit, baseTypeText, sxTypeIntersection);
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
