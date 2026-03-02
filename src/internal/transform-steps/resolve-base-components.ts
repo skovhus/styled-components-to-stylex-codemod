@@ -86,7 +86,7 @@ function willHaveExternalInterface(
     exportName: exportInfo.exportName,
     isDefaultExport: exportInfo.isDefault,
   });
-  return result.styles || result.as || (result.ref ?? false);
+  return result.styles || result.as || result.ref;
 }
 
 /** Finds export info for a local name, or undefined if not exported. */

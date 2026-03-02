@@ -249,38 +249,47 @@ describe("runPrepass createExternalInterface", () => {
       {
         "components/Alert.tsx:Alert": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Badge.tsx:Badge": {
           "as": true,
+          "ref": false,
           "styles": true,
         },
         "components/Button.tsx:Button": {
           "as": true,
+          "ref": false,
           "styles": false,
         },
         "components/Card.tsx:Card": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Heading.tsx:Heading": {
           "as": true,
+          "ref": false,
           "styles": false,
         },
         "components/Input.tsx:Input": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Link.tsx:Link": {
           "as": true,
+          "ref": false,
           "styles": true,
         },
         "components/Panel.tsx:Panel": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Tag.tsx:Tag": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
       }
@@ -290,19 +299,19 @@ describe("runPrepass createExternalInterface", () => {
   it("lookup returns flags for known components", () => {
     const badgePath = realpathSync(path.join(fixtureDir, "components/Badge.tsx"));
     const key = `${badgePath}:Badge`;
-    expect(result.get(key)).toEqual({ as: true, styles: true });
+    expect(result.get(key)).toEqual({ as: true, styles: true, ref: false });
   });
 
   it("detects className consumer (no styled-components import)", () => {
     const alertPath = realpathSync(path.join(fixtureDir, "components/Alert.tsx"));
     const key = `${alertPath}:Alert`;
-    expect(result.get(key)).toEqual({ as: false, styles: true });
+    expect(result.get(key)).toEqual({ as: false, styles: true, ref: false });
   });
 
   it("detects style consumer (no styled-components import)", () => {
     const panelPath = realpathSync(path.join(fixtureDir, "components/Panel.tsx"));
     const key = `${panelPath}:Panel`;
-    expect(result.get(key)).toEqual({ as: false, styles: true });
+    expect(result.get(key)).toEqual({ as: false, styles: true, ref: false });
   });
 
   it("does not detect className on non-exported components", () => {
@@ -529,12 +538,16 @@ describe("runPrepass createExternalInterface — className/style detection", () 
 
   it("detects cross-file className usage (consumer has no styled-components import)", () => {
     const snapshot = toSnapshot(result, fixtureDir);
-    expect(snapshot["components/Box.tsx:Box"]).toEqual({ as: false, styles: true });
+    expect(snapshot["components/Box.tsx:Box"]).toEqual({ as: false, styles: true, ref: false });
   });
 
   it("detects cross-file style prop usage", () => {
     const snapshot = toSnapshot(result, fixtureDir);
-    expect(snapshot["components/Wrapper.tsx:Wrapper"]).toEqual({ as: false, styles: true });
+    expect(snapshot["components/Wrapper.tsx:Wrapper"]).toEqual({
+      as: false,
+      styles: true,
+      ref: false,
+    });
   });
 
   it("detects multiline JSX className usage", () => {
@@ -557,13 +570,21 @@ describe("runPrepass createExternalInterface — className/style detection", () 
 
   it("detects same-file className usage", () => {
     const snapshot = toSnapshot(result, fixtureDir);
-    expect(snapshot["components/SameFile.tsx:SameFile"]).toEqual({ as: false, styles: true });
+    expect(snapshot["components/SameFile.tsx:SameFile"]).toEqual({
+      as: false,
+      styles: true,
+      ref: false,
+    });
   });
 
   it("detects aliased import className usage", () => {
     // import { Aliased as MyAliased } → <MyAliased className="extra">
     const snapshot = toSnapshot(result, fixtureDir);
-    expect(snapshot["components/Aliased.tsx:Aliased"]).toEqual({ as: false, styles: true });
+    expect(snapshot["components/Aliased.tsx:Aliased"]).toEqual({
+      as: false,
+      styles: true,
+      ref: false,
+    });
   });
 
   it("full snapshot", () => {
@@ -571,18 +592,22 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       {
         "components/Aliased.tsx:Aliased": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Box.tsx:Box": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/SameFile.tsx:SameFile": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "components/Wrapper.tsx:Wrapper": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
       }
@@ -737,10 +762,12 @@ describe("runPrepass createExternalInterface — wildcard exports in monorepo", 
     expect(snapshot["packages/ui/src/components/Button.tsx:Button"]).toEqual({
       as: true,
       styles: true,
+      ref: false,
     });
     expect(snapshot["packages/ui/src/components/Text.tsx:Text"]).toEqual({
       as: false,
       styles: true,
+      ref: false,
     });
   });
 
@@ -754,10 +781,12 @@ describe("runPrepass createExternalInterface — wildcard exports in monorepo", 
       {
         "packages/ui/src/components/Button.tsx:Button": {
           "as": true,
+          "ref": false,
           "styles": true,
         },
         "packages/ui/src/components/Text.tsx:Text": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
       }
@@ -794,102 +823,127 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         },
         "test-cases/conditional-multiProp.input.tsx:Spacer": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/cssHelper-destructuredDefaultTemplateLiteral.input.tsx:Tile": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/cssHelper-dynamicPropertyNameNonProp.input.tsx:Stack": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/cssHelper-dynamicPropertyNamePropStatic.input.tsx:Strip": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/cssVariable-flexShrinkFallback.input.tsx:ColumnContainer": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/example-actionMenuDivider-exported.input.tsx:TextDividerContainer": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/example-flex.input.tsx:Flex": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/externalStyles-element.input.tsx:ColorBadge": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/externalStyles-input.input.tsx:StyledInput": {
           "as": true,
+          "ref": false,
           "styles": false,
         },
         "test-cases/htmlProp-element.input.tsx:TextColor": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/action-menu-divider.tsx:ActionMenuGroupHeader": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/action-menu-divider.tsx:ActionMenuTextDivider": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/external-component.tsx:ExternalComponent": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/flex.ts:Flex": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/inline-base-flex.tsx:Flex": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/loading.tsx:Loading": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/styled-group-header.tsx:GroupHeader": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/text.ts:Text": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/lib/user-avatar.tsx:UserAvatar": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/shouldForwardProp-dynamicDeclaration.input.tsx:FlexBox": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/staticProp-basic.input.tsx:ExtendedButton": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/staticProp-basic.input.tsx:ListItem": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/typeHandling-duplicateIdentifier.input.tsx:Card": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
         "test-cases/wrapper-propsIncomplete.input.tsx:TextColor": {
           "as": false,
+          "ref": false,
           "styles": true,
         },
       }

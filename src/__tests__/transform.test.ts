@@ -745,7 +745,7 @@ export const App = () => <Box $on />;
 
     const adapterWithBadThemeExpr = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         if (ctx.kind !== "theme") {
@@ -804,7 +804,7 @@ export const App = () => (
 
     const adapterWithoutCallResolution = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue(ctx: ResolveValueContext) {
         // Intentionally do not resolve any calls.
@@ -851,7 +851,7 @@ export const App = () => <Box level="high">Hello</Box>;
 
     const adapterWithCallableResolution = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -912,7 +912,7 @@ export const App = () => <Box tone="muted">Hello</Box>;
     // NOT trigger the global bail flag.
     const adapterWithNoColorResolution = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -997,7 +997,7 @@ export const App = () => <Button>Click</Button>;
 describe("styleMerger configuration", () => {
   const mergerAdapter = {
     externalInterface() {
-      return { styles: true, as: false } as const;
+      return { styles: true, as: false, ref: false } as const;
     },
     resolveValue() {
       return undefined;
@@ -1015,7 +1015,7 @@ describe("styleMerger configuration", () => {
   };
   const noExternalMergerAdapter = {
     externalInterface() {
-      return { styles: false, as: false };
+      return { styles: false, as: false, ref: false };
     },
     resolveValue() {
       return undefined;
@@ -1033,7 +1033,7 @@ describe("styleMerger configuration", () => {
   };
   const absolutePathMergerAdapter = {
     externalInterface() {
-      return { styles: true, as: false } as const;
+      return { styles: true, as: false, ref: false } as const;
     },
     resolveValue() {
       return undefined;
@@ -1281,7 +1281,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       externalInterface() {
-        return { styles: true, as: false } as const;
+        return { styles: true, as: false, ref: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1327,7 +1327,7 @@ export const App = () => <Button>Click</Button>;
         importSource: { kind: "specifier" as const, value: "./lib/mergedSx" },
       },
       externalInterface() {
-        return { styles: true, as: true } as const;
+        return { styles: true, as: true, ref: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1436,7 +1436,7 @@ export const App = () => <Button>Click me</Button>;
     const resolveCallCalls: unknown[] = [];
     const adapterWithCallTracking = {
       externalInterface() {
-        return { styles: false, as: false } as const;
+        return { styles: false, as: false, ref: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1478,7 +1478,7 @@ export const App = () => <Button>Click me</Button>;
 
     const adapterThatResolves = {
       externalInterface() {
-        return { styles: false, as: false } as const;
+        return { styles: false, as: false, ref: false } as const;
       },
       resolveValue() {
         return undefined;
@@ -1629,7 +1629,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithoutCssText = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1690,7 +1690,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterResolving = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1740,7 +1740,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1796,7 +1796,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1859,7 +1859,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithCssText = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1917,7 +1917,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterWithBadCssText = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -1972,7 +1972,7 @@ export const App = () => <Text>Hello</Text>;
 
     const adapterReturningUndefined = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -2399,7 +2399,7 @@ export const App = () => <Box>Hello</Box>;
 
     const adapterWithCustomThemeHook = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -2443,7 +2443,7 @@ export const App = () => <Box>Hello</Box>;
     const inputPath = pathResolve(__dirname, "fixtures", "components", "theme-custom-hook-abs.tsx");
     const adapterWithAbsoluteThemeHook = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -2489,7 +2489,7 @@ export const App = () => <Box>Hello</Box>;
 
     const adapterWithAliasedThemeHookImport = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveValue() {
         return undefined;
@@ -3274,7 +3274,7 @@ export function App() {
 
     const adapterWithLiteralResolves: Adapter = {
       externalInterface() {
-        return { styles: false, as: false };
+        return { styles: false, as: false, ref: false };
       },
       resolveCall(ctx) {
         if (ctx.calleeImportedName === "borderWidth") {

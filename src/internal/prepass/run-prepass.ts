@@ -318,7 +318,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       const key = `${toRealPath(filePath)}:${name}`;
       let entry = consumerAnalysis!.get(key);
       if (!entry) {
-        entry = { styles: false, as: false };
+        entry = { styles: false, as: false, ref: false };
         consumerAnalysis!.set(key, entry);
       }
       return entry;

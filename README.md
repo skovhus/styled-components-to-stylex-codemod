@@ -145,7 +145,7 @@ const adapter = defineAdapter({
 
   /**
    * Control which exported components accept external className/style
-   * and/or polymorphic `as` prop. Return `{ styles, as, ref? }` flags.
+   * and/or polymorphic `as` prop. Return `{ styles, as, ref }` flags.
    */
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
@@ -193,7 +193,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`; `null`/`undefined` bails the file)
-- which exported components should support external className/style extension, polymorphic `as`, and optional `ref` typing (`externalInterface`)
+- which exported components should support external className/style extension, polymorphic `as`, and `ref` typing (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
 - how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)

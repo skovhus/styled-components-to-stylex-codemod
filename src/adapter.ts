@@ -378,7 +378,7 @@ export interface ExternalInterfaceContext {
  * - `{ styles: false, as: false, ref: true }` → keep public `ref` typing without class/style or `as`
  * - `{ styles: false, as: false, ref: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: boolean; as: boolean; ref?: boolean };
+export type ExternalInterfaceResult = { styles: boolean; as: boolean; ref: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration

@@ -30,7 +30,7 @@ export const fixtureAdapter = defineAdapter({
         ctx.filePath.includes(filePath),
       )
     ) {
-      return { styles: true, as: true };
+      return { styles: true, as: true, ref: false };
     }
 
     // Enable external styles only (no `as`) for test cases that only need className/style merging
@@ -45,19 +45,19 @@ export const fixtureAdapter = defineAdapter({
         "transientProp-notForwarded",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true, as: false };
+      return { styles: true, as: false, ref: false };
     }
 
     // Enable styles + as to reproduce duplicate declaration bug
     if (ctx.filePath.includes("naming-duplicateDeclaration")) {
-      return { styles: true, as: true };
+      return { styles: true, as: true, ref: false };
     }
 
     // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true, as: false };
+        return { styles: true, as: false, ref: false };
       }
     }
 
@@ -65,10 +65,10 @@ export const fixtureAdapter = defineAdapter({
     if (
       ["asProp-exported", "asProp-crossFile"].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: false, as: true };
+      return { styles: false, as: true, ref: false };
     }
 
-    return { styles: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
 
   resolveBaseComponent(ctx) {
@@ -553,7 +553,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 export const customAdapter = defineAdapter({
   styleMerger: null,
   externalInterface() {
-    return { styles: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
   resolveValue: customResolveValue,
   resolveCall(_ctx) {
