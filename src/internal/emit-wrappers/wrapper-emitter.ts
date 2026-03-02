@@ -16,7 +16,7 @@ import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
-import { VOID_TAGS } from "./type-helpers.js";
+import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -893,18 +893,19 @@ export class WrapperEmitter {
       lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
     }
 
-    // When all picked keys have universal types (same on every element:
-    // className, style, children), inline them instead of Pick<ComponentProps>.
-    // Pick is only valuable for element-specific attrs (ref, disabled, src, d).
-    // For forceNarrow, children is excluded from inlining — the caller wraps
-    // with PropsWithChildren so custom props end up inside the wrapper.
-    const hasElementSpecificPicks = pickedAttrKeys.some(
-      (k) => !(k in UNIVERSAL_PROP_TYPES) && k !== "children",
-    );
+    // When all picked keys can be inlined (universal types like className/style,
+    // plus children and ref when forceNarrow), avoid Pick<ComponentProps> entirely.
+    // Pick is only valuable for element-specific attrs (disabled, src, d, href).
+    const canInline = (k: string): boolean =>
+      k in UNIVERSAL_PROP_TYPES || k === "children" || (forceNarrow === true && k === "ref");
+    const hasElementSpecificPicks = pickedAttrKeys.some((k) => !canInline(k));
     if (!hasElementSpecificPicks) {
       for (const k of pickedAttrKeys) {
         if (k in UNIVERSAL_PROP_TYPES) {
           lines.push(UNIVERSAL_PROP_TYPES[k]!);
+        } else if (k === "ref") {
+          const elementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
+          lines.push(`ref?: React.Ref<${elementType}>`);
         }
       }
       // Keep children in Pick only when !forceNarrow (caller won't wrap)
