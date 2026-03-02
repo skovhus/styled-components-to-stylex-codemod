@@ -880,11 +880,6 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "ref": false,
           "styles": true,
         },
-        "test-cases/shouldForwardProp-flexComplex.input.tsx:Flex": {
-          "as": true,
-          "ref": false,
-          "styles": true,
-        },
         "test-cases/staticProp-basic.input.tsx:ExtendedButton": {
           "as": false,
           "ref": false,
