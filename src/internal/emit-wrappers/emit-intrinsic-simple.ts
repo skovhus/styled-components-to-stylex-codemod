@@ -544,13 +544,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         ...staticAttrNames,
       ]);
 
-      // Skip explicitly-typed and custom style-driving props in baseTypeText.
-      // Standard-looking handled props (non-$, no hyphens) stay out of skipProps
-      // so they flow through to Pick<ComponentProps> with proper types.
-      const skipProps = new Set([
-        ...explicitPropNames,
-        ...[...handledProps].filter((k) => k.startsWith("$") || k.includes("-")),
-      ]);
+      // All style-driving props are excluded from Pick<ComponentProps> — they
+      // appear in customStyleDrivingPropsTypeText instead, because custom props
+      // like `active` are not keys of intrinsic element types.
+      const skipProps = new Set([...explicitPropNames, ...handledProps]);
       const baseTypeText = emitter.inferredIntrinsicPropsTypeText({
         d,
         tagName,
@@ -600,9 +597,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
 
       const customStyleDrivingPropsTypeText = (() => {
         // These are props that influence styles/attrs and are consumed by the wrapper.
-        // Standard-looking props (non-$, no hyphens) are omitted here — they flow
-        // through to Pick<ComponentProps> in baseTypeText with proper types.
-        // Only truly custom props ($-prefixed, hyphenated) are listed here.
+        // They are excluded from Pick<ComponentProps> via skipProps because custom
+        // props like `active` are not keys of intrinsic element types.
         const keys = new Set<string>();
         const addIfString = (k: unknown) => {
           if (typeof k === "string") {
@@ -629,8 +625,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             k !== "style" &&
             k !== "as" &&
             k !== "forwardedAs" &&
-            !explicitPropNames.has(k) &&
-            (k.startsWith("$") || k.includes("-")),
+            !explicitPropNames.has(k),
         );
         if (filtered.length === 0) {
           return "{}";

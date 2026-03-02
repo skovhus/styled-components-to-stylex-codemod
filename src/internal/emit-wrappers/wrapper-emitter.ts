@@ -1653,13 +1653,43 @@ function extractObjectLiteralMembers(typeText: string): string[] | null {
   if (!inner) {
     return null;
   }
-  // Reject complex types that happen to be wrapped in braces
-  // (mapped types with `[`, arrow types)
+  // Reject complex types (mapped types, arrow types)
   if (inner.includes("[") || inner.includes("=>")) {
     return null;
   }
-  return inner
-    .split(/[;,]\s*/)
-    .map((m) => m.trim())
-    .filter(Boolean);
+  // Depth-aware split: only split on `;` or `,` at the top level,
+  // skipping over `<…>`, `(…)`, `"…"`, `'…'` nesting.
+  const members: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let inString: string | null = null;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i]!;
+    if (inString) {
+      if (ch === inString && inner[i - 1] !== "\\") {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = ch;
+      continue;
+    }
+    if (ch === "<" || ch === "(") {
+      depth++;
+    } else if (ch === ">" || ch === ")") {
+      depth--;
+    } else if (depth === 0 && (ch === ";" || ch === ",")) {
+      const member = inner.slice(start, i).trim();
+      if (member) {
+        members.push(member);
+      }
+      start = i + 1;
+    }
+  }
+  const last = inner.slice(start).trim();
+  if (last) {
+    members.push(last);
+  }
+  return members.length > 0 ? members : null;
 }
