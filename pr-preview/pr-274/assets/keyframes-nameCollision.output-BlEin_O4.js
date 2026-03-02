@@ -1,1 +1,0 @@
-import{j as s}from"./index--c6D97rf.js";function e(i){const{children:n,...x}=i;return s.jsx("div",{...x,className:"x5sgm85 xdz8niu xa3vuyk xai882t xur7f20 x1tamke2 xbsw2ss",children:n})}function t(){return s.jsx("div",{style:{display:"flex",gap:16,padding:20},children:s.jsx(e,{children:"Moving in"})})}export{t as App,e as Move};
