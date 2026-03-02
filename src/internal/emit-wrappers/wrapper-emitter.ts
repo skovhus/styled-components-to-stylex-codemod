@@ -45,6 +45,7 @@ type WrapperEmitterArgs = {
   themeHook: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
+  polymorphicTypeHelpersImportPath?: string;
 };
 
 export class WrapperEmitter {
@@ -60,6 +61,7 @@ export class WrapperEmitter {
   readonly themeHook: ThemeHookConfig;
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
+  readonly polymorphicTypeHelpersImportPath?: string;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   readonly emitTypes: boolean;
@@ -84,6 +86,7 @@ export class WrapperEmitter {
     this.themeHook = args.themeHook;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
+    this.polymorphicTypeHelpersImportPath = args.polymorphicTypeHelpersImportPath;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 

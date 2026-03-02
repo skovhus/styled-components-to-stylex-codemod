@@ -92,6 +92,8 @@ export class TransformContext {
   sidecarStylexContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
+  /** True when this file emitted wrapper typings that import shared polymorphic helper types. */
+  usesPolymorphicTypeHelpers = false;
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */

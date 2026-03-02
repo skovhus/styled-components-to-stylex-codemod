@@ -32,6 +32,8 @@ vi.mock("../internal/logger.js", () => ({
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const testCasesDir = join(__dirname, "..", "..", "test-cases");
+const testCasesPolymorphicHelpersImportPath = join(testCasesDir, "stylex-polymorphic-helpers");
+const fixturesWithPolymorphicHelpers = new Set(["typeHandling-polymorphicHelperTypes"]);
 const j = jscodeshift.withParser("tsx");
 
 type FixtureCase = {
@@ -115,6 +117,13 @@ function getCrossFileInfo(filePath: string): CrossFileInfo | undefined {
     return undefined;
   }
   return { selectorUsages: usages };
+}
+
+function getFixtureSpecificOptions(name: string): Partial<TransformOptions> {
+  if (fixturesWithPolymorphicHelpers.has(name)) {
+    return { polymorphicTypeHelpersImportPath: testCasesPolymorphicHelpersImportPath };
+  }
+  return {};
 }
 
 function readTestCase(
@@ -356,7 +365,15 @@ describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
-    const diagnostics = runTransformWithDiagnostics(input, { crossFileInfo }, inputPath, parser);
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      {
+        crossFileInfo,
+        ...getFixtureSpecificOptions(name),
+      },
+      inputPath,
+      parser,
+    );
     const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed
@@ -1528,6 +1545,26 @@ export const App = () => <Box $color="red">Hello</Box>;
     // The polymorphic type should include sx alongside as
     expect(result.code).toContain("sx?: stylex.StyleXStyles");
     expect(result.code).toContain("as?: C");
+  });
+
+  it("uses shared polymorphic helper types for as-delegating wrappers when configured", async () => {
+    const { input, output, inputPath, outputPath } = readTestCase(
+      "typeHandling-polymorphicHelperTypes",
+    );
+
+    const result = transformWithWarnings(
+      { source: input, path: inputPath },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        polymorphicTypeHelpersImportPath: testCasesPolymorphicHelpersImportPath,
+      },
+    );
+
+    const actual = result.code ?? input;
+    const normalizedActual = await normalizeCode(actual, outputPath);
+    const normalizedExpected = await normalizeCode(output, outputPath);
+    expect(normalizedActual).toEqual(normalizedExpected);
   });
 
   it("should include ref in type when externalInterface returns ref: true", async () => {

@@ -24,7 +24,8 @@ export function emitWrappers(args: {
   themeHook?: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
-}): void {
+  polymorphicTypeHelpersImportPath?: string;
+}): { usedPolymorphicTypeHelpers: boolean } {
   const {
     root,
     j,
@@ -38,11 +39,12 @@ export function emitWrappers(args: {
     themeHook,
     emptyStyleKeys,
     ancestorSelectorParents,
+    polymorphicTypeHelpersImportPath,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
   if (wrapperDecls.length === 0) {
-    return;
+    return { usedPolymorphicTypeHelpers: false };
   }
 
   const emitter = new WrapperEmitter({
@@ -58,11 +60,13 @@ export function emitWrappers(args: {
     themeHook: themeHook ?? DEFAULT_THEME_HOOK,
     emptyStyleKeys,
     ancestorSelectorParents,
+    polymorphicTypeHelpersImportPath,
   });
 
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
   let needsUseThemeImport = false;
+  let needsPolymorphicTypeHelpersImport = false;
 
   {
     const out = emitIntrinsicWrappers(emitter);
@@ -84,6 +88,9 @@ export function emitWrappers(args: {
     if (out.needsUseThemeImport) {
       needsUseThemeImport = true;
     }
+    if (out.needsPolymorphicTypeHelpersImport) {
+      needsPolymorphicTypeHelpersImport = true;
+    }
   }
 
   insertEmittedWrappers({
@@ -91,5 +98,11 @@ export function emitWrappers(args: {
     emitted,
     needsReactTypeImport,
     needsUseThemeImport,
+    needsPolymorphicTypeHelpersImport,
   });
+
+  return {
+    usedPolymorphicTypeHelpers:
+      needsPolymorphicTypeHelpersImport && !!polymorphicTypeHelpersImportPath,
+  };
 }

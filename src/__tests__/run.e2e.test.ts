@@ -54,4 +54,42 @@ describe("runTransform (e2e)", () => {
 
     expect(await normalizeCode(actual)).toBe(await normalizeCode(expected));
   });
+
+  it("writes and imports polymorphic helper types when configured", async () => {
+    const repoRoot = join(__dirname, "..", "..");
+    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
+
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-e2e-poly-"));
+    const fixtureDir = join(tmp, "polymorphic-helpers");
+    await mkdir(fixtureDir, { recursive: true });
+
+    const targetFile = join(fixtureDir, "App.tsx");
+    await copyFile(join(testCasesDir, "example-flex.input.tsx"), targetFile);
+
+    const helperFile = join(fixtureDir, "stylex-polymorphic-helpers.d.ts");
+
+    const result = await runTransform({
+      files: targetFile,
+      consumerPaths: null,
+      adapter: fixtureAdapter,
+      dryRun: false,
+      print: false,
+      parser: "tsx",
+      polymorphicTypeHelpersFile: helperFile,
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(1);
+
+    const actual = await readFile(targetFile, "utf-8");
+    const helperContent = await readFile(helperFile, "utf-8");
+    expect(actual).toContain(
+      'import type { DelegatingPolymorphicProps } from "./stylex-polymorphic-helpers";',
+    );
+    expect(actual).toContain("DelegatingPolymorphicProps<");
+    expect(helperContent).toContain("type FastOmit");
+    expect(helperContent).toContain("type Substitute");
+    expect(helperContent).toContain("type PolymorphicAsProps");
+    expect(helperContent).toContain("type DelegatingPolymorphicProps");
+  });
 });

@@ -165,9 +165,15 @@ export function FlexSpacer(props: Pick<React.ComponentProps<"div">, "ref" | "chi
   );
 }
 
-export function Content(
-  props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">,
-) {
+type ContentProps<C extends React.ElementType = typeof Flex> = Omit<
+  FlexProps,
+  "as" | "className" | "style" | "sx" | "forwardedAs"
+> &
+  Omit<React.ComponentPropsWithRef<C>, keyof FlexProps> & {
+    as?: C;
+  };
+
+export function Content<C extends React.ElementType = typeof Flex>(props: ContentProps<C>) {
   return <Flex {...props} {...stylex.props(styles.content)} />;
 }
 

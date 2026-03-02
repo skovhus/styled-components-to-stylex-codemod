@@ -101,6 +101,69 @@ describe("mergeSidecarContent", () => {
   });
 });
 
+/* ── Polymorphic helper merge ─────────────────────────────────────────── */
+
+describe("mergePolymorphicTypeHelpersContent", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "polymorphic-helper-merge-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns new content when helper file does not exist", async () => {
+    const { mergePolymorphicTypeHelpersContent } = await import("../run.js");
+    const newContent = [
+      'import type * as React from "react";',
+      "",
+      "export type FastOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;",
+      "export type Substitute<A, B> = FastOmit<A, keyof B> & B;",
+      "export type PolymorphicAsProps<C extends React.ElementType, BaseProps, Omitted extends keyof any = never, ExtraProps = {}> = BaseProps & FastOmit<React.ComponentPropsWithRef<C>, keyof BaseProps | Omitted> & { as?: C } & ExtraProps;",
+      "export type DelegatingPolymorphicProps<C extends React.ElementType, BaseProps, BaseOmitted extends keyof any = never, TargetOmitted extends keyof any = never, ExtraProps = {}> = PolymorphicAsProps<C, FastOmit<BaseProps, BaseOmitted>, TargetOmitted, ExtraProps>;",
+      "",
+    ].join("\n");
+    const filePath = join(tmpDir, "stylex-polymorphic-helpers.d.ts");
+    const result = mergePolymorphicTypeHelpersContent(filePath, newContent);
+    expect(result).toBe(newContent);
+  });
+
+  it("preserves existing helper file content when both types are already present", async () => {
+    const { mergePolymorphicTypeHelpersContent } = await import("../run.js");
+    const existing = [
+      "/** user-owned header */",
+      'import type * as React from "react";',
+      "export type FastOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;",
+      "export type Substitute<A, B> = FastOmit<A, keyof B> & B;",
+      "export type PolymorphicAsProps<C extends React.ElementType, BaseProps, Omitted extends keyof any = never, ExtraProps = {}> = BaseProps & FastOmit<React.ComponentPropsWithRef<C>, keyof BaseProps | Omitted> & { as?: C } & ExtraProps;",
+      "export type DelegatingPolymorphicProps<C extends React.ElementType, BaseProps, BaseOmitted extends keyof any = never, TargetOmitted extends keyof any = never, ExtraProps = {}> = PolymorphicAsProps<C, FastOmit<BaseProps, BaseOmitted>, TargetOmitted, ExtraProps>;",
+      "",
+    ].join("\n");
+    const filePath = join(tmpDir, "stylex-polymorphic-helpers.d.ts");
+    writeFileSync(filePath, existing, "utf-8");
+    const result = mergePolymorphicTypeHelpersContent(filePath, "ignored");
+    expect(result).toBe(existing);
+  });
+
+  it("appends missing helper types when file is partial", async () => {
+    const { mergePolymorphicTypeHelpersContent } = await import("../run.js");
+    const existing = [
+      "export type FastOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;",
+      "",
+    ].join("\n");
+    const filePath = join(tmpDir, "stylex-polymorphic-helpers.d.ts");
+    writeFileSync(filePath, existing, "utf-8");
+    const result = mergePolymorphicTypeHelpersContent(filePath, "ignored");
+    expect(result).toContain("type FastOmit");
+    expect(result).toContain("type Substitute");
+    expect(result).toContain("type PolymorphicAsProps");
+    expect(result).toContain("type DelegatingPolymorphicProps");
+    expect(result).toContain('from "react"');
+  });
+});
+
 /* ── Prepass failure contract ────────────────────────────────────────── */
 
 describe("runTransform prepass failure contract", () => {

@@ -14,8 +14,15 @@ export function insertEmittedWrappers(args: {
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
   needsUseThemeImport?: boolean;
+  needsPolymorphicTypeHelpersImport?: boolean;
 }): void {
-  const { emitter, emitted, needsReactTypeImport, needsUseThemeImport } = args;
+  const {
+    emitter,
+    emitted,
+    needsReactTypeImport,
+    needsUseThemeImport,
+    needsPolymorphicTypeHelpersImport,
+  } = args;
   const { root, j, wrapperDecls, exportedComponents, emitTypes } = emitter;
 
   if (emitted.length > 0) {
@@ -234,6 +241,19 @@ export function insertEmittedWrappers(args: {
     ensureReactBinding({ root, j, useNamespaceStyle: true });
   }
 
+  if (emitTypes && needsPolymorphicTypeHelpersImport && emitter.polymorphicTypeHelpersImportPath) {
+    const moduleSpecifier = toModuleSpecifier(
+      { kind: "absolutePath", value: emitter.polymorphicTypeHelpersImportPath },
+      emitter.filePath,
+    );
+    ensureTypeOnlyImportSpecifiers({
+      root,
+      j,
+      moduleSpecifier,
+      importedNames: ["DelegatingPolymorphicProps"],
+    });
+  }
+
   // Add configured theme hook import when needed for theme boolean conditionals.
   if (needsUseThemeImport) {
     const { functionName: themeHookFunctionName, importSource: themeHookImportSource } =
@@ -310,4 +330,48 @@ function toModuleSpecifier(from: ImportSource, filePath: string): string {
     relativePath = `./${relativePath}`;
   }
   return relativePath;
+}
+
+function ensureTypeOnlyImportSpecifiers(args: {
+  root: WrapperEmitter["root"];
+  j: WrapperEmitter["j"];
+  moduleSpecifier: string;
+  importedNames: string[];
+}): void {
+  const { root, j, moduleSpecifier, importedNames } = args;
+  const existingImportNames = new Set<string>();
+
+  root
+    .find(j.ImportDeclaration, {
+      source: { value: moduleSpecifier },
+    } as any)
+    .forEach((path: any) => {
+      for (const spec of path.node.specifiers ?? []) {
+        if (spec?.type !== "ImportSpecifier") {
+          continue;
+        }
+        const importedName = spec.imported?.name ?? spec.imported?.value;
+        if (typeof importedName === "string") {
+          existingImportNames.add(importedName);
+        }
+      }
+    });
+
+  const missing = importedNames.filter((name) => !existingImportNames.has(name));
+  if (missing.length === 0) {
+    return;
+  }
+
+  const typeImportDecl = j.importDeclaration(
+    missing.map((name) => j.importSpecifier(j.identifier(name))),
+    j.literal(moduleSpecifier),
+  );
+  (typeImportDecl as any).importKind = "type";
+
+  const imports = root.find(j.ImportDeclaration);
+  if (imports.size() > 0) {
+    imports.at(imports.size() - 1).insertAfter(typeImportDecl);
+  } else {
+    root.get().node.program.body.unshift(typeImportDecl);
+  }
 }

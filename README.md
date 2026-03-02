@@ -49,6 +49,8 @@ await runTransform({
   dryRun: false,
   parser: "tsx",
   formatterCommands: ["pnpm prettier --write"],
+  // Optional: shared helper .d.ts for polymorphic wrapper typings
+  // polymorphicTypeHelpersFile: "stylex-polymorphic-helpers.d.ts",
 });
 ```
 
@@ -181,6 +183,7 @@ await runTransform({
   dryRun: false,
   parser: "tsx",
   formatterCommands: ["pnpm prettier --write"],
+  // polymorphicTypeHelpersFile: "stylex-polymorphic-helpers.d.ts",
 });
 ```
 
@@ -214,6 +217,22 @@ await runTransform({
 
 - Files in **both** `files` and `consumerPaths` use the **marker sidecar** strategy (both consumer and target are transformed, using `stylex.defineMarker()`).
 - Files in `consumerPaths` but **not** in `files` use the **bridge** strategy (a stable `className` is added to the converted component so unconverted consumers' selectors still work).
+
+#### Shared polymorphic type helpers (`polymorphicTypeHelpersFile`)
+
+When wrappers delegate polymorphic `as` behavior through another wrapper, generated TS types can become large. `runTransform` can emit and reuse shared helper types:
+
+- `FastOmit<T, K>`
+- `Substitute<A, B>`
+- `PolymorphicAsProps<...>`
+- `DelegatingPolymorphicProps<...>`
+
+Behavior:
+
+- opt-in only: set `polymorphicTypeHelpersFile: "path/to/helpers.d.ts"`
+- disabled by default: `undefined`/`null` means no helper-file imports or emission
+
+The codemod only imports these helpers in files that need them.
 
 #### Auto-detecting external interface usage (experimental)
 

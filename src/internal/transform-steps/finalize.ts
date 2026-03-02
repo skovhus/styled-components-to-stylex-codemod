@@ -53,5 +53,6 @@ export function finalize(ctx: TransformContext): TransformResult {
     warnings: ctx.warnings,
     sidecarContent: ctx.sidecarStylexContent,
     bridgeResults: ctx.bridgeResults,
+    usesPolymorphicTypeHelpers: ctx.usesPolymorphicTypeHelpers,
   };
 }

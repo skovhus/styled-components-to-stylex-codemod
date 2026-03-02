@@ -92,6 +92,14 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       }
     }
 
+    if (result.usesPolymorphicTypeHelpers) {
+      const helperUsageFiles = (options as Record<string, unknown>)
+        .polymorphicTypeHelpersUsedFiles as Set<string> | undefined;
+      if (helperUsageFiles) {
+        helperUsageFiles.add(toRealPath(file.path));
+      }
+    }
+
     return result.code;
   } catch (e) {
     if (!Logger.isErrorLogged(e)) {

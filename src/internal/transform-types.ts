@@ -22,6 +22,8 @@ export interface TransformResult {
   sidecarContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
+  /** True when emitted wrapper types depend on shared polymorphic helper types. */
+  usesPolymorphicTypeHelpers?: boolean;
 }
 
 /** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
@@ -74,6 +76,12 @@ export interface TransformOptions extends Options {
    * When present, enables cross-file component selector handling.
    */
   crossFileInfo?: CrossFileInfo;
+
+  /**
+   * Absolute helper-module path (without extension) for shared polymorphic type helpers.
+   * When set, wrapper emission may import `FastOmit`/`Substitute` from this module.
+   */
+  polymorphicTypeHelpersImportPath?: string;
 }
 
 /**

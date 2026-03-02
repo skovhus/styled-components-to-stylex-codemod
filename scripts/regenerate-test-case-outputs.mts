@@ -38,6 +38,7 @@ const [
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
+const TEST_CASES_POLYMORPHIC_HELPERS_IMPORT_PATH = join(testCasesDir, "stylex-polymorphic-helpers");
 
 // Test cases that use the app-like adapter (styleMerger: null) to reproduce
 // real-world TS errors with the verbose className/style merging pattern.
@@ -47,8 +48,19 @@ const APP_LIKE_ADAPTER_FIXTURES = new Set([
   "bug-external-styles-missing-classname",
 ]);
 
+const POLYMORPHIC_HELPER_FIXTURES = new Set(["typeHandling-polymorphicHelperTypes"]);
+
 function selectAdapter(name: string) {
   return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
+}
+
+function getFixtureTransformOptions(name: string): Record<string, unknown> {
+  if (POLYMORPHIC_HELPER_FIXTURES.has(name)) {
+    return {
+      polymorphicTypeHelpersImportPath: TEST_CASES_POLYMORPHIC_HELPERS_IMPORT_PATH,
+    };
+  }
+  return {};
 }
 
 async function normalizeCode(code: string, ext: string) {
@@ -93,7 +105,12 @@ async function updateFixture(name: string, ext: string) {
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
     transform,
-    { adapter, crossFilePrepassResult, sidecarFiles },
+    {
+      adapter,
+      crossFilePrepassResult,
+      sidecarFiles,
+      ...getFixtureTransformOptions(name),
+    },
     { source: input, path: inputPath },
     { parser },
   );

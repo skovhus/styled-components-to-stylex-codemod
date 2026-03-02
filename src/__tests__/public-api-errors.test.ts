@@ -191,4 +191,40 @@ describe("public API runtime validation (DX)", () => {
       }),
     ).rejects.toThrowError(/consumerPaths matched no files/);
   });
+
+  it("runTransform: throws when polymorphicTypeHelpersFile is not a string/null", async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: () => ({ styles: false, as: false, ref: false }),
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({
+        files: "src/__tests__/fixtures/**/*.tsx",
+        consumerPaths: null,
+        adapter,
+        polymorphicTypeHelpersFile: 42 as any,
+      }),
+    ).rejects.toThrowError(/polymorphicTypeHelpersFile/);
+  });
+
+  it('runTransform: throws when polymorphicTypeHelpersFile is not a ".d.ts" file', async () => {
+    const adapter = {
+      resolveValue: () => undefined,
+      resolveCall: () => undefined,
+      resolveSelector: () => undefined,
+      externalInterface: () => ({ styles: false, as: false, ref: false }),
+      styleMerger: null,
+    };
+    await expect(
+      runTransform({
+        files: "src/__tests__/fixtures/**/*.tsx",
+        consumerPaths: null,
+        adapter,
+        polymorphicTypeHelpersFile: "types/polymorphic-helpers.ts",
+      }),
+    ).rejects.toThrowError(/\.d\.ts/);
+  });
 });

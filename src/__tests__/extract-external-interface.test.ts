@@ -810,8 +810,13 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "ref": false,
           "styles": true,
         },
+        "test-cases/example-flex.input.tsx:Content": {
+          "as": true,
+          "ref": false,
+          "styles": false,
+        },
         "test-cases/example-flex.input.tsx:Flex": {
-          "as": false,
+          "as": true,
           "ref": false,
           "styles": true,
         },
@@ -894,6 +899,11 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "ref": false,
           "styles": true,
+        },
+        "test-cases/typeHandling-polymorphicHelperTypes.input.tsx:Content": {
+          "as": true,
+          "ref": false,
+          "styles": false,
         },
         "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
           "as": false,

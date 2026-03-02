@@ -43,6 +43,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
   needsReactTypeImport: boolean;
   needsUseThemeImport: boolean;
+  needsPolymorphicTypeHelpersImport: boolean;
 } {
   const root = emitter.root;
   const j = emitter.j;
@@ -56,6 +57,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   const emitted: ASTNode[] = [];
   let needsReactTypeImport = false;
   let needsUseThemeImport = false;
+  let needsPolymorphicTypeHelpersImport = false;
 
   const emitNamedPropsType = (localName: string, typeExprText: string, genericParams?: string) =>
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
@@ -127,11 +129,29 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const wrappedComponent = d.base.ident;
     // When .attrs({ as: ComponentRef }) is present, render and type against that component
     const renderedComponent = d.attrsInfo?.attrsAsTag ?? wrappedComponent;
+    const wrappedComponentDecl = wrapperDecls.find((decl) => decl.localName === wrappedComponent);
     const baseComponentPropsType = findComponentPropsType(wrappedComponent);
+    const wrappedComponentPropsTypeForTyping =
+      wrappedComponentDecl?.propsType ?? baseComponentPropsType;
+    const wrappedComponentDeclPropsText =
+      wrappedComponentDecl?.propsType && emitter.stringifyTsType(wrappedComponentDecl.propsType);
+    const wrappedComponentExplicitPropNames = wrappedComponentPropsTypeForTyping
+      ? emitter.getExplicitPropNames(wrappedComponentPropsTypeForTyping)
+      : new Set<string>();
+    const canUsePolymorphicTypeHelpers = !!emitter.polymorphicTypeHelpersImportPath;
+    const canNarrowAsDelegationProps =
+      !!wrappedComponentDeclPropsText || wrappedComponentExplicitPropNames.size > 0;
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
     const supportsAsProp = d.supportsAsProp ?? false;
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
+    // Wrapper delegates `as` to an already-polymorphic wrapped component.
+    // Keep runtime delegation (<Wrapped {...props} />) but use generic props typing so
+    // intrinsic event handlers (e.g., onChange for as="input") stay inferred.
+    const isAsDelegatingComponentWrapper =
+      shouldAllowAsProp &&
+      wrappedComponentHasAs &&
+      (canNarrowAsDelegationProps || canUsePolymorphicTypeHelpers);
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
     // component's className/style are not silently dropped by the styled() layer.
@@ -178,7 +198,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
-      if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
+      if (
+        explicitTypeExists &&
+        explicit &&
+        explicitTypeName &&
+        !isPolymorphicComponentWrapper &&
+        !isAsDelegatingComponentWrapper
+      ) {
         const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
         const omitted: string[] = [];
         if (!allowClassNameProp || forceClassNameOptional) {
@@ -264,6 +290,106 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             typeText,
             `C extends React.ElementType = typeof ${wrappedComponent}`,
           );
+        } else if (isAsDelegatingComponentWrapper) {
+          const basePropsRaw = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+          const baseExplicitPropNames = Array.from(wrappedComponentExplicitPropNames);
+          const omittedFromRetainedBase: string[] = ['"as"'];
+          if (!allowClassNameProp && !forceClassNameOptional) {
+            omittedFromRetainedBase.push('"className"');
+          }
+          if (!allowStyleProp && !forceStyleOptional) {
+            omittedFromRetainedBase.push('"style"');
+          }
+          if (!allowSxProp) {
+            omittedFromRetainedBase.push('"sx"');
+          }
+          if (!hasForwardedAsUsage) {
+            omittedFromRetainedBase.push('"forwardedAs"');
+          }
+
+          let retainedBasePropNames: string[] = [];
+          const optionalStyleProps: string[] = [];
+          if (forceClassNameOptional) {
+            optionalStyleProps.push("className?: string");
+          }
+          if (forceStyleOptional) {
+            optionalStyleProps.push("style?: React.CSSProperties");
+          }
+          if (
+            allowSxProp &&
+            !retainedBasePropNames.includes("sx") &&
+            !wrappedComponentDeclPropsText
+          ) {
+            optionalStyleProps.push(SX_PROP_TYPE_TEXT);
+          }
+
+          if (canUsePolymorphicTypeHelpers) {
+            needsPolymorphicTypeHelpersImport = true;
+            const basePropsForDelegation = wrappedComponentDeclPropsText ?? basePropsRaw;
+            const extraPropsMembers: string[] = [
+              ...(hasForwardedAsUsage ? ["forwardedAs?: React.ElementType"] : []),
+              ...optionalStyleProps,
+            ];
+            const extraPropsType =
+              extraPropsMembers.length > 0 ? `{ ${extraPropsMembers.join("; ")} }` : "{}";
+            const baseOmittedUnion =
+              omittedFromRetainedBase.length > 0 ? omittedFromRetainedBase.join(" | ") : "never";
+            const targetOmittedUnion = "never";
+            const delegatingPropsType = `DelegatingPolymorphicProps<C, ${basePropsForDelegation}, ${baseOmittedUnion}, ${targetOmittedUnion}, ${extraPropsType}>`;
+            const typeText = explicit
+              ? emitter.joinIntersection(delegatingPropsType, explicit)
+              : delegatingPropsType;
+            emitNamedPropsType(
+              d.localName,
+              typeText,
+              `C extends React.ElementType = typeof ${wrappedComponent}`,
+            );
+          } else {
+            const retainedBaseProps = (() => {
+              if (wrappedComponentDeclPropsText) {
+                return omittedFromRetainedBase.length > 0
+                  ? `Omit<${wrappedComponentDeclPropsText}, ${omittedFromRetainedBase.join(" | ")}>`
+                  : wrappedComponentDeclPropsText;
+              }
+              // Fallback without shared helper types: keep only wrapped component's explicit
+              // own props to avoid inheriting broad intrinsic handler props.
+              retainedBasePropNames = baseExplicitPropNames
+                .filter((name) => name !== "as")
+                .filter(
+                  (name) => name !== "className" || allowClassNameProp || forceClassNameOptional,
+                )
+                .filter((name) => name !== "style" || allowStyleProp || forceStyleOptional)
+                .filter((name) => name !== "sx" || allowSxProp)
+                .filter((name) => name !== "forwardedAs" || hasForwardedAsUsage)
+                .sort();
+              return retainedBasePropNames.length > 0
+                ? `Pick<${basePropsRaw}, ${retainedBasePropNames.map((name) => JSON.stringify(name)).join(" | ")}>`
+                : basePropsRaw;
+            })();
+            const baseKeysForC = wrappedComponentDeclPropsText
+              ? `keyof ${wrappedComponentDeclPropsText}`
+              : `keyof ${retainedBaseProps}`;
+            const omitFromCParts = wrappedComponentDeclPropsText
+              ? [baseKeysForC]
+              : [baseKeysForC, '"className"', '"style"'];
+            const typeText = [
+              retainedBaseProps,
+              `Omit<React.ComponentPropsWithRef<C>, ${omitFromCParts.join(" | ")}>`,
+              "{\n  as?: C;\n}",
+              ...(hasForwardedAsUsage &&
+              !retainedBasePropNames.includes("forwardedAs") &&
+              !wrappedComponentDeclPropsText
+                ? ["{ forwardedAs?: React.ElementType }"]
+                : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ].join(" & ");
+            emitNamedPropsType(
+              d.localName,
+              typeText,
+              `C extends React.ElementType = typeof ${wrappedComponent}`,
+            );
+          }
         } else {
           // Check if the wrapped component is one of our styled component wrappers.
           // If so, it already has className/style in its props and we don't need to add them.
@@ -583,9 +709,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     const propsParamId = j.identifier("props");
-    let polymorphicFnTypeParams: any = null;
-    if (isPolymorphicComponentWrapper && emitTypes) {
-      polymorphicFnTypeParams = j(
+    let genericFnTypeParams: any = null;
+    const needsGenericAsTypeParams =
+      (isPolymorphicComponentWrapper || isAsDelegatingComponentWrapper) && emitTypes;
+    if (needsGenericAsTypeParams) {
+      genericFnTypeParams = j(
         `function _<C extends React.ElementType = typeof ${wrappedComponent}>() { return null }`,
       ).get().node.program.body[0].typeParameters;
       (propsParamId as any).typeAnnotation = j(
@@ -593,11 +721,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       ).get().node.program.body[0].declarations[0].id.typeAnnotation;
     }
     // If we extended an existing type directly, use that type name for the parameter.
-    if (!isPolymorphicComponentWrapper && functionParamTypeName && emitTypes) {
+    if (!needsGenericAsTypeParams && functionParamTypeName && emitTypes) {
       propsParamId.typeAnnotation = j.tsTypeAnnotation(
         j.tsTypeReference(j.identifier(functionParamTypeName)),
       );
-    } else if (!isPolymorphicComponentWrapper) {
+    } else if (!needsGenericAsTypeParams) {
       // When there are no custom props, use inline type instead of named type
       emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
     }
@@ -876,7 +1004,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             localName: d.localName,
             params: [propsParamId],
             bodyStmts: stmts,
-            typeParameters: polymorphicFnTypeParams,
+            typeParameters: genericFnTypeParams,
           }),
           d,
         ),
@@ -907,7 +1035,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
                 : []),
               j.returnStatement(jsx as any),
             ],
-            typeParameters: polymorphicFnTypeParams,
+            typeParameters: genericFnTypeParams,
           }),
           d,
         ),
@@ -915,5 +1043,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
   }
 
-  return { emitted, needsReactTypeImport, needsUseThemeImport };
+  return {
+    emitted,
+    needsReactTypeImport,
+    needsUseThemeImport,
+    needsPolymorphicTypeHelpersImport,
+  };
 }

@@ -6,8 +6,7 @@ import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { glob } from "node:fs/promises";
+import { glob, mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import type {
   Adapter,
@@ -89,6 +88,17 @@ export interface RunTransformOptions {
    * @default 3
    */
   maxExamples?: number;
+
+  /**
+   * Path to the shared polymorphic helper type file (`.d.ts`).
+   *
+   * Wrappers that delegate polymorphic `as` behavior can import helper types from this
+   * module to keep generated props types short and fast.
+   *
+   * - `undefined` / `null`: disable helper-file emission and helper imports
+   * - `string`: custom `.d.ts` path (absolute or relative to `process.cwd()`)
+   */
+  polymorphicTypeHelpersFile?: string | null;
 }
 
 export interface RunTransformResult {
@@ -108,6 +118,29 @@ export interface RunTransformResult {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const POLYMORPHIC_TYPE_HELPERS_CONTENT = [
+  'import type * as React from "react";',
+  "",
+  "/** Shared polymorphic helper types for codemod-emitted wrappers. */",
+  "export type FastOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;",
+  "export type Substitute<A, B> = FastOmit<A, keyof B> & B;",
+  "export type PolymorphicAsProps<",
+  "  C extends React.ElementType,",
+  "  BaseProps,",
+  "  Omitted extends keyof any = never,",
+  "  ExtraProps = {},",
+  "> = BaseProps & FastOmit<React.ComponentPropsWithRef<C>, keyof BaseProps | Omitted> & {",
+  "  as?: C;",
+  "} & ExtraProps;",
+  "export type DelegatingPolymorphicProps<",
+  "  C extends React.ElementType,",
+  "  BaseProps,",
+  "  BaseOmitted extends keyof any = never,",
+  "  TargetOmitted extends keyof any = never,",
+  "  ExtraProps = {},",
+  "> = PolymorphicAsProps<C, FastOmit<BaseProps, BaseOmitted>, TargetOmitted, ExtraProps>;",
+  "",
+].join("\n");
 
 /**
  * Run the styled-components to StyleX transform on files matching the glob pattern.
@@ -203,6 +236,33 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   }
 
+  const polymorphicTypeHelpersFileRaw = (options as { polymorphicTypeHelpersFile?: unknown })
+    .polymorphicTypeHelpersFile;
+  if (
+    polymorphicTypeHelpersFileRaw !== undefined &&
+    polymorphicTypeHelpersFileRaw !== null &&
+    (typeof polymorphicTypeHelpersFileRaw !== "string" ||
+      polymorphicTypeHelpersFileRaw.trim() === "")
+  ) {
+    throw new Error(
+      [
+        "runTransform(options): `polymorphicTypeHelpersFile` must be a non-empty string, null, or undefined.",
+        `Received: polymorphicTypeHelpersFile=${describeValue(polymorphicTypeHelpersFileRaw)}`,
+      ].join("\n"),
+    );
+  }
+  if (
+    typeof polymorphicTypeHelpersFileRaw === "string" &&
+    !polymorphicTypeHelpersFileRaw.endsWith(".d.ts")
+  ) {
+    throw new Error(
+      [
+        'runTransform(options): `polymorphicTypeHelpersFile` must point to a ".d.ts" file.',
+        `Received: polymorphicTypeHelpersFile=${JSON.stringify(polymorphicTypeHelpersFileRaw)}`,
+      ].join("\n"),
+    );
+  }
+
   const {
     files,
     consumerPaths: consumerPathsOption,
@@ -211,6 +271,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     parser = "tsx",
     formatterCommands,
     maxExamples,
+    polymorphicTypeHelpersFile,
   } = options;
 
   if (maxExamples !== undefined) {
@@ -292,6 +353,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const filePaths: string[] = [];
 
   const cwd = process.cwd();
+  const polymorphicTypeHelpersFilePath = resolvePolymorphicTypeHelpersFilePath(
+    cwd,
+    polymorphicTypeHelpersFile,
+  );
+  const polymorphicTypeHelpersImportPath =
+    polymorphicTypeHelpersFilePath === null
+      ? null
+      : polymorphicTypeHelpersFilePath.slice(0, -".d.ts".length);
   for (const pattern of patterns) {
     for await (const file of glob(pattern, { cwd })) {
       filePaths.push(file);
@@ -453,6 +522,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Set populated by the per-file transform to track which files were actually transformed.
   // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
   const transformedFiles = new Set<string>();
+  const polymorphicTypeHelpersUsedFiles = new Set<string>();
 
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
@@ -463,6 +533,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     sidecarFiles,
     bridgeResults,
     transformedFiles,
+    polymorphicTypeHelpersUsedFiles,
+    polymorphicTypeHelpersImportPath: polymorphicTypeHelpersImportPath ?? undefined,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -475,6 +547,15 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       const merged = mergeSidecarContent(sidecarPath, content);
       await writeFile(sidecarPath, merged, "utf-8");
     }
+  }
+
+  if (polymorphicTypeHelpersFilePath && polymorphicTypeHelpersUsedFiles.size > 0 && !dryRun) {
+    await mkdir(dirname(polymorphicTypeHelpersFilePath), { recursive: true });
+    const mergedHelpers = mergePolymorphicTypeHelpersContent(
+      polymorphicTypeHelpersFilePath,
+      POLYMORPHIC_TYPE_HELPERS_CONTENT,
+    );
+    await writeFile(polymorphicTypeHelpersFilePath, mergedHelpers, "utf-8");
   }
 
   // Patch unconverted consumer files that reference bridge components via CSS selectors
@@ -590,6 +671,88 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
   const trailingNewline = merged.endsWith("\n") ? "" : "\n";
   merged = merged + trailingNewline + markersToAdd.join("\n") + "\n";
 
+  return merged;
+}
+
+function resolvePolymorphicTypeHelpersFilePath(
+  cwd: string,
+  configuredPath: string | null | undefined,
+): string | null {
+  if (configuredPath === null || configuredPath === undefined) {
+    return null;
+  }
+  return resolve(cwd, configuredPath);
+}
+
+export function mergePolymorphicTypeHelpersContent(filePath: string, newContent: string): string {
+  let existing: string;
+  try {
+    existing = readFileSync(filePath, "utf-8");
+  } catch {
+    return newContent;
+  }
+
+  const hasReactImport = /\bfrom\s+["']react["']/.test(existing);
+  const hasFastOmit = /\b(?:export\s+)?type\s+FastOmit\b/.test(existing);
+  const hasSubstitute = /\b(?:export\s+)?type\s+Substitute\b/.test(existing);
+  const hasPolymorphicAsProps = /\b(?:export\s+)?type\s+PolymorphicAsProps\b/.test(existing);
+  const hasDelegatingPolymorphicProps = /\b(?:export\s+)?type\s+DelegatingPolymorphicProps\b/.test(
+    existing,
+  );
+  if (
+    hasReactImport &&
+    hasFastOmit &&
+    hasSubstitute &&
+    hasPolymorphicAsProps &&
+    hasDelegatingPolymorphicProps
+  ) {
+    return existing;
+  }
+
+  let merged = existing;
+  if (!hasReactImport) {
+    merged = `import type * as React from "react";\n\n${merged}`;
+  }
+
+  const additions: string[] = [];
+  if (!hasFastOmit) {
+    additions.push("export type FastOmit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;");
+  }
+  if (!hasSubstitute) {
+    additions.push("export type Substitute<A, B> = FastOmit<A, keyof B> & B;");
+  }
+  if (!hasPolymorphicAsProps) {
+    additions.push(
+      [
+        "export type PolymorphicAsProps<",
+        "  C extends React.ElementType,",
+        "  BaseProps,",
+        "  Omitted extends keyof any = never,",
+        "  ExtraProps = {},",
+        "> = BaseProps & FastOmit<React.ComponentPropsWithRef<C>, keyof BaseProps | Omitted> & {",
+        "  as?: C;",
+        "} & ExtraProps;",
+      ].join("\n"),
+    );
+  }
+  if (!hasDelegatingPolymorphicProps) {
+    additions.push(
+      [
+        "export type DelegatingPolymorphicProps<",
+        "  C extends React.ElementType,",
+        "  BaseProps,",
+        "  BaseOmitted extends keyof any = never,",
+        "  TargetOmitted extends keyof any = never,",
+        "  ExtraProps = {},",
+        "> = PolymorphicAsProps<C, FastOmit<BaseProps, BaseOmitted>, TargetOmitted, ExtraProps>;",
+      ].join("\n"),
+    );
+  }
+
+  if (additions.length === 0) {
+    return merged;
+  }
+  merged = merged + (merged.endsWith("\n") ? "" : "\n") + additions.join("\n") + "\n";
   return merged;
 }
 

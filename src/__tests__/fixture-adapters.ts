@@ -25,6 +25,10 @@ export const fixtureAdapter = defineAdapter({
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both
+    if (ctx.filePath.includes("typeHandling-polymorphicHelperTypes")) {
+      return { styles: false, as: true, ref: false };
+    }
+
     if (
       ["externalStyles-basic", "externalStyles-input"].some((filePath) =>
         ctx.filePath.includes(filePath),
