@@ -5,6 +5,7 @@
 import type { API } from "jscodeshift";
 
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
+import { normalizeWhitespace } from "../utilities/string-utils.js";
 import type { WarningLog } from "../logger.js";
 import type { UnsupportedCssUsage } from "./css-helpers.js";
 
@@ -167,7 +168,7 @@ export function literalToAst(j: API["jscodeshift"], value: unknown): any {
 
 export function cssValueToJs(value: any, important = false, propName?: string): unknown {
   if (value.kind === "static") {
-    const raw = String(value.value);
+    const raw = normalizeStaticCssValueWhitespace(String(value.value), propName);
     // Preserve `!important` by emitting a string value that includes it.
     // (StyleX supports `!important` in values and this is necessary to override inline styles.)
     if (important) {
@@ -209,4 +210,20 @@ export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): Warn
       context: usage.closureVariable ? { variable: usage.closureVariable } : undefined,
     };
   });
+}
+
+function normalizeStaticCssValueWhitespace(raw: string, propName?: string): string {
+  // Preserve authored whitespace for most properties. Normalize only gradient
+  // background-image values to avoid escaped \n sequences in generated output.
+  if (propName !== "backgroundImage") {
+    return raw;
+  }
+  if (
+    !/\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\s*\(/.test(
+      raw,
+    )
+  ) {
+    return raw;
+  }
+  return normalizeWhitespace(raw).replace(/\(\s+/g, "(").replace(/\s+\)/g, ")");
 }
