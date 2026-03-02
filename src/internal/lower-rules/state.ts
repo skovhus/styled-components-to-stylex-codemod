@@ -212,6 +212,8 @@ export function createLowerRulesState(ctx: TransformContext) {
     parseExpr,
     resolverImports,
     warnings,
+    keyframesNames,
+    j,
   });
 
   const { resolveImportInScope, resolveImportForExpr } = createImportResolver({

@@ -788,6 +788,12 @@ function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>
     }
     for (const prop of Object.keys(style as Record<string, unknown>)) {
       if (FORBIDDEN_STYLEX_SHORTHANDS.has(prop)) {
+        // Allow `background: "none"` — this is a CSS reset value that StyleX accepts
+        // as-is; expanding to `backgroundColor: "none"` would be invalid CSS.
+        const val = (style as Record<string, unknown>)[prop];
+        if (prop === "background" && val === "none") {
+          continue;
+        }
         throw new Error(
           `Unexpanded CSS shorthand "${prop}" in style object "${styleKey}". ` +
             `This property must be expanded to longhands before reaching StyleX output. ` +

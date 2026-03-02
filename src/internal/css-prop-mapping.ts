@@ -187,7 +187,13 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
   }
 
   if (prop === "background") {
-    const stylexProp = resolveBackgroundStylexProp(decl.valueRaw ?? "");
+    const rawVal = (decl.valueRaw ?? "").trim();
+    // `background: none` resets all background layers — keep as the shorthand
+    // since `none` is not a valid `background-color` value.
+    if (rawVal === "none") {
+      return [{ prop: "background", value: decl.value }];
+    }
+    const stylexProp = resolveBackgroundStylexProp(rawVal);
     return [{ prop: stylexProp, value: decl.value }];
   }
 

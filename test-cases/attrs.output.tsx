@@ -163,18 +163,17 @@ export function AlignedFlex(props: AlignedFlexProps) {
   );
 }
 
-type DynamicHeightBoxProps = Omit<React.ComponentProps<"div">, "className" | "style"> & {
+type DynamicHeightBoxProps = React.PropsWithChildren<{
   $height: number;
-};
+}>;
 
 // Pattern 10: dynamic attrs with computed style object
-// The dynamic inline styles should be preserved as a dynamic StyleX style
+// The dynamic inline styles should be preserved as inline style prop
 function DynamicHeightBox(props: DynamicHeightBoxProps) {
-  const { children, $height, ...rest } = props;
+  const { children, $height } = props;
 
   return (
     <div
-      {...rest}
       {...stylex.props(
         styles.dynamicHeightBox,
         $height ? styles.dynamicHeightBoxHeight(`${$height}px`) : undefined,
@@ -260,7 +259,7 @@ const styles = stylex.create({
     color: "blue",
   },
   // Pattern 10: dynamic attrs with computed style object
-  // The dynamic inline styles should be preserved as a dynamic StyleX style
+  // The dynamic inline styles should be preserved as inline style prop
   dynamicHeightBox: {
     display: "flex",
     alignItems: "center",

@@ -59,6 +59,8 @@ type CssHelperConditionalContext = Pick<
   | "resolveCssHelperTemplate"
   | "markBail"
   | "importMap"
+  | "keyframesNames"
+  | "inlineKeyframeNameMap"
 > & {
   decl: StyledDecl;
   handlerContext: InternalHandlerContext;
@@ -146,6 +148,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     componentInfo,
     handlerContext,
     warnings,
+    keyframesNames: ctx.keyframesNames,
+    inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
   };
 
   return (d: any, pseudos?: string[] | null): boolean => {
@@ -972,6 +976,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         componentInfo,
         handlerContext,
         warnings,
+        keyframesNames: ctx.keyframesNames,
+        inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
       });
       if (handled) {
         return true;
@@ -1934,6 +1940,8 @@ type BlockThemeConditionalArgs = Pick<
   | "isPlainTemplateLiteral"
   | "resolveStaticCssBlock"
   | "warnings"
+  | "keyframesNames"
+  | "inlineKeyframeNameMap"
 > & {
   conditional: { test: ExpressionKind; consequent: ExpressionKind; alternate: ExpressionKind };
   paramName: string | null;
@@ -1989,6 +1997,8 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
     componentInfo: componentInfo as TemplateLiteralContext["componentInfo"],
     handlerContext,
     warnings,
+    keyframesNames: args.keyframesNames,
+    inlineKeyframeNameMap: args.inlineKeyframeNameMap,
   };
 
   const resolveTemplateNode = (

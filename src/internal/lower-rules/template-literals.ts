@@ -33,6 +33,7 @@ import { cssValueToJs } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { WarningLog } from "../logger.js";
 import { mergeMediaIntoStyles } from "./utils.js";
+import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
@@ -82,6 +83,10 @@ export type TemplateLiteralContext = {
   componentInfo: ComponentInfo;
   handlerContext: InternalHandlerContext;
   warnings?: WarningLog[];
+  /** Keyframe names available for animation shorthand expansion. */
+  keyframesNames?: Set<string>;
+  /** Map from original keyframe name to JS identifier name. */
+  inlineKeyframeNameMap?: Map<string, string>;
 };
 
 export function resolveTemplateLiteralBranch(
@@ -117,12 +122,14 @@ export function resolveTemplateLiteralBranch(
   const mediaStyles = new Map<string, Record<string, unknown>>();
 
   for (const rule of rules) {
-    const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
-    // Only support @media at-rules; bail on others (@supports, @container, etc.)
+    const media = rule.atRuleStack.find(
+      (a) => a.startsWith("@media") || a.startsWith("@container"),
+    );
+    // Only support @media and @container at-rules; bail on others (@supports, etc.)
     if (rule.atRuleStack.length > 0 && !media) {
       ctx.warnings?.push({
         severity: "warning",
-        type: "CSS block contains unsupported at-rule (only @media is supported; @supports, @container, etc. require manual handling)",
+        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
         loc: null,
       });
       return null;
@@ -153,6 +160,24 @@ export function resolveTemplateLiteralBranch(
         return null;
       }
       if (d.value.kind === "static") {
+        // Expand animation shorthand referencing inline @keyframes
+        if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
+          const expanded: Record<string, unknown> = {};
+          if (
+            expandStaticAnimationShorthand(
+              d.valueRaw,
+              ctx.keyframesNames,
+              j,
+              expanded,
+              ctx.inlineKeyframeNameMap,
+            )
+          ) {
+            for (const [prop, value] of Object.entries(expanded)) {
+              setStyleValue(prop, value);
+            }
+            continue;
+          }
+        }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
           if (mapped.prop === "content" && typeof value === "string") {
@@ -166,9 +191,6 @@ export function resolveTemplateLiteralBranch(
           setStyleValue(mapped.prop, value);
         }
         continue;
-      }
-      if (d.important) {
-        return null;
       }
       if (d.value.kind !== "interpolated") {
         return null;
@@ -269,12 +291,19 @@ export function resolveTemplateLiteralBranch(
             }
           }
         }
+        // Append ` !important` to the final static part when the declaration has the flag
+        if (d.important) {
+          currentStaticPart += " !important";
+        }
         quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
 
         // Simplify trivial template literals: `${expr}` → expr
         // Avoids TS2731 when expr is a symbol type (e.g. StyleXVar<string>)
+        // (Don't simplify when !important is appended — we need the template literal)
         const styleValue =
-          expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)
+          expressions.length === 1 &&
+          !d.important &&
+          quasis.every((q) => !q.value.raw && !q.value.cooked)
             ? expressions[0]
             : j.templateLiteral(quasis, expressions);
         // Handle border shorthand expansion for static interpolated values
@@ -310,8 +339,67 @@ export function resolveTemplateLiteralBranch(
         return null;
       }
 
-      if (slotParts.length !== 1) {
+      // !important with dynamic prop-based slots is not supported —
+      // only static (theme-resolved) interpolations can carry the flag
+      if (d.important) {
         return null;
+      }
+
+      // Multiple dynamic slots in one property value — support when all share
+      // the same jsxProp by building a composite template literal
+      if (slotParts.length > 1) {
+        const dynamicSlots = slotParts
+          .map((sp) => resolvedSlots.get(sp.slotId))
+          .filter(
+            (
+              r,
+            ): r is {
+              kind: "dynamic";
+              jsxProp: string;
+              callArg: ExpressionKind;
+              condition?: "always";
+            } => r?.kind === "dynamic",
+          );
+        if (dynamicSlots.length !== slotParts.length) {
+          return null;
+        }
+        const firstJsxProp = dynamicSlots[0]?.jsxProp;
+        if (!firstJsxProp || !dynamicSlots.every((s) => s.jsxProp === firstJsxProp)) {
+          return null;
+        }
+        // Build composite template: `staticPart${callArg1}staticPart${callArg2}staticPart`
+        const compositeQuasis: Array<ReturnType<JSCodeshift["templateElement"]>> = [];
+        const compositeExpressions: ExpressionKind[] = [];
+        let currentPart = "";
+        for (const part of parts) {
+          if (part.kind === "static") {
+            currentPart += part.value;
+          } else if (part.kind === "slot") {
+            compositeQuasis.push(
+              j.templateElement({ raw: currentPart, cooked: currentPart }, false),
+            );
+            currentPart = "";
+            const r = resolvedSlots.get(part.slotId);
+            if (r?.kind === "dynamic") {
+              compositeExpressions.push(r.callArg);
+            }
+          }
+        }
+        compositeQuasis.push(j.templateElement({ raw: currentPart, cooked: currentPart }, true));
+        const compositeCallArg = j.templateLiteral(
+          compositeQuasis,
+          compositeExpressions,
+        ) as ExpressionKind;
+
+        for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+          dynamicEntries.push({
+            jsxProp: firstJsxProp,
+            stylexProp: mapped.prop,
+            callArg: compositeCallArg,
+            condition: dynamicSlots[0]?.condition,
+          });
+        }
+        continue;
       }
       const slotPart = slotParts[0];
       if (!slotPart) {
