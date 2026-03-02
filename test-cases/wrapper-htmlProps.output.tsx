@@ -1,8 +1,9 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type OptionLabelProps = React.PropsWithChildren<
-  { $disabled?: boolean } & Pick<React.ComponentProps<"label">, "children" | "onClick" | "title">
+type OptionLabelProps = { $disabled?: boolean } & Pick<
+  React.ComponentProps<"label">,
+  "children" | "onClick" | "title"
 >;
 
 // When a styled component wrapper spreads ...rest to the element,

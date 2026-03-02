@@ -679,12 +679,14 @@ export class WrapperEmitter {
     if (t.startsWith("React.PropsWithChildren<")) {
       return t;
     }
-    if (
-      /^React\.ComponentProps(?:WithRef)?</.test(t) ||
-      /^(Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?</.test(
+    // Types that already include children — skip wrapping.
+    // Matches ComponentProps, Pick<ComponentProps, "children" | …>, etc.
+    // at the start OR after `&` in an intersection.
+    const alreadyHasChildren =
+      /(?:^|&\s*)(?:React\.ComponentProps(?:WithRef)?<|(?:Omit|Pick|Partial|Required|Readonly|ReadonlyArray|NonNullable|Extract|Exclude)<\s*React\.ComponentProps(?:WithRef)?<)/.test(
         t,
-      )
-    ) {
+      );
+    if (alreadyHasChildren) {
       return t;
     }
     return `React.PropsWithChildren<${t}>`;
