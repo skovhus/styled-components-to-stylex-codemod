@@ -1,0 +1,1 @@
+import{j as r}from"./index-1kBNfraX.js";function s(x){return r.jsx("div",{className:"xju2f9n xe8ttls x1nq1fro xm35quw x15otxcs x-default-marker",children:x.children})}const t=()=>r.jsxs("div",{className:"x78zum5 xdt5ytf x1jnr06f",children:[r.jsx(s,{children:"First"}),r.jsx(s,{children:"Second (should have border-top)"})]});export{t as App};
