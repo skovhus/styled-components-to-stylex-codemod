@@ -219,9 +219,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const hasThemeAccess = hasThemeAccessInArrowFn(fnExpr);
-    const runtimeCallArg = hasThemeAccess
+    const baseRuntimeExpr = hasThemeAccess
       ? rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind)
       : (inlinedExpr as ExpressionKind);
+
+    // P1 fix: Wrap with static prefix/suffix and !important (same as static branch)
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
+    const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
+    const runtimeCallArg =
+      prefix || effectiveSuffix
+        ? buildTemplateWithStaticParts(j, baseRuntimeExpr, prefix, effectiveSuffix)
+        : baseRuntimeExpr;
 
     if (hasThemeAccess) {
       if (!decl.needsUseThemeHook) {
@@ -261,18 +269,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
-    if (
-      !styleFnFromProps.some(
-        (entry) =>
-          entry.fnKey === fnKey && entry.jsxProp === "__props" && entry.condition === "always",
-      )
-    ) {
-      styleFnFromProps.push({
-        fnKey,
-        jsxProp: "__props",
-        condition: "always",
-        callArg: cloneAstNode(runtimeCallArg) as ExpressionKind,
-      });
+    // P2 fix: Later declarations should override earlier ones (CSS source order).
+    // Find and replace existing entry instead of skipping, or add new if not found.
+    const existingIdx = styleFnFromProps.findIndex(
+      (entry) =>
+        entry.fnKey === fnKey && entry.jsxProp === "__props" && entry.condition === "always",
+    );
+    const newEntry = {
+      fnKey,
+      jsxProp: "__props" as const,
+      condition: "always" as const,
+      callArg: cloneAstNode(runtimeCallArg) as ExpressionKind,
+    };
+    if (existingIdx >= 0) {
+      styleFnFromProps[existingIdx] = newEntry;
+    } else {
+      styleFnFromProps.push(newEntry);
     }
 
     decl.needsWrapperComponent = true;

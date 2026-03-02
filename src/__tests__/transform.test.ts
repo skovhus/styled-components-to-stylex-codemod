@@ -1018,6 +1018,88 @@ export const App = () => <Toggle>Toggle</Toggle>;
     expect(code).not.toContain("ColorConverter.cssWithAlpha(");
     expect(code).not.toContain("toggleBackgroundColor");
   });
+
+  it("should preserve static suffix in runtime call override (P1 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  transform: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.5)} translateX(8px);
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-suffix.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The static suffix " translateX(8px)" should be preserved in the runtime call
+    expect(code).toContain("translateX(8px)");
+    expect(code).toContain("boxTransform");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+  });
+
+  it("should preserve !important in runtime call override (P1 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.5)} !important;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-important.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The !important should be preserved in the runtime call
+    expect(code).toContain("!important");
+    expect(code).toContain("ColorConverter.cssWithAlpha");
+  });
+
+  it("should allow later runtime call overrides to win over earlier ones (P2 fix)", () => {
+    const source = `
+import styled from "styled-components";
+import { ColorConverter } from "./lib/helpers";
+
+const Box = styled.div\`
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.primary, 0.3)};
+  color: \${({ theme }) => ColorConverter.cssWithAlpha(theme.color.secondary, 0.5)};
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "runtime-call-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // Only the second color declaration should be in the output (secondary, 0.5)
+    expect(code).toContain("secondary");
+    expect(code).toContain("0.5");
+    // The first declaration should NOT be present (primary, 0.3 should be overridden)
+    expect(code).not.toMatch(/primary.*0\.3/);
+    // Only one boxColor style function call should be present
+    const colorFnMatches = code.match(/styles\.boxColor\(/g);
+    expect(colorFnMatches?.length).toBe(1);
+  });
 });
 
 describe("import resolution scope", () => {
@@ -1520,7 +1602,9 @@ export const App = () => {
 
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/const\s*\{\s*children,\s*ref,\s*\.\.\.rest\s*\}\s*=\s*props;/);
-    expect(result.code).toMatch(/<div\s+ref=\{ref\}\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
+    expect(result.code).toMatch(
+      /<div\s+ref=\{ref\}\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/,
+    );
   });
 
   it("should explicitly destructure and forward ref for component wrappers", async () => {
