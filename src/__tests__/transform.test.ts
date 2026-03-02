@@ -3617,3 +3617,80 @@ export const App = () => (
     expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
   });
 });
+
+describe("ref typing support", () => {
+  const baseAdapter: Adapter = {
+    externalInterface() {
+      return { styles: false, as: false, ref: false };
+    },
+    resolveValue() {
+      return undefined;
+    },
+    resolveCall() {
+      return undefined;
+    },
+    resolveSelector() {
+      return undefined;
+    },
+    styleMerger: null,
+  };
+
+  it("adds ref typing when externalInterface enables ref", () => {
+    const source = `
+import styled from "styled-components";
+
+type BoxProps = {
+  tone?: "muted" | "strong";
+};
+
+export const Box = styled.div<BoxProps>\`
+  color: red;
+\`;
+`;
+
+    const adapterWithRef: Adapter = {
+      ...baseAdapter,
+      externalInterface() {
+        return { styles: false, as: false, ref: true };
+      },
+    };
+
+    const result = transformWithWarnings(
+      { source, path: "external-interface-ref.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithRef },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('React.ComponentPropsWithRef<"div">');
+  });
+
+  it("adds ref typing when ref is used within the same file", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type TextProps = {
+  tone?: "muted" | "strong";
+};
+
+export const Text = styled.span<TextProps>\`
+  color: red;
+\`;
+
+export const App = () => {
+  const textRef = React.useRef<HTMLSpanElement>(null);
+  return <Text ref={textRef}>Hello</Text>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "internal-ref-usage.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: baseAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('React.ComponentPropsWithRef<"span">');
+  });
+});

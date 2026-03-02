@@ -51,7 +51,7 @@ export interface RunTransformOptions {
    * Controls value resolution and resolver-provided imports.
    *
    * Use `externalInterface: "auto"` to auto-detect which exported components
-   * need external className/style and polymorphic `as` support by scanning
+   * need external className/style, polymorphic `as`, and `ref` typing support by scanning
    * consumer code specified via `consumerPaths` (or `files`).
    *
    * Note: `"auto"` requires prepass scanning to succeed. If prepass fails,
@@ -225,7 +225,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     throw new Error(
       [
         'runTransform(options): externalInterface is "auto" but consumerPaths is null.',
-        "Auto-detection needs consumer file globs to scan for styled(Component) and as-prop usage.",
+        "Auto-detection needs consumer file globs to scan for styled(Component), as-prop, and ref usage.",
         'Example: consumerPaths: "src/**/*.tsx"',
       ].join("\n"),
     );
@@ -394,6 +394,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
               styles: false,
               as: false,
+              ref: false,
             }
           );
         },

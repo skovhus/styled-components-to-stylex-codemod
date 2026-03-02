@@ -2,7 +2,7 @@
  * Unified prepass: single pass for both cross-file selector scanning
  * and consumer analysis (external interface detection).
  *
- * Reads each file once, classifies by content (styled-components / as-prop),
+ * Reads each file once, classifies by content (styled-components / as-prop / ref-prop),
  * and runs AST parsing + consumer analysis only on relevant files.
  */
 import { execSync } from "node:child_process";
@@ -43,7 +43,7 @@ interface PrepassOptions {
   consumerPaths: readonly string[];
   resolver: ModuleResolver;
   parserName?: PrepassParserName;
-  /** When true, also detect as-prop + styled() wrapping patterns */
+  /** When true, also detect as/ref-prop + styled() wrapping patterns */
   createExternalInterface: boolean;
   /** When true, cache AST-derived data (importMap, styledImportName, selectorLocals) keyed by content hash */
   enableAstCache?: boolean;
@@ -65,10 +65,13 @@ interface AstCacheEntry {
 /* ── Regex patterns (compiled once at module scope) ───────────────────── */
 
 const AS_PROP_RE = /\bas[={]/;
+const REF_PROP_RE = /\bref\s*[={]/;
 const STYLED_CALL_RE = /styled\(([A-Z][A-Za-z0-9]+)/g;
 const STYLED_DEF_RE = /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled[.(]/g;
 /** Matches <Component ...as= across lines. [^<>]* avoids crossing tag boundaries. */
 const JSX_AS_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bas[={]/g;
+/** Matches <Component ...ref= across lines. [^<>]* avoids crossing tag boundaries. */
+const JSX_REF_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bref\s*[={]/g;
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
@@ -142,6 +145,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
   // Consumer analysis state (if createExternalInterface)
   const asUsages = new Map<string, Set<string>>();
+  const refUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, Set<string>>();
@@ -183,8 +187,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
     const hasStyled = source.includes("styled-components");
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
+    const hasRefProp = createExternalInterface && REF_PROP_RE.test(source);
 
-    if (!hasStyled && !hasAsProp) {
+    if (!hasStyled && !hasAsProp && !hasRefProp) {
       continue;
     }
 
@@ -239,12 +244,20 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    // --- as-prop detection ---
+    // --- as/ref-prop detection ---
     if (hasAsProp) {
       JSX_AS_COMPONENT_RE.lastIndex = 0;
       for (const m of source.matchAll(JSX_AS_COMPONENT_RE)) {
         if (m[1]) {
           addToSetMap(asUsages, m[1], filePath);
+        }
+      }
+    }
+    if (hasRefProp) {
+      JSX_REF_COMPONENT_RE.lastIndex = 0;
+      for (const m of source.matchAll(JSX_REF_COMPONENT_RE)) {
+        if (m[1]) {
+          addToSetMap(refUsages, m[1], filePath);
         }
       }
     }
@@ -342,6 +355,37 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
+    // ref-prop: match definitions to usages
+    if (refUsages.size > 0) {
+      for (const [defFile, names] of styledDefFiles) {
+        const defSrc = cachedRead(defFile);
+        for (const name of names) {
+          const usageFiles = refUsages.get(name);
+          if (!usageFiles) {
+            continue;
+          }
+
+          if (!fileExports(defSrc, name)) {
+            continue;
+          }
+
+          // Same-file usage — no import needed
+          if (usageFiles.has(defFile)) {
+            ensure(defFile, name).ref = true;
+            continue;
+          }
+
+          // Cross-file — must be imported by a usage file
+          for (const usageFile of usageFiles) {
+            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
+              ensure(defFile, name).ref = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     // className/style prop: match definitions to usages
     if (classNameStyleUsages.size > 0) {
       for (const [defFile, names] of styledDefFiles) {
@@ -426,12 +470,16 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       ? [...consumerAnalysis.values()].filter((v) => v.styles).length
       : 0;
     const asProp = consumerAnalysis ? [...consumerAnalysis.values()].filter((v) => v.as).length : 0;
+    const refProp = consumerAnalysis
+      ? [...consumerAnalysis.values()].filter((v) => v.ref).length
+      : 0;
     process.stdout.write(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
         ` — ${styledFileCount} with styled-components` +
         `, ${selectorUsages.size} cross-file selectors` +
         `, ${reStyled} re-styled` +
         `, ${asProp} as-prop` +
+        `, ${refProp} ref-prop` +
         `, ${classNameStyleUsages.size} className/style\n`,
     );
   }
@@ -707,7 +755,7 @@ function scanFileForSelectorsAst(
 /* ── ripgrep pre-filter ───────────────────────────────────────────────── */
 
 /**
- * Use ripgrep to quickly find files containing "styled-components" or `as[={]`.
+ * Use ripgrep to quickly find files containing "styled-components", `as[={]`, or `ref=`.
  * Returns a Set of absolute file paths, or undefined if rg is not available.
  */
 function rgPreFilter(files: readonly string[]): Set<string> | undefined {
@@ -717,7 +765,7 @@ function rgPreFilter(files: readonly string[]): Set<string> | undefined {
   }
 
   try {
-    const pattern = String.raw`(styled-components|\bas[={])`;
+    const pattern = String.raw`(styled-components|\bas[={]|\bref\s*[={])`;
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");

@@ -90,6 +90,21 @@ export function injectRefPropIntoTypeLiteralString(
   return `${typeText} & { ref?: React.Ref<${refElementType}> }`;
 }
 
+export function withOptionalRefPropForTag(
+  typeText: string,
+  tagName: string,
+  includeRef: boolean,
+): string {
+  if (!includeRef) {
+    return typeText;
+  }
+  if (/\bref\s*\??\s*:/.test(typeText) || typeText.includes("ComponentPropsWithRef<")) {
+    return typeText;
+  }
+  const refElementType = TAG_TO_HTML_ELEMENT[tagName] ?? "HTMLElement";
+  return injectRefPropIntoTypeLiteralString(typeText, refElementType);
+}
+
 /**
  * Injects className and/or style props at the start of a type literal string.
  * Used when wrapping external components that may not have these props in their type.

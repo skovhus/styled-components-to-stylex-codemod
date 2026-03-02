@@ -10,6 +10,7 @@ import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import { withOptionalRefPropForTag } from "./type-helpers.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -25,12 +26,15 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "input");
+      const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
       const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText = withForwardedAsType(
-        explicit ??
+        (explicit ? withOptionalRefPropForTag(explicit, "input", includeRefInType) : null) ??
           (() => {
-            const base = "React.InputHTMLAttributes<HTMLInputElement>";
+            const base = includeRefInType
+              ? 'React.ComponentPropsWithRef<"input">'
+              : "React.InputHTMLAttributes<HTMLInputElement>";
             const omitted: string[] = [];
             if (!allowClassNameProp) {
               omitted.push('"className"');
@@ -227,13 +231,16 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = emitter.shouldAllowClassNameProp(d);
       const allowStyleProp = emitter.shouldAllowStyleProp(d);
       const allowAsProp = shouldAllowAsProp(d, "a");
+      const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
       const includesForwardedAs = hasForwardedAsUsage(d);
       const explicit = emitter.stringifyTsType(d.propsType);
       const baseTypeText = withForwardedAsType(
-        explicit ??
+        (explicit ? withOptionalRefPropForTag(explicit, "a", includeRefInType) : null) ??
           emitter.withChildren(
             (() => {
-              const base = "React.AnchorHTMLAttributes<HTMLAnchorElement>";
+              const base = includeRefInType
+                ? 'React.ComponentPropsWithRef<"a">'
+                : "React.AnchorHTMLAttributes<HTMLAnchorElement>";
               const omitted: string[] = [];
               if (!allowClassNameProp) {
                 omitted.push('"className"');
@@ -478,6 +485,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
       const allowClassNameProp = false;
       const allowStyleProp = false;
       const allowAsProp = shouldAllowAsProp(d, tagName);
+      const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
       const { propName, baseKey, cases } = d.enumVariant;
       const primary = cases[0];
       const secondary = cases[1];
@@ -486,10 +494,11 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
       }
       const explicit = emitter.stringifyTsType(d.propsType);
       if (explicit) {
+        const explicitWithRef = withOptionalRefPropForTag(explicit, tagName, includeRefInType);
         emitPropsType({
           localName: d.localName,
           tagName,
-          typeText: withForwardedAsType(emitter.withChildren(explicit), includesForwardedAs),
+          typeText: withForwardedAsType(emitter.withChildren(explicitWithRef), includesForwardedAs),
           allowAsProp,
           allowClassNameProp,
           allowStyleProp,
@@ -503,9 +512,10 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
           : values.length > 0
             ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
-        const typeText = emitter.withChildren(
-          `React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`,
-        );
+        const base = includeRefInType
+          ? 'React.ComponentPropsWithRef<"div">'
+          : "React.HTMLAttributes<HTMLDivElement>";
+        const typeText = emitter.withChildren(`${base} & { ${propName}?: ${union} }`);
         emitPropsType({
           localName: d.localName,
           tagName,

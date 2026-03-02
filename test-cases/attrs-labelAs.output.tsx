@@ -9,7 +9,9 @@ type TextProps = { sx?: stylex.StyleXStyles } & React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
-function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
+function Text(
+  props: TextProps & React.ComponentPropsWithRef<"span"> & { sx?: stylex.StyleXStyles },
+) {
   const { as: Component = "span", className, children, style, sx, ...rest } = props;
 
   return (

@@ -70,6 +70,7 @@ export class WrapperEmitter {
   private jsxChildrenUsageCache = new Map<string, boolean>();
   private usedAsValueCache = new Map<string, boolean>();
   private forwardedAsUsageCache = new Map<string, boolean>();
+  private refUsageCache = new Map<string, boolean>();
 
   constructor(args: WrapperEmitterArgs) {
     this.root = args.root;
@@ -161,6 +162,38 @@ export class WrapperEmitter {
 
     visiting.delete(localName);
     this.forwardedAsUsageCache.set(localName, false);
+    return false;
+  }
+
+  hasRefUsage(localName: string, visiting: Set<string> = new Set<string>()): boolean {
+    const cached = this.refUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+    if (visiting.has(localName)) {
+      return false;
+    }
+    visiting.add(localName);
+
+    if (this.getUsedAttrs(localName).has("ref")) {
+      this.refUsageCache.set(localName, true);
+      visiting.delete(localName);
+      return true;
+    }
+
+    for (const wrapperDecl of this.wrapperDecls) {
+      if (wrapperDecl.base.kind !== "component" || wrapperDecl.base.ident !== localName) {
+        continue;
+      }
+      if (this.hasRefUsage(wrapperDecl.localName, visiting)) {
+        this.refUsageCache.set(localName, true);
+        visiting.delete(localName);
+        return true;
+      }
+    }
+
+    visiting.delete(localName);
+    this.refUsageCache.set(localName, false);
     return false;
   }
 
@@ -279,6 +312,13 @@ export class WrapperEmitter {
     }
     const used = this.getUsedAttrs(d.localName);
     return used.has("as") || this.hasForwardedAsUsage(d.localName);
+  }
+
+  shouldIncludeRefPropForIntrinsic(d: StyledDecl): boolean {
+    if (d.supportsRefProp) {
+      return true;
+    }
+    return this.hasRefUsage(d.localName);
   }
 
   private stringifyTsTypeName(n: AstNodeOrNull): string | null {

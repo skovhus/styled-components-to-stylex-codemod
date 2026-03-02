@@ -15,7 +15,11 @@ import {
 } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
+import {
+  sortVariantEntriesBySpecificity,
+  VOID_TAGS,
+  withOptionalRefPropForTag,
+} from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
@@ -77,6 +81,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
     // Determine whether the component will forward ref (via {...rest}) so we can
     // include ref in the narrow type only when it's actually forwarded.
     const willForwardRef =
@@ -141,7 +146,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             ctx.markNeedsReactTypeImport();
             return emitter.joinIntersection(intrinsicBaseType, explicit);
           }
-          return explicit;
+          return withOptionalRefPropForTag(explicit, tagName, includeRefInType && willForwardRef);
         }
         return typeWithChildren;
       })();
@@ -467,6 +472,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const usedAttrsForType = emitter.getUsedAttrs(d.localName);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
     // When the user's props type already has `as?: React.ElementType`, we don't
     // upgrade to our generic pattern (to avoid TypeScript inference issues), but
     // we still need to destructure `as` and use it as the JSX tag so that
@@ -562,7 +568,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const extendBaseTypeText = (() => {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
-        const base = `React.ComponentProps<"${tagName}">`;
+        const base = includeRefInType
+          ? `React.ComponentPropsWithRef<"${tagName}">`
+          : `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
@@ -661,7 +669,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
         return emitter.withChildren(explicit);
       })();
-      const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
+      const typeTextWithRef = withOptionalRefPropForTag(
+        typeText,
+        tagName,
+        includeRefInType && willForwardRef,
+      );
+      const typeTextWithForwardedAs = withForwardedAsType(typeTextWithRef, includesForwardedAs);
 
       // Emit the public props type.
       // For exported components that support `as`, use the full polymorphic pattern.

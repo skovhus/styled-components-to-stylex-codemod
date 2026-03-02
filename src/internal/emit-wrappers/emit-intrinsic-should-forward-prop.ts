@@ -10,7 +10,11 @@ import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
+import {
+  sortVariantEntriesBySpecificity,
+  VOID_TAGS,
+  withOptionalRefPropForTag,
+} from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
@@ -85,6 +89,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const includesForwardedAs = hasForwardedAsUsage(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
+    const includeRefInType = emitter.shouldIncludeRefPropForIntrinsic(d);
 
     const extraProps = new Set<string>();
     for (const p of d.shouldForwardProp?.dropProps ?? []) {
@@ -201,7 +206,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
           return emitter.joinIntersection(baseWithOmit, extrasTypeText);
         }
-        const base = `React.ComponentProps<"${tagName}">`;
+        const base = includeRefInType
+          ? `React.ComponentPropsWithRef<"${tagName}">`
+          : `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');
@@ -224,7 +231,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       // inferredIntrinsicPropsTypeText already includes children for non-void tags
       return inferred;
     })();
-    const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
+    const finalTypeTextWithRef = withOptionalRefPropForTag(
+      finalTypeText,
+      tagName,
+      includeRefInType,
+    );
+    const finalTypeTextWithForwardedAs = withForwardedAsType(
+      finalTypeTextWithRef,
+      includesForwardedAs,
+    );
 
     // Detect if there are no custom user-defined props (just intrinsic element props)
     const hasNoCustomProps = !explicit && extraProps.size === 0;
@@ -253,7 +268,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const extendBaseTypeText = (() => {
         // Prefer ComponentProps for intrinsic wrappers so event handlers/attrs
         // are typed like real JSX usage (and so we can reliably omit className/style).
-        const base = `React.ComponentProps<"${tagName}">`;
+        const base = includeRefInType
+          ? `React.ComponentPropsWithRef<"${tagName}">`
+          : `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
         if (!allowClassNameProp) {
           omitted.push('"className"');

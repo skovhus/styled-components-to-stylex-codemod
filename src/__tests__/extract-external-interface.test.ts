@@ -321,6 +321,87 @@ describe("runPrepass createExternalInterface", () => {
   });
 });
 
+describe("runPrepass createExternalInterface — ref detection", () => {
+  let fixtureDir: string;
+  let result: Map<string, ExternalInterfaceResult>;
+
+  beforeAll(async () => {
+    fixtureDir = mkdtempSync(path.join(tmpdir(), "extract-external-interface-ref-"));
+
+    writeFileSync(
+      path.join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { baseUrl: "." } }),
+    );
+
+    const componentsDir = path.join(fixtureDir, "components");
+    const consumersDir = path.join(fixtureDir, "consumers");
+    mkdirSync(componentsDir, { recursive: true });
+    mkdirSync(consumersDir, { recursive: true });
+
+    writeFileSync(
+      path.join(componentsDir, "Focus.tsx"),
+      'import styled from "styled-components";\nexport const Focus = styled.input`outline: none;`;',
+    );
+
+    writeFileSync(
+      path.join(componentsDir, "SameFileRef.tsx"),
+      [
+        'import * as React from "react";',
+        'import styled from "styled-components";',
+        "export const SameFileRef = styled.div`display: block;`;",
+        "export const App = () => {",
+        "  const divRef = React.useRef<HTMLDivElement>(null);",
+        "  return <SameFileRef ref={divRef} />;",
+        "};",
+      ].join("\n"),
+    );
+
+    writeFileSync(
+      path.join(consumersDir, "use-focus.tsx"),
+      [
+        'import * as React from "react";',
+        'import { Focus } from "../components/Focus";',
+        "export const App = () => {",
+        "  const inputRef = React.useRef<HTMLInputElement>(null);",
+        "  return <Focus ref={inputRef} />;",
+        "};",
+      ].join("\n"),
+    );
+
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      const allFiles = collectFiles(fixtureDir);
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: allFiles,
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: true,
+      });
+      result = prepassResult.consumerAnalysis!;
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  afterAll(() => {
+    if (fixtureDir) {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects cross-file and same-file ref usage", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Focus.tsx:Focus"]).toEqual({ as: false, styles: false, ref: true });
+    expect(snapshot["components/SameFileRef.tsx:SameFileRef"]).toEqual({
+      as: false,
+      styles: false,
+      ref: true,
+    });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // className/style prop detection — dedicated test with isolated fixture
 // ---------------------------------------------------------------------------
@@ -701,6 +782,16 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
     });
     expect(toSnapshot(prepassResult.consumerAnalysis!)).toMatchInlineSnapshot(`
       {
+        "test-cases/asProp-exported.input.tsx:ContentViewContainer": {
+          "as": false,
+          "ref": true,
+          "styles": false,
+        },
+        "test-cases/attrs-labelAs.input.tsx:Label": {
+          "as": false,
+          "ref": true,
+          "styles": false,
+        },
         "test-cases/conditional-multiProp.input.tsx:Spacer": {
           "as": false,
           "styles": true,

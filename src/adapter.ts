@@ -372,12 +372,13 @@ export interface ExternalInterfaceContext {
 /**
  * Result type for `adapter.externalInterface(...)`.
  *
- * - `{ styles: true, as: false }` → enable className/style support only
- * - `{ styles: true, as: true }` → enable className/style support AND polymorphic `as` prop
- * - `{ styles: false, as: true }` → enable only polymorphic `as` prop (no style merging)
- * - `{ styles: false, as: false }` → no external interface support
+ * - `{ styles: true, as: false, ref: false }` → enable className/style support only
+ * - `{ styles: true, as: true, ref: false }` → enable className/style support AND polymorphic `as` prop
+ * - `{ styles: false, as: true, ref: false }` → enable only polymorphic `as` prop (no style merging)
+ * - `{ styles: false, as: false, ref: true }` → keep public `ref` typing without class/style or `as`
+ * - `{ styles: false, as: false, ref: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: boolean; as: boolean };
+export type ExternalInterfaceResult = { styles: boolean; as: boolean; ref?: boolean };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
@@ -490,10 +491,11 @@ export interface Adapter {
    * Called for exported styled components to determine their external interface.
    *
    * Return:
-   * - `{ styles: false, as: false }` → no external interface
-   * - `{ styles: true, as: false }` → accept className/style props only
-   * - `{ styles: true, as: true }` → accept className/style props AND polymorphic `as` prop
-   * - `{ styles: false, as: true }` → accept only polymorphic `as` prop
+   * - `{ styles: false, as: false, ref: false }` → no external interface
+   * - `{ styles: true, as: false, ref: false }` → accept className/style props only
+   * - `{ styles: true, as: true, ref: false }` → accept className/style props AND polymorphic `as` prop
+   * - `{ styles: false, as: true, ref: false }` → accept only polymorphic `as` prop
+   * - `{ styles: false, as: false, ref: true }` → preserve `ref` in the public type surface
    */
   externalInterface: (context: ExternalInterfaceContext) => ExternalInterfaceResult;
 
@@ -533,7 +535,7 @@ export interface Adapter {
  * Same as `Adapter` except `externalInterface` may also be the string `"auto"`.
  * When `"auto"` is used, `runTransform()` automatically scans consumer code
  * (using `consumerPaths` / `files` globs) to detect which exported components
- * are re-styled or used with the `as` prop.
+ * are re-styled or used with the `as`/`ref` props.
  */
 export interface AdapterInput {
   resolveValue: Adapter["resolveValue"];
@@ -600,9 +602,9 @@ export interface AdapterInput {
  *     externalInterface(ctx) {
  *       // Example: Enable styles and `as` for shared components folder
  *       if (ctx.filePath.includes("/shared/components/")) {
- *         return { styles: true, as: true };
+ *         return { styles: true, as: true, ref: true };
  *       }
- *       return { styles: false, as: false };
+ *       return { styles: false, as: false, ref: false };
  *     },
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output

@@ -86,7 +86,7 @@ describe("runPrepass rg prefilter", () => {
       enableAstCache: true,
     });
 
-    // Two rg calls: (1) rgPreFilter for styled-components/as-prop, (2) rgComponentFilter for className/style
+    // Two rg calls: (1) rgPreFilter for styled-components/as/ref usage, (2) rgComponentFilter for className/style
     expect(execSyncMock).toHaveBeenCalledTimes(2);
     expect(execSyncMock.mock.calls[0]?.[0]).toContain("--glob '*.mts'");
 

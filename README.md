@@ -28,9 +28,9 @@ const adapter = defineAdapter({
   resolveCall(ctx) {
     return null;
   },
-  // Control which components accept external className/style and polymorphic `as`
+  // Control which components accept external className/style, polymorphic `as`, and `ref` typing
   externalInterface(ctx) {
-    return { style: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
   // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
@@ -145,13 +145,13 @@ const adapter = defineAdapter({
 
   /**
    * Control which exported components accept external className/style
-   * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
+   * and/or polymorphic `as` prop. Return `{ styles, as, ref? }` flags.
    */
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true, as: true };
+      return { styles: true, as: true, ref: true };
     }
-    return { styles: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
 
   /**
@@ -193,7 +193,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`; `null`/`undefined` bails the file)
-- which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
+- which exported components should support external className/style extension, polymorphic `as`, and optional `ref` typing (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
 - how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
@@ -217,7 +217,7 @@ await runTransform({
 
 #### Auto-detecting external interface usage (experimental)
 
-Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
+Instead of manually specifying which components need `styles`, `as`, or `ref` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
 
 > [!NOTE]
 > Experimental. Requires `consumerPaths` and a successful prepass scan.
@@ -238,7 +238,7 @@ await runTransform({
 });
 ```
 
-When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` / `<Component ref={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as, ref }` flags automatically.
 
 If that prepass scan fails, `runTransform()` stops and throws an actionable error rather than silently falling back to non-auto behavior.
 

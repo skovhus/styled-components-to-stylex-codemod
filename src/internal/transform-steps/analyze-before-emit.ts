@@ -390,7 +390,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
-  // Determine supportsExternalStyles and supportsAsProp for each decl
+  // Determine supportsExternalStyles / supportsAsProp / supportsRefProp for each decl
   // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
     // 1. If extended by another styled component in this file -> enable external styles
@@ -398,14 +398,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     //    support for intrinsic-based components.
     if (extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
+      const exportInfo = exportedComponents.get(decl.localName);
+      if (!exportInfo) {
+        decl.supportsRefProp = false;
+        continue;
+      }
+      const extResult = adapter.externalInterface({
+        filePath: file.path,
+        componentName: decl.localName,
+        exportName: exportInfo.exportName,
+        isDefaultExport: exportInfo.isDefault,
+      });
+      decl.supportsRefProp = extResult.ref ?? false;
       continue;
     }
 
-    // 2. If NOT exported -> disable both
+    // 2. If NOT exported -> disable all external-interface flags
     const exportInfo = exportedComponents.get(decl.localName);
     if (!exportInfo) {
       decl.supportsExternalStyles = false;
       decl.supportsAsProp = false;
+      decl.supportsRefProp = false;
       continue;
     }
 
@@ -418,6 +431,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     });
     decl.supportsExternalStyles = extResult.styles;
     decl.supportsAsProp = extResult.as;
+    decl.supportsRefProp = extResult.ref ?? false;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)

@@ -4,7 +4,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function OptionsList(props: React.ComponentProps<"ul">) {
+function OptionsList(props: React.ComponentPropsWithRef<"ul">) {
   const { className, children, style, ...rest } = props;
 
   return (
