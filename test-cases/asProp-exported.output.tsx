@@ -25,13 +25,11 @@ interface CustomProps {
   variant: "primary" | "secondary";
 }
 
-type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> = NoInfer<
-  Omit<
+type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> =
+  __StylexCodemodOpaquePolymorphicProps<
     React.ComponentPropsWithRef<typeof BaseComponent> & CustomProps,
-    keyof Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
-  > &
-    Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">
-> & { as?: C };
+    C
+  >;
 
 export function StyledWrapper<C extends React.ElementType = typeof BaseComponent>(
   props: StyledWrapperProps<C>,
@@ -57,6 +55,27 @@ export const App = () => (
     <StyledWrapper variant="primary">Content</StyledWrapper>
   </>
 );
+type __StylexCodemodFastOmit<T, K extends PropertyKey> = Omit<T, K>;
+type __StylexCodemodSubstitute<A, B> = __StylexCodemodFastOmit<A, keyof B> & B;
+type __StylexCodemodAsTargetProps<C extends React.ElementType> = __StylexCodemodFastOmit<
+  React.ComponentPropsWithRef<C>,
+  "className" | "style" | "as" | "forwardedAs"
+>;
+type __StylexCodemodOpaquePolymorphicProps<
+  BaseProps,
+  C extends React.ElementType,
+  ForwardedAsC extends React.ElementType | void = void,
+> = NoInfer<
+  [ForwardedAsC] extends [React.ElementType]
+    ? __StylexCodemodSubstitute<
+        BaseProps,
+        __StylexCodemodSubstitute<
+          __StylexCodemodAsTargetProps<ForwardedAsC>,
+          __StylexCodemodAsTargetProps<C>
+        >
+      >
+    : __StylexCodemodSubstitute<BaseProps, __StylexCodemodAsTargetProps<C>>
+> & { as?: C } & ([ForwardedAsC] extends [React.ElementType] ? { forwardedAs?: ForwardedAsC } : {});
 
 const styles = stylex.create({
   contentViewContainer: {

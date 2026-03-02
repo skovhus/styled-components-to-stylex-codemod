@@ -59,6 +59,26 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
   const emitNamedPropsType = (localName: string, typeExprText: string, genericParams?: string) =>
     emitter.emitNamedPropsType({ localName, typeExprText, genericParams, emitted });
+  let opaquePolymorphicHelpersEmitted = false;
+  const ensureOpaquePolymorphicHelpers = (): void => {
+    if (!emitTypes || opaquePolymorphicHelpersEmitted) {
+      return;
+    }
+    if (emitter.typeExistsInFile("__StylexCodemodOpaquePolymorphicProps")) {
+      opaquePolymorphicHelpersEmitted = true;
+      return;
+    }
+    const helperTypes = j(
+      [
+        "type __StylexCodemodFastOmit<T, K extends PropertyKey> = Omit<T, K>;",
+        "type __StylexCodemodSubstitute<A, B> = __StylexCodemodFastOmit<A, keyof B> & B;",
+        'type __StylexCodemodAsTargetProps<C extends React.ElementType> = __StylexCodemodFastOmit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">;',
+        "type __StylexCodemodOpaquePolymorphicProps<BaseProps, C extends React.ElementType, ForwardedAsC extends React.ElementType | void = void> = NoInfer<[ForwardedAsC] extends [React.ElementType] ? __StylexCodemodSubstitute<BaseProps, __StylexCodemodSubstitute<__StylexCodemodAsTargetProps<ForwardedAsC>, __StylexCodemodAsTargetProps<C>>> : __StylexCodemodSubstitute<BaseProps, __StylexCodemodAsTargetProps<C>>> & { as?: C } & ([ForwardedAsC] extends [React.ElementType] ? { forwardedAs?: ForwardedAsC } : {});",
+      ].join("\n"),
+    ).get().node.program.body as ASTNode[];
+    emitted.push(...helperTypes);
+    opaquePolymorphicHelpersEmitted = true;
+  };
 
   const findComponentPropsType = (componentName: string): ASTNode | null => {
     const firstParamType = (node: unknown): ASTNode | null => {
@@ -275,26 +295,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             ].join(" & ");
           };
           const buildOpaqueBasePolymorphicType = (): string => {
+            ensureOpaquePolymorphicHelpers();
             const baseWithCustomProps = emitter.joinIntersection(
               baseProps,
               ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
               ...(explicit ? [explicit] : []),
             );
-            // Mirror styled-components polymorphic override order for imported/opaque bases:
-            // Base props -> forwardedAs target props -> as target props (as wins).
-            const asTargetProps =
-              'Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "as" | "forwardedAs">';
-            const forwardedAsTargetProps = needsForwardedAsTargetParam
-              ? 'Omit<React.ComponentPropsWithRef<ForwardedAsC>, "className" | "style" | "as" | "forwardedAs">'
-              : null;
-            const forwardedThenAs = forwardedAsTargetProps
-              ? `Omit<${forwardedAsTargetProps}, keyof (${asTargetProps})> & ${asTargetProps}`
-              : asTargetProps;
-            return emitter.joinIntersection(
-              `NoInfer<Omit<${baseWithCustomProps}, keyof (${forwardedThenAs})> & ${forwardedThenAs}>`,
-              "{ as?: C }",
-              ...(needsForwardedAsTargetParam ? ["{ forwardedAs?: ForwardedAsC }"] : []),
-            );
+            const forwardedArg = needsForwardedAsTargetParam ? ", ForwardedAsC" : "";
+            return `__StylexCodemodOpaquePolymorphicProps<${baseWithCustomProps}, C${forwardedArg}>`;
           };
           const typeText = wrappedComponentHasAs
             ? buildKnownBasePolymorphicType()
