@@ -1,0 +1,1 @@
+import{j as e}from"./index-D3x1ffqz.js";function n(s){return e.jsx("div",{className:"xju2f9n xe8ttls x18so4qo x-default-marker",children:s.children})}const i=()=>e.jsxs("div",{style:{padding:16},children:[e.jsx(n,{children:"First"}),e.jsx(n,{children:"Second (margin-top on wide screens)"})]});export{i as App};
