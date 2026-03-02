@@ -1,1 +1,0 @@
-import{j as t}from"./index-BNJh2SpB.js";import{T as r}from"./text-I2p_CrNf.js";const e=()=>t.jsx("div",{style:{padding:"16px"},children:t.jsx(r,{variant:"title2",children:"Hello World"})});export{e as App};
