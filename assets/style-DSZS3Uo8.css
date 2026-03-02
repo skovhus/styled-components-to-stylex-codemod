@@ -115,6 +115,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -126,11 +131,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -1699,10 +1699,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1t391ir:not(#\#):not(#\#):not(#\#) {
   background-color: #00f;
-}
-
-.x13o1wqe:not(#\#):not(#\#):not(#\#) {
-  background-color: color-mix(in srgb,var(--x89fx1c) 40%,transparent);
 }
 
 .xaucakd:not(#\#):not(#\#):not(#\#) {
