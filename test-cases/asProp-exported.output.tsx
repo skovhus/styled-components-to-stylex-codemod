@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import type { PolymorphicComponentProps } from "./lib/polymorphic";
 
 export function ContentViewContainer<C extends React.ElementType = "div">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
@@ -26,13 +27,7 @@ interface CustomProps {
 }
 
 type StyledWrapperProps<C extends React.ElementType = typeof BaseComponent> =
-  React.ComponentPropsWithRef<typeof BaseComponent> &
-    Omit<
-      React.ComponentPropsWithRef<C>,
-      keyof React.ComponentPropsWithRef<typeof BaseComponent> | "className" | "style"
-    > & {
-      as?: C;
-    } & CustomProps;
+  PolymorphicComponentProps<React.ComponentPropsWithRef<typeof BaseComponent>, C> & CustomProps;
 
 export function StyledWrapper<C extends React.ElementType = typeof BaseComponent>(
   props: StyledWrapperProps<C>,

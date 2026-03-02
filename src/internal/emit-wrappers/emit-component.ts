@@ -278,10 +278,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         functionParamTypeName = explicitTypeName;
       } else {
         if (needsGenericType) {
-          // For pass-through polymorphic, use the wrapped component's explicit props type
-          // (e.g., FlexProps) as the base. This provides precise typing for element-specific
-          // props — e.g., onChange is correctly typed for "input" vs "div", not coerced to the
-          // wrapped component's default element type.
           // For pass-through polymorphic, use the named props type directly (e.g., FlexProps);
           // fall back to typeof-based base for direct polymorphic wrappers.
           const basePropsSrc =
@@ -312,21 +308,38 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (allowSxProp) {
             optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
-          // For pass-through polymorphic with explicit props type, mirror the wrapped
-          // component's Omit pattern (just `keyof ExplicitType`) to ensure type compatibility
-          // when spreading props into the wrapped component. Adding extra omissions like
-          // "className" | "style" would make the type narrower than what the wrapped component
-          // expects, causing TS2322 with generic type parameters.
-          const cOmitSuffix = isPassThroughPolymorphic ? "" : ' | "className" | "style"';
-          const typeText = [
-            baseProps,
-            `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsSrc}${cOmitSuffix}>`,
-            "{\n  as?: C;\n}",
-            ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
-            ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
-            // Include user's explicit props type if it exists
-            ...(explicit ? [explicit] : []),
-          ].join(" & ");
+
+          // When polymorphicHelper is configured and this is a direct polymorphic wrapper
+          // (not pass-through), use the Substitute-based helper type for correct prop
+          // override ordering (as-target props win over base props for overlapping keys).
+          const polyHelper = emitter.polymorphicHelper;
+          const usePolymorphicHelper = polyHelper && isPolymorphicComponentWrapper;
+
+          let typeText: string;
+          if (usePolymorphicHelper) {
+            const parts = [
+              `${polyHelper.typeName}<${baseProps}, C>`,
+              ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ];
+            typeText = parts.join(" & ");
+          } else {
+            // For pass-through polymorphic with explicit props type, mirror the wrapped
+            // component's Omit pattern (just `keyof ExplicitType`) to ensure type compatibility
+            // when spreading props into the wrapped component. Adding extra omissions like
+            // "className" | "style" would make the type narrower than what the wrapped component
+            // expects, causing TS2322 with generic type parameters.
+            const cOmitSuffix = isPassThroughPolymorphic ? "" : ' | "className" | "style"';
+            typeText = [
+              baseProps,
+              `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsSrc}${cOmitSuffix}>`,
+              "{\n  as?: C;\n}",
+              ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ].join(" & ");
+          }
           emitNamedPropsType(
             d.localName,
             typeText,

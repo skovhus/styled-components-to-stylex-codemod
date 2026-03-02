@@ -12,7 +12,7 @@ import type {
   Property,
   RestElement,
 } from "jscodeshift";
-import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
+import type { ImportSource, StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
@@ -43,6 +43,7 @@ type WrapperEmitterArgs = {
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
   themeHook: ThemeHookConfig;
+  polymorphicHelper?: { typeName: string; importSource: ImportSource } | null;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
 };
@@ -58,6 +59,7 @@ export class WrapperEmitter {
   readonly stylesIdentifier: string;
   readonly styleMerger: StyleMergerConfig | null;
   readonly themeHook: ThemeHookConfig;
+  readonly polymorphicHelper: { typeName: string; importSource: ImportSource } | null;
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
 
@@ -82,6 +84,7 @@ export class WrapperEmitter {
     this.stylesIdentifier = args.stylesIdentifier;
     this.styleMerger = args.styleMerger;
     this.themeHook = args.themeHook;
+    this.polymorphicHelper = args.polymorphicHelper ?? null;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");

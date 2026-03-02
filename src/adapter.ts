@@ -563,6 +563,28 @@ export interface Adapter {
    * `{ functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }`
    */
   themeHook?: ThemeHookConfig;
+
+  /**
+   * Polymorphic type helper for as-delegating component wrappers.
+   *
+   * When provided, the codemod imports and uses this helper type for correct prop
+   * override ordering (matching styled-components' Substitute semantics where `as`
+   * target props win over base props for overlapping keys like event handlers).
+   *
+   * When null or omitted, falls back to the inline `Base & Omit<C, keyof Base>` pattern.
+   *
+   * Expected type signature:
+   * ```typescript
+   * type PolymorphicComponentProps<
+   *   BaseProps extends object,
+   *   AsTarget extends React.ElementType,
+   * > = ...;
+   * ```
+   */
+  polymorphicHelper?: {
+    typeName: string;
+    importSource: ImportSource;
+  } | null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -594,6 +616,7 @@ export interface AdapterInput {
 
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
+  polymorphicHelper?: Adapter["polymorphicHelper"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

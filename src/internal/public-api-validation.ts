@@ -243,6 +243,38 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
       absolutePathExample: "/path/to/theme-hooks.ts",
     });
   }
+
+  // Validate polymorphicHelper config (null/undefined or object with typeName/importSource)
+  const polymorphicHelper = obj?.polymorphicHelper;
+  if (polymorphicHelper !== null && polymorphicHelper !== undefined) {
+    if (typeof polymorphicHelper !== "object") {
+      throw new Error(
+        [
+          `${where}: adapter.polymorphicHelper must be an object when provided.`,
+          `Received: polymorphicHelper=${describeValue(polymorphicHelper)}`,
+          "",
+          "Expected shape:",
+          "  {",
+          '    typeName: "PolymorphicComponentProps",',
+          '    importSource: { kind: "specifier", value: "./lib/polymorphic" }',
+          "  }",
+        ].join("\n"),
+      );
+    }
+
+    const { typeName, importSource } = polymorphicHelper as {
+      typeName?: unknown;
+      importSource?: unknown;
+    };
+    assertFunctionNameAndImportSource({
+      where,
+      configPath: "adapter.polymorphicHelper",
+      functionName: typeName,
+      importSource,
+      specifierExample: "./lib/polymorphic",
+      absolutePathExample: "/path/to/polymorphic.ts",
+    });
+  }
 }
 
 function assertFunctionNameAndImportSource(args: {
