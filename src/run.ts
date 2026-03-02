@@ -21,6 +21,7 @@ import type {
   SelectorResolveContext,
   SelectorResolveResult,
 } from "./adapter.js";
+import { POLYMORPHIC_HELPER_CONTENT } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 
@@ -406,6 +407,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapterWithLogging: Adapter = {
     styleMerger: resolvedAdapter.styleMerger,
     themeHook: resolvedAdapter.themeHook,
+    polymorphicHelperPath: resolvedAdapter.polymorphicHelperPath,
     externalInterface(ctx) {
       return resolvedAdapter.externalInterface(ctx);
     },
@@ -474,6 +476,15 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     for (const [sidecarPath, content] of sidecarFiles) {
       const merged = mergeSidecarContent(sidecarPath, content);
       await writeFile(sidecarPath, merged, "utf-8");
+    }
+  }
+
+  // Write the auto-generated polymorphic type helper file when configured.
+  if (adapterWithLogging.polymorphicHelperPath && !dryRun) {
+    const helperPath = resolve(adapterWithLogging.polymorphicHelperPath);
+    const existingContent = existsSync(helperPath) ? readFileSync(helperPath, "utf-8") : null;
+    if (existingContent !== POLYMORPHIC_HELPER_CONTENT) {
+      await writeFile(helperPath, POLYMORPHIC_HELPER_CONTENT, "utf-8");
     }
   }
 

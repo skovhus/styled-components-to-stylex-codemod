@@ -3,7 +3,7 @@
  * Core concepts: identifier usage scanning and import injection.
  */
 import path from "node:path";
-import type { ImportSource } from "../../adapter.js";
+import { POLYMORPHIC_TYPE_NAME, type ImportSource } from "../../adapter.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 
@@ -44,8 +44,8 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
   }
 
   // Ensure the polymorphic type helper import is present when referenced in type annotations.
-  if (adapter.polymorphicHelper?.typeName && adapter.polymorphicHelper.importSource) {
-    const typeName = adapter.polymorphicHelper.typeName;
+  if (adapter.polymorphicHelperPath) {
+    const typeName = POLYMORPHIC_TYPE_NAME;
     const hasTypeRef =
       root
         .find(j.TSTypeReference, {
@@ -67,7 +67,12 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
     const hasTopLevel = hasTopLevelValueBinding(root, typeName);
 
     if (hasTypeRef && !hasImportBinding && !hasTopLevel) {
-      insertImportAfterStylex(ctx, adapter.polymorphicHelper.importSource, typeName, true);
+      // Strip .ts/.d.ts extension from the helper path for the import specifier
+      const helperPathForImport = adapter.polymorphicHelperPath
+        .replace(/\.d\.ts$/, "")
+        .replace(/\.tsx?$/, "");
+      const importSource: ImportSource = { kind: "absolutePath", value: helperPathForImport };
+      insertImportAfterStylex(ctx, importSource, typeName, true);
     }
   }
 

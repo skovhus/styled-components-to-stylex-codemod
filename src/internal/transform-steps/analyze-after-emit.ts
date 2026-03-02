@@ -2,7 +2,7 @@
  * Step: analyze post-emit wrappers and delegation needs.
  * Core concepts: wrapper decisions and polymorphic-as handling.
  */
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { propagateDelegationWrapperRequirements } from "../utilities/delegation-utils.js";
@@ -354,6 +354,38 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   }
 
   ctx.wrapperNames = wrapperNames;
+
+  // Bail when a direct polymorphic component wrapper is detected but the helper path
+  // is not configured — the codemod needs it to emit correct Substitute-based typing.
+  if (!ctx.adapter.polymorphicHelperPath) {
+    for (const decl of styledDecls) {
+      if (decl.base.kind !== "component") {
+        continue;
+      }
+      const wrappedHasAs = wrapperNames.has(decl.base.ident);
+      const shouldAllow = wrapperNames.has(decl.localName) || (decl.supportsAsProp ?? false);
+      if (shouldAllow && !wrappedHasAs) {
+        return returnResult(
+          {
+            code: null,
+            warnings: [
+              {
+                severity: "warning",
+                type: "Polymorphic component wrapper needs adapter.polymorphicHelperPath to generate correct as-prop typing",
+                loc: decl.loc ?? null,
+                context: {
+                  component: decl.localName,
+                  wrappedComponent: decl.base.ident,
+                  hint: 'Set adapter.polymorphicHelperPath to an absolute path (e.g. path.resolve("src/lib/stylex-codemod.d.ts"))',
+                },
+              },
+            ],
+          },
+          "bail",
+        );
+      }
+    }
+  }
 
   return CONTINUE;
 }

@@ -244,36 +244,19 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     });
   }
 
-  // Validate polymorphicHelper config (null/undefined or object with typeName/importSource)
-  const polymorphicHelper = obj?.polymorphicHelper;
-  if (polymorphicHelper !== null && polymorphicHelper !== undefined) {
-    if (typeof polymorphicHelper !== "object") {
+  // Validate polymorphicHelperPath (null/undefined or non-empty string)
+  const polymorphicHelperPath = obj?.polymorphicHelperPath;
+  if (polymorphicHelperPath !== null && polymorphicHelperPath !== undefined) {
+    if (typeof polymorphicHelperPath !== "string" || !polymorphicHelperPath.trim()) {
       throw new Error(
         [
-          `${where}: adapter.polymorphicHelper must be an object when provided.`,
-          `Received: polymorphicHelper=${describeValue(polymorphicHelper)}`,
+          `${where}: adapter.polymorphicHelperPath must be a non-empty string when provided.`,
+          `Received: polymorphicHelperPath=${describeValue(polymorphicHelperPath)}`,
           "",
-          "Expected shape:",
-          "  {",
-          '    typeName: "PolymorphicComponentProps",',
-          '    importSource: { kind: "specifier", value: "./lib/polymorphic" }',
-          "  }",
+          'Example: path.resolve("src/lib/stylex-codemod.d.ts")',
         ].join("\n"),
       );
     }
-
-    const { typeName, importSource } = polymorphicHelper as {
-      typeName?: unknown;
-      importSource?: unknown;
-    };
-    assertFunctionNameAndImportSource({
-      where,
-      configPath: "adapter.polymorphicHelper",
-      functionName: typeName,
-      importSource,
-      specifierExample: "./lib/polymorphic",
-      absolutePathExample: "/path/to/polymorphic.ts",
-    });
   }
 }
 

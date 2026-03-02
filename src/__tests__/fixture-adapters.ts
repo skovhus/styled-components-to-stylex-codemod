@@ -22,12 +22,8 @@ export const fixtureAdapter = defineAdapter({
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
 
-  // Use PolymorphicComponentProps for correct as-prop override ordering
-  // See test-cases/lib/polymorphic.ts for the implementation
-  polymorphicHelper: {
-    typeName: "PolymorphicComponentProps",
-    importSource: { kind: "specifier", value: "./lib/polymorphic" },
-  },
+  // Path to the auto-generated polymorphic type helper file
+  polymorphicHelperPath: new URL("../../test-cases/lib/polymorphic.ts", import.meta.url).pathname,
 
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {

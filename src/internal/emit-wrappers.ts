@@ -3,12 +3,7 @@
  * Core concepts: intrinsic vs component wrappers and insertion ordering.
  */
 import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
-import {
-  DEFAULT_THEME_HOOK,
-  type ImportSource,
-  type StyleMergerConfig,
-  type ThemeHookConfig,
-} from "../adapter.js";
+import { DEFAULT_THEME_HOOK, type StyleMergerConfig, type ThemeHookConfig } from "../adapter.js";
 import type { StyledDecl } from "./transform-types.js";
 import { emitComponentWrappers } from "./emit-wrappers/emit-component.js";
 import { emitIntrinsicWrappers } from "./emit-wrappers/emit-intrinsic.js";
@@ -27,7 +22,7 @@ export function emitWrappers(args: {
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
   themeHook?: ThemeHookConfig;
-  polymorphicHelper?: { typeName: string; importSource: ImportSource } | null;
+  polymorphicHelperPath?: string | null;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
 }): void {
@@ -42,7 +37,7 @@ export function emitWrappers(args: {
     stylesIdentifier,
     styleMerger,
     themeHook,
-    polymorphicHelper,
+    polymorphicHelperPath,
     emptyStyleKeys,
     ancestorSelectorParents,
   } = args;
@@ -63,7 +58,7 @@ export function emitWrappers(args: {
     stylesIdentifier,
     styleMerger,
     themeHook: themeHook ?? DEFAULT_THEME_HOOK,
-    polymorphicHelper,
+    polymorphicHelperPath,
     emptyStyleKeys,
     ancestorSelectorParents,
   });

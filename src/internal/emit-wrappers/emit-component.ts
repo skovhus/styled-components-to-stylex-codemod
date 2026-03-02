@@ -3,6 +3,7 @@
  * Core concepts: prop mapping, style merging, and JSX construction.
  */
 import type { ASTNode, Property } from "jscodeshift";
+import { POLYMORPHIC_TYPE_NAME } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { emitStyleMerging } from "./style-merger.js";
@@ -309,27 +310,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
 
-          // When polymorphicHelper is configured and this is a direct polymorphic wrapper
-          // (not pass-through), use the Substitute-based helper type for correct prop
-          // override ordering (as-target props win over base props for overlapping keys).
-          const polyHelper = emitter.polymorphicHelper;
-          const usePolymorphicHelper = polyHelper && isPolymorphicComponentWrapper;
-
           let typeText: string;
-          if (usePolymorphicHelper) {
+          if (isPolymorphicComponentWrapper && emitter.polymorphicHelperPath) {
+            // Use the Substitute-based helper type for correct prop override ordering
+            // (as-target props win over base props for overlapping keys like event handlers).
             const parts = [
-              `${polyHelper.typeName}<${baseProps}, C>`,
+              `${POLYMORPHIC_TYPE_NAME}<${baseProps}, C>`,
               ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
               ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
               ...(explicit ? [explicit] : []),
             ];
             typeText = parts.join(" & ");
           } else {
-            // For pass-through polymorphic with explicit props type, mirror the wrapped
-            // component's Omit pattern (just `keyof ExplicitType`) to ensure type compatibility
-            // when spreading props into the wrapped component. Adding extra omissions like
-            // "className" | "style" would make the type narrower than what the wrapped component
-            // expects, causing TS2322 with generic type parameters.
+            // Pass-through polymorphic: mirror the wrapped component's Omit pattern
+            // (just `keyof ExplicitType`) for type compatibility when spreading into
+            // the wrapped component.
             const cOmitSuffix = isPassThroughPolymorphic ? "" : ' | "className" | "style"';
             typeText = [
               baseProps,
