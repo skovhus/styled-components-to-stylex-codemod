@@ -418,6 +418,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     });
     decl.supportsExternalStyles = extResult.styles;
     decl.supportsAsProp = extResult.as;
+    decl.supportsRefProp = extResult.ref;
   }
 
   // Early detection of components used as values (before emitStylesAndImports for merger import)

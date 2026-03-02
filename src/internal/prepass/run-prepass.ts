@@ -65,10 +65,13 @@ interface AstCacheEntry {
 /* ── Regex patterns (compiled once at module scope) ───────────────────── */
 
 const AS_PROP_RE = /\bas[={]/;
+const REF_PROP_RE = /\bref[={]/;
 const STYLED_CALL_RE = /styled\(([A-Z][A-Za-z0-9]+)/g;
 const STYLED_DEF_RE = /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled[.(]/g;
 /** Matches <Component ...as= across lines. [^<>]* avoids crossing tag boundaries. */
 const JSX_AS_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bas[={]/g;
+/** Matches <Component ...ref= across lines. [^<>]* avoids crossing tag boundaries. */
+const JSX_REF_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bref[={]/g;
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
@@ -142,6 +145,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
   // Consumer analysis state (if createExternalInterface)
   const asUsages = new Map<string, Set<string>>();
+  const refUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, Set<string>>();
@@ -183,8 +187,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
     const hasStyled = source.includes("styled-components");
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
+    const hasRefProp = createExternalInterface && REF_PROP_RE.test(source);
 
-    if (!hasStyled && !hasAsProp) {
+    if (!hasStyled && !hasAsProp && !hasRefProp) {
       continue;
     }
 
@@ -248,6 +253,16 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         }
       }
     }
+
+    // --- ref-prop detection ---
+    if (hasRefProp) {
+      JSX_REF_COMPONENT_RE.lastIndex = 0;
+      for (const m of source.matchAll(JSX_REF_COMPONENT_RE)) {
+        if (m[1]) {
+          addToSetMap(refUsages, m[1], filePath);
+        }
+      }
+    }
   }
 
   const styledFileCount = fileContents.size;
@@ -305,18 +320,26 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       const key = `${toRealPath(filePath)}:${name}`;
       let entry = consumerAnalysis!.get(key);
       if (!entry) {
-        entry = { styles: false, as: false };
+        entry = { styles: false, as: false, ref: false };
         consumerAnalysis!.set(key, entry);
       }
       return entry;
     };
 
-    // as-prop: match definitions to usages
-    if (asUsages.size > 0) {
+    // Match component definition files to consumer usage files and set flags.
+    // Shared logic: for each usage map, iterate definitions, check exports,
+    // verify same-file or cross-file import, and set the corresponding flag.
+    const matchUsagesToDefinitions = (
+      usages: ReadonlyMap<string, ReadonlySet<string>>,
+      field: keyof ExternalInterfaceResult,
+    ) => {
+      if (usages.size === 0) {
+        return;
+      }
       for (const [defFile, names] of styledDefFiles) {
         const defSrc = cachedRead(defFile);
         for (const name of names) {
-          const usageFiles = asUsages.get(name);
+          const usageFiles = usages.get(name);
           if (!usageFiles) {
             continue;
           }
@@ -325,53 +348,24 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
             continue;
           }
 
-          // Same-file usage — no import needed
           if (usageFiles.has(defFile)) {
-            ensure(defFile, name).as = true;
+            ensure(defFile, name)[field] = true;
             continue;
           }
 
-          // Cross-file — must be imported by a usage file
           for (const usageFile of usageFiles) {
             if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
-              ensure(defFile, name).as = true;
+              ensure(defFile, name)[field] = true;
               break;
             }
           }
         }
       }
-    }
+    };
 
-    // className/style prop: match definitions to usages
-    if (classNameStyleUsages.size > 0) {
-      for (const [defFile, names] of styledDefFiles) {
-        const defSrc = cachedRead(defFile);
-        for (const name of names) {
-          const usageFiles = classNameStyleUsages.get(name);
-          if (!usageFiles) {
-            continue;
-          }
-
-          if (!fileExports(defSrc, name)) {
-            continue;
-          }
-
-          // Same-file usage — no import needed
-          if (usageFiles.has(defFile)) {
-            ensure(defFile, name).styles = true;
-            continue;
-          }
-
-          // Cross-file — must be imported by a usage file
-          for (const usageFile of usageFiles) {
-            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
-              ensure(defFile, name).styles = true;
-              break;
-            }
-          }
-        }
-      }
-    }
+    matchUsagesToDefinitions(asUsages, "as");
+    matchUsagesToDefinitions(refUsages, "ref");
+    matchUsagesToDefinitions(classNameStyleUsages, "styles");
 
     // re-styled: resolve imports to find definition files
     {
@@ -426,12 +420,16 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       ? [...consumerAnalysis.values()].filter((v) => v.styles).length
       : 0;
     const asProp = consumerAnalysis ? [...consumerAnalysis.values()].filter((v) => v.as).length : 0;
+    const refProp = consumerAnalysis
+      ? [...consumerAnalysis.values()].filter((v) => v.ref).length
+      : 0;
     process.stdout.write(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
         ` — ${styledFileCount} with styled-components` +
         `, ${selectorUsages.size} cross-file selectors` +
         `, ${reStyled} re-styled` +
         `, ${asProp} as-prop` +
+        `, ${refProp} ref-prop` +
         `, ${classNameStyleUsages.size} className/style\n`,
     );
   }
@@ -717,7 +715,7 @@ function rgPreFilter(files: readonly string[]): Set<string> | undefined {
   }
 
   try {
-    const pattern = String.raw`(styled-components|\bas[={])`;
+    const pattern = String.raw`(styled-components|\bas[={]|\bref[={])`;
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");

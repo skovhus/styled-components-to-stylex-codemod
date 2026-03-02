@@ -34,30 +34,34 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
-  // Helper to check if a component has `as` or `forwardedAs` on its own opening tag
-  const hasPolymorphicAttrOnOpeningTag = (componentName: string): boolean => {
-    let hasAs = false;
-    let hasForwardedAs = false;
+  // Helper to check if a component has any of the given attribute names on its JSX opening tag
+  const hasAttrOnOpeningTag = (componentName: string, attrNames: ReadonlySet<string>): boolean => {
+    let found = false;
     root
       .find(j.JSXElement, {
         openingElement: { name: { type: "JSXIdentifier", name: componentName } },
       })
-      .forEach((p: any) => {
-        const opening = p.node.openingElement;
+      .forEach((p: unknown) => {
+        const opening = (p as { node: { openingElement: { attributes?: unknown[] } } }).node
+          .openingElement;
         for (const attr of opening.attributes ?? []) {
-          if (attr?.type !== "JSXAttribute" || attr.name?.type !== "JSXIdentifier") {
-            continue;
-          }
-          if (attr.name.name === "as") {
-            hasAs = true;
-          }
-          if (attr.name.name === "forwardedAs") {
-            hasForwardedAs = true;
+          const typed = attr as { type?: string; name?: { type?: string; name?: string } };
+          if (
+            typed.type === "JSXAttribute" &&
+            typed.name?.type === "JSXIdentifier" &&
+            typed.name.name &&
+            attrNames.has(typed.name.name)
+          ) {
+            found = true;
           }
         }
       });
-    return hasAs || hasForwardedAs;
+    return found;
   };
+
+  const polymorphicAttrs = new Set(["as", "forwardedAs"]);
+  const hasPolymorphicAttrOnOpeningTag = (componentName: string): boolean =>
+    hasAttrOnOpeningTag(componentName, polymorphicAttrs);
 
   for (const [baseName, children] of extendedBy.entries()) {
     const names = [baseName, ...children];
@@ -87,6 +91,19 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       if (hasPolymorphicAttrOnOpeningTag(decl.localName)) {
         wrapperNames.add(decl.localName);
       }
+    }
+  }
+
+  // Detect internal ref usage on styled components.
+  // When <StyledComponent ref={...}> appears in the same file, mark supportsRefProp
+  // so the emitter includes `ref` in the component's public type.
+  const refAttr = new Set(["ref"]);
+  for (const decl of styledDecls) {
+    if (decl.supportsRefProp) {
+      continue;
+    }
+    if (hasAttrOnOpeningTag(decl.localName, refAttr)) {
+      decl.supportsRefProp = true;
     }
   }
 
