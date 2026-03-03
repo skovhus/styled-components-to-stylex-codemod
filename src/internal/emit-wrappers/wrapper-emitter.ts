@@ -984,7 +984,29 @@ export class WrapperEmitter {
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
 
-  /** Gets a component's explicit props type name if it's a simple identifier (e.g., FlexProps). */
+  /**
+   * Gets a component's explicit props type including type arguments (e.g., FlexProps, Props<"button">).
+   * Returns the full stringified type reference, not just the identifier name.
+   */
+  resolveWrappedExplicitPropsType(componentName: string): string | null {
+    const decl = this.wrapperDecls.find((d2) => d2.localName === componentName);
+    if (!decl?.propsType) {
+      return null;
+    }
+    const pt = decl.propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    if (pt.type === "TSTypeReference" && pt.typeName?.type === "Identifier") {
+      return this.stringifyTsType(pt);
+    }
+    return null;
+  }
+
+  /**
+   * Gets only the base type name (without type arguments) from a component's props type.
+   * Used for detecting self-referential types.
+   */
   resolveWrappedExplicitPropsTypeName(componentName: string): string | null {
     const decl = this.wrapperDecls.find((d2) => d2.localName === componentName);
     if (!decl?.propsType) {
@@ -1029,15 +1051,27 @@ export class WrapperEmitter {
    * When the wrapped component is a generic function (e.g., Flex<C>), uses its explicit
    * props type directly because `React.ComponentPropsWithRef<typeof GenericComponent>`
    * resolves to `any`. Falls back to the standard `typeof` form otherwise.
+   *
+   * @param componentName - The name of the wrapped component
+   * @param excludeTypeName - Optional type name to exclude to avoid self-referential types.
+   *   When the caller's explicit props type equals the wrapped component's props type,
+   *   pass the caller's type name here to fall back to the `typeof` form.
    */
-  componentPropsBaseType(componentName: string): string {
+  componentPropsBaseType(componentName: string, excludeTypeName?: string): string {
     if (!this.wrappedComponentWillBeGeneric(componentName)) {
       return `React.ComponentPropsWithRef<typeof ${componentName}>`;
     }
-    const typeName = this.resolveWrappedExplicitPropsTypeName(componentName);
-    const defaultTag = typeName ? this.resolveWrappedDefaultTag(componentName) : null;
-    if (typeName && defaultTag) {
-      return `${typeName} & Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${typeName}>`;
+    const wrappedTypeName = this.resolveWrappedExplicitPropsTypeName(componentName);
+    // P1 fix: Avoid self-referential types by falling back to `typeof` when the
+    // wrapped component's props type name matches the caller's explicit props type.
+    if (wrappedTypeName && excludeTypeName && wrappedTypeName === excludeTypeName) {
+      return `React.ComponentPropsWithRef<typeof ${componentName}>`;
+    }
+    // P2 fix: Use the full type with arguments (e.g., Props<"button">)
+    const fullPropsType = this.resolveWrappedExplicitPropsType(componentName);
+    const defaultTag = fullPropsType ? this.resolveWrappedDefaultTag(componentName) : null;
+    if (fullPropsType && defaultTag) {
+      return `${fullPropsType} & Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${fullPropsType}>`;
     }
     return `React.ComponentPropsWithRef<typeof ${componentName}>`;
   }

@@ -178,8 +178,25 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
-      if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
-        const base = emitter.componentPropsBaseType(renderedComponent);
+      // Check if the wrapper and wrapped component share the same props type name.
+      // This would create a circular type reference, so we should not extend the type.
+      const wrappedPropsTypeName = emitter.resolveWrappedExplicitPropsTypeName(renderedComponent);
+      const isSelfReferentialPropsType = !!(
+        explicitTypeName &&
+        wrappedPropsTypeName &&
+        explicitTypeName === wrappedPropsTypeName
+      );
+
+      if (
+        explicitTypeExists &&
+        explicit &&
+        explicitTypeName &&
+        !isPolymorphicComponentWrapper &&
+        !isSelfReferentialPropsType
+      ) {
+        // Pass explicitTypeName to avoid self-referential types when wrapper and wrapped
+        // component share the same props type name (P1 fix)
+        const base = emitter.componentPropsBaseType(renderedComponent, explicitTypeName);
         const omitted: string[] = [];
         if (!allowClassNameProp || forceClassNameOptional) {
           omitted.push('"className"');
@@ -218,6 +235,36 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           emitter.extendExistingTypeAlias(explicitTypeName, baseTypeText);
         }
         functionParamTypeName = explicitTypeName;
+      } else if (isSelfReferentialPropsType && explicitTypeName) {
+        // P1 fix: When wrapper and wrapped component share the same props type,
+        // don't modify the existing type (would create circular reference).
+        // Instead, use an inline intersection in the function parameter:
+        //   SharedProps & Omit<ComponentProps<"div">, keyof SharedProps>
+        // This is safe because SharedProps is already defined (no forward reference).
+        const defaultTag = emitter.resolveWrappedDefaultTag(renderedComponent);
+        const omitted: string[] = [];
+        if (!allowClassNameProp) {
+          omitted.push('"className"');
+        }
+        if (!allowStyleProp) {
+          omitted.push('"style"');
+        }
+        const intrinsicBase = defaultTag
+          ? `Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${explicitTypeName}${omitted.length ? ` | ${omitted.join(" | ")}` : ""}>`
+          : null;
+        const optionalProps: string[] = [];
+        if (allowSxProp) {
+          optionalProps.push(SX_PROP_TYPE_TEXT);
+        }
+        if (hasForwardedAsUsage) {
+          optionalProps.push("forwardedAs?: React.ElementType");
+        }
+        // Build inline type for the function parameter (don't modify SharedProps)
+        inlineTypeText = emitter.joinIntersection(
+          explicitTypeName,
+          intrinsicBase,
+          optionalProps.length > 0 ? `{ ${optionalProps.join("; ")} }` : null,
+        );
       } else {
         if (isPolymorphicComponentWrapper) {
           const basePropsRaw = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
