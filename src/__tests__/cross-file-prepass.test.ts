@@ -551,6 +551,43 @@ export const App = () => <CollapseArrowIcon />;
     expect(result.bridgeResults).toHaveLength(1);
   });
 
+  it("includes bridge class in className for shouldForwardProp components that allow className", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Flex = styled("div").withConfig({
+  shouldForwardProp: (prop) => !["column"].includes(prop),
+})<{ column?: boolean }>\`
+  display: flex;
+  flex-direction: \${({ column }) => column ? "column" : "row"};
+\`;
+
+export const App = () => <Flex className="extra" column>Content</Flex>;
+`;
+
+    const absPath = pathResolve("/src/lib/flex.tsx");
+    const bridgeComponentNames = new Set(["Flex"]);
+
+    const result = transformWithWarnings({ source, path: "/src/lib/flex.tsx" }, api, {
+      adapter: fixtureAdapter,
+      crossFileInfo: { selectorUsages: [], bridgeComponentNames },
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    // Should contain the bridge className value as an internal const
+    const bridgeCn = generateBridgeClassName(absPath, "Flex");
+    const internalVar = bridgeClassVarName("Flex");
+    expect(code).toContain(`const ${internalVar} = "${bridgeCn}"`);
+
+    // The bridge class variable must appear in the component's className expression,
+    // not just in the GlobalSelector export.
+    // Count occurrences: at least 3 — definition + GlobalSelector + className usage
+    const varOccurrences = code.split(internalVar).length - 1;
+    expect(varOccurrences).toBeGreaterThanOrEqual(3);
+  });
+
   it("does NOT emit bridge for components not in bridgeComponentNames", () => {
     const source = `
 import styled from "styled-components";

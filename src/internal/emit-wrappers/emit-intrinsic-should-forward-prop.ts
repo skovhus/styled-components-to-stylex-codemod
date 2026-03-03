@@ -728,6 +728,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ? buildPrefixCleanupStatements(j, restId, dropPrefix)
       : null;
 
+    // Extract static className and bridge class for the style merger
+    const { staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo, getBridgeClassVar(d));
+
     // Use the style merger helper
     const merging = emitStyleMerging({
       j,
@@ -739,6 +742,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+      staticClassNameExpr,
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
