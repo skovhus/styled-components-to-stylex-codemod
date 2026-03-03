@@ -304,6 +304,20 @@ export const fixtureAdapter = defineAdapter({
 
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
+
+    // Handle thinBorder(color) helper from ./lib/helpers.ts
+    // thinBorder("transparent") -> `${pixelVars.thin} solid transparent`
+    if (ctx.calleeImportedName === "thinBorder" && key) {
+      return {
+        expr: `\`\${pixelVars.thin} solid ${key}\``,
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "pixelVars" }],
+          },
+        ],
+      };
+    }
     const themeColorKey = (() => {
       if (!arg0 || arg0.kind !== "theme") {
         return undefined;
