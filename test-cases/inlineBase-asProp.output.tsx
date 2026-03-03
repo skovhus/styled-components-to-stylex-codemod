@@ -1,16 +1,12 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import type { PolymorphicComponentProps } from "./lib/polymorphic";
 import { Flex } from "./lib/inline-base-flex";
 
-type ContainerProps<C extends React.ElementType = typeof Flex> = React.ComponentPropsWithRef<
-  typeof Flex
-> &
-  Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof React.ComponentPropsWithRef<typeof Flex> | "className" | "style"
-  > & {
-    as?: C;
-  };
+type ContainerProps<C extends React.ElementType = typeof Flex> = PolymorphicComponentProps<
+  React.ComponentPropsWithRef<typeof Flex>,
+  C
+>;
 
 function Container<C extends React.ElementType = typeof Flex>(props: ContainerProps<C>) {
   const { as: Component = Flex, ...rest } = props;

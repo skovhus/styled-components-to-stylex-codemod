@@ -22,6 +22,12 @@ export const fixtureAdapter = defineAdapter({
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
 
+  // Import source for the polymorphic type helper (auto-generated at this path)
+  polymorphicHelper: {
+    kind: "absolutePath",
+    value: new URL("../../test-cases/lib/polymorphic.ts", import.meta.url).pathname,
+  },
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both

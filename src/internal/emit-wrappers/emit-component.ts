@@ -3,6 +3,7 @@
  * Core concepts: prop mapping, style merging, and JSX construction.
  */
 import type { ASTNode, Property } from "jscodeshift";
+import { POLYMORPHIC_TYPE_NAME } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { emitStyleMerging } from "./style-merger.js";
@@ -117,6 +118,46 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     return explicitProps.has(propName);
   };
 
+  /** Resolves the default intrinsic tag by tracing through the component chain. */
+  const resolveWrappedDefaultTag = (componentName: string): string | null => {
+    const visited = new Set<string>();
+    let current = componentName;
+    for (;;) {
+      if (visited.has(current)) {
+        return null;
+      }
+      visited.add(current);
+      const decl = wrapperDecls.find((d2) => d2.localName === current);
+      if (!decl) {
+        return null;
+      }
+      if (decl.base.kind === "intrinsic") {
+        return decl.base.tagName;
+      }
+      if (decl.base.kind === "component") {
+        current = decl.base.ident;
+      } else {
+        return null;
+      }
+    }
+  };
+
+  /** Gets the wrapped component's explicit props type name if it's a simple identifier. */
+  const getWrappedExplicitPropsTypeName = (componentName: string): string | null => {
+    const decl = wrapperDecls.find((d2) => d2.localName === componentName);
+    if (!decl?.propsType) {
+      return null;
+    }
+    const pt = decl.propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    if (pt.type === "TSTypeReference" && pt.typeName?.type === "Identifier") {
+      return pt.typeName.name;
+    }
+    return null;
+  };
+
   // Component wrappers (styled(Component)) - these wrap another component
   const componentWrappers = wrapperDecls.filter((d: StyledDecl) => d.base.kind === "component");
 
@@ -132,6 +173,24 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const supportsAsProp = d.supportsAsProp ?? false;
     const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
+    // When wrapping a polymorphic component that has a named explicit props type (e.g.,
+    // FlexProps), the wrapper needs generic typing to properly forward element-specific
+    // props (e.g., onChange typed for "input" vs "div"). The wrapper doesn't destructure
+    // `as` — it flows through props to the wrapped component.
+    // Only enabled when the wrapped component has a named explicit props type, because
+    // React.ComponentPropsWithRef<typeof GenericComponent> evaluates to `any` for generic
+    // function components, making typeof-based polymorphic types unsound.
+    const wrappedExplicitPropsTypeName = wrappedComponentHasAs
+      ? getWrappedExplicitPropsTypeName(wrappedComponent)
+      : null;
+    const isPassThroughPolymorphic =
+      shouldAllowAsProp && wrappedComponentHasAs && wrappedExplicitPropsTypeName !== null;
+    const needsGenericType = isPolymorphicComponentWrapper || isPassThroughPolymorphic;
+    const genericDefault = isPassThroughPolymorphic
+      ? `"${resolveWrappedDefaultTag(wrappedComponent) ?? "div"}"`
+      : needsGenericType
+        ? `typeof ${wrappedComponent}`
+        : null;
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
     // component's className/style are not silently dropped by the styled() layer.
@@ -178,7 +237,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeName = isSimpleTypeRef ? (propsType?.typeName?.name ?? null) : null;
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
-      if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
+      if (explicitTypeExists && explicit && explicitTypeName && !needsGenericType) {
         const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
         const omitted: string[] = [];
         if (!allowClassNameProp || forceClassNameOptional) {
@@ -219,9 +278,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
         functionParamTypeName = explicitTypeName;
       } else {
-        if (isPolymorphicComponentWrapper) {
-          const basePropsRaw = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
-          // When forcing optional, omit className/style from base to prevent inheriting requiredness
+        if (needsGenericType) {
+          // For pass-through polymorphic, use the named props type directly (e.g., FlexProps);
+          // fall back to typeof-based base for direct polymorphic wrappers.
+          const basePropsSrc =
+            wrappedExplicitPropsTypeName ??
+            `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+
+          // When forcing optional, omit className/style from base to prevent inheriting requiredness.
+          // className/style are NOT omitted for pass-through because the wrapped component
+          // expects them and props flow through via spread.
           const baseOmitted: string[] = [];
           if (forceClassNameOptional) {
             baseOmitted.push('"className"');
@@ -230,15 +296,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             baseOmitted.push('"style"');
           }
           const baseProps = baseOmitted.length
-            ? `Omit<${basePropsRaw}, ${baseOmitted.join(" | ")}>`
-            : basePropsRaw;
-          const omitted: string[] = [];
-          if (!allowClassNameProp) {
-            omitted.push('"className"');
-          }
-          if (!allowStyleProp) {
-            omitted.push('"style"');
-          }
+            ? `Omit<${basePropsSrc}, ${baseOmitted.join(" | ")}>`
+            : basePropsSrc;
           // Add optional className/style/sx when forcing optional or when sx is enabled
           const optionalStyleProps: string[] = [];
           if (forceClassNameOptional) {
@@ -250,19 +309,36 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (allowSxProp) {
             optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
-          const typeText = [
-            baseProps,
-            `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsRaw} | "className" | "style">`,
-            "{\n  as?: C;\n}",
-            ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
-            ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
-            // Include user's explicit props type if it exists
-            ...(explicit ? [explicit] : []),
-          ].join(" & ");
+
+          let typeText: string;
+          if (isPolymorphicComponentWrapper && emitter.polymorphicHelper) {
+            // Use the Substitute-based helper type for correct prop override ordering
+            // (as-target props win over base props for overlapping keys like event handlers).
+            const parts = [
+              `${POLYMORPHIC_TYPE_NAME}<${baseProps}, C>`,
+              ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ];
+            typeText = parts.join(" & ");
+          } else {
+            // Pass-through polymorphic: mirror the wrapped component's Omit pattern
+            // (just `keyof ExplicitType`) for type compatibility when spreading into
+            // the wrapped component.
+            const cOmitSuffix = isPassThroughPolymorphic ? "" : ' | "className" | "style"';
+            typeText = [
+              baseProps,
+              `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsSrc}${cOmitSuffix}>`,
+              "{\n  as?: C;\n}",
+              ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+              ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
+              ...(explicit ? [explicit] : []),
+            ].join(" & ");
+          }
           emitNamedPropsType(
             d.localName,
             typeText,
-            `C extends React.ElementType = typeof ${wrappedComponent}`,
+            `C extends React.ElementType = ${genericDefault}`,
           );
         } else {
           // Check if the wrapped component is one of our styled component wrappers.
@@ -584,20 +660,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     const propsParamId = j.identifier("props");
     let polymorphicFnTypeParams: any = null;
-    if (isPolymorphicComponentWrapper && emitTypes) {
+    if (needsGenericType && emitTypes) {
       polymorphicFnTypeParams = j(
-        `function _<C extends React.ElementType = typeof ${wrappedComponent}>() { return null }`,
+        `function _<C extends React.ElementType = ${genericDefault}>() { return null }`,
       ).get().node.program.body[0].typeParameters;
       (propsParamId as any).typeAnnotation = j(
         `const x: ${emitter.propsTypeNameFor(d.localName)}<C> = null`,
       ).get().node.program.body[0].declarations[0].id.typeAnnotation;
     }
     // If we extended an existing type directly, use that type name for the parameter.
-    if (!isPolymorphicComponentWrapper && functionParamTypeName && emitTypes) {
+    if (!needsGenericType && functionParamTypeName && emitTypes) {
       propsParamId.typeAnnotation = j.tsTypeAnnotation(
         j.tsTypeReference(j.identifier(functionParamTypeName)),
       );
-    } else if (!isPolymorphicComponentWrapper) {
+    } else if (!needsGenericType) {
       // When there are no custom props, use inline type instead of named type
       emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
     }

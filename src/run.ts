@@ -21,6 +21,7 @@ import type {
   SelectorResolveContext,
   SelectorResolveResult,
 } from "./adapter.js";
+import { POLYMORPHIC_HELPER_CONTENT } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 
@@ -406,6 +407,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const adapterWithLogging: Adapter = {
     styleMerger: resolvedAdapter.styleMerger,
     themeHook: resolvedAdapter.themeHook,
+    polymorphicHelper: resolvedAdapter.polymorphicHelper,
     externalInterface(ctx) {
       return resolvedAdapter.externalInterface(ctx);
     },
@@ -474,6 +476,20 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     for (const [sidecarPath, content] of sidecarFiles) {
       const merged = mergeSidecarContent(sidecarPath, content);
       await writeFile(sidecarPath, merged, "utf-8");
+    }
+  }
+
+  // Write the auto-generated polymorphic type helper file for absolutePath sources.
+  // Specifier sources assume the user provides the module (e.g. from a shared package).
+  if (
+    adapterWithLogging.polymorphicHelper?.kind === "absolutePath" &&
+    adapterWithLogging.polymorphicHelper.value &&
+    !dryRun
+  ) {
+    const helperPath = resolve(adapterWithLogging.polymorphicHelper.value);
+    const existingContent = existsSync(helperPath) ? readFileSync(helperPath, "utf-8") : null;
+    if (existingContent !== POLYMORPHIC_HELPER_CONTENT) {
+      await writeFile(helperPath, POLYMORPHIC_HELPER_CONTENT, "utf-8");
     }
   }
 

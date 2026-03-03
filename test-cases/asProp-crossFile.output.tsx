@@ -1,16 +1,12 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import type { PolymorphicComponentProps } from "./lib/polymorphic";
 import { Text } from "./lib/text";
 
-type HeaderTitleProps<C extends React.ElementType = typeof Text> = React.ComponentPropsWithRef<
-  typeof Text
-> &
-  Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof React.ComponentPropsWithRef<typeof Text> | "className" | "style"
-  > & {
-    as?: C;
-  };
+type HeaderTitleProps<C extends React.ElementType = typeof Text> = PolymorphicComponentProps<
+  React.ComponentPropsWithRef<typeof Text>,
+  C
+>;
 
 export function HeaderTitle<C extends React.ElementType = typeof Text>(props: HeaderTitleProps<C>) {
   const { as: Component = Text, ...rest } = props;

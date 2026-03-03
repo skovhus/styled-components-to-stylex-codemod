@@ -27,6 +27,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     stylesIdentifier: ctx.stylesIdentifier ?? "styles",
     styleMerger: ctx.adapter.styleMerger,
     themeHook: ctx.adapter.themeHook,
+    polymorphicHelper: ctx.adapter.polymorphicHelper,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
   });
