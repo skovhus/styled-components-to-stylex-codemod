@@ -1,0 +1,1 @@
+import{j as e}from"./index-zlnohtvV.js";import{F as r}from"./inline-base-flex-CuKyH44R.js";function l(){return e.jsxs("div",{className:"x1tamke2 xln26u5",children:[e.jsx(r,{column:!0,gap:8,className:"u-margin",children:"With className"}),e.jsx(r,{column:!0,gap:16,style:{color:"red"},children:"With style"})]})}export{l as App};
