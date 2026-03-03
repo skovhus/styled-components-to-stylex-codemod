@@ -304,7 +304,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
       return (
         keys.includes("default") ||
-        keys.some((k) => k.startsWith(":") || k.startsWith("@media") || k.startsWith("::"))
+        keys.some(
+          (k) =>
+            k.startsWith(":") ||
+            k.startsWith("@media") ||
+            k.startsWith("@container") ||
+            k.startsWith("::"),
+        )
       );
     };
 
