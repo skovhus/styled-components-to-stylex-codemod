@@ -1,0 +1,1 @@
+import{j as r}from"./index-h25qP3nz.js";import{p as t}from"./stylex-DS3CntOa.js";import{m as o}from"./mixins.stylex-CqnyKmVW.js";function n(){return r.jsx("div",{...t(o.flex,s.container),children:"Mixin mode"})}const s={container:{kmVPX3:"xe8ttls",kWkggS:"xpnvprw",kMzoRj:"xmkeg23",ksu8eU:"x1y0btm7",kVAM5u:"xqu46wi",$$css:!0}};export{n as App};
