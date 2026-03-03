@@ -578,10 +578,15 @@ function buildInlineResolverVariantDimensions(args: {
   // single-key variant styles into combined per-call-site entries. This reduces
   // N separate style entries (one per consumed prop) to M entries (one per unique
   // prop combination), and produces fewer stylex.props() arguments.
+  const effectiveBaseSx: Record<string, string> = {
+    ...baseResult.sx,
+    ...foldedBaseSx,
+  };
   const callSiteCombinedStyles = buildCallSiteCombinedStyles({
     decl,
     staticBooleanVariants,
     dimensions,
+    baseSx: effectiveBaseSx,
     propsByUsage: usageResult.propsByUsage,
     hasCompleteCallsiteVisibility:
       !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue,
@@ -883,6 +888,7 @@ function buildCallSiteCombinedStyles(args: {
   decl: StyledDecl;
   staticBooleanVariants: StaticBooleanVariant[];
   dimensions: VariantDimension[];
+  baseSx: Record<string, string>;
   propsByUsage: Array<Record<string, ResolveBaseComponentStaticValue>>;
   hasCompleteCallsiteVisibility: boolean;
   hasPropReferencingTemplateExpressions: boolean;
@@ -891,6 +897,7 @@ function buildCallSiteCombinedStyles(args: {
     decl,
     staticBooleanVariants,
     dimensions,
+    baseSx,
     propsByUsage,
     hasCompleteCallsiteVisibility,
     hasPropReferencingTemplateExpressions,
@@ -924,7 +931,9 @@ function buildCallSiteCombinedStyles(args: {
     if (combinationGroups.has(groupKey)) {
       continue;
     }
-    const mergedStyles: Record<string, unknown> = {};
+    // Merge base sx + per-prop variant styles into a complete style entry
+    // so each call site uses exactly one style reference (no base + override).
+    const mergedStyles: Record<string, unknown> = { ...baseSx };
     for (const propName of matchingPropNames) {
       const variant = variantsByProp.get(propName)!;
       Object.assign(mergedStyles, variant.styles);

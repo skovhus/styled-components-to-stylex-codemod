@@ -385,6 +385,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
+        // When a combined per-call-site style matches, use it INSTEAD of the base
+        // style — the combined entry already includes all base + consumed-prop styles.
+        const baseStyleKey = matchedCombinedStyleKey ?? decl.styleKey;
+
         const styleArgs: ExpressionKind[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -397,20 +401,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...extraMixinArgs,
           j.memberExpression(
             j.identifier(ctx.stylesIdentifier ?? "styles"),
-            j.identifier(decl.styleKey),
+            j.identifier(baseStyleKey),
           ),
           ...extraAfterBaseArgs,
         ];
-
-        // Apply combined per-call-site style if matched
-        if (matchedCombinedStyleKey) {
-          styleArgs.push(
-            j.memberExpression(
-              j.identifier(ctx.stylesIdentifier ?? "styles"),
-              j.identifier(matchedCombinedStyleKey),
-            ),
-          );
-        }
 
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
