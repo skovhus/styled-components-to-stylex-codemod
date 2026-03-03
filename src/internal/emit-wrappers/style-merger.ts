@@ -388,15 +388,8 @@ function buildMergerClassNameArg(args: {
     const first = parts[0];
     return first ?? null;
   }
-  return j.callExpression(
-    j.memberExpression(
-      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
-        j.identifier("Boolean"),
-      ]),
-      j.identifier("join"),
-    ),
-    [j.literal(" ")],
-  );
+  // Pass multiple classNames as an array — the merger function handles joining.
+  return j.arrayExpression(parts);
 }
 
 /**
