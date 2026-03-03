@@ -195,6 +195,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-textAlign {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-1e2mv7m {
   syntax: "*";
   inherits: false
@@ -627,6 +632,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1uuigni:not(#\#):not(#\#) {
   border-color: #2f2f2f;
+}
+
+.xagrhfj:not(#\#):not(#\#) {
+  border-color: #4caf50;
 }
 
 .x1e9dlz5:not(#\#):not(#\#) {
@@ -1145,7 +1154,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #bf4f74;
 }
 
-.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
+.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -1607,6 +1616,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x330b2w:not(#\#):not(#\#):not(#\#) {
   background-color: #e8f4e8;
+}
+
+.x8cstpe:not(#\#):not(#\#):not(#\#) {
+  background-color: #e8f5e9;
 }
 
 .xg3y8ke:not(#\#):not(#\#):not(#\#) {
@@ -2345,6 +2358,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-size: var(--xxcdnn2);
 }
 
+.x1j61x8r:not(#\#):not(#\#):not(#\#) {
+  font-style: normal;
+}
+
 .xss6m8b:not(#\#):not(#\#):not(#\#) {
   font-variant-numeric: tabular-nums;
 }
@@ -2595,6 +2612,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   text-align: right;
 }
 
+.x142shqn:not(#\#):not(#\#):not(#\#) {
+  text-align: var(--x-textAlign);
+}
+
 .xlyipyv:not(#\#):not(#\#):not(#\#) {
   text-overflow: ellipsis;
 }
@@ -2690,6 +2711,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 .x87ps6o:not(#\#):not(#\#):not(#\#) {
   -webkit-user-select: none;
   user-select: none;
+}
+
+.x1hx0egp:not(#\#):not(#\#):not(#\#) {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .xuxw1ft:not(#\#):not(#\#):not(#\#) {
@@ -2824,7 +2850,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: 1;
 }
 
-.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
+.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
