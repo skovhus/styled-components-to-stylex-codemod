@@ -1,1 +1,0 @@
-import{j as s}from"./index-DJln-3ic.js";function n(){return s.jsxs("div",{className:"x1tamke2 xln26u5",children:[s.jsx("div",{className:"x78zum5 xdt5ytf x1665zp3 x6s0dn4 xl56j7k",children:"Content A"}),s.jsx("div",{className:"x78zum5",children:"Content B"})]})}export{n as App};
