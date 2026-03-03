@@ -284,9 +284,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // - Everything from first spread onwards → rest (in original interleaved order)
         // - stylex.props() inserted after the last spread in rest
         // - `style` attr → always last (for inline overrides)
+        // - For direct JSX resolution: `className` is also extracted for merging
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
         let styleAttr: (typeof keptAttrs)[0] | null = null;
+        let classNameAttr: (typeof keptAttrs)[0] | null = null;
         let seenSpread = false;
         for (const attr of keptAttrs) {
           if (
@@ -294,16 +296,20 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "style"
           ) {
-            // `style` attribute always goes last to allow inline overrides
             styleAttr = attr;
+          } else if (
+            decl.isDirectJsxResolution &&
+            attr.type === "JSXAttribute" &&
+            attr.name.type === "JSXIdentifier" &&
+            attr.name.name === "className"
+          ) {
+            classNameAttr = attr;
           } else if (attr.type === "JSXSpreadAttribute") {
             rest.push(attr);
             seenSpread = true;
           } else if (seenSpread) {
-            // After first spread, preserve interleaved order in rest
             rest.push(attr);
           } else {
-            // Attrs before any spread go to leading
             leading.push(attr);
           }
         }
@@ -505,23 +511,29 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
-        // Build final rest with stylex.props inserted after last spread
-        const stylexSpread = j.jsxSpreadAttribute(
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-            ...styleArgs,
-          ]),
-        );
+        // Build final rest with stylex.props inserted after last spread.
+        // For direct JSX resolutions with className/style, use mergedSx to
+        // combine StyleX output with user-provided className/style values.
+        const needsMerge =
+          decl.isDirectJsxResolution && (classNameAttr !== null || styleAttr !== null);
+        const stylexCallExpr = needsMerge
+          ? buildMergedSxCall(j, styleArgs, classNameAttr, styleAttr)
+          : j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
+              ...styleArgs,
+            ]);
+        const stylexSpread = j.jsxSpreadAttribute(stylexCallExpr);
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
           stylexSpread,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 
-        // Final order: leading attrs, rest (with stylex.props inserted), style attr last
+        // Final order: leading attrs, rest (with stylex.props/mergedSx inserted).
+        // When mergedSx is used, className/style are already folded into the call.
         opening.attributes = [
           ...keptLeadingAfterVariants,
           ...finalRest,
-          ...(styleAttr ? [styleAttr] : []),
+          ...(styleAttr && !needsMerge ? [styleAttr] : []),
         ];
       });
   }
@@ -539,4 +551,48 @@ function buildInlineVariantLookupFromAttr(
     return undefined;
   }
   return j.memberExpression(j.identifier(variantObjectName), j.literal(value), true /* computed */);
+}
+
+/**
+ * Builds `mergedSx(stylesArg, classNameExpr, styleExpr)` for direct JSX
+ * resolutions that receive className and/or style at a call site.
+ * `mergedSx` calls `stylex.props()` internally, so we pass raw style objects.
+ */
+function buildMergedSxCall(
+  j: TransformContext["j"]["jscodeshift"],
+  styleArgs: ExpressionKind[],
+  classNameAttr: unknown,
+  styleAttr: unknown,
+): ExpressionKind {
+  const stylesArg = styleArgs.length === 1 ? styleArgs[0]! : j.arrayExpression([...styleArgs]);
+
+  const classNameExpr = extractJsxAttrValueExpr(j, classNameAttr);
+  const styleExpr = extractJsxAttrValueExpr(j, styleAttr);
+
+  return j.callExpression(j.identifier("mergedSx"), [
+    stylesArg,
+    classNameExpr ?? j.identifier("undefined"),
+    ...(styleExpr ? [styleExpr] : []),
+  ]);
+}
+
+/** Extracts the value expression from a JSX attribute node. */
+function extractJsxAttrValueExpr(
+  j: TransformContext["j"]["jscodeshift"],
+  attr: unknown,
+): ExpressionKind | undefined {
+  if (!attr) {
+    return undefined;
+  }
+  const a = attr as { value?: { type?: string; value?: unknown; expression?: unknown } };
+  if (!a.value) {
+    return j.literal(true) as unknown as ExpressionKind;
+  }
+  if (a.value.type === "StringLiteral" || a.value.type === "Literal") {
+    return j.literal(a.value.value as string | number | boolean) as unknown as ExpressionKind;
+  }
+  if (a.value.type === "JSXExpressionContainer") {
+    return a.value.expression as ExpressionKind;
+  }
+  return undefined;
 }
