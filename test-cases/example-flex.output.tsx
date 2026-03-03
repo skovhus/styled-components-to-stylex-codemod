@@ -340,19 +340,19 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  flexGrow: (grow: number | undefined) => ({
+  flexGrow: (grow: number) => ({
     flexGrow: grow,
   }),
-  flexShrink: (shrink: number | undefined) => ({
+  flexShrink: (shrink: number) => ({
     flexShrink: shrink,
   }),
-  flexGap: (gap: number | undefined) => ({
+  flexGap: (gap: number) => ({
     gap: `${gap}px`,
   }),
-  flexColumnGap: (wrapGap: number | undefined) => ({
+  flexColumnGap: (wrapGap: number) => ({
     columnGap: `${wrapGap}px`,
   }),
-  flexRowGap: (wrapGap: number | undefined) => ({
+  flexRowGap: (wrapGap: number) => ({
     rowGap: `${wrapGap}px`,
   }),
   /**

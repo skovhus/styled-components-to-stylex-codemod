@@ -91,13 +91,13 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  flexBoxGap: (gap: number | undefined) => ({
+  flexBoxGap: (gap: number) => ({
     gap: `${gap}px`,
   }),
-  flexBoxColumnGap: (wrapGap: number | undefined) => ({
+  flexBoxColumnGap: (wrapGap: number) => ({
     columnGap: `${wrapGap}px`,
   }),
-  flexBoxRowGap: (wrapGap: number | undefined) => ({
+  flexBoxRowGap: (wrapGap: number) => ({
     rowGap: `${wrapGap}px`,
   }),
   flexBoxWrap: {

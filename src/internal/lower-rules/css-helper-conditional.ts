@@ -117,17 +117,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
   const avoidNames = new Set(importMap.keys());
 
   /**
-   * Resolve the TS type node for a prop used in a style function parameter object.
+   * Resolve the TS type node for a prop used in a style function parameter.
    * Uses the component's type annotation to infer the correct type (e.g. `number | string`).
-   * For optional props, includes `| undefined` in the union.
+   * For optional props, includes `| undefined` in the union unless `required` is set,
+   * which callers should use when the call-site condition narrows away undefined
+   * (e.g. `typeof x === "number"` is a TypeScript type guard).
    * Falls back to `number` when the prop type cannot be determined.
    */
-  const resolveStyleFnPropType = (jsxProp: string): unknown => {
+  const resolveStyleFnPropType = (jsxProp: string, opts?: { required?: boolean }): unknown => {
     const resolved =
       cloneAstNode(resolveTypeNodeFromTsType(j, findJsxPropTsType(jsxProp))) ?? j.tsNumberKeyword();
 
-    // Wrap with `| undefined` for optional props
-    if (isJsxPropOptional(jsxProp)) {
+    if (!opts?.required && isJsxPropOptional(jsxProp)) {
       const members =
         (resolved as { type: string }).type === "TSUnionType"
           ? [...(resolved as { types: unknown[] }).types, j.tsUndefinedKeyword()]
@@ -1161,6 +1162,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     if (!testInfo) {
       // Non-prop conditional: generate StyleX parameterized style functions.
       // Only support css`` or template-literal CSS branches.
+
+      // `typeof x === "type"` is a TypeScript type guard that narrows away undefined,
+      // so style function parameters don't need `| undefined` for these conditions.
+      const conditionNarrowsType = isTypeofGuard(conditional.test);
+
       const consMap =
         consIsCss || consIsTpl ? resolveCssBranchToInlineMap(cons) : consIsEmpty ? new Map() : null;
       const altMap =
@@ -1211,7 +1217,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                   const paramIdent = singleProp.startsWith("$") ? singleProp.slice(1) : singleProp;
                   const param = j.identifier(paramIdent);
                   (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-                    resolveStyleFnPropType(singleProp) as any,
+                    resolveStyleFnPropType(singleProp, {
+                      required: conditionNarrowsType,
+                    }) as any,
                   );
                   const properties = mapEntries.map(([cssProp, valueExpr]) =>
                     j.property(
@@ -1229,7 +1237,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                     const propName = p.startsWith("$") ? p.slice(1) : p;
                     return j.tsPropertySignature(
                       j.identifier(propName),
-                      j.tsTypeAnnotation(resolveStyleFnPropType(p) as any),
+                      j.tsTypeAnnotation(
+                        resolveStyleFnPropType(p, { required: conditionNarrowsType }) as any,
+                      ),
                     );
                   });
                   const propsParam = j.identifier("props");
@@ -1347,7 +1357,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (useSingleParam) {
           const param = j.identifier(singleParamName);
           (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-            resolveStyleFnPropType(singlePropName) as any,
+            resolveStyleFnPropType(singlePropName, {
+              required: conditionNarrowsType,
+            }) as any,
           );
 
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
@@ -1361,7 +1373,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const propName = p.startsWith("$") ? p.slice(1) : p;
           const prop = j.tsPropertySignature(
             j.identifier(propName),
-            j.tsTypeAnnotation(resolveStyleFnPropType(p) as any),
+            j.tsTypeAnnotation(
+              resolveStyleFnPropType(p, { required: conditionNarrowsType }) as any,
+            ),
           );
           return prop;
         });
@@ -2066,6 +2080,24 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+/** Checks if an AST node is a `typeof x === "type"` expression (a TypeScript type guard). */
+function isTypeofGuard(node: ExpressionKind): boolean {
+  if (node.type !== "BinaryExpression") {
+    return false;
+  }
+  const { operator, left, right } = node as {
+    operator: string;
+    left: ExpressionKind;
+    right: ExpressionKind;
+  };
+  if (operator !== "===" && operator !== "!==") {
+    return false;
+  }
+  const isTypeof = (n: ExpressionKind): boolean =>
+    n.type === "UnaryExpression" && (n as { operator: string }).operator === "typeof";
+  return isTypeof(left) || isTypeof(right);
 }
 
 /** Returns a unique key by appending a numeric suffix if the key already exists in the map. */
