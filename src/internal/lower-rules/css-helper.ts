@@ -18,6 +18,7 @@ import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
+import { resolveMediaQueryPlaceholders, resolveSlotExprToStaticValue } from "./utils.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -333,12 +334,32 @@ export function createCssHelperResolver(args: {
     const dynamicPropKeys = new Set<string>();
     const conditionalVariants: ConditionalVariant[] = [];
 
+    const lookupImport = (localName: string) => importMap.get(localName) ?? null;
+
     for (const rule of rules) {
-      const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+      let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
       // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
       if (rule.atRuleStack.length > 0 && !media) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
+
+      // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+      if (media) {
+        const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
+          resolveSlotExprToStaticValue(
+            slotExprById.get(slotId),
+            lookupImport,
+            resolveValue,
+            filePath,
+            resolverImports,
+          ),
+        );
+        if (resolved === null) {
+          return bail("Conditional `css` block: media query contains unresolvable interpolation");
+        }
+        media = resolved;
+      }
+
       const selector = (rule.selector ?? "").trim();
       const allowDynamicValues = selector === "&";
       let target = out;

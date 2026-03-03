@@ -45,6 +45,7 @@ import {
 } from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
+import { resolveMediaQueryPlaceholders, resolveSlotExprToStaticValue } from "./utils.js";
 
 type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -430,11 +431,29 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       for (const rule of rules) {
-        const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
+        let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
         // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
         if (rule.atRuleStack.length > 0 && !media) {
           return null;
         }
+
+        // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+        if (media) {
+          const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
+            resolveSlotExprToStaticValue(
+              slotExprById.get(slotId),
+              resolveImportInScope,
+              resolveValue,
+              filePath,
+              resolverImports,
+            ),
+          );
+          if (resolved === null) {
+            return null;
+          }
+          media = resolved;
+        }
+
         const selector = (rule.selector ?? "").trim();
         if (selector !== "&") {
           return null;

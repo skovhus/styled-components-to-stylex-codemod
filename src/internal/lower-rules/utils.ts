@@ -1,8 +1,99 @@
 /**
  * Shared lower-rules helpers for merging and formatting style objects.
- * Core concepts: deep merge semantics and AST node detection.
+ * Core concepts: deep merge semantics, AST node detection, and media query resolution.
  */
-import { isAstNode } from "../utilities/jscodeshift-utils.js";
+import { extractRootAndPath, isAstNode } from "../utilities/jscodeshift-utils.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
+import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
+import { literalToStaticValue } from "./types.js";
+
+type ImportMeta = { importedName: string; source: ImportSource };
+type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
+
+/**
+ * Resolves `__SC_EXPR_N__` placeholders in a media/container query string to static values.
+ * Returns the resolved query string, or null if any placeholder cannot be statically resolved.
+ *
+ * @param mediaQuery - The at-rule string, e.g. `@media (max-width: __SC_EXPR_0__px)`
+ * @param resolveSlot - Callback that takes a slot ID and returns the static value, or null
+ */
+export function resolveMediaQueryPlaceholders(
+  mediaQuery: string,
+  resolveSlot: (slotId: number) => string | number | null,
+): string | null {
+  if (!mediaQuery.includes("__SC_EXPR_")) {
+    return mediaQuery;
+  }
+
+  const globalRe = new RegExp(PLACEHOLDER_RE.source, "g");
+  const matches: Array<{ full: string; slotId: number }> = [];
+  let match;
+
+  while ((match = globalRe.exec(mediaQuery)) !== null) {
+    matches.push({ full: match[0], slotId: Number(match[1]) });
+  }
+
+  let resolved = mediaQuery;
+  for (const m of matches) {
+    const staticVal = resolveSlot(m.slotId);
+    if (staticVal === null) {
+      return null;
+    }
+    resolved = resolved.replace(m.full, String(staticVal));
+  }
+
+  return resolved;
+}
+
+/**
+ * Resolves a slot expression AST node to a static string or number value.
+ * Handles:
+ * - Direct literals (NumericLiteral, StringLiteral, Literal)
+ * - Imported values via adapter resolveValue (MemberExpression, Identifier)
+ */
+export function resolveSlotExprToStaticValue(
+  expr: unknown,
+  lookupImport: ImportLookup,
+  resolveValue: Adapter["resolveValue"],
+  filePath: string,
+  resolverImports: Map<string, ImportSpec>,
+): string | number | null {
+  if (!expr || typeof expr !== "object") {
+    return null;
+  }
+
+  const staticVal = literalToStaticValue(expr);
+  if (typeof staticVal === "string" || typeof staticVal === "number") {
+    return staticVal;
+  }
+
+  const info = extractRootAndPath(expr);
+  if (!info) {
+    return null;
+  }
+
+  const imp = lookupImport(info.rootName, info.rootNode);
+  if (!imp) {
+    return null;
+  }
+
+  const result = resolveValue({
+    kind: "importedValue",
+    importedName: imp.importedName,
+    source: imp.source,
+    ...(info.path.length > 0 ? { path: info.path.join(".") } : {}),
+    filePath,
+  });
+  if (!result || !("expr" in result)) {
+    return null;
+  }
+
+  for (const impSpec of result.imports ?? []) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
+  }
+
+  return parseStaticExprString(result.expr);
+}
 
 /**
  * Merges tracked @media values into a base style object as nested StyleX objects.
@@ -50,4 +141,27 @@ export function mergeStyleObjects(
       target[key] = value;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Non-exported helpers
+// ---------------------------------------------------------------------------
+
+/** Parses a JS expression string as a static numeric or quoted string value. */
+function parseStaticExprString(expr: string): string | number | null {
+  const trimmed = expr.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const num = Number(trimmed);
+  if (!isNaN(num) && trimmed !== "") {
+    return num;
+  }
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return null;
 }

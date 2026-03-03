@@ -32,7 +32,11 @@ import { literalToStaticValue } from "./types.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { WarningLog } from "../logger.js";
-import { mergeMediaIntoStyles } from "./utils.js";
+import {
+  mergeMediaIntoStyles,
+  resolveMediaQueryPlaceholders,
+  resolveSlotExprToStaticValue,
+} from "./utils.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
@@ -122,9 +126,7 @@ export function resolveTemplateLiteralBranch(
   const mediaStyles = new Map<string, Record<string, unknown>>();
 
   for (const rule of rules) {
-    const media = rule.atRuleStack.find(
-      (a) => a.startsWith("@media") || a.startsWith("@container"),
-    );
+    let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
     // Only support @media and @container at-rules; bail on others (@supports, etc.)
     if (rule.atRuleStack.length > 0 && !media) {
       ctx.warnings?.push({
@@ -134,6 +136,24 @@ export function resolveTemplateLiteralBranch(
       });
       return null;
     }
+
+    // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+    if (media) {
+      const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
+        resolveSlotExprToStaticValue(
+          slotExprById.get(slotId),
+          resolveImportInScope,
+          resolveValue,
+          filePath,
+          resolverImports,
+        ),
+      );
+      if (resolved === null) {
+        return null;
+      }
+      media = resolved;
+    }
+
     const selector = (rule.selector ?? "").trim();
     if (selector !== "&") {
       return null;

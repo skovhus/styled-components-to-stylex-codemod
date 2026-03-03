@@ -223,6 +223,15 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      // screenSizeBreakPoints.phone → 640, screenSizeBreakPoints.tablet → 768
+      if (ctx.importedName === "screenSizeBreakPoints") {
+        const path = ctx.path ?? "";
+        const values: Record<string, number> = { phone: 640, tablet: 768 };
+        const value = path ? values[path] : undefined;
+        if (value !== undefined) {
+          return { expr: String(value), imports: [] };
+        }
+      }
       // Handle imported styled components used as mixins
       // TruncateText -> helpers.truncate (a StyleX style object)
       if (ctx.importedName === "TruncateText") {
