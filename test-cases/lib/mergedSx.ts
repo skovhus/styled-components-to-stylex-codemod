@@ -27,22 +27,25 @@ type StyleArg = StyleXArray<
  * ```
  *
  * @param styles - StyleX styles from stylex.create(), can be single style or array
- * @param className - External className to merge (optional)
+ * @param className - External className(s) to merge (optional). Accepts a single
+ *   string or an array of strings (e.g., `[bridgeClass, className]`).
  * @param style - External style object to merge (optional)
  * @returns Object with merged className and style props
  */
 export function mergedSx(
   styles: StyleArg,
-  className?: string,
+  className?: string | (string | undefined)[],
   style?: React.CSSProperties,
 ): { className?: string; style?: React.CSSProperties } {
   const sx = stylex.props(styles);
-  if (!className && !style) {
+  const classNames = Array.isArray(className) ? className : [className];
+  const merged = [sx.className, ...classNames].filter(Boolean).join(" ") || undefined;
+  if (!merged && !style) {
     return sx;
   }
   return {
     ...sx,
-    className: [sx.className, className].filter(Boolean).join(" ") || undefined,
+    className: merged,
     style: { ...sx.style, ...style },
   };
 }

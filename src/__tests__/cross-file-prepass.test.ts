@@ -586,6 +586,10 @@ export const App = () => <Flex className="extra" column>Content</Flex>;
     // Count occurrences: at least 3 — definition + GlobalSelector + className usage
     const varOccurrences = code.split(internalVar).length - 1;
     expect(varOccurrences).toBeGreaterThanOrEqual(3);
+
+    // The merger should receive the bridge class as part of an array, not pre-joined
+    expect(code).toContain(`[${internalVar}, className]`);
+    expect(code).not.toContain(".filter(Boolean).join");
   });
 
   it("does NOT emit bridge for components not in bridgeComponentNames", () => {
