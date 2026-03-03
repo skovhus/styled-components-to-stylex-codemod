@@ -60,7 +60,7 @@ export function buildForwardedAsReplacements(
  */
 export function patchConsumerForwardedAs(
   filePath: string,
-  entries: readonly ForwardedAsConsumerEntry[],
+  entries: readonly Pick<ForwardedAsConsumerEntry, "localStyledName">[],
 ): string | null {
   let source: string;
   try {
@@ -105,14 +105,17 @@ function patchJsxAsProp(source: string, componentName: string): string {
 }
 
 /**
- * Replace `as:` with `forwardedAs:` in `.attrs({...})` calls on the styled
- * declaration for the given component name.
+ * Replace `as:` with `forwardedAs:` in object-form `.attrs({...})` calls on
+ * the styled declaration for the given component name.
+ * Only matches object-form `.attrs({ as: ... })`, NOT function-form
+ * `.attrs(({ as }) => ...)` where the destructuring param would be incorrectly patched.
  * Skips attrs blocks that already contain `forwardedAs`.
  */
 function patchAttrsAsProp(source: string, componentName: string): string {
-  // Match: `const ComponentName ... .attrs( ... as: ... )`
+  // Match: `const ComponentName ... .attrs( { ... as: ... )`
+  // The `\(\s*\{` ensures we only match object literal form (not arrow function form).
   const attrsRegex = new RegExp(
-    `(const\\s+${escapeRegex(componentName)}\\b[^;]*\\.attrs\\s*\\([^)]*?)\\bas(\\s*:)`,
+    `(const\\s+${escapeRegex(componentName)}\\b[^;]*\\.attrs\\s*\\(\\s*\\{[^)]*?)\\bas(\\s*:)`,
     "g",
   );
 

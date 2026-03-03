@@ -252,6 +252,21 @@ describe("patchConsumerForwardedAs", () => {
     });
   });
 
+  it("does not patch function-form attrs destructuring param", () => {
+    const source = [
+      'import styled from "styled-components";',
+      'import { Flex } from "./lib/flex-component";',
+      "const StyledFlex = styled(Flex).attrs(({ as: alias }) => ({ as: alias }))`gap: 8px;`;",
+      "export const App = () => <StyledFlex>Hello</StyledFlex>;",
+    ].join("\n");
+
+    withTempFixture("_tmp-forwarded-as-fn-attrs.tsx", source, (tmpPath) => {
+      const result = patchConsumerForwardedAs(tmpPath, [{ localStyledName: "StyledFlex" }]);
+      // Function-form attrs should NOT be patched (too risky with regex)
+      expect(result).toBeNull();
+    });
+  });
+
   it("returns null when no changes needed", () => {
     const source = [
       'import styled from "styled-components";',
