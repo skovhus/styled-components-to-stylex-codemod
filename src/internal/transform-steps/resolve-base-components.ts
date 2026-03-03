@@ -1061,7 +1061,7 @@ function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]
     if (isUsedAsNonJsxValue(ctx, name)) {
       continue;
     }
-    if (hasClassNameOrStyleInJsx(ctx, name)) {
+    if (hasSpreadInJsxForComponent(ctx, name)) {
       continue;
     }
 
@@ -1221,12 +1221,8 @@ function isUsedAsNonJsxValue(ctx: TransformContext, localName: string): boolean 
   );
 }
 
-/**
- * Returns true if any JSX call site of `localName` passes `className`, `style`,
- * or a spread attribute. These cases cannot be safely inlined because `stylex.props()`
- * would clobber user-provided className/style values (or vice versa).
- */
-function hasClassNameOrStyleInJsx(ctx: TransformContext, localName: string): boolean {
+/** Returns true if any JSX call site of `localName` has a spread attribute. */
+function hasSpreadInJsxForComponent(ctx: TransformContext, localName: string): boolean {
   const { root, j } = ctx;
   let found = false;
   const checkAttrs = (attributes: unknown[] | undefined): void => {
@@ -1234,16 +1230,9 @@ function hasClassNameOrStyleInJsx(ctx: TransformContext, localName: string): boo
       return;
     }
     for (const attr of attributes ?? []) {
-      const a = attr as { type?: string; name?: { type?: string; name?: string } };
-      if (a.type === "JSXSpreadAttribute") {
+      if ((attr as { type?: string }).type === "JSXSpreadAttribute") {
         found = true;
         return;
-      }
-      if (a.type === "JSXAttribute" && a.name?.type === "JSXIdentifier") {
-        if (a.name.name === "className" || a.name.name === "style") {
-          found = true;
-          return;
-        }
       }
     }
   };
