@@ -431,8 +431,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       for (const rule of rules) {
-        let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
-        // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
+        let media = rule.atRuleStack.find(
+          (a) => a.startsWith("@media") || a.startsWith("@container"),
+        );
+        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
         if (rule.atRuleStack.length > 0 && !media) {
           return null;
         }

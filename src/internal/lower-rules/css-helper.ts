@@ -8,6 +8,7 @@ import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
+  extractRootAndPath,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isAstNode,
@@ -253,24 +254,22 @@ export function createCssHelperResolver(args: {
         return { ast: branch, exprString: JSON.stringify(v) };
       }
     }
-    // Handle identifiers (local constants or imports)
-    if (branch.type === "Identifier" && typeof branch.name === "string") {
-      const name = branch.name;
-      const imp = importMap.get(name);
+    // Handle identifiers and member expressions (local constants or imports)
+    const info = extractRootAndPath(branch);
+    if (info) {
+      const imp = importMap.get(info.rootName);
       if (imp) {
-        // Identifier is an import - try to resolve via adapter
         const res = resolveValue({
           kind: "importedValue",
           importedName: imp.importedName,
           source: imp.source,
+          ...(info.path.length > 0 ? { path: info.path.join(".") } : {}),
           filePath,
           loc: getNodeLocStart(branch) ?? undefined,
         });
         if (!res) {
-          // Adapter couldn't resolve - return null to trigger bail
           return null;
         }
-        // Track the import for the resolver
         for (const impSpec of res.imports ?? []) {
           resolverImports.set(JSON.stringify(impSpec), impSpec);
         }
@@ -278,7 +277,9 @@ export function createCssHelperResolver(args: {
         return exprAst ? { ast: exprAst, exprString: res.expr } : null;
       }
       // Local identifier (not an import) - use as-is
-      return { ast: branch, exprString: name };
+      if (branch.type === "Identifier") {
+        return { ast: branch, exprString: info.rootName };
+      }
     }
     return null;
   };
@@ -337,8 +338,10 @@ export function createCssHelperResolver(args: {
     const lookupImport = (localName: string) => importMap.get(localName) ?? null;
 
     for (const rule of rules) {
-      let media = rule.atRuleStack.find((a) => a.startsWith("@media"));
-      // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
+      let media = rule.atRuleStack.find(
+        (a) => a.startsWith("@media") || a.startsWith("@container"),
+      );
+      // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
       if (rule.atRuleStack.length > 0 && !media) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
