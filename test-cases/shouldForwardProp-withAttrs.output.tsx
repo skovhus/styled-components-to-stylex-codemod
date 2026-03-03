@@ -36,8 +36,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // This chain is silently not recognized: styled("span").withConfig(...).attrs(fn)
-  // The codemod produces no output and no warning.
   text: {
     fontStyle: "normal",
   },

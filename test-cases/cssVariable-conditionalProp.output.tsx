@@ -41,7 +41,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // A wrapper that conditionally sets a CSS custom property based on prop
   containerWrapper: {
     overflow: "hidden",
   },

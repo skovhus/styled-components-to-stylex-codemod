@@ -49,7 +49,6 @@ const styles = stylex.create({
     borderRadius: "8px",
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  // Combining withConfig options
   input: {
     paddingBlock: "8px",
     paddingInline: "12px",

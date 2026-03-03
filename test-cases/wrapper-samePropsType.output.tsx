@@ -96,7 +96,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // Base uses SharedProps
   base: {
     display: "flex",
     flexDirection: "row",
@@ -110,7 +109,6 @@ const styles = stylex.create({
   wrapper: {
     padding: "8px",
   },
-  // When wrapping with parameterized type, the type args must be preserved
   button: {
     backgroundColor: "gray",
   },

@@ -37,9 +37,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Template literal with non-transient props should emit StyleX style functions.
-  // These are props without the $ prefix that are used in template literal interpolations.
-
   box: {
     padding: "8px",
     backgroundColor: "paleturquoise",

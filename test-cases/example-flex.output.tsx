@@ -340,9 +340,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Generic flexbox div component.
-   */
   flex: {
     display: "flex",
     flex: "initial",

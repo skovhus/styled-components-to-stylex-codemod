@@ -44,9 +44,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Exported component with shouldForwardProp using dropPrefix pattern
-  // Props are defined via interface reference, not inline type literal
-  // The cleanup loop should still filter unknown $-prefixed props
   transientButton: {
     backgroundColor: "#4F74BF",
     paddingBlock: "8px",

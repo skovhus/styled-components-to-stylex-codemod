@@ -38,7 +38,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /** A container for emojis that standardizes sizing across browsers */
   emojiContainer: {
     display: "inline-flex",
     justifyContent: "center",

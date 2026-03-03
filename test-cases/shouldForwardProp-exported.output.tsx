@@ -64,30 +64,22 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Exported component with shouldForwardProp using dropPrefix pattern
-  // The cleanup loop should filter unknown $-prefixed props from rest
-  // so external callers can't accidentally forward $unknown to the DOM
   transientButton: {
     backgroundColor: "#4F74BF",
     color: "white",
     paddingBlock: "8px",
     paddingInline: "16px",
   },
-
   transientButtonVariantPrimary: {
     backgroundColor: "#BF4F74",
   },
-
-  // Exported component with explicit list-based shouldForwardProp
   explicitFilterButton: {
     backgroundColor: "#BF4F74",
     color: "white",
   },
-
   explicitFilterButtonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-
   explicitFilterButtonPadding: (props) => ({
     padding: (props.anotherProp || 16) + "px",
   }),

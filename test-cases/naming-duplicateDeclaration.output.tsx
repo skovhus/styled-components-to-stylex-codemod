@@ -56,7 +56,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /** A container that scales based on a dynamic size prop */
   sizeBox: {
     display: "inline-flex",
     justifyContent: "center",
