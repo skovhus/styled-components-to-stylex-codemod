@@ -1,1 +1,0 @@
-import{j as i}from"./index-B5cHh60p.js";function d({style:n,size:r="medium",text:s="Loading…"}){return i.jsx("div",{style:n,children:i.jsx("div",{className:`spinner spinner-${r}`,children:s})})}export{d as L};
