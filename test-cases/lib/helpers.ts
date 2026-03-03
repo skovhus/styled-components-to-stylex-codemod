@@ -64,6 +64,7 @@ export const UNKNOWN_CONSTANT = 42;
 export const zIndex = {
   modal: 1000,
   popover: 900,
+  dialog: 800,
 };
 
 export const config = {

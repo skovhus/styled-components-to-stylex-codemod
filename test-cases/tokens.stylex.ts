@@ -99,6 +99,7 @@ export const pixelVars = stylex.defineVars({
 export const $zIndex = stylex.defineVars({
   modal: "1000",
   popover: "900",
+  dialog: "800",
 });
 
 export const $config = stylex.defineVars({
