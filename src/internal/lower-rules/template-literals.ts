@@ -35,8 +35,7 @@ import type { WarningLog } from "../logger.js";
 import {
   findSupportedAtRule,
   mergeMediaIntoStyles,
-  resolveMediaQueryPlaceholders,
-  resolveSlotExprToStaticValue,
+  resolveMediaAtRulePlaceholders,
 } from "./utils.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
 
@@ -83,6 +82,7 @@ export type TemplateLiteralContext = {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
+  resolveSelector?: Adapter["resolveSelector"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
   componentInfo: ComponentInfo;
@@ -138,21 +138,26 @@ export function resolveTemplateLiteralBranch(
       return null;
     }
 
-    // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+    // Resolve __SC_EXPR_N__ placeholders inside the media query
+    let computedMediaKeyExpr: unknown;
     if (media) {
-      const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
-        resolveSlotExprToStaticValue(
-          slotExprById.get(slotId),
-          resolveImportInScope,
-          resolveValue,
-          filePath,
-          resolverImports,
-        ),
-      );
+      const resolved = resolveMediaAtRulePlaceholders(media, (slotId) => slotExprById.get(slotId), {
+        lookupImport: resolveImportInScope,
+        resolveValue,
+        resolveSelector: ctx.resolveSelector,
+        parseExpr,
+        filePath,
+        resolverImports,
+      });
       if (resolved === null) {
         return null;
       }
-      media = resolved;
+      if (resolved.kind === "static") {
+        media = resolved.value;
+      } else {
+        computedMediaKeyExpr = resolved.keyExpr;
+        media = undefined;
+      }
     }
 
     const selector = (rule.selector ?? "").trim();
@@ -160,8 +165,22 @@ export function resolveTemplateLiteralBranch(
       return null;
     }
 
-    // Helper to set a value into the correct target (base style or media-scoped)
+    // Helper to set a value into the correct target (base style, media-scoped, or computed-key)
     const setStyleValue = (prop: string, value: unknown): void => {
+      if (computedMediaKeyExpr) {
+        const existing = style[prop];
+        const nested: Record<string, unknown> =
+          existing && typeof existing === "object" && !Array.isArray(existing)
+            ? (existing as Record<string, unknown>)
+            : { default: existing ?? null };
+        if (!("default" in nested)) {
+          nested.default = null;
+        }
+        const prev = (nested.__computedKeys as Array<{ keyExpr: unknown; value: unknown }>) ?? [];
+        nested.__computedKeys = [...prev, { keyExpr: computedMediaKeyExpr, value }];
+        style[prop] = nested;
+        return;
+      }
       if (media) {
         const target = mediaStyles.get(media) ?? {};
         mediaStyles.set(media, target);

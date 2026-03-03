@@ -36,12 +36,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
-import {
-  findSupportedAtRule,
-  isSupportedAtRule,
-  resolveMediaQueryPlaceholders,
-  resolveSlotExprToStaticValue,
-} from "./utils.js";
+import { findSupportedAtRule, isSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -675,16 +670,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       selector = "&";
     }
 
-    // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+    // Resolve __SC_EXPR_N__ placeholders inside the media query
     if (media) {
-      const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
-        resolveSlotExprToStaticValue(
-          decl.templateExpressions[slotId],
-          resolveImportInScope,
-          state.resolveValue,
-          state.filePath,
+      const resolved = resolveMediaAtRulePlaceholders(
+        media,
+        (slotId) => decl.templateExpressions[slotId],
+        {
+          lookupImport: resolveImportInScope,
+          resolveValue: state.resolveValue,
+          resolveSelector,
+          parseExpr,
+          filePath: state.filePath,
           resolverImports,
-        ),
+        },
       );
       if (resolved === null) {
         state.markBail();
@@ -695,7 +693,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       }
-      media = resolved;
+      if (resolved.kind === "static") {
+        media = resolved.value;
+      } else {
+        resolvedSelectorMedia = { keyExpr: resolved.keyExpr, exprSource: "" };
+        media = undefined;
+      }
     }
 
     // Support comma-separated pseudo-selectors like "&:hover, &:focus"
@@ -1798,16 +1801,19 @@ function handleSiblingSelector(
   // Wrap values in media/container condition objects when inside an @media or @container at-rule
   let media = findSupportedAtRule(rule.atRuleStack);
 
-  // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
+  // Resolve __SC_EXPR_N__ placeholders inside the media query
   if (media) {
-    const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
-      resolveSlotExprToStaticValue(
-        decl.templateExpressions[slotId],
-        state.resolveImportInScope,
-        state.resolveValue,
-        state.filePath,
-        state.resolverImports,
-      ),
+    const resolved = resolveMediaAtRulePlaceholders(
+      media,
+      (slotId) => decl.templateExpressions[slotId],
+      {
+        lookupImport: state.resolveImportInScope,
+        resolveValue: state.resolveValue,
+        resolveSelector: state.resolveSelector,
+        parseExpr: state.parseExpr,
+        filePath: state.filePath,
+        resolverImports: state.resolverImports,
+      },
     );
     if (resolved === null) {
       warnings.push({
@@ -1817,7 +1823,11 @@ function handleSiblingSelector(
       });
       return "break";
     }
-    media = resolved;
+    if (resolved.kind === "static") {
+      media = resolved.value;
+    } else {
+      media = undefined;
+    }
   }
 
   // Add each property to perPropComputedMedia with the sibling computed key

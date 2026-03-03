@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { breakpoints } from "./lib/breakpoints.stylex";
 
 type ContainerProps = React.PropsWithChildren<{
   $isCompact?: boolean;
@@ -31,11 +32,11 @@ const styles = stylex.create({
   containerCompact: {
     maxWidth: {
       default: null,
-      "@media (max-width: 640px)": "none",
+      [breakpoints.phone]: "none",
     },
     borderRadius: {
       default: null,
-      "@media (max-width: 640px)": 0,
+      [breakpoints.phone]: 0,
     },
   },
 });

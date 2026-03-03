@@ -209,6 +209,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     importMap,
     filePath,
     resolveValue,
+    resolveSelector,
     parseExpr,
     resolverImports,
     warnings,

@@ -21,8 +21,8 @@ import { cssValueToJs } from "../transform/helpers.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
 import {
   findSupportedAtRule,
-  resolveMediaQueryPlaceholders,
-  resolveSlotExprToStaticValue,
+  resolveMediaAtRulePlaceholders,
+  type ResolvedMedia,
 } from "./utils.js";
 
 type ImportMapEntry = {
@@ -84,6 +84,7 @@ export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
   resolveValue: Adapter["resolveValue"];
+  resolveSelector?: Adapter["resolveSelector"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
   warnings: WarningLog[];
@@ -342,27 +343,37 @@ export function createCssHelperResolver(args: {
     const lookupImport = (localName: string) => importMap.get(localName) ?? null;
 
     for (const rule of rules) {
-      let media = findSupportedAtRule(rule.atRuleStack);
+      const rawMedia = findSupportedAtRule(rule.atRuleStack);
       // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
-      if (rule.atRuleStack.length > 0 && !media) {
+      if (rule.atRuleStack.length > 0 && !rawMedia) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
 
-      // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
-      if (media) {
-        const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
-          resolveSlotExprToStaticValue(
-            slotExprById.get(slotId),
+      // Resolve __SC_EXPR_N__ placeholders inside the media query
+      let media: string | undefined = rawMedia;
+      let computedMediaKey: ResolvedMedia | null = null;
+      if (rawMedia) {
+        const resolved = resolveMediaAtRulePlaceholders(
+          rawMedia,
+          (slotId) => slotExprById.get(slotId),
+          {
             lookupImport,
             resolveValue,
+            resolveSelector: args.resolveSelector,
+            parseExpr,
             filePath,
             resolverImports,
-          ),
+          },
         );
         if (resolved === null) {
           return bail("Conditional `css` block: media query contains unresolvable interpolation");
         }
-        media = resolved;
+        if (resolved.kind === "static") {
+          media = resolved.value;
+        } else {
+          computedMediaKey = resolved;
+          media = undefined;
+        }
       }
 
       const selector = (rule.selector ?? "").trim();
@@ -405,14 +416,29 @@ export function createCssHelperResolver(args: {
         }
       }
 
-      // Merge a value into the appropriate nested context (pseudo-class and/or @media).
-      // Handles all combinations: base, pseudo-only, media-only, pseudo+media.
+      // Merge a value into the appropriate nested context (pseudo-class, @media, or computed key).
+      // Handles all combinations: base, pseudo-only, media-only, computed-media, pseudo+media.
       const mergeIntoContext = (
         value: unknown,
         prop: string,
         targetObj: Record<string, unknown>,
       ): unknown => {
         const existing = targetObj[prop];
+        if (computedMediaKey) {
+          const nested: Record<string, unknown> =
+            existing &&
+            typeof existing === "object" &&
+            !Array.isArray(existing) &&
+            !isAstNode(existing)
+              ? (existing as Record<string, unknown>)
+              : { default: existing ?? null };
+          if (!("default" in nested)) {
+            nested.default = null;
+          }
+          const prev = (nested.__computedKeys as Array<{ keyExpr: unknown; value: unknown }>) ?? [];
+          nested.__computedKeys = [...prev, { keyExpr: computedMediaKey.keyExpr, value }];
+          return nested;
+        }
         if (media && currentPseudoClass) {
           // Nested pseudo + media: { ":hover": { default: null, "@media (...)": value } }
           const pseudoExisting =
