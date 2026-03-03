@@ -1,0 +1,1 @@
+import{j as t}from"./index-DaD0VRRn.js";import{T as r}from"./text-C76pkc2Z.js";const e=()=>t.jsx("div",{style:{padding:"16px"},children:t.jsx(r,{variant:"title2",children:"Hello World"})});export{e as App};
