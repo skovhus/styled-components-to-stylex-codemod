@@ -592,17 +592,21 @@ export interface Adapter {
   themeHook?: ThemeHookConfig;
 
   /**
-   * Absolute path for the auto-generated polymorphic type helper file
-   * (e.g., `path.resolve("src/lib/stylex-codemod.d.ts")`).
+   * Import source for the `PolymorphicComponentProps` type helper used in
+   * `styled(Component)` wrappers that support the `as` prop.
    *
-   * The codemod generates this file with `PolymorphicComponentProps` — a Substitute-based
-   * type that ensures `as`-target props override base props for overlapping keys
-   * (matching styled-components' PolymorphicComponentProps semantics).
+   * - `{ kind: "absolutePath", value: path.resolve("src/lib/stylex-codemod.d.ts") }`
+   *   The codemod auto-generates this file with the type helper.
+   * - `{ kind: "specifier", value: "@my-lib/stylex-polymorphic" }`
+   *   Use a pre-existing module (e.g. from a shared package). No file is generated.
+   *
+   * The helper uses styled-components' Substitute semantics so `as`-target props
+   * override base props for overlapping keys (e.g. event handlers).
    *
    * When null/omitted and a component needs polymorphic as-prop typing, the transform
-   * bails with a warning explaining how to configure this path.
+   * bails with a warning.
    */
-  polymorphicHelperPath?: string | null;
+  polymorphicHelper?: ImportSource | null;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -634,7 +638,7 @@ export interface AdapterInput {
 
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
-  polymorphicHelperPath?: Adapter["polymorphicHelperPath"];
+  polymorphicHelper?: Adapter["polymorphicHelper"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

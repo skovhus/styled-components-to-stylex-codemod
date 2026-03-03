@@ -357,7 +357,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
 
   // Bail when a direct polymorphic component wrapper is detected but the helper path
   // is not configured — the codemod needs it to emit correct Substitute-based typing.
-  if (!ctx.adapter.polymorphicHelperPath) {
+  if (!ctx.adapter.polymorphicHelper) {
     for (const decl of styledDecls) {
       if (decl.base.kind !== "component") {
         continue;
@@ -371,12 +371,12 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
             warnings: [
               {
                 severity: "warning",
-                type: "Polymorphic component wrapper needs adapter.polymorphicHelperPath to generate correct as-prop typing",
+                type: "Polymorphic component wrapper needs adapter.polymorphicHelper to generate correct as-prop typing",
                 loc: decl.loc ?? null,
                 context: {
                   component: decl.localName,
                   wrappedComponent: decl.base.ident,
-                  hint: 'Set adapter.polymorphicHelperPath to an absolute path (e.g. path.resolve("src/lib/stylex-codemod.d.ts"))',
+                  hint: 'Set adapter.polymorphicHelper to an import source, e.g. { kind: "absolutePath", value: path.resolve("src/lib/stylex-codemod.d.ts") }',
                 },
               },
             ],

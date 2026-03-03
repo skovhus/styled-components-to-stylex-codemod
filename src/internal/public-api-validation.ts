@@ -244,17 +244,31 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     });
   }
 
-  // Validate polymorphicHelperPath (null/undefined or non-empty string)
-  const polymorphicHelperPath = obj?.polymorphicHelperPath;
-  if (polymorphicHelperPath !== null && polymorphicHelperPath !== undefined) {
-    if (typeof polymorphicHelperPath !== "string" || !polymorphicHelperPath.trim()) {
+  // Validate polymorphicHelper (null/undefined or ImportSource)
+  const polymorphicHelper = obj?.polymorphicHelper;
+  if (polymorphicHelper !== null && polymorphicHelper !== undefined) {
+    if (typeof polymorphicHelper !== "object") {
       throw new Error(
         [
-          `${where}: adapter.polymorphicHelperPath must be a non-empty string when provided.`,
-          `Received: polymorphicHelperPath=${describeValue(polymorphicHelperPath)}`,
+          `${where}: adapter.polymorphicHelper must be an ImportSource object when provided.`,
+          `Received: polymorphicHelper=${describeValue(polymorphicHelper)}`,
           "",
-          'Example: path.resolve("src/lib/stylex-codemod.d.ts")',
+          "Expected shape:",
+          '  { kind: "absolutePath", value: path.resolve("src/lib/stylex-codemod.d.ts") }',
+          "or:",
+          '  { kind: "specifier", value: "@my-lib/stylex-polymorphic" }',
         ].join("\n"),
+      );
+    }
+    const { kind, value } = polymorphicHelper as { kind?: unknown; value?: unknown };
+    if (kind !== "specifier" && kind !== "absolutePath") {
+      throw new Error(
+        `${where}: adapter.polymorphicHelper.kind must be "specifier" or "absolutePath". Received: ${describeValue(kind)}`,
+      );
+    }
+    if (typeof value !== "string" || !value.trim()) {
+      throw new Error(
+        `${where}: adapter.polymorphicHelper.value must be a non-empty string. Received: ${describeValue(value)}`,
       );
     }
   }

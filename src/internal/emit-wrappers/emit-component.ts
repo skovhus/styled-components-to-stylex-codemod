@@ -311,7 +311,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
 
           let typeText: string;
-          if (isPolymorphicComponentWrapper && emitter.polymorphicHelperPath) {
+          if (isPolymorphicComponentWrapper && emitter.polymorphicHelper) {
             // Use the Substitute-based helper type for correct prop override ordering
             // (as-target props win over base props for overlapping keys like event handlers).
             const parts = [

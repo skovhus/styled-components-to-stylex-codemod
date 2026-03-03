@@ -99,7 +99,7 @@ export type WarningType =
   | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
   | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts"
-  | "Polymorphic component wrapper needs adapter.polymorphicHelperPath to generate correct as-prop typing";
+  | "Polymorphic component wrapper needs adapter.polymorphicHelper to generate correct as-prop typing";
 
 export interface WarningLog {
   severity: Severity;

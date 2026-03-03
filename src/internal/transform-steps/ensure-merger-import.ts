@@ -44,7 +44,7 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
   }
 
   // Ensure the polymorphic type helper import is present when referenced in type annotations.
-  if (adapter.polymorphicHelperPath) {
+  if (adapter.polymorphicHelper) {
     const typeName = POLYMORPHIC_TYPE_NAME;
     const hasTypeRef =
       root
@@ -67,11 +67,15 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
     const hasTopLevel = hasTopLevelValueBinding(root, typeName);
 
     if (hasTypeRef && !hasImportBinding && !hasTopLevel) {
-      // Strip .ts/.d.ts extension from the helper path for the import specifier
-      const helperPathForImport = adapter.polymorphicHelperPath
-        .replace(/\.d\.ts$/, "")
-        .replace(/\.tsx?$/, "");
-      const importSource: ImportSource = { kind: "absolutePath", value: helperPathForImport };
+      const source = adapter.polymorphicHelper;
+      // For absolutePath sources, strip .ts/.d.ts extension for the import specifier
+      const importSource: ImportSource =
+        source.kind === "absolutePath"
+          ? {
+              kind: "absolutePath",
+              value: source.value.replace(/\.d\.ts$/, "").replace(/\.tsx?$/, ""),
+            }
+          : source;
       insertImportAfterStylex(ctx, importSource, typeName, true);
     }
   }
