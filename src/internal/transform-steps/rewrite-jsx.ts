@@ -152,6 +152,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               if (inlineVariantProps.has(n)) {
                 return true;
               }
+              if (decl.variantStyleKeys && n in decl.variantStyleKeys) {
+                return true;
+              }
               return false;
             }
             if (
@@ -475,6 +478,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
           if (attr.value.type === "JSXExpressionContainer") {
+            // If the expression is a known truthy static literal (e.g. gap={24}),
+            // apply the style unconditionally to avoid `24 && styles.x` (always truthy).
+            const staticLiteralValue = readStaticJsxLiteral(attr);
+            if (staticLiteralValue !== undefined && staticLiteralValue) {
+              styleArgs.push(
+                j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(variantStyleKey),
+                ),
+              );
+              return;
+            }
             // <X $prop={expr}>
             styleArgs.push(
               j.logicalExpression(
@@ -484,6 +499,20 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                   j.identifier(ctx.stylesIdentifier ?? "styles"),
                   j.identifier(variantStyleKey),
                 ),
+              ),
+            );
+            return;
+          }
+          if (
+            attr.value.type === "StringLiteral" ||
+            attr.value.type === "NumericLiteral" ||
+            attr.value.type === "Literal"
+          ) {
+            // <X prop="value"> or <X prop={123}> — static literal value, apply unconditionally
+            styleArgs.push(
+              j.memberExpression(
+                j.identifier(ctx.stylesIdentifier ?? "styles"),
+                j.identifier(variantStyleKey),
               ),
             );
             return;

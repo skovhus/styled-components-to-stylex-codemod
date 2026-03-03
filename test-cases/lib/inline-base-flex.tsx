@@ -3,6 +3,7 @@ import styled, { css } from "styled-components";
 
 export interface FlexProps extends React.ComponentProps<"div"> {
   align?: "start" | "center" | "end" | "stretch";
+  center?: boolean;
   gap?: number;
   direction?: "row" | "column";
   column?: boolean;

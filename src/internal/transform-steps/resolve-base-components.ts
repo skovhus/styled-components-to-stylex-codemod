@@ -535,12 +535,12 @@ function buildInlineResolverVariantDimensions(args: {
         continue;
       }
 
-      // Single variant key, partial call sites: emit as a boolean conditional style
+      // Single variant key, partial call sites: emit as a conditional style
       // in the main `styles` object rather than a separate lookup object.
-      // Only actual boolean `true` (not string "true") maps cleanly to a truthy condition
-      // (`prop &&`), since string props can have other truthy values (e.g., "false").
+      // Only safe when the value is truthy at runtime — falsy values like 0
+      // would fail the truthy guard condition in the emitted code.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
-      if (singleKey === "true" && booleanOnlyProps.has(propName)) {
+      if (isSingleVariantKeyTruthy(singleKey, booleanOnlyProps.has(propName))) {
         staticBooleanVariants.push({
           propName,
           styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
@@ -829,6 +829,19 @@ function diffSx(
     }
   }
   return out;
+}
+
+/**
+ * Checks whether a single variant key represents a value that is truthy at runtime.
+ * For boolean props, only `"true"` is truthy (`false` is falsy).
+ * For non-boolean props (numbers, strings), "0" and "" are falsy; everything else is truthy.
+ * Falsy values cannot use the truthy-guard pattern (`prop && styles.key`) safely.
+ */
+function isSingleVariantKeyTruthy(key: string, isBooleanProp: boolean): boolean {
+  if (isBooleanProp) {
+    return key === "true";
+  }
+  return key !== "0" && key !== "";
 }
 
 function serializeRecord(record: Record<string, unknown>): string {
