@@ -60,7 +60,7 @@ function removeBlankLinesInStylexCreate(code: string): string {
     const cleaned = blockContent
       // Remove blank lines after closing braces followed by property
       .replace(
-        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
+        /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|\d+|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
         "$1\n$2",
       )
       // Remove blank lines after commas followed by property or comment
