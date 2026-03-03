@@ -36,7 +36,12 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
-import { resolveMediaQueryPlaceholders, resolveSlotExprToStaticValue } from "./utils.js";
+import {
+  findSupportedAtRule,
+  isSupportedAtRule,
+  resolveMediaQueryPlaceholders,
+  resolveSlotExprToStaticValue,
+} from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -644,7 +649,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
+    let media = findSupportedAtRule(rule.atRuleStack);
 
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
@@ -665,10 +670,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    if (
-      !media &&
-      (selector.trim().startsWith("@media") || selector.trim().startsWith("@container"))
-    ) {
+    if (!media && isSupportedAtRule(selector.trim())) {
       media = selector.trim();
       selector = "&";
     }
@@ -1794,7 +1796,7 @@ function handleSiblingSelector(
     );
 
   // Wrap values in media/container condition objects when inside an @media or @container at-rule
-  let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
+  let media = findSupportedAtRule(rule.atRuleStack);
 
   // Resolve __SC_EXPR_N__ placeholders inside the media query to static values
   if (media) {

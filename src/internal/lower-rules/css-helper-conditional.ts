@@ -45,7 +45,11 @@ import {
 } from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
-import { resolveMediaQueryPlaceholders, resolveSlotExprToStaticValue } from "./utils.js";
+import {
+  findSupportedAtRule,
+  resolveMediaQueryPlaceholders,
+  resolveSlotExprToStaticValue,
+} from "./utils.js";
 
 type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -431,9 +435,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       for (const rule of rules) {
-        let media = rule.atRuleStack.find(
-          (a) => a.startsWith("@media") || a.startsWith("@container"),
-        );
+        let media = findSupportedAtRule(rule.atRuleStack);
         // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
         if (rule.atRuleStack.length > 0 && !media) {
           return null;

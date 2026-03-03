@@ -10,6 +10,26 @@ import { literalToStaticValue } from "./types.js";
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
 
+/** Returns true for at-rules the codemod can transform (`@media`, `@container`). */
+export function isSupportedAtRule(atRule: string): boolean {
+  return atRule.startsWith("@media") || atRule.startsWith("@container");
+}
+
+/** Finds the first supported at-rule (`@media` or `@container`) in the stack, if any. */
+export function findSupportedAtRule(atRuleStack: string[]): string | undefined {
+  return atRuleStack.find(isSupportedAtRule);
+}
+
+/** Returns true if the key looks like a StyleX style condition (pseudo, media, container). */
+export function isStyleConditionKey(key: string): boolean {
+  return (
+    key.startsWith(":") ||
+    key.startsWith("::") ||
+    key.startsWith("@media") ||
+    key.startsWith("@container")
+  );
+}
+
 /**
  * Resolves `__SC_EXPR_N__` placeholders in a media/container query string to static values.
  * Returns the resolved query string, or null if any placeholder cannot be statically resolved.

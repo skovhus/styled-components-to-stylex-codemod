@@ -18,6 +18,7 @@ import {
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
+import { isSupportedAtRule } from "./lower-rules/utils.js";
 import { styleFromSingleDeclaration } from "./builtin-handlers/css-parsing.js";
 import {
   buildResolvedHandlerResult,
@@ -1010,8 +1011,8 @@ function tryResolveInlineStyleValueFromArrowFn(node: DynamicNode): HandlerResult
   if (!node.css.property) {
     return null;
   }
-  const hasMediaAtRule = (node.css.atRuleStack ?? []).some((rule) => rule.startsWith("@media"));
-  const isMediaSelector = (node.css.selector ?? "").trim().startsWith("@media");
+  const hasMediaAtRule = (node.css.atRuleStack ?? []).some(isSupportedAtRule);
+  const isMediaSelector = isSupportedAtRule((node.css.selector ?? "").trim());
   if (!hasMediaAtRule && !isMediaSelector) {
     return null;
   }

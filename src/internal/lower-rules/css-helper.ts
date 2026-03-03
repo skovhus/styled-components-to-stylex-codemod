@@ -19,7 +19,11 @@ import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
-import { resolveMediaQueryPlaceholders, resolveSlotExprToStaticValue } from "./utils.js";
+import {
+  findSupportedAtRule,
+  resolveMediaQueryPlaceholders,
+  resolveSlotExprToStaticValue,
+} from "./utils.js";
 
 type ImportMapEntry = {
   importedName: string;
@@ -338,9 +342,7 @@ export function createCssHelperResolver(args: {
     const lookupImport = (localName: string) => importMap.get(localName) ?? null;
 
     for (const rule of rules) {
-      let media = rule.atRuleStack.find(
-        (a) => a.startsWith("@media") || a.startsWith("@container"),
-      );
+      let media = findSupportedAtRule(rule.atRuleStack);
       // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
       if (rule.atRuleStack.length > 0 && !media) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");

@@ -11,7 +11,7 @@ import { createCssHelperHandlers } from "./css-helper-handlers.js";
 import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
-import { mergeMediaIntoStyles } from "./utils.js";
+import { findSupportedAtRule, mergeMediaIntoStyles } from "./utils.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
 import { createVariantApplier } from "./variant-utils.js";
 import { addStyleKeyMixin } from "./precompute.js";
@@ -267,9 +267,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     // Track @media values per property: mediaQuery → prop → value
     const mediaStyles = new Map<string, Record<string, unknown>>();
     for (const rule of rules) {
-      const media = rule.atRuleStack.find(
-        (a) => a.startsWith("@media") || a.startsWith("@container"),
-      );
+      const media = findSupportedAtRule(rule.atRuleStack);
       // Only support @media and @container at-rules; bail on others (@supports, etc.)
       if (rule.atRuleStack.length > 0 && !media) {
         warnings.push({
