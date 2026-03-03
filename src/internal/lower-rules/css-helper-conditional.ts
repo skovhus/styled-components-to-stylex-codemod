@@ -1163,9 +1163,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       // Non-prop conditional: generate StyleX parameterized style functions.
       // Only support css`` or template-literal CSS branches.
 
-      // `typeof x === "type"` is a TypeScript type guard that narrows away undefined,
-      // so style function parameters don't need `| undefined` for these conditions.
-      const conditionNarrowsType = isTypeofGuard(conditional.test);
+      // `typeof x === "type"` narrows that specific prop away from undefined,
+      // so its style function parameter doesn't need `| undefined`.
+      const typeofGuardProp = getTypeofGuardProp(conditional.test);
 
       const consMap =
         consIsCss || consIsTpl ? resolveCssBranchToInlineMap(cons) : consIsEmpty ? new Map() : null;
@@ -1218,7 +1218,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                   const param = j.identifier(paramIdent);
                   (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                     resolveStyleFnPropType(singleProp, {
-                      required: conditionNarrowsType,
+                      required: singleProp === typeofGuardProp,
                     }) as any,
                   );
                   const properties = mapEntries.map(([cssProp, valueExpr]) =>
@@ -1238,7 +1238,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                     return j.tsPropertySignature(
                       j.identifier(propName),
                       j.tsTypeAnnotation(
-                        resolveStyleFnPropType(p, { required: conditionNarrowsType }) as any,
+                        resolveStyleFnPropType(p, { required: p === typeofGuardProp }) as any,
                       ),
                     );
                   });
@@ -1358,7 +1358,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const param = j.identifier(singleParamName);
           (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
             resolveStyleFnPropType(singlePropName, {
-              required: conditionNarrowsType,
+              required: singlePropName === typeofGuardProp,
             }) as any,
           );
 
@@ -1374,7 +1374,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const prop = j.tsPropertySignature(
             j.identifier(propName),
             j.tsTypeAnnotation(
-              resolveStyleFnPropType(p, { required: conditionNarrowsType }) as any,
+              resolveStyleFnPropType(p, { required: p === typeofGuardProp }) as any,
             ),
           );
           return prop;
@@ -1399,8 +1399,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         consMap,
         altMap,
       );
-      const consKey = ensureUniqueKey(resolvedStyleObjects, rawConsKey);
-      const altKey = ensureUniqueKey(resolvedStyleObjects, rawAltKey);
+      const uniqueKeyMaps = [resolvedStyleObjects, styleFnDecls as Map<string, unknown>];
+      const consKey = ensureUniqueKey(uniqueKeyMaps, rawConsKey);
+      const altKey = ensureUniqueKey(uniqueKeyMaps, rawAltKey);
 
       if (consMap.size > 0) {
         styleFnDecls.set(consKey, createStyleFn(consMap));
@@ -2082,10 +2083,13 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
   return true;
 }
 
-/** Checks if an AST node is a `typeof x === "type"` expression (a TypeScript type guard). */
-function isTypeofGuard(node: ExpressionKind): boolean {
+/**
+ * If the node is a `typeof x === "type"` expression (a TypeScript type guard),
+ * returns the name of the narrowed identifier. Returns null otherwise.
+ */
+function getTypeofGuardProp(node: ExpressionKind): string | null {
   if (node.type !== "BinaryExpression") {
-    return false;
+    return null;
   }
   const { operator, left, right } = node as {
     operator: string;
@@ -2093,20 +2097,26 @@ function isTypeofGuard(node: ExpressionKind): boolean {
     right: ExpressionKind;
   };
   if (operator !== "===" && operator !== "!==") {
-    return false;
+    return null;
   }
-  const isTypeof = (n: ExpressionKind): boolean =>
-    n.type === "UnaryExpression" && (n as { operator: string }).operator === "typeof";
-  return isTypeof(left) || isTypeof(right);
+  const extractTypeofArg = (n: ExpressionKind): string | null => {
+    if (n.type !== "UnaryExpression" || (n as { operator: string }).operator !== "typeof") {
+      return null;
+    }
+    const arg = (n as { argument: ExpressionKind }).argument;
+    return arg?.type === "Identifier" ? (arg as { name: string }).name : null;
+  };
+  return extractTypeofArg(left) ?? extractTypeofArg(right);
 }
 
-/** Returns a unique key by appending a numeric suffix if the key already exists in the map. */
-function ensureUniqueKey(map: Map<string, unknown>, key: string): string {
-  if (!map.has(key)) {
+/** Returns a unique key by appending a numeric suffix if the key already exists in any of the maps. */
+function ensureUniqueKey(maps: Map<string, unknown>[], key: string): string {
+  const has = (k: string): boolean => maps.some((m) => m.has(k));
+  if (!has(key)) {
     return key;
   }
   let i = 2;
-  while (map.has(`${key}${i}`)) {
+  while (has(`${key}${i}`)) {
     i++;
   }
   return `${key}${i}`;
