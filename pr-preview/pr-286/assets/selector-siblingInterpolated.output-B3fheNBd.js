@@ -1,1 +1,0 @@
-import{j as e}from"./index-CfAYBhhI.js";function r(n){return e.jsx("div",{className:"xju2f9n x1kk4a09 x-default-marker",children:n.children})}const s=()=>e.jsxs("div",{style:{padding:16},children:[e.jsx(r,{children:"First"}),e.jsx(r,{children:"Second (theme color)"})]});export{s as App};
