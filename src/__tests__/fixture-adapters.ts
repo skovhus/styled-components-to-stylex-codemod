@@ -195,6 +195,20 @@ export const fixtureAdapter = defineAdapter({
 
     if (ctx.kind === "importedValue") {
       const source = ctx.source.value;
+      if (source.includes("lib/layout") || source.includes("lib\\layout")) {
+        if (ctx.importedName === "CONTENT_MAX_WIDTH") {
+          return {
+            expr: "$layout.contentMaxWidth",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$layout" }],
+              },
+            ],
+          };
+        }
+        throw new Error(`Unknown imported value from layout: ${ctx.importedName}`);
+      }
       if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {
         throw new Error(`Unknown imported value: ${ctx.importedName}`);
       }

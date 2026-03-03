@@ -107,6 +107,10 @@ export const $config = stylex.defineVars({
   "ui.spacing.large": "16px",
 });
 
+export const $layout = stylex.defineVars({
+  contentMaxWidth: "1200px",
+});
+
 // Shadow variables — used by helper-callPropArgResolved test case
 export const $shadow = stylex.defineVars({
   dark: "0 4px 12px rgba(0,0,0,0.3)",
