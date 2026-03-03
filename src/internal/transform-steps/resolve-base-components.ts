@@ -1061,6 +1061,9 @@ function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]
     if (isUsedAsNonJsxValue(ctx, name)) {
       continue;
     }
+    if (hasClassNameOrStyleInJsx(ctx, name)) {
+      continue;
+    }
 
     const importInfo = importMap.get(name);
     if (!importInfo) {
@@ -1216,6 +1219,45 @@ function isUsedAsNonJsxValue(ctx: TransformContext, localName: string): boolean 
       })
       .size() > 0
   );
+}
+
+/**
+ * Returns true if any JSX call site of `localName` passes `className`, `style`,
+ * or a spread attribute. These cases cannot be safely inlined because `stylex.props()`
+ * would clobber user-provided className/style values (or vice versa).
+ */
+function hasClassNameOrStyleInJsx(ctx: TransformContext, localName: string): boolean {
+  const { root, j } = ctx;
+  let found = false;
+  const checkAttrs = (attributes: unknown[] | undefined): void => {
+    if (found) {
+      return;
+    }
+    for (const attr of attributes ?? []) {
+      const a = attr as { type?: string; name?: { type?: string; name?: string } };
+      if (a.type === "JSXSpreadAttribute") {
+        found = true;
+        return;
+      }
+      if (a.type === "JSXAttribute" && a.name?.type === "JSXIdentifier") {
+        if (a.name.name === "className" || a.name.name === "style") {
+          found = true;
+          return;
+        }
+      }
+    }
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name: localName } },
+    } as object)
+    .forEach((p: any) => checkAttrs(p.node.openingElement?.attributes));
+  root
+    .find(j.JSXSelfClosingElement, {
+      name: { type: "JSXIdentifier", name: localName },
+    } as object)
+    .forEach((p: any) => checkAttrs(p.node.attributes));
+  return found;
 }
 
 /** Returns a styleKey that doesn't collide with existing keys. */
