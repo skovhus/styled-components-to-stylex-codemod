@@ -63,7 +63,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /** Styled wrapper that adds conditional transform based on props, but the base component also needs those props */
   card: {
     backgroundColor: "#e0e0e0",
     padding: "12px",

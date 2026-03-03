@@ -202,7 +202,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Pattern 1: styled.input.attrs (dot notation)
   input: {
     borderRadius: "3px",
     borderWidth: "1px",
@@ -258,8 +257,6 @@ const styles = stylex.create({
     color: "blue",
     whiteSpace: "nowrap",
   },
-  // Pattern 10: dynamic attrs with computed style object
-  // The dynamic inline styles should be preserved as inline style prop
   dynamicHeightBox: {
     display: "flex",
     alignItems: "center",

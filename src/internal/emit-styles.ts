@@ -461,15 +461,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Build a map from styleKey to leadingComments for comment preservation.
-  // For components that need wrappers BUT have shouldForwardProp, comments should
-  // appear in BOTH stylex.create AND on the wrapper function.
-  // For exported components WITHOUT shouldForwardProp, comments should only go on
-  // the wrapper function (to avoid duplication).
+  // Components with wrappers already have the comment on the wrapper function,
+  // so skip them to avoid duplication in stylex.create.
   const styleKeyToComments = new Map<string, any[]>();
   for (const decl of styledDecls) {
-    // Skip exported components that will have wrappers but don't use shouldForwardProp.
-    // Their comments should only appear on the wrapper function, not in stylex.create.
-    if (decl.needsWrapperComponent && !decl.shouldForwardProp) {
+    if (decl.needsWrapperComponent) {
       continue;
     }
     if (decl.leadingComments && decl.leadingComments.length > 0) {

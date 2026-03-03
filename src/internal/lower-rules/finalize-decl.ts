@@ -484,16 +484,16 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       resolvedStyleObjects,
       variantSourceOrder: decl.variantSourceOrder,
     });
+  }
 
-    for (const [k, v] of styleFnDecls.entries()) {
-      resolvedStyleObjects.set(k, v);
-    }
-    // When the base styleKey is a dynamic function (not a static style object),
-    // skip the bare `styles.{styleKey}` reference in stylex.props() to avoid
-    // passing a function instead of a style object.
-    if (styleFnDecls.has(decl.styleKey) && Object.keys(styleObj).length === 0) {
-      decl.skipBaseStyleRef = true;
-    }
+  for (const [k, v] of styleFnDecls.entries()) {
+    resolvedStyleObjects.set(k, v);
+  }
+  // When the base styleKey is a dynamic function (not a static style object),
+  // skip the bare `styles.{styleKey}` reference in stylex.props() to avoid
+  // passing a function instead of a style object.
+  if (styleFnDecls.has(decl.styleKey) && Object.keys(styleObj).length === 0) {
+    decl.skipBaseStyleRef = true;
   }
   if (inlineStyleProps.length) {
     decl.inlineStyleProps = inlineStyleProps;

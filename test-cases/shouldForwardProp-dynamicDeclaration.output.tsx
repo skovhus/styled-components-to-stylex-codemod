@@ -45,14 +45,14 @@ export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "cl
       {...rest}
       {...mergedSx(
         [
+          wrap ? styles.flexBoxWrap : undefined,
+          alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
           typeof gap === "number" ? styles.flexBoxGap(gap) : undefined,
           typeof wrapGap === "number"
             ? column
               ? styles.flexBoxColumnGap(wrapGap)
               : styles.flexBoxRowGap(wrapGap)
             : undefined,
-          wrap ? styles.flexBoxWrap : undefined,
-          alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
         ],
         undefined,
         style,
@@ -91,19 +91,19 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  flexBoxGap: (gap: number | undefined) => ({
-    gap: `${gap}px`,
-  }),
-  flexBoxColumnGap: (wrapGap: number | undefined) => ({
-    columnGap: `${wrapGap}px`,
-  }),
-  flexBoxRowGap: (wrapGap: number | undefined) => ({
-    rowGap: `${wrapGap}px`,
-  }),
   flexBoxWrap: {
     flexWrap: "wrap",
   },
   flexBoxAlignSelf: (alignSelf: AlignValues) => ({
     alignSelf,
+  }),
+  flexBoxGap: (gap: number) => ({
+    gap: `${gap}px`,
+  }),
+  flexBoxColumnGap: (wrapGap: number) => ({
+    columnGap: `${wrapGap}px`,
+  }),
+  flexBoxRowGap: (wrapGap: number) => ({
+    rowGap: `${wrapGap}px`,
   }),
 });

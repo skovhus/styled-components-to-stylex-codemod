@@ -16,12 +16,12 @@ export function EmojiContainer(props: EmojiContainerProps) {
       {...rest}
       {...stylex.props(
         styles.emojiContainer,
-        Browser.isSafari
-          ? styles.emojiContainerBrowserIsSafari($size)
-          : styles.emojiContainerDefault($size),
         styles.emojiContainerWidth($size),
         styles.emojiContainerMaxWidth($size),
         styles.emojiContainerMaxHeight($size),
+        Browser.isSafari
+          ? styles.emojiContainerBrowserIsSafari($size)
+          : styles.emojiContainerDefault($size),
       )}
     >
       {children}
@@ -38,6 +38,23 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  emojiContainer: {
+    display: "inline-flex",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+    wordBreak: "keep-all",
+    height: "auto",
+  },
+  emojiContainerWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  emojiContainerMaxWidth: (maxWidth: number) => ({
+    maxWidth: `${maxWidth}px`,
+  }),
+  emojiContainerMaxHeight: (maxHeight: number) => ({
+    maxHeight: `${maxHeight}px`,
+  }),
   emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {
       default: `${size - 4}px`,
@@ -57,23 +74,5 @@ const styles = stylex.create({
       default: `${size}px`,
       "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size}px`,
     },
-  }),
-  /** A container for emojis that standardizes sizing across browsers */
-  emojiContainer: {
-    display: "inline-flex",
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
-    wordBreak: "keep-all",
-    height: "auto",
-  },
-  emojiContainerWidth: (width: number) => ({
-    width: `${width}px`,
-  }),
-  emojiContainerMaxWidth: (maxWidth: number) => ({
-    maxWidth: `${maxWidth}px`,
-  }),
-  emojiContainerMaxHeight: (maxHeight: number) => ({
-    maxHeight: `${maxHeight}px`,
   }),
 });

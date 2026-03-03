@@ -41,13 +41,12 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  containerWrapperWithComponentWidth: (width: number | undefined) => ({
-    "--component-width": `${width}px`,
-  }),
-  // A wrapper that conditionally sets a CSS custom property based on prop
   containerWrapper: {
     overflow: "hidden",
   },
+  containerWrapperWithComponentWidth: (width: number | undefined) => ({
+    "--component-width": `${width}px`,
+  }),
   container: {
     backgroundColor: "coral",
     width: "calc(var(--component-width) + 60px)",

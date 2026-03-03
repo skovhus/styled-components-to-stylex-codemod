@@ -83,7 +83,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Pattern 1: props.$zIndex !== undefined && template literal with interpolation
   layeredBox: {
     position: "absolute",
   },

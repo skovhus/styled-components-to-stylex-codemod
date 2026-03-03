@@ -40,18 +40,11 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Test case for dynamic styles in pseudo elements (::before / ::after).
-   * Uses CSS custom properties as a workaround for StyleX's limitation
-   * with dynamic values inside pseudo elements.
-   * See: https://github.com/facebook/stylex/issues/1396
-   */
   badge: {
     position: "relative",
     paddingBlock: "8px",
     paddingInline: "16px",
     backgroundColor: "#f0f0f0",
-
     "::after": {
       content: '""',
       position: "absolute",

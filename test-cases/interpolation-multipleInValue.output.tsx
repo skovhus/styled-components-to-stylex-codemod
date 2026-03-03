@@ -53,8 +53,6 @@ const styles = stylex.create({
     width: "200px",
     height: "100px",
   },
-  // Multiple interpolations in a transform value
-  // Should produce a single template literal preserving all transform functions
   popover: {
     transform: "translateY(-50%) translateX(-8px) scale(0.9)",
     opacity: 0,

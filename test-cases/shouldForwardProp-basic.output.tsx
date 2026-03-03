@@ -110,7 +110,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Using shouldForwardProp to filter props (v5 pattern)
   button: {
     backgroundColor: "#BF4F74",
     paddingBlock: "8px",
@@ -130,7 +129,6 @@ const styles = stylex.create({
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-  // Using isPropValid from @emotion
   link: {
     color: {
       default: "#333",
@@ -143,7 +141,6 @@ const styles = stylex.create({
     color: "#BF4F74",
     fontWeight: "bold",
   },
-  // Custom prop filtering logic (transient props pattern)
   box: {
     backgroundColor: "white",
     padding: "16px",
@@ -164,7 +161,6 @@ const styles = stylex.create({
   colorBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-  // Filter multiple custom props
   card: {
     backgroundColor: "#4F74BF",
     borderRadius: "4px",

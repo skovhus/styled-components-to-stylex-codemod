@@ -55,10 +55,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Arrow function returns a template literal with nested conditionals.
-   * The codemod should preserve this via a stylex function.
-   */
   columnContainer: {
     flexGrow: 1,
   },

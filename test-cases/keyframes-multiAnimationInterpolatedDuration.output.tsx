@@ -54,9 +54,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // First animation has interpolated duration, second has static duration
-  // When $duration is provided, animationDuration should be "${$duration}ms, 1s"
-  // not just "${$duration}ms" which would drop the second animation's duration
   animatedCard: {
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "200ms, 1s",
@@ -64,7 +61,6 @@ const styles = stylex.create({
     padding: "20px",
     backgroundColor: "white",
   },
-
   animatedCardAnimationDuration: (animationDuration: string) => ({
     animationDuration,
   }),

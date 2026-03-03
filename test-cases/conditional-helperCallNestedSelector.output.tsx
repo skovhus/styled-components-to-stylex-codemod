@@ -24,9 +24,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  // Helper call conditional inside a pseudo selector.
-  // The adapter provides cssText so the codemod can expand individual CSS properties
-  // and wrap them in the pseudo selector context.
   text: {
     fontSize: "14px",
     color: "#333",

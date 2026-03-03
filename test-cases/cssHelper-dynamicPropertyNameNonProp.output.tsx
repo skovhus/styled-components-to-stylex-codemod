@@ -54,6 +54,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  stack: {
+    display: "flex",
+  },
   stackColumnGapMarginTop: (gap: number | undefined) => ({
     columnGap: `${gap ?? 8}px`,
     marginTop: `${gap ?? 8}px`,
@@ -62,7 +65,4 @@ const styles = stylex.create({
     rowGap: `${gap ?? 8}px`,
     marginTop: `${gap ?? 8}px`,
   }),
-  stack: {
-    display: "flex",
-  },
 });

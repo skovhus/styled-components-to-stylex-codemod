@@ -44,9 +44,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  // Critical: interpolated time comes BEFORE the static time
-  // In CSS animation shorthand, first time = duration, second time = delay
-  // So the interpolated value should be duration, and "0.5s" should be delay
   fadeInWithDelay: {
     animationName: fadeIn,
     animationDuration: "200ms",
