@@ -82,10 +82,16 @@ export const flexPropKeys = [
 /**
  * Generic flexbox div component.
  */
-export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "className">) {
+export function Flex<C extends React.ElementType = "div">(
+  props: FlexProps &
+    Omit<React.ComponentPropsWithRef<C>, keyof FlexProps> & { sx?: stylex.StyleXStyles; as?: C },
+) {
   const {
+    as: Component = "div",
+    className,
     children,
     style,
+    sx,
     column,
     reverse,
     center,
@@ -107,7 +113,7 @@ export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "class
   } = props;
 
   return (
-    <div
+    <Component
       {...rest}
       {...mergedSx(
         [
@@ -137,13 +143,14 @@ export function Flex(props: FlexProps & Omit<React.ComponentProps<"div">, "class
           overflowHidden ? styles.flexOverflowHidden : undefined,
           noMinWidth ? styles.flexNoMinWidth : undefined,
           noMinHeight ? styles.flexNoMinHeight : undefined,
+          sx,
         ],
-        undefined,
+        className,
         style,
       )}
     >
       {children}
-    </div>
+    </Component>
   );
 }
 
@@ -301,6 +308,14 @@ export const App = () => (
       <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Item</div>
     </Flex>
 
+    {/* Non-polymorphic wrapper around generic Flex */}
+    <Flex
+      onContextMenu={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
+      {...stylex.props(styles.flex, styles.padded)}
+    >
+      Padded content
+    </Flex>
+
     {/* FlexSpacer pushes items apart */}
     <div style={{ display: "flex", gap: 8, backgroundColor: "#e0e0e0", padding: 8 }}>
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Before</div>
@@ -373,6 +388,9 @@ const styles = stylex.create({
   flexSpacer: {
     display: "flex",
     flex: "auto",
+  },
+  padded: {
+    padding: "16px",
   },
 });
 

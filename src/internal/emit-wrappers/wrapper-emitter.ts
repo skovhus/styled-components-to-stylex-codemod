@@ -18,6 +18,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
 import type { LogicalExpressionOperand } from "./variant-condition.js";
@@ -983,6 +984,123 @@ export class WrapperEmitter {
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
 
+  /**
+   * Gets a component's explicit props type including type arguments (e.g., FlexProps, Props<"button">).
+   * Returns the full stringified type reference, not just the identifier name.
+   */
+  resolveWrappedExplicitPropsType(componentName: string): string | null {
+    const decl = this.wrapperDecls.find((d2) => d2.localName === componentName);
+    if (!decl?.propsType) {
+      return null;
+    }
+    const pt = decl.propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    if (pt.type === "TSTypeReference" && pt.typeName?.type === "Identifier") {
+      return this.stringifyTsType(pt);
+    }
+    return null;
+  }
+
+  /**
+   * Gets only the base type name (without type arguments) from a component's props type.
+   * Used for detecting self-referential types.
+   */
+  resolveWrappedExplicitPropsTypeName(componentName: string): string | null {
+    const decl = this.wrapperDecls.find((d2) => d2.localName === componentName);
+    if (!decl?.propsType) {
+      return null;
+    }
+    const pt = decl.propsType as ASTNode & {
+      type?: string;
+      typeName?: { type?: string; name?: string };
+    };
+    if (pt.type === "TSTypeReference" && pt.typeName?.type === "Identifier") {
+      return pt.typeName.name;
+    }
+    return null;
+  }
+
+  /** Resolves the default intrinsic tag by tracing through the component chain. */
+  resolveWrappedDefaultTag(componentName: string): string | null {
+    const visited = new Set<string>();
+    let current = componentName;
+    for (;;) {
+      if (visited.has(current)) {
+        return null;
+      }
+      visited.add(current);
+      const decl = this.wrapperDecls.find((d2) => d2.localName === current);
+      if (!decl) {
+        return null;
+      }
+      if (decl.base.kind === "intrinsic") {
+        return decl.base.tagName;
+      }
+      if (decl.base.kind === "component") {
+        current = decl.base.ident;
+      } else {
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Builds a base props type for a wrapped component.
+   * When the wrapped component is a generic function (e.g., Flex<C>), uses its explicit
+   * props type directly because `React.ComponentPropsWithRef<typeof GenericComponent>`
+   * resolves to `any`. Falls back to the standard `typeof` form otherwise.
+   *
+   * @param componentName - The name of the wrapped component
+   * @param excludeTypeName - Optional type name to exclude to avoid self-referential types.
+   *   When the caller's explicit props type equals the wrapped component's props type,
+   *   pass the caller's type name here to fall back to the `typeof` form.
+   */
+  componentPropsBaseType(componentName: string, excludeTypeName?: string): string {
+    if (!this.wrappedComponentWillBeGeneric(componentName)) {
+      return `React.ComponentPropsWithRef<typeof ${componentName}>`;
+    }
+    const wrappedTypeName = this.resolveWrappedExplicitPropsTypeName(componentName);
+    // P1 fix: Avoid self-referential types by falling back to `typeof` when the
+    // wrapped component's props type name matches the caller's explicit props type.
+    if (wrappedTypeName && excludeTypeName && wrappedTypeName === excludeTypeName) {
+      return `React.ComponentPropsWithRef<typeof ${componentName}>`;
+    }
+    // P2 fix: Use the full type with arguments (e.g., Props<"button">)
+    const fullPropsType = this.resolveWrappedExplicitPropsType(componentName);
+    const defaultTag = fullPropsType ? this.resolveWrappedDefaultTag(componentName) : null;
+    if (fullPropsType && defaultTag) {
+      return `${fullPropsType} & Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${fullPropsType}>`;
+    }
+    return `React.ComponentPropsWithRef<typeof ${componentName}>`;
+  }
+
+  /**
+   * Checks if a component in wrapperDecls will be emitted as a generic function.
+   * A component is generic when it has `as` prop support AND its existing props type
+   * doesn't already declare `as` (components with existing `as` stay non-generic).
+   */
+  wrappedComponentWillBeGeneric(componentName: string): boolean {
+    const decl = this.wrapperDecls.find((d) => d.localName === componentName);
+    if (!decl) {
+      return false;
+    }
+    const hasAsSupport = this.wrapperNames.has(componentName) || !!decl.supportsAsProp;
+    if (!hasAsSupport) {
+      return false;
+    }
+    // Components with existing `as` in their props type stay non-generic
+    // (the intrinsic emitter uses the simple path for these)
+    if (
+      decl.propsType &&
+      typeContainsPolymorphicAs({ root: this.root, j: this.j, typeNode: decl.propsType })
+    ) {
+      return false;
+    }
+    return true;
+  }
+
   inferredComponentWrapperPropsTypeText(args: {
     d: StyledDecl;
     allowClassNameProp: boolean;
@@ -1031,7 +1149,7 @@ export class WrapperEmitter {
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
-    const base = `React.ComponentPropsWithRef<typeof ${propsTarget}>`;
+    const base = this.componentPropsBaseType(propsTarget);
     const omitted: string[] = [];
     // When forcing optional, always omit from base to prevent inheriting requiredness
     if (!allowClassNameProp || forceClassNameOptional) {

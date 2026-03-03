@@ -905,6 +905,11 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "ref": false,
           "styles": true,
         },
+        "test-cases/wrapper-samePropsType.input.tsx:Wrapper": {
+          "as": false,
+          "ref": false,
+          "styles": true,
+        },
       }
     `);
   });

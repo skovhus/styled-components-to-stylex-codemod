@@ -112,6 +112,10 @@ export const FlexSpacer = styled.div`
   flex: auto;
 `;
 
+const Padded = styled(Flex)`
+  padding: 16px;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
     {/* Basic row (default) */}
@@ -254,6 +258,9 @@ export const App = () => (
       </div>
       <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Item</div>
     </Flex>
+
+    {/* Non-polymorphic wrapper around generic Flex */}
+    <Padded onContextMenu={(e) => e.stopPropagation()}>Padded content</Padded>
 
     {/* FlexSpacer pushes items apart */}
     <div style={{ display: "flex", gap: 8, backgroundColor: "#e0e0e0", padding: 8 }}>
