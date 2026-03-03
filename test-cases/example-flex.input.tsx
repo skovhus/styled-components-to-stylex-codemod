@@ -186,6 +186,20 @@ export const App = () => (
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Auto Flex</div>
     </Flex>
 
+    {/* auto + grow=0: grow should override auto's flex-grow (flex: 1 1 auto sets grow=1, but grow=0 overrides it) */}
+    <Flex auto grow={0} style={{ backgroundColor: "#ffe0e0", padding: 8 }}>
+      <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>
+        auto + grow=0 (should NOT grow)
+      </div>
+    </Flex>
+
+    {/* auto + shrink=0: shrink should override auto's flex-shrink */}
+    <Flex auto shrink={0} style={{ backgroundColor: "#ffe0e0", padding: 8 }}>
+      <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>
+        auto + shrink=0 (should NOT shrink)
+      </div>
+    </Flex>
+
     {/* Wrap + gap */}
     <Flex wrap gap={8} style={{ backgroundColor: "#f0f0f0", padding: 8 }}>
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Wrap</div>
