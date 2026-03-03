@@ -2648,6 +2648,39 @@ export function App() {
   });
 });
 
+describe("double .attrs() chain bails safely", () => {
+  it("should leave file unchanged when styled has multiple .attrs() calls", () => {
+    const source = `
+import styled from "styled-components";
+
+const Input = styled.input.attrs({ type: "text" }).attrs({ autoComplete: "off" })\`
+  padding: 8px;
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should leave file unchanged when styled(tag).withConfig().attrs().attrs() is used", () => {
+    const source = `
+import styled from "styled-components";
+
+const Input = styled("input")
+  .withConfig({ shouldForwardProp: p => p !== "size" })
+  .attrs({ type: "text" })
+  .attrs({ autoComplete: "off" })\`
+  padding: 8px;
+\`;
+
+export const App = () => <Input />;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+});
+
 describe("attrs defaultAttrs nullish coalescing", () => {
   it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
     // Regression test: styled.div.attrs with props.X ?? defaultValue should

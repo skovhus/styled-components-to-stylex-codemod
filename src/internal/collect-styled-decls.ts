@@ -655,7 +655,8 @@ function collectStyledDeclsImpl(args: {
    * Peel .attrs() and .withConfig() method calls from a tagged-template tag expression.
    * Handles single-method chains (e.g., .attrs(...)) and two-level chains
    * (e.g., .withConfig(...).attrs(...)) in any order.
-   * Returns null if no chain methods were found.
+   * Returns null if no chain methods were found or if duplicate methods are detected
+   * (e.g., .attrs(a).attrs(b)), since composing multiple attrs layers is not supported.
    */
   const peelChainMethods = (
     tag: any,
@@ -679,8 +680,14 @@ function collectStyledDeclsImpl(args: {
     ) {
       peeled = true;
       if (cur.callee.property.name === "attrs") {
+        if (attrsArg !== undefined) {
+          return null;
+        }
         attrsArg = cur.arguments?.[0];
       } else {
+        if (withConfigArg !== undefined) {
+          return null;
+        }
         withConfigArg = cur.arguments?.[0];
       }
       if (!chainPropsType) {
