@@ -2,11 +2,11 @@
 import styled from "styled-components";
 import { CONTENT_MAX_WIDTH } from "./lib/layout";
 
-export const SkillLayout = styled.div`
+export const Layout = styled.div`
   position: relative;
   max-width: ${CONTENT_MAX_WIDTH};
 `;
 
 export function App() {
-  return <SkillLayout>Content</SkillLayout>;
+  return <Layout>Content</Layout>;
 }
