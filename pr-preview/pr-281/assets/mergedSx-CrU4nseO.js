@@ -1,0 +1,1 @@
+import{p as a}from"./stylex-DS3CntOa.js";function m(t,o,s){const r=a(t),n=Array.isArray(o)?o:[o],e=[r.className,...n].filter(Boolean).join(" ")||void 0;return!e&&!s?r:{...r,className:e,style:{...r.style,...s}}}export{m};
