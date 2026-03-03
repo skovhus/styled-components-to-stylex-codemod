@@ -1,0 +1,1 @@
+import{j as n}from"./index-DJDPyVd0.js";function o(t){const{children:r,...e}=t;return n.jsx("div",{...e,className:"x1n2onr6 x1e77i0s",children:r})}function i(){return n.jsx(o,{children:"Content"})}export{i as App,o as Layout};
