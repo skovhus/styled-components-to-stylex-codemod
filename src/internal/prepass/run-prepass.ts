@@ -49,9 +49,15 @@ interface PrepassOptions {
   enableAstCache?: boolean;
 }
 
+interface ForwardedAsConsumerEntry {
+  localStyledName: string;
+}
+
 interface PrepassResult {
   crossFileInfo: CrossFileInfo;
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
+  /** Unconverted consumers that wrap converted components with styled() and use `as` prop */
+  forwardedAsConsumers: Map<string, ForwardedAsConsumerEntry[]>;
 }
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
@@ -72,6 +78,9 @@ const STYLED_DEF_RE = /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled[.(]/g;
 const JSX_AS_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bas[={]/g;
 /** Matches <Component ...ref= across lines. [^<>]* avoids crossing tag boundaries. */
 const JSX_REF_COMPONENT_RE = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\bref[={]/g;
+/** Captures both the local styled name and the wrapped component: styled(Flex) → ["StyledFlex", "Flex"] */
+const STYLED_COMPONENT_WRAPPER_RE =
+  /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled\(\s*([A-Z][A-Za-z0-9]*)\s*\)/g;
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
@@ -149,6 +158,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, Set<string>>();
+  const styledWrapperUsages: { file: string; localStyledName: string; wrappedName: string }[] = [];
 
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
   const fileContents = new Map<string, string>();
@@ -240,6 +250,14 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       for (const m of source.matchAll(STYLED_DEF_RE)) {
         if (m[1]) {
           addToSetMap(styledDefFiles, filePath, m[1]);
+        }
+      }
+
+      // Detect styled(Component) wrappers for forwardedAs patching
+      STYLED_COMPONENT_WRAPPER_RE.lastIndex = 0;
+      for (const m of source.matchAll(STYLED_COMPONENT_WRAPPER_RE)) {
+        if (m[1] && m[2]) {
+          styledWrapperUsages.push({ file: filePath, localStyledName: m[1], wrappedName: m[2] });
         }
       }
     }
@@ -406,6 +424,47 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  // Phase 2b: Cross-reference styled(Component) wrappers for forwardedAs patching.
+  // For each wrapper in an unconverted consumer file, check if the wrapped component
+  // is imported from a file that IS being transformed → needs as→forwardedAs patching.
+  const forwardedAsConsumers = new Map<string, ForwardedAsConsumerEntry[]>();
+
+  if (createExternalInterface && styledWrapperUsages.length > 0) {
+    for (const { file, localStyledName, wrappedName } of styledWrapperUsages) {
+      // Only patch unconverted consumer files (not being transformed)
+      if (transformSet.has(file)) {
+        continue;
+      }
+
+      const importInfo = findImportSource(cachedRead(file), wrappedName);
+      if (!importInfo) {
+        continue;
+      }
+
+      const { source: importSource, exportedName } = importInfo;
+
+      let defFile = resolve(importSource, file);
+      if (!defFile) {
+        continue;
+      }
+
+      // Follow barrel re-exports (index.ts -> actual definition)
+      defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
+
+      // The wrapped component's definition file must be in the transform set
+      if (!transformSet.has(defFile)) {
+        continue;
+      }
+
+      let entries = forwardedAsConsumers.get(file);
+      if (!entries) {
+        entries = [];
+        forwardedAsConsumers.set(file, entries);
+      }
+      entries.push({ localStyledName });
+    }
+  }
+
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,
     componentsNeedingMarkerSidecar,
@@ -430,7 +489,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         `, ${reStyled} re-styled` +
         `, ${asProp} as-prop` +
         `, ${refProp} ref-prop` +
-        `, ${classNameStyleUsages.size} className/style\n`,
+        `, ${classNameStyleUsages.size} className/style` +
+        `, ${forwardedAsConsumers.size} forwardedAs\n`,
     );
   }
 
@@ -438,7 +498,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     logPrepassDebug(uniqueAllFiles, crossFileInfo, consumerAnalysis);
   }
 
-  return { crossFileInfo, consumerAnalysis };
+  return { crossFileInfo, consumerAnalysis, forwardedAsConsumers };
 }
 
 /* ── Phase helpers ────────────────────────────────────────────────────── */
