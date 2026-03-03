@@ -53,4 +53,11 @@ export const Flex = styled.div<FlexProps>`
           align-items: ${ALIGN_TO_CSS[align]};
         `
       : ""}
+  ${({ center }) =>
+    center
+      ? css`
+          align-items: center;
+          justify-content: center;
+        `
+      : ""}
 `;
