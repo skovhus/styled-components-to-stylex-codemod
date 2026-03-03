@@ -1,0 +1,1 @@
+import{j as t}from"./index-B0EHWB6m.js";import{T as a}from"./text-DgV0Zl0a.js";function n(e){const{as:r=a,...s}=e;return t.jsx(r,{...s,className:"x1pvqxga x1s688f"})}const x=()=>t.jsx("div",{children:t.jsx(n,{variant:"large",children:"Default Title"})});export{x as App,n as HeaderTitle};
