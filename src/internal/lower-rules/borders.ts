@@ -471,18 +471,27 @@ export function tryHandleInterpolatedBorder(
       const exprs = value.expressions ?? [];
 
       // Format 1: `1px solid ${color}` - static width/style, dynamic color
-      // quasis: ["1px solid ", ""], exprs: [colorExpr]
+      // Format 3: `${width} solid transparent` - dynamic width, static style+color in suffix
+      // quasis: ["1px solid ", ""] or ["", " solid transparent"], exprs: [expr]
       if (quasis.length === 2 && exprs.length === 1) {
         const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
         const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
-        if (suffix.trim() !== "") {
-          return null;
+
+        // Format 1: static width+style in prefix, dynamic color
+        if (suffix.trim() === "") {
+          const parsed = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
+          if (parsed?.width && parsed?.style) {
+            return { width: parsed.width, style: parsed.style, colorExpr: exprs[0] };
+          }
         }
-        const parsed = parseInterpolatedBorderStaticParts({ prop, prefix, suffix });
-        if (!parsed?.width || !parsed?.style) {
-          return null;
+
+        // Format 3: dynamic width, static style+color in suffix
+        if (prefix.trim() === "" && suffix.trim() !== "") {
+          const parsed = parseBorderShorthandParts(suffix.trim());
+          if (parsed?.style && parsed?.color) {
+            return { width: exprs[0], style: parsed.style, colorExpr: parsed.color };
+          }
         }
-        return { width: parsed.width, style: parsed.style, colorExpr: exprs[0] };
       }
 
       // Format 2: `${width} solid ${color}` - dynamic width, static style, dynamic color
@@ -649,8 +658,14 @@ export function tryHandleInterpolatedBorder(
       if (hasStaticWidthOrStyle) {
         applyResolvedPropValue(targetProp, resolved.exprAst);
       } else {
-        const fullProp = direction ? `border${direction}` : "border";
-        applyResolvedPropValue(fullProp, resolved.exprAst);
+        // Cannot set the border shorthand directly — StyleX forbids it.
+        // The adapter must return a value that can be expanded (string literal
+        // like "1px solid red" or template literal like `${width} solid ${color}`).
+        bailUnsupportedWithContext(
+          "Resolved border helper value could not be expanded to longhand properties",
+          { property: prop },
+          getNodeLocStart(expr),
+        );
       }
       return true;
     }

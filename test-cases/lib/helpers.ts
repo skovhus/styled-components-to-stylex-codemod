@@ -127,6 +127,13 @@ export function themedBorder(colorKey: ThemeColor) {
 }
 
 /**
+ * A helper function that returns a CSS border shorthand with thin pixel width.
+ */
+export function thinBorder(color: string) {
+  return `${thinPixel()} solid ${color}`;
+}
+
+/**
  * A helper function that returns a CSS string for a border with a given color.
  */
 export function borderByColor(color: string) {
