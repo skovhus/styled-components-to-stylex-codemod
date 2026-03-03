@@ -179,7 +179,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeExists = explicitTypeName && emitter.typeExistsInFile(explicitTypeName);
 
       if (explicitTypeExists && explicit && explicitTypeName && !isPolymorphicComponentWrapper) {
-        const base = `React.ComponentPropsWithRef<typeof ${renderedComponent}>`;
+        const base = emitter.componentPropsBaseType(renderedComponent);
         const omitted: string[] = [];
         if (!allowClassNameProp || forceClassNameOptional) {
           omitted.push('"className"');
