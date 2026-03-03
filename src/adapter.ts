@@ -549,7 +549,7 @@ export interface Adapter {
    * ```typescript
    * function merger(
    *   styles: StyleXStyles | StyleXStyles[],
-   *   className?: string | (string | undefined)[],
+   *   className?: string | (string | undefined | false | null)[],
    *   style?: React.CSSProperties
    * ): { className?: string; style?: React.CSSProperties }
    * ```
