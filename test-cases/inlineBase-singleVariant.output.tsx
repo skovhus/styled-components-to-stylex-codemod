@@ -18,6 +18,7 @@ const styles = stylex.create({
   },
   flex: {
     display: "flex",
+    flexDirection: "row",
   },
   flexCenter: {
     alignItems: "center",

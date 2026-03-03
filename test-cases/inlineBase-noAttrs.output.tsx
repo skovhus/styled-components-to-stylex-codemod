@@ -7,6 +7,7 @@ export function App() {
 const styles = stylex.create({
   container: {
     display: "flex",
+    flexDirection: "row",
     padding: "10px",
     backgroundColor: "#eef9ff",
     borderWidth: "1px",

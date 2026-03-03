@@ -552,36 +552,82 @@ export const customAdapter = defineAdapter({
 const INLINE_BASE_FLEX_IMPORTED_NAME = "Flex";
 const INLINE_BASE_FLEX_CONSUMED_PROPS = [
   "align",
+  "alignSelf",
   "as",
+  "auto",
   "center",
   "column",
   "direction",
+  "disabled",
   "gap",
+  "grow",
+  "inline",
+  "justify",
+  "noMinHeight",
   "noMinWidth",
+  "overflowHidden",
+  "reverse",
+  "shrink",
+  "wrap",
+  "wrapGap",
 ];
-const INLINE_BASE_ALIGN_MAP: Record<string, string> = {
-  start: "flex-start",
-  center: "center",
-  end: "flex-end",
-  stretch: "stretch",
-};
 
 function resolveInlineBaseFlexSx(
   staticProps: Record<string, string | number | boolean>,
 ): Record<string, string> {
-  const sx: Record<string, string> = {
-    display: "flex",
-  };
+  const sx: Record<string, string> = {};
+
+  sx.display = staticProps.inline === true ? "inline-flex" : "flex";
+
+  const isColumn = staticProps.column === true;
+  const isReverse = staticProps.reverse === true;
+  if (isColumn && isReverse) {
+    sx.flexDirection = "column-reverse";
+  } else if (isColumn) {
+    sx.flexDirection = "column";
+  } else if (isReverse) {
+    sx.flexDirection = "row-reverse";
+  } else if (typeof staticProps.direction === "string") {
+    sx.flexDirection = staticProps.direction;
+  } else {
+    sx.flexDirection = "row";
+  }
+
+  if (typeof staticProps.align === "string") {
+    sx.alignItems = staticProps.align;
+  }
+
+  if (typeof staticProps.justify === "string") {
+    sx.justifyContent = staticProps.justify;
+  }
 
   if (staticProps.center === true) {
     sx.alignItems = "center";
     sx.justifyContent = "center";
   }
 
-  if (staticProps.column === true) {
-    sx.flexDirection = "column";
-  } else if (typeof staticProps.direction === "string") {
-    sx.flexDirection = staticProps.direction;
+  if (staticProps.auto === true) {
+    sx.flex = "1 1 auto";
+  }
+
+  if (typeof staticProps.grow === "number") {
+    sx.flexGrow = String(staticProps.grow);
+  }
+
+  if (typeof staticProps.shrink === "number") {
+    sx.flexShrink = String(staticProps.shrink);
+  }
+
+  if (staticProps.wrap === true) {
+    sx.flexWrap = "wrap";
+  }
+
+  if (typeof staticProps.alignSelf === "string") {
+    sx.alignSelf = staticProps.alignSelf;
+  }
+
+  if (staticProps.overflowHidden === true) {
+    sx.overflow = "hidden";
   }
 
   if (typeof staticProps.gap === "number") {
@@ -590,12 +636,16 @@ function resolveInlineBaseFlexSx(
     sx.gap = staticProps.gap;
   }
 
-  if (typeof staticProps.align === "string") {
-    sx.alignItems = INLINE_BASE_ALIGN_MAP[staticProps.align] ?? staticProps.align;
+  if (typeof staticProps.wrapGap === "number") {
+    sx[isColumn ? "columnGap" : "rowGap"] = `${staticProps.wrapGap}px`;
   }
 
   if (staticProps.noMinWidth === true) {
     sx.minWidth = "0px";
+  }
+
+  if (staticProps.noMinHeight === true) {
+    sx.minHeight = "0px";
   }
 
   return sx;
@@ -607,7 +657,8 @@ function stripInlineBaseFlexBaseStyles(
 ): Record<string, string> {
   const next = { ...sx };
   delete next.display;
-  if (staticProps.direction === "row" && next.flexDirection === "row") {
+  const dir = next.flexDirection;
+  if (dir === "row" || (staticProps.direction === "row" && dir === staticProps.direction)) {
     delete next.flexDirection;
   }
   return next;

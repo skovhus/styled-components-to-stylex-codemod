@@ -2,12 +2,24 @@ import * as React from "react";
 import styled, { css } from "styled-components";
 
 export interface FlexProps extends React.ComponentProps<"div"> {
-  align?: "start" | "center" | "end" | "stretch";
+  align?: string;
+  alignSelf?: string;
+  auto?: boolean;
   center?: boolean;
-  gap?: number;
-  direction?: "row" | "column";
   column?: boolean;
+  direction?: "row" | "column";
+  disabled?: boolean;
+  gap?: number;
+  grow?: number;
+  inline?: boolean;
+  justify?: string;
+  noMinHeight?: boolean;
   noMinWidth?: boolean;
+  overflowHidden?: boolean;
+  reverse?: boolean;
+  shrink?: number;
+  wrap?: boolean;
+  wrapGap?: number;
 }
 
 const ALIGN_TO_CSS: Record<NonNullable<FlexProps["align"]>, string> = {

@@ -62,6 +62,7 @@ export const App = () => (
 const styles = stylex.create({
   textDividerContainer: {
     display: "flex",
+    flexDirection: "row",
     userSelect: "none",
     height: "30px",
     paddingTop: "4px",

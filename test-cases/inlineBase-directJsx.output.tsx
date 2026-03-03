@@ -29,7 +29,7 @@ const flexAlignVariants = stylex.create({
     alignItems: "center",
   },
   start: {
-    alignItems: "flex-start",
+    alignItems: "start",
   },
 });
 
