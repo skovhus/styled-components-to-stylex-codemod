@@ -27,7 +27,6 @@ const flexGapVariants = stylex.create({
   8: {
     gap: "8px",
   },
-
   16: {
     gap: "16px",
   },
