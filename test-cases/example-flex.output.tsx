@@ -340,21 +340,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  flexGrow: (grow: number) => ({
-    flexGrow: grow,
-  }),
-  flexShrink: (shrink: number) => ({
-    flexShrink: shrink,
-  }),
-  flexGap: (gap: number) => ({
-    gap: `${gap}px`,
-  }),
-  flexColumnGap: (wrapGap: number) => ({
-    columnGap: `${wrapGap}px`,
-  }),
-  flexRowGap: (wrapGap: number) => ({
-    rowGap: `${wrapGap}px`,
-  }),
   /**
    * Generic flexbox div component.
    */
@@ -396,8 +381,23 @@ const styles = stylex.create({
   flexNoMinHeight: {
     minHeight: "0px",
   },
+  flexGrow: (grow: number) => ({
+    flexGrow: grow,
+  }),
+  flexShrink: (shrink: number) => ({
+    flexShrink: shrink,
+  }),
   flexAlignSelf: (alignSelf: AlignValues) => ({
     alignSelf,
+  }),
+  flexGap: (gap: number) => ({
+    gap: `${gap}px`,
+  }),
+  flexColumnGap: (wrapGap: number) => ({
+    columnGap: `${wrapGap}px`,
+  }),
+  flexRowGap: (wrapGap: number) => ({
+    rowGap: `${wrapGap}px`,
   }),
   flexSpacer: {
     display: "flex",

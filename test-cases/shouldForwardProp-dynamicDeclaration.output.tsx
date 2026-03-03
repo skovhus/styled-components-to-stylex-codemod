@@ -91,6 +91,12 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  flexBoxWrap: {
+    flexWrap: "wrap",
+  },
+  flexBoxAlignSelf: (alignSelf: AlignValues) => ({
+    alignSelf,
+  }),
   flexBoxGap: (gap: number) => ({
     gap: `${gap}px`,
   }),
@@ -99,11 +105,5 @@ const styles = stylex.create({
   }),
   flexBoxRowGap: (wrapGap: number) => ({
     rowGap: `${wrapGap}px`,
-  }),
-  flexBoxWrap: {
-    flexWrap: "wrap",
-  },
-  flexBoxAlignSelf: (alignSelf: AlignValues) => ({
-    alignSelf,
   }),
 });

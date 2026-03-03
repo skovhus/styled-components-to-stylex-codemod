@@ -38,6 +38,24 @@ export const App = () => (
 );
 
 const styles = stylex.create({
+  /** A container for emojis that standardizes sizing across browsers */
+  emojiContainer: {
+    display: "inline-flex",
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+    wordBreak: "keep-all",
+    height: "auto",
+  },
+  emojiContainerWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  emojiContainerMaxWidth: (maxWidth: number) => ({
+    maxWidth: `${maxWidth}px`,
+  }),
+  emojiContainerMaxHeight: (maxHeight: number) => ({
+    maxHeight: `${maxHeight}px`,
+  }),
   emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {
       default: `${size - 4}px`,
@@ -57,23 +75,5 @@ const styles = stylex.create({
       default: `${size}px`,
       "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size}px`,
     },
-  }),
-  /** A container for emojis that standardizes sizing across browsers */
-  emojiContainer: {
-    display: "inline-flex",
-    justifyContent: "center",
-    alignItems: "center",
-    flexShrink: 0,
-    wordBreak: "keep-all",
-    height: "auto",
-  },
-  emojiContainerWidth: (width: number) => ({
-    width: `${width}px`,
-  }),
-  emojiContainerMaxWidth: (maxWidth: number) => ({
-    maxWidth: `${maxWidth}px`,
-  }),
-  emojiContainerMaxHeight: (maxHeight: number) => ({
-    maxHeight: `${maxHeight}px`,
   }),
 });

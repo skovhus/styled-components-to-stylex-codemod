@@ -1211,7 +1211,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                 ? `${label}${restPropSuffix}`
                 : `${firstPropSuffix}${restPropSuffix}`;
               const fnKey = `${decl.styleKey}${branchSuffix}`;
-              if (!resolvedStyleObjects.has(fnKey)) {
+              if (!styleFnDecls.has(fnKey) && !resolvedStyleObjects.has(fnKey)) {
                 if (valuePropParams.length === 1) {
                   const singleProp = valuePropParams[0]!;
                   const paramIdent = singleProp.startsWith("$") ? singleProp.slice(1) : singleProp;
@@ -1228,7 +1228,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                       replacePropsWithBareIdent(normalizeDollarProps(j, valueExpr)),
                     ),
                   );
-                  resolvedStyleObjects.set(
+                  styleFnDecls.set(
                     fnKey,
                     j.arrowFunctionExpression([param], j.objectExpression(properties)),
                   );
@@ -1253,7 +1253,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                       normalizeDollarProps(j, valueExpr),
                     ),
                   );
-                  resolvedStyleObjects.set(
+                  styleFnDecls.set(
                     fnKey,
                     j.arrowFunctionExpression([propsParam], j.objectExpression(properties)),
                   );
@@ -1403,10 +1403,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const altKey = ensureUniqueKey(resolvedStyleObjects, rawAltKey);
 
       if (consMap.size > 0) {
-        resolvedStyleObjects.set(consKey, createStyleFn(consMap));
+        styleFnDecls.set(consKey, createStyleFn(consMap));
       }
       if (altMap.size > 0) {
-        resolvedStyleObjects.set(altKey, createStyleFn(altMap));
+        styleFnDecls.set(altKey, createStyleFn(altMap));
       }
 
       // Create function call expressions with bare prop identifiers.
