@@ -90,6 +90,16 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const inlineVariantProps = new Set(
           inlineVariantDimensions.map((dimension) => dimension.propName),
         );
+        const combinedStylePropNames = new Set(
+          (decl.callSiteCombinedStyles ?? []).flatMap((c) => c.propNames),
+        );
+
+        // Pre-compute combined per-call-site style match from original attributes
+        // (before shouldForwardProp filtering strips consumed props).
+        const matchedCombinedStyleKey = matchCallSiteCombinedStyle(
+          decl.callSiteCombinedStyles,
+          opening.attributes ?? [],
+        );
 
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         // `forwardedAs` does NOT switch the outer rendered element; it maps to an `as`
@@ -392,6 +402,16 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...extraAfterBaseArgs,
         ];
 
+        // Apply combined per-call-site style if matched
+        if (matchedCombinedStyleKey) {
+          styleArgs.push(
+            j.memberExpression(
+              j.identifier(ctx.stylesIdentifier ?? "styles"),
+              j.identifier(matchedCombinedStyleKey),
+            ),
+          );
+        }
+
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
         const keptLeadingAfterVariants: typeof leading = [];
@@ -434,6 +454,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 );
               }
             }
+            return;
+          }
+
+          // Props handled by combined per-call-site styles are already applied above;
+          // just strip the attribute without adding individual style args.
+          if (combinedStylePropNames.has(n) && matchedCombinedStyleKey) {
             return;
           }
 
@@ -624,4 +650,36 @@ function extractJsxAttrValueExpr(
     return a.value.expression as ExpressionKind;
   }
   return undefined;
+}
+
+/**
+ * Finds the combined style key matching the consumed props at a JSX call site.
+ * Returns the style key if a matching combination exists, or undefined otherwise.
+ */
+function matchCallSiteCombinedStyle(
+  combinedStyles: StyledDecl["callSiteCombinedStyles"],
+  attrs: ReadonlyArray<unknown>,
+): string | undefined {
+  if (!combinedStyles?.length) {
+    return undefined;
+  }
+  const attrNames = new Set<string>();
+  for (const a of attrs) {
+    const attr = a as { type?: string; name?: { type?: string; name?: string } };
+    if (
+      attr.type === "JSXAttribute" &&
+      attr.name?.type === "JSXIdentifier" &&
+      typeof attr.name.name === "string"
+    ) {
+      attrNames.add(attr.name.name);
+    }
+  }
+  const allCombinedPropNames = new Set(combinedStyles.flatMap((c) => c.propNames));
+  const presentPropNames = [...allCombinedPropNames].filter((p) => attrNames.has(p)).sort();
+  if (presentPropNames.length === 0) {
+    return undefined;
+  }
+  const key = presentPropNames.join(",");
+  const match = combinedStyles.find((c) => [...c.propNames].sort().join(",") === key);
+  return match?.styleKey;
 }

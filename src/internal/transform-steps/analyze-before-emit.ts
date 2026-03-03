@@ -729,15 +729,19 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // before emitStylesStep (which reads resolvedStyleObjects to emit stylex.create).
   if (ctx.resolvedStyleObjects) {
     for (const decl of styledDecls) {
-      if (!decl.staticBooleanVariants?.length) {
-        continue;
-      }
-      for (const { propName, styleKey, styles } of decl.staticBooleanVariants) {
-        ctx.resolvedStyleObjects.set(styleKey, styles);
-        if (!decl.variantStyleKeys) {
-          decl.variantStyleKeys = {};
+      if (decl.staticBooleanVariants?.length) {
+        for (const { propName, styleKey, styles } of decl.staticBooleanVariants) {
+          ctx.resolvedStyleObjects.set(styleKey, styles);
+          if (!decl.variantStyleKeys) {
+            decl.variantStyleKeys = {};
+          }
+          decl.variantStyleKeys[propName] = styleKey;
         }
-        decl.variantStyleKeys[propName] = styleKey;
+      }
+      if (decl.callSiteCombinedStyles?.length) {
+        for (const { styleKey, styles } of decl.callSiteCombinedStyles) {
+          ctx.resolvedStyleObjects.set(styleKey, styles);
+        }
       }
     }
   }
