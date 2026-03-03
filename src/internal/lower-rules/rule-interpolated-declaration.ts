@@ -453,6 +453,26 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const resolveImportedValueExpr = (
       expr: any,
     ): { resolved: any; imports?: any[] } | { bail: true } | null => {
+      if (expr?.type === "BinaryExpression") {
+        const leftResult = resolveImportedValueExpr(expr.left);
+        const rightResult = resolveImportedValueExpr(expr.right);
+        if (!leftResult && !rightResult) {
+          return null;
+        }
+        if (leftResult && "bail" in leftResult) {
+          return leftResult;
+        }
+        if (rightResult && "bail" in rightResult) {
+          return rightResult;
+        }
+        const resolvedLeft = leftResult ? leftResult.resolved : expr.left;
+        const resolvedRight = rightResult ? rightResult.resolved : expr.right;
+        const imports = [...(leftResult?.imports ?? []), ...(rightResult?.imports ?? [])];
+        return {
+          resolved: j.binaryExpression(expr.operator, resolvedLeft, resolvedRight),
+          imports,
+        };
+      }
       const info = getRootIdentifierInfo(expr);
       if (!info) {
         return null;
