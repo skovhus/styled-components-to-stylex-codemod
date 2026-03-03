@@ -372,6 +372,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         componentsNeedingGlobalSelectorBridge: new Map(),
       },
       consumerAnalysis: undefined,
+      forwardedAsConsumers: new Map(),
     };
   }
 
@@ -496,6 +497,27 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     }
 
     // Include patched consumer files in formatter commands
+    if (formatterCommands && patchedFiles.length > 0) {
+      await runFormatters(formatterCommands, patchedFiles);
+    }
+  }
+
+  // Patch unconverted consumers: as → forwardedAs on styled() wrappers of converted components
+  if (prepassResult.forwardedAsConsumers.size > 0 && !dryRun) {
+    const { buildForwardedAsReplacements, patchConsumerForwardedAs } =
+      await import("./internal/forwarded-as-consumer-patcher.js");
+    const forwardedAsReplacements = buildForwardedAsReplacements(
+      prepassResult.forwardedAsConsumers,
+      transformedFiles,
+    );
+    const patchedFiles: string[] = [];
+    for (const [consumerPath, entries] of forwardedAsReplacements) {
+      const patched = patchConsumerForwardedAs(consumerPath, entries);
+      if (patched !== null) {
+        await writeFile(consumerPath, patched, "utf-8");
+        patchedFiles.push(consumerPath);
+      }
+    }
     if (formatterCommands && patchedFiles.length > 0) {
       await runFormatters(formatterCommands, patchedFiles);
     }
