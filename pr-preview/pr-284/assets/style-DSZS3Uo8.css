@@ -90,6 +90,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-maxHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -110,16 +115,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-maxHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -131,6 +126,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
