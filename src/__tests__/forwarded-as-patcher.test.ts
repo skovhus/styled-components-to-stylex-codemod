@@ -54,6 +54,7 @@ describe("forwardedAs prepass detection", () => {
     expect(entries).toBeDefined();
     expect(entries).toHaveLength(1);
     expect(entries![0]!.localStyledName).toBe("StyledFlex");
+    expect(entries![0]!.targetPath).toBe(fixture("lib/flex-component.tsx"));
   });
 
   it("detects styled(Component).attrs wrapper in unconverted consumer files", async () => {
@@ -71,6 +72,7 @@ describe("forwardedAs prepass detection", () => {
     expect(entries).toBeDefined();
     expect(entries).toHaveLength(1);
     expect(entries![0]!.localStyledName).toBe("StyledFlex");
+    expect(entries![0]!.targetPath).toBe(fixture("lib/flex-component.tsx"));
   });
 
   it("skips consumers that are being transformed", async () => {
@@ -115,10 +117,11 @@ describe("forwardedAs prepass detection", () => {
 describe("buildForwardedAsReplacements", () => {
   it("filters out consumers that were actually transformed", () => {
     const prepassConsumers = new Map([
-      ["/a/consumer.tsx", [{ localStyledName: "StyledFlex" }]],
-      ["/a/other.tsx", [{ localStyledName: "StyledBox" }]],
+      ["/a/consumer.tsx", [{ localStyledName: "StyledFlex", targetPath: "/a/lib/flex.tsx" }]],
+      ["/a/other.tsx", [{ localStyledName: "StyledBox", targetPath: "/a/lib/box.tsx" }]],
     ]);
-    const transformedFiles = new Set(["/a/consumer.tsx"]);
+    // consumer.tsx itself was transformed, and both targets were transformed
+    const transformedFiles = new Set(["/a/consumer.tsx", "/a/lib/flex.tsx", "/a/lib/box.tsx"]);
 
     const result = buildForwardedAsReplacements(prepassConsumers, transformedFiles);
     expect(result.size).toBe(1);
@@ -126,9 +129,42 @@ describe("buildForwardedAsReplacements", () => {
     expect(result.has("/a/consumer.tsx")).toBe(false);
   });
 
-  it("returns all consumers when none were transformed", () => {
-    const prepassConsumers = new Map([["/a/consumer.tsx", [{ localStyledName: "StyledFlex" }]]]);
+  it("filters out entries whose target bailed and did not transform", () => {
+    const prepassConsumers = new Map([
+      [
+        "/a/consumer.tsx",
+        [
+          { localStyledName: "StyledFlex", targetPath: "/a/lib/flex.tsx" },
+          { localStyledName: "StyledBox", targetPath: "/a/lib/box.tsx" },
+        ],
+      ],
+    ]);
+    // Only flex.tsx actually transformed; box.tsx bailed
+    const transformedFiles = new Set(["/a/lib/flex.tsx"]);
+
+    const result = buildForwardedAsReplacements(prepassConsumers, transformedFiles);
+    expect(result.size).toBe(1);
+    const entries = result.get("/a/consumer.tsx")!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.localStyledName).toBe("StyledFlex");
+  });
+
+  it("drops consumer entirely when all targets bailed", () => {
+    const prepassConsumers = new Map([
+      ["/a/consumer.tsx", [{ localStyledName: "StyledFlex", targetPath: "/a/lib/flex.tsx" }]],
+    ]);
+    // Target bailed — not in transformedFiles
     const transformedFiles = new Set<string>();
+
+    const result = buildForwardedAsReplacements(prepassConsumers, transformedFiles);
+    expect(result.size).toBe(0);
+  });
+
+  it("returns all consumers when none were transformed but targets were", () => {
+    const prepassConsumers = new Map([
+      ["/a/consumer.tsx", [{ localStyledName: "StyledFlex", targetPath: "/a/lib/flex.tsx" }]],
+    ]);
+    const transformedFiles = new Set(["/a/lib/flex.tsx"]);
 
     const result = buildForwardedAsReplacements(prepassConsumers, transformedFiles);
     expect(result.size).toBe(1);

@@ -51,6 +51,8 @@ interface PrepassOptions {
 
 interface ForwardedAsConsumerEntry {
   localStyledName: string;
+  /** Resolved path of the wrapped component's definition file */
+  targetPath: string;
 }
 
 interface PrepassResult {
@@ -461,7 +463,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         entries = [];
         forwardedAsConsumers.set(file, entries);
       }
-      entries.push({ localStyledName });
+      entries.push({ localStyledName, targetPath: defFile });
     }
   }
 

@@ -17,12 +17,17 @@ import { escapeRegex } from "./utilities/string-utils.js";
 
 interface ForwardedAsConsumerEntry {
   localStyledName: string;
+  /** Resolved path of the wrapped component's definition file */
+  targetPath: string;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 /**
- * Filter prepass consumers to exclude files that were actually transformed.
+ * Filter prepass consumers to exclude:
+ * - consumers that were actually transformed (no longer use styled-components)
+ * - entries whose wrapped target bailed and didn't actually transform
+ *
  * Returns a map of consumer paths → entries to patch.
  */
 export function buildForwardedAsReplacements(
@@ -37,8 +42,10 @@ export function buildForwardedAsReplacements(
       continue;
     }
 
-    if (entries.length > 0) {
-      result.set(consumerPath, [...entries]);
+    // Only keep entries whose wrapped target was actually transformed (not bailed)
+    const surviving = entries.filter((e) => transformedFiles.has(e.targetPath));
+    if (surviving.length > 0) {
+      result.set(consumerPath, surviving);
     }
   }
 
