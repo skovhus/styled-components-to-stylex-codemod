@@ -195,6 +195,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-textAlign {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-1e2mv7m {
   syntax: "*";
   inherits: false
@@ -2345,6 +2350,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-size: var(--xxcdnn2);
 }
 
+.x1j61x8r:not(#\#):not(#\#):not(#\#) {
+  font-style: normal;
+}
+
 .xss6m8b:not(#\#):not(#\#):not(#\#) {
   font-variant-numeric: tabular-nums;
 }
@@ -2595,6 +2604,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   text-align: right;
 }
 
+.x142shqn:not(#\#):not(#\#):not(#\#) {
+  text-align: var(--x-textAlign);
+}
+
 .xlyipyv:not(#\#):not(#\#):not(#\#) {
   text-overflow: ellipsis;
 }
@@ -2690,6 +2703,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 .x87ps6o:not(#\#):not(#\#):not(#\#) {
   -webkit-user-select: none;
   user-select: none;
+}
+
+.x1hx0egp:not(#\#):not(#\#):not(#\#) {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .xuxw1ft:not(#\#):not(#\#):not(#\#) {
