@@ -3730,6 +3730,40 @@ export function App() {
     // "16" is canonical (String(Number("16")) === "16") so it can be a numeric key
     expect(code).toMatch(/\b16:\s*\{/);
   });
+
+  it("should not apply variant style for falsy string literal props", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Container = styled(Flex)\`
+  padding: 4px;
+\`;
+
+export function App() {
+  return (
+    <>
+      <Container align="">Empty</Container>
+      <Container align="center">Center</Container>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "inlineBase-falsyStringLiteral.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    // The empty-string call site should NOT get the align variant style applied.
+    // An empty string is falsy, so the truthy-guard condition should not trigger.
+    expect(code).not.toMatch(/align="".*styles\.container.*Align/s);
+    // The "center" call site SHOULD get the align variant applied
+    expect(code).toContain("containerAlignVariants");
+  });
 });
 
 describe("inline base resolver safety guards", () => {

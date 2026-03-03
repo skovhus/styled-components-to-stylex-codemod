@@ -528,13 +528,17 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.value.type === "NumericLiteral" ||
             attr.value.type === "Literal"
           ) {
-            // <X prop="value"> or <X prop={123}> — static literal value, apply unconditionally
-            styleArgs.push(
-              j.memberExpression(
-                j.identifier(ctx.stylesIdentifier ?? "styles"),
-                j.identifier(variantStyleKey),
-              ),
-            );
+            // <X prop="value"> — only apply for truthy values; falsy literals like
+            // "" should not trigger truthy-guard variants (matches && semantics).
+            const literalVal = readStaticJsxLiteral(attr);
+            if (literalVal !== undefined && literalVal) {
+              styleArgs.push(
+                j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(variantStyleKey),
+                ),
+              );
+            }
             return;
           }
           // Any other value shape: drop the prop without attempting to apply a variant.
