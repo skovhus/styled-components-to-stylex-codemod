@@ -1300,7 +1300,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             );
 
             decl.extraStylexPropsArgs ??= [];
-            decl.extraStylexPropsArgs.push({ expr: outerCondExpr });
+            decl.extraStylexPropsArgs.push({ expr: outerCondExpr, afterVariants: true });
             decl.needsWrapperComponent = true;
 
             for (const propName of propsUsed) {
@@ -1426,11 +1426,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         altMap.size > 0 ? makeStyleCall(altKey) : (j.identifier("undefined") as ExpressionKind),
       );
 
-      // Add to extraStylexPropsArgs
+      // Add to extraStylexPropsArgs (afterVariants preserves CSS cascade: standalone
+      // conditional interpolations appear after property-level declarations in the
+      // template literal, so they must override variant styles from earlier declarations)
       if (!decl.extraStylexPropsArgs) {
         decl.extraStylexPropsArgs = [];
       }
-      decl.extraStylexPropsArgs.push({ expr: condExpr });
+      decl.extraStylexPropsArgs.push({ expr: condExpr, afterVariants: true });
 
       decl.needsWrapperComponent = true;
       for (const propName of propsUsed) {
