@@ -115,11 +115,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -131,6 +126,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -1217,12 +1217,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1eo1aoc:active:not(#\#):not(#\#) {
   text-decoration: underline;
-}
-
-@media (width <= 641px) {
-  .x1yod2c3.x1yod2c3:not(#\#):not(#\#) {
-    border-radius: 0;
-  }
 }
 
 @media (width >= 768px) and (width <= 1023.99px) {
@@ -4063,12 +4057,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@media (width <= 641px) {
-  .x1cyxdsb.x1cyxdsb:not(#\#):not(#\#):not(#\#):not(#\#) {
-    max-width: none;
-  }
-}
-
 @media (width <= 480px) {
   .x1n9fu1m.x1n9fu1m:not(#\#):not(#\#):not(#\#):not(#\#) {
     min-height: 100px;
@@ -4159,7 +4147,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x1r8tq1b.x1r8tq1b:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     border-radius: 0;
   }
+}
 
+@media (width <= 641px) {
+  .x1iq7syi.x1iq7syi:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    border-radius: 0;
+  }
+}
+
+@media (width <= 640px) {
   .x1xdgjpz.x1xdgjpz:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     padding-inline: 16px;
   }
@@ -4185,7 +4181,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .xlsr20w.xlsr20w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     max-width: none;
   }
+}
 
+@media (width <= 641px) {
+  .x19vyi06.x19vyi06:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    max-width: none;
+  }
+}
+
+@media (width <= 640px) {
   .xyhzg9w.xyhzg9w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     padding-bottom: 0;
   }
