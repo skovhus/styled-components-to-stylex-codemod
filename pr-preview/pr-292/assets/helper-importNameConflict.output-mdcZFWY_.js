@@ -1,0 +1,1 @@
+import{j as s}from"./index-DnzI-mms.js";import{i}from"./helpers-Do10n4n6.js";const t=i("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};

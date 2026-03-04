@@ -1,1 +1,0 @@
-import{j as r}from"./index-CHT9E2Cu.js";import{E as t}from"./external-component-Cal6n86J.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
