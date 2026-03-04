@@ -304,4 +304,53 @@ export function expandStaticAnimationShorthand(
   return true;
 }
 
+/**
+ * Expands an interpolated `animation` shorthand where slot expressions
+ * reference keyframes identifiers.  Replaces each `__SC_EXPR_N__`
+ * placeholder whose slot expression is in `keyframesNames` with the
+ * actual name, then delegates to `expandStaticAnimationShorthand`.
+ */
+export function expandInterpolatedAnimationShorthand(args: {
+  valueRaw: string;
+  slotExprById: Map<number, unknown>;
+  keyframesNames: Set<string>;
+  j: JSCodeshift;
+  inlineKeyframeNameMap?: Map<string, string>;
+}): Record<string, unknown> | null {
+  const { valueRaw, slotExprById, keyframesNames, j, inlineKeyframeNameMap } = args;
+
+  let modifiedValue = valueRaw;
+  const usedKeyframeNames = new Set<string>();
+
+  const placeholderRe = /__SC_EXPR_(\d+)__/g;
+  let match: RegExpExecArray | null;
+  while ((match = placeholderRe.exec(valueRaw))) {
+    const slotId = Number(match[1]);
+    const expr = slotExprById.get(slotId) as { type?: string; name?: string } | null | undefined;
+    if (!expr || expr.type !== "Identifier" || !expr.name || !keyframesNames.has(expr.name)) {
+      return null;
+    }
+    modifiedValue = modifiedValue.replace(match[0], expr.name);
+    usedKeyframeNames.add(expr.name);
+  }
+
+  if (usedKeyframeNames.size === 0) {
+    return null;
+  }
+
+  const expanded: Record<string, unknown> = {};
+  if (
+    expandStaticAnimationShorthand(
+      modifiedValue,
+      usedKeyframeNames,
+      j,
+      expanded,
+      inlineKeyframeNameMap,
+    )
+  ) {
+    return expanded;
+  }
+  return null;
+}
+
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

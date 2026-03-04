@@ -46,6 +46,10 @@ import {
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 import { findSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
+import {
+  expandInterpolatedAnimationShorthand,
+  expandStaticAnimationShorthand,
+} from "../keyframes.js";
 
 type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -495,7 +499,34 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (d.important) {
             return null;
           }
+          // Convert expanded animation values (mix of AST nodes and primitives) to ExpressionKind
+          const applyExpandedAnimation = (expanded: Record<string, unknown>): void => {
+            for (const [prop, value] of Object.entries(expanded)) {
+              const exprValue =
+                typeof value === "string" || typeof value === "number"
+                  ? (staticValueToLiteral(j, value) as ExpressionKind)
+                  : (value as ExpressionKind);
+              setValueForProp(prop, exprValue, media, computedMediaKeyExpr);
+            }
+          };
+
           if (d.value.kind === "static") {
+            // Expand static animation shorthand referencing keyframes
+            if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
+              const expanded: Record<string, unknown> = {};
+              if (
+                expandStaticAnimationShorthand(
+                  d.valueRaw,
+                  ctx.keyframesNames,
+                  j,
+                  expanded,
+                  ctx.inlineKeyframeNameMap,
+                )
+              ) {
+                applyExpandedAnimation(expanded);
+                continue;
+              }
+            }
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               let value = cssValueToJs(mapped.value, d.important, mapped.prop);
               if (mapped.prop === "content" && typeof value === "string") {
@@ -525,6 +556,20 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           }
           if (d.value.kind !== "interpolated") {
             return null;
+          }
+          // Expand interpolated animation shorthand referencing keyframes identifiers
+          if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
+            const expanded = expandInterpolatedAnimationShorthand({
+              valueRaw: d.valueRaw,
+              slotExprById,
+              keyframesNames: ctx.keyframesNames,
+              j,
+              inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
+            });
+            if (expanded) {
+              applyExpandedAnimation(expanded);
+              continue;
+            }
           }
           const parts = d.value.parts ?? [];
           const slotParts = parts.filter(
