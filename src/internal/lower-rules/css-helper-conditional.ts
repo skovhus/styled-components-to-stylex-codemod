@@ -488,6 +488,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (selector !== "&") {
           return null;
         }
+
+        // Convert expanded animation values (mix of AST nodes and primitives) to ExpressionKind
+        const applyExpandedAnimation = (expanded: Record<string, unknown>): void => {
+          for (const [prop, value] of Object.entries(expanded)) {
+            const exprValue =
+              typeof value === "string" || typeof value === "number"
+                ? (staticValueToLiteral(j, value) as ExpressionKind)
+                : (value as ExpressionKind);
+            setValueForProp(prop, exprValue, media, computedMediaKeyExpr);
+          }
+        };
+
         for (const d of rule.declarations) {
           if (!d.property) {
             return null;
@@ -499,17 +511,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (d.important) {
             return null;
           }
-          // Convert expanded animation values (mix of AST nodes and primitives) to ExpressionKind
-          const applyExpandedAnimation = (expanded: Record<string, unknown>): void => {
-            for (const [prop, value] of Object.entries(expanded)) {
-              const exprValue =
-                typeof value === "string" || typeof value === "number"
-                  ? (staticValueToLiteral(j, value) as ExpressionKind)
-                  : (value as ExpressionKind);
-              setValueForProp(prop, exprValue, media, computedMediaKeyExpr);
-            }
-          };
-
           if (d.value.kind === "static") {
             // Expand static animation shorthand referencing keyframes
             if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
