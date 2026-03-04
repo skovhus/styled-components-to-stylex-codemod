@@ -1,0 +1,1 @@
+import{j as t}from"./index-LOHGFLq1.js";function x(){return t.jsx("div",{"data-testid":"mixed-inline-base",role:"region",id:"mixed-box",className:"x78zum5 xdt5ytf xe8ttls x1rr6085 xmkeg23 x1y0btm7 x1m9dyqn",children:"Mixed attrs"})}export{x as App};
