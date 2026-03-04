@@ -366,7 +366,9 @@ export function createCssHelperResolver(args: {
           },
         );
         if (resolved === null) {
-          return bail("Conditional `css` block: media query contains unresolvable interpolation");
+          return bail(
+            "Conditional `css` block: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+          );
         }
         if (resolved.kind === "static") {
           media = resolved.value;
