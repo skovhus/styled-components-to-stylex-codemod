@@ -688,7 +688,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         state.markBail();
         warnings.push({
           severity: "warning",
-          type: "Unsupported: media query contains unresolvable interpolation",
+          type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
           loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
         });
         break;
@@ -1818,7 +1818,7 @@ function handleSiblingSelector(
     if (resolved === null) {
       warnings.push({
         severity: "warning",
-        type: "Unsupported: media query contains unresolvable interpolation",
+        type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
       return "break";
