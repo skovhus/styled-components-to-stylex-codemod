@@ -522,14 +522,15 @@ export function createCssHelperResolver(args: {
           });
         }
 
-        // Expand interpolated animation shorthand referencing keyframes identifiers
+        // Resolve interpolated animation declarations referencing keyframes identifiers
         if (
-          d.property === "animation" &&
+          (d.property === "animation" || d.property === "animation-name") &&
           args.keyframesNames &&
           args.keyframesNames.size > 0 &&
           args.j
         ) {
           const expanded = expandInterpolatedAnimationShorthand({
+            property: d.property,
             valueRaw: d.valueRaw,
             slotExprById,
             keyframesNames: args.keyframesNames,

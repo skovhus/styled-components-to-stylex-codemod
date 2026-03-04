@@ -15,6 +15,7 @@ const pulse = keyframes`
   }
 `;
 
+// animation shorthand with keyframes reference in css`` conditional
 const Box = styled.div<{ $isAnimating?: boolean }>`
   background-color: cornflowerblue;
   padding: 24px;
@@ -26,9 +27,27 @@ const Box = styled.div<{ $isAnimating?: boolean }>`
     `}
 `;
 
+// animation-name longhand with keyframes reference in css`` conditional
+const Dot = styled.span<{ $active?: boolean }>`
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: tomato;
+  ${(props) =>
+    props.$active &&
+    css`
+      animation-name: ${pulse};
+      animation-duration: 2s;
+      animation-iteration-count: infinite;
+    `}
+`;
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
+  <div style={{ display: "flex", gap: 16, padding: 16, alignItems: "center" }}>
     <Box $isAnimating>Animating</Box>
     <Box>Static</Box>
+    <Dot $active />
+    <Dot />
   </div>
 );

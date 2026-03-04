@@ -557,9 +557,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (d.value.kind !== "interpolated") {
             return null;
           }
-          // Expand interpolated animation shorthand referencing keyframes identifiers
-          if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
+          // Resolve interpolated animation declarations referencing keyframes identifiers
+          if (
+            (d.property === "animation" || d.property === "animation-name") &&
+            ctx.keyframesNames &&
+            ctx.keyframesNames.size > 0
+          ) {
             const expanded = expandInterpolatedAnimationShorthand({
+              property: d.property,
               valueRaw: d.valueRaw,
               slotExprById,
               keyframesNames: ctx.keyframesNames,
