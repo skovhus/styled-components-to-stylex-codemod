@@ -148,6 +148,20 @@ export type StaticBooleanVariant = {
   styles: Record<string, unknown>;
 };
 
+/**
+ * Combined styles for a unique consumed-prop combination at a direct JSX call site.
+ * Merges per-prop style entries into one entry per unique prop set, reducing the
+ * number of `stylex.props()` arguments and `stylex.create` entries.
+ */
+export type CallSiteCombinedStyle = {
+  /** Consumed prop names for this combination */
+  propNames: string[];
+  /** Style key for the combined entry in the main styles object */
+  styleKey: string;
+  /** Merged CSS styles from all consumed props in this combination */
+  styles: Record<string, unknown>;
+};
+
 export type StyledDecl = {
   /**
    * Index of the parent top-level statement (VariableDeclaration) within Program.body at
@@ -400,6 +414,13 @@ export type StyledDecl = {
    * (via `variantStyleKeys`). Processed in `analyzeBeforeEmitStep`.
    */
   staticBooleanVariants?: StaticBooleanVariant[];
+  /**
+   * Combined per-call-site styles for direct JSX resolution.
+   * When all consumed props at call sites produce single-key variants, their styles
+   * are merged into one entry per unique prop combination. Each call site uses one
+   * combined entry instead of N individual entries.
+   */
+  callSiteCombinedStyles?: CallSiteCombinedStyle[];
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.

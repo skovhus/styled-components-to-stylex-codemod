@@ -2,11 +2,24 @@ import * as React from "react";
 import styled, { css } from "styled-components";
 
 export interface FlexProps extends React.ComponentProps<"div"> {
-  align?: "start" | "center" | "end" | "stretch";
-  gap?: number;
-  direction?: "row" | "column";
+  align?: string;
+  alignSelf?: string;
+  auto?: boolean;
+  center?: boolean;
   column?: boolean;
+  direction?: "row" | "column";
+  disabled?: boolean;
+  gap?: number;
+  grow?: number;
+  inline?: boolean;
+  justify?: string;
+  noMinHeight?: boolean;
   noMinWidth?: boolean;
+  overflowHidden?: boolean;
+  reverse?: boolean;
+  shrink?: number;
+  wrap?: boolean;
+  wrapGap?: number;
 }
 
 const ALIGN_TO_CSS: Record<NonNullable<FlexProps["align"]>, string> = {
@@ -38,6 +51,13 @@ export const Flex = styled.div<FlexProps>`
     align
       ? css`
           align-items: ${ALIGN_TO_CSS[align]};
+        `
+      : ""}
+  ${({ center }) =>
+    center
+      ? css`
+          align-items: center;
+          justify-content: center;
         `
       : ""}
 `;

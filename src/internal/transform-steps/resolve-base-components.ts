@@ -6,7 +6,12 @@ import { isAbsolute as isAbsolutePath } from "node:path";
 import type { ImportSource, ResolveBaseComponentStaticValue } from "../../adapter.js";
 import type { CssRuleIR } from "../css-ir.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
-import type { StaticBooleanVariant, StyledDecl, VariantDimension } from "../transform-types.js";
+import type {
+  CallSiteCombinedStyle,
+  StaticBooleanVariant,
+  StyledDecl,
+  VariantDimension,
+} from "../transform-types.js";
 import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
@@ -52,6 +57,11 @@ type InlineResolverVariantsOutcome =
        * boolean condition guard, rather than a separate lookup object.
        */
       staticBooleanVariants: StaticBooleanVariant[];
+      /**
+       * Combined per-call-site styles for direct JSX resolution. Merges individual
+       * single-key variant styles into one entry per unique prop combination.
+       */
+      callSiteCombinedStyles: CallSiteCombinedStyle[];
     }
   | { kind: "bail" };
 
@@ -144,6 +154,7 @@ function emptyOkVariantOutcome(
     foldedBaseSx: {},
     bakedInConsumedProps: [],
     staticBooleanVariants: [],
+    callSiteCombinedStyles: [],
   };
 }
 
@@ -216,6 +227,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       foldedBaseSx: variantOutcome.foldedBaseSx,
       bakedInConsumedProps: variantOutcome.bakedInConsumedProps,
       staticBooleanVariants: variantOutcome.staticBooleanVariants,
+      callSiteCombinedStyles: variantOutcome.callSiteCombinedStyles,
     });
   }
 }
@@ -535,12 +547,12 @@ function buildInlineResolverVariantDimensions(args: {
         continue;
       }
 
-      // Single variant key, partial call sites: emit as a boolean conditional style
+      // Single variant key, partial call sites: emit as a conditional style
       // in the main `styles` object rather than a separate lookup object.
-      // Only actual boolean `true` (not string "true") maps cleanly to a truthy condition
-      // (`prop &&`), since string props can have other truthy values (e.g., "false").
+      // Only safe when the value is truthy at runtime — falsy values like 0
+      // would fail the truthy guard condition in the emitted code.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
-      if (singleKey === "true" && booleanOnlyProps.has(propName)) {
+      if (isSingleVariantKeyTruthy(singleKey, booleanOnlyProps.has(propName))) {
         staticBooleanVariants.push({
           propName,
           styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
@@ -562,6 +574,41 @@ function buildInlineResolverVariantDimensions(args: {
     });
   }
 
+  // For direct JSX resolution with complete callsite visibility, merge individual
+  // single-key variant styles into combined per-call-site entries. This reduces
+  // N separate style entries (one per consumed prop) to M entries (one per unique
+  // prop combination), and produces fewer stylex.props() arguments.
+  const effectiveBaseSx: Record<string, string> = {
+    ...baseResult.sx,
+    ...foldedBaseSx,
+  };
+  const callSiteCombinedStyles = buildCallSiteCombinedStyles({
+    decl,
+    staticBooleanVariants,
+    dimensions,
+    baseSx: effectiveBaseSx,
+    propsByUsage: usageResult.propsByUsage,
+    hasCompleteCallsiteVisibility:
+      !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue,
+    hasPropReferencingTemplateExpressions: (decl.templateExpressions ?? []).some((expr) => {
+      const type = (expr as { type?: string })?.type;
+      return type === "ArrowFunctionExpression" || type === "FunctionExpression";
+    }),
+  });
+
+  if (callSiteCombinedStyles) {
+    return {
+      kind: "ok",
+      variantDimensions: dimensions,
+      hasLocalCallsites,
+      usedConsumedPropsAtCallSites,
+      foldedBaseSx,
+      bakedInConsumedProps,
+      staticBooleanVariants: [],
+      callSiteCombinedStyles,
+    };
+  }
+
   return {
     kind: "ok",
     variantDimensions: dimensions,
@@ -570,6 +617,7 @@ function buildInlineResolverVariantDimensions(args: {
     foldedBaseSx,
     bakedInConsumedProps,
     staticBooleanVariants,
+    callSiteCombinedStyles: [],
   };
 }
 
@@ -831,6 +879,97 @@ function diffSx(
   return out;
 }
 
+/**
+ * For direct JSX resolution, merges individual single-key variant styles into
+ * combined per-call-site entries. Returns the combined styles, or null if
+ * combining is not applicable (e.g., multi-key variants, wrapper components).
+ */
+function buildCallSiteCombinedStyles(args: {
+  decl: StyledDecl;
+  staticBooleanVariants: StaticBooleanVariant[];
+  dimensions: VariantDimension[];
+  baseSx: Record<string, string>;
+  propsByUsage: Array<Record<string, ResolveBaseComponentStaticValue>>;
+  hasCompleteCallsiteVisibility: boolean;
+  hasPropReferencingTemplateExpressions: boolean;
+}): CallSiteCombinedStyle[] | null {
+  const {
+    decl,
+    staticBooleanVariants,
+    dimensions,
+    baseSx,
+    propsByUsage,
+    hasCompleteCallsiteVisibility,
+    hasPropReferencingTemplateExpressions,
+  } = args;
+
+  if (
+    !decl.isDirectJsxResolution ||
+    !hasCompleteCallsiteVisibility ||
+    hasPropReferencingTemplateExpressions ||
+    staticBooleanVariants.length < 2 ||
+    dimensions.length > 0
+  ) {
+    return null;
+  }
+
+  const variantsByProp = new Map(staticBooleanVariants.map((v) => [v.propName, v]));
+
+  // Group call sites by their set of consumed props that have variants
+  const combinationGroups = new Map<
+    string,
+    { propNames: string[]; styles: Record<string, unknown> }
+  >();
+  for (const siteProps of propsByUsage) {
+    const matchingPropNames = Object.keys(siteProps)
+      .filter((p) => variantsByProp.has(p))
+      .sort();
+    if (matchingPropNames.length === 0) {
+      continue;
+    }
+    const groupKey = matchingPropNames.join(",");
+    if (combinationGroups.has(groupKey)) {
+      continue;
+    }
+    // Merge base sx + per-prop variant styles into a complete style entry
+    // so each call site uses exactly one style reference (no base + override).
+    const mergedStyles: Record<string, unknown> = { ...baseSx };
+    for (const propName of matchingPropNames) {
+      const variant = variantsByProp.get(propName)!;
+      Object.assign(mergedStyles, variant.styles);
+    }
+    combinationGroups.set(groupKey, { propNames: matchingPropNames, styles: mergedStyles });
+  }
+
+  if (combinationGroups.size === 0 || combinationGroups.size >= staticBooleanVariants.length) {
+    return null;
+  }
+
+  const result: CallSiteCombinedStyle[] = [];
+  for (const [, { propNames, styles }] of combinationGroups) {
+    const suffix = propNames.map((p) => toSuffixFromProp(p)).join("");
+    result.push({
+      propNames,
+      styleKey: `${decl.styleKey}${suffix}`,
+      styles,
+    });
+  }
+  return result;
+}
+
+/**
+ * Checks whether a single variant key represents a value that is truthy at runtime.
+ * For boolean props, only `"true"` is truthy (`false` is falsy).
+ * For non-boolean props (numbers, strings), "0" and "" are falsy; everything else is truthy.
+ * Falsy values cannot use the truthy-guard pattern (`prop && styles.key`) safely.
+ */
+function isSingleVariantKeyTruthy(key: string, isBooleanProp: boolean): boolean {
+  if (isBooleanProp) {
+    return key === "true";
+  }
+  return key !== "0" && key !== "";
+}
+
 function serializeRecord(record: Record<string, unknown>): string {
   const ordered = Object.keys(record)
     .sort()
@@ -857,6 +996,7 @@ function inlineResolvedBaseComponent(args: {
   foldedBaseSx: Record<string, string>;
   bakedInConsumedProps: string[];
   staticBooleanVariants: StaticBooleanVariant[];
+  callSiteCombinedStyles: CallSiteCombinedStyle[];
 }): void {
   const {
     ctx,
@@ -872,6 +1012,7 @@ function inlineResolvedBaseComponent(args: {
     foldedBaseSx,
     bakedInConsumedProps,
     staticBooleanVariants,
+    callSiteCombinedStyles,
   } = args;
 
   // Merge folded styles from singleton variants into the base sx
@@ -947,6 +1088,12 @@ function inlineResolvedBaseComponent(args: {
   }
   if (staticBooleanVariants.length > 0) {
     decl.staticBooleanVariants = [...(decl.staticBooleanVariants ?? []), ...staticBooleanVariants];
+  }
+  if (callSiteCombinedStyles.length > 0) {
+    decl.callSiteCombinedStyles = [
+      ...(decl.callSiteCombinedStyles ?? []),
+      ...callSiteCombinedStyles,
+    ];
   }
   decl.inlinedBaseComponent = {
     importSource,
@@ -1124,6 +1271,7 @@ function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]
       foldedBaseSx: variantOutcome.foldedBaseSx,
       bakedInConsumedProps: variantOutcome.bakedInConsumedProps,
       staticBooleanVariants: variantOutcome.staticBooleanVariants,
+      callSiteCombinedStyles: variantOutcome.callSiteCombinedStyles,
     });
 
     usedStyleKeys.add(syntheticDecl.styleKey);

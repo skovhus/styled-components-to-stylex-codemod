@@ -90,6 +90,16 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const inlineVariantProps = new Set(
           inlineVariantDimensions.map((dimension) => dimension.propName),
         );
+        const combinedStylePropNames = new Set(
+          (decl.callSiteCombinedStyles ?? []).flatMap((c) => c.propNames),
+        );
+
+        // Pre-compute combined per-call-site style match from original attributes
+        // (before shouldForwardProp filtering strips consumed props).
+        const matchedCombinedStyleKey = matchCallSiteCombinedStyle(
+          decl.callSiteCombinedStyles,
+          opening.attributes ?? [],
+        );
 
         // Handle `as="tag"` (styled-components polymorphism) by rewriting the element.
         // `forwardedAs` does NOT switch the outer rendered element; it maps to an `as`
@@ -150,6 +160,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             const n = attr.name.name;
             if (decl.shouldForwardProp.dropProps.includes(n)) {
               if (inlineVariantProps.has(n)) {
+                return true;
+              }
+              if (decl.variantStyleKeys && n in decl.variantStyleKeys) {
                 return true;
               }
               return false;
@@ -372,6 +385,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
+        // When a combined per-call-site style matches, use it INSTEAD of the base
+        // style — the combined entry already includes all base + consumed-prop styles.
+        const baseStyleKey = matchedCombinedStyleKey ?? decl.styleKey;
+
         const styleArgs: ExpressionKind[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -384,7 +401,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...extraMixinArgs,
           j.memberExpression(
             j.identifier(ctx.stylesIdentifier ?? "styles"),
-            j.identifier(decl.styleKey),
+            j.identifier(baseStyleKey),
           ),
           ...extraAfterBaseArgs,
         ];
@@ -434,6 +451,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
 
+          // Props handled by combined per-call-site styles are already applied above;
+          // just strip the attribute without adding individual style args.
+          if (combinedStylePropNames.has(n) && matchedCombinedStyleKey) {
+            return;
+          }
+
           const inlineVariantDimension = inlineVariantByProp.get(n);
           if (inlineVariantDimension) {
             const variantLookup = buildInlineVariantLookupFromAttr(
@@ -475,6 +498,18 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             return;
           }
           if (attr.value.type === "JSXExpressionContainer") {
+            // If the expression is a known truthy static literal (e.g. gap={24}),
+            // apply the style unconditionally to avoid `24 && styles.x` (always truthy).
+            const staticLiteralValue = readStaticJsxLiteral(attr);
+            if (staticLiteralValue !== undefined && staticLiteralValue) {
+              styleArgs.push(
+                j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(variantStyleKey),
+                ),
+              );
+              return;
+            }
             // <X $prop={expr}>
             styleArgs.push(
               j.logicalExpression(
@@ -486,6 +521,24 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ),
               ),
             );
+            return;
+          }
+          if (
+            attr.value.type === "StringLiteral" ||
+            attr.value.type === "NumericLiteral" ||
+            attr.value.type === "Literal"
+          ) {
+            // <X prop="value"> — only apply for truthy values; falsy literals like
+            // "" should not trigger truthy-guard variants (matches && semantics).
+            const literalVal = readStaticJsxLiteral(attr);
+            if (literalVal !== undefined && literalVal) {
+              styleArgs.push(
+                j.memberExpression(
+                  j.identifier(ctx.stylesIdentifier ?? "styles"),
+                  j.identifier(variantStyleKey),
+                ),
+              );
+            }
             return;
           }
           // Any other value shape: drop the prop without attempting to apply a variant.
@@ -595,4 +648,36 @@ function extractJsxAttrValueExpr(
     return a.value.expression as ExpressionKind;
   }
   return undefined;
+}
+
+/**
+ * Finds the combined style key matching the consumed props at a JSX call site.
+ * Returns the style key if a matching combination exists, or undefined otherwise.
+ */
+function matchCallSiteCombinedStyle(
+  combinedStyles: StyledDecl["callSiteCombinedStyles"],
+  attrs: ReadonlyArray<unknown>,
+): string | undefined {
+  if (!combinedStyles?.length) {
+    return undefined;
+  }
+  const attrNames = new Set<string>();
+  for (const a of attrs) {
+    const attr = a as { type?: string; name?: { type?: string; name?: string } };
+    if (
+      attr.type === "JSXAttribute" &&
+      attr.name?.type === "JSXIdentifier" &&
+      typeof attr.name.name === "string"
+    ) {
+      attrNames.add(attr.name.name);
+    }
+  }
+  const allCombinedPropNames = new Set(combinedStyles.flatMap((c) => c.propNames));
+  const presentPropNames = [...allCombinedPropNames].filter((p) => attrNames.has(p)).sort();
+  if (presentPropNames.length === 0) {
+    return undefined;
+  }
+  const key = presentPropNames.join(",");
+  const match = combinedStyles.find((c) => [...c.propNames].sort().join(",") === key);
+  return match?.styleKey;
 }

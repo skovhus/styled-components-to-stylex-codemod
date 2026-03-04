@@ -35,6 +35,7 @@ export const App = () => <ActionMenuTextDivider text="Section" />;
 const styles = stylex.create({
   textDividerContainer: {
     display: "flex",
+    flexDirection: "row",
     minWidth: "0px",
     userSelect: "none",
     height: "30px",

@@ -7,8 +7,8 @@ export function App() {
 
 const styles = stylex.create({
   button: {
-    gap: "12px",
     alignItems: "center",
+    gap: "12px",
     paddingBlock: "8px",
     paddingInline: "12px",
     backgroundColor: "#ecf2ff",

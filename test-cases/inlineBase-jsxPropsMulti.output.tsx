@@ -53,13 +53,13 @@ const styles = stylex.create({
 
 const containerAlignVariants = stylex.create({
   start: {
-    alignItems: "flex-start",
+    alignItems: "start",
   },
   center: {
     alignItems: "center",
   },
   end: {
-    alignItems: "flex-end",
+    alignItems: "end",
   },
 });
 

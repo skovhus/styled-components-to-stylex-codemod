@@ -28,6 +28,7 @@ export function App() {
 const styles = stylex.create({
   container: {
     display: "flex",
+    flexDirection: "row",
     padding: "8px",
     backgroundColor: "#fff5f5",
     borderWidth: "1px",
@@ -38,12 +39,12 @@ const styles = stylex.create({
 
 const containerAlignVariants = stylex.create({
   start: {
-    alignItems: "flex-start",
+    alignItems: "start",
   },
   center: {
     alignItems: "center",
   },
   end: {
-    alignItems: "flex-end",
+    alignItems: "end",
   },
 });
