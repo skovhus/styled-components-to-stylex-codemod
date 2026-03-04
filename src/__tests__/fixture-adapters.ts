@@ -466,8 +466,11 @@ export const fixtureAdapter = defineAdapter({
       return undefined;
     }
 
-    // Handle screenSize.phone, screenSize.tablet, etc.
-    if (ctx.importedName === "screenSize" && ctx.path) {
+    // Handle screenSize.phone / screenSizeBreakPoints.phone, etc.
+    if (
+      (ctx.importedName === "screenSize" || ctx.importedName === "screenSizeBreakPoints") &&
+      ctx.path
+    ) {
       return {
         kind: "media",
         expr: `breakpoints.${ctx.path}`,

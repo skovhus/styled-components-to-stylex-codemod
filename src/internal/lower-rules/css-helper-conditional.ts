@@ -45,6 +45,7 @@ import {
 } from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
+import { findSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
 
 type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -54,6 +55,7 @@ type CssHelperConditionalContext = Pick<
   | "parseExpr"
   | "resolveValue"
   | "resolveCall"
+  | "resolveSelector"
   | "resolveImportInScope"
   | "resolverImports"
   | "isCssHelperTaggedTemplate"
@@ -91,6 +93,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     parseExpr,
     resolveValue,
     resolveCall,
+    resolveSelector,
     resolveImportInScope,
     resolverImports,
     componentInfo,
@@ -417,9 +420,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const out = new Map<string, ExpressionKind>();
       // Track @media values per property: Map<cssProp, Map<mediaQuery, ExpressionKind>>
       const mediaValues = new Map<string, Map<string, ExpressionKind>>();
+      // Track computed media keys per property (from resolveSelector)
+      const computedMediaValues = new Map<
+        string,
+        Array<{ keyExpr: unknown; value: ExpressionKind }>
+      >();
 
-      const setValueForProp = (prop: string, value: ExpressionKind, media: string | undefined) => {
-        if (media) {
+      const setValueForProp = (
+        prop: string,
+        value: ExpressionKind,
+        media: string | undefined,
+        computedKey: unknown,
+      ) => {
+        if (computedKey) {
+          const arr = computedMediaValues.get(prop) ?? [];
+          arr.push({ keyExpr: computedKey, value });
+          computedMediaValues.set(prop, arr);
+        } else if (media) {
           if (!mediaValues.has(prop)) {
             mediaValues.set(prop, new Map());
           }
@@ -430,11 +447,39 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       for (const rule of rules) {
-        const media = rule.atRuleStack.find((a) => a.startsWith("@media"));
-        // Only support @media at-rules; bail on others (@supports, @keyframes, etc.)
-        if (rule.atRuleStack.length > 0 && !media) {
+        const rawMedia = findSupportedAtRule(rule.atRuleStack);
+        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
+        if (rule.atRuleStack.length > 0 && !rawMedia) {
           return null;
         }
+
+        // Resolve __SC_EXPR_N__ placeholders inside the media query
+        let media: string | undefined = rawMedia;
+        let computedMediaKeyExpr: unknown;
+        if (rawMedia) {
+          const resolved = resolveMediaAtRulePlaceholders(
+            rawMedia,
+            (slotId) => slotExprById.get(slotId),
+            {
+              lookupImport: resolveImportInScope,
+              resolveValue,
+              resolveSelector,
+              parseExpr,
+              filePath,
+              resolverImports,
+            },
+          );
+          if (resolved === null) {
+            return null;
+          }
+          if (resolved.kind === "static") {
+            media = resolved.value;
+          } else {
+            computedMediaKeyExpr = resolved.keyExpr;
+            media = undefined;
+          }
+        }
+
         const selector = (rule.selector ?? "").trim();
         if (selector !== "&") {
           return null;
@@ -470,6 +515,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                   mapped.prop,
                   staticValueToLiteral(j, value) as ExpressionKind,
                   media,
+                  computedMediaKeyExpr,
                 );
               } else {
                 return null;
@@ -497,14 +543,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const valueExpr =
             prefix || suffix ? buildTemplateWithStaticParts(j, rawExpr, prefix, suffix) : rawExpr;
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            setValueForProp(mapped.prop, valueExpr, media);
+            setValueForProp(mapped.prop, valueExpr, media, computedMediaKeyExpr);
           }
         }
       }
 
       // Merge @media values into the output map as nested StyleX objects:
       // { default: baseValue, "@media (...)": mediaValue }
-      for (const [prop, queries] of mediaValues) {
+      // Also handles computed media keys: { default: baseValue, [breakpoints.phone]: mediaValue }
+      const allMediaProps = new Set([...mediaValues.keys(), ...computedMediaValues.keys()]);
+      for (const prop of allMediaProps) {
         const baseValue = out.get(prop);
         const properties = [
           j.property(
@@ -513,8 +561,19 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             baseValue ?? (j.literal(null) as unknown as ExpressionKind),
           ),
         ];
-        for (const [query, value] of queries) {
-          properties.push(j.property("init", j.literal(query), value));
+        const queries = mediaValues.get(prop);
+        if (queries) {
+          for (const [query, value] of queries) {
+            properties.push(j.property("init", j.literal(query), value));
+          }
+        }
+        const computed = computedMediaValues.get(prop);
+        if (computed) {
+          for (const { keyExpr, value } of computed) {
+            const p = j.property("init", keyExpr as ExpressionKind, value);
+            (p as { computed?: boolean }).computed = true;
+            properties.push(p);
+          }
         }
         out.set(prop, j.objectExpression(properties) as unknown as ExpressionKind);
       }

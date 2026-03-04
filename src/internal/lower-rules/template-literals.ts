@@ -32,7 +32,11 @@ import { literalToStaticValue } from "./types.js";
 import { cssValueToJs } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { WarningLog } from "../logger.js";
-import { mergeMediaIntoStyles } from "./utils.js";
+import {
+  findSupportedAtRule,
+  mergeMediaIntoStyles,
+  resolveMediaAtRulePlaceholders,
+} from "./utils.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
@@ -78,6 +82,7 @@ export type TemplateLiteralContext = {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
+  resolveSelector?: Adapter["resolveSelector"];
   resolveImportInScope: ResolveImportInScope;
   resolverImports: Map<string, ImportSpec>;
   componentInfo: ComponentInfo;
@@ -122,9 +127,7 @@ export function resolveTemplateLiteralBranch(
   const mediaStyles = new Map<string, Record<string, unknown>>();
 
   for (const rule of rules) {
-    const media = rule.atRuleStack.find(
-      (a) => a.startsWith("@media") || a.startsWith("@container"),
-    );
+    let media = findSupportedAtRule(rule.atRuleStack);
     // Only support @media and @container at-rules; bail on others (@supports, etc.)
     if (rule.atRuleStack.length > 0 && !media) {
       ctx.warnings?.push({
@@ -134,13 +137,50 @@ export function resolveTemplateLiteralBranch(
       });
       return null;
     }
+
+    // Resolve __SC_EXPR_N__ placeholders inside the media query
+    let computedMediaKeyExpr: unknown;
+    if (media) {
+      const resolved = resolveMediaAtRulePlaceholders(media, (slotId) => slotExprById.get(slotId), {
+        lookupImport: resolveImportInScope,
+        resolveValue,
+        resolveSelector: ctx.resolveSelector,
+        parseExpr,
+        filePath,
+        resolverImports,
+      });
+      if (resolved === null) {
+        return null;
+      }
+      if (resolved.kind === "static") {
+        media = resolved.value;
+      } else {
+        computedMediaKeyExpr = resolved.keyExpr;
+        media = undefined;
+      }
+    }
+
     const selector = (rule.selector ?? "").trim();
     if (selector !== "&") {
       return null;
     }
 
-    // Helper to set a value into the correct target (base style or media-scoped)
+    // Helper to set a value into the correct target (base style, media-scoped, or computed-key)
     const setStyleValue = (prop: string, value: unknown): void => {
+      if (computedMediaKeyExpr) {
+        const existing = style[prop];
+        const nested: Record<string, unknown> =
+          existing && typeof existing === "object" && !Array.isArray(existing)
+            ? (existing as Record<string, unknown>)
+            : { default: existing ?? null };
+        if (!("default" in nested)) {
+          nested.default = null;
+        }
+        const prev = (nested.__computedKeys as Array<{ keyExpr: unknown; value: unknown }>) ?? [];
+        nested.__computedKeys = [...prev, { keyExpr: computedMediaKeyExpr, value }];
+        style[prop] = nested;
+        return;
+      }
       if (media) {
         const target = mediaStyles.get(media) ?? {};
         mediaStyles.set(media, target);

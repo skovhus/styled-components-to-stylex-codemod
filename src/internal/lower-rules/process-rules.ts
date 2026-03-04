@@ -36,6 +36,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
+import { findSupportedAtRule, isSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -643,7 +644,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    let media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
+    let media = findSupportedAtRule(rule.atRuleStack);
 
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
@@ -664,12 +665,40 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
-    if (
-      !media &&
-      (selector.trim().startsWith("@media") || selector.trim().startsWith("@container"))
-    ) {
+    if (!media && isSupportedAtRule(selector.trim())) {
       media = selector.trim();
       selector = "&";
+    }
+
+    // Resolve __SC_EXPR_N__ placeholders inside the media query
+    if (media) {
+      const resolved = resolveMediaAtRulePlaceholders(
+        media,
+        (slotId) => decl.templateExpressions[slotId],
+        {
+          lookupImport: resolveImportInScope,
+          resolveValue: state.resolveValue,
+          resolveSelector,
+          parseExpr,
+          filePath: state.filePath,
+          resolverImports,
+        },
+      );
+      if (resolved === null) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported: media query contains unresolvable interpolation",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+      if (resolved.kind === "static") {
+        media = resolved.value;
+      } else {
+        resolvedSelectorMedia = { keyExpr: resolved.keyExpr, exprSource: "" };
+        media = undefined;
+      }
     }
 
     // Support comma-separated pseudo-selectors like "&:hover, &:focus"
@@ -1770,7 +1799,36 @@ function handleSiblingSelector(
     );
 
   // Wrap values in media/container condition objects when inside an @media or @container at-rule
-  const media = rule.atRuleStack.find((a) => a.startsWith("@media") || a.startsWith("@container"));
+  let media = findSupportedAtRule(rule.atRuleStack);
+
+  // Resolve __SC_EXPR_N__ placeholders inside the media query
+  if (media) {
+    const resolved = resolveMediaAtRulePlaceholders(
+      media,
+      (slotId) => decl.templateExpressions[slotId],
+      {
+        lookupImport: state.resolveImportInScope,
+        resolveValue: state.resolveValue,
+        resolveSelector: state.resolveSelector,
+        parseExpr: state.parseExpr,
+        filePath: state.filePath,
+        resolverImports: state.resolverImports,
+      },
+    );
+    if (resolved === null) {
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported: media query contains unresolvable interpolation",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (resolved.kind === "static") {
+      media = resolved.value;
+    } else {
+      media = undefined;
+    }
+  }
 
   // Add each property to perPropComputedMedia with the sibling computed key
   for (const [prop, value] of Object.entries(bucket)) {

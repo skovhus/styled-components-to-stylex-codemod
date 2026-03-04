@@ -20,6 +20,7 @@ import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
+import { isStyleConditionKey } from "./utils.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -302,10 +303,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       if (keys.length === 0) {
         return false;
       }
-      return (
-        keys.includes("default") ||
-        keys.some((k) => k.startsWith(":") || k.startsWith("@media") || k.startsWith("::"))
-      );
+      return keys.includes("default") || keys.some(isStyleConditionKey);
     };
 
     // Check if we should use namespace dimensions pattern instead of compound buckets

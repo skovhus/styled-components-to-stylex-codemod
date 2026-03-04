@@ -120,6 +120,14 @@ export const screenSize = {
 };
 
 /**
+ * Raw breakpoint pixel values for use inside custom media query templates.
+ */
+export const screenSizeBreakPoints = {
+  phone: 640,
+  tablet: 768,
+};
+
+/**
  * A helper function that returns a curried function that returns a CSS string for a themed border.
  */
 export function themedBorder(colorKey: ThemeColor) {
