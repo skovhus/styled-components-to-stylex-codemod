@@ -963,11 +963,16 @@ function extractPropNamesFromWhenString(when: string): string[] {
  * Renames `$`-prefixed prop references in a "when" condition string.
  * Sorts renames by length descending to avoid partial matches.
  */
+function escapeRegExp(value: string): string {
+  // Escapes characters with special meaning in regular expressions.
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function renamePropsInWhenString(when: string, renames: Map<string, string>): string {
   let result = when;
   const sorted = [...renames.entries()].sort((a, b) => b[0].length - a[0].length);
   for (const [from, to] of sorted) {
-    const escaped = from.replace(/\$/g, "\\$");
+    const escaped = escapeRegExp(from);
     result = result.replace(new RegExp(`(?<![\\w$])${escaped}(?!\\w)`, "g"), to);
   }
   return result;
