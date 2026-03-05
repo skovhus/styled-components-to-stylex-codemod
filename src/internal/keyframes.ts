@@ -304,4 +304,130 @@ export function expandStaticAnimationShorthand(
   return true;
 }
 
+/**
+ * Resolves an interpolated animation declaration whose slot expressions
+ * reference keyframes identifiers.
+ *
+ * Supports both the `animation` shorthand and `animation-name` longhand.
+ * For shorthands, replaces each `__SC_EXPR_N__` placeholder with the
+ * corresponding keyframes name, then delegates to
+ * `expandStaticAnimationShorthand`.  For `animation-name`, resolves the
+ * single slot directly to a JS identifier.
+ *
+ * Bails (returns null) on comma-separated multi-animation shorthands,
+ * which the single-tuple parser cannot correctly model.
+ */
+export function expandInterpolatedAnimationShorthand(args: {
+  property?: string;
+  valueRaw: string;
+  slotExprById: Map<number, unknown>;
+  keyframesNames: Set<string>;
+  j: JSCodeshift;
+  inlineKeyframeNameMap?: Map<string, string>;
+}): Record<string, unknown> | null {
+  const {
+    property = "animation",
+    valueRaw,
+    slotExprById,
+    keyframesNames,
+    j,
+    inlineKeyframeNameMap,
+  } = args;
+
+  if (property === "animation-name") {
+    return resolveAnimationNameSlot(valueRaw, slotExprById, keyframesNames, j);
+  }
+
+  // Bail on comma-separated multi-animation values — the single-tuple
+  // parser would collapse the list into incorrect longhands.
+  if (valueRaw.includes(",")) {
+    return null;
+  }
+
+  return resolveAnimationShorthandSlots(
+    valueRaw,
+    slotExprById,
+    keyframesNames,
+    j,
+    inlineKeyframeNameMap,
+  );
+}
+
+/** Resolves `animation-name: ${kf}` where the sole slot is a keyframes identifier. */
+function resolveAnimationNameSlot(
+  valueRaw: string,
+  slotExprById: Map<number, unknown>,
+  keyframesNames: Set<string>,
+  j: JSCodeshift,
+): Record<string, unknown> | null {
+  const kfName = extractKeyframesIdentifierFromSlot(valueRaw, slotExprById, keyframesNames);
+  if (!kfName) {
+    return null;
+  }
+  return { animationName: j.identifier(kfName) };
+}
+
+/** Resolves `animation: ${kf} 1.6s ease-in-out infinite` by replacing placeholders and expanding. */
+function resolveAnimationShorthandSlots(
+  valueRaw: string,
+  slotExprById: Map<number, unknown>,
+  keyframesNames: Set<string>,
+  j: JSCodeshift,
+  inlineKeyframeNameMap: Map<string, string> | undefined,
+): Record<string, unknown> | null {
+  let modifiedValue = valueRaw;
+  const usedKeyframeNames = new Set<string>();
+
+  const placeholderRe = /__SC_EXPR_(\d+)__/g;
+  let match: RegExpExecArray | null;
+  while ((match = placeholderRe.exec(valueRaw))) {
+    const slotId = Number(match[1]);
+    const expr = slotExprById.get(slotId) as { type?: string; name?: string } | null | undefined;
+    if (!expr || expr.type !== "Identifier" || !expr.name || !keyframesNames.has(expr.name)) {
+      return null;
+    }
+    modifiedValue = modifiedValue.replace(match[0], expr.name);
+    usedKeyframeNames.add(expr.name);
+  }
+
+  if (usedKeyframeNames.size === 0) {
+    return null;
+  }
+
+  const expanded: Record<string, unknown> = {};
+  if (
+    expandStaticAnimationShorthand(
+      modifiedValue,
+      usedKeyframeNames,
+      j,
+      expanded,
+      inlineKeyframeNameMap,
+    )
+  ) {
+    return expanded;
+  }
+  return null;
+}
+
+/**
+ * If `valueRaw` is exactly a single `__SC_EXPR_N__` placeholder whose slot
+ * expression is a keyframes identifier, returns the identifier name.
+ */
+function extractKeyframesIdentifierFromSlot(
+  valueRaw: string,
+  slotExprById: Map<number, unknown>,
+  keyframesNames: Set<string>,
+): string | null {
+  const m = valueRaw.match(/^__SC_EXPR_(\d+)__$/);
+  if (!m) {
+    return null;
+  }
+  const slotId = Number(m[1]);
+  const expr = slotExprById.get(slotId) as { type?: string; name?: string } | null | undefined;
+  if (!expr || expr.type !== "Identifier" || !expr.name || !keyframesNames.has(expr.name)) {
+    return null;
+  }
+  return expr.name;
+}
+
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

@@ -37,7 +37,10 @@ import {
   mergeMediaIntoStyles,
   resolveMediaAtRulePlaceholders,
 } from "./utils.js";
-import { expandStaticAnimationShorthand } from "../keyframes.js";
+import {
+  expandInterpolatedAnimationShorthand,
+  expandStaticAnimationShorthand,
+} from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 
@@ -234,6 +237,27 @@ export function resolveTemplateLiteralBranch(
       }
       if (d.value.kind !== "interpolated") {
         return null;
+      }
+      // Resolve interpolated animation declarations referencing keyframes identifiers
+      if (
+        (d.property === "animation" || d.property === "animation-name") &&
+        ctx.keyframesNames &&
+        ctx.keyframesNames.size > 0
+      ) {
+        const expanded = expandInterpolatedAnimationShorthand({
+          property: d.property,
+          valueRaw: d.valueRaw,
+          slotExprById,
+          keyframesNames: ctx.keyframesNames,
+          j,
+          inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
+        });
+        if (expanded) {
+          for (const [prop, value] of Object.entries(expanded)) {
+            setStyleValue(prop, value);
+          }
+          continue;
+        }
       }
       const parts = d.value.parts ?? [];
       const slotParts = parts.filter((p) => p.kind === "slot");

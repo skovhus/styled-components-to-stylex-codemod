@@ -18,7 +18,10 @@ import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs } from "../transform/helpers.js";
-import { expandStaticAnimationShorthand } from "../keyframes.js";
+import {
+  expandInterpolatedAnimationShorthand,
+  expandStaticAnimationShorthand,
+} from "../keyframes.js";
 import {
   findSupportedAtRule,
   resolveMediaAtRulePlaceholders,
@@ -517,6 +520,29 @@ export function createCssHelperResolver(args: {
           return bail("Conditional `css` block: !important is not supported in StyleX", {
             property: d.property,
           });
+        }
+
+        // Resolve interpolated animation declarations referencing keyframes identifiers
+        if (
+          (d.property === "animation" || d.property === "animation-name") &&
+          args.keyframesNames &&
+          args.keyframesNames.size > 0 &&
+          args.j
+        ) {
+          const expanded = expandInterpolatedAnimationShorthand({
+            property: d.property,
+            valueRaw: d.valueRaw,
+            slotExprById,
+            keyframesNames: args.keyframesNames,
+            j: args.j,
+            inlineKeyframeNameMap: args.inlineKeyframeNameMap,
+          });
+          if (expanded) {
+            for (const [prop, value] of Object.entries(expanded)) {
+              (target as any)[prop] = mergeIntoContext(value, prop, target as any) as any;
+            }
+            continue;
+          }
         }
 
         const parts = d.value.parts ?? [];

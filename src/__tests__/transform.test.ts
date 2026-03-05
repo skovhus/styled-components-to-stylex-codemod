@@ -4140,3 +4140,41 @@ export const App = () => <Box>Gradient Background</Box>;
     expect(result.code).not.toMatch(/linear-gradient\([^)]*\n[^)]*\)/);
   });
 });
+
+describe("keyframes in css helper", () => {
+  it("should bail on comma-separated multi-animation in css helper rather than misparse", () => {
+    const source = `
+import styled, { keyframes, css } from "styled-components";
+
+const pulse = keyframes\`
+  0% { opacity: 1; }
+  100% { opacity: 0.5; }
+\`;
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const Box = styled.div<{ $animate?: boolean }>\`
+  \${(props) =>
+    props.$animate &&
+    css\`
+      animation: \${pulse} 1s linear, \${fade} 2s ease;
+    \`}
+\`;
+
+export const App = () => <Box $animate>Multi</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-cssConditional.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Comma-separated animations in css helpers should cause a bail
+    // (untransformed source) rather than produce incorrect longhands
+    expect(result.code).toBeNull();
+  });
+});
