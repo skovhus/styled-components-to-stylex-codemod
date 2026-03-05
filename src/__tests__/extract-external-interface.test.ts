@@ -256,6 +256,19 @@ describe("runPrepass createExternalInterface", () => {
       'import { NavLink as MyLink } from "../components/NavLink";\nexport const App = () => <MyLink as="button">Click</MyLink>;',
     );
 
+    // Consumer with TypeScript cast that should NOT create a false alias for ref detection.
+    // `getValue() as TextInput` must not alias `TextInput → getValue()`.
+    writeFileSync(
+      path.join(consumersDir, "ts-cast-ref.tsx"),
+      [
+        'import * as React from "react";',
+        'import { TextInput } from "../components/TextInput";',
+        "const getValue = (): unknown => null;",
+        "const input = getValue() as TextInput;",
+        "export const App = () => { const ref = React.useRef(null); return <TextInput ref={ref} />; };",
+      ].join("\n"),
+    );
+
     // Consumer that passes className to a non-exported component (should NOT trigger styles: true)
     writeFileSync(
       path.join(consumersDir, "non-exported-className.tsx"),
@@ -406,6 +419,12 @@ describe("runPrepass createExternalInterface", () => {
   it("detects cross-file ref usage via aliased import", () => {
     const searchInputPath = realpathSync(path.join(fixtureDir, "components/SearchInput.tsx"));
     const key = `${searchInputPath}:SearchInput`;
+    expect(result.get(key)?.ref).toBe(true);
+  });
+
+  it("detects ref even when file contains TypeScript as-cast on the same name", () => {
+    const textInputPath = realpathSync(path.join(fixtureDir, "components/TextInput.tsx"));
+    const key = `${textInputPath}:TextInput`;
     expect(result.get(key)?.ref).toBe(true);
   });
 

@@ -582,11 +582,14 @@ const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
 /**
  * Build a mapping from local alias names to original imported names for a source file.
  * Only includes PascalCase names that differ from their original (actual aliases).
+ * Scans only import declarations to avoid false positives from TypeScript `as` casts
+ * (e.g., `foo as Button` would incorrectly map `Button → foo`).
  */
 function buildLocalToImportedMap(source: string): Map<string, string> {
+  const importText = collectImportDeclarationText(source);
   const map = new Map<string, string>();
   IMPORT_ALIAS_ENTRY_RE.lastIndex = 0;
-  for (const m of source.matchAll(IMPORT_ALIAS_ENTRY_RE)) {
+  for (const m of importText.matchAll(IMPORT_ALIAS_ENTRY_RE)) {
     const original = m[1]!;
     const local = m[2]!;
     if (original !== local && /^[A-Z]/.test(local)) {
