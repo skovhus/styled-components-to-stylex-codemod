@@ -101,7 +101,8 @@ export type WarningType =
   | "css`` helper function interpolation references closure variable that cannot be hoisted"
   | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
-  | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+  | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts"
+  | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names";
 
 export interface WarningLog {
   severity: Severity;

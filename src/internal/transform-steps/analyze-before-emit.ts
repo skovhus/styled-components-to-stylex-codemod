@@ -510,6 +510,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         continue;
       }
       decl.transientPropRenames = renames;
+      const renameList = [...renames.entries()].map(([from, to]) => `${from} → ${to}`).join(", ");
+      ctx.warnings.push({
+        severity: "info",
+        type: "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
+        loc: decl.loc ?? null,
+        context: { componentName: decl.localName, renames: renameList },
+      });
       applyTransientPropRenames(decl, renames);
       renameTransientPropsInReferencedTypes(
         root,

@@ -103,11 +103,7 @@ export function ColorChip(props: ColorChipProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
-        styles.colorChip,
-        styles.colorChipBackgroundColor($color),
-        styles.colorChipColor(color),
-      )}
+      sx={[styles.colorChip, styles.colorChipBackgroundColor($color), styles.colorChipColor(color)]}
     >
       {children}
     </div>
