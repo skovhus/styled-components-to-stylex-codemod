@@ -264,22 +264,31 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    // --- as-prop detection ---
-    if (hasAsProp) {
-      JSX_AS_COMPONENT_RE.lastIndex = 0;
-      for (const m of source.matchAll(JSX_AS_COMPONENT_RE)) {
-        if (m[1]) {
-          addToSetMap(asUsages, m[1], filePath);
+    // --- as-prop / ref-prop detection ---
+    // Resolve aliased imports so that `import { Button as MyBtn }` followed by
+    // `<MyBtn as="a">` or `<MyBtn ref={r}>` records the usage under `Button`.
+    if (hasAsProp || hasRefProp) {
+      let aliasMap: Map<string, string> | undefined;
+      const resolveTagName = (tagName: string): string => {
+        aliasMap ??= buildLocalToImportedMap(source);
+        return aliasMap.get(tagName) ?? tagName;
+      };
+
+      if (hasAsProp) {
+        JSX_AS_COMPONENT_RE.lastIndex = 0;
+        for (const m of source.matchAll(JSX_AS_COMPONENT_RE)) {
+          if (m[1]) {
+            addToSetMap(asUsages, resolveTagName(m[1]), filePath);
+          }
         }
       }
-    }
 
-    // --- ref-prop detection ---
-    if (hasRefProp) {
-      JSX_REF_COMPONENT_RE.lastIndex = 0;
-      for (const m of source.matchAll(JSX_REF_COMPONENT_RE)) {
-        if (m[1]) {
-          addToSetMap(refUsages, m[1], filePath);
+      if (hasRefProp) {
+        JSX_REF_COMPONENT_RE.lastIndex = 0;
+        for (const m of source.matchAll(JSX_REF_COMPONENT_RE)) {
+          if (m[1]) {
+            addToSetMap(refUsages, resolveTagName(m[1]), filePath);
+          }
         }
       }
     }
@@ -573,11 +582,14 @@ const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
 /**
  * Build a mapping from local alias names to original imported names for a source file.
  * Only includes PascalCase names that differ from their original (actual aliases).
+ * Scans only import declarations to avoid false positives from TypeScript `as` casts
+ * (e.g., `foo as Button` would incorrectly map `Button → foo`).
  */
 function buildLocalToImportedMap(source: string): Map<string, string> {
+  const importText = collectImportDeclarationText(source);
   const map = new Map<string, string>();
   IMPORT_ALIAS_ENTRY_RE.lastIndex = 0;
-  for (const m of source.matchAll(IMPORT_ALIAS_ENTRY_RE)) {
+  for (const m of importText.matchAll(IMPORT_ALIAS_ENTRY_RE)) {
     const original = m[1]!;
     const local = m[2]!;
     if (original !== local && /^[A-Z]/.test(local)) {

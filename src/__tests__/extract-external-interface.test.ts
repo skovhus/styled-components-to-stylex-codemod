@@ -138,6 +138,18 @@ describe("runPrepass createExternalInterface", () => {
       'import styled from "styled-components";\nimport * as React from "react";\nexport const FocusBox = styled.div`outline: none;`;\nexport const App = () => { const ref = React.useRef(null); return <FocusBox ref={ref} />; };',
     );
 
+    // Component consumed via aliased import with ref (cross-file)
+    writeFileSync(
+      path.join(componentsDir, "SearchInput.tsx"),
+      'import styled from "styled-components";\nexport const SearchInput = styled.input`border: 2px solid blue;`;',
+    );
+
+    // Component consumed via aliased import with as-prop (cross-file)
+    writeFileSync(
+      path.join(componentsDir, "NavLink.tsx"),
+      'import styled from "styled-components";\nexport const NavLink = styled.a`color: navy;`;',
+    );
+
     // --- Consumer files ---
     const consumersDir = path.join(fixtureDir, "consumers");
     mkdirSync(consumersDir, { recursive: true });
@@ -232,6 +244,31 @@ describe("runPrepass createExternalInterface", () => {
       'import * as React from "react";\nimport { TextInput } from "../components/TextInput";\nexport const App = () => { const ref = React.useRef(null); return <TextInput ref={ref} />; };',
     );
 
+    // Consumer that uses `ref` on aliased import (import { SearchInput as MySearch })
+    writeFileSync(
+      path.join(consumersDir, "aliased-ref.tsx"),
+      'import * as React from "react";\nimport { SearchInput as MySearch } from "../components/SearchInput";\nexport const App = () => { const ref = React.useRef(null); return <MySearch ref={ref} />; };',
+    );
+
+    // Consumer that uses `as` on aliased import (import { NavLink as MyLink })
+    writeFileSync(
+      path.join(consumersDir, "aliased-as.tsx"),
+      'import { NavLink as MyLink } from "../components/NavLink";\nexport const App = () => <MyLink as="button">Click</MyLink>;',
+    );
+
+    // Consumer with TypeScript cast that should NOT create a false alias for ref detection.
+    // `getValue() as TextInput` must not alias `TextInput → getValue()`.
+    writeFileSync(
+      path.join(consumersDir, "ts-cast-ref.tsx"),
+      [
+        'import * as React from "react";',
+        'import { TextInput } from "../components/TextInput";',
+        "const getValue = (): unknown => null;",
+        "const input = getValue() as TextInput;",
+        "export const App = () => { const ref = React.useRef(null); return <TextInput ref={ref} />; };",
+      ].join("\n"),
+    );
+
     // Consumer that passes className to a non-exported component (should NOT trigger styles: true)
     writeFileSync(
       path.join(consumersDir, "non-exported-className.tsx"),
@@ -305,10 +342,20 @@ describe("runPrepass createExternalInterface", () => {
           "ref": false,
           "styles": true,
         },
+        "components/NavLink.tsx:NavLink": {
+          "as": true,
+          "ref": false,
+          "styles": false,
+        },
         "components/Panel.tsx:Panel": {
           "as": false,
           "ref": false,
           "styles": true,
+        },
+        "components/SearchInput.tsx:SearchInput": {
+          "as": false,
+          "ref": true,
+          "styles": false,
         },
         "components/Tag.tsx:Tag": {
           "as": false,
@@ -367,6 +414,24 @@ describe("runPrepass createExternalInterface", () => {
     const focusBoxPath = realpathSync(path.join(fixtureDir, "components/FocusBox.tsx"));
     const key = `${focusBoxPath}:FocusBox`;
     expect(result.get(key)?.ref).toBe(true);
+  });
+
+  it("detects cross-file ref usage via aliased import", () => {
+    const searchInputPath = realpathSync(path.join(fixtureDir, "components/SearchInput.tsx"));
+    const key = `${searchInputPath}:SearchInput`;
+    expect(result.get(key)?.ref).toBe(true);
+  });
+
+  it("detects ref even when file contains TypeScript as-cast on the same name", () => {
+    const textInputPath = realpathSync(path.join(fixtureDir, "components/TextInput.tsx"));
+    const key = `${textInputPath}:TextInput`;
+    expect(result.get(key)?.ref).toBe(true);
+  });
+
+  it("detects cross-file as-prop usage via aliased import", () => {
+    const navLinkPath = realpathSync(path.join(fixtureDir, "components/NavLink.tsx"));
+    const key = `${navLinkPath}:NavLink`;
+    expect(result.get(key)?.as).toBe(true);
   });
 });
 
@@ -874,6 +939,16 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "as": false,
           "ref": false,
           "styles": true,
+        },
+        "test-cases/ref-exported.input.tsx:StyledDiv": {
+          "as": false,
+          "ref": true,
+          "styles": false,
+        },
+        "test-cases/ref-exported.input.tsx:StyledInput": {
+          "as": false,
+          "ref": true,
+          "styles": false,
         },
         "test-cases/shouldForwardProp-dynamicDeclaration.input.tsx:FlexBox": {
           "as": false,

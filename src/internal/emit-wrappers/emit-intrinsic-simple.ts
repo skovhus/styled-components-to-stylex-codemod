@@ -301,7 +301,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             allowAsProp,
             allowClassNameProp: false,
             allowStyleProp: false,
-            includeRefProp: d.supportsRefProp ?? false,
+            includeRefProp: (d.supportsRefProp ?? false) || (!includeRest && willForwardRef),
             includeRest,
             defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
             conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
@@ -1130,7 +1130,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
-          ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
+          ...((d.supportsRefProp ?? false) || (!restId && willForwardRef)
+            ? [ctx.patternProp("ref", refId)]
+            : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps,
@@ -1173,7 +1175,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
-        ...((d.supportsRefProp ?? false)
+        ...((d.supportsRefProp ?? false) || (!restId && willForwardRef)
           ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
           : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
@@ -1247,7 +1249,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowAsProp,
           allowClassNameProp: false,
           allowStyleProp: false,
-          includeRefProp: d.supportsRefProp ?? false,
+          includeRefProp: (d.supportsRefProp ?? false) || (!shouldIncludeRest && willForwardRef),
           includeRest: shouldIncludeRest,
           defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
           conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
