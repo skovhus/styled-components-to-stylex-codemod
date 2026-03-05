@@ -115,6 +115,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-gap {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -126,11 +131,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -228,6 +228,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 @keyframes xekv6nw-B {
   0% {
     opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes x2t3rfm-B {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .55;
   }
 
   100% {
@@ -1419,6 +1433,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-duration: .6s;
 }
 
+.x18hd8ej:not(#\#):not(#\#):not(#\#) {
+  animation-duration: 1.6s;
+}
+
 .x1q3qbx4:not(#\#):not(#\#):not(#\#) {
   animation-duration: 1s;
 }
@@ -1481,6 +1499,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1aerksh:not(#\#):not(#\#):not(#\#) {
   animation-name: x1wc8ddo-B;
+}
+
+.x12vp4nf:not(#\#):not(#\#):not(#\#) {
+  animation-name: x2t3rfm-B;
 }
 
 .xk7vdms:not(#\#):not(#\#):not(#\#) {
@@ -1817,6 +1839,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x15qk9wz:not(#\#):not(#\#):not(#\#) {
   background-color: #ffffff09;
+}
+
+.x1aiepmy:not(#\#):not(#\#):not(#\#) {
+  background-color: tomato;
 }
 
 .xjbqb8w:not(#\#):not(#\#):not(#\#) {
@@ -2771,7 +2797,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#), .x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#) {
+.x1308hcw.x1308hcw:where(.x19pepp0:hover *):not(#\#):not(#\#):not(#\#), .xry1jez.xry1jez:where(.x1rnikca:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
