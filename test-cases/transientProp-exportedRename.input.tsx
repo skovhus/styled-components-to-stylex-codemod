@@ -66,6 +66,14 @@ const PrivateLabel = styled.span<{ $bold?: boolean }>`
   font-weight: ${(props) => (props.$bold ? 700 : 400)};
 `;
 
+// Collision: $color cannot be renamed because `color` already exists as a prop
+export const ColorChip = styled.div<{ $color: string; color: string }>`
+  background-color: ${(props) => props.$color};
+  color: ${(props) => props.color};
+  padding: 4px 8px;
+  border-radius: 4px;
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
@@ -84,6 +92,9 @@ export function App() {
       </div>
       <PrivateLabel $bold>Bold text</PrivateLabel>
       <PrivateLabel>Normal text</PrivateLabel>
+      <ColorChip $color="blue" color="white">
+        Collision kept
+      </ColorChip>
     </div>
   );
 }

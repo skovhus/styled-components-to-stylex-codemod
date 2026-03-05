@@ -5,12 +5,12 @@ import { $colors } from "./tokens.stylex";
 import { Flex } from "./lib/flex";
 
 type Props = {
-  applyBackground?: boolean;
+  $applyBackground?: boolean;
   gutter?: string;
 } & React.ComponentPropsWithRef<typeof Flex> & { sx?: stylex.StyleXStyles };
 
 export function ScrollableFlex(props: Props) {
-  const { className, children, style, sx, applyBackground, gutter, tabIndex, ...rest } = props;
+  const { className, children, style, sx, $applyBackground, gutter, tabIndex, ...rest } = props;
 
   return (
     <Flex
@@ -20,7 +20,7 @@ export function ScrollableFlex(props: Props) {
       {...mergedSx(
         [
           styles.scrollableFlex,
-          applyBackground ? styles.scrollableFlexApplyBackground : undefined,
+          $applyBackground ? styles.scrollableFlexApplyBackground : undefined,
           props.gutter != null && styles.scrollableFlexScrollbarGutter(props.gutter),
           sx,
         ],
@@ -36,7 +36,7 @@ export function ScrollableFlex(props: Props) {
 export function ScrollableDiv(
   props: Props & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, applyBackground, gutter, tabIndex, ...rest } = props;
+  const { className, children, style, sx, $applyBackground, gutter, tabIndex, ...rest } = props;
 
   return (
     <div
@@ -45,7 +45,7 @@ export function ScrollableDiv(
       {...mergedSx(
         [
           styles.scrollableDiv,
-          applyBackground ? styles.scrollableDivApplyBackground : undefined,
+          $applyBackground ? styles.scrollableDivApplyBackground : undefined,
           gutter != null && styles.scrollableDivScrollbarGutter(gutter),
           sx,
         ],
@@ -60,7 +60,7 @@ export function ScrollableDiv(
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "200px" }}>
-    <ScrollableFlex gutter="stable" applyBackground>
+    <ScrollableFlex gutter="stable" $applyBackground>
       <div style={{ height: "400px", padding: "8px" }}>
         Flex: Tab me! (scrollable with stable gutter)
       </div>

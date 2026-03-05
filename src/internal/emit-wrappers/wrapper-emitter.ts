@@ -1177,7 +1177,7 @@ export class WrapperEmitter {
         }
       }
     }
-    const literal = lines.length > 0 ? `{ ${lines.join("; ")} }` : "{}";
+    const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
     return literal !== "{}" ? this.joinIntersection(literal, baseMaybeOmitted) : baseMaybeOmitted;
   }

@@ -693,6 +693,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
 
+      // When transient props were renamed ($prop → prop), translate
+      // wrapperOnlyTransientProps to use the renamed names so they match
+      // the entries in destructureProps (which already use renamed names).
+      if (d.transientPropRenames) {
+        for (let i = 0; i < wrapperOnlyTransientProps.length; i++) {
+          const renamed = d.transientPropRenames.get(wrapperOnlyTransientProps[i]!);
+          if (renamed) {
+            wrapperOnlyTransientProps[i] = renamed;
+          }
+        }
+      }
+
       // Add wrapper-only transient props to destructureProps to filter them out.
       for (const prop of wrapperOnlyTransientProps) {
         if (!destructureProps.includes(prop)) {

@@ -497,6 +497,18 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       }
     }
     if (renames.size > 0) {
+      // Don't rename props when the propsType references a type shared with another
+      // styled decl — mutating the shared type would break the other component.
+      const referencedTypeName = extractReferencedTypeName(decl.propsType);
+      const isSharedType =
+        referencedTypeName != null &&
+        styledDecls.some(
+          (other) =>
+            other !== decl && extractReferencedTypeName(other.propsType) === referencedTypeName,
+        );
+      if (isSharedType) {
+        continue;
+      }
       decl.transientPropRenames = renames;
       applyTransientPropRenames(decl, renames);
       renameTransientPropsInReferencedTypes(
@@ -824,6 +836,20 @@ function isLocalFunctionComponent(
 }
 
 /**
+ * Extracts the top-level type name from a propsType AST node.
+ * Returns the identifier name for TSTypeReference, null otherwise.
+ */
+function extractReferencedTypeName(propsType: unknown): string | null {
+  const node = propsType as
+    | { type?: string; typeName?: { type?: string; name?: string } }
+    | undefined;
+  if (node?.type === "TSTypeReference" && node.typeName?.type === "Identifier") {
+    return node.typeName.name ?? null;
+  }
+  return null;
+}
+
+/**
  * Collects all `$`-prefixed prop names referenced in a decl's styling data.
  */
 function collectTransientPropsFromDecl(decl: StyledDecl): Set<string> {
@@ -1127,24 +1153,46 @@ function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
       keys.push(key);
     }
   }
-  for (const vd of decl.variantDimensions ?? []) {
-    for (const key of Object.values(vd.variants)) {
-      if (typeof key === "string") {
-        keys.push(key);
-      }
+  if (decl.enumVariant) {
+    keys.push(decl.enumVariant.baseKey);
+    for (const c of decl.enumVariant.cases) {
+      keys.push(c.styleKey);
     }
+  }
+  for (const sbv of decl.staticBooleanVariants ?? []) {
+    keys.push(sbv.styleKey);
+  }
+  for (const pas of decl.pseudoAliasSelectors ?? []) {
+    keys.push(...pas.styleKeys);
   }
   return keys;
 }
 
+const AST_METADATA_KEYS = new Set([
+  "loc",
+  "start",
+  "end",
+  "comments",
+  "leadingComments",
+  "trailingComments",
+  "innerComments",
+  "extra",
+  "range",
+  "tokens",
+]);
+
 /**
  * Recursively renames identifiers in an AST expression node based on the rename map.
+ * Only walks structural AST properties (skips metadata like `loc`, `comments`, etc.).
  */
 function renameIdentifiersInAst(node: unknown, renames: Map<string, string>): void {
   if (!node || typeof node !== "object") {
     return;
   }
   const n = node as Record<string, unknown>;
+  if (typeof n.type !== "string") {
+    return;
+  }
   if (n.type === "Identifier" && typeof n.name === "string") {
     const renamed = renames.get(n.name);
     if (renamed) {
@@ -1152,7 +1200,10 @@ function renameIdentifiersInAst(node: unknown, renames: Map<string, string>): vo
     }
     return;
   }
-  for (const value of Object.values(n)) {
+  for (const [key, value] of Object.entries(n)) {
+    if (AST_METADATA_KEYS.has(key)) {
+      continue;
+    }
     if (Array.isArray(value)) {
       for (const item of value) {
         renameIdentifiersInAst(item, renames);

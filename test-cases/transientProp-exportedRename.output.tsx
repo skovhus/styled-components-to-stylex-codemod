@@ -90,6 +90,29 @@ function PrivateLabel(props: PrivateLabelProps) {
   );
 }
 
+type ColorChipProps = {
+  $color: string;
+  color: string;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+// Collision: $color cannot be renamed because `color` already exists as a prop
+export function ColorChip(props: ColorChipProps) {
+  const { children, $color, color, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...stylex.props(
+        styles.colorChip,
+        styles.colorChipBackgroundColor($color),
+        styles.colorChipColor(color),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
@@ -108,6 +131,9 @@ export function App() {
       </div>
       <PrivateLabel $bold>Bold text</PrivateLabel>
       <PrivateLabel>Normal text</PrivateLabel>
+      <ColorChip $color="blue" color="white">
+        Collision kept
+      </ColorChip>
     </div>
   );
 }
@@ -142,6 +168,17 @@ const styles = stylex.create({
   privateLabelBold: {
     fontWeight: 700,
   },
+  colorChip: {
+    paddingBlock: "4px",
+    paddingInline: "8px",
+    borderRadius: "4px",
+  },
+  colorChipBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  colorChipColor: (color: string) => ({
+    color,
+  }),
 });
 
 const variantVariants = stylex.create({
