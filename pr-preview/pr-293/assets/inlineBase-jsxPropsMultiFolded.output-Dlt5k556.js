@@ -1,0 +1,1 @@
+import{j as e}from"./index-gYhsT2UO.js";function r(t){return e.jsx("div",{className:"x78zum5 xdt5ytf x1v2ro7d xe8ttls x8cstpe xmkeg23 x1y0btm7 xagrhfj",children:t.children})}function x(){return e.jsxs("div",{style:{display:"grid",gap:8},children:[e.jsx(r,{children:"Folded A"}),e.jsx(r,{children:"Folded B"})]})}export{x as App};
