@@ -521,9 +521,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // These should NOT be passed back to the base component because the base doesn't accept them.
     const wrapperOnlyTransientProps: string[] = [];
     {
-      // Helper to find transient props in a type name
-      const findTransientPropsInTypeName = (typeName: string): string[] => {
-        const props: string[] = [];
+      // Finds prop names in a named type (interface or type alias) matching a predicate.
+      const findMatchingPropsInTypeName = (
+        typeName: string,
+        predicate: (name: string) => boolean,
+      ): string[] => {
+        const found: string[] = [];
         const collectFromTypeNode = (typeNode: any) => {
           if (!typeNode) {
             return;
@@ -543,64 +546,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               if (
                 member.type === "TSPropertySignature" &&
                 member.key?.type === "Identifier" &&
-                member.key.name.startsWith("$")
-              ) {
-                props.push(member.key.name);
-              }
-            }
-          }
-        };
-        // Look up the interface
-        const interfaceDecl = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p: any) => (p.node as any).id?.name === typeName);
-        if (interfaceDecl.size() > 0) {
-          const body = interfaceDecl.get().node.body?.body ?? [];
-          for (const member of body) {
-            if (
-              member.type === "TSPropertySignature" &&
-              member.key?.type === "Identifier" &&
-              member.key.name.startsWith("$")
-            ) {
-              props.push(member.key.name);
-            }
-          }
-        }
-        // Look up the type alias
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p: any) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          const typeAnnotation = typeAlias.get().node.typeAnnotation;
-          collectFromTypeNode(typeAnnotation);
-        }
-        return props;
-      };
-
-      // Helper to find props matching a set of names in a type (interface or type alias)
-      const findPropsInTypeName = (
-        typeName: string,
-        targetNames: ReadonlySet<string>,
-      ): string[] => {
-        const found: string[] = [];
-        const collectFromTypeNode = (typeNode: any) => {
-          if (!typeNode) {
-            return;
-          }
-          if (typeNode.type === "TSTypeLiteral" && typeNode.members) {
-            for (const member of typeNode.members) {
-              if (
-                member.type === "TSPropertySignature" &&
-                member.key?.type === "Identifier" &&
-                targetNames.has(member.key.name)
+                predicate(member.key.name)
               ) {
                 found.push(member.key.name);
               }
-            }
-          }
-          if (typeNode.type === "TSIntersectionType") {
-            for (const t of typeNode.types ?? []) {
-              collectFromTypeNode(t);
             }
           }
         };
@@ -612,7 +561,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             if (
               member.type === "TSPropertySignature" &&
               member.key?.type === "Identifier" &&
-              targetNames.has(member.key.name)
+              predicate(member.key.name)
             ) {
               found.push(member.key.name);
             }
@@ -649,12 +598,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // Check if explicit type is a reference to an interface/type alias
       else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
         const typeName = explicit.typeName.name;
-        transientProps = findTransientPropsInTypeName(typeName);
+        transientProps = findMatchingPropsInTypeName(typeName, (n) => n.startsWith("$"));
         // After interface renaming, $-prefixed members may have been renamed.
         // Also find renamed-from-transient members.
         if (renamedTransientValues) {
-          const renamedInType = findPropsInTypeName(typeName, renamedTransientValues);
-          for (const p of renamedInType) {
+          for (const p of findMatchingPropsInTypeName(typeName, (n) =>
+            renamedTransientValues.has(n),
+          )) {
             if (!transientProps.includes(p)) {
               transientProps.push(p);
             }
@@ -674,7 +624,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const param = funcDecls.get().node.params[0] as any;
           if (param?.typeAnnotation?.typeAnnotation?.typeName?.type === "Identifier") {
             const typeName = param.typeAnnotation.typeAnnotation.typeName.name;
-            transientProps = findTransientPropsInTypeName(typeName);
+            transientProps = findMatchingPropsInTypeName(typeName, (n) => n.startsWith("$"));
           }
         }
         // Also check variable declarators with arrow functions
@@ -687,7 +637,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             const param = init.params[0] as any;
             if (param?.typeAnnotation?.typeAnnotation?.typeName?.type === "Identifier") {
               const typeName = param.typeAnnotation.typeAnnotation.typeName.name;
-              transientProps = findTransientPropsInTypeName(typeName);
+              transientProps = findMatchingPropsInTypeName(typeName, (n) => n.startsWith("$"));
             }
           }
         }

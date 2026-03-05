@@ -74,6 +74,15 @@ export const ColorChip = styled.div<{ $color: string; color: string }>`
   border-radius: 4px;
 `;
 
+// Specifier export (export { ... }) — should also be renamed
+const SpecifierTag = styled.div<{ $highlighted?: boolean }>`
+  border: 2px solid ${(props) => (props.$highlighted ? "gold" : "gray")};
+  padding: 4px 8px;
+  border-radius: 4px;
+`;
+
+export { SpecifierTag };
+
 export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
@@ -95,6 +104,8 @@ export function App() {
       <ColorChip $color="blue" color="white">
         Collision kept
       </ColorChip>
+      <SpecifierTag $highlighted>Highlighted</SpecifierTag>
+      <SpecifierTag>Normal</SpecifierTag>
     </div>
   );
 }

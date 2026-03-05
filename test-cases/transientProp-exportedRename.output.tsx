@@ -1,6 +1,7 @@
 // Transient prop renaming: exported styled(Component) with $-prefixed props
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 interface IconProps {
   className?: string;
@@ -113,6 +114,28 @@ export function ColorChip(props: ColorChipProps) {
   );
 }
 
+type SpecifierTagProps = { highlighted?: boolean } & React.ComponentProps<"div">;
+
+// Specifier export (export { ... }) — should also be renamed
+function SpecifierTag(props: SpecifierTagProps) {
+  const { className, children, style, highlighted, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...mergedSx(
+        [styles.specifierTag, highlighted ? styles.specifierTagHighlighted : undefined],
+        className,
+        style,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export { SpecifierTag };
+
 export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
@@ -134,6 +157,8 @@ export function App() {
       <ColorChip $color="blue" color="white">
         Collision kept
       </ColorChip>
+      <SpecifierTag highlighted>Highlighted</SpecifierTag>
+      <SpecifierTag>Normal</SpecifierTag>
     </div>
   );
 }
@@ -179,6 +204,17 @@ const styles = stylex.create({
   colorChipColor: (color: string) => ({
     color,
   }),
+  specifierTag: {
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: "gray",
+    paddingBlock: "4px",
+    paddingInline: "8px",
+    borderRadius: "4px",
+  },
+  specifierTagHighlighted: {
+    borderColor: "gold",
+  },
 });
 
 const variantVariants = stylex.create({
