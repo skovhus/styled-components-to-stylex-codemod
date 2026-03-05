@@ -34,7 +34,7 @@ function Flex(props: FlexProps) {
 
 interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
   /** Whether to apply background color - used only for styling */
-  $applyBackground?: boolean;
+  applyBackground?: boolean;
   sx?: stylex.StyleXStyles;
 }
 
@@ -43,13 +43,13 @@ interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
  * The $applyBackground prop must NOT be passed to Flex since Flex doesn't accept it.
  */
 export function Scrollable(props: ScrollableProps) {
-  const { className, children, style, sx, $applyBackground, ...rest } = props;
+  const { className, children, style, sx, applyBackground, ...rest } = props;
 
   return (
     <Flex
       {...rest}
       {...mergedSx(
-        [styles.scrollable, $applyBackground ? styles.scrollableApplyBackground : undefined, sx],
+        [styles.scrollable, applyBackground ? styles.scrollableApplyBackground : undefined, sx],
         className,
         style,
       )}
@@ -61,7 +61,7 @@ export function Scrollable(props: ScrollableProps) {
 
 // Usage
 export const App = () => (
-  <Scrollable $applyBackground column gap={10}>
+  <Scrollable applyBackground column gap={10}>
     <div>Item 1</div>
     <div>Item 2</div>
   </Scrollable>

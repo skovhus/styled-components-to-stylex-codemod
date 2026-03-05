@@ -1,25 +1,25 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = React.PropsWithChildren<{
-  $isActive?: boolean;
-  $size?: "small" | "large";
-}>;
+type BoxProps = {
+  isActive?: boolean;
+  size?: "small" | "large";
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // Pattern 1: Exported components - become wrapper functions that must:
 // 1. Accept the transient props for styling decisions
 // 2. NOT forward them to the underlying DOM element
 
 export function Box(props: BoxProps) {
-  const { children, $isActive, $size, ...rest } = props;
+  const { children, isActive, size, ...rest } = props;
 
   return (
     <div
       {...rest}
       sx={[
         styles.box,
-        $size === "large" && styles.boxSizeLarge,
-        $isActive ? styles.boxActive : undefined,
+        size === "large" && styles.boxSizeLarge,
+        isActive ? styles.boxActive : undefined,
       ]}
     >
       {children}
@@ -27,15 +27,15 @@ export function Box(props: BoxProps) {
   );
 }
 
-type ImageProps = { $isInactive?: boolean } & Omit<
+type ImageProps = { isInactive?: boolean } & Omit<
   React.ComponentProps<"img">,
   "className" | "style"
 >;
 
 export function Image(props: ImageProps) {
-  const { $isInactive, ...rest } = props;
+  const { isInactive, ...rest } = props;
 
-  return <img {...rest} sx={[styles.image, $isInactive ? styles.imageInactive : undefined]} />;
+  return <img {...rest} sx={[styles.image, isInactive ? styles.imageInactive : undefined]} />;
 }
 
 type SliderProps = React.PropsWithChildren<{
@@ -52,11 +52,11 @@ export function App() {
   const pickerHeight = 200;
   return (
     <div>
-      <Box $isActive $size="large">
+      <Box isActive size="large">
         Active large box
       </Box>
-      <Box $size="small">Small inactive box</Box>
-      <Image $isInactive src="/avatar.png" alt="Avatar" />
+      <Box size="small">Small inactive box</Box>
+      <Image isInactive src="/avatar.png" alt="Avatar" />
       {/* Internal components with transient props */}
       <div sx={styles.point} />
       <Slider $height={pickerHeight}>Slider content</Slider>

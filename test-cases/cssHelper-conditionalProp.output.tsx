@@ -25,19 +25,16 @@ function Flex(props: FlexProps) {
   );
 }
 
-type ContainerProps = { $color?: string } & React.ComponentPropsWithRef<typeof Flex>;
+type ContainerProps = { color?: string } & Omit<React.ComponentPropsWithRef<typeof Flex>, "$color">;
 
 export function Container(props: ContainerProps) {
-  const { className, children, style, $color, ...rest } = props;
+  const { className, children, style, color, ...rest } = props;
 
   return (
     <Flex
       {...rest}
       {...mergedSx(
-        [
-          styles.container,
-          props.$color ? styles.containerBackgroundColor(props.$color) : undefined,
-        ],
+        [styles.container, props.color ? styles.containerBackgroundColor(props.color) : undefined],
         className,
         style,
       )}
@@ -48,7 +45,7 @@ export function Container(props: ContainerProps) {
 }
 
 export const App = () => (
-  <Container gap={4} $color="rebeccapurple">
+  <Container gap={4} color="rebeccapurple">
     Hello
   </Container>
 );

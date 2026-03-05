@@ -1150,7 +1150,6 @@ export class WrapperEmitter {
     if (this.hasForwardedAsUsage(d.localName)) {
       lines.push("forwardedAs?: React.ElementType");
     }
-    const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
     const base = this.componentPropsBaseType(propsTarget);
     const omitted: string[] = [];
@@ -1161,6 +1160,24 @@ export class WrapperEmitter {
     if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
+    // When transient props are renamed ($prop → prop), also omit the original $-prefixed
+    // props from the base type and re-add them with their new names.
+    if (d.transientPropRenames && d.transientPropRenames.size > 0) {
+      for (const original of d.transientPropRenames.keys()) {
+        omitted.push(`"${original}"`);
+      }
+      // Only add renamed prop types from the base component when there is no explicit
+      // wrapper type. When there is an explicit type, the renamed props are already there.
+      if (!hasExplicitPropsType) {
+        for (const [original, renamed] of d.transientPropRenames) {
+          const entry = `${renamed}: ${base}["${original}"]`;
+          if (!lines.some((l) => l.startsWith(`${renamed}:`))) {
+            lines.push(entry);
+          }
+        }
+      }
+    }
+    const literal = lines.length > 0 ? `{ ${lines.join("; ")} }` : "{}";
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
     return literal !== "{}" ? this.joinIntersection(literal, baseMaybeOmitted) : baseMaybeOmitted;
   }

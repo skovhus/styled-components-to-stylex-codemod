@@ -577,21 +577,72 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         return props;
       };
 
+      // Helper to find props matching a set of names in a type (interface or type alias)
+      const findPropsInTypeName = (
+        typeName: string,
+        targetNames: ReadonlySet<string>,
+      ): string[] => {
+        const found: string[] = [];
+        const collectFromTypeNode = (typeNode: any) => {
+          if (!typeNode) {
+            return;
+          }
+          if (typeNode.type === "TSTypeLiteral" && typeNode.members) {
+            for (const member of typeNode.members) {
+              if (
+                member.type === "TSPropertySignature" &&
+                member.key?.type === "Identifier" &&
+                targetNames.has(member.key.name)
+              ) {
+                found.push(member.key.name);
+              }
+            }
+          }
+          if (typeNode.type === "TSIntersectionType") {
+            for (const t of typeNode.types ?? []) {
+              collectFromTypeNode(t);
+            }
+          }
+        };
+        const interfaceDecl = root
+          .find(j.TSInterfaceDeclaration)
+          .filter((p: any) => (p.node as any).id?.name === typeName);
+        if (interfaceDecl.size() > 0) {
+          for (const member of interfaceDecl.get().node.body?.body ?? []) {
+            if (
+              member.type === "TSPropertySignature" &&
+              member.key?.type === "Identifier" &&
+              targetNames.has(member.key.name)
+            ) {
+              found.push(member.key.name);
+            }
+          }
+        }
+        const typeAlias = root
+          .find(j.TSTypeAliasDeclaration)
+          .filter((p: any) => (p.node as any).id?.name === typeName);
+        if (typeAlias.size() > 0) {
+          collectFromTypeNode(typeAlias.get().node.typeAnnotation);
+        }
+        return found;
+      };
+
       // Find all transient props in the explicit props type
       const explicit = d.propsType;
       let transientProps: string[] = [];
+      const renamedTransientValues = d.transientPropRenames
+        ? new Set(d.transientPropRenames.values())
+        : undefined;
 
       // Check if explicit type is a type literal with members
       if (explicit?.type === "TSTypeLiteral" && explicit.members) {
         for (const member of explicit.members) {
-          if (
-            member.type === "TSPropertySignature" &&
-            member.key?.type === "Identifier" &&
-            member.key.name.startsWith("$")
-          ) {
-            transientProps.push(member.key.name);
-            // This is a wrapper-only transient prop (defined in wrapper's explicit type)
-            wrapperOnlyTransientProps.push(member.key.name);
+          if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+            const memberName = member.key.name;
+            if (memberName.startsWith("$") || renamedTransientValues?.has(memberName)) {
+              transientProps.push(memberName);
+              wrapperOnlyTransientProps.push(memberName);
+            }
           }
         }
       }
@@ -599,7 +650,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
         const typeName = explicit.typeName.name;
         transientProps = findTransientPropsInTypeName(typeName);
-        // These are also wrapper-only transient props
+        // After interface renaming, $-prefixed members may have been renamed.
+        // Also find renamed-from-transient members.
+        if (renamedTransientValues) {
+          const renamedInType = findPropsInTypeName(typeName, renamedTransientValues);
+          for (const p of renamedInType) {
+            if (!transientProps.includes(p)) {
+              transientProps.push(p);
+            }
+          }
+        }
         wrapperOnlyTransientProps.push(...transientProps);
       }
 
@@ -847,12 +907,40 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         );
       };
 
+      // Build reverse lookup for renamed transient props: renamedName → originalName
+      const renamedFromTransient = new Map<string, string>();
+      if (d.transientPropRenames) {
+        for (const [original, renamed] of d.transientPropRenames) {
+          renamedFromTransient.set(renamed, original);
+        }
+      }
+
       // Pass transient props used for styling back to the base component.
       // These props were destructured for styling but the base component might also need them.
       // Filter out:
       // 1. Props that are for filtering only (not used in styling)
       // 2. Props defined in the wrapper's explicit type (base doesn't accept them)
       for (const propName of destructureProps) {
+        const originalTransientName = renamedFromTransient.get(propName);
+        if (originalTransientName) {
+          // Renamed transient prop: forward with original $-prefixed attribute name
+          // e.g., <BaseComp $isOpen={isOpen} /> where $isOpen was renamed to isOpen
+          if (
+            !filterOnlyTransientProps.includes(propName) &&
+            !wrapperOnlyTransientProps.includes(propName)
+          ) {
+            if (!forwardedProps.has(originalTransientName)) {
+              forwardedProps.add(originalTransientName);
+              openingAttrs.push(
+                j.jsxAttribute(
+                  j.jsxIdentifier(originalTransientName),
+                  j.jsxExpressionContainer(j.identifier(propName)),
+                ),
+              );
+            }
+          }
+          continue;
+        }
         if (
           propName.startsWith("$") &&
           !filterOnlyTransientProps.includes(propName) &&
@@ -871,7 +959,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         : null;
 
       for (const propName of destructureProps) {
-        if (propName && propName !== "children" && !propName.startsWith("$")) {
+        if (
+          propName &&
+          propName !== "children" &&
+          !propName.startsWith("$") &&
+          !renamedFromTransient.has(propName)
+        ) {
           if (styleOnlyConditionProps.has(propName)) {
             // Props added purely for variant conditions or pseudo-alias selectors are
             // style-only concerns. Forward them when the base component explicitly

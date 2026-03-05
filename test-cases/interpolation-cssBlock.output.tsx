@@ -3,14 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type ButtonProps = React.PropsWithChildren<{
-  $primary?: boolean;
+  primary?: boolean;
 }>;
 
 export function Button(props: ButtonProps) {
-  const { children, $primary, ...rest } = props;
+  const { children, primary, ...rest } = props;
 
   return (
-    <button {...rest} sx={[styles.button, $primary ? styles.buttonPrimary : undefined]}>
+    <button {...rest} sx={[styles.button, primary ? styles.buttonPrimary : undefined]}>
       {children}
     </button>
   );
@@ -20,7 +20,7 @@ export function App() {
   return (
     <div>
       <Button>Normal</Button>
-      <Button $primary>Primary</Button>
+      <Button primary>Primary</Button>
     </div>
   );
 }

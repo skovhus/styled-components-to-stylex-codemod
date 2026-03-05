@@ -1035,14 +1035,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     });
 
     // Extract transient props (starting with $) from the explicit type.
-    // Only destructure them when we actually spread `rest` into the element.
+    // Also include props that were renamed from $-prefixed names (via transientPropRenames),
+    // since they still shouldn't be forwarded to the DOM element.
     const explicitTransientProps: string[] = [];
+    const renamedTransientValues = d.transientPropRenames
+      ? new Set(d.transientPropRenames.values())
+      : undefined;
     const explicit = d.propsType;
     if (explicit?.type === "TSTypeLiteral" && explicit.members) {
       for (const member of explicit.members as any[]) {
         if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
           const name = member.key.name;
-          if (name.startsWith("$")) {
+          if (name.startsWith("$") || renamedTransientValues?.has(name)) {
             explicitTransientProps.push(name);
           }
         }
@@ -1062,7 +1066,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           n === "style" ||
           n === "as" ||
           n === "forwardedAs" ||
-          n.startsWith("$")
+          n.startsWith("$") ||
+          renamedTransientValues?.has(n)
         ) {
           return false;
         }

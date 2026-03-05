@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 
 // Props defined via interface (not TSTypeLiteral)
 interface TransientButtonProps {
-  $variant?: "primary" | "secondary";
-  $size?: "small" | "large";
+  variant?: "primary" | "secondary";
+  size?: "small" | "large";
 }
 
 // Exported component with shouldForwardProp using dropPrefix pattern
@@ -13,7 +13,7 @@ interface TransientButtonProps {
 export function TransientButton(
   props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style">,
 ) {
-  const { children, $variant, $size, ...rest } = props;
+  const { children, variant, size, ...rest } = props;
 
   const restRecord = rest as Record<string, unknown>;
 
@@ -26,8 +26,8 @@ export function TransientButton(
       {...rest}
       sx={[
         styles.transientButton,
-        $variant === "primary" && styles.transientButtonVariantPrimary,
-        $size === "large" && styles.transientButtonSizeLarge,
+        variant === "primary" && styles.transientButtonVariantPrimary,
+        size === "large" && styles.transientButtonSizeLarge,
       ]}
     >
       {children}
@@ -37,7 +37,7 @@ export function TransientButton(
 
 export const App = () => (
   <div>
-    <TransientButton $variant="primary" $size="large">
+    <TransientButton variant="primary" size="large">
       Primary Large
     </TransientButton>
   </div>

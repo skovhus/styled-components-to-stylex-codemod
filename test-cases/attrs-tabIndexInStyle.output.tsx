@@ -3,13 +3,13 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type Props = {
-  $applyBackground?: boolean;
+  applyBackground?: boolean;
 };
 
 // Test case: tabIndex used in BOTH attrs (with default) AND in styles
 // The default value should be preserved when destructuring
 export function Component(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
-  const { children, $applyBackground, tabIndex = 0, ...rest } = props;
+  const { children, applyBackground, tabIndex = 0, ...rest } = props;
 
   return (
     <div
@@ -17,7 +17,7 @@ export function Component(props: Props & Omit<React.ComponentProps<"div">, "clas
       {...rest}
       sx={[
         styles.component,
-        $applyBackground ? styles.componentApplyBackground : undefined,
+        applyBackground ? styles.componentApplyBackground : undefined,
         tabIndex === 0 && styles.componentTabIndex0,
       ]}
     >

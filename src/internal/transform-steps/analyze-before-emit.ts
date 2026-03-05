@@ -475,6 +475,52 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsRefProp = extResult.ref;
   }
 
+  // Rename transient ($-prefixed) props for exported components.
+  // styled-components v6 filters $-prefixed props when the wrapped target is a plain function
+  // (not a styled component). The codemod converts styled(Component) to a plain function,
+  // so any consumer wrapping it with styled() would silently lose transient props.
+  // Stripping the $ prefix prevents this filtering.
+  for (const decl of styledDecls) {
+    if (!exportedComponents.has(decl.localName)) {
+      continue;
+    }
+    const transientProps = collectTransientPropsFromDecl(decl);
+    if (transientProps.size === 0) {
+      continue;
+    }
+    const existingPropNames = collectExistingNonTransientPropNames(decl);
+    const renames = new Map<string, string>();
+    for (const prop of transientProps) {
+      const stripped = prop.slice(1);
+      if (!existingPropNames.has(stripped)) {
+        renames.set(prop, stripped);
+      }
+    }
+    if (renames.size > 0) {
+      decl.transientPropRenames = renames;
+      applyTransientPropRenames(decl, renames);
+      renameTransientPropsInReferencedTypes(
+        root,
+        j,
+        decl.propsType as
+          | { type?: string; typeName?: { type?: string; name?: string }; types?: unknown[] }
+          | undefined,
+        renames,
+      );
+      // Also rename in resolvedStyleObjects (style function bodies may reference $-prefixed props)
+      const resolvedStyleObjects = ctx.resolvedStyleObjects;
+      if (resolvedStyleObjects) {
+        const styleKeys = collectAllStyleKeysForDecl(decl);
+        for (const key of styleKeys) {
+          const value = resolvedStyleObjects.get(key);
+          if (value && typeof value === "object") {
+            renameIdentifiersInAst(value, renames);
+          }
+        }
+      }
+    }
+  }
+
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
@@ -775,6 +821,418 @@ function isLocalFunctionComponent(
       })
       .size() > 0
   );
+}
+
+/**
+ * Collects all `$`-prefixed prop names referenced in a decl's styling data.
+ */
+function collectTransientPropsFromDecl(decl: StyledDecl): Set<string> {
+  const props = new Set<string>();
+  for (const when of Object.keys(decl.variantStyleKeys ?? {})) {
+    for (const p of extractPropNamesFromWhenString(when)) {
+      if (p.startsWith("$")) {
+        props.add(p);
+      }
+    }
+  }
+  for (const sf of decl.styleFnFromProps ?? []) {
+    if (sf.jsxProp.startsWith("$")) {
+      props.add(sf.jsxProp);
+    }
+    if (sf.conditionWhen) {
+      for (const p of extractPropNamesFromWhenString(sf.conditionWhen)) {
+        if (p.startsWith("$")) {
+          props.add(p);
+        }
+      }
+    }
+  }
+  for (const isp of decl.inlineStyleProps ?? []) {
+    const jprop = isp.jsxProp ?? isp.prop;
+    if (jprop.startsWith("$")) {
+      props.add(jprop);
+    }
+  }
+  for (const cv of decl.compoundVariants ?? []) {
+    if (cv.kind === "3branch" || cv.kind === "4branch") {
+      if (cv.outerProp.startsWith("$")) {
+        props.add(cv.outerProp);
+      }
+      if (cv.innerProp.startsWith("$")) {
+        props.add(cv.innerProp);
+      }
+    }
+  }
+  for (const vd of decl.variantDimensions ?? []) {
+    if (vd.propName.startsWith("$")) {
+      props.add(vd.propName);
+    }
+  }
+  for (const sbv of decl.staticBooleanVariants ?? []) {
+    if (sbv.propName.startsWith("$")) {
+      props.add(sbv.propName);
+    }
+  }
+  if (decl.enumVariant && decl.enumVariant.propName.startsWith("$")) {
+    props.add(decl.enumVariant.propName);
+  }
+  collectPropsFromType(decl.propsType, props, (n) => n.startsWith("$"));
+  return props;
+}
+
+type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
+
+/**
+ * Collects member names from a TS type AST node matching a filter predicate.
+ */
+function collectPropsFromType(
+  typeNode: TypeNodeLike,
+  result: Set<string>,
+  filter: (name: string) => boolean,
+): void {
+  if (!typeNode) {
+    return;
+  }
+  if (typeNode.type === "TSTypeLiteral" && Array.isArray(typeNode.members)) {
+    for (const member of typeNode.members) {
+      const m = member as { type?: string; key?: { type?: string; name?: string } };
+      if (
+        m.type === "TSPropertySignature" &&
+        m.key?.type === "Identifier" &&
+        m.key.name &&
+        filter(m.key.name)
+      ) {
+        result.add(m.key.name);
+      }
+    }
+  }
+  if (typeNode.type === "TSIntersectionType" && Array.isArray(typeNode.types)) {
+    for (const t of typeNode.types) {
+      collectPropsFromType(t as TypeNodeLike, result, filter);
+    }
+  }
+}
+
+/**
+ * Collects non-transient (non-`$`-prefixed) prop names to check for rename collisions.
+ */
+function collectExistingNonTransientPropNames(decl: StyledDecl): Set<string> {
+  const names = new Set<string>(["className", "style", "children", "ref", "key", "as"]);
+  for (const when of Object.keys(decl.variantStyleKeys ?? {})) {
+    for (const p of extractPropNamesFromWhenString(when)) {
+      if (!p.startsWith("$")) {
+        names.add(p);
+      }
+    }
+  }
+  for (const sf of decl.styleFnFromProps ?? []) {
+    if (!sf.jsxProp.startsWith("$")) {
+      names.add(sf.jsxProp);
+    }
+  }
+  for (const vd of decl.variantDimensions ?? []) {
+    if (!vd.propName.startsWith("$")) {
+      names.add(vd.propName);
+    }
+  }
+  collectPropsFromType(decl.propsType, names, (n) => !n.startsWith("$"));
+  return names;
+}
+
+/**
+ * Extracts prop names from a "when" condition string (e.g., "$isOpen", "!$active").
+ */
+function extractPropNamesFromWhenString(when: string): string[] {
+  const props: string[] = [];
+  const tokens = when.split(/[&|!()=\s]+/).filter(Boolean);
+  for (const token of tokens) {
+    if (
+      /^[$A-Z_a-z][$\w]*$/.test(token) &&
+      token !== "true" &&
+      token !== "false" &&
+      token !== "undefined" &&
+      token !== "null"
+    ) {
+      props.push(token);
+    }
+  }
+  return props;
+}
+
+/**
+ * Renames `$`-prefixed prop references in a "when" condition string.
+ * Sorts renames by length descending to avoid partial matches.
+ */
+function renamePropsInWhenString(when: string, renames: Map<string, string>): string {
+  let result = when;
+  const sorted = [...renames.entries()].sort((a, b) => b[0].length - a[0].length);
+  for (const [from, to] of sorted) {
+    const escaped = from.replace(/\$/g, "\\$");
+    result = result.replace(new RegExp(`(?<![\\w$])${escaped}(?!\\w)`, "g"), to);
+  }
+  return result;
+}
+
+/**
+ * Applies transient prop renames to all relevant fields of a StyledDecl.
+ */
+function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string>): void {
+  if (decl.variantStyleKeys) {
+    const updated: Record<string, string> = {};
+    for (const [when, key] of Object.entries(decl.variantStyleKeys)) {
+      updated[renamePropsInWhenString(when, renames)] = key;
+    }
+    decl.variantStyleKeys = updated;
+  }
+
+  if (decl.variantSourceOrder) {
+    const updated: Record<string, number> = {};
+    for (const [when, order] of Object.entries(decl.variantSourceOrder)) {
+      updated[renamePropsInWhenString(when, renames)] = order;
+    }
+    decl.variantSourceOrder = updated;
+  }
+
+  if (decl.styleFnFromProps) {
+    for (const sf of decl.styleFnFromProps) {
+      sf.jsxProp = renames.get(sf.jsxProp) ?? sf.jsxProp;
+      if (sf.conditionWhen) {
+        sf.conditionWhen = renamePropsInWhenString(sf.conditionWhen, renames);
+      }
+      if (sf.callArg) {
+        renameIdentifiersInAst(sf.callArg, renames);
+      }
+    }
+  }
+
+  if (decl.inlineStyleProps) {
+    for (const isp of decl.inlineStyleProps) {
+      const jprop = isp.jsxProp ?? isp.prop;
+      const renamed = renames.get(jprop);
+      if (renamed) {
+        if (isp.jsxProp) {
+          isp.jsxProp = renamed;
+        } else {
+          isp.prop = renamed;
+        }
+      }
+      renameIdentifiersInAst(isp.expr, renames);
+    }
+  }
+
+  if (decl.compoundVariants) {
+    for (const cv of decl.compoundVariants) {
+      if (cv.kind === "3branch" || cv.kind === "4branch") {
+        cv.outerProp = renames.get(cv.outerProp) ?? cv.outerProp;
+        cv.innerProp = renames.get(cv.innerProp) ?? cv.innerProp;
+      }
+    }
+  }
+
+  if (decl.variantDimensions) {
+    for (const vd of decl.variantDimensions) {
+      const renamedProp = renames.get(vd.propName);
+      if (renamedProp) {
+        // Also update the variant object name if it was derived from the $-prefixed prop name
+        if (vd.variantObjectName.startsWith(vd.propName)) {
+          vd.variantObjectName = renamedProp + vd.variantObjectName.slice(vd.propName.length);
+        }
+        vd.propName = renamedProp;
+      }
+    }
+  }
+
+  if (decl.staticBooleanVariants) {
+    for (const sbv of decl.staticBooleanVariants) {
+      sbv.propName = renames.get(sbv.propName) ?? sbv.propName;
+    }
+  }
+
+  if (decl.enumVariant) {
+    decl.enumVariant.propName = renames.get(decl.enumVariant.propName) ?? decl.enumVariant.propName;
+  }
+
+  renameTransientPropsInType(decl.propsType, renames);
+
+  if (decl.shouldForwardProp?.dropProps) {
+    decl.shouldForwardProp.dropProps = decl.shouldForwardProp.dropProps.map(
+      (p) => renames.get(p) ?? p,
+    );
+  }
+
+  if (decl.attrsInfo?.defaultAttrs) {
+    for (const attr of decl.attrsInfo.defaultAttrs) {
+      attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+    }
+  }
+  if (decl.attrsInfo?.conditionalAttrs) {
+    for (const attr of decl.attrsInfo.conditionalAttrs) {
+      attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+    }
+  }
+  if (decl.attrsInfo?.attrsDynamicStyles) {
+    for (const ds of decl.attrsInfo.attrsDynamicStyles) {
+      ds.jsxProp = renames.get(ds.jsxProp) ?? ds.jsxProp;
+    }
+  }
+
+  if (decl.extraStylexPropsArgs) {
+    for (const arg of decl.extraStylexPropsArgs) {
+      if (arg.when) {
+        arg.when = renamePropsInWhenString(arg.when, renames);
+      }
+      renameIdentifiersInAst(arg.expr, renames);
+    }
+  }
+
+  if (decl.preResolvedFnDecls) {
+    for (const value of Object.values(decl.preResolvedFnDecls)) {
+      renameIdentifiersInAst(value, renames);
+    }
+  }
+
+  if (decl.pseudoAliasSelectors) {
+    for (const pas of decl.pseudoAliasSelectors) {
+      if (pas.guard?.when) {
+        pas.guard.when = renamePropsInWhenString(pas.guard.when, renames);
+      }
+    }
+  }
+}
+
+/**
+ * Collects all style keys that belong to a decl (for renaming in resolvedStyleObjects).
+ */
+function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
+  const keys: string[] = [decl.styleKey];
+  for (const key of Object.values(decl.variantStyleKeys ?? {})) {
+    keys.push(key);
+  }
+  for (const sf of decl.styleFnFromProps ?? []) {
+    keys.push(sf.fnKey);
+  }
+  for (const key of decl.extraStyleKeys ?? []) {
+    keys.push(key);
+  }
+  for (const key of decl.extraStyleKeysAfterBase ?? []) {
+    keys.push(key);
+  }
+  if (decl.preResolvedFnDecls) {
+    for (const key of Object.keys(decl.preResolvedFnDecls)) {
+      keys.push(key);
+    }
+  }
+  for (const vd of decl.variantDimensions ?? []) {
+    for (const key of Object.values(vd.variants)) {
+      if (typeof key === "string") {
+        keys.push(key);
+      }
+    }
+  }
+  return keys;
+}
+
+/**
+ * Recursively renames identifiers in an AST expression node based on the rename map.
+ */
+function renameIdentifiersInAst(node: unknown, renames: Map<string, string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const n = node as Record<string, unknown>;
+  if (n.type === "Identifier" && typeof n.name === "string") {
+    const renamed = renames.get(n.name);
+    if (renamed) {
+      n.name = renamed;
+    }
+    return;
+  }
+  for (const value of Object.values(n)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        renameIdentifiersInAst(item, renames);
+      }
+    } else if (value && typeof value === "object") {
+      renameIdentifiersInAst(value, renames);
+    }
+  }
+}
+
+/**
+ * Renames `$`-prefixed members in interface/type alias declarations
+ * referenced by a propsType AST node.
+ */
+function renameTransientPropsInReferencedTypes(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  propsType:
+    | { type?: string; typeName?: { type?: string; name?: string }; types?: unknown[] }
+    | undefined,
+  renames: Map<string, string>,
+): void {
+  if (!propsType) {
+    return;
+  }
+  if (propsType.type === "TSTypeReference" && propsType.typeName?.type === "Identifier") {
+    const typeName = propsType.typeName.name;
+    if (!typeName) {
+      return;
+    }
+    // Rename in interface declarations
+    root
+      .find(j.TSInterfaceDeclaration)
+      .filter((p: any) => (p.node as any).id?.name === typeName)
+      .forEach((p: any) => {
+        for (const member of (p.node.body?.body ?? []) as any[]) {
+          if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+            const renamed = renames.get(member.key.name);
+            if (renamed) {
+              member.key.name = renamed;
+            }
+          }
+        }
+      });
+    // Rename in type alias declarations
+    root
+      .find(j.TSTypeAliasDeclaration)
+      .filter((p: any) => (p.node as any).id?.name === typeName)
+      .forEach((p: any) => {
+        renameTransientPropsInType(p.node.typeAnnotation, renames);
+      });
+  }
+  if (propsType.type === "TSIntersectionType" && Array.isArray(propsType.types)) {
+    for (const t of propsType.types) {
+      renameTransientPropsInReferencedTypes(root, j, t as typeof propsType, renames);
+    }
+  }
+}
+
+/**
+ * Renames `$`-prefixed member names in a TS type AST node in place.
+ */
+function renameTransientPropsInType(
+  typeNode: { type?: string; members?: unknown[]; types?: unknown[] } | undefined,
+  renames: Map<string, string>,
+): void {
+  if (!typeNode) {
+    return;
+  }
+  if (typeNode.type === "TSTypeLiteral" && Array.isArray(typeNode.members)) {
+    for (const member of typeNode.members) {
+      const m = member as { type?: string; key?: { type?: string; name?: string } };
+      if (m.type === "TSPropertySignature" && m.key?.type === "Identifier" && m.key.name) {
+        const renamed = renames.get(m.key.name);
+        if (renamed) {
+          m.key.name = renamed;
+        }
+      }
+    }
+  }
+  if (typeNode.type === "TSIntersectionType" && Array.isArray(typeNode.types)) {
+    for (const t of typeNode.types) {
+      renameTransientPropsInType(t as typeof typeNode, renames);
+    }
+  }
 }
 
 /** Recursively check if a pattern (Identifier, ArrayPattern, ObjectPattern, etc.) contains a binding with the given name. */

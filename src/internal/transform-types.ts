@@ -351,6 +351,14 @@ export type StyledDecl = {
    */
   propsType?: ASTNode;
 
+  /**
+   * Maps original `$`-prefixed transient prop names to their stripped versions.
+   * E.g., `$isOpen` → `isOpen`. Set on exported components to prevent
+   * styled-components v6 from filtering transient props when the converted
+   * plain function is wrapped by an unconverted `styled()` consumer.
+   */
+  transientPropRenames?: Map<string, string>;
+
   withConfig?: { componentId?: string };
   attrsInfo?: {
     staticAttrs: Record<string, unknown>;
