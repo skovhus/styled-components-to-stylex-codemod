@@ -1,0 +1,1 @@
+import{r as o}from"./index-Cc9ANA2v.js";function l(t){const{width:e=16,height:r=16,children:n,style:s,...i}=t;return o.createElement("span",{...i,style:{display:"inline-block",width:e,height:r,...s},children:n})}export{l as I};
