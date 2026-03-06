@@ -6,13 +6,13 @@ import { highlightStyles } from "./lib/helpers";
 function Button(props: React.PropsWithChildren<{}>) {
   return (
     <button
-      {...stylex.props(
+      sx={[
         styles.button,
         highlightStyles({
           active: styles.buttonPseudoActive,
           hover: styles.buttonPseudoHover,
         }),
-      )}
+      ]}
     >
       {props.children}
     </button>

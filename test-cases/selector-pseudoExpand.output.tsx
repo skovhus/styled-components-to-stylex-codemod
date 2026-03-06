@@ -4,9 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
 
 function Button(props: React.PropsWithChildren<{}>) {
-  return (
-    <button {...stylex.props(styles.button, styles.buttonHighlightExpand)}>{props.children}</button>
-  );
+  return <button sx={[styles.button, styles.buttonHighlightExpand]}>{props.children}</button>;
 }
 
 export function App() {

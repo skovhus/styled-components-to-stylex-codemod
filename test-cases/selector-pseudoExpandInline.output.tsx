@@ -6,7 +6,7 @@ import { $interaction } from "./lib/interaction.stylex";
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <button {...stylex.props(styles.button, styles.buttonHighlightExpand)}>Hover me</button>
+      <button sx={[styles.button, styles.buttonHighlightExpand]}>Hover me</button>
     </div>
   );
 }
