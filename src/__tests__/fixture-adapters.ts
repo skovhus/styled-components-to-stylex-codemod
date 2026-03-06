@@ -503,6 +503,30 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle `highlightExpand` pseudo-class interpolation: &:${highlightExpand}
+    // Resolves to a pseudoExpand that creates one merged style object with
+    // :active direct + :hover wrapped in $interaction.canHover condition.
+    if (ctx.importedName === "highlightExpand") {
+      const interactionImport = {
+        from: { kind: "specifier" as const, value: "./lib/interaction.stylex" },
+        names: [{ imported: "$interaction" }],
+      };
+      return {
+        kind: "pseudoExpand",
+        expansions: [
+          { pseudo: "active" },
+          {
+            pseudo: "hover",
+            condition: {
+              expr: "$interaction.canHover",
+              imports: [interactionImport],
+            },
+          },
+        ],
+        imports: [],
+      };
+    }
+
     return undefined;
   },
 });

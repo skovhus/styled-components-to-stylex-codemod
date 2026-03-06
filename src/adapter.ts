@@ -386,6 +386,30 @@ export type SelectorResolveResult =
        * Import statements required by `styleSelectorExpr`.
        */
       imports: ImportSpec[];
+    }
+  | {
+      kind: "pseudoExpand";
+      /**
+       * List of pseudo-classes to expand into a single merged style object.
+       * Each pseudo can optionally be wrapped in a condition (e.g., a `defineConsts` media query).
+       *
+       * Example: `[{ pseudo: "active" }, { pseudo: "hover", condition: { expr: "$interaction.canHover", imports: [...] } }]`
+       */
+      expansions: Array<{
+        /** Pseudo-class name without leading colon (e.g., "active", "hover") */
+        pseudo: string;
+        /** Optional condition wrapping this pseudo entry (e.g., a defineConsts key) */
+        condition?: {
+          /** JS expression string (e.g., "$interaction.canHover") */
+          expr: string;
+          /** Imports required by the condition expression */
+          imports: ImportSpec[];
+        };
+      }>;
+      /**
+       * Shared imports for the overall expansion (not per-condition).
+       */
+      imports: ImportSpec[];
     };
 
 // ────────────────────────────────────────────────────────────────────────────

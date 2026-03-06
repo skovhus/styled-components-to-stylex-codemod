@@ -191,6 +191,18 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       stylesIdentifier,
     );
 
+    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
+    for (const gp of appendPseudoExpandStyleArgs(
+      d.pseudoExpandSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    )) {
+      if (!pseudoGuardProps.includes(gp)) {
+        pseudoGuardProps.push(gp);
+      }
+    }
+
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
       emitter.annotatePropsParam(
@@ -847,6 +859,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     // Handle pseudo-alias selectors (e.g., &:${highlight})
     for (const gp of appendPseudoAliasStyleArgs(
       d.pseudoAliasSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    )) {
+      if (!destructureProps.includes(gp)) {
+        destructureProps.push(gp);
+      }
+    }
+
+    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
+    for (const gp of appendPseudoExpandStyleArgs(
+      d.pseudoExpandSelectors,
       styleArgs,
       j,
       stylesIdentifier,
@@ -1570,11 +1594,10 @@ export function appendPseudoAliasStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
 ): string[] {
-  const guardProps: string[] = [];
   if (!entries?.length) {
-    return guardProps;
+    return [];
   }
-  for (const entry of entries) {
+  return appendGuardedStyleArgs(entries, styleArgs, j, (entry) => {
     const properties = entry.pseudoNames.map((name, i) =>
       j.property(
         "init",
@@ -1582,10 +1605,53 @@ export function appendPseudoAliasStyleArgs(
         j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
       ),
     );
-    const callExpr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+    return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
       j.objectExpression(properties),
     ]) as ExpressionKind;
+  });
+}
 
+/**
+ * Appends pseudo-expand style args as static `styles.key` references.
+ * When the entry has a `guard`, the ref is wrapped: `cond && styles.key`.
+ *
+ * Returns the list of guard prop names that need destructuring.
+ */
+export function appendPseudoExpandStyleArgs(
+  entries: StyledDecl["pseudoExpandSelectors"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  if (!entries?.length) {
+    return [];
+  }
+  return appendGuardedStyleArgs(
+    entries,
+    styleArgs,
+    j,
+    (entry) =>
+      j.memberExpression(
+        j.identifier(stylesIdentifier),
+        j.identifier(entry.styleKey),
+      ) as ExpressionKind,
+  );
+}
+
+/**
+ * Shared logic for appending style args with optional guard wrapping.
+ * Each entry is mapped to an expression via `buildExpr`, then optionally
+ * wrapped in a conditional if the entry has a `guard`.
+ */
+function appendGuardedStyleArgs<T extends { guard?: { when: string } }>(
+  entries: T[],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  buildExpr: (entry: T) => ExpressionKind,
+): string[] {
+  const guardProps: string[] = [];
+  for (const entry of entries) {
+    const expr = buildExpr(entry);
     if (entry.guard) {
       const parsed = parseVariantWhenToAst(j, entry.guard.when);
       for (const p of parsed.props) {
@@ -1596,12 +1662,12 @@ export function appendPseudoAliasStyleArgs(
       styleArgs.push(
         makeConditionalStyleExpr(j, {
           cond: parsed.cond,
-          expr: callExpr,
+          expr,
           isBoolean: parsed.isBoolean,
         }),
       );
     } else {
-      styleArgs.push(callExpr);
+      styleArgs.push(expr);
     }
   }
   return guardProps;

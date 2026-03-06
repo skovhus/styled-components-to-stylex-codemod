@@ -245,6 +245,19 @@ export type StyledDecl = {
     guard?: { when: string };
   }>;
   /**
+   * Pseudo-expand selectors from `&:${expr}` patterns resolved via
+   * `adapter.resolveSelector()` with `kind: "pseudoExpand"`.
+   *
+   * Each entry creates ONE merged style object with all pseudo expansions inline,
+   * applied statically (no runtime wrapper function).
+   */
+  pseudoExpandSelectors?: Array<{
+    /** Style key for the merged pseudo-expand style object */
+    styleKey: string;
+    /** When present, the style ref is guarded by a boolean prop condition. */
+    guard?: { when: string };
+  }>;
+  /**
    * When set, the wrapper needs to call `useTheme()` from styled-components
    * to access runtime theme boolean values (e.g., theme.isDark, theme.isHighContrast).
    *

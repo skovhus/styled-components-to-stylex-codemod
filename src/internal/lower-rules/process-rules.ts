@@ -19,6 +19,7 @@ import {
   parseSelector,
 } from "../selectors.js";
 import {
+  cloneAstNode,
   extractRootAndPath,
   getArrowFnParamBindings,
   getNodeLocStart,
@@ -1372,6 +1373,10 @@ function tryResolveInterpolatedPseudo(
     return handlePseudoAlias(selectorResult, rule, ctx);
   }
 
+  if (selectorResult.kind === "pseudoExpand") {
+    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx);
+  }
+
   // "media" kind is not applicable for pseudo selectors
   return "bail";
 }
@@ -1387,48 +1392,14 @@ function handlePseudoAlias(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "bail" | void {
-  // Bail when the pseudo alias is inside @media or other at-rules —
-  // we can't carry the enclosing conditions into pseudo-alias style objects.
-  if (rule.atRuleStack.length > 0) {
+  const prepared = preparePseudoBucket(rule, ctx);
+  if (prepared === "bail") {
     return "bail";
   }
-
+  const { flatBucket, guard } = prepared;
   const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
     ctx;
-  const { j, parseExpr, resolverImports, resolveThemeValue, resolveThemeValueFromFn } = state;
-
-  // Process declarations into a flat bucket (populated in-place)
-  const flatBucket: Record<string, unknown> = {};
-  const writeResult = processDeclarationsIntoBucket(
-    rule,
-    flatBucket,
-    j,
-    decl,
-    resolveThemeValue,
-    resolveThemeValueFromFn,
-    { bailOnUnresolved: true },
-  );
-  if (writeResult === "bail") {
-    return "bail";
-  }
-
-  // When the pseudo block produced no static declarations (all interpolations
-  // were standalone prop-conditional), try to recover by extracting the
-  // condition and CSS from the raw template.
-  let guard: { when: string } | undefined;
-  if (Object.keys(flatBucket).length === 0) {
-    const recovered = recoverStandaloneInterpolationsInPseudoBlock(rule, decl);
-    if (!recovered) {
-      return "bail";
-    }
-    Object.assign(flatBucket, recovered.cssProps);
-    guard = { when: recovered.when };
-
-    // Ensure the guard prop is dropped from DOM forwarding
-    if (recovered.propName && !recovered.propName.startsWith("$")) {
-      ensureShouldForwardPropDrop(decl, recovered.propName);
-    }
-  }
+  const { parseExpr, resolverImports } = state;
 
   // Build N style objects (one per pseudo value)
   const styleKeys: string[] = [];
@@ -1470,6 +1441,139 @@ function handlePseudoAlias(
   }
 
   decl.needsWrapperComponent = true;
+}
+
+/**
+ * Handles `pseudoExpand` result: builds ONE merged style object with all pseudo
+ * expansions inline, applied statically (no runtime wrapper function).
+ *
+ * For each CSS property, creates a nested structure like:
+ * ```
+ * { default: baseValue, ':active': value, ':hover': { default: null, [condition]: value } }
+ * ```
+ */
+function handlePseudoExpand(
+  result: Extract<SelectorResolveResult, { kind: "pseudoExpand" }>,
+  importedName: string,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "bail" | void {
+  const prepared = preparePseudoBucket(rule, ctx);
+  if (prepared === "bail") {
+    return "bail";
+  }
+  const { flatBucket, guard } = prepared;
+  const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
+    ctx;
+  const { parseExpr, resolverImports } = state;
+
+  // Build the style key
+  const guardSuffix = guard ? toSuffixFromProp(guard.when) : "";
+  const styleKey = `${decl.styleKey}${guardSuffix}${capitalize(kebabToCamelCase(importedName))}`;
+
+  // Pre-parse condition expressions once (reused across all CSS properties via cloneAstNode)
+  const parsedConditions = result.expansions.map((e) =>
+    e.condition ? parseExpr(e.condition.expr) : null,
+  );
+  if (parsedConditions.some((c, i) => result.expansions[i]!.condition && !c)) {
+    return "bail";
+  }
+
+  // Build ONE merged style object with all pseudo expansions
+  const mergedStyleObj: Record<string, unknown> = {};
+  for (const prop of Object.keys(flatBucket)) {
+    const value = flatBucket[prop];
+    const baseValue =
+      (styleObj as Record<string, unknown>)[prop] ??
+      (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+
+    const nested: Record<string, unknown> = { default: baseValue };
+    for (let i = 0; i < result.expansions.length; i++) {
+      const expansion = result.expansions[i]!;
+      const pseudo = `:${expansion.pseudo}`;
+      if (expansion.condition) {
+        nested[pseudo] = {
+          default: null,
+          __computedKeys: [
+            { keyExpr: cloneAstNode(parsedConditions[i]!), value: cloneAstNode(value) },
+          ],
+        };
+      } else {
+        nested[pseudo] = cloneAstNode(value);
+      }
+    }
+    mergedStyleObj[prop] = nested;
+  }
+
+  extraStyleObjects.set(styleKey, mergedStyleObj);
+
+  // Register on the decl for the emit phase
+  decl.pseudoExpandSelectors ??= [];
+  decl.pseudoExpandSelectors.push({
+    styleKey,
+    ...(guard ? { guard } : {}),
+  });
+
+  // Collect imports: shared + per-condition
+  for (const impSpec of result.imports) {
+    resolverImports.set(JSON.stringify(impSpec), impSpec);
+  }
+  for (const expansion of result.expansions) {
+    if (expansion.condition) {
+      for (const impSpec of expansion.condition.imports) {
+        resolverImports.set(JSON.stringify(impSpec), impSpec);
+      }
+    }
+  }
+
+  // No needsWrapperComponent — this is static application
+}
+
+/**
+ * Shared preamble for pseudo-alias and pseudo-expand handlers.
+ * Bails on at-rules, processes declarations into a flat bucket,
+ * and recovers standalone interpolations if the bucket is empty.
+ */
+function preparePseudoBucket(
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): { flatBucket: Record<string, unknown>; guard?: { when: string } } | "bail" {
+  if (rule.atRuleStack.length > 0) {
+    return "bail";
+  }
+
+  const { state, decl } = ctx;
+  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  const flatBucket: Record<string, unknown> = {};
+  const writeResult = processDeclarationsIntoBucket(
+    rule,
+    flatBucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (writeResult === "bail") {
+    return "bail";
+  }
+
+  let guard: { when: string } | undefined;
+  if (Object.keys(flatBucket).length === 0) {
+    const recovered = recoverStandaloneInterpolationsInPseudoBlock(rule, decl);
+    if (!recovered) {
+      return "bail";
+    }
+    Object.assign(flatBucket, recovered.cssProps);
+    guard = { when: recovered.when };
+
+    if (recovered.propName && !recovered.propName.startsWith("$")) {
+      ensureShouldForwardPropDrop(decl, recovered.propName);
+    }
+  }
+
+  return { flatBucket, guard };
 }
 
 /**
