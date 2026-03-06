@@ -4,6 +4,7 @@
  */
 import type { Element } from "stylis";
 import { PLACEHOLDER_RE, type StyledInterpolationSlot } from "./styled-css.js";
+import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
 
 export type CssValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
 
@@ -113,6 +114,9 @@ export function normalizeStylisAstToIR(
 
   const handleCommentNode = (raw: string): void => {
     const body = stripBlockComment(raw);
+    if (isPrettierIgnoreComment(body)) {
+      return;
+    }
     // Preserve actual `// ...` (stylis-converted) comments as trailing line comments.
     if (lastDecl && isStylisConvertedLineComment(raw)) {
       lastDecl.trailingLineComment = body;

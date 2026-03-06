@@ -72,6 +72,14 @@ export function escapeRegex(s: string): string {
 }
 
 /**
+ * Returns true if a comment body (without delimiters) is a prettier-ignore directive.
+ * These are formatting tool directives that should not be transferred to the output.
+ */
+export function isPrettierIgnoreComment(body: string): boolean {
+  return /^\s*prettier-ignore\s*$/.test(body);
+}
+
+/**
  * Normalizes whitespace in a CSS value string.
  * Collapses all sequences of whitespace (including newlines) to single spaces
  * and trims leading/trailing whitespace.

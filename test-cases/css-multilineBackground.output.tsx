@@ -8,7 +8,6 @@ export const App = () => (
 
 const styles = stylex.create({
   // Multiline gradient formatting should normalize to a compact backgroundImage value
-  // prettier-ignore
   card: {
     backgroundImage: "linear-gradient(to right, transparent, black 80%, hotpink)",
     color: "white",
