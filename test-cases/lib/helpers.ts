@@ -207,6 +207,13 @@ export const Browser = {
 export const highlight = () => (Browser.isTouchDevice ? "active" : "hover");
 
 /**
+ * Pseudo-class highlight expand helper: same semantics as `highlight`,
+ * but the codemod resolves it to a `pseudoExpand` — one merged style object
+ * with :active direct and :hover wrapped in a `canHover` media condition.
+ */
+export const highlightExpand = () => (Browser.isTouchDevice ? "active" : "hover");
+
+/**
  * Helper that wraps the conditional pseudo selection in a function call,
  * making the pairing explicit and enabling lint enforcement.
  */

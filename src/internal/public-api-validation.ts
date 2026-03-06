@@ -140,7 +140,7 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
         "",
         "Adapter shape:",
         "  {",
-        '    resolveSelector(context) { return { kind: "media" | "pseudoAlias", ... } | undefined }',
+        '    resolveSelector(context) { return { kind: "media" | "pseudoAlias" | "pseudoExpand", ... } | undefined }',
         "  }",
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,

@@ -17,7 +17,10 @@ import {
 } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import { appendPseudoAliasStyleArgs } from "./emit-intrinsic-simple.js";
+import {
+  appendPseudoAliasStyleArgs,
+  appendPseudoExpandStyleArgs,
+} from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
@@ -333,6 +336,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j,
       stylesIdentifier,
     );
+
+    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
+    for (const gp of appendPseudoExpandStyleArgs(
+      d.pseudoExpandSelectors,
+      styleArgs,
+      j,
+      stylesIdentifier,
+    )) {
+      if (!pseudoGuardProps.includes(gp)) {
+        pseudoGuardProps.push(gp);
+      }
+    }
 
     // Collect keys used by compound variants (they're handled separately)
     const compoundVariantKeys = new Set<string>();
