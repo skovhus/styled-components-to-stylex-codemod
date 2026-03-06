@@ -5,6 +5,7 @@
 import { extractRootAndPath, isAstNode } from "../utilities/jscodeshift-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
+import { isStylexFileImportSource } from "../transform-import-map.js";
 import { literalToStaticValue } from "./types.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
@@ -213,6 +214,9 @@ function resolveSlotExprToStaticValue(
 
   const imp = lookupImport(info.rootName, info.rootNode);
   if (!imp) {
+    return null;
+  }
+  if (isStylexFileImportSource(imp.source)) {
     return null;
   }
 

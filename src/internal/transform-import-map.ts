@@ -6,6 +6,10 @@ import { dirname, resolve as pathResolve } from "node:path";
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../adapter.js";
 
+export function isStylexFileImportSource(source: ImportSource): boolean {
+  return STYLEX_FILE_SOURCE_RE.test(source.value.replaceAll("\\", "/"));
+}
+
 export function buildImportMap(args: {
   root: Collection<ASTNode>;
   j: JSCodeshift;
@@ -89,3 +93,5 @@ export function buildImportMap(args: {
 
   return importMap;
 }
+
+const STYLEX_FILE_SOURCE_RE = /\.stylex(?:\.[cm]?[jt]sx?)?$/;

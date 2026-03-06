@@ -7,6 +7,7 @@ import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { isStylexFileImportSource } from "../transform-import-map.js";
 import {
   extractRootAndPath,
   getMemberPathFromIdentifier,
@@ -267,6 +268,11 @@ export function createCssHelperResolver(args: {
     if (info) {
       const imp = importMap.get(info.rootName);
       if (imp) {
+        if (isStylexFileImportSource(imp.source)) {
+          const exprString =
+            info.path.length > 0 ? `${info.rootName}.${info.path.join(".")}` : info.rootName;
+          return { ast: branch, exprString };
+        }
         const res = resolveValue({
           kind: "importedValue",
           importedName: imp.importedName,

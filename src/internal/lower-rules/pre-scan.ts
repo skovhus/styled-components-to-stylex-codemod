@@ -4,6 +4,7 @@
  */
 import type { ASTNode } from "jscodeshift";
 import type { DeclProcessingState } from "./decl-setup.js";
+import { isStylexFileImportSource } from "../transform-import-map.js";
 import { toStyleKey } from "../transform/helpers.js";
 import { extractRootAndPath, getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 
@@ -57,6 +58,9 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
               // Check if this is an imported styled component mixin that the adapter can resolve
               const importEntry = importMap?.get(expr.name);
               if (importEntry) {
+                if (isStylexFileImportSource(importEntry.source)) {
+                  continue;
+                }
                 const resolved = resolveValue({
                   kind: "importedValue",
                   importedName: importEntry.importedName,

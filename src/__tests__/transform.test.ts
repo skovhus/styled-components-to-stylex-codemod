@@ -1137,6 +1137,36 @@ export function App() {
     expect(code).not.toContain("$zIndex");
     expect(code).not.toContain("tokens.stylex");
   });
+
+  it("should not resolve imported values that already come from a .stylex file", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+import { zIndex } from "./tokens.stylex";
+
+const Overlay = styled.div\`
+  position: fixed;
+  z-index: \${zIndex.modal};
+\`;
+
+export function App() {
+  return <Overlay />;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "stylex-import.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toHaveLength(0);
+    const code = result.code ?? "";
+    expect(code).toContain('import { zIndex } from "./tokens.stylex";');
+    expect(code).toContain("zIndex: zIndex.modal");
+    expect(code).not.toContain("$zIndex");
+  });
 });
 
 describe("adapter configuration", () => {

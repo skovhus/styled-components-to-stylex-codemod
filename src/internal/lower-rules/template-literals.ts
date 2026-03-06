@@ -13,6 +13,7 @@ import {
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
+import { isStylexFileImportSource } from "../transform-import-map.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   cloneAstNode,
@@ -798,6 +799,9 @@ function resolveStaticTemplateExpressionAst(args: {
   if (importedInfo) {
     const imp = resolveImportInScope(importedInfo.rootName, importedInfo.rootNode);
     if (imp) {
+      if (isStylexFileImportSource(imp.source)) {
+        return expr as ExpressionKind;
+      }
       const res = handlerContext.resolveValue({
         kind: "importedValue",
         importedName: imp.importedName,

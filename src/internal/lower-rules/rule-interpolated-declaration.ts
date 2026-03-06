@@ -31,6 +31,7 @@ import {
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
+import { isStylexFileImportSource } from "../transform-import-map.js";
 import {
   extractStaticPartsForDecl,
   tryHandleInterpolatedStringValue,
@@ -481,6 +482,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (!imp) {
         return null;
       }
+      if (isStylexFileImportSource(imp.source)) {
+        return { resolved: expr, imports: [] };
+      }
       const resolveValueContext: ResolveValueContext = {
         kind: "importedValue",
         importedName: imp.importedName,
@@ -681,6 +685,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           // Case 2: Imported styled component mixin (resolved via adapter)
           const importEntry = importMap?.get(expr.name);
           if (importEntry && !cssHelperNames.has(expr.name)) {
+            if (isStylexFileImportSource(importEntry.source)) {
+              const extras = decl.extraStylexPropsArgs ?? [];
+              const order = decl.mixinOrder ?? [];
+              extras.push({ expr, afterBase: true });
+              order.push("propsArg");
+              decl.extraStylexPropsArgs = extras;
+              decl.mixinOrder = order;
+              continue;
+            }
             const resolved = resolveValue({
               kind: "importedValue",
               importedName: importEntry.importedName,
