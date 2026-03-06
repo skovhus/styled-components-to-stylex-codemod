@@ -68,13 +68,13 @@ export function Button(
   return (
     <button
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.button,
         variant === "primary" && styles.buttonVariantPrimary,
         styles.buttonFontSize({
           size,
         }),
-      )}
+      ]}
     >
       {children}
     </button>

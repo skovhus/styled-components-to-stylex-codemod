@@ -14,11 +14,7 @@ export function Badge(props: Props & Omit<React.ComponentProps<"div">, "classNam
   return (
     <div
       {...rest}
-      {...stylex.props(
-        styles.badge,
-        sizeVariants[size],
-        color != null && styles.badgeBackgroundColor(color),
-      )}
+      sx={[styles.badge, sizeVariants[size], color != null && styles.badgeBackgroundColor(color)]}
     >
       {children}
     </div>

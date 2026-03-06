@@ -7,7 +7,7 @@ export function App() {
   return (
     <div style={{ padding: 16 }}>
       <CrossFileLink href="#" {...stylex.props(CrossFileLinkMarker)}>
-        <span {...stylex.props(styles.badge, styles.badgeInCrossFileLink)} />
+        <span sx={[styles.badge, styles.badgeInCrossFileLink]} />
         Hover me
       </CrossFileLink>
     </div>

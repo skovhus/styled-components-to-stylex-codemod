@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.thing, stylex.defaultMarker())}>{props.children}</div>;
+  return <div sx={[styles.thing, stylex.defaultMarker()]}>{props.children}</div>;
 }
 
 export const App = () => (

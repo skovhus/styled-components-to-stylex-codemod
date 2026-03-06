@@ -22,6 +22,9 @@ export const fixtureAdapter = defineAdapter({
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
 
+  // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (StyleX ≥0.18)
+  useSxProp: true,
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both
@@ -556,6 +559,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,
+  useSxProp: false,
   externalInterface() {
     return { styles: false, as: false, ref: false };
   },

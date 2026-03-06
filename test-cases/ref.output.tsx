@@ -8,7 +8,7 @@ export const App = () => {
     inputRef.current?.focus();
   }, []);
 
-  return <input ref={inputRef} placeholder="Focus me on mount!" {...stylex.props(styles.input)} />;
+  return <input ref={inputRef} placeholder="Focus me on mount!" sx={styles.input} />;
 };
 
 const styles = stylex.create({

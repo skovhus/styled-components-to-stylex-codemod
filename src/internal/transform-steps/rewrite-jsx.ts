@@ -569,15 +569,27 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // combine StyleX output with user-provided className/style values.
         const needsMerge =
           decl.isDirectJsxResolution && (classNameAttr !== null || styleAttr !== null);
-        const stylexCallExpr = needsMerge
-          ? buildMergedSxCall(j, styleArgs, classNameAttr, styleAttr)
-          : j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
-              ...styleArgs,
-            ]);
-        const stylexSpread = j.jsxSpreadAttribute(stylexCallExpr);
+        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
+        const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
+        const stylexAttr = useSxProp
+          ? (() => {
+              const sxExpr =
+                styleArgs.length === 1 && styleArgs[0]
+                  ? styleArgs[0]
+                  : j.arrayExpression([...styleArgs]);
+              return j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxExpr));
+            })()
+          : j.jsxSpreadAttribute(
+              needsMerge
+                ? buildMergedSxCall(j, styleArgs, classNameAttr, styleAttr)
+                : j.callExpression(
+                    j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+                    [...styleArgs],
+                  ),
+            );
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
-          stylexSpread,
+          stylexAttr,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 

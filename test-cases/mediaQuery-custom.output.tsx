@@ -9,7 +9,7 @@ export function ConditionalContainer(props: ConditionalContainerProps) {
   const { children, $size, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.conditionalContainerFontSizeFromProps(props))}>
+    <div {...rest} sx={styles.conditionalContainerFontSizeFromProps(props)}>
       {children}
     </div>
   );

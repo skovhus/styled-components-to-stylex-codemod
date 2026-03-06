@@ -16,3 +16,22 @@ declare module "styled-components" {
   /** override the useThemeType */
   export function useTheme(): TestCaseTheme;
 }
+
+// Augment React JSX to accept the `sx` prop on intrinsic elements.
+// The StyleX babel plugin (≥0.18, sxPropName option) transforms
+// `<div sx={styles.base} />` to `<div {...stylex.props(styles.base)} />`
+// at build time, so the prop never reaches the DOM.
+import type { CompiledStyles, InlineStyles, StyleXArray } from "@stylexjs/stylex";
+
+type StyleXSxProp = StyleXArray<
+  (null | undefined | CompiledStyles) | boolean | Readonly<[CompiledStyles, InlineStyles]>
+>;
+
+declare module "react" {
+  interface AriaAttributes {
+    sx?: StyleXSxProp;
+  }
+  interface HTMLAttributes<T> {
+    sx?: StyleXSxProp;
+  }
+}

@@ -36,12 +36,12 @@ const scaleUp = stylex.keyframes({
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.fadeBox)}>Fade in</div>
-    <div {...stylex.props(styles.animatedCard)}>Animated Card</div>
-    <div {...stylex.props(styles.bounceIn)}>Bounce In</div>
-    <div {...stylex.props(styles.sequentialAnimation)}>Sequential</div>
-    <div {...stylex.props(styles.fullAnimation)}>Full Animation</div>
-    <div {...stylex.props(styles.mixedStates)}>Mixed States</div>
+    <div sx={styles.fadeBox}>Fade in</div>
+    <div sx={styles.animatedCard}>Animated Card</div>
+    <div sx={styles.bounceIn}>Bounce In</div>
+    <div sx={styles.sequentialAnimation}>Sequential</div>
+    <div sx={styles.fullAnimation}>Full Animation</div>
+    <div sx={styles.mixedStates}>Mixed States</div>
   </div>
 );
 

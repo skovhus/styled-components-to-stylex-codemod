@@ -8,7 +8,7 @@ const speedLabel = transitionSpeed("fast");
 export const App = () => (
   <div>
     <div>{speedLabel}</div>
-    <div {...stylex.props(styles.box)} />
+    <div sx={styles.box} />
   </div>
 );
 

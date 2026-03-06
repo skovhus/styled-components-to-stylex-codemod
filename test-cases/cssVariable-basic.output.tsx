@@ -3,9 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { vars } from "./css-variables.stylex";
 
 export const App = () => (
-  <div {...stylex.props(styles.card)}>
-    <p {...stylex.props(styles.text)}>Some text content</p>
-    <button {...stylex.props(styles.button)}>Click me</button>
+  <div sx={styles.card}>
+    <p sx={styles.text}>Some text content</p>
+    <button sx={styles.button}>Click me</button>
   </div>
 );
 

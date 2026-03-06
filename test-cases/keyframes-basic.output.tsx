@@ -10,7 +10,7 @@ const rotate = stylex.keyframes({
   },
 });
 
-export const App = () => <div {...stylex.props(styles.rotate)}>💅</div>;
+export const App = () => <div sx={styles.rotate}>💅</div>;
 
 const styles = stylex.create({
   rotate: {

@@ -14,12 +14,12 @@ function HoverSwatch(props: HoverSwatchProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.hoverSwatch,
         styles.hoverSwatchColor({
           $tone,
         }),
-      )}
+      ]}
     >
       {children}
     </div>
@@ -35,12 +35,12 @@ function HoverMediaSwatch(props: HoverMediaSwatchProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.hoverMediaSwatch,
         styles.hoverMediaSwatchColor({
           $tone,
         }),
-      )}
+      ]}
     >
       {children}
     </div>

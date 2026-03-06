@@ -14,7 +14,7 @@ const ThemeInfo = () => {
 export const App = () => (
   <ThemeProvider theme={theme}>
     <div style={{ display: "grid", gap: "8px", padding: "12px" }}>
-      <button {...stylex.props(styles.button)}>Themed Button</button>
+      <button sx={styles.button}>Themed Button</button>
       <ThemeInfo />
     </div>
   </ThemeProvider>

@@ -7,10 +7,7 @@ function Circle(props: CircleProps) {
   const { children, $isAnimated, ...rest } = props;
 
   return (
-    <path
-      {...rest}
-      {...stylex.props(styles.circle, $isAnimated ? styles.circleAnimated : undefined)}
-    >
+    <path {...rest} sx={[styles.circle, $isAnimated ? styles.circleAnimated : undefined]}>
       {children}
     </path>
   );
@@ -19,9 +16,9 @@ function Circle(props: CircleProps) {
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
-      <div {...stylex.props(styles.fadeIn)}>Fading In</div>
-      <div {...stylex.props(styles.slideUp)}>Sliding Up</div>
-      <div {...stylex.props(styles.bounceIn)}>Bouncing In</div>
+      <div sx={styles.fadeIn}>Fading In</div>
+      <div sx={styles.slideUp}>Sliding Up</div>
+      <div sx={styles.bounceIn}>Bouncing In</div>
       <svg>
         <Circle $isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />

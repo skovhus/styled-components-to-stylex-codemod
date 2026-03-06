@@ -11,13 +11,13 @@ function Button(props: ButtonProps) {
 
   return (
     <button
-      {...stylex.props(
+      sx={[
         styles.button,
         $primary ? styles.buttonPrimary : undefined,
         hollow ? styles.buttonHollow : undefined,
         !hollow && $primary ? styles.buttonNotHollowPrimary : undefined,
         !hollow && !$primary && styles.buttonNotHollowNotPrimary,
-      )}
+      ]}
     >
       {children}
     </button>
@@ -36,12 +36,12 @@ function Badge(props: BadgeProps) {
 
   return (
     <span
-      {...stylex.props(
+      sx={[
         styles.badge,
         size === "small" && styles.badgeSizeSmall,
         size !== "small" && size === "large" && styles.badgeSizeNotSmallSizeLarge,
         size !== "small" && size !== "large" && styles.badgeSizeNotSmallSizeNotLarge,
-      )}
+      ]}
     >
       {children}
     </span>

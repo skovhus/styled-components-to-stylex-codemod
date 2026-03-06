@@ -8,10 +8,10 @@ function Box(props: React.PropsWithChildren<{}>) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.box,
         theme.mode === "dark" ? styles.boxThemeModeDark : styles.boxThemeModeNotDark,
-      )}
+      ]}
     >
       {props.children}
     </div>

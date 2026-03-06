@@ -17,7 +17,7 @@ export function Badge(props: BadgeProps) {
   const { children, user, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(user.role === Role.admin && styles.badgeUserRoleAdmin)}>
+    <div {...rest} sx={user.role === Role.admin && styles.badgeUserRoleAdmin}>
       {children}
     </div>
   );

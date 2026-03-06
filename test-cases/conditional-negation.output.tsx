@@ -12,7 +12,7 @@ export function Tooltip(props: TooltipProps) {
   const { children, $open, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(!$open && styles.tooltipNotOpen)}>
+    <div {...rest} sx={!$open && styles.tooltipNotOpen}>
       {children}
     </div>
   );
@@ -27,7 +27,7 @@ export function Overlay(props: OverlayProps) {
   const { children, $visible, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.overlay, !$visible && styles.overlayNotVisible)}>
+    <div {...rest} sx={[styles.overlay, !$visible && styles.overlayNotVisible]}>
       {children}
     </div>
   );

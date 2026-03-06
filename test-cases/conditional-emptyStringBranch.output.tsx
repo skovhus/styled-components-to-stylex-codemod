@@ -9,11 +9,7 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, $disableMinWidth } = props;
 
-  return (
-    <div {...stylex.props(styles.box, !$disableMinWidth && styles.boxNotDisableMinWidth)}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, !$disableMinWidth && styles.boxNotDisableMinWidth]}>{children}</div>;
 }
 
 type BoxAltProps = React.PropsWithChildren<{
@@ -25,9 +21,7 @@ function BoxAlt(props: BoxAltProps) {
   const { children, $enableMinWidth } = props;
 
   return (
-    <div
-      {...stylex.props(styles.boxAlt, $enableMinWidth ? styles.boxAltEnableMinWidth : undefined)}
-    >
+    <div sx={[styles.boxAlt, $enableMinWidth ? styles.boxAltEnableMinWidth : undefined]}>
       {children}
     </div>
   );
@@ -41,11 +35,7 @@ type ContainerProps = React.PropsWithChildren<{
 function Container(props: ContainerProps) {
   const { children, $compact } = props;
 
-  return (
-    <div {...stylex.props(styles.container, !$compact && styles.containerNotCompact)}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.container, !$compact && styles.containerNotCompact]}>{children}</div>;
 }
 
 type WrapperProps = React.PropsWithChildren<{
@@ -56,11 +46,7 @@ type WrapperProps = React.PropsWithChildren<{
 function Wrapper(props: WrapperProps) {
   const { children, $fullWidth } = props;
 
-  return (
-    <div {...stylex.props(styles.wrapper, !$fullWidth && styles.wrapperNotFullWidth)}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.wrapper, !$fullWidth && styles.wrapperNotFullWidth]}>{children}</div>;
 }
 
 type WrapperAltProps = React.PropsWithChildren<{
@@ -72,9 +58,7 @@ function WrapperAlt(props: WrapperAltProps) {
   const { children, $narrow } = props;
 
   return (
-    <div {...stylex.props(styles.wrapperAlt, $narrow ? styles.wrapperAltNarrow : undefined)}>
-      {children}
-    </div>
+    <div sx={[styles.wrapperAlt, $narrow ? styles.wrapperAltNarrow : undefined]}>{children}</div>
   );
 }
 

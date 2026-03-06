@@ -13,11 +13,11 @@ function Button(props: ButtonProps) {
   return (
     <button
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.button,
         color != null && styles.buttonBackgroundColor(color),
         size === "large" && styles.buttonSizeLarge,
-      )}
+      ]}
     >
       {children}
     </button>
@@ -31,7 +31,7 @@ function Link(props: LinkProps) {
   const { children, isActive, ...rest } = props;
 
   return (
-    <a {...rest} {...stylex.props(styles.link, isActive ? styles.linkActive : undefined)}>
+    <a {...rest} sx={[styles.link, isActive ? styles.linkActive : undefined]}>
       {children}
     </a>
   );
@@ -49,11 +49,11 @@ function Box(props: BoxProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.box,
         $background != null && styles.boxBackgroundColor($background),
         $padding != null && styles.boxPadding($padding),
-      )}
+      ]}
     >
       {children}
     </div>
@@ -73,12 +73,12 @@ function Card(props: CardProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.card,
         variant === "primary" && styles.cardVariantPrimary,
         styles.cardBoxShadow(props),
         rounded ? styles.cardRounded : undefined,
-      )}
+      ]}
     >
       {children}
     </div>
@@ -100,7 +100,7 @@ export const App = () => (
     <Box $background="#f0f0f0" $padding="24px">
       Box with transient-like props
     </Box>
-    <div {...stylex.props(styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74"))}>
+    <div sx={[styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74")]}>
       Nullish Coalescing Box
     </div>
     <Card variant="primary" elevation={3} rounded>

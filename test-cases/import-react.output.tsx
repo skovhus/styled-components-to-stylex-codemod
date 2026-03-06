@@ -8,7 +8,7 @@ export function Card(props: Pick<React.ComponentProps<"div">, "ref" | "children"
   const { children, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.card)}>
+    <div {...rest} sx={styles.card}>
       {children}
     </div>
   );
@@ -19,7 +19,7 @@ export function Button(props: Pick<React.ComponentProps<"button">, "ref" | "chil
   const { children, ...rest } = props;
 
   return (
-    <button {...rest} {...stylex.props(styles.button)}>
+    <button {...rest} sx={styles.button}>
       {children}
     </button>
   );
@@ -37,7 +37,7 @@ export function ThemeSpan(
   const { children, variant, ...rest } = props;
 
   return (
-    <span {...rest} {...stylex.props(styles.themeSpanColor(variant))}>
+    <span {...rest} sx={styles.themeSpanColor(variant)}>
       {children}
     </span>
   );

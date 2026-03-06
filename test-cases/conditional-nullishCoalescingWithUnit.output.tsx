@@ -9,11 +9,7 @@ type BoxProps = {
 function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, $delay } = props;
 
-  return (
-    <div {...stylex.props(styles.box, styles.boxTransitionDelay(`${$delay ?? 0}ms`))}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, styles.boxTransitionDelay(`${$delay ?? 0}ms`)]}>{children}</div>;
 }
 
 export const App = () => (

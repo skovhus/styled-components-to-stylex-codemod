@@ -211,7 +211,9 @@ export function appendMergingAttrs(
       j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(merging.classNameAttr)),
     );
   }
-  if (merging.jsxSpreadExpr) {
+  if (merging.sxPropExpr) {
+    attrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(merging.sxPropExpr)));
+  } else if (merging.jsxSpreadExpr) {
     attrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
   }
   if (merging.classNameAttr && !merging.classNameBeforeSpread) {

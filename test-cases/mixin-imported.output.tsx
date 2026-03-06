@@ -3,7 +3,7 @@ import { helpers } from "./lib/helpers.stylex";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-    <div {...stylex.props(styles.elementWithImportedMixin, helpers.truncate)}>
+    <div sx={[styles.elementWithImportedMixin, helpers.truncate]}>
       This long text should be truncated with ellipsis because the mixin overrides overflow
     </div>
   </div>

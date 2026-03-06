@@ -775,6 +775,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
+        isIntrinsicElement: false,
       });
 
       const stmts: StatementKind[] = [declStmt];

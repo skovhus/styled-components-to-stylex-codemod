@@ -10,10 +10,10 @@ export function Container(props: ContainerProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.container,
         Browser.isSafari ? styles.containerBrowserIsSafari(size) : styles.containerDefault(size),
-      )}
+      ]}
     >
       {children}
     </div>

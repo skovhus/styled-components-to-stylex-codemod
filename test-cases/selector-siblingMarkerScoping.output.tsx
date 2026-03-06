@@ -6,11 +6,11 @@ import * as stylex from "@stylexjs/stylex";
 // an ancestor relation override), its marker could incorrectly activate
 // Row's sibling styles. Use defineMarker() for strict scoping.
 function Row(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.row, stylex.defaultMarker())}>{props.children}</div>;
+  return <div sx={[styles.row, stylex.defaultMarker()]}>{props.children}</div>;
 }
 
 export const App = () => (
-  <div {...stylex.props(styles.container)}>
+  <div sx={styles.container}>
     <Row>First</Row>
     <Row>Second (should have border-top)</Row>
   </div>

@@ -21,10 +21,7 @@ export function TransientButton(props: TransientButtonProps) {
   return (
     <button
       {...rest}
-      {...stylex.props(
-        styles.transientButton,
-        $variant === "primary" && styles.transientButtonVariantPrimary,
-      )}
+      sx={[styles.transientButton, $variant === "primary" && styles.transientButtonVariantPrimary]}
     >
       {children}
     </button>
@@ -43,11 +40,11 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
   return (
     <button
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.explicitFilterButton,
         customProp != null && styles.explicitFilterButtonBackgroundColor(customProp),
         styles.explicitFilterButtonPadding(props),
-      )}
+      ]}
     >
       {children}
     </button>

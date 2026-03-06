@@ -24,10 +24,10 @@ function FadeInWithDelay(props: FadeInWithDelayProps) {
 
   return (
     <span
-      {...stylex.props(
+      sx={[
         styles.fadeInWithDelay,
         $duration != null && styles.fadeInWithDelayAnimationDuration(`${$duration ?? 200}ms`),
-      )}
+      ]}
     >
       {children}
     </span>

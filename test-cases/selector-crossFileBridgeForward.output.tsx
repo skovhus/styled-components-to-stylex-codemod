@@ -10,11 +10,7 @@ export function StyledCollapseButton(props: Pick<React.ComponentProps<"div">, "r
   return (
     <div
       {...rest}
-      {...stylex.props(
-        styles.styledCollapseButton,
-        stylex.defaultMarker(),
-        StyledCollapseButtonMarker,
-      )}
+      sx={[styles.styledCollapseButton, stylex.defaultMarker(), StyledCollapseButtonMarker]}
     >
       {children}
     </div>

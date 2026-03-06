@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { animated } from "./lib/react-spring";
 
 export const App = () => (
-  <div {...stylex.props(styles.simpleBox)}>
+  <div sx={styles.simpleBox}>
     <animated.div role="region" {...stylex.props(styles.animatedBox)}>
       Hello
     </animated.div>

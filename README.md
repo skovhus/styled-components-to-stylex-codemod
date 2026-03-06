@@ -34,6 +34,8 @@ const adapter = defineAdapter({
   },
   // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
+  // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
+  useSxProp: false,
   // Optional: customize the runtime theme hook import/call used for theme conditionals
   // Defaults to { functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }
   themeHook: {
@@ -163,6 +165,12 @@ const adapter = defineAdapter({
     functionName: "mergedSx",
     importSource: { kind: "specifier", value: "./lib/mergedSx" },
   },
+
+  /**
+   * Emit sx={} JSX attributes instead of {...stylex.props()} spreads.
+   * Requires @stylexjs/babel-plugin ≥0.18 with sxPropName enabled.
+   */
+  useSxProp: false,
 
   /**
    * Optional: customize the runtime theme hook used when wrappers need theme booleans.

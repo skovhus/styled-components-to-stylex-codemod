@@ -2,12 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export function App() {
   return (
-    <div
-      data-testid="mixed-inline-base"
-      role="region"
-      id="mixed-box"
-      {...stylex.props(styles.container)}
-    >
+    <div data-testid="mixed-inline-base" role="region" id="mixed-box" sx={styles.container}>
       Mixed attrs
     </div>
   );

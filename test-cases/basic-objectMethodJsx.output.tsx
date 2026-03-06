@@ -7,7 +7,7 @@ const dynamicColor = "#BF4F74";
 // because the method body executes at runtime, not during module initialization
 const viewConfig = {
   render() {
-    return <button {...stylex.props(styles.styledButton)}>Click me</button>;
+    return <button sx={styles.styledButton}>Click me</button>;
   },
 };
 

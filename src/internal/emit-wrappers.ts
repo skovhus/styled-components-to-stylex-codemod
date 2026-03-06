@@ -24,6 +24,7 @@ export function emitWrappers(args: {
   themeHook?: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
+  useSxProp: boolean;
 }): void {
   const {
     root,
@@ -38,6 +39,7 @@ export function emitWrappers(args: {
     themeHook,
     emptyStyleKeys,
     ancestorSelectorParents,
+    useSxProp,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
@@ -58,6 +60,7 @@ export function emitWrappers(args: {
     themeHook: themeHook ?? DEFAULT_THEME_HOOK,
     emptyStyleKeys,
     ancestorSelectorParents,
+    useSxProp,
   });
 
   const emitted: ASTNode[] = [];

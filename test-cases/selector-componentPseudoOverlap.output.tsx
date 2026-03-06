@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <a href="#" {...stylex.props(styles.link, stylex.defaultMarker())}>
-    <span {...stylex.props(styles.badge, styles.badgeInLink)}>
+  <a href="#" sx={[styles.link, stylex.defaultMarker()]}>
+    <span sx={[styles.badge, styles.badgeInLink]}>
       Label (gray, orange on focus, blue on Link hover)
     </span>
   </a>

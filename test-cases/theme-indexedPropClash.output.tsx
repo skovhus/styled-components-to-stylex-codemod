@@ -11,7 +11,7 @@ type DotProps = React.PropsWithChildren<{
 function Dot(props: DotProps) {
   const { children, $colors } = props;
 
-  return <div {...stylex.props(styles.dotBackgroundColor($colors))}>{children}</div>;
+  return <div sx={styles.dotBackgroundColor($colors)}>{children}</div>;
 }
 
 export const App = () => <Dot $colors="labelBase">Hello</Dot>;

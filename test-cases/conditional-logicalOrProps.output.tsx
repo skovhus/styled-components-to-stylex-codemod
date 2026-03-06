@@ -12,9 +12,7 @@ function Dot(props: DotProps) {
   const { children, $active, $completed } = props;
 
   return (
-    <div
-      {...stylex.props(styles.dot, $active || $completed ? styles.dotActiveOrCompleted : undefined)}
-    >
+    <div sx={[styles.dot, $active || $completed ? styles.dotActiveOrCompleted : undefined]}>
       {children}
     </div>
   );
@@ -30,9 +28,7 @@ function Step(props: StepProps) {
   const { children, $active, $completed } = props;
 
   return (
-    <div
-      {...stylex.props(styles.step, !($active || $completed) && styles.stepNotActiveOrCompleted)}
-    >
+    <div sx={[styles.step, !($active || $completed) && styles.stepNotActiveOrCompleted]}>
       {children}
     </div>
   );
@@ -50,10 +46,10 @@ function Badge(props: BadgeProps) {
 
   return (
     <span
-      {...stylex.props(
+      sx={[
         styles.badge,
         $visible && ($primary || $accent) ? styles.badgeVisiblePrimaryOrAccent : undefined,
-      )}
+      ]}
     >
       {children}
     </span>

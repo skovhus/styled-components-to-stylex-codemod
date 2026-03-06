@@ -2,15 +2,15 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Gutter(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.gutter)}>{props.children}</div>;
+  return <div sx={styles.gutter}>{props.children}</div>;
 }
 
 function Code(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.code)}>{props.children}</div>;
+  return <div sx={styles.code}>{props.children}</div>;
 }
 
 export const App = () => (
-  <div {...stylex.props(styles.container)}>
+  <div sx={styles.container}>
     <Gutter>1</Gutter>
     <Code>const answer = 42;</Code>
     <Gutter>2</Gutter>

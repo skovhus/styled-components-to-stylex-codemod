@@ -7,7 +7,7 @@ export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <CrossFileIcon />
-      <button {...stylex.props(styles.button, styles.iconButton, IconButtonMarker)}>
+      <button sx={[styles.button, styles.iconButton, IconButtonMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInIconButton)} />
         Hover
       </button>

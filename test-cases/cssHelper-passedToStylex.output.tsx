@@ -5,9 +5,7 @@ import { scrollFadeMaskStyles, helpers } from "./lib/helpers.stylex";
 // Pattern 1: css helper used alongside regular CSS properties
 function Container(props: React.PropsWithChildren<{}>) {
   return (
-    <div
-      {...stylex.props(styles.container, scrollFadeMaskStyles(18, "both"), styles.containerAfter1)}
-    >
+    <div sx={[styles.container, scrollFadeMaskStyles(18, "both"), styles.containerAfter1]}>
       {props.children}
     </div>
   );
@@ -15,19 +13,19 @@ function Container(props: React.PropsWithChildren<{}>) {
 
 // Pattern 2: css helper as the only interpolation
 function FadeBox(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(scrollFadeMaskStyles(24, "bottom"))}>{props.children}</div>;
+  return <div sx={scrollFadeMaskStyles(24, "bottom")}>{props.children}</div>;
 }
 
 // Pattern 3: Multiple css helpers
 function ComplexFade(props: React.PropsWithChildren<{}>) {
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.complexFade,
         scrollFadeMaskStyles(12, "top"),
         styles.complexFadeAfter1,
         scrollFadeMaskStyles(12, "bottom"),
-      )}
+      ]}
     >
       {props.children}
     </div>
@@ -39,9 +37,7 @@ function ComplexFade(props: React.PropsWithChildren<{}>) {
 // centered (flex) instead of stacking normally (block), producing a visible pixel diff.
 function OverrideDisplay(props: React.PropsWithChildren<{}>) {
   return (
-    <div
-      {...stylex.props(styles.overrideDisplay, helpers.flexCenter, styles.overrideDisplayAfter1)}
-    >
+    <div sx={[styles.overrideDisplay, helpers.flexCenter, styles.overrideDisplayAfter1]}>
       {props.children}
     </div>
   );

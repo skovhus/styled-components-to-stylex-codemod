@@ -31,7 +31,7 @@ function DynamicBox(props: DynamicBoxProps) {
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.staticBox)} />
+    <div sx={styles.staticBox} />
     <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
   </div>
 );

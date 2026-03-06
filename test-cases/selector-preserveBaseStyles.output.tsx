@@ -2,8 +2,8 @@ import * as stylex from "@stylexjs/stylex";
 
 export function App() {
   return (
-    <div {...stylex.props(styles.parent, stylex.defaultMarker())}>
-      <div {...stylex.props(styles.child, styles.childInParent)}>child</div>
+    <div sx={[styles.parent, stylex.defaultMarker()]}>
+      <div sx={[styles.child, styles.childInParent]}>child</div>
     </div>
   );
 }

@@ -5,15 +5,15 @@ export function Select(props: Omit<React.ComponentProps<"select">, "className" |
   const { children, ...rest } = props;
 
   return (
-    <select {...rest} {...stylex.props(styles.select)}>
+    <select {...rest} sx={styles.select}>
       {children}
     </select>
   );
 }
 
 export const App = () => (
-  <section {...stylex.props(styles.wrapper)}>
-    <h1 {...stylex.props(styles.title)}>Hello World!</h1>
+  <section sx={styles.wrapper}>
+    <h1 sx={styles.title}>Hello World!</h1>
     <Select onChange={(e: React.ChangeEvent<HTMLSelectElement>) => console.log(e.target.value)} />
   </section>
 );

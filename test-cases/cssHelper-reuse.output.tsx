@@ -10,16 +10,14 @@ function CheckMark(props: CheckMarkProps) {
   const { children, $opaque } = props;
 
   return (
-    <div {...stylex.props(styles.checkMark, $opaque ? styles.checkMarkOpaque : undefined)}>
-      {children}
-    </div>
+    <div sx={[styles.checkMark, $opaque ? styles.checkMarkOpaque : undefined]}>{children}</div>
   );
 }
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.groupHeaderRow, styles.rowBase)}>Group</div>
-    <div {...stylex.props(styles.projectRow, styles.rowBase)}>Project</div>
+    <div sx={[styles.groupHeaderRow, styles.rowBase]}>Group</div>
+    <div sx={[styles.projectRow, styles.rowBase]}>Project</div>
     <CheckMark $opaque={true} />
     <CheckMark $opaque={false} />
   </div>

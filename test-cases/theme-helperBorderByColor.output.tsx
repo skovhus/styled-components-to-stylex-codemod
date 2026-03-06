@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 function Box(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.borderBottom)}>{props.children}</div>;
+  return <div sx={styles.borderBottom}>{props.children}</div>;
 }
 
 export const App = () => <Box />;

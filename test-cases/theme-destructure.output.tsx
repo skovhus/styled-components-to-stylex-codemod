@@ -8,9 +8,7 @@ function StatusBadge(props: React.PropsWithChildren<Props>) {
   const { children, enabled } = props;
 
   return (
-    <div {...stylex.props(styles.statusBadge, enabled ? styles.statusBadgeEnabled : undefined)}>
-      {children}
-    </div>
+    <div sx={[styles.statusBadge, enabled ? styles.statusBadgeEnabled : undefined]}>{children}</div>
   );
 }
 

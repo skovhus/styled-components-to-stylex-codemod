@@ -2,9 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 
 export function App() {
   return (
-    <div {...stylex.props(styles.wrapper)}>
-      <div {...stylex.props(styles.flexCenterColumnGap)}>Content A</div>
-      <div {...stylex.props(styles.flex)}>Content B</div>
+    <div sx={styles.wrapper}>
+      <div sx={styles.flexCenterColumnGap}>Content A</div>
+      <div sx={styles.flex}>Content B</div>
     </div>
   );
 }

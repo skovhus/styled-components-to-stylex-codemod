@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
-      <div {...stylex.props(styles.zoomIn)}>Zoom In</div>
-      <div {...stylex.props(styles.slideDown)}>Slide Down</div>
+      <div sx={styles.zoomIn}>Zoom In</div>
+      <div sx={styles.slideDown}>Slide Down</div>
     </div>
   );
 }

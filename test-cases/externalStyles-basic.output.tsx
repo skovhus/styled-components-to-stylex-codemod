@@ -24,7 +24,7 @@ export function ExportedButton<C extends React.ElementType = "button">(
 export const App = () => (
   <div>
     <ExportedButton>Styled Button</ExportedButton>
-    <div {...stylex.props(styles.internalBox)}>Internal Box</div>
+    <div sx={styles.internalBox}>Internal Box</div>
   </div>
 );
 

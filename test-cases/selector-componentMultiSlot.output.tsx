@@ -2,8 +2,8 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 export const App = () => (
-  <a href="#" {...stylex.props(styles.link, stylex.defaultMarker())}>
-    <span {...stylex.props(styles.badge, styles.badgeInLink)}>Label</span>
+  <a href="#" sx={[styles.link, stylex.defaultMarker()]}>
+    <span sx={[styles.badge, styles.badgeInLink]}>Label</span>
     Hover me
   </a>
 );

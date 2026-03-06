@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <button {...stylex.props(styles.buttonStylesRootCss, styles.buttonStylesSizeCss, styles.button)}>
+  <button sx={[styles.buttonStylesRootCss, styles.buttonStylesSizeCss, styles.button]}>
     Click me
   </button>
 );

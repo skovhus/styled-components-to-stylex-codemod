@@ -21,11 +21,11 @@ function FadeInContainer(props: FadeInContainerProps) {
 
   return (
     <span
-      {...stylex.props(
+      sx={[
         styles.fadeInContainer,
         $fadeInDuration != null &&
           styles.fadeInContainerAnimationDuration(`${$fadeInDuration ?? 200}ms`),
-      )}
+      ]}
     >
       {children}
     </span>

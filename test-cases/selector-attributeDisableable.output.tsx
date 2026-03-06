@@ -5,7 +5,7 @@ function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabl
   const { children, ...rest } = props;
 
   return (
-    <button {...rest} {...stylex.props(styles.button)}>
+    <button {...rest} sx={styles.button}>
       {children}
     </button>
   );
@@ -15,7 +15,7 @@ function Select(props: Pick<React.ComponentProps<"select">, "children" | "disabl
   const { children, ...rest } = props;
 
   return (
-    <select {...rest} {...stylex.props(styles.select)}>
+    <select {...rest} sx={styles.select}>
       {children}
     </select>
   );
@@ -27,7 +27,7 @@ function Textarea(
   const { children, ...rest } = props;
 
   return (
-    <textarea {...rest} {...stylex.props(styles.textarea)}>
+    <textarea {...rest} sx={styles.textarea}>
       {children}
     </textarea>
   );

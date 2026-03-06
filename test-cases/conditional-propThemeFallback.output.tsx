@@ -18,13 +18,13 @@ export function ColorBadge(
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.colorBadge,
         hollow ? styles.colorBadgeHollow : undefined,
         hollow ? styles.colorBadgeBorderColor(color ? color : $colors.labelMuted) : undefined,
         !hollow && styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
         sizeVariants[size],
-      )}
+      ]}
     >
       {children}
     </div>

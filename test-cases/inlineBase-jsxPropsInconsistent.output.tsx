@@ -9,9 +9,7 @@ function Container(props: ContainerProps) {
   const { children, align } = props;
 
   return (
-    <div {...stylex.props(styles.container, align != null && containerAlignVariants[align])}>
-      {children}
-    </div>
+    <div sx={[styles.container, align != null && containerAlignVariants[align]]}>{children}</div>
   );
 }
 

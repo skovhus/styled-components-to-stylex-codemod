@@ -13,7 +13,7 @@ function Box(props: BoxProps) {
   const theme = useTheme();
 
   return (
-    <div {...stylex.props(styles.box, theme.isDark && props.enabled ? styles.boxDark : undefined)}>
+    <div sx={[styles.box, theme.isDark && props.enabled ? styles.boxDark : undefined]}>
       {children}
     </div>
   );

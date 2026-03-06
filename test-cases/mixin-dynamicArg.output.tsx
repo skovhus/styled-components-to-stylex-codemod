@@ -11,10 +11,10 @@ function TitleText(props: TitleTextProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.titleText,
         $oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
-      )}
+      ]}
     >
       {children}
     </div>

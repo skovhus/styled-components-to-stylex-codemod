@@ -14,7 +14,7 @@ export function EmojiContainer(props: EmojiContainerProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.emojiContainer,
         styles.emojiContainerWidth($size),
         styles.emojiContainerMaxWidth($size),
@@ -22,7 +22,7 @@ export function EmojiContainer(props: EmojiContainerProps) {
         Browser.isSafari
           ? styles.emojiContainerBrowserIsSafari($size)
           : styles.emojiContainerDefault($size),
-      )}
+      ]}
     >
       {children}
     </div>

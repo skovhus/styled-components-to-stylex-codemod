@@ -8,10 +8,10 @@ function Toggle(props: React.PropsWithChildren<{}>) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.toggle,
         styles.toggleBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)),
-      )}
+      ]}
     >
       {props.children}
     </div>

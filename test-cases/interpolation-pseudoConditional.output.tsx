@@ -11,13 +11,13 @@ import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 function Button(props: React.PropsWithChildren<{}>) {
   return (
     <button
-      {...stylex.props(
+      sx={[
         styles.button,
         highlightStyles({
           active: styles.buttonPseudoActive,
           hover: styles.buttonPseudoHover,
         }),
-      )}
+      ]}
     >
       {props.children}
     </button>
@@ -31,13 +31,13 @@ function Button(props: React.PropsWithChildren<{}>) {
 function SpecificButton(props: React.PropsWithChildren<{}>) {
   return (
     <button
-      {...stylex.props(
+      sx={[
         styles.specificButton,
         highlightStyles({
           active: styles.specificButtonPseudoActive,
           hover: styles.specificButtonPseudoHover,
         }),
-      )}
+      ]}
     >
       {props.children}
     </button>

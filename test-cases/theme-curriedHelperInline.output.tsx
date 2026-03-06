@@ -10,20 +10,14 @@ function Box(props: BoxProps) {
   const { children, position } = props;
 
   return (
-    <div
-      {...stylex.props(
-        styles.box,
-        position === "top" && styles.boxPositionTop,
-        styles.borderBottom,
-      )}
-    >
+    <div sx={[styles.box, position === "top" && styles.boxPositionTop, styles.borderBottom]}>
       {children}
     </div>
   );
 }
 
 function BorderedBox(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.border)}>{props.children}</div>;
+  return <div sx={styles.border}>{props.children}</div>;
 }
 
 export const App = () => (

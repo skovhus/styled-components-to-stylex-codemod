@@ -17,11 +17,11 @@ function Button(props: React.PropsWithChildren<Props & { ref?: React.Ref<HTMLBut
     <button
       {...rest}
       disabled={disabled}
-      {...stylex.props(
+      sx={[
         styles.button,
         sizeVariants[size],
         disabled ? buttonColorDisabledVariants[color] : buttonColorEnabledVariants[color],
-      )}
+      ]}
     >
       {children}
     </button>
@@ -41,10 +41,10 @@ function Link(props: LinkProps & Pick<React.ComponentProps<"a">, "children" | "h
   return (
     <a
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.link,
         disabled ? linkColorDisabledVariants[color] : linkColorEnabledVariants[color],
-      )}
+      ]}
     >
       {children}
     </a>

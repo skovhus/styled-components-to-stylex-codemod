@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => {
   return (
-    <div {...stylex.props(styles.header)}>
+    <div sx={styles.header}>
       <FullWidthCopyText as="label">Invite link</FullWidthCopyText>
     </div>
   );

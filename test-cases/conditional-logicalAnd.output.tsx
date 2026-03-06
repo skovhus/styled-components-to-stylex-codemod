@@ -10,12 +10,7 @@ function LayeredBox(props: LayeredBoxProps) {
   const { children, $zIndex } = props;
 
   return (
-    <div
-      {...stylex.props(
-        styles.layeredBox,
-        $zIndex !== undefined && styles.layeredBoxZIndex($zIndex),
-      )}
-    >
+    <div sx={[styles.layeredBox, $zIndex !== undefined && styles.layeredBoxZIndex($zIndex)]}>
       {children}
     </div>
   );
@@ -28,10 +23,7 @@ function GrayscaleImage(props: GrayscaleImageProps) {
   const { $isBw, ...rest } = props;
 
   return (
-    <img
-      {...rest}
-      {...stylex.props(styles.grayscaleImage, $isBw ? styles.grayscaleImageBw : undefined)}
-    />
+    <img {...rest} sx={[styles.grayscaleImage, $isBw ? styles.grayscaleImageBw : undefined]} />
   );
 }
 
@@ -46,12 +38,12 @@ function DialogText(props: DialogTextProps) {
 
   return (
     <p
-      {...stylex.props(
+      sx={[
         styles.dialogText,
         $renderingContext === "dialog" &&
           $lines === 1 &&
           styles.dialogTextRenderingContextDialogLines1,
-      )}
+      ]}
     >
       {children}
     </p>

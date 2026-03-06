@@ -10,7 +10,7 @@ function Button(props: React.PropsWithChildren<ButtonProps>) {
   const { children, variant } = props;
 
   return (
-    <button {...stylex.props(styles.button, variant === "primary" && styles.buttonVariantPrimary)}>
+    <button sx={[styles.button, variant === "primary" && styles.buttonVariantPrimary]}>
       {children}
     </button>
   );
@@ -26,7 +26,7 @@ export const App = () => {
   }, []);
 
   return (
-    <div onClick={handleClick} {...stylex.props(styles.card)}>
+    <div onClick={handleClick} sx={styles.card}>
       <Button variant="primary">Click me</Button>
     </div>
   );

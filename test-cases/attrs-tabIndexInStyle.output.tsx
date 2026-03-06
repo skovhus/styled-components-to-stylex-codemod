@@ -15,11 +15,11 @@ export function Component(props: Props & Omit<React.ComponentProps<"div">, "clas
     <div
       tabIndex={tabIndex ?? 0}
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.component,
         $applyBackground ? styles.componentApplyBackground : undefined,
         tabIndex === 0 && styles.componentTabIndex0,
-      )}
+      ]}
     >
       {children}
     </div>

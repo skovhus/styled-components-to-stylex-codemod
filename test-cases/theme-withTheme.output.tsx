@@ -21,7 +21,7 @@ const ThemedComponent = withTheme(MyComponent);
 export const App = () => (
   <ThemeProvider theme={theme}>
     <div style={{ display: "grid", gap: "12px", padding: "12px" }}>
-      <div {...stylex.props(styles.panel)}>Panel</div>
+      <div sx={styles.panel}>Panel</div>
       <ThemedComponent />
     </div>
   </ThemeProvider>

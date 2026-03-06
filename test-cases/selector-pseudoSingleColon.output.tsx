@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ padding: 40 }}>
-    <div {...stylex.props(styles.point)}>Point</div>
+    <div sx={styles.point}>Point</div>
   </div>
 );
 

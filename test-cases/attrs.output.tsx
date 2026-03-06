@@ -23,7 +23,7 @@ function Input(props: InputProps) {
       size={$small ? 5 : undefined}
       type="text"
       {...rest}
-      {...stylex.props(styles.input, $padding != null && styles.inputPadding($padding))}
+      sx={[styles.input, $padding != null && styles.inputPadding($padding)]}
     />
   );
 }
@@ -40,13 +40,7 @@ export function TextInput(
 ) {
   const { allowPMAutofill, ...rest } = props;
 
-  return (
-    <input
-      data-1p-ignore={allowPMAutofill !== true}
-      {...rest}
-      {...stylex.props(styles.textInput)}
-    />
-  );
+  return <input data-1p-ignore={allowPMAutofill !== true} {...rest} sx={styles.textInput} />;
 }
 
 // Pattern 3: styled(Component).attrs with object
@@ -143,7 +137,7 @@ function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, tabIndex, ...rest } = props;
 
   return (
-    <div tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.box)}>
+    <div tabIndex={tabIndex ?? 0} {...rest} sx={styles.box}>
       {children}
     </div>
   );
@@ -174,10 +168,10 @@ function DynamicHeightBox(props: DynamicHeightBoxProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.dynamicHeightBox,
         $height ? styles.dynamicHeightBoxHeight(`${$height}px`) : undefined,
-      )}
+      ]}
     >
       {children}
     </div>
@@ -196,7 +190,7 @@ export const App = () => (
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
     <Box>Box content</Box>
     <AlignedFlex>Aligned content</AlignedFlex>
-    <span {...stylex.props(styles.noWrapText)}>No wrapping text</span>
+    <span sx={styles.noWrapText}>No wrapping text</span>
     <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
   </>
 );

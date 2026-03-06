@@ -5,9 +5,8 @@ import { $colors } from "./tokens.stylex";
 
 function Text(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
-
   return (
-    <span {...stylex.props(styles.text, theme.isDark ? styles.textDark : styles.textLight)}>
+    <span sx={[styles.text, theme.isDark ? styles.textDark : styles.textLight]}>
       {props.children}
     </span>
   );

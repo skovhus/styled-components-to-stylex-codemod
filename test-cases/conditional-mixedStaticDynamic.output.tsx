@@ -14,7 +14,7 @@ interface ContainerProps {
 }
 
 function Wrapper(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.wrapper)}>{props.children}</div>;
+  return <div sx={styles.wrapper}>{props.children}</div>;
 }
 
 function Container(props: React.PropsWithChildren<ContainerProps>) {
@@ -22,13 +22,13 @@ function Container(props: React.PropsWithChildren<ContainerProps>) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.container,
         $position === "fixed" && styles.containerPositionFixed,
         $position === "fixed" && $sidebarCollapsed
           ? styles.containerPositionFixedSidebarCollapsed
           : undefined,
-      )}
+      ]}
     >
       {children}
     </div>

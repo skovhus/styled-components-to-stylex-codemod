@@ -17,11 +17,11 @@ function Container(props: React.PropsWithChildren<Props>) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.container,
         $enabled ? styles.containerEnabled : undefined,
         $enabled && $collapsed ? styles.containerEnabledCollapsed : undefined,
-      )}
+      ]}
     >
       {children}
     </div>

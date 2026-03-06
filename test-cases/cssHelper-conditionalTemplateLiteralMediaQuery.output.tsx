@@ -18,10 +18,7 @@ function Banner(props: BannerProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
-        styles.banner,
-        $prominent ? styles.bannerProminent : styles.bannerNotProminent,
-      )}
+      sx={[styles.banner, $prominent ? styles.bannerProminent : styles.bannerNotProminent]}
     >
       {children}
     </div>

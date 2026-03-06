@@ -8,10 +8,10 @@ export function App() {
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <div ref={firstRef} {...stylex.props(styles.card)}>
+      <div ref={firstRef} sx={styles.card}>
         First card
       </div>
-      <div ref={secondRef} {...stylex.props(styles.card)}>
+      <div ref={secondRef} sx={styles.card}>
         Second card
       </div>
     </div>
