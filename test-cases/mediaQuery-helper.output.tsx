@@ -3,8 +3,8 @@ import { breakpoints } from "./lib/breakpoints.stylex";
 
 export const App = () => (
   <div>
-    <div {...stylex.props(styles.container)}>Responsive container</div>
-    <div {...stylex.props(styles.details)}>Details column</div>
+    <div sx={styles.container}>Responsive container</div>
+    <div sx={styles.details}>Details column</div>
   </div>
 );
 

@@ -13,7 +13,7 @@ function Box(props: BoxProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.box,
         styles.boxWidth({
           size,
@@ -21,7 +21,7 @@ function Box(props: BoxProps) {
         styles.boxHeight({
           size,
         }),
-      )}
+      ]}
     >
       {children}
     </div>

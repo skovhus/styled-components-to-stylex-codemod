@@ -13,10 +13,10 @@ function TitleText(props: TitleTextProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.titleText,
         $oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
-      )}
+      ]}
     >
       {children}
     </div>
@@ -34,13 +34,13 @@ function ColorTitleText(props: ColorTitleTextProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.colorTitleText,
         $oneLine === undefined || $oneLine
           ? helpers.truncateMultiline(1)
           : helpers.truncateMultiline(2),
         styles.colorTitleTextColor(props.$oneLine === undefined ? "purple" : "teal"),
-      )}
+      ]}
     >
       {children}
     </div>

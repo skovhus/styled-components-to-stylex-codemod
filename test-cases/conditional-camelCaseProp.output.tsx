@@ -6,7 +6,7 @@ type BoxProps = { active?: boolean };
 function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, active } = props;
 
-  return <div {...stylex.props(styles.box, active ? styles.boxActive : undefined)}>{children}</div>;
+  return <div sx={[styles.box, active ? styles.boxActive : undefined]}>{children}</div>;
 }
 
 export const App = () => (

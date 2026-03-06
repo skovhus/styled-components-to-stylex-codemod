@@ -2,8 +2,8 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
-    <div {...stylex.props(styles.progressBar)}>Progress Bar</div>
-    <div {...stylex.props(styles.header)}>Header</div>
+    <div sx={styles.progressBar}>Progress Bar</div>
+    <div sx={styles.header}>Header</div>
   </div>
 );
 

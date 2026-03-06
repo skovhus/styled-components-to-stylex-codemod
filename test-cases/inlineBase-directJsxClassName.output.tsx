@@ -3,7 +3,7 @@ import { mergedSx } from "./lib/mergedSx";
 
 export function App() {
   return (
-    <div {...stylex.props(styles.wrapper)}>
+    <div sx={styles.wrapper}>
       <div {...mergedSx([styles.flex, flexGapVariants[8]], "u-margin")}>With className</div>
       <div {...mergedSx([styles.flex, flexGapVariants[16]], undefined, { color: "red" })}>
         With style

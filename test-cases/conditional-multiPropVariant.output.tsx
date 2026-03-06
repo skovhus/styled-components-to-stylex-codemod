@@ -14,7 +14,7 @@ export function Badge(props: BadgeProps) {
   const { children, $size, ...rest } = props;
 
   return (
-    <span {...rest} {...stylex.props(styles.badge, $size === "micro" && styles.badgeSizeMicro)}>
+    <span {...rest} sx={[styles.badge, $size === "micro" && styles.badgeSizeMicro]}>
       {children}
     </span>
   );

@@ -18,11 +18,11 @@ export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "classNa
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.box,
         bordered ? styles.boxBordered : styles.boxNotBordered,
         bg != null && styles.boxBackgroundColor(bg),
-      )}
+      ]}
     >
       {children}
     </div>
@@ -31,7 +31,7 @@ export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "classNa
 
 // Component with callback that receives event
 export function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
-  return <input {...props} {...stylex.props(styles.input)} />;
+  return <input {...props} sx={styles.input} />;
 }
 
 export function Form() {

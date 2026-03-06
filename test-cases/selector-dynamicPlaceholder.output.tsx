@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 function Input(props: Pick<React.ComponentProps<"input">, "placeholder">) {
-  return <input {...props} {...stylex.props(styles.input)} />;
+  return <input {...props} sx={styles.input} />;
 }
 
 export const App = () => (

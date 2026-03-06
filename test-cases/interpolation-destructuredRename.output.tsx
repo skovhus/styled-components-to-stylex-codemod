@@ -10,9 +10,7 @@ function Button(props: ButtonProps) {
   const { children, color } = props;
 
   return (
-    <button {...stylex.props(styles.button, styles.buttonColor(props.color || "hotpink"))}>
-      {children}
-    </button>
+    <button sx={[styles.button, styles.buttonColor(props.color || "hotpink")]}>{children}</button>
   );
 }
 
@@ -24,11 +22,7 @@ type CardProps = React.PropsWithChildren<{
 function Card(props: CardProps) {
   const { children, padding } = props;
 
-  return (
-    <div {...stylex.props(styles.card, padding != null && styles.cardPadding(padding))}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.card, padding != null && styles.cardPadding(padding)]}>{children}</div>;
 }
 
 type BoxProps = React.PropsWithChildren<{
@@ -39,23 +33,21 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, margin } = props;
 
-  return (
-    <div {...stylex.props(styles.box, margin != null && styles.boxMargin(margin))}>{children}</div>
-  );
+  return <div sx={[styles.box, margin != null && styles.boxMargin(margin)]}>{children}</div>;
 }
 
 export const App = () => (
   <>
     <Button color="red">Click</Button>
     <Button>Click (default)</Button>
-    <a href="#" {...stylex.props(styles.linkFontSize("14px"))}>
+    <a href="#" sx={styles.linkFontSize("14px")}>
       Link
     </a>
     <Card>Card</Card>
     <Card padding="24px">Card with padding</Card>
     <Box>Box</Box>
     <Box margin="12px">Box with margin</Box>
-    <span {...stylex.props(styles.textFontWeight("bold"), styles.textFontSize("16px"))}>Text</span>
+    <span sx={[styles.textFontWeight("bold"), styles.textFontSize("16px")]}>Text</span>
   </>
 );
 

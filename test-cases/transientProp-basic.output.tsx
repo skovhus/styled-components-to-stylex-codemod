@@ -8,11 +8,7 @@ type CompProps = React.PropsWithChildren<{
 function Comp(props: CompProps) {
   const { children, $draggable } = props;
 
-  return (
-    <div {...stylex.props(styles.comp, $draggable ? styles.compDraggable : undefined)}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.comp, $draggable ? styles.compDraggable : undefined]}>{children}</div>;
 }
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (

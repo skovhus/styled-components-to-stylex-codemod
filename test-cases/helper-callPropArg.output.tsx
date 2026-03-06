@@ -16,7 +16,7 @@ export function Box(props: BoxProps) {
   const { children, shadow, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.box, styles.boxBoxShadow(shadow))}>
+    <div {...rest} sx={[styles.box, styles.boxBoxShadow(shadow)]}>
       {children}
     </div>
   );

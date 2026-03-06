@@ -6,7 +6,7 @@ export function GradientText(props: Pick<React.ComponentProps<"span">, "ref" | "
   const { children, ...rest } = props;
 
   return (
-    <span {...rest} {...stylex.props(helpers.gradient, styles.gradientText)}>
+    <span {...rest} sx={[helpers.gradient, styles.gradientText]}>
       {children}
     </span>
   );

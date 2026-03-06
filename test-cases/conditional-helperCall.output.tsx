@@ -10,7 +10,7 @@ type TextProps = React.PropsWithChildren<{
 function Text(props: TextProps) {
   const { children, $truncate } = props;
 
-  return <p {...stylex.props(styles.text, $truncate ? helpers.truncate : undefined)}>{children}</p>;
+  return <p sx={[styles.text, $truncate ? helpers.truncate : undefined]}>{children}</p>;
 }
 
 type TextAltProps = React.PropsWithChildren<{
@@ -21,7 +21,7 @@ type TextAltProps = React.PropsWithChildren<{
 function TextAlt(props: TextAltProps) {
   const { children, $noTruncate } = props;
 
-  return <p {...stylex.props(styles.textAlt, !$noTruncate && helpers.truncate)}>{children}</p>;
+  return <p sx={[styles.textAlt, !$noTruncate && helpers.truncate]}>{children}</p>;
 }
 
 type TitleProps = React.PropsWithChildren<{
@@ -34,11 +34,11 @@ function Title(props: TitleProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.title,
         $truncateTitle ? helpers.truncate : undefined,
         maxWidth ? styles.titleMaxWidth(maxWidth) : undefined,
-      )}
+      ]}
     >
       {children}
     </div>

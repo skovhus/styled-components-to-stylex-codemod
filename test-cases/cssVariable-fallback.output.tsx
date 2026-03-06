@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 export function ScrollableArea({ children }: { children: React.ReactNode }) {
-  return <div {...stylex.props(styles.scrollContainer)}>{children}</div>;
+  return <div sx={styles.scrollContainer}>{children}</div>;
 }
 
 export const App = () => (

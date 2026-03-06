@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export function App() {
-  return <div {...stylex.props(styles.container)}>No attrs</div>;
+  return <div sx={styles.container}>No attrs</div>;
 }
 
 const styles = stylex.create({

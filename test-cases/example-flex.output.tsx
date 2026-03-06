@@ -159,7 +159,7 @@ export function FlexSpacer(props: Pick<React.ComponentProps<"div">, "ref" | "chi
   const { children, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.flexSpacer)}>
+    <div {...rest} sx={styles.flexSpacer}>
       {children}
     </div>
   );

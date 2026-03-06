@@ -16,11 +16,11 @@ export function Box(props: BoxProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.box,
         $size === "large" && styles.boxSizeLarge,
         $isActive ? styles.boxActive : undefined,
-      )}
+      ]}
     >
       {children}
     </div>
@@ -35,12 +35,7 @@ type ImageProps = { $isInactive?: boolean } & Omit<
 export function Image(props: ImageProps) {
   const { $isInactive, ...rest } = props;
 
-  return (
-    <img
-      {...rest}
-      {...stylex.props(styles.image, $isInactive ? styles.imageInactive : undefined)}
-    />
-  );
+  return <img {...rest} sx={[styles.image, $isInactive ? styles.imageInactive : undefined]} />;
 }
 
 type SliderProps = React.PropsWithChildren<{
@@ -50,7 +45,7 @@ type SliderProps = React.PropsWithChildren<{
 function Slider(props: SliderProps) {
   const { children, $height } = props;
 
-  return <div {...stylex.props(styles.slider, styles.sliderHeight($height))}>{children}</div>;
+  return <div sx={[styles.slider, styles.sliderHeight($height)]}>{children}</div>;
 }
 
 export function App() {
@@ -63,7 +58,7 @@ export function App() {
       <Box $size="small">Small inactive box</Box>
       <Image $isInactive src="/avatar.png" alt="Avatar" />
       {/* Internal components with transient props */}
-      <div {...stylex.props(styles.point)} />
+      <div sx={styles.point} />
       <Slider $height={pickerHeight}>Slider content</Slider>
     </div>
   );

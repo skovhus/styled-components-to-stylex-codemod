@@ -6,7 +6,7 @@ export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children"
   const { children, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.move)}>
+    <div {...rest} sx={styles.move}>
       {children}
     </div>
   );

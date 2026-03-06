@@ -9,7 +9,7 @@ export function SomeComponent() {
   const innerRef = React.useRef<HTMLDivElement>(null);
 
   return (
-    <div ref={outerRef} tabIndex={-1} {...stylex.props(styles.wrapper)}>
+    <div ref={outerRef} tabIndex={-1} sx={styles.wrapper}>
       <div ref={innerRef} style={{ height: 200 }}>
         Scrollable content
       </div>

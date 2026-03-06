@@ -15,7 +15,7 @@ function AnimatedPath(props: Pick<React.ComponentProps<"path">, "children" | "d"
   const { children, ...rest } = props;
 
   return (
-    <path {...rest} {...stylex.props(styles.animatedPath)}>
+    <path {...rest} sx={styles.animatedPath}>
       {children}
     </path>
   );

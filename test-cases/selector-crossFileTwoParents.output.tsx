@@ -6,11 +6,11 @@ import { ButtonAMarker, ButtonBMarker } from "./selector-crossFileTwoParents.inp
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <button {...stylex.props(styles.buttonA, ButtonAMarker)}>
+      <button sx={[styles.buttonA, ButtonAMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInButtonA)} />
         Parent A
       </button>
-      <button {...stylex.props(styles.buttonB, ButtonBMarker)}>
+      <button sx={[styles.buttonB, ButtonBMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInButtonB)} />
         Parent B
       </button>

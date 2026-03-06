@@ -48,10 +48,10 @@ function DynamicBox(props: DynamicBoxProps) {
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Button</button>
-    <p {...stylex.props(styles.text)}>Some text</p>
-    <button {...stylex.props(styles.conditionalButton)}>Conditional</button>
-    <div {...stylex.props(styles.themedCard)}>Themed Card</div>
+    <button sx={styles.button}>Button</button>
+    <p sx={styles.text}>Some text</p>
+    <button sx={styles.conditionalButton}>Conditional</button>
+    <div sx={styles.themedCard}>Themed Card</div>
     <DynamicBox $variant="primary">Primary</DynamicBox>
     <DynamicBox $variant="secondary">Secondary</DynamicBox>
   </div>

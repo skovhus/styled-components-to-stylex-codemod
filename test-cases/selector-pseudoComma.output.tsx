@@ -2,11 +2,11 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Hover or Focus Me</button>
-    <a href="#" {...stylex.props(styles.link)}>
+    <button sx={styles.button}>Hover or Focus Me</button>
+    <a href="#" sx={styles.link}>
       Link
     </a>
-    <input placeholder="Type here..." {...stylex.props(styles.input)} />
+    <input placeholder="Type here..." sx={styles.input} />
   </div>
 );
 

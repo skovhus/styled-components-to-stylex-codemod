@@ -12,13 +12,13 @@ export function Container(props: ContainerProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.container,
         styles.containerStyles({
           size,
           padding,
         }),
-      )}
+      ]}
     >
       {children}
     </div>

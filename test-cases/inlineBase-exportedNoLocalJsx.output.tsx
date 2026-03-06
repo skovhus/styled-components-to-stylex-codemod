@@ -5,7 +5,7 @@ export function Container(props: Pick<React.ComponentProps<"div">, "ref" | "chil
   const { children, ...rest } = props;
 
   return (
-    <div {...rest} {...stylex.props(styles.container)}>
+    <div {...rest} sx={styles.container}>
       {children}
     </div>
   );

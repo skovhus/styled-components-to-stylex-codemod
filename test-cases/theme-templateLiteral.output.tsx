@@ -3,7 +3,7 @@ import { $colors } from "./tokens.stylex";
 
 export const App = () => (
   <div style={{ display: "flex", gap: 12, padding: 16 }}>
-    <div {...stylex.props(styles.box)}>Template literal with theme</div>
+    <div sx={styles.box}>Template literal with theme</div>
   </div>
 );
 

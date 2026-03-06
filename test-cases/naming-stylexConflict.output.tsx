@@ -9,7 +9,7 @@ function ChevronHandle() {
 
   return (
     <svg width="22" height="6">
-      <animated.path d={styles.d} {...stylex.props(stylexStyles.styledPath)} />
+      <animated.path d={styles.d} sx={stylexStyles.styledPath} />
     </svg>
   );
 }

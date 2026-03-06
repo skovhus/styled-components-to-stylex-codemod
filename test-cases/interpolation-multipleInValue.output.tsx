@@ -15,18 +15,16 @@ function Popover(props: PopoverProps) {
   const { children, $expanded } = props;
 
   return (
-    <div {...stylex.props(styles.popover, $expanded ? styles.popoverExpanded : undefined)}>
-      {children}
-    </div>
+    <div sx={[styles.popover, $expanded ? styles.popoverExpanded : undefined]}>{children}</div>
   );
 }
 
 export const App = () => (
   <>
-    <div {...stylex.props(styles.linearGradientBox)}>Linear</div>
-    <div {...stylex.props(styles.radialGradientBox)}>Radial</div>
-    <div {...stylex.props(styles.conicGradientBox)}>Conic</div>
-    <div {...stylex.props(styles.repeatingLinearGradientBox)}>Repeating</div>
+    <div sx={styles.linearGradientBox}>Linear</div>
+    <div sx={styles.radialGradientBox}>Radial</div>
+    <div sx={styles.conicGradientBox}>Conic</div>
+    <div sx={styles.repeatingLinearGradientBox}>Repeating</div>
     <Popover $expanded={true}>Expanded</Popover>
     <Popover $expanded={false}>Collapsed</Popover>
   </>

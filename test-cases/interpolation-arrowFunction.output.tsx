@@ -11,10 +11,10 @@ function GradientBox(props: GradientBoxProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.gradientBox,
         $direction === "horizontal" && styles.gradientBoxDirectionHorizontal,
-      )}
+      ]}
     >
       {children}
     </div>
@@ -33,7 +33,7 @@ function TabItem(props: TabItemProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(styles.tabItem, $isActive ? styles.tabItemActive : styles.tabItemNotActive)}
+      sx={[styles.tabItem, $isActive ? styles.tabItemActive : styles.tabItemNotActive]}
     >
       {children}
     </div>

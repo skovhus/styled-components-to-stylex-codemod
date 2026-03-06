@@ -1,9 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div {...stylex.props(styles.container, styles.colorMixin, styles.backgroundMixin)}>
-    Multiple mixins
-  </div>
+  <div sx={[styles.container, styles.colorMixin, styles.backgroundMixin]}>Multiple mixins</div>
 );
 
 const styles = stylex.create({

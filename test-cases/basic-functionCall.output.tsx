@@ -6,8 +6,8 @@ import { animated } from "./lib/react-spring";
 export function App() {
   return (
     <div>
-      <input placeholder="Type here" {...stylex.props(styles.input)} />
-      <animated.div {...stylex.props(styles.animatedBox)}>Animated content</animated.div>
+      <input placeholder="Type here" sx={styles.input} />
+      <animated.div sx={styles.animatedBox}>Animated content</animated.div>
     </div>
   );
 }

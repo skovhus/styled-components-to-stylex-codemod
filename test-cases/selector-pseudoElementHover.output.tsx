@@ -5,13 +5,7 @@ export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "16px", padding: "16px" }}>
     <label>
       Hover the thumb — it should change color:
-      <input
-        type="range"
-        min="0"
-        max="100"
-        defaultValue="50"
-        {...stylex.props(styles.rangeInput)}
-      />
+      <input type="range" min="0" max="100" defaultValue="50" sx={styles.rangeInput} />
     </label>
   </div>
 );

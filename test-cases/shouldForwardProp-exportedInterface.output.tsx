@@ -24,11 +24,11 @@ export function TransientButton(
   return (
     <button
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.transientButton,
         $variant === "primary" && styles.transientButtonVariantPrimary,
         $size === "large" && styles.transientButtonSizeLarge,
-      )}
+      ]}
     >
       {children}
     </button>

@@ -16,11 +16,11 @@ function AvatarContainer(props: AvatarContainerProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.avatarContainer,
         styles.avatarContainerWidth(size),
         styles.avatarContainerHeight(size),
-      )}
+      ]}
     >
       {children}
     </div>

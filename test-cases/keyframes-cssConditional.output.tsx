@@ -23,11 +23,7 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, $isAnimating } = props;
 
-  return (
-    <div {...stylex.props(styles.box, $isAnimating ? styles.boxAnimating : undefined)}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, $isAnimating ? styles.boxAnimating : undefined]}>{children}</div>;
 }
 
 type DotProps = React.PropsWithChildren<{
@@ -38,9 +34,7 @@ type DotProps = React.PropsWithChildren<{
 function Dot(props: DotProps) {
   const { children, $active } = props;
 
-  return (
-    <span {...stylex.props(styles.dot, $active ? styles.dotActive : undefined)}>{children}</span>
-  );
+  return <span sx={[styles.dot, $active ? styles.dotActive : undefined]}>{children}</span>;
 }
 
 export const App = () => (

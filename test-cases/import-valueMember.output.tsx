@@ -5,7 +5,7 @@ import { $zIndex } from "./tokens.stylex";
 const PEEK_MAX_WIDTH = 380;
 
 export function App() {
-  return <div {...stylex.props(styles.container)} />;
+  return <div sx={styles.container} />;
 }
 
 const styles = stylex.create({

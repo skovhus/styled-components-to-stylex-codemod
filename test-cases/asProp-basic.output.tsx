@@ -9,7 +9,7 @@ function Button<C extends React.ElementType = "button">(
   const { as: Component = "button", children, ...rest } = props;
 
   return (
-    <Component {...rest} {...stylex.props(styles.button)}>
+    <Component {...rest} sx={styles.button}>
       {children}
     </Component>
   );

@@ -9,10 +9,7 @@ function Tab(props: React.PropsWithChildren<{ "data-state"?: string }>) {
   const theme = useTheme();
 
   return (
-    <button
-      {...rest}
-      {...stylex.props(styles.tab, theme.isDark ? styles.tabDark : styles.tabLight)}
-    >
+    <button {...rest} sx={[styles.tab, theme.isDark ? styles.tabDark : styles.tabLight]}>
       {children}
     </button>
   );

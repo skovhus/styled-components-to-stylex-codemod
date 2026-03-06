@@ -12,14 +12,14 @@ function CardContainer(props: CardContainerProps) {
 
   return (
     <label
-      {...stylex.props(
+      sx={[
         styles.cardContainer,
         disabled
           ? styles.cardContainerDisabled
           : checked
             ? styles.cardContainerCheckedTrue
             : styles.cardContainerCheckedFalse,
-      )}
+      ]}
     >
       {children}
     </label>
@@ -27,7 +27,7 @@ function CardContainer(props: CardContainerProps) {
 }
 
 function CardContent(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.cardContent)}>{props.children}</div>;
+  return <div sx={styles.cardContent}>{props.children}</div>;
 }
 
 export const App = () => (

@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div {...stylex.props(styles.container)}>
-    <div {...stylex.props(styles.responsiveItem)}>Visible when container &gt; 300px</div>
+  <div sx={styles.container}>
+    <div sx={styles.responsiveItem}>Visible when container &gt; 300px</div>
   </div>
 );
 

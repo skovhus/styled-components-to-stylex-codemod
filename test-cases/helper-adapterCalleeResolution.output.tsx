@@ -3,11 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { fontWeightVars, fontSizeVars, transitionSpeed } from "./tokens.stylex";
 
 export function Text({ children }: { children: React.ReactNode }) {
-  return <span {...stylex.props(styles.styledText)}>{children}</span>;
+  return <span sx={styles.styledText}>{children}</span>;
 }
 
 export function Button({ children }: { children: React.ReactNode }) {
-  return <button {...stylex.props(styles.styledButton)}>{children}</button>;
+  return <button sx={styles.styledButton}>{children}</button>;
 }
 
 export const App = () => (

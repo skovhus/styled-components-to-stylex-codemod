@@ -8,7 +8,7 @@ function Layer(props: LayerProps) {
   const { children, $zIndex, $layer } = props;
 
   return (
-    <div {...stylex.props(styles.layer, $layer.isTop ? styles.layerZIndex($zIndex) : undefined)}>
+    <div sx={[styles.layer, $layer.isTop ? styles.layerZIndex($zIndex) : undefined]}>
       {children}
     </div>
   );

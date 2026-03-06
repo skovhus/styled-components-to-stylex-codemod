@@ -2,21 +2,21 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Card(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.card)}>{props.children}</div>;
+  return <div sx={styles.card}>{props.children}</div>;
 }
 
 function CardTitle(props: React.PropsWithChildren<{}>) {
-  return <h3 {...stylex.props(styles.cardTitle)}>{props.children}</h3>;
+  return <h3 sx={styles.cardTitle}>{props.children}</h3>;
 }
 
 function CardText(props: React.PropsWithChildren<{}>) {
-  return <p {...stylex.props(styles.cardText)}>{props.children}</p>;
+  return <p sx={styles.cardText}>{props.children}</p>;
 }
 
 export const App = () => (
-  <div {...stylex.props(styles.container)}>
-    <h2 {...stylex.props(styles.title)}>Responsive Media Queries</h2>
-    <div {...stylex.props(styles.grid)}>
+  <div sx={styles.container}>
+    <h2 sx={styles.title}>Responsive Media Queries</h2>
+    <div sx={styles.grid}>
       <Card>
         <CardTitle>Card One</CardTitle>
         <CardText>Resize the window to see the layout change from 1 to 2 to 3 columns.</CardText>
@@ -30,7 +30,7 @@ export const App = () => (
         <CardText>Hover over cards to see the hover effect (on devices that support it).</CardText>
       </Card>
     </div>
-    <button {...stylex.props(styles.button)}>Interactive Button</button>
+    <button sx={styles.button}>Interactive Button</button>
   </div>
 );
 

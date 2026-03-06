@@ -10,9 +10,7 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, $width, $height } = props;
 
-  return (
-    <div {...stylex.props(styles.boxWidth($width), styles.boxHeight($height))}>{children}</div>
-  );
+  return <div sx={[styles.boxWidth($width), styles.boxHeight($height)]}>{children}</div>;
 }
 
 type MixedBoxProps = React.PropsWithChildren<{

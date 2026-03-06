@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export function App() {
-  return <div {...stylex.props(styles.container)}>Override</div>;
+  return <div sx={styles.container}>Override</div>;
 }
 
 const styles = stylex.create({

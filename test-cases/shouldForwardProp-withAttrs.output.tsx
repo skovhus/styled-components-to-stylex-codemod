@@ -14,11 +14,11 @@ export function Text(props: TextProps & Omit<React.ComponentProps<"span">, "clas
   return (
     <span
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.text,
         align ? styles.textTextAlign(align) : undefined,
         selectable ? styles.textSelectable : undefined,
-      )}
+      ]}
     >
       {children}
     </span>

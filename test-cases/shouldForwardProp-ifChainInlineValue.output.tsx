@@ -13,7 +13,7 @@ function FlexContainer(props: FlexContainerProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.flexContainer,
         column
           ? reverse
@@ -22,7 +22,7 @@ function FlexContainer(props: FlexContainerProps) {
           : reverse
             ? styles.flexContainerReverse
             : styles.flexContainerDefault,
-      )}
+      ]}
     >
       {children}
     </div>

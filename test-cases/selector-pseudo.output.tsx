@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const App = () => <div {...stylex.props(styles.thing)}>Hover me!</div>;
+export const App = () => <div sx={styles.thing}>Hover me!</div>;
 
 const styles = stylex.create({
   thing: {

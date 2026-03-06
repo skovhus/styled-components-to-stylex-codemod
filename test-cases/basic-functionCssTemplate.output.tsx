@@ -12,9 +12,7 @@ function FlexContainer(props: FlexContainerProps) {
   const { children, $align } = props;
 
   return (
-    <div
-      {...stylex.props(styles.flexContainer, $align === "left" && styles.flexContainerAlignLeft)}
-    >
+    <div sx={[styles.flexContainer, $align === "left" && styles.flexContainerAlignLeft]}>
       {children}
     </div>
   );
@@ -28,12 +26,7 @@ function ColoredBox(props: ColoredBoxProps) {
   const { children, $color } = props;
 
   return (
-    <div
-      {...stylex.props(
-        styles.coloredBox,
-        $color != null && styles.coloredBoxBackgroundColor($color),
-      )}
-    >
+    <div sx={[styles.coloredBox, $color != null && styles.coloredBoxBackgroundColor($color)]}>
       {children}
     </div>
   );
@@ -48,13 +41,11 @@ export const App = () => (
     <FlexContainer $align="right">
       <ColoredBox>Right aligned</ColoredBox>
     </FlexContainer>
-    <div {...stylex.props(styles.borderBox, styles.borderBoxBorderColor("red"))}>Red border</div>
-    <div
-      {...stylex.props(styles.shadowBox, styles.shadowBoxBoxShadow("0 2px 4px rgba(0,0,0,0.2)"))}
-    >
+    <div sx={[styles.borderBox, styles.borderBoxBorderColor("red")]}>Red border</div>
+    <div sx={[styles.shadowBox, styles.shadowBoxBoxShadow("0 2px 4px rgba(0,0,0,0.2)")]}>
       With shadow
     </div>
-    <div {...stylex.props(styles.blockBox, styles.blockBoxWidth("50%"))}>Half width</div>
+    <div sx={[styles.blockBox, styles.blockBoxWidth("50%")]}>Half width</div>
   </div>
 );
 

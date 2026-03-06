@@ -2,8 +2,8 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Click me</button>
-    <div {...stylex.props(styles.card)}>Card content</div>
+    <button sx={styles.button}>Click me</button>
+    <div sx={styles.card}>Card content</div>
   </div>
 );
 

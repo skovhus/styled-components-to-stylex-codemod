@@ -2,13 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 
 export function App() {
   return (
-    <div {...stylex.props(styles.wrapper)}>
-      <div {...stylex.props(styles.flex, flexGapVariants[8], flexAlignVariants["center"])}>
-        Hello
-      </div>
-      <div {...stylex.props(styles.flex, flexGapVariants[16], flexAlignVariants["start"])}>
-        World
-      </div>
+    <div sx={styles.wrapper}>
+      <div sx={[styles.flex, flexGapVariants[8], flexAlignVariants["center"]]}>Hello</div>
+      <div sx={[styles.flex, flexGapVariants[16], flexAlignVariants["start"]]}>World</div>
     </div>
   );
 }

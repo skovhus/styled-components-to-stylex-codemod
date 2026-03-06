@@ -6,11 +6,8 @@ import { pixelVars } from "./tokens.stylex";
 // Block-level theme boolean conditional: theme.isDark controls entire CSS block
 function Box(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
-
   return (
-    <div {...stylex.props(styles.box, theme.isDark ? styles.boxDark : styles.boxLight)}>
-      {props.children}
-    </div>
+    <div sx={[styles.box, theme.isDark ? styles.boxDark : styles.boxLight]}>{props.children}</div>
   );
 }
 

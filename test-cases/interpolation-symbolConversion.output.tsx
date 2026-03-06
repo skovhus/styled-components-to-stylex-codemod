@@ -10,9 +10,7 @@ function Container(props: ContainerProps) {
   const { children, $compact } = props;
 
   return (
-    <div {...stylex.props(styles.container, $compact ? styles.containerCompact : undefined)}>
-      {children}
-    </div>
+    <div sx={[styles.container, $compact ? styles.containerCompact : undefined]}>{children}</div>
   );
 }
 

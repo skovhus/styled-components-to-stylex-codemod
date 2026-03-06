@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Container(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.container)}>{props.children}</div>;
+  return <div sx={styles.container}>{props.children}</div>;
 }
 
 export function App() {

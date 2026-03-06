@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 import { mixins } from "./lib/mixins.stylex";
 
 export function App() {
-  return <div {...stylex.props(mixins.flex, styles.button)}>Mixin + props</div>;
+  return <div sx={[mixins.flex, styles.button]}>Mixin + props</div>;
 }
 
 const styles = stylex.create({

@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ padding: 16, background: "#111" }}>
-    <div {...stylex.props(styles.card)}>Gradient Card</div>
+    <div sx={styles.card}>Gradient Card</div>
   </div>
 );
 

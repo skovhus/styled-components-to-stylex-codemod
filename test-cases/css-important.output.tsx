@@ -22,14 +22,14 @@ export const App = () => (
     <OverrideButton style={{ background: "blue" }}>
       Should be pink despite inline style
     </OverrideButton>
-    <div {...stylex.props(styles.forceWidth)}>Full width content</div>
+    <div sx={styles.forceWidth}>Full width content</div>
     <MixedStyles style={{ color: "red", margin: "20px" }}>
       Color and margin should be overridden
     </MixedStyles>
-    <a href="#" {...stylex.props(styles.importantHover)}>
+    <a href="#" sx={styles.importantHover}>
       Hover me
     </a>
-    <span {...stylex.props(styles.overrideText)}>Override text</span>
+    <span sx={styles.overrideText}>Override text</span>
   </div>
 );
 

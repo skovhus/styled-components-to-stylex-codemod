@@ -11,11 +11,11 @@ function Container(props: ContainerProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.container,
         align != null && containerAlignVariants[align],
         gap != null && containerGapVariants[gap],
-      )}
+      ]}
     >
       {children}
     </div>

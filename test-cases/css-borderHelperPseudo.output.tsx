@@ -6,14 +6,14 @@ export function StyledHeader(props: Pick<React.ComponentProps<"header">, "ref" |
   const { children, ...rest } = props;
 
   return (
-    <header {...rest} {...stylex.props(styles.styledHeader)}>
+    <header {...rest} sx={styles.styledHeader}>
       {children}
     </header>
   );
 }
 
 export const App = () => (
-  <div {...stylex.props(styles.container)}>
+  <div sx={styles.container}>
     <StyledHeader>Header 1 (has border because not only child)</StyledHeader>
     <StyledHeader>Header 2 (has border because not only child)</StyledHeader>
     <div style={{ padding: 16, background: "#e0e0e0" }}>

@@ -5,7 +5,7 @@ type CardProps = React.PropsWithChildren<{}>;
 
 // withConfig for componentId (stable class names)
 function Card(props: CardProps) {
-  return <div {...stylex.props(styles.card)}>{props.children}</div>;
+  return <div sx={styles.card}>{props.children}</div>;
 }
 
 type InputProps = { hasError?: boolean } & Pick<React.ComponentProps<"input">, "placeholder">;
@@ -14,20 +14,18 @@ type InputProps = { hasError?: boolean } & Pick<React.ComponentProps<"input">, "
 function Input(props: InputProps) {
   const { hasError, ...rest } = props;
 
-  return (
-    <input {...rest} {...stylex.props(styles.input, hasError ? styles.inputHasError : undefined)} />
-  );
+  return <input {...rest} sx={[styles.input, hasError ? styles.inputHasError : undefined]} />;
 }
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button)}>Primary Button</button>
+    <button sx={styles.button}>Primary Button</button>
     <Card>
       <p>Card content</p>
     </Card>
     <Input placeholder="Normal input" />
     <Input hasError placeholder="Error input" />
-    <button {...stylex.props(styles.baseButton, styles.extendedButton)}>Extended Button</button>
+    <button sx={[styles.baseButton, styles.extendedButton]}>Extended Button</button>
   </div>
 );
 

@@ -12,10 +12,10 @@ function ErrorMessage(props: ErrorMessageProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.errorMessage,
         $inline === true ? styles.errorMessageInline : styles.errorMessageNotInline,
-      )}
+      ]}
     >
       {children}
     </div>

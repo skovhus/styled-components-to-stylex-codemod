@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
 function Container(props: React.PropsWithChildren<{}>) {
-  return <div {...stylex.props(styles.container, styles.border)}>{props.children}</div>;
+  return <div sx={[styles.container, styles.border]}>{props.children}</div>;
 }
 
 export function App() {

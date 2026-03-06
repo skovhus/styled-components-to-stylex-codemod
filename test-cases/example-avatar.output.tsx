@@ -13,11 +13,11 @@ function Img(props: ImgProps) {
   return (
     <img
       {...rest}
-      {...stylex.props(
+      sx={[
         styles.img,
         $disabled ? styles.imgDisabled : undefined,
         $isInactive ? styles.imgInactive : undefined,
-      )}
+      ]}
     />
   );
 }

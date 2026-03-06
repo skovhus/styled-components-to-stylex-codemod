@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $zIndex } from "./tokens.stylex";
 
 export function App() {
-  return <div {...stylex.props(styles.dialogContainer)}>Dialog Content</div>;
+  return <div sx={styles.dialogContainer}>Dialog Content</div>;
 }
 
 const styles = stylex.create({

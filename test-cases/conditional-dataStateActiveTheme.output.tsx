@@ -7,12 +7,7 @@ function Container(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 
   return (
-    <div
-      {...stylex.props(
-        styles.container,
-        theme.isDark ? styles.containerDark : styles.containerLight,
-      )}
-    >
+    <div sx={[styles.container, theme.isDark ? styles.containerDark : styles.containerLight]}>
       {props.children}
     </div>
   );
@@ -22,7 +17,7 @@ function Tab(props: React.PropsWithChildren<{ "data-state"?: string }>) {
   const { children, ...rest } = props;
 
   return (
-    <button {...rest} {...stylex.props(styles.tab)}>
+    <button {...rest} sx={styles.tab}>
       {children}
     </button>
   );

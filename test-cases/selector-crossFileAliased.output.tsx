@@ -6,7 +6,7 @@ import { CardMarker } from "./selector-crossFileAliased.input.stylex";
 export function App() {
   return (
     <div style={{ padding: 16 }}>
-      <div {...stylex.props(styles.card, CardMarker)}>
+      <div sx={[styles.card, CardMarker]}>
         <Arrow {...stylex.props(styles.arrowInCard)} />
         Aliased import
       </div>

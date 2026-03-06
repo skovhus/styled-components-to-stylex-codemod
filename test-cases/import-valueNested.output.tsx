@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $config } from "./tokens.stylex";
 
 export function App() {
-  return <div {...stylex.props(styles.card)} />;
+  return <div sx={styles.card} />;
 }
 
 const styles = stylex.create({

@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
 export function App() {
-  return <div {...stylex.props(styles.container)}>Hello</div>;
+  return <div sx={styles.container}>Hello</div>;
 }
 
 const styles = stylex.create({

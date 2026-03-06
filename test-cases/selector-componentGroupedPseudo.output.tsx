@@ -1,10 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <a href="#" {...stylex.props(styles.link, stylex.defaultMarker())}>
-    <span {...stylex.props(styles.badge, styles.badgeInLink)}>
-      Badge (blue on focus-visible OR active)
-    </span>
+  <a href="#" sx={[styles.link, stylex.defaultMarker()]}>
+    <span sx={[styles.badge, styles.badgeInLink]}>Badge (blue on focus-visible OR active)</span>
   </a>
 );
 

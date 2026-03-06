@@ -15,7 +15,7 @@ export function DropZone(props: DropZoneProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined)}
+      sx={[styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined]}
     >
       {children}
     </div>

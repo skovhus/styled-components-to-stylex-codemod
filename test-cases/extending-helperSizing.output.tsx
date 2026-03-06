@@ -19,12 +19,12 @@ function AvatarContainer(props: AvatarContainerProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.avatarContainer,
         disabled ? styles.avatarContainerDisabled : undefined,
         styles.avatarContainerWidth(sizeMap[size]),
         styles.avatarContainerHeight(sizeMap[size]),
-      )}
+      ]}
     >
       {children}
     </div>

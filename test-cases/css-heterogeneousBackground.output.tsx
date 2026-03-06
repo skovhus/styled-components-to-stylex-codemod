@@ -15,9 +15,7 @@ function MixedBackground(props: MixedBackgroundProps) {
   return (
     <div
       {...rest}
-      {...stylex.props(
-        $useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient,
-      )}
+      sx={$useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient}
     >
       {children}
     </div>
@@ -35,10 +33,10 @@ function NestedColorBackground(props: NestedColorBackgroundProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.nestedColorBackground,
         $colorVariants[$color as keyof typeof $colorVariants] ?? $colorVariants.default,
-      )}
+      ]}
     >
       {children}
     </div>
@@ -52,7 +50,7 @@ export const App = () => (
     <NestedColorBackground $color="red">Red</NestedColorBackground>
     <NestedColorBackground $color="blue">Blue</NestedColorBackground>
     <NestedColorBackground $color="default">Default</NestedColorBackground>
-    <div {...stylex.props(styles.resetBackground)}>No Background</div>
+    <div sx={styles.resetBackground}>No Background</div>
   </div>
 );
 

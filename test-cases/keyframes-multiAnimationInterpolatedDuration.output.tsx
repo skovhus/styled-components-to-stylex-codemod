@@ -34,10 +34,10 @@ function AnimatedCard(props: AnimatedCardProps) {
 
   return (
     <div
-      {...stylex.props(
+      sx={[
         styles.animatedCard,
         $duration != null && styles.animatedCardAnimationDuration(`${$duration ?? 200}ms, 1s`),
-      )}
+      ]}
     >
       {children}
     </div>

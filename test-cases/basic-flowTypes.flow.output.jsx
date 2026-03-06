@@ -4,7 +4,7 @@ export function Button(props) {
   const { children, ...rest } = props;
 
   return (
-    <button {...rest} {...stylex.props(styles.button)}>
+    <button {...rest} sx={styles.button}>
       {children}
     </button>
   );
@@ -13,7 +13,7 @@ export function Button(props) {
 export const App = () => (
   <div>
     <Button>Click me</Button>
-    <div {...stylex.props(styles.card)}>Card content</div>
+    <div sx={styles.card}>Card content</div>
   </div>
 );
 

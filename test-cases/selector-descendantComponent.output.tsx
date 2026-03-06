@@ -14,7 +14,7 @@ export function ContainerLink(props: Omit<React.ComponentProps<"a">, "className"
   const { children, ...rest } = props;
 
   return (
-    <a {...rest} {...stylex.props(stylex.defaultMarker())}>
+    <a {...rest} sx={stylex.defaultMarker()}>
       {children}
     </a>
   );
@@ -22,19 +22,19 @@ export function ContainerLink(props: Omit<React.ComponentProps<"a">, "className"
 
 export const App = () => (
   <div>
-    <button {...stylex.props(styles.button, stylex.defaultMarker())}>
+    <button sx={[styles.button, stylex.defaultMarker()]}>
       Click me
-      <span {...stylex.props(styles.icon, styles.iconInButton)} />
+      <span sx={[styles.icon, styles.iconInButton]} />
     </button>
     <br />
     <br />
     <ContainerLink href="#">
-      <div {...stylex.props(styles.content, styles.contentInContainerLink)} />
+      <div sx={[styles.content, styles.contentInContainerLink]} />
     </ContainerLink>
     <br />
     <br />
-    <div {...stylex.props(stylex.defaultMarker())}>
-      <div {...stylex.props(styles.shadowBox, styles.shadowBoxInShadowContainer)} />
+    <div sx={stylex.defaultMarker()}>
+      <div sx={[styles.shadowBox, styles.shadowBoxInShadowContainer]} />
     </div>
   </div>
 );
