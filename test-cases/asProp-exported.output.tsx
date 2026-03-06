@@ -7,7 +7,7 @@ export function ContentViewContainer<C extends React.ElementType = "div">(
   const { as: Component = "div", children, ...rest } = props;
 
   return (
-    <Component {...rest} sx={styles.contentViewContainer}>
+    <Component {...rest} {...stylex.props(styles.contentViewContainer)}>
       {children}
     </Component>
   );

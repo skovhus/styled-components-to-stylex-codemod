@@ -15,7 +15,7 @@ function FullWidthCopyText<C extends React.ElementType = "div">(
   const { as: Component = "div", children, ...rest } = props;
 
   return (
-    <Component {...rest} sx={styles.fullWidthCopyText}>
+    <Component {...rest} {...stylex.props(styles.fullWidthCopyText)}>
       {children}
     </Component>
   );

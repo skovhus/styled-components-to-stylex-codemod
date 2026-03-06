@@ -628,6 +628,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         allowStyleProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
+        isIntrinsicElement: !allowAsProp,
       });
 
       const openingAttrs: JsxAttr[] = [
@@ -743,6 +744,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
       staticClassNameExpr,
+      isIntrinsicElement: !allowAsProp,
     });
 
     // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override

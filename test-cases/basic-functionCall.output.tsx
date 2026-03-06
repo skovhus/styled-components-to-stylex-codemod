@@ -7,7 +7,7 @@ export function App() {
   return (
     <div>
       <input placeholder="Type here" sx={styles.input} />
-      <animated.div sx={styles.animatedBox}>Animated content</animated.div>
+      <animated.div {...stylex.props(styles.animatedBox)}>Animated content</animated.div>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { animated } from "./lib/react-spring";
 
 export const App = () => (
   <div sx={styles.simpleBox}>
-    <animated.div role="region" sx={styles.animatedBox}>
+    <animated.div role="region" {...stylex.props(styles.animatedBox)}>
       Hello
     </animated.div>
   </div>

@@ -1463,6 +1463,7 @@ export class WrapperEmitter {
       allowStyleProp,
       inlineStyleProps,
       staticClassNameExpr,
+      isIntrinsicElement: !allowAsProp,
     });
 
     const jsxAttrs: Array<JSXAttribute | JSXSpreadAttribute> = [];

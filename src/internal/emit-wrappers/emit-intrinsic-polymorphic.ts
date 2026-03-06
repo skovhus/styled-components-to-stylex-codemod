@@ -312,6 +312,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         allowSxProp,
         inlineStyleProps: [],
         staticClassNameExpr,
+        isIntrinsicElement: false,
       });
 
       const attrs: JsxAttr[] = [

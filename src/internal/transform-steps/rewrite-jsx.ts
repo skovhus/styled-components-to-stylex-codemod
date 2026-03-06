@@ -569,7 +569,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // combine StyleX output with user-provided className/style values.
         const needsMerge =
           decl.isDirectJsxResolution && (classNameAttr !== null || styleAttr !== null);
-        const isIntrinsicTag = /^[a-z]/.test(finalTag);
+        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
         const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
         const stylexAttr = useSxProp
           ? (() => {

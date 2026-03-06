@@ -355,6 +355,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       allowSxProp,
       inlineStyleProps: [],
       staticClassNameExpr,
+      isIntrinsicElement: !allowAsProp,
     });
 
     const openingAttrs: JsxAttr[] = [
@@ -1168,6 +1169,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
+        isIntrinsicElement: !useAsProp,
       });
 
       const openingAttrs: JsxAttr[] = [
