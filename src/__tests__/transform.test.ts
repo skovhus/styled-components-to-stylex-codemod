@@ -4138,6 +4138,108 @@ export const App = () => <Box>Gradient Background</Box>;
     expect(result.code).toContain("linear-gradient(to right, red, blue)");
     // Should not contain newlines in the gradient
     expect(result.code).not.toMatch(/linear-gradient\([^)]*\n[^)]*\)/);
+    // prettier-ignore should not be transferred to the output
+    expect(result.code).not.toContain("prettier-ignore");
+  });
+});
+
+describe("prettier-ignore comment removal", () => {
+  it("should omit // prettier-ignore from leading comments on styled declaration", () => {
+    const source = `
+import styled from "styled-components";
+
+// prettier-ignore
+const Box = styled.div\`
+  color: red;
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "prettierIgnore-leading.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("prettier-ignore");
+    expect(result.code).toContain("color:");
+  });
+
+  it("should omit // prettier-ignore from inside template literal", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: red;
+  // prettier-ignore
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "prettierIgnore-inline.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("prettier-ignore");
+    expect(result.code).toContain("color:");
+    expect(result.code).toContain("padding:");
+  });
+
+  it("should omit /* prettier-ignore */ block comment from inside template literal", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: red;
+  /* prettier-ignore */
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "prettierIgnore-block.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("prettier-ignore");
+    expect(result.code).toContain("color:");
+    expect(result.code).toContain("padding:");
+  });
+
+  it("should preserve non-prettier-ignore comments while omitting prettier-ignore", () => {
+    const source = `
+import styled from "styled-components";
+
+// Component description
+// prettier-ignore
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "prettierIgnore-mixed.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("prettier-ignore");
+    expect(result.code).toContain("Component description");
   });
 });
 

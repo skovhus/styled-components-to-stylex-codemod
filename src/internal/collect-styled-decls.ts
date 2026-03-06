@@ -13,6 +13,7 @@ import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 import { toStyleKey, toSuffixFromProp } from "./transform/helpers.js";
+import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
 
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
@@ -586,8 +587,10 @@ function collectStyledDeclsImpl(args: {
     if (!comments || !Array.isArray(comments) || comments.length === 0) {
       return;
     }
-    // Only capture leading comments
-    return comments.filter((c: any) => c.leading !== false);
+    const filtered = comments.filter(
+      (c: any) => c.leading !== false && !isPrettierIgnoreComment(String(c.value ?? "")),
+    );
+    return filtered.length > 0 ? filtered : undefined;
   };
 
   /**
