@@ -1,1 +1,0 @@
-import{j as s}from"./index-rJK7xR3r.js";import{u as e,a as n}from"./react-spring-BzAR47Hh.js";function o(){const[t]=e(()=>({d:"M2 3L11 5L20 3",y:0}));return s.jsx("svg",{width:"22",height:"6",children:s.jsx(n.path,{d:t.d,sx:r.styledPath})})}const x=()=>s.jsx(o,{}),r={styledPath:{kjVXCG:"x73je2i",kfJifR:"xvlca1e",kU5bRw:"x1owpc8m",$$css:!0}};export{x as App};

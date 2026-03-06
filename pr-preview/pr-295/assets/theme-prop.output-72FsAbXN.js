@@ -1,1 +1,0 @@
-import{j as x,K as r}from"./index-rJK7xR3r.js";function t(e){const s=r();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk xyc6gmr"},1:{className:"xpyat2d x1exxlbk xhxy2q7"}}[!!s.isDark<<0],children:e.children})}const c=()=>x.jsx(t,{children:"Theme prop"});export{c as App};

@@ -1,0 +1,1 @@
+import{j as x}from"./index-Bjb9JkI6.js";const e=()=>x.jsx("div",{className:"x4s5kx9 x12h1iku xh8yej3 xmkeg23 x1y0btm7 xtb30c9 x1tamke2",children:x.jsx("div",{className:"x1s85apg x16fd72j",children:"Visible when container > 300px"})});export{e as App};
