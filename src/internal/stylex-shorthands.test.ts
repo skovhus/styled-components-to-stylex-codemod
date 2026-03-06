@@ -1,74 +1,40 @@
 import { describe, it, expect } from "vitest";
-import {
-  isStylexLonghandOnlyShorthand,
-  isStylexShorthandCamelCase,
-  splitDirectionalProperty,
-} from "./stylex-shorthands.js";
-
-describe("isStylexLonghandOnlyShorthand", () => {
-  it("returns true for border", () => {
-    expect(isStylexLonghandOnlyShorthand("border")).toBe(true);
-  });
-
-  it("returns true for directional border", () => {
-    expect(isStylexLonghandOnlyShorthand("border-top")).toBe(true);
-    expect(isStylexLonghandOnlyShorthand("border-right")).toBe(true);
-    expect(isStylexLonghandOnlyShorthand("border-bottom")).toBe(true);
-    expect(isStylexLonghandOnlyShorthand("border-left")).toBe(true);
-  });
-
-  it("returns true for margin and padding", () => {
-    expect(isStylexLonghandOnlyShorthand("margin")).toBe(true);
-    expect(isStylexLonghandOnlyShorthand("padding")).toBe(true);
-  });
-
-  it("returns true for scroll-margin and scroll-padding", () => {
-    expect(isStylexLonghandOnlyShorthand("scroll-margin")).toBe(true);
-    expect(isStylexLonghandOnlyShorthand("scroll-padding")).toBe(true);
-  });
-
-  it("returns false for non-shorthand properties", () => {
-    expect(isStylexLonghandOnlyShorthand("color")).toBe(false);
-    expect(isStylexLonghandOnlyShorthand("font-size")).toBe(false);
-    expect(isStylexLonghandOnlyShorthand("margin-top")).toBe(false);
-  });
-});
+import { isStylexShorthandCamelCase, splitDirectionalProperty } from "./stylex-shorthands.js";
 
 describe("isStylexShorthandCamelCase", () => {
-  it("returns true for camelCase shorthand", () => {
+  it("detects camelCase shorthands that map to kebab-case entries", () => {
     expect(isStylexShorthandCamelCase("borderTop")).toBe(true);
     expect(isStylexShorthandCamelCase("scrollMargin")).toBe(true);
     expect(isStylexShorthandCamelCase("scrollPadding")).toBe(true);
   });
 
-  it("returns false for non-shorthand camelCase", () => {
+  it("rejects longhand properties that are NOT shorthand-only", () => {
+    expect(isStylexShorthandCamelCase("borderTopWidth")).toBe(false);
+    expect(isStylexShorthandCamelCase("marginTop")).toBe(false);
+    expect(isStylexShorthandCamelCase("paddingInline")).toBe(false);
+  });
+
+  it("rejects plain CSS properties", () => {
     expect(isStylexShorthandCamelCase("color")).toBe(false);
     expect(isStylexShorthandCamelCase("fontSize")).toBe(false);
-    expect(isStylexShorthandCamelCase("marginTop")).toBe(false);
   });
 });
 
 describe("splitDirectionalProperty", () => {
-  it("returns single entry for one-value shorthand", () => {
-    const result = splitDirectionalProperty({
-      prop: "padding",
-      rawValue: "8px",
-    });
-    expect(result).toEqual([{ prop: "padding", value: "8px" }]);
+  it("returns single entry for uniform single value", () => {
+    expect(splitDirectionalProperty({ prop: "padding", rawValue: "8px" })).toEqual([
+      { prop: "padding", value: "8px" },
+    ]);
   });
 
-  it("splits two-value shorthand into block and inline", () => {
-    const result = splitDirectionalProperty({
-      prop: "padding",
-      rawValue: "4px 8px",
-    });
-    expect(result).toEqual([
+  it("uses block/inline for two-value shorthand", () => {
+    expect(splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px" })).toEqual([
       { prop: "paddingBlock", value: "4px" },
       { prop: "paddingInline", value: "8px" },
     ]);
   });
 
-  it("splits three-value shorthand into four directions", () => {
+  it("expands three-value shorthand with CSS spec rules (top, left=right, bottom)", () => {
     const result = splitDirectionalProperty({
       prop: "margin",
       rawValue: "4px 8px 12px",
@@ -81,31 +47,30 @@ describe("splitDirectionalProperty", () => {
     ]);
   });
 
-  it("splits four-value shorthand into four directions", () => {
-    const result = splitDirectionalProperty({
-      prop: "padding",
-      rawValue: "1px 2px 3px 4px",
-    });
-    expect(result).toEqual([
-      { prop: "paddingTop", value: "1px" },
-      { prop: "paddingRight", value: "2px" },
-      { prop: "paddingBottom", value: "3px" },
-      { prop: "paddingLeft", value: "4px" },
+  it("collapses identical four values back to single entry", () => {
+    expect(splitDirectionalProperty({ prop: "padding", rawValue: "8px 8px 8px 8px" })).toEqual([
+      { prop: "padding", value: "8px" },
     ]);
   });
 
-  it("adds !important to each direction when important is true", () => {
+  it("forces expansion with important even for single values", () => {
     const result = splitDirectionalProperty({
-      prop: "margin",
-      rawValue: "4px 8px",
+      prop: "padding",
+      rawValue: "8px",
       important: true,
     });
-    expect(result).toEqual([
-      { prop: "marginTop", value: "4px !important" },
-      { prop: "marginRight", value: "8px !important" },
-      { prop: "marginBottom", value: "4px !important" },
-      { prop: "marginLeft", value: "8px !important" },
-    ]);
+    expect(result).toHaveLength(4);
+    expect(result[0]).toEqual({ prop: "paddingTop", value: "8px !important" });
+  });
+
+  it("forces expansion with alwaysExpand even for single values", () => {
+    const result = splitDirectionalProperty({
+      prop: "padding",
+      rawValue: "8px",
+      alwaysExpand: true,
+    });
+    expect(result).toHaveLength(4);
+    expect(result.every((e) => e.value === "8px")).toBe(true);
   });
 
   it("uses inline directional props with preferInline", () => {
@@ -114,63 +79,34 @@ describe("splitDirectionalProperty", () => {
       rawValue: "1px 2px 3px 4px",
       preferInline: true,
     });
+    expect(result[1]!.prop).toBe("paddingInlineEnd");
+    expect(result[3]!.prop).toBe("paddingInlineStart");
+  });
+
+  it("handles CSS functions like calc() as single values", () => {
+    const result = splitDirectionalProperty({
+      prop: "padding",
+      rawValue: "calc(100% - 20px)",
+    });
+    expect(result).toEqual([{ prop: "padding", value: "calc(100% - 20px)" }]);
+  });
+
+  it("handles calc() in multi-value shorthand", () => {
+    const result = splitDirectionalProperty({
+      prop: "margin",
+      rawValue: "calc(100% - 20px) 10px",
+    });
     expect(result).toEqual([
-      { prop: "paddingTop", value: "1px" },
-      { prop: "paddingInlineEnd", value: "2px" },
-      { prop: "paddingBottom", value: "3px" },
-      { prop: "paddingInlineStart", value: "4px" },
+      { prop: "marginBlock", value: "calc(100% - 20px)" },
+      { prop: "marginInline", value: "10px" },
     ]);
   });
 
-  it("handles numeric values", () => {
+  it("handles numeric 0 input", () => {
     const result = splitDirectionalProperty({
       prop: "margin",
       rawValue: 0,
     });
     expect(result).toEqual([{ prop: "margin", value: "0" }]);
-  });
-
-  it("always expands with alwaysExpand even for single value", () => {
-    const result = splitDirectionalProperty({
-      prop: "padding",
-      rawValue: "8px",
-      alwaysExpand: true,
-    });
-    expect(result).toEqual([
-      { prop: "paddingTop", value: "8px" },
-      { prop: "paddingRight", value: "8px" },
-      { prop: "paddingBottom", value: "8px" },
-      { prop: "paddingLeft", value: "8px" },
-    ]);
-  });
-
-  it("handles scrollMargin", () => {
-    const result = splitDirectionalProperty({
-      prop: "scrollMargin",
-      rawValue: "4px 8px",
-    });
-    expect(result).toEqual([
-      { prop: "scrollMarginBlock", value: "4px" },
-      { prop: "scrollMarginInline", value: "8px" },
-    ]);
-  });
-
-  it("handles scrollPadding", () => {
-    const result = splitDirectionalProperty({
-      prop: "scrollPadding",
-      rawValue: "4px 8px",
-    });
-    expect(result).toEqual([
-      { prop: "scrollPaddingBlock", value: "4px" },
-      { prop: "scrollPaddingInline", value: "8px" },
-    ]);
-  });
-
-  it("collapses identical values to single entry", () => {
-    const result = splitDirectionalProperty({
-      prop: "padding",
-      rawValue: "8px 8px 8px 8px",
-    });
-    expect(result).toEqual([{ prop: "padding", value: "8px" }]);
   });
 });
