@@ -1,1 +1,0 @@
-import{j as s}from"./index-B6g1vYsS.js";import{a as e}from"./react-spring-35XKxyvf.js";const x=()=>s.jsx("div",{className:"x1lliihq",children:s.jsx(e.div,{role:"region",sx:i.animatedBox,children:"Hello"})}),i={animatedBox:{k1xSpc:"x78zum5",kGNEyG:"x6s0dn4",$$css:!0}};export{x as App};
