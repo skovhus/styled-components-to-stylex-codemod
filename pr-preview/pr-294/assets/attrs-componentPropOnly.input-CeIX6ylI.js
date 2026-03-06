@@ -1,0 +1,1 @@
+import{j as t,c as r}from"./index-B8fR1p4V.js";import{T as s}from"./text-CuVIsUa6.js";const i=r(s).attrs({variant:"title2"})``,l=()=>t.jsx("div",{style:{padding:"16px"},children:t.jsx(i,{children:"Hello World"})});export{l as App};
