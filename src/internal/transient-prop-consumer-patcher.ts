@@ -46,6 +46,29 @@ export function findImportedRenamedComponents(
 }
 
 /**
+ * Patch source code: rename `$prop` → `prop` in JSX attributes
+ * for the given components.
+ *
+ * Returns the patched source or `null` if no changes were made.
+ */
+export function patchSourceTransientProps(
+  source: string,
+  entries: readonly TransientPropConsumerEntry[],
+): string | null {
+  if (entries.length === 0) {
+    return null;
+  }
+
+  let modified = source;
+
+  for (const { localComponentName, renames } of entries) {
+    modified = patchJsxTransientProps(modified, localComponentName, renames);
+  }
+
+  return modified !== source ? modified : null;
+}
+
+/**
  * Patch a single consumer file: rename `$prop` → `prop` in JSX attributes
  * for the given components.
  *
@@ -61,18 +84,7 @@ export function patchConsumerTransientProps(
   } catch {
     return null;
   }
-
-  if (entries.length === 0) {
-    return null;
-  }
-
-  let modified = source;
-
-  for (const { localComponentName, renames } of entries) {
-    modified = patchJsxTransientProps(modified, localComponentName, renames);
-  }
-
-  return modified !== source ? modified : null;
+  return patchSourceTransientProps(source, entries);
 }
 
 /* ── Non-exported helpers ─────────────────────────────────────────────── */

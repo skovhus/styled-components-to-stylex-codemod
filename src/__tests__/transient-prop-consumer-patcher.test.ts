@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findImportedRenamedComponents,
   patchConsumerTransientProps,
+  patchSourceTransientProps,
 } from "../internal/transient-prop-consumer-patcher.js";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -43,7 +44,56 @@ describe("findImportedRenamedComponents", () => {
   });
 });
 
-describe("patchConsumerTransientProps", () => {
+describe("patchSourceTransientProps", () => {
+  it("renames $-prefixed JSX attributes", () => {
+    const source = `import { Toggle } from "./Toggle";\n\nexport const App = () => <Toggle $active $size="large" />;`;
+    const result = patchSourceTransientProps(source, [
+      { localComponentName: "Toggle", renames: { $active: "active", $size: "size" } },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result).toContain("active");
+    expect(result).toContain('size="large"');
+    expect(result).not.toContain("$active");
+    expect(result).not.toContain("$size");
+  });
+
+  it("handles shorthand boolean props", () => {
+    const result = patchSourceTransientProps(`<Toggle $active>On</Toggle>`, [
+      { localComponentName: "Toggle", renames: { $active: "active" } },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result).toContain("<Toggle active>");
+  });
+
+  it("returns null when no changes needed", () => {
+    const result = patchSourceTransientProps(`<Toggle active>On</Toggle>`, [
+      { localComponentName: "Toggle", renames: { $active: "active" } },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("does not touch unrelated components", () => {
+    const result = patchSourceTransientProps(`<OtherComp $active>On</OtherComp>`, [
+      { localComponentName: "Toggle", renames: { $active: "active" } },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("handles multiple components from different targets", () => {
+    const source = `<Toggle $active />\n<Badge $variant="ok" />`;
+    const result = patchSourceTransientProps(source, [
+      { localComponentName: "Toggle", renames: { $active: "active" } },
+      { localComponentName: "Badge", renames: { $variant: "variant" } },
+    ]);
+    expect(result).not.toBeNull();
+    expect(result).toContain("<Toggle active");
+    expect(result).toContain('variant="ok"');
+    expect(result).not.toContain("$active");
+    expect(result).not.toContain("$variant");
+  });
+});
+
+describe("patchConsumerTransientProps (file-based)", () => {
   let tmpDir: string;
 
   function writeTemp(content: string): string {
@@ -59,25 +109,7 @@ describe("patchConsumerTransientProps", () => {
     }
   }
 
-  it("renames $-prefixed JSX attributes", () => {
-    const filePath = writeTemp(
-      `import { Toggle } from "./Toggle";\n\nexport const App = () => <Toggle $active $size="large" />;`,
-    );
-    try {
-      const result = patchConsumerTransientProps(filePath, [
-        { localComponentName: "Toggle", renames: { $active: "active", $size: "size" } },
-      ]);
-      expect(result).not.toBeNull();
-      expect(result).toContain("active");
-      expect(result).toContain('size="large"');
-      expect(result).not.toContain("$active");
-      expect(result).not.toContain("$size");
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("handles shorthand boolean props", () => {
+  it("reads file and patches it", () => {
     const filePath = writeTemp(`<Toggle $active>On</Toggle>`);
     try {
       const result = patchConsumerTransientProps(filePath, [
@@ -90,27 +122,10 @@ describe("patchConsumerTransientProps", () => {
     }
   });
 
-  it("returns null when no changes needed", () => {
-    const filePath = writeTemp(`<Toggle active>On</Toggle>`);
-    try {
-      const result = patchConsumerTransientProps(filePath, [
-        { localComponentName: "Toggle", renames: { $active: "active" } },
-      ]);
-      expect(result).toBeNull();
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("does not touch unrelated components", () => {
-    const filePath = writeTemp(`<OtherComp $active>On</OtherComp>`);
-    try {
-      const result = patchConsumerTransientProps(filePath, [
-        { localComponentName: "Toggle", renames: { $active: "active" } },
-      ]);
-      expect(result).toBeNull();
-    } finally {
-      cleanup();
-    }
+  it("returns null for missing file", () => {
+    const result = patchConsumerTransientProps("/nonexistent/path.tsx", [
+      { localComponentName: "Toggle", renames: { $active: "active" } },
+    ]);
+    expect(result).toBeNull();
   });
 });
