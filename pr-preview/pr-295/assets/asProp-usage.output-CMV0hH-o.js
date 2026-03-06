@@ -1,0 +1,1 @@
+import{j as t}from"./index-B6g1vYsS.js";const x=()=>t.jsx("div",{className:"x12nagc",children:t.jsx(i,{as:"label",children:"Invite link"})});function i(s){const{as:e="div",children:n,...l}=s;return t.jsx(e,{...l,sx:o.fullWidthCopyText,children:n})}const o={fullWidthCopyText:{kzqmXN:"xh8yej3",$$css:!0}};export{x as App};
