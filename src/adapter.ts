@@ -574,9 +574,8 @@ export interface Adapter {
    *
    * Only applies to simple cases without className/style merging.
    *
-   * @default false
    */
-  useSxProp?: boolean;
+  useSxProp: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -608,7 +607,7 @@ export interface AdapterInput {
 
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
-  useSxProp?: Adapter["useSxProp"];
+  useSxProp: Adapter["useSxProp"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -664,6 +663,9 @@ export interface AdapterInput {
  *
  *     // Optional: provide a custom merger, or use `null` for the default verbose merge output
  *     styleMerger: null,
+ *
+ *     // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
+ *     useSxProp: false,
  *
  *     // Optional: customize runtime theme hook import/call used by emitted wrappers
  *     themeHook: {

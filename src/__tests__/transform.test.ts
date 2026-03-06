@@ -767,6 +767,7 @@ export const App = () => <Box $on />;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -820,6 +821,7 @@ export const App = () => (
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -876,6 +878,7 @@ export const App = () => <Box level="high">Hello</Box>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -924,6 +927,7 @@ export const App = () => <Box tone="muted">Hello</Box>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -1002,6 +1006,7 @@ export const App = () => <Toggle>Toggle</Toggle>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -1174,6 +1179,7 @@ describe("styleMerger configuration", () => {
       functionName: "stylexProps",
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
+    useSxProp: false,
   };
   const noExternalMergerAdapter = {
     externalInterface() {
@@ -1192,6 +1198,7 @@ describe("styleMerger configuration", () => {
       functionName: "stylexProps",
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
+    useSxProp: false,
   };
   const absolutePathMergerAdapter = {
     externalInterface() {
@@ -1213,6 +1220,7 @@ describe("styleMerger configuration", () => {
         value: pathResolve(__dirname, "fixtures", "stylexProps.ts"),
       },
     },
+    useSxProp: false,
   };
 
   it("should use merger function instead of verbose pattern when configured", async () => {
@@ -1442,6 +1450,7 @@ export const App = () => <Box $delay={100} />;
   it("should use verbose pattern when no merger is configured", async () => {
     const adapterWithoutMerger = {
       styleMerger: null,
+      useSxProp: false,
       externalInterface() {
         return { styles: true, as: false, ref: false } as const;
       },
@@ -1488,6 +1497,7 @@ export const App = () => <Button>Click</Button>;
         functionName: "mergedSx",
         importSource: { kind: "specifier" as const, value: "./lib/mergedSx" },
       },
+      useSxProp: false,
       externalInterface() {
         return { styles: true, as: true, ref: true } as const;
       },
@@ -1533,6 +1543,7 @@ export const App = () => <Box $color="red">Hello</Box>;
   it("should include ref in type when externalInterface returns ref: true", async () => {
     const adapterWithRef = {
       styleMerger: null,
+      useSxProp: false,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -1568,6 +1579,7 @@ export const App = () => <Box>Hello</Box>;
   it("should explicitly destructure and forward ref when wrapper supports external refs", async () => {
     const adapterWithRef = {
       styleMerger: null,
+      useSxProp: false,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -1610,6 +1622,7 @@ export const App = () => {
   it("should explicitly destructure and forward ref for component wrappers", async () => {
     const adapterWithRef = {
       styleMerger: null,
+      useSxProp: false,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -1656,6 +1669,7 @@ export const App = () => {
   it("should not include ref in type when externalInterface returns ref: false", async () => {
     const adapterWithoutRef = {
       styleMerger: null,
+      useSxProp: false,
       externalInterface() {
         return { styles: false, as: false, ref: false } as const;
       },
@@ -1771,6 +1785,7 @@ export const App = () => <Button>Click me</Button>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -1817,6 +1832,7 @@ export const App = () => <Button>Click me</Button>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -1974,6 +1990,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2028,6 +2045,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2079,6 +2097,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2136,6 +2155,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2199,6 +2219,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2256,6 +2277,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2306,6 +2328,7 @@ export const App = () => <Text>Hello</Text>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -2766,6 +2789,7 @@ export const App = () => <Box>Hello</Box>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
       themeHook: {
         functionName: "useDesignTheme",
         importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
@@ -2810,6 +2834,7 @@ export const App = () => <Box>Hello</Box>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
       themeHook: {
         functionName: "useDesignTheme",
         importSource: {
@@ -2856,6 +2881,7 @@ export const App = () => <Box>Hello</Box>;
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
       themeHook: {
         functionName: "useTheme",
         importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
@@ -3635,6 +3661,7 @@ export function App() {
         return undefined;
       },
       styleMerger: null,
+      useSxProp: false,
     };
 
     const result = transformWithWarnings(

@@ -93,6 +93,7 @@ describe("public API runtime validation (DX)", () => {
         },
         externalInterface: "auto",
         styleMerger: null,
+        useSxProp: false,
       }),
     ).not.toThrow();
   });
@@ -133,6 +134,7 @@ describe("public API runtime validation (DX)", () => {
         },
         externalInterface: "auto",
         styleMerger: null,
+        useSxProp: false,
         themeHook: {
           functionName: "useDesignTheme",
           importSource: { kind: "specifier", value: "@company/theme-hooks" },
@@ -169,6 +171,7 @@ describe("public API runtime validation (DX)", () => {
       resolveSelector: () => undefined,
       externalInterface: "auto" as const,
       styleMerger: null,
+      useSxProp: false,
     };
     await expect(
       runTransform({ files: "src/__tests__/fixtures/**/*.tsx", consumerPaths: null, adapter }),
@@ -182,6 +185,7 @@ describe("public API runtime validation (DX)", () => {
       resolveSelector: () => undefined,
       externalInterface: "auto" as const,
       styleMerger: null,
+      useSxProp: false,
     };
     await expect(
       runTransform({

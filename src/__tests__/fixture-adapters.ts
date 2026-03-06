@@ -559,6 +559,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,
+  useSxProp: false,
   externalInterface() {
     return { styles: false, as: false, ref: false };
   },

@@ -24,7 +24,7 @@ export function emitWrappers(args: {
   themeHook?: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
-  useSxProp?: boolean;
+  useSxProp: boolean;
 }): void {
   const {
     root,

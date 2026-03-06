@@ -136,6 +136,7 @@ describe("runTransform prepass failure contract", () => {
       resolveSelector: () => undefined,
       externalInterface: "auto" as const,
       styleMerger: null,
+      useSxProp: false,
     };
 
     const execution = runTransform({
@@ -179,6 +180,7 @@ describe("runTransform prepass failure contract", () => {
       resolveSelector: () => undefined,
       externalInterface: () => ({ styles: false, as: false, ref: false }),
       styleMerger: null,
+      useSxProp: false,
     };
 
     const result = await runTransform({

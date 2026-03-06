@@ -46,7 +46,7 @@ type WrapperEmitterArgs = {
   themeHook: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
-  useSxProp?: boolean;
+  useSxProp: boolean;
 };
 
 export class WrapperEmitter {
@@ -87,7 +87,7 @@ export class WrapperEmitter {
     this.themeHook = args.themeHook;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
-    this.useSxProp = args.useSxProp ?? false;
+    this.useSxProp = args.useSxProp;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 
