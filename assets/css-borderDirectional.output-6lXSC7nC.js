@@ -1,0 +1,1 @@
+import{j as d}from"./index-oYS-xOVM.js";function r(e){return d.jsx("div",{className:"x1kvmibo x19ypqd9 x1dtrvc8",children:e.children})}function x(e){return d.jsx("div",{className:"x1b4wo1g x1y0btm7 xd8ztd4",children:e.children})}const n=()=>d.jsxs("div",{style:{padding:"10px"},children:[d.jsx(r,{children:"Bordered left"}),d.jsx(x,{children:"Bordered box"})]});export{n as App};

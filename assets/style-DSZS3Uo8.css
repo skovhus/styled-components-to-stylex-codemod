@@ -155,12 +155,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-strokeWidth {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
 
-@property --x-color {
+@property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
@@ -171,16 +171,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-fontWeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-1113oo7 {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-64unvl {
   syntax: "*";
   inherits: false
 }
@@ -201,6 +191,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-1e2mv7m {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-1113oo7 {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-64unvl {
   syntax: "*";
   inherits: false
 }
