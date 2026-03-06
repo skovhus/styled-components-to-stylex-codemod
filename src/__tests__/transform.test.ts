@@ -2913,7 +2913,7 @@ export const App = () => <Box>Hello</Box>;
 
       function Box(props: React.PropsWithChildren<{}>) {
         const theme = useTheme();
-        return <div {...stylex.props(theme.isDark ? styles.boxDark : styles.boxLight)}>{props.children}</div>;
+        return <div sx={theme.isDark ? styles.boxDark : styles.boxLight}>{props.children}</div>;
       }
 
       export const App = () => <Box>Hello</Box>;
@@ -2958,7 +2958,7 @@ export const App = () => <Box>Hello</Box>;
 
         return (
           <div
-            {...stylex.props(theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast)}>{props.children}</div>
+            sx={theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast}>{props.children}</div>
         );
       }
 
@@ -3006,10 +3006,10 @@ export const App = () => <Box>Hello</Box>;
 
         return (
           <div
-            {...stylex.props(
+            sx={[
               theme.isDark ? styles.boxDark : styles.boxLight,
               theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast,
-            )}>{props.children}</div>
+            ]}>{props.children}</div>
         );
       }
 

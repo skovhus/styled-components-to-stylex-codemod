@@ -101,31 +101,89 @@ export function postProcessTransformedAst(args: {
       return undefined;
     };
 
-    const hasStyleKeyArg = (call: any, key: string): boolean => {
-      return (call.arguments ?? []).some(
-        (a: any) =>
-          a?.type === "MemberExpression" &&
-          a.object?.type === "Identifier" &&
-          a.object.name === stylesIdentifier &&
-          a.property?.type === "Identifier" &&
-          a.property.name === key,
-      );
+    /** Returns the flat list of style args from an sx attribute expression. */
+    const getSxAttrArgs = (expr: any): any[] => {
+      if (!expr) {
+        return [];
+      }
+      if (expr.type === "ArrayExpression") {
+        return expr.elements ?? [];
+      }
+      return [expr];
     };
+
+    /** Finds the sx={...} JSX attribute on an opening element, or undefined. */
+    const getSxAttrFromAttrs = (attrs: any[]): any => {
+      for (const a of attrs ?? []) {
+        if (
+          a.type === "JSXAttribute" &&
+          a.name?.type === "JSXIdentifier" &&
+          a.name.name === "sx" &&
+          a.value?.type === "JSXExpressionContainer"
+        ) {
+          return a;
+        }
+      }
+      return undefined;
+    };
+
+    const isStyleKeyRef = (node: any, key: string): boolean =>
+      node?.type === "MemberExpression" &&
+      node.object?.type === "Identifier" &&
+      node.object.name === stylesIdentifier &&
+      node.property?.type === "Identifier" &&
+      node.property.name === key;
+
+    const hasStyleKeyArg = (call: any, key: string): boolean => {
+      return (call.arguments ?? []).some((a: any) => isStyleKeyRef(a, key));
+    };
+
+    /** Check for a style key in either stylex.props() args OR sx attribute args. */
+    const hasStyleKeyInAttrs = (attrs: any[], key: string): boolean => {
+      const call = getStylexPropsCallFromAttrs(attrs);
+      if (call && hasStyleKeyArg(call, key)) {
+        return true;
+      }
+      const sxAttr = getSxAttrFromAttrs(attrs);
+      if (sxAttr) {
+        return getSxAttrArgs(sxAttr.value.expression).some((a: any) => isStyleKeyRef(a, key));
+      }
+      return false;
+    };
+
+    /** Add args to sx attribute, converting single expr to array if needed. */
+    const addArgsToSxAttr = (sxAttr: any, newArgs: any[]): void => {
+      const container = sxAttr.value;
+      const expr = container.expression;
+      if (expr.type === "ArrayExpression") {
+        expr.elements = [...(expr.elements ?? []), ...newArgs];
+      } else {
+        container.expression = j.arrayExpression([expr, ...newArgs]);
+      }
+    };
+
+    const isIdentifierNamed = (a: any, name: string): boolean =>
+      a?.type === "Identifier" && a.name === name;
+
+    const isDefaultMarkerCall = (a: any): boolean =>
+      a?.type === "CallExpression" &&
+      a.callee?.type === "MemberExpression" &&
+      a.callee.object?.type === "Identifier" &&
+      a.callee.object.name === "stylex" &&
+      a.callee.property?.type === "Identifier" &&
+      a.callee.property.name === "defaultMarker";
 
     const hasIdentifierArg = (call: any, name: string): boolean =>
-      (call.arguments ?? []).some((a: any) => a?.type === "Identifier" && a.name === name);
+      (call.arguments ?? []).some((a: any) => isIdentifierNamed(a, name));
 
-    const hasDefaultMarker = (call: any): boolean => {
-      return (call.arguments ?? []).some(
-        (a: any) =>
-          a?.type === "CallExpression" &&
-          a.callee?.type === "MemberExpression" &&
-          a.callee.object?.type === "Identifier" &&
-          a.callee.object.name === "stylex" &&
-          a.callee.property?.type === "Identifier" &&
-          a.callee.property.name === "defaultMarker",
-      );
-    };
+    const hasIdentifierInSxArgs = (sxAttr: any, name: string): boolean =>
+      getSxAttrArgs(sxAttr.value.expression).some((a: any) => isIdentifierNamed(a, name));
+
+    const hasDefaultMarker = (call: any): boolean =>
+      (call.arguments ?? []).some(isDefaultMarkerCall);
+
+    const hasDefaultMarkerInSxArgs = (sxAttr: any): boolean =>
+      getSxAttrArgs(sxAttr.value.expression).some(isDefaultMarkerCall);
 
     const overridesByChild = new Map<string, RelationOverride[]>();
     for (const o of relationOverrides) {
@@ -139,6 +197,10 @@ export function postProcessTransformedAst(args: {
       return ancestors.some(
         (a: any) =>
           (a?.call && hasStyleKeyArg(a.call, parentStyleKey)) ||
+          (a?.sxAttr &&
+            getSxAttrArgs(a.sxAttr.value.expression).some((arg: any) =>
+              isStyleKeyRef(arg, parentStyleKey),
+            )) ||
           (a?.elementStyleKey && a.elementStyleKey === parentStyleKey) ||
           (markerVarName && a?.markerVarName === markerVarName),
       );
@@ -155,21 +217,20 @@ export function postProcessTransformedAst(args: {
       const opening = node.openingElement;
       const attrs = (opening.attributes ?? []) as any[];
       const call = getStylexPropsCallFromAttrs(attrs);
+      const sxAttr = getSxAttrFromAttrs(attrs);
       const elementName = getJsxElementName(opening?.name, { allowMemberExpression: false });
       // Get the style key for this element if it's a known component
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
 
+      // Process ancestor selector parents — works with both stylex.props() and sx={}
       if (call) {
         for (const parentKey of ancestorSelectorParents) {
           if (hasStyleKeyArg(call, parentKey)) {
-            // If the style key is empty, record for later removal (after descendant matching)
             if (emptyStyleKeys?.has(parentKey)) {
               pendingEmptyKeyRemovals.push({ call, key: parentKey });
             }
-            // For cross-file parents, use the defineMarker variable; otherwise defaultMarker
             const markerVarName = crossFileMarkers?.get(parentKey);
             if (markerVarName) {
-              // Add the marker variable reference if not already present
               if (!hasIdentifierArg(call, markerVarName)) {
                 call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
                 changed = true;
@@ -180,25 +241,53 @@ export function postProcessTransformedAst(args: {
             }
           }
         }
+      } else if (sxAttr) {
+        for (const parentKey of ancestorSelectorParents) {
+          if (
+            getSxAttrArgs(sxAttr.value.expression).some((a: any) => isStyleKeyRef(a, parentKey))
+          ) {
+            const markerVarName = crossFileMarkers?.get(parentKey);
+            if (markerVarName) {
+              if (!hasIdentifierInSxArgs(sxAttr, markerVarName)) {
+                addArgsToSxAttr(sxAttr, [j.identifier(markerVarName)]);
+                changed = true;
+              }
+            } else if (!hasDefaultMarkerInSxArgs(sxAttr)) {
+              addArgsToSxAttr(sxAttr, [makeDefaultMarkerCall()]);
+              changed = true;
+            }
+          }
+        }
       }
 
-      if (call) {
+      // Process child override styles — works with both stylex.props() and sx={}
+      if (call || sxAttr) {
         for (const [childKey, list] of overridesByChild.entries()) {
-          if (!hasStyleKeyArg(call, childKey)) {
+          const hasKey = call
+            ? hasStyleKeyArg(call, childKey)
+            : hasStyleKeyInAttrs(attrs, childKey);
+          if (!hasKey) {
             continue;
           }
           for (const o of list) {
             if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
               continue;
             }
-            if (hasStyleKeyArg(call, o.overrideStyleKey)) {
+            const alreadyHas = call
+              ? hasStyleKeyArg(call, o.overrideStyleKey)
+              : hasStyleKeyInAttrs(attrs, o.overrideStyleKey);
+            if (alreadyHas) {
               continue;
             }
             const overrideArg = j.memberExpression(
               j.identifier(stylesIdentifier),
               j.identifier(o.overrideStyleKey),
             );
-            call.arguments = [...(call.arguments ?? []), overrideArg];
+            if (call) {
+              call.arguments = [...(call.arguments ?? []), overrideArg];
+            } else if (sxAttr) {
+              addArgsToSxAttr(sxAttr, [overrideArg]);
+            }
             changed = true;
           }
         }
@@ -217,10 +306,13 @@ export function postProcessTransformedAst(args: {
           );
         }
         if (overrideArgs.length > 0) {
-          // Merge into an existing stylex.props() spread if present, otherwise create a new one
+          // Merge into existing stylex.props() or sx={} if present, otherwise create new
           const existingCall = getStylexPropsCallFromAttrs(opening.attributes ?? []);
+          const existingSx = getSxAttrFromAttrs(opening.attributes ?? []);
           if (existingCall) {
             existingCall.arguments = [...(existingCall.arguments ?? []), ...overrideArgs];
+          } else if (existingSx) {
+            addArgsToSxAttr(existingSx, overrideArgs);
           } else {
             const newCall = j.callExpression(
               j.memberExpression(j.identifier("stylex"), j.identifier("props")),
@@ -243,13 +335,16 @@ export function postProcessTransformedAst(args: {
           addedMarkerVarName = o.markerVarName;
           const markerIdent = j.identifier(o.markerVarName);
           if (call) {
-            // Parent already has stylex.props(...) — append marker to its arguments
             if (!hasIdentifierArg(call, o.markerVarName)) {
               call.arguments = [...(call.arguments ?? []), markerIdent];
               changed = true;
             }
+          } else if (sxAttr) {
+            if (!hasIdentifierInSxArgs(sxAttr, o.markerVarName)) {
+              addArgsToSxAttr(sxAttr, [markerIdent]);
+              changed = true;
+            }
           } else {
-            // Parent has no stylex.props() — add a new spread
             const markerCall = j.callExpression(
               j.memberExpression(j.identifier("stylex"), j.identifier("props")),
               [markerIdent],
@@ -262,7 +357,7 @@ export function postProcessTransformedAst(args: {
 
       const nextAncestors = [
         ...ancestors,
-        { call, elementStyleKey, markerVarName: addedMarkerVarName },
+        { call, sxAttr, elementStyleKey, markerVarName: addedMarkerVarName },
       ];
       for (const child of node.children ?? []) {
         visitJsxChild(child, nextAncestors);
@@ -364,19 +459,19 @@ export function postProcessTransformedAst(args: {
     }
   }
 
-  // Remove empty style key references from ALL stylex.props() calls and style merger calls
+  // Remove empty style key references from stylex.props(), merger calls, and sx={} attributes
   if (emptyStyleKeys && emptyStyleKeys.size > 0) {
     const isEmptyStyleRef = (a: any): boolean =>
       a?.type === "MemberExpression" &&
       a.object?.type === "Identifier" &&
-      a.object.name === "styles" &&
+      a.object.name === stylesIdentifier &&
       a.property?.type === "Identifier" &&
       emptyStyleKeys.has(a.property.name);
 
+    // Clean stylex.props() and merger calls
     root.find(j.CallExpression).forEach((p: any) => {
       const call = p.node;
 
-      // Handle stylex.props() calls
       if (
         call?.callee?.type === "MemberExpression" &&
         call.callee.object?.type === "Identifier" &&
@@ -389,7 +484,6 @@ export function postProcessTransformedAst(args: {
         if (call.arguments.length !== originalLength) {
           changed = true;
         }
-        // Remove the entire JSX spread attribute when stylex.props() has no arguments
         if (call.arguments.length === 0) {
           const parentNode = p.parentPath?.node;
           if (parentNode?.type === "JSXSpreadAttribute") {
@@ -404,11 +498,8 @@ export function postProcessTransformedAst(args: {
         }
       }
 
-      // Handle style merger calls (e.g., mergedSx([styles.foo, styles.bar], className, style))
-      // or mergedSx(styles.foo, className, style)
       if (call?.callee?.type === "Identifier") {
         const firstArg = call.arguments?.[0];
-        // Handle array of style references
         if (firstArg?.type === "ArrayExpression") {
           const arr = firstArg;
           const originalLength = (arr.elements ?? []).length;
@@ -417,9 +508,41 @@ export function postProcessTransformedAst(args: {
             changed = true;
           }
         }
-        // Handle single empty style reference - replace with undefined
         if (isEmptyStyleRef(firstArg)) {
           call.arguments[0] = j.identifier("undefined");
+          changed = true;
+        }
+      }
+    });
+
+    // Clean sx={} JSX attributes
+    root.find(j.JSXAttribute, { name: { name: "sx" } } as any).forEach((p: any) => {
+      const val = p.node.value;
+      if (!val || val.type !== "JSXExpressionContainer") {
+        return;
+      }
+      const expr = val.expression;
+      if (expr?.type === "ArrayExpression") {
+        const orig = (expr.elements ?? []).length;
+        expr.elements = (expr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
+        if (expr.elements.length !== orig) {
+          changed = true;
+        }
+        if (expr.elements.length === 1) {
+          val.expression = expr.elements[0];
+          changed = true;
+        }
+        if (expr.elements.length === 0) {
+          const opening = p.parentPath?.node;
+          if (opening?.type === "JSXOpeningElement" && Array.isArray(opening.attributes)) {
+            opening.attributes = opening.attributes.filter((attr: unknown) => attr !== p.node);
+            changed = true;
+          }
+        }
+      } else if (isEmptyStyleRef(expr)) {
+        const opening = p.parentPath?.node;
+        if (opening?.type === "JSXOpeningElement" && Array.isArray(opening.attributes)) {
+          opening.attributes = opening.attributes.filter((attr: unknown) => attr !== p.node);
           changed = true;
         }
       }

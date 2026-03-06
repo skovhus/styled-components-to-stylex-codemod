@@ -29,6 +29,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     themeHook: ctx.adapter.themeHook,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
+    useSxProp: ctx.adapter.useSxProp,
   });
 
   return CONTINUE;

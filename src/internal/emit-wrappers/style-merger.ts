@@ -29,6 +29,12 @@ export interface StyleMergingResult {
   jsxSpreadExpr: ExpressionKind | null;
 
   /**
+   * When set, emit `sx={expr}` JSX attribute instead of `{...jsxSpreadExpr}`.
+   * Mutually exclusive with `jsxSpreadExpr`.
+   */
+  sxPropExpr: ExpressionKind | null;
+
+  /**
    * The className attribute expression, or null if using merger.
    */
   classNameAttr: ExpressionKind | null;
@@ -61,7 +67,12 @@ export function emitStyleMerging(args: {
   j: JSCodeshift;
   emitter: Pick<
     WrapperEmitter,
-    "styleMerger" | "stylesIdentifier" | "emptyStyleKeys" | "ancestorSelectorParents" | "emitTypes"
+    | "styleMerger"
+    | "stylesIdentifier"
+    | "emptyStyleKeys"
+    | "ancestorSelectorParents"
+    | "emitTypes"
+    | "useSxProp"
   >;
   styleArgs: ExpressionKind[];
   classNameId: Identifier;
@@ -71,6 +82,9 @@ export function emitStyleMerging(args: {
   allowSxProp?: boolean;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   staticClassNameExpr?: ExpressionKind;
+  /** Set to true when the rendered tag is an intrinsic HTML element (lowercase).
+   * The sx prop is only valid on intrinsic elements (processed by the StyleX babel plugin). */
+  isIntrinsicElement?: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -83,6 +97,7 @@ export function emitStyleMerging(args: {
     allowSxProp,
     inlineStyleProps = [],
     staticClassNameExpr,
+    isIntrinsicElement = true,
   } = args;
 
   const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, emitTypes } =
@@ -131,6 +146,21 @@ export function emitStyleMerging(args: {
     inlineStyleProps.length === 0 &&
     !staticClassNameExpr
   ) {
+    // When useSxProp is enabled, emit sx={expr} instead of {...stylex.props(expr)}
+    // Only valid on intrinsic elements (the StyleX babel plugin only processes lowercase tags)
+    if (emitter.useSxProp && isIntrinsicElement) {
+      const sxExpr =
+        styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+      return {
+        needsSxVar: false,
+        sxDecl: null,
+        jsxSpreadExpr: null,
+        sxPropExpr: sxExpr,
+        classNameAttr: null,
+        classNameBeforeSpread: false,
+        styleAttr: null,
+      };
+    }
     const stylexPropsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
       styleArgs,
@@ -139,6 +169,7 @@ export function emitStyleMerging(args: {
       needsSxVar: false,
       sxDecl: null,
       jsxSpreadExpr: stylexPropsCall,
+      sxPropExpr: null,
       classNameAttr: null,
       classNameBeforeSpread: false,
       styleAttr: null,
@@ -260,6 +291,7 @@ function emitWithoutStylex(args: {
     needsSxVar: false,
     sxDecl: null,
     jsxSpreadExpr: null,
+    sxPropExpr: null,
     classNameAttr,
     classNameBeforeSpread: false,
     styleAttr,
@@ -361,6 +393,7 @@ function emitWithMerger(args: {
     needsSxVar: false,
     sxDecl: null,
     jsxSpreadExpr: mergerCall,
+    sxPropExpr: null,
     classNameAttr: null,
     classNameBeforeSpread: false,
     styleAttr: null,
@@ -474,6 +507,7 @@ function emitVerbosePattern(args: {
     needsSxVar: true,
     sxDecl,
     jsxSpreadExpr: j.identifier(sxVarName),
+    sxPropExpr: null,
     classNameAttr,
     // Always emit the merged className AFTER `{...sx}` so it cannot be overwritten by `sx.className`.
     classNameBeforeSpread: false,

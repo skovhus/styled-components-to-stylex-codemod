@@ -46,6 +46,7 @@ type WrapperEmitterArgs = {
   themeHook: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
+  useSxProp?: boolean;
 };
 
 export class WrapperEmitter {
@@ -61,6 +62,7 @@ export class WrapperEmitter {
   readonly themeHook: ThemeHookConfig;
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
+  readonly useSxProp: boolean;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   readonly emitTypes: boolean;
@@ -85,6 +87,7 @@ export class WrapperEmitter {
     this.themeHook = args.themeHook;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
+    this.useSxProp = args.useSxProp ?? false;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
 
@@ -1556,7 +1559,11 @@ export class WrapperEmitter {
       );
     }
 
-    if (merging.jsxSpreadExpr) {
+    if (merging.sxPropExpr) {
+      jsxAttrs.push(
+        j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(merging.sxPropExpr)),
+      );
+    } else if (merging.jsxSpreadExpr) {
       jsxAttrs.push(j.jsxSpreadAttribute(merging.jsxSpreadExpr));
     }
 

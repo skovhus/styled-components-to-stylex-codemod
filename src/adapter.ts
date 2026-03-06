@@ -563,6 +563,20 @@ export interface Adapter {
    * `{ functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }`
    */
   themeHook?: ThemeHookConfig;
+
+  /**
+   * Emit `sx={...}` JSX attributes instead of `{...stylex.props(...)}` spreads
+   * on intrinsic elements. Requires `@stylexjs/babel-plugin` ≥0.18 with the
+   * `sxPropName` option (defaults to `"sx"`).
+   *
+   * When enabled, the codemod produces shorter output:
+   *   `<div sx={styles.base} />`  instead of  `<div {...stylex.props(styles.base)} />`
+   *
+   * Only applies to simple cases without className/style merging.
+   *
+   * @default false
+   */
+  useSxProp?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -594,6 +608,7 @@ export interface AdapterInput {
 
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
+  useSxProp?: Adapter["useSxProp"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
