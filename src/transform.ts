@@ -82,6 +82,16 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       }
     }
 
+    // Store transient prop renames for post-transform consumer patching
+    if (result.transientPropRenames && result.transientPropRenames.length > 0) {
+      const transientPropRenamesMap = (options as Record<string, unknown>).transientPropRenames as
+        | Map<string, import("./internal/transform-types.js").TransientPropRenameResult[]>
+        | undefined;
+      if (transientPropRenamesMap) {
+        transientPropRenamesMap.set(toRealPath(file.path), result.transientPropRenames);
+      }
+    }
+
     // Track successfully transformed files so bailed consumers can be bridge-patched
     if (result.code !== null) {
       const transformedFiles = (options as Record<string, unknown>).transformedFiles as

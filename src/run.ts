@@ -4,7 +4,7 @@
  */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
@@ -456,6 +456,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
   const transformedFiles = new Set<string>();
 
+  // Map populated by the per-file transform: target file → transient prop renames for consumer patching
+  const transientPropRenames = new Map<
+    string,
+    import("./internal/transform-types.js").TransientPropRenameResult[]
+  >();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
@@ -465,6 +471,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     sidecarFiles,
     bridgeResults,
     transformedFiles,
+    transientPropRenames,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -517,6 +524,51 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       if (patched !== null) {
         await writeFile(consumerPath, patched, "utf-8");
         patchedFiles.push(consumerPath);
+      }
+    }
+    if (formatterCommands && patchedFiles.length > 0) {
+      await runFormatters(formatterCommands, patchedFiles);
+    }
+  }
+
+  // Patch unconverted consumers: rename $-prefixed props on components whose props were renamed
+  if (transientPropRenames.size > 0 && !dryRun) {
+    const { findImportedRenamedComponents, patchConsumerTransientProps } =
+      await import("./internal/transient-prop-consumer-patcher.js");
+    const patchedFiles: string[] = [];
+    // Build set of possible import sources for each target file
+    // (the relative path as consumers would write it)
+    const allConsumerFiles = new Set(
+      consumerFilePaths.map((p: string) => {
+        const abs = resolve(p);
+        try {
+          return realpathSync(abs);
+        } catch {
+          return abs;
+        }
+      }),
+    );
+    for (const [targetPath, renames] of transientPropRenames) {
+      for (const consumerPath of allConsumerFiles) {
+        if (consumerPath === targetPath || transformedFiles.has(consumerPath)) {
+          continue;
+        }
+        let consumerSource: string;
+        try {
+          consumerSource = readFileSync(consumerPath, "utf-8");
+        } catch {
+          continue;
+        }
+        // Build possible import source strings that could resolve to targetPath
+        const importSources = buildPossibleImportSources(consumerPath, targetPath);
+        const entries = findImportedRenamedComponents(consumerSource, importSources, renames);
+        if (entries.length > 0) {
+          const patched = patchConsumerTransientProps(consumerPath, entries);
+          if (patched !== null) {
+            await writeFile(consumerPath, patched, "utf-8");
+            patchedFiles.push(consumerPath);
+          }
+        }
       }
     }
     if (formatterCommands && patchedFiles.length > 0) {
@@ -641,4 +693,38 @@ async function runFormatters(commands: string[], files: string[]): Promise<void>
       }
     }
   }
+}
+
+/**
+ * Build a set of import source strings that a consumer at `consumerPath`
+ * might use to import from `targetPath`.
+ *
+ * Generates relative paths with and without common extensions (`.ts`, `.tsx`,
+ * `.js`, `.jsx`), and with and without `/index` suffixes.
+ */
+function buildPossibleImportSources(consumerPath: string, targetPath: string): Set<string> {
+  const sources = new Set<string>();
+  const dir = dirname(consumerPath);
+  let rel = relative(dir, targetPath);
+  if (!rel.startsWith(".")) {
+    rel = `./${rel}`;
+  }
+  // Normalize backslashes (Windows)
+  rel = rel.replace(/\\/g, "/");
+  sources.add(rel);
+  // Strip known extensions
+  for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {
+    if (rel.endsWith(ext)) {
+      sources.add(rel.slice(0, -ext.length));
+      break;
+    }
+  }
+  // Strip /index suffix
+  const base = basename(targetPath).replace(/\.\w+$/, "");
+  if (base === "index") {
+    const dirRel = relative(dir, dirname(targetPath));
+    const normalized = dirRel.startsWith(".") ? dirRel : `./${dirRel}`;
+    sources.add(normalized.replace(/\\/g, "/"));
+  }
+  return sources;
 }

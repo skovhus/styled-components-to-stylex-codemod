@@ -22,6 +22,14 @@ export interface TransformResult {
   sidecarContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
+  /** Transient prop renames for exported components, keyed by export name. */
+  transientPropRenames?: TransientPropRenameResult[];
+}
+
+/** Describes a transient prop rename on an exported component for consumer patching. */
+export interface TransientPropRenameResult {
+  exportName: string;
+  renames: Record<string, string>;
 }
 
 /** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
