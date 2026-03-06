@@ -38,6 +38,7 @@ import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { findSupportedAtRule, isSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
+import { addStyleKeyMixin } from "./precompute.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -1507,13 +1508,6 @@ function handlePseudoExpand(
 
   extraStyleObjects.set(styleKey, mergedStyleObj);
 
-  // Register on the decl for the emit phase
-  decl.pseudoExpandSelectors ??= [];
-  decl.pseudoExpandSelectors.push({
-    styleKey,
-    ...(guard ? { guard } : {}),
-  });
-
   // Collect imports: shared + per-condition
   for (const impSpec of result.imports) {
     resolverImports.set(JSON.stringify(impSpec), impSpec);
@@ -1526,7 +1520,17 @@ function handlePseudoExpand(
     }
   }
 
-  // No needsWrapperComponent — this is static application
+  // When there's a guard, we need a wrapper component to evaluate the condition at runtime.
+  // Register on pseudoExpandSelectors so the wrapper emitter applies the conditional logic.
+  // When there's no guard, the styleKey is added to extraStyleKeys which works for both
+  // wrapper components and inline JSX paths.
+  if (guard) {
+    decl.pseudoExpandSelectors ??= [];
+    decl.pseudoExpandSelectors.push({ styleKey, guard });
+    decl.needsWrapperComponent = true;
+  } else {
+    addStyleKeyMixin(decl, styleKey, { afterBase: true });
+  }
 }
 
 /**
