@@ -1,3 +1,0 @@
-import{j as t,c as d}from"./index-BVRlmEKj.js";function l(e){const{variant:s,selected:c,compact:r,className:i,...n}=e,o=s==="active"?"blue":s==="muted"?"gray":"black";return t.jsx("svg",{...n,className:i,width:"40",height:"40",viewBox:"0 0 40 40",children:t.jsx("rect",{width:"30",height:"30",x:"5",y:"5",fill:o,stroke:c?"orange":"none",strokeWidth:c?3:0,rx:r?2:8})})}const a=d(l)`
-  ${e=>e.compact&&!e.selected&&e.variant!=="active"?"transform: scale(0.66);":""}
-`,u=()=>t.jsxs("div",{style:{display:"flex",gap:16,padding:16},children:[t.jsx(a,{variant:"default"}),t.jsx(a,{variant:"active",selected:!0}),t.jsx(a,{variant:"muted",compact:!0}),t.jsx(a,{variant:"default",compact:!0,selected:!0})]});export{u as App,a as Icon};
