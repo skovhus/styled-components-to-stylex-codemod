@@ -98,11 +98,9 @@ describe("cssValueToJs", () => {
     expect(cssValueToJs({ kind: "static", value: "-3.5" })).toBe(-3.5);
   });
 
-  it("BUG: does not coerce leading-dot decimals (.5) to numbers", () => {
-    // ".5" is valid CSS and equivalent to "0.5", but the regex /^-?\d+(\.\d+)?$/
-    // requires at least one digit before the decimal. This returns ".5" as a string.
-    const result = cssValueToJs({ kind: "static", value: ".5" });
-    expect(result).toBe(".5"); // Should ideally be 0.5
+  it("coerces leading-dot decimals (.5) to numbers", () => {
+    expect(cssValueToJs({ kind: "static", value: ".5" })).toBe(0.5);
+    expect(cssValueToJs({ kind: "static", value: "-.5" })).toBe(-0.5);
   });
 
   it("keeps flex values as strings even when numeric", () => {

@@ -238,7 +238,7 @@ function applyStaticDeclsToStyleObj(
   })) {
     if (out.value.kind === "static") {
       const v = out.value.value.trim();
-      styleObj[out.prop] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
+      styleObj[out.prop] = /^-?\d*\.?\d+$/.test(v) ? Number(v) : v;
     }
   }
 }

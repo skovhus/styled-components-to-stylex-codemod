@@ -167,7 +167,7 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
     const rhs =
       rhsRaw?.startsWith('"') || rhsRaw?.startsWith("'")
         ? j.literal(JSON.parse(rhsRaw.replace(/^'/, '"').replace(/'$/, '"')))
-        : /^-?\d+(\.\d+)?$/.test(rhsRaw)
+        : /^-?\d*\.?\d+$/.test(rhsRaw)
           ? j.literal(Number(rhsRaw))
           : rhsRaw === "true" || rhsRaw === "false"
             ? j.literal(rhsRaw === "true")

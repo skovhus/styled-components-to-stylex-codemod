@@ -38,14 +38,10 @@ describe("looksLikeLength", () => {
     expect(looksLikeLength("inherit")).toBe(false);
   });
 
-  it("BUG: does not recognize CSS keyword border-widths", () => {
-    // CSS border-width accepts keywords thin/medium/thick which are lengths,
-    // but looksLikeLength only matches numeric patterns.
-    // This means classifyBorderSlotRole in borders.ts would misclassify
-    // "thin" as a color instead of a width.
-    expect(looksLikeLength("thin")).toBe(false);
-    expect(looksLikeLength("medium")).toBe(false);
-    expect(looksLikeLength("thick")).toBe(false);
+  it("recognizes CSS keyword border-widths", () => {
+    expect(looksLikeLength("thin")).toBe(true);
+    expect(looksLikeLength("medium")).toBe(true);
+    expect(looksLikeLength("thick")).toBe(true);
   });
 
   it("matches modern CSS viewport units", () => {

@@ -165,7 +165,7 @@ export function toSuffixFromProp(propName: string): string {
     const [lhs0, rhs0] = trimmed.split(eq).map((s) => s.trim());
     const lhs = lhs0 ?? "Variant";
     const rhsRaw = (rhs0 ?? "").replace(/^['"]|['"]$/g, "");
-    const isSimpleRhs = /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(rhsRaw) || /^-?\d+(\.\d+)?$/.test(rhsRaw);
+    const isSimpleRhs = /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(rhsRaw) || /^-?\d*\.?\d+$/.test(rhsRaw);
     if (rhsRaw && !isSimpleRhs) {
       return "CondTruthy";
     }

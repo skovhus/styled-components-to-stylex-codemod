@@ -21,12 +21,9 @@ describe("styleFromSingleDeclaration", () => {
     expect(result).toEqual({ opacity: 0.5 });
   });
 
-  it("BUG: does not coerce leading-dot decimals like .5 to numbers", () => {
+  it("coerces leading-dot decimals like .5 to numbers", () => {
     const result = styleFromSingleDeclaration("opacity", ".5");
-    // This documents the current behavior - ".5" is NOT coerced to 0.5
-    // because the regex /^-?\d+(\.\d+)?$/ requires digits before the decimal point.
-    // Ideally this should return { opacity: 0.5 }
-    expect(result.opacity).toBe(".5");
+    expect(result.opacity).toBe(0.5);
   });
 
   it("expands border shorthand to longhand properties", () => {
@@ -59,10 +56,9 @@ describe("parseCssDeclarationBlock", () => {
     expect(result).toEqual({ transform: "rotate(180deg)", color: "red" });
   });
 
-  it("BUG: leading-dot decimals are strings, not numbers", () => {
-    const result = parseCssDeclarationBlock("opacity: .5");
-    // Should be 0.5 but regex doesn't match ".5"
-    expect(result).toEqual({ opacity: ".5" });
+  it("coerces leading-dot decimals to numbers", () => {
+    expect(parseCssDeclarationBlock("opacity: .5")).toEqual({ opacity: 0.5 });
+    expect(parseCssDeclarationBlock("opacity: -.5")).toEqual({ opacity: -0.5 });
   });
 
   it("coerces full decimals to numbers correctly", () => {
