@@ -1153,6 +1153,7 @@ export class WrapperEmitter {
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
     const base = this.componentPropsBaseType(propsTarget);
     const omitted: string[] = [];
+    const renamedPropTypes: string[] = [];
     // When forcing optional, always omit from base to prevent inheriting requiredness
     if (!allowClassNameProp || forceClassNameOptional) {
       omitted.push('"className"');
@@ -1169,17 +1170,22 @@ export class WrapperEmitter {
       // Only add renamed prop types from the base component when there is no explicit
       // wrapper type. When there is an explicit type, the renamed props are already there.
       if (!hasExplicitPropsType) {
+        // Emit renamed props as mapped types that preserve optionality:
+        // { [K in "$isOpen" as "isOpen"]: Base[K] } keeps `?` if Base has `$isOpen?`.
+        // These are emitted as separate intersection members since mapped types
+        // can't coexist with regular members in the same type literal.
         for (const [original, renamed] of d.transientPropRenames) {
-          const entry = `${renamed}: ${base}["${original}"]`;
-          if (!lines.some((l) => l.startsWith(`${renamed}:`))) {
-            lines.push(entry);
-          }
+          renamedPropTypes.push(`{ [K in "${original}" as "${renamed}"]: ${base}[K] }`);
         }
       }
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
     const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-    return literal !== "{}" ? this.joinIntersection(literal, baseMaybeOmitted) : baseMaybeOmitted;
+    return this.joinIntersection(
+      literal !== "{}" ? literal : null,
+      baseMaybeOmitted,
+      ...renamedPropTypes,
+    );
   }
 
   isPropRequiredInPropsTypeLiteral(propsType: any, propName: string): boolean {

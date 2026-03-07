@@ -36,10 +36,10 @@ function ExpandIcon(props: ExpandIconProps) {
 // The $ prefix must be stripped so styled-components v6 consumers
 // doing styled(TreeToggle) don't lose the prop.
 export function TreeToggle(
-  props: { isExpanded: React.ComponentPropsWithRef<typeof ExpandIcon>["$isExpanded"] } & Omit<
+  props: Omit<
     React.ComponentPropsWithRef<typeof ExpandIcon>,
     "className" | "style" | "$isExpanded"
-  >,
+  > & { [K in "$isExpanded" as "isExpanded"]: React.ComponentPropsWithRef<typeof ExpandIcon>[K] },
 ) {
   const { children, isExpanded, ...rest } = props;
 

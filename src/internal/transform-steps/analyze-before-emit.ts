@@ -490,6 +490,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       continue;
     }
     const existingPropNames = collectExistingNonTransientPropNames(decl);
+    // Also check the base component's props for collisions (e.g., Base has `color`,
+    // wrapper has `$color` — renaming to `color` would collide).
+    if (decl.base.kind === "component") {
+      collectBaseComponentPropNames(root, j, decl.base.ident, existingPropNames);
+    }
     const renames = new Map<string, string>();
     for (const prop of transientProps) {
       const stripped = prop.slice(1);
@@ -498,16 +503,14 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       }
     }
     if (renames.size > 0) {
-      // Don't rename props when the propsType references a type shared with another
-      // styled decl — mutating the shared type would break the other component.
+      // Don't rename props when the propsType references a named type (interface
+      // or type alias) that is used elsewhere in the file — mutating the shared
+      // declaration would break non-styled code that also references it.
       const referencedTypeName = extractReferencedTypeName(decl.propsType);
-      const isSharedType =
+      if (
         referencedTypeName != null &&
-        styledDecls.some(
-          (other) =>
-            other !== decl && extractReferencedTypeName(other.propsType) === referencedTypeName,
-        );
-      if (isSharedType) {
+        isTypeNameUsedElsewhere(root, j, referencedTypeName, decl.localName)
+      ) {
         continue;
       }
       decl.transientPropRenames = renames;
@@ -864,6 +867,117 @@ function extractReferencedTypeName(propsType: unknown): string | null {
     return node.typeName.name ?? null;
   }
   return null;
+}
+
+/**
+ * Collects non-`$`-prefixed prop names from a locally-defined base component's
+ * type to prevent rename collisions. For `styled(Base)`, if `Base` accepts
+ * `color`, we must not rename `$color` → `color`.
+ */
+function collectBaseComponentPropNames(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  componentName: string,
+  names: Set<string>,
+): void {
+  const extractFromParam = (param: any) => {
+    const typeRef = param?.typeAnnotation?.typeAnnotation;
+    if (!typeRef) {
+      return;
+    }
+    if (typeRef.type === "TSTypeLiteral") {
+      collectPropsFromType(typeRef, names, (n) => !n.startsWith("$"));
+    } else if (typeRef.type === "TSTypeReference" && typeRef.typeName?.type === "Identifier") {
+      const typeName = typeRef.typeName.name;
+      // Check interface
+      root
+        .find(j.TSInterfaceDeclaration)
+        .filter((p: any) => (p.node as any).id?.name === typeName)
+        .forEach((p: any) => {
+          for (const member of (p.node.body?.body ?? []) as any[]) {
+            if (
+              member.type === "TSPropertySignature" &&
+              member.key?.type === "Identifier" &&
+              !member.key.name.startsWith("$")
+            ) {
+              names.add(member.key.name);
+            }
+          }
+        });
+      // Check type alias
+      root
+        .find(j.TSTypeAliasDeclaration)
+        .filter((p: any) => (p.node as any).id?.name === typeName)
+        .forEach((p: any) => {
+          collectPropsFromType(p.node.typeAnnotation, names, (n) => !n.startsWith("$"));
+        });
+    }
+    if (typeRef.type === "TSIntersectionType") {
+      for (const t of typeRef.types ?? []) {
+        extractFromParam({ typeAnnotation: { typeAnnotation: t } });
+      }
+    }
+  };
+
+  // Check function declarations
+  root
+    .find(j.FunctionDeclaration)
+    .filter((p) => p.node.id?.type === "Identifier" && p.node.id.name === componentName)
+    .forEach((p) => {
+      extractFromParam(p.node.params[0]);
+    });
+  // Check arrow function variable declarations
+  root
+    .find(j.VariableDeclarator)
+    .filter((p: any) => p.node.id?.type === "Identifier" && p.node.id.name === componentName)
+    .forEach((p: any) => {
+      const init = p.node.init;
+      if (init?.type === "ArrowFunctionExpression" && init.params[0]) {
+        extractFromParam(init.params[0]);
+      }
+    });
+}
+
+/**
+ * Returns true when a named type (interface or type alias) is referenced
+ * in the file outside of the given styled component's own declaration.
+ * This catches sharing with other styled decls, non-styled components,
+ * helper functions, or any other code that uses the type.
+ */
+function isTypeNameUsedElsewhere(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  typeName: string,
+  ownerLocalName: string,
+): boolean {
+  let count = 0;
+  root
+    .find(j.TSTypeReference)
+    .filter((p: any) => {
+      const id = p.node.typeName;
+      return id?.type === "Identifier" && id.name === typeName;
+    })
+    .forEach((p: any) => {
+      // Walk up to the nearest variable/function declaration to find the owner.
+      // If the owner is the styled decl itself, don't count it.
+      let cur = p.parentPath;
+      while (cur) {
+        const node = cur.node;
+        if (
+          node?.type === "VariableDeclarator" &&
+          node.id?.type === "Identifier" &&
+          node.id.name === ownerLocalName
+        ) {
+          return;
+        }
+        if (node?.type === "FunctionDeclaration" && node.id?.name === ownerLocalName) {
+          return;
+        }
+        cur = cur.parentPath;
+      }
+      count++;
+    });
+  return count > 0;
 }
 
 /**

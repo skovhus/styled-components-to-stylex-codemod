@@ -549,9 +549,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       }),
     );
     for (const consumerPath of allConsumerFiles) {
-      if (transformedFiles.has(consumerPath)) {
-        continue;
-      }
       let consumerSource: string;
       try {
         consumerSource = readFileSync(consumerPath, "utf-8");
