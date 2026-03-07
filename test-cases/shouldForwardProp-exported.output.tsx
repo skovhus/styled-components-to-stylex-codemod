@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type TransientButtonProps = { $variant?: "primary" | "secondary" } & Omit<
+type TransientButtonProps = { variant?: "primary" | "secondary" } & Omit<
   React.ComponentProps<"button">,
   "className" | "style"
 >;
@@ -10,7 +10,7 @@ type TransientButtonProps = { $variant?: "primary" | "secondary" } & Omit<
 // The cleanup loop should filter unknown $-prefixed props from rest
 // so external callers can't accidentally forward $unknown to the DOM
 export function TransientButton(props: TransientButtonProps) {
-  const { children, $variant, ...rest } = props;
+  const { children, variant, ...rest } = props;
 
   const restRecord = rest as Record<string, unknown>;
 
@@ -21,7 +21,7 @@ export function TransientButton(props: TransientButtonProps) {
   return (
     <button
       {...rest}
-      sx={[styles.transientButton, $variant === "primary" && styles.transientButtonVariantPrimary]}
+      sx={[styles.transientButton, variant === "primary" && styles.transientButtonVariantPrimary]}
     >
       {children}
     </button>
@@ -53,7 +53,7 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
 
 export const App = () => (
   <div>
-    <TransientButton $variant="primary">Primary</TransientButton>
+    <TransientButton variant="primary">Primary</TransientButton>
     <ExplicitFilterButton customProp="#4CAF50" anotherProp={24}>
       Custom
     </ExplicitFilterButton>

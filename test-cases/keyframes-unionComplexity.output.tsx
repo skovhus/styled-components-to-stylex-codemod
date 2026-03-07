@@ -13,31 +13,31 @@ const pulse = stylex.keyframes({
 });
 
 type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
-  { $delay?: number } & React.ComponentProps<"div">,
+  { delay?: number } & React.ComponentProps<"div">,
   "as"
 > &
-  Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof ({ $delay?: number } & React.ComponentProps<"div">)
-  > & { sx?: stylex.StyleXStyles; as?: C };
+  Omit<React.ComponentPropsWithRef<C>, keyof ({ delay?: number } & React.ComponentProps<"div">)> & {
+    sx?: stylex.StyleXStyles;
+    as?: C;
+  };
 
 export function LoaderCaret<C extends React.ElementType = "div">(
   props: {
-    $delay?: number;
+    delay?: number;
   } & Omit<
     React.ComponentPropsWithRef<C>,
     keyof {
-      $delay?: number;
+      delay?: number;
     }
   > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, sx, $delay, ...rest } = props;
+  const { as: Component = "div", className, children, style, sx, delay, ...rest } = props;
 
   return (
     <Component
       {...rest}
       {...mergedSx(
-        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${$delay ?? 1000}ms`), sx],
+        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${delay ?? 1000}ms`), sx],
         className,
         style,
       )}
@@ -70,7 +70,7 @@ export const App = () => (
   <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
     <div>
       <p>LoaderCaret:</p>
-      <LoaderCaret $delay={0} />
+      <LoaderCaret delay={0} />
     </div>
     <div style={{ position: "relative", height: 40 }}>
       <p>StyledLoaderCaret:</p>

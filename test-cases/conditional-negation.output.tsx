@@ -2,32 +2,32 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type TooltipProps = React.PropsWithChildren<{
-  $open?: boolean;
+  open?: boolean;
 }>;
 
 // Support negated boolean conditions in ternary CSS blocks.
 // Pattern: !props.$prop ? "css;" : ""
 
 export function Tooltip(props: TooltipProps) {
-  const { children, $open, ...rest } = props;
+  const { children, open, ...rest } = props;
 
   return (
-    <div {...rest} sx={!$open && styles.tooltipNotOpen}>
+    <div {...rest} sx={!open && styles.tooltipNotOpen}>
       {children}
     </div>
   );
 }
 
 type OverlayProps = React.PropsWithChildren<{
-  $visible?: boolean;
+  visible?: boolean;
 }>;
 
 // Pattern: !props.$prop ? "cssA;" : "cssB;" (both branches have styles)
 export function Overlay(props: OverlayProps) {
-  const { children, $visible, ...rest } = props;
+  const { children, visible, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.overlay, !$visible && styles.overlayNotVisible]}>
+    <div {...rest} sx={[styles.overlay, !visible && styles.overlayNotVisible]}>
       {children}
     </div>
   );
@@ -35,11 +35,11 @@ export function Overlay(props: OverlayProps) {
 
 export const App = () => (
   <div>
-    <Tooltip $open>Visible tooltip</Tooltip>
-    <Tooltip $open={false}>Hidden tooltip</Tooltip>
+    <Tooltip open>Visible tooltip</Tooltip>
+    <Tooltip open={false}>Hidden tooltip</Tooltip>
     <Tooltip>Default hidden tooltip</Tooltip>
-    <Overlay $visible>Visible overlay</Overlay>
-    <Overlay $visible={false}>Hidden overlay</Overlay>
+    <Overlay visible>Visible overlay</Overlay>
+    <Overlay visible={false}>Hidden overlay</Overlay>
   </div>
 );
 

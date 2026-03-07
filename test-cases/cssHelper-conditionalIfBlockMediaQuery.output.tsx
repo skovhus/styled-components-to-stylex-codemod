@@ -2,26 +2,26 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
 
-type EmojiContainerProps = { $size: number } & Omit<
+type EmojiContainerProps = { size: number } & Omit<
   React.ComponentProps<"div">,
   "className" | "style"
 >;
 
 /** A container for emojis that standardizes sizing across browsers */
 export function EmojiContainer(props: EmojiContainerProps) {
-  const { children, $size, ...rest } = props;
+  const { children, size, ...rest } = props;
 
   return (
     <div
       {...rest}
       sx={[
         styles.emojiContainer,
-        styles.emojiContainerWidth($size),
-        styles.emojiContainerMaxWidth($size),
-        styles.emojiContainerMaxHeight($size),
+        styles.emojiContainerWidth(size),
+        styles.emojiContainerMaxWidth(size),
+        styles.emojiContainerMaxHeight(size),
         Browser.isSafari
-          ? styles.emojiContainerBrowserIsSafari($size)
-          : styles.emojiContainerDefault($size),
+          ? styles.emojiContainerBrowserIsSafari(size)
+          : styles.emojiContainerDefault(size),
       ]}
     >
       {children}
@@ -31,9 +31,9 @@ export function EmojiContainer(props: EmojiContainerProps) {
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
-    <EmojiContainer $size={16}>🎉</EmojiContainer>
-    <EmojiContainer $size={24}>🚀</EmojiContainer>
-    <EmojiContainer $size={32}>✨</EmojiContainer>
+    <EmojiContainer size={16}>🎉</EmojiContainer>
+    <EmojiContainer size={24}>🚀</EmojiContainer>
+    <EmojiContainer size={32}>✨</EmojiContainer>
   </div>
 );
 

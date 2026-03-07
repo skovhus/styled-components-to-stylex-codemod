@@ -3,20 +3,17 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type DropZoneProps = React.PropsWithChildren<{
-  $isDraggingOver: boolean;
+  isDraggingOver: boolean;
 }>;
 
 // Support ternary interpolations where branches are template literals with theme access.
 // The adapter should resolve the theme color.
 
 export function DropZone(props: DropZoneProps) {
-  const { children, $isDraggingOver, ...rest } = props;
+  const { children, isDraggingOver, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      sx={[styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined]}
-    >
+    <div {...rest} sx={[styles.dropZone, isDraggingOver ? styles.dropZoneDraggingOver : undefined]}>
       {children}
     </div>
   );
@@ -24,8 +21,8 @@ export function DropZone(props: DropZoneProps) {
 
 export const App = () => (
   <div>
-    <DropZone $isDraggingOver>Dragging</DropZone>
-    <DropZone $isDraggingOver={false}>Not dragging</DropZone>
+    <DropZone isDraggingOver>Dragging</DropZone>
+    <DropZone isDraggingOver={false}>Not dragging</DropZone>
   </div>
 );
 

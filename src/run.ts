@@ -456,6 +456,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
   const transformedFiles = new Set<string>();
 
+  // Map populated by the per-file transform: target file → transient prop renames for consumer patching
+  const transientPropRenames = new Map<
+    string,
+    import("./internal/transform-types.js").TransientPropRenameResult[]
+  >();
+
   const result = await jscodeshiftRun(transformPath, filePaths, {
     parser,
     dry: dryRun,
@@ -465,6 +471,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     sidecarFiles,
     bridgeResults,
     transformedFiles,
+    transientPropRenames,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
@@ -518,6 +525,25 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         await writeFile(consumerPath, patched, "utf-8");
         patchedFiles.push(consumerPath);
       }
+    }
+    if (formatterCommands && patchedFiles.length > 0) {
+      await runFormatters(formatterCommands, patchedFiles);
+    }
+  }
+
+  // Patch unconverted consumers: rename $-prefixed props on components whose props were renamed
+  if (transientPropRenames.size > 0 && !dryRun) {
+    const { collectTransientPropPatches } =
+      await import("./internal/transient-prop-consumer-patcher.js");
+    const patches = collectTransientPropPatches({
+      transientPropRenames,
+      consumerFilePaths: consumerFilePaths.map((p) => resolve(p)),
+      resolver: sharedResolver,
+    });
+    const patchedFiles: string[] = [];
+    for (const { consumerPath, patched } of patches) {
+      await writeFile(consumerPath, patched, "utf-8");
+      patchedFiles.push(consumerPath);
     }
     if (formatterCommands && patchedFiles.length > 0) {
       await runFormatters(formatterCommands, patchedFiles);

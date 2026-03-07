@@ -3,10 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
-  { $size: number } & React.ComponentProps<"div">,
+  { size: number } & React.ComponentProps<"div">,
   "as"
 > &
-  Omit<React.ComponentPropsWithRef<C>, keyof ({ $size: number } & React.ComponentProps<"div">)> & {
+  Omit<React.ComponentPropsWithRef<C>, keyof ({ size: number } & React.ComponentProps<"div">)> & {
     sx?: stylex.StyleXStyles;
     as?: C;
   };
@@ -14,15 +14,15 @@ type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
 /** A container that scales based on a dynamic size prop */
 function SizeBox<C extends React.ElementType = "div">(
   props: {
-    $size: number;
+    size: number;
   } & Omit<
     React.ComponentPropsWithRef<C>,
     keyof {
-      $size: number;
+      size: number;
     }
   > & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, ref, sx, $size, ...rest } = props;
+  const { as: Component = "div", className, children, style, ref, sx, size, ...rest } = props;
 
   return (
     <Component
@@ -31,9 +31,9 @@ function SizeBox<C extends React.ElementType = "div">(
       {...mergedSx(
         [
           styles.sizeBox,
-          styles.sizeBoxWidth($size),
-          styles.sizeBoxMaxWidth($size),
-          styles.sizeBoxMaxHeight($size),
+          styles.sizeBoxWidth(size),
+          styles.sizeBoxMaxWidth(size),
+          styles.sizeBoxMaxHeight(size),
           sx,
         ],
         className,
@@ -49,9 +49,9 @@ export { SizeBox };
 
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16, alignItems: "center" }}>
-    <SizeBox $size={60}>60</SizeBox>
-    <SizeBox $size={100}>100</SizeBox>
-    <SizeBox $size={140}>140</SizeBox>
+    <SizeBox size={60}>60</SizeBox>
+    <SizeBox size={100}>100</SizeBox>
+    <SizeBox size={140}>140</SizeBox>
   </div>
 );
 

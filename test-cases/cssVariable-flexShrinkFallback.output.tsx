@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type ColumnContainerProps = {
-  $noGrowOrShrink?: boolean;
-  $basis?: number;
+  noGrowOrShrink?: boolean;
+  basis?: number;
 } & Omit<React.ComponentProps<"div">, "className">;
 
 /**
@@ -12,7 +12,7 @@ type ColumnContainerProps = {
  * The codemod should preserve this via a stylex function.
  */
 export function ColumnContainer(props: ColumnContainerProps) {
-  const { children, style, $noGrowOrShrink, $basis, ...rest } = props;
+  const { children, style, noGrowOrShrink, basis, ...rest } = props;
 
   return (
     <div
@@ -20,10 +20,10 @@ export function ColumnContainer(props: ColumnContainerProps) {
       {...mergedSx(
         [
           styles.columnContainer,
-          $noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
+          noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
           styles.columnContainerFlexShrink({
-            $noGrowOrShrink,
-            $basis,
+            noGrowOrShrink,
+            basis,
           }),
         ],
         undefined,
@@ -37,8 +37,8 @@ export function ColumnContainer(props: ColumnContainerProps) {
 
 export const App = () => (
   <ColumnContainer
-    $noGrowOrShrink
-    $basis={1}
+    noGrowOrShrink
+    basis={1}
     style={{
       display: "flex",
       gap: 8,
@@ -62,6 +62,6 @@ const styles = stylex.create({
     flexGrow: 0,
   },
   columnContainerFlexShrink: (props) => ({
-    flexShrink: `var(--flex-shrink, ${props.$noGrowOrShrink ? 0 : props.$basis ? 1 : 2})`,
+    flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,
   }),
 });

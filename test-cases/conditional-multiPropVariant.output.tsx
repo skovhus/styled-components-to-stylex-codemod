@@ -6,15 +6,13 @@ import * as stylex from "@stylexjs/stylex";
 
 type BadgeSize = "micro" | "small";
 
-type BadgeProps = React.PropsWithChildren<{
-  $size: BadgeSize;
-}>;
+type BadgeProps = { size: BadgeSize } & Omit<React.ComponentProps<"span">, "className" | "style">;
 
 export function Badge(props: BadgeProps) {
-  const { children, $size, ...rest } = props;
+  const { children, size, ...rest } = props;
 
   return (
-    <span {...rest} sx={[styles.badge, $size === "micro" && styles.badgeSizeMicro]}>
+    <span {...rest} sx={[styles.badge, size === "micro" && styles.badgeSizeMicro]}>
       {children}
     </span>
   );
@@ -22,8 +20,8 @@ export function Badge(props: BadgeProps) {
 
 export const App = () => (
   <div>
-    <Badge $size="micro">Micro</Badge>
-    <Badge $size="small">Small</Badge>
+    <Badge size="micro">Micro</Badge>
+    <Badge size="small">Small</Badge>
   </div>
 );
 

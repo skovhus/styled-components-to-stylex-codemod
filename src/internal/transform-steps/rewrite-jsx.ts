@@ -67,6 +67,27 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
     // Wrapper emitters keep `forwardedAs` callsite attrs intact when needed.
     if (decl.needsWrapperComponent) {
+      // Rename $-prefixed JSX attributes at call sites for exported components
+      // whose transient props were stripped of the $ prefix.
+      if (decl.transientPropRenames && decl.transientPropRenames.size > 0) {
+        root
+          .find(j.JSXElement, {
+            openingElement: {
+              name: { type: "JSXIdentifier", name: decl.localName },
+            },
+          })
+          .forEach((p) => {
+            for (const attr of p.node.openingElement.attributes ?? []) {
+              if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
+                continue;
+              }
+              const renamed = decl.transientPropRenames!.get(attr.name.name);
+              if (renamed) {
+                attr.name.name = renamed;
+              }
+            }
+          });
+      }
       continue;
     }
 

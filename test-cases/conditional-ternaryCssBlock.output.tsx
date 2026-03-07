@@ -3,16 +3,16 @@ import * as stylex from "@stylexjs/stylex";
 import { fontWeightVars } from "./tokens.stylex";
 
 type HighlightProps = React.PropsWithChildren<{
-  $dim: boolean;
+  dim: boolean;
 }>;
 
 // Support ternary CSS blocks that return declaration text (or empty string).
 
 export function Highlight(props: HighlightProps) {
-  const { children, $dim, ...rest } = props;
+  const { children, dim, ...rest } = props;
 
   return (
-    <span {...rest} sx={[styles.highlight, $dim ? styles.highlightDim : undefined]}>
+    <span {...rest} sx={[styles.highlight, dim ? styles.highlightDim : undefined]}>
       {children}
     </span>
   );
@@ -20,8 +20,8 @@ export function Highlight(props: HighlightProps) {
 
 export const App = () => (
   <div>
-    <Highlight $dim>Dim</Highlight>
-    <Highlight $dim={false}>No dim</Highlight>
+    <Highlight dim>Dim</Highlight>
+    <Highlight dim={false}>No dim</Highlight>
   </div>
 );
 

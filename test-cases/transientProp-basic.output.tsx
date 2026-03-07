@@ -70,18 +70,17 @@ function ArrowIcon(props: IconProps & ArrowIconProps) {
 
 // The wrapper uses $isOpen for styling; ArrowIcon declares it in props but filters before spreading
 export function CollapseArrowIcon(
-  props: Omit<React.ComponentPropsWithRef<typeof ArrowIcon>, "className" | "style">,
+  props: Omit<React.ComponentPropsWithRef<typeof ArrowIcon>, "className" | "style" | "$isOpen"> & {
+    [K in "$isOpen" as "isOpen"]: React.ComponentPropsWithRef<typeof ArrowIcon>[K];
+  },
 ) {
-  const { $isOpen, ...rest } = props;
+  const { isOpen, ...rest } = props;
 
   return (
     <ArrowIcon
-      $isOpen={$isOpen}
+      $isOpen={isOpen}
       {...rest}
-      {...stylex.props(
-        styles.collapseArrowIcon,
-        $isOpen ? styles.collapseArrowIconOpen : undefined,
-      )}
+      {...stylex.props(styles.collapseArrowIcon, isOpen ? styles.collapseArrowIconOpen : undefined)}
     />
   );
 }
@@ -93,8 +92,8 @@ export const App = () => (
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
     <Point $size={100} style={{ top: "10px" }} data-testid="point" />
-    <CollapseArrowIcon $isOpen />
-    <CollapseArrowIcon $isOpen={false} />
+    <CollapseArrowIcon isOpen />
+    <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
   </div>
 );

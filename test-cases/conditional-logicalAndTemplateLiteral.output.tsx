@@ -14,51 +14,48 @@ function Title(props: TitleProps) {
 }
 
 type DropZoneProps = React.PropsWithChildren<{
-  $isDraggingOver: boolean;
+  isDraggingOver: boolean;
 }>;
 
 // Test logical AND with template literal containing theme expression
 export function DropZone(props: DropZoneProps) {
-  const { children, $isDraggingOver, ...rest } = props;
+  const { children, isDraggingOver, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      sx={[styles.dropZone, $isDraggingOver ? styles.dropZoneDraggingOver : undefined]}
-    >
+    <div {...rest} sx={[styles.dropZone, isDraggingOver ? styles.dropZoneDraggingOver : undefined]}>
       {children}
     </div>
   );
 }
 
 type CardProps = React.PropsWithChildren<{
-  $isHighlighted: boolean;
+  isHighlighted: boolean;
 }>;
 
 // Test logical AND with template literal containing multiple theme expressions
 export function Card(props: CardProps) {
-  const { children, $isHighlighted, ...rest } = props;
+  const { children, isHighlighted, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.card, $isHighlighted ? styles.cardHighlighted : undefined]}>
+    <div {...rest} sx={[styles.card, isHighlighted ? styles.cardHighlighted : undefined]}>
       {children}
     </div>
   );
 }
 
 type StatusBarProps = React.PropsWithChildren<{
-  $isDisconnected?: boolean;
+  isDisconnected?: boolean;
 }>;
 
 // Test ternary with template literal containing theme expression and undefined alternate
 // This is semantically equivalent to the logical AND form above
 export function StatusBar(props: StatusBarProps) {
-  const { children, $isDisconnected, ...rest } = props;
+  const { children, isDisconnected, ...rest } = props;
 
   return (
     <div
       {...rest}
-      sx={[styles.statusBar, $isDisconnected ? styles.statusBarDisconnected : undefined]}
+      sx={[styles.statusBar, isDisconnected ? styles.statusBarDisconnected : undefined]}
     >
       {children}
     </div>
@@ -69,11 +66,11 @@ export const App = () => (
   <div>
     <Title>Normal Title</Title>
     <Title $upsideDown>Upside Down Title</Title>
-    <DropZone $isDraggingOver>Dragging</DropZone>
-    <DropZone $isDraggingOver={false}>Not dragging</DropZone>
-    <Card $isHighlighted>Highlighted</Card>
-    <Card $isHighlighted={false}>Normal</Card>
-    <StatusBar $isDisconnected>Disconnected</StatusBar>
+    <DropZone isDraggingOver>Dragging</DropZone>
+    <DropZone isDraggingOver={false}>Not dragging</DropZone>
+    <Card isHighlighted>Highlighted</Card>
+    <Card isHighlighted={false}>Normal</Card>
+    <StatusBar isDisconnected>Disconnected</StatusBar>
     <StatusBar>Connected</StatusBar>
   </div>
 );

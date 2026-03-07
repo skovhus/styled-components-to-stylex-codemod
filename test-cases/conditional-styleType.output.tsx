@@ -6,7 +6,7 @@ export enum Status {
   inactive = "inactive",
 }
 
-type IconWithTeamColorProps = { $color?: string } & Omit<
+type IconWithTeamColorProps = { color?: string } & Omit<
   React.ComponentProps<"svg">,
   "className" | "style"
 >;
@@ -14,9 +14,9 @@ type IconWithTeamColorProps = { $color?: string } & Omit<
 // Styled component with conditional CSS based on prop
 // Uses ternary: props.$color ? `fill: ${props.$color};` : ""
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
-  const { children, $color, ...rest } = props;
+  const { children, color, ...rest } = props;
 
-  const sx = stylex.props($color ? styles.iconWithTeamColorFill($color) : undefined);
+  const sx = stylex.props(color ? styles.iconWithTeamColorFill(color) : undefined);
 
   return (
     <svg {...rest} {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")}>
@@ -66,7 +66,7 @@ function Icon_(props: Props) {
 export function App() {
   return (
     <div>
-      <IconWithTeamColor $color="red">
+      <IconWithTeamColor color="red">
         <circle cx="50" cy="50" r="40" stroke="green" strokeWidth="4" />
       </IconWithTeamColor>
       <IconWithTransform noDate selected status={Status.active} />

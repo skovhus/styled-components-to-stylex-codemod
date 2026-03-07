@@ -22,6 +22,14 @@ export interface TransformResult {
   sidecarContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
+  /** Transient prop renames for exported components, keyed by export name. */
+  transientPropRenames?: TransientPropRenameResult[];
+}
+
+/** Describes a transient prop rename on an exported component for consumer patching. */
+export interface TransientPropRenameResult {
+  exportName: string;
+  renames: Record<string, string>;
 }
 
 /** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
@@ -350,6 +358,14 @@ export type StyledDecl = {
    * Stored as a TS type node (best-effort) so wrapper emission can reuse it.
    */
   propsType?: ASTNode;
+
+  /**
+   * Maps original `$`-prefixed transient prop names to their stripped versions.
+   * E.g., `$isOpen` → `isOpen`. Set on exported components to prevent
+   * styled-components v6 from filtering transient props when the converted
+   * plain function is wrapped by an unconverted `styled()` consumer.
+   */
+  transientPropRenames?: Map<string, string>;
 
   withConfig?: { componentId?: string };
   attrsInfo?: {

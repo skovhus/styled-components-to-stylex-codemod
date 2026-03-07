@@ -92,6 +92,8 @@ export class TransformContext {
   sidecarStylexContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
+  /** Transient prop renames for exported components (for consumer patching). */
+  transientPropRenames?: import("./transform-types.js").TransientPropRenameResult[];
   /** Inline @keyframes extracted from styled component templates: JS identifier name → frame objects */
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */

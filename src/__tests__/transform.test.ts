@@ -639,6 +639,65 @@ export const App = () => <Thing />;
     const infoWarnings = result.warnings.filter((w) => w.severity === "info");
     expect(infoWarnings).toHaveLength(0);
   });
+
+  it("should emit info warning when transient props are renamed on exported component", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Toggle = styled.div<{ $active?: boolean }>\`
+  color: \${(props) => (props.$active ? "red" : "blue")};
+\`;
+
+export const App = () => <Toggle $active />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("active");
+    expect(result.code).not.toContain("$active");
+    const infoWarnings = result.warnings.filter(
+      (w) =>
+        w.severity === "info" &&
+        w.type ===
+          "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
+    );
+    expect(infoWarnings).toHaveLength(1);
+    expect(infoWarnings[0]!.context).toMatchObject({
+      componentName: "Toggle",
+    });
+  });
+
+  it("should NOT emit transient rename warning for non-exported component", () => {
+    const source = `
+import styled from "styled-components";
+
+const Toggle = styled.div<{ $active?: boolean }>\`
+  color: \${(props) => (props.$active ? "red" : "blue")};
+\`;
+
+export const App = () => <Toggle $active />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$active");
+    const renameWarnings = result.warnings.filter(
+      (w) =>
+        w.type ===
+        "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
+    );
+    expect(renameWarnings).toHaveLength(0);
+  });
 });
 
 describe("import cleanup safety", () => {
