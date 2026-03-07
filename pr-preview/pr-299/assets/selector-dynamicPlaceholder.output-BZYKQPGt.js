@@ -1,0 +1,1 @@
+import{j as e}from"./index-n-d7C2lh.js";function p(t){return e.jsx("input",{...t,className:"xc7ga6q xmkeg23 x1y0btm7 xtb30c9 x12peec7 x3p1z5f"})}const x=()=>e.jsxs("div",{style:{display:"grid",gap:12,padding:16},children:[e.jsx(p,{placeholder:"Muted placeholder"}),e.jsx(p,{placeholder:"Second input"})]});export{x as App};

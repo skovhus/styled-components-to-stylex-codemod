@@ -55,12 +55,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
@@ -76,16 +76,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-fill {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -111,6 +101,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-12ploh {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -171,6 +171,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-fontWeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bf5hz0 {
   syntax: "*";
   inherits: false
 }
@@ -612,6 +617,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 @media (width >= 1024px) {
   .x1wk2j8l.x1wk2j8l:not(#\#) {
     padding: 2.5rem;
+  }
+}
+
+@media (width >= 768px) {
+  .x12id7pw.x12id7pw:not(#\#) {
+    padding: 24px;
   }
 }
 
@@ -1107,6 +1118,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1h2kqdt:not(#\#):not(#\#) {
   transition: background-color .2s;
+}
+
+.xnz68lp:not(#\#):not(#\#) {
+  transition: box-shadow .2s;
 }
 
 .x4lopbt:not(#\#):not(#\#) {
@@ -2181,6 +2196,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   container-type: inline-size;
 }
 
+.xt0e3qv:not(#\#):not(#\#):not(#\#) {
+  cursor: default;
+}
+
 .xv5twrn:not(#\#):not(#\#):not(#\#) {
   cursor: move;
 }
@@ -2983,6 +3002,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1336f0y:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #ff0;
+}
+
+.xy0lkqh:hover:not(#\#):not(#\#):not(#\#) {
+  box-shadow: var(--x-bf5hz0);
 }
 
 .x1nt1xku:hover:not(#\#):not(#\#):not(#\#) {
@@ -3951,6 +3974,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1pju0fl:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: 50px;
+}
+
+.x1247r65:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 60px;
 }
 
 .xci0xqf:not(#\#):not(#\#):not(#\#):not(#\#) {
