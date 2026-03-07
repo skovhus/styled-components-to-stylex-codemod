@@ -14,6 +14,7 @@ import {
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
+import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -485,11 +486,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (!exportedComponents.has(decl.localName)) {
       continue;
     }
-    const transientProps = collectTransientPropsFromDecl(decl);
+    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       continue;
     }
-    const existingPropNames = collectExistingNonTransientPropNames(decl);
+    const existingPropNames = collectDeclPropNames(j, decl, (n) => !n.startsWith("$"));
+    existingPropNames.add("className").add("style").add("children").add("ref").add("key").add("as");
     // Also check the base component's props for collisions (e.g., Base has `color`,
     // wrapper has `$color` — renaming to `color` would collide).
     if (decl.base.kind === "component") {
@@ -886,7 +888,11 @@ function collectBaseComponentPropNames(
       return;
     }
     if (typeRef.type === "TSTypeLiteral") {
-      collectPropsFromType(typeRef, names, (n) => !n.startsWith("$"));
+      walkTypePropNames(typeRef, (n) => {
+        if (!n.startsWith("$")) {
+          names.add(n);
+        }
+      });
     } else if (typeRef.type === "TSTypeReference" && typeRef.typeName?.type === "Identifier") {
       const typeName = typeRef.typeName.name;
       // Check interface
@@ -909,7 +915,11 @@ function collectBaseComponentPropNames(
         .find(j.TSTypeAliasDeclaration)
         .filter((p: any) => (p.node as any).id?.name === typeName)
         .forEach((p: any) => {
-          collectPropsFromType(p.node.typeAnnotation, names, (n) => !n.startsWith("$"));
+          walkTypePropNames(p.node.typeAnnotation, (n) => {
+            if (!n.startsWith("$")) {
+              names.add(n);
+            }
+          });
         });
     }
     if (typeRef.type === "TSIntersectionType") {
@@ -981,139 +991,56 @@ function isTypeNameUsedElsewhere(
 }
 
 /**
- * Collects all `$`-prefixed prop names referenced in a decl's styling data.
+ * Collects prop names from a decl's styling data that match a filter.
+ * Reuses `parseVariantWhenToAst` to extract prop names from "when" strings,
+ * keeping prop extraction consistent with the emit phase.
  */
-function collectTransientPropsFromDecl(decl: StyledDecl): Set<string> {
-  const props = new Set<string>();
+function collectDeclPropNames(
+  j: JSCodeshift,
+  decl: StyledDecl,
+  filter: (name: string) => boolean,
+): Set<string> {
+  const result = new Set<string>();
+  const addIfMatch = (name: string) => {
+    if (filter(name)) {
+      result.add(name);
+    }
+  };
   for (const when of Object.keys(decl.variantStyleKeys ?? {})) {
-    for (const p of extractPropNamesFromWhenString(when)) {
-      if (p.startsWith("$")) {
-        props.add(p);
-      }
+    for (const p of parseVariantWhenToAst(j, when).props) {
+      addIfMatch(p);
     }
   }
   for (const sf of decl.styleFnFromProps ?? []) {
-    if (sf.jsxProp.startsWith("$")) {
-      props.add(sf.jsxProp);
-    }
+    addIfMatch(sf.jsxProp);
     if (sf.conditionWhen) {
-      for (const p of extractPropNamesFromWhenString(sf.conditionWhen)) {
-        if (p.startsWith("$")) {
-          props.add(p);
-        }
+      for (const p of parseVariantWhenToAst(j, sf.conditionWhen).props) {
+        addIfMatch(p);
       }
     }
   }
   for (const isp of decl.inlineStyleProps ?? []) {
-    const jprop = isp.jsxProp ?? isp.prop;
-    if (jprop.startsWith("$")) {
-      props.add(jprop);
-    }
+    addIfMatch(isp.jsxProp ?? isp.prop);
   }
   for (const cv of decl.compoundVariants ?? []) {
     if (cv.kind === "3branch" || cv.kind === "4branch") {
-      if (cv.outerProp.startsWith("$")) {
-        props.add(cv.outerProp);
-      }
-      if (cv.innerProp.startsWith("$")) {
-        props.add(cv.innerProp);
-      }
+      addIfMatch(cv.outerProp);
+      addIfMatch(cv.innerProp);
     }
   }
   for (const vd of decl.variantDimensions ?? []) {
-    if (vd.propName.startsWith("$")) {
-      props.add(vd.propName);
-    }
+    addIfMatch(vd.propName);
   }
   for (const sbv of decl.staticBooleanVariants ?? []) {
-    if (sbv.propName.startsWith("$")) {
-      props.add(sbv.propName);
-    }
+    addIfMatch(sbv.propName);
   }
-  if (decl.enumVariant && decl.enumVariant.propName.startsWith("$")) {
-    props.add(decl.enumVariant.propName);
+  if (decl.enumVariant) {
+    addIfMatch(decl.enumVariant.propName);
   }
-  collectPropsFromType(decl.propsType, props, (n) => n.startsWith("$"));
-  return props;
-}
-
-type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
-
-/**
- * Collects member names from a TS type AST node matching a filter predicate.
- */
-function collectPropsFromType(
-  typeNode: TypeNodeLike,
-  result: Set<string>,
-  filter: (name: string) => boolean,
-): void {
-  if (!typeNode) {
-    return;
-  }
-  if (typeNode.type === "TSTypeLiteral" && Array.isArray(typeNode.members)) {
-    for (const member of typeNode.members) {
-      const m = member as { type?: string; key?: { type?: string; name?: string } };
-      if (
-        m.type === "TSPropertySignature" &&
-        m.key?.type === "Identifier" &&
-        m.key.name &&
-        filter(m.key.name)
-      ) {
-        result.add(m.key.name);
-      }
-    }
-  }
-  if (typeNode.type === "TSIntersectionType" && Array.isArray(typeNode.types)) {
-    for (const t of typeNode.types) {
-      collectPropsFromType(t as TypeNodeLike, result, filter);
-    }
-  }
-}
-
-/**
- * Collects non-transient (non-`$`-prefixed) prop names to check for rename collisions.
- */
-function collectExistingNonTransientPropNames(decl: StyledDecl): Set<string> {
-  const names = new Set<string>(["className", "style", "children", "ref", "key", "as"]);
-  for (const when of Object.keys(decl.variantStyleKeys ?? {})) {
-    for (const p of extractPropNamesFromWhenString(when)) {
-      if (!p.startsWith("$")) {
-        names.add(p);
-      }
-    }
-  }
-  for (const sf of decl.styleFnFromProps ?? []) {
-    if (!sf.jsxProp.startsWith("$")) {
-      names.add(sf.jsxProp);
-    }
-  }
-  for (const vd of decl.variantDimensions ?? []) {
-    if (!vd.propName.startsWith("$")) {
-      names.add(vd.propName);
-    }
-  }
-  collectPropsFromType(decl.propsType, names, (n) => !n.startsWith("$"));
-  return names;
-}
-
-/**
- * Extracts prop names from a "when" condition string (e.g., "$isOpen", "!$active").
- */
-function extractPropNamesFromWhenString(when: string): string[] {
-  const props: string[] = [];
-  const tokens = when.split(/[&|!()=\s]+/).filter(Boolean);
-  for (const token of tokens) {
-    if (
-      /^[$A-Z_a-z][$\w]*$/.test(token) &&
-      token !== "true" &&
-      token !== "false" &&
-      token !== "undefined" &&
-      token !== "null"
-    ) {
-      props.push(token);
-    }
-  }
-  return props;
+  walkTypePropNames(decl.propsType, (name) => {
+    addIfMatch(name);
+  });
+  return result;
 }
 
 /**
@@ -1209,7 +1136,12 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
     decl.enumVariant.propName = renames.get(decl.enumVariant.propName) ?? decl.enumVariant.propName;
   }
 
-  renameTransientPropsInType(decl.propsType, renames);
+  walkTypePropNames(decl.propsType, (name, keyNode) => {
+    const renamed = renames.get(name);
+    if (renamed) {
+      keyNode.name = renamed;
+    }
+  });
 
   if (decl.shouldForwardProp?.dropProps) {
     decl.shouldForwardProp.dropProps = decl.shouldForwardProp.dropProps.map(
@@ -1379,7 +1311,12 @@ function renameTransientPropsInReferencedTypes(
       .find(j.TSTypeAliasDeclaration)
       .filter((p: any) => (p.node as any).id?.name === typeName)
       .forEach((p: any) => {
-        renameTransientPropsInType(p.node.typeAnnotation, renames);
+        walkTypePropNames(p.node.typeAnnotation, (name, keyNode) => {
+          const renamed = renames.get(name);
+          if (renamed) {
+            keyNode.name = renamed;
+          }
+        });
       });
   }
   if (propsType.type === "TSIntersectionType" && Array.isArray(propsType.types)) {
@@ -1389,12 +1326,16 @@ function renameTransientPropsInReferencedTypes(
   }
 }
 
+type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
+
 /**
- * Renames `$`-prefixed member names in a TS type AST node in place.
+ * Walks TSPropertySignature members in a type AST node (TSTypeLiteral,
+ * TSIntersectionType) and calls `visitor` with each member's key name
+ * and the key node itself. Used for both collecting and renaming props.
  */
-function renameTransientPropsInType(
-  typeNode: { type?: string; members?: unknown[]; types?: unknown[] } | undefined,
-  renames: Map<string, string>,
+function walkTypePropNames(
+  typeNode: TypeNodeLike,
+  visitor: (name: string, keyNode: { name: string }) => void,
 ): void {
   if (!typeNode) {
     return;
@@ -1403,16 +1344,13 @@ function renameTransientPropsInType(
     for (const member of typeNode.members) {
       const m = member as { type?: string; key?: { type?: string; name?: string } };
       if (m.type === "TSPropertySignature" && m.key?.type === "Identifier" && m.key.name) {
-        const renamed = renames.get(m.key.name);
-        if (renamed) {
-          m.key.name = renamed;
-        }
+        visitor(m.key.name, m.key as { name: string });
       }
     }
   }
   if (typeNode.type === "TSIntersectionType" && Array.isArray(typeNode.types)) {
     for (const t of typeNode.types) {
-      renameTransientPropsInType(t as typeof typeNode, renames);
+      walkTypePropNames(t as TypeNodeLike, visitor);
     }
   }
 }
