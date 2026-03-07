@@ -6,27 +6,74 @@
  * Unconverted consumer files that use `<CollapseArrowIcon $isOpen={...} />` must be
  * patched to use the new prop names.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, relative } from "node:path";
+import type { TransientPropRenameResult } from "./transform-types.js";
 import { escapeRegex } from "./utilities/string-utils.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
 interface TransientPropConsumerEntry {
-  /** Local name of the component in the consumer file */
   localComponentName: string;
-  /** Map of original $-prefixed prop names to their renamed versions */
   renames: Record<string, string>;
+}
+
+interface Resolver {
+  resolve(from: string, specifier: string): string | undefined;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 /**
- * Scan a consumer file's imports to find which renamed components it uses.
- * Returns entries for components that are imported from the target file.
+ * Scan all consumer files and patch any that import renamed components.
  *
- * `exportName` is checked against both named imports (`import { X }`)
- * and default imports (`import X`). Aliased imports are handled:
- * `import { CollapseArrowIcon as Arrow }` returns `localComponentName: "Arrow"`.
+ * Iterates consumers once (outer) and targets (inner) to minimise I/O.
+ * Returns the list of consumer file paths that were patched.
+ */
+export function collectTransientPropPatches(args: {
+  transientPropRenames: ReadonlyMap<string, readonly TransientPropRenameResult[]>;
+  consumerFilePaths: readonly string[];
+  resolver?: Resolver;
+}): Array<{ consumerPath: string; patched: string }> {
+  const { transientPropRenames, consumerFilePaths, resolver } = args;
+  const results: Array<{ consumerPath: string; patched: string }> = [];
+
+  const allConsumerFiles = new Set(consumerFilePaths.map(toRealPath));
+
+  for (const consumerPath of allConsumerFiles) {
+    let consumerSource: string;
+    try {
+      consumerSource = readFileSync(consumerPath, "utf-8");
+    } catch {
+      continue;
+    }
+    const allEntries: TransientPropConsumerEntry[] = [];
+    for (const [targetPath, renames] of transientPropRenames) {
+      if (consumerPath === targetPath) {
+        continue;
+      }
+      const importSources = buildPossibleImportSources(
+        consumerPath,
+        targetPath,
+        consumerSource,
+        resolver,
+      );
+      const entries = findImportedRenamedComponents(consumerSource, importSources, renames);
+      allEntries.push(...entries);
+    }
+    if (allEntries.length > 0) {
+      const patched = patchSourceTransientProps(consumerSource, allEntries);
+      if (patched !== null) {
+        results.push({ consumerPath, patched });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Scan a consumer file's imports to find which renamed components it uses.
  */
 export function findImportedRenamedComponents(
   consumerSource: string,
@@ -34,22 +81,18 @@ export function findImportedRenamedComponents(
   componentRenames: ReadonlyArray<{ exportName: string; renames: Record<string, string> }>,
 ): TransientPropConsumerEntry[] {
   const entries: TransientPropConsumerEntry[] = [];
-
   for (const { exportName, renames } of componentRenames) {
     const localName = findLocalImportName(consumerSource, targetImportSources, exportName);
     if (localName) {
       entries.push({ localComponentName: localName, renames });
     }
   }
-
   return entries;
 }
 
 /**
- * Patch source code: rename `$prop` → `prop` in JSX attributes
- * for the given components.
- *
- * Returns the patched source or `null` if no changes were made.
+ * Patch source code: rename `$prop` → `prop` in JSX attributes.
+ * Returns the patched source or `null` if unchanged.
  */
 export function patchSourceTransientProps(
   source: string,
@@ -58,21 +101,15 @@ export function patchSourceTransientProps(
   if (entries.length === 0) {
     return null;
   }
-
   let modified = source;
-
   for (const { localComponentName, renames } of entries) {
     modified = patchJsxTransientProps(modified, localComponentName, renames);
   }
-
   return modified !== source ? modified : null;
 }
 
 /**
- * Patch a single consumer file: rename `$prop` → `prop` in JSX attributes
- * for the given components.
- *
- * Returns the patched source or `null` if no changes were made.
+ * File-based convenience wrapper around `patchSourceTransientProps`.
  */
 export function patchConsumerTransientProps(
   filePath: string,
@@ -89,10 +126,68 @@ export function patchConsumerTransientProps(
 
 /* ── Non-exported helpers ─────────────────────────────────────────────── */
 
+function toRealPath(filePath: string): string {
+  try {
+    return realpathSync(filePath);
+  } catch {
+    return filePath;
+  }
+}
+
+/**
+ * Build import source strings that a consumer might use to import from `targetPath`.
+ * Generates relative paths (with/without extension, /index), and — when a resolver
+ * is provided — also probes the consumer's actual import specifiers to catch
+ * tsconfig path aliases.
+ */
+function buildPossibleImportSources(
+  consumerPath: string,
+  targetPath: string,
+  consumerSource: string,
+  resolver?: Resolver,
+): Set<string> {
+  const sources = new Set<string>();
+  const dir = dirname(consumerPath);
+  let rel = relative(dir, targetPath).replace(/\\/g, "/");
+  if (!rel.startsWith(".")) {
+    rel = `./${rel}`;
+  }
+  sources.add(rel);
+  for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {
+    if (rel.endsWith(ext)) {
+      sources.add(rel.slice(0, -ext.length));
+      break;
+    }
+  }
+  const base = basename(targetPath).replace(/\.\w+$/, "");
+  if (base === "index") {
+    const dirRel = relative(dir, dirname(targetPath)).replace(/\\/g, "/");
+    sources.add(dirRel.startsWith(".") ? dirRel : `./${dirRel}`);
+  }
+  if (resolver) {
+    const importRe = /from\s+["']([^"']+)["']/g;
+    for (const m of consumerSource.matchAll(importRe)) {
+      const specifier = m[1]!;
+      if (sources.has(specifier)) {
+        continue;
+      }
+      try {
+        const resolved = resolver.resolve(consumerPath, specifier);
+        if (resolved && toRealPath(resolved) === targetPath) {
+          sources.add(specifier);
+        }
+      } catch {
+        // resolver failure — skip
+      }
+    }
+  }
+  return sources;
+}
+
 /**
  * Find the local name for an imported component.
  * Checks named imports (`import { X }`, `import { X as Y }`),
- * default imports (`import X`), and namespace re-exports.
+ * default imports (`import X`).
  */
 function findLocalImportName(
   source: string,

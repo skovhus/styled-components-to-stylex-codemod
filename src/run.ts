@@ -4,7 +4,7 @@
  */
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
@@ -533,45 +533,17 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Patch unconverted consumers: rename $-prefixed props on components whose props were renamed
   if (transientPropRenames.size > 0 && !dryRun) {
-    const { findImportedRenamedComponents, patchSourceTransientProps } =
+    const { collectTransientPropPatches } =
       await import("./internal/transient-prop-consumer-patcher.js");
+    const patches = collectTransientPropPatches({
+      transientPropRenames,
+      consumerFilePaths: consumerFilePaths.map((p) => resolve(p)),
+      resolver: sharedResolver,
+    });
     const patchedFiles: string[] = [];
-    // Iterate consumers once (outer) and check all targets (inner) to avoid
-    // re-reading the same file for each target.
-    const allConsumerFiles = new Set(
-      consumerFilePaths.map((p: string) => {
-        const abs = resolve(p);
-        try {
-          return realpathSync(abs);
-        } catch {
-          return abs;
-        }
-      }),
-    );
-    for (const consumerPath of allConsumerFiles) {
-      let consumerSource: string;
-      try {
-        consumerSource = readFileSync(consumerPath, "utf-8");
-      } catch {
-        continue;
-      }
-      // Collect entries from ALL targets for this single consumer
-      const allEntries: Array<{ localComponentName: string; renames: Record<string, string> }> = [];
-      for (const [targetPath, renames] of transientPropRenames) {
-        if (consumerPath === targetPath) {
-          continue;
-        }
-        const importSources = buildPossibleImportSources(consumerPath, targetPath, sharedResolver);
-        const entries = findImportedRenamedComponents(consumerSource, importSources, renames);
-        allEntries.push(...entries);
-      }
-      if (allEntries.length > 0) {
-        const patched = patchSourceTransientProps(consumerSource, allEntries);
-        if (patched !== null) {
-          await writeFile(consumerPath, patched, "utf-8");
-          patchedFiles.push(consumerPath);
-        }
-      }
+    for (const { consumerPath, patched } of patches) {
+      await writeFile(consumerPath, patched, "utf-8");
+      patchedFiles.push(consumerPath);
     }
     if (formatterCommands && patchedFiles.length > 0) {
       await runFormatters(formatterCommands, patchedFiles);
@@ -695,76 +667,4 @@ async function runFormatters(commands: string[], files: string[]): Promise<void>
       }
     }
   }
-}
-
-/**
- * Build a set of import source strings that a consumer at `consumerPath`
- * might use to import from `targetPath`.
- *
- * Generates relative paths with and without common extensions, `/index`
- * suffixes, and — when a module resolver is provided — also checks the
- * consumer's existing import specifiers against the resolver to catch
- * tsconfig path aliases (e.g., `@/components/Toggle`).
- */
-function buildPossibleImportSources(
-  consumerPath: string,
-  targetPath: string,
-  resolver?: { resolve(from: string, specifier: string): string | undefined },
-): Set<string> {
-  const sources = new Set<string>();
-  const dir = dirname(consumerPath);
-  let rel = relative(dir, targetPath);
-  if (!rel.startsWith(".")) {
-    rel = `./${rel}`;
-  }
-  rel = rel.replace(/\\/g, "/");
-  sources.add(rel);
-  for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {
-    if (rel.endsWith(ext)) {
-      sources.add(rel.slice(0, -ext.length));
-      break;
-    }
-  }
-  const base = basename(targetPath).replace(/\.\w+$/, "");
-  if (base === "index") {
-    const dirRel = relative(dir, dirname(targetPath));
-    const normalized = dirRel.startsWith(".") ? dirRel : `./${dirRel}`;
-    sources.add(normalized.replace(/\\/g, "/"));
-  }
-  // When a resolver is available, also try resolving each import specifier
-  // found in the consumer file to catch tsconfig path aliases.
-  if (resolver) {
-    let consumerSource: string | undefined;
-    try {
-      consumerSource = readFileSync(consumerPath, "utf-8");
-    } catch {
-      // ignore
-    }
-    if (consumerSource) {
-      const importRe = /from\s+["']([^"']+)["']/g;
-      for (const m of consumerSource.matchAll(importRe)) {
-        const specifier = m[1]!;
-        if (sources.has(specifier)) {
-          continue;
-        }
-        try {
-          const resolved = resolver.resolve(consumerPath, specifier);
-          if (resolved) {
-            let resolvedReal: string;
-            try {
-              resolvedReal = realpathSync(resolved);
-            } catch {
-              resolvedReal = resolved;
-            }
-            if (resolvedReal === targetPath) {
-              sources.add(specifier);
-            }
-          }
-        } catch {
-          // resolver failure — skip
-        }
-      }
-    }
-  }
-  return sources;
 }
