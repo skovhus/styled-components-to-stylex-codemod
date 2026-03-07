@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { format } from "oxfmt";
 import { runTransform } from "../run.js";
+import {
+  runTransform as runTransformFromIndex,
+  defineAdapter as defineAdapterFromIndex,
+} from "../index.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -15,6 +19,13 @@ async function normalizeCode(code: string): Promise<string> {
   const { code: formatted } = await format("test.tsx", code);
   return formatted.replace(/\n{3,}/g, "\n\n").trim();
 }
+
+describe("index.ts barrel exports", () => {
+  it("re-exports runTransform and defineAdapter from the package entry point", () => {
+    expect(runTransformFromIndex).toBe(runTransform);
+    expect(typeof defineAdapterFromIndex).toBe("function");
+  });
+});
 
 describe("runTransform (e2e)", () => {
   it("transforms a fixture in a temp folder and matches the .output.tsx file", async () => {
