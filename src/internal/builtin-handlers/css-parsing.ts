@@ -70,7 +70,7 @@ function coerceStaticCss(value: unknown): unknown {
   }
   const v = value as { kind?: string; value?: unknown };
   if (v.kind === "static" && typeof v.value === "string") {
-    if (/^-?\d+(\.\d+)?$/.test(v.value)) {
+    if (/^-?\d*\.?\d+$/.test(v.value)) {
       return Number(v.value);
     }
     return v.value;

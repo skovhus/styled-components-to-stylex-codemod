@@ -176,7 +176,7 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
     }
 
     // Try to return number if purely numeric and no unit.
-    if (/^-?\d+(\.\d+)?$/.test(raw)) {
+    if (/^-?\d*\.?\d+$/.test(raw)) {
       if (propName === "flex") {
         return raw;
       }

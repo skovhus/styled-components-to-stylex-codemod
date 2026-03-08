@@ -45,6 +45,9 @@ export function sanitizeIdentifier(s: string): string {
  * @example looksLikeLength("auto") => false
  */
 export function looksLikeLength(token: string): boolean {
+  if (token === "thin" || token === "medium" || token === "thick") {
+    return true;
+  }
   return /^-?\d*\.?\d+(px|rem|em|vh|vw|vmin|vmax|ch|ex|lh|svh|svw|dvh|dvw|cqw|cqh|%)?$/.test(token);
 }
 
