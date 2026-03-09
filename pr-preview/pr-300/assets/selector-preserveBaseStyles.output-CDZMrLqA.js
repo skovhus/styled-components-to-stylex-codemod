@@ -1,0 +1,1 @@
+import{j as x}from"./index-CxxucBix.js";function s(){return x.jsx("div",{className:"x1p6a1jd xqvfhly x1us6l5c x3oybdh x-default-marker",children:x.jsx("div",{className:"xju2f9n",children:"child"})})}export{s as App};
