@@ -8,7 +8,7 @@ import { ExternalComponent } from "./lib/external-component";
 function StyledExternal(props: React.ComponentPropsWithRef<typeof ExternalComponent>) {
   const { className, style, ...rest } = props;
 
-  return <ExternalComponent {...rest} {...mergedSx(styles.styledExternal, className, style)} />;
+  return <ExternalComponent {...rest} {...mergedSx(styles.external, className, style)} />;
 }
 
 // Wrapper receives props from a parent that includes className and style.
@@ -48,7 +48,7 @@ export function App() {
 }
 
 const styles = stylex.create({
-  styledExternal: {
+  external: {
     borderRadius: "8px",
     padding: "8px",
     backgroundColor: "#f5f5f5",

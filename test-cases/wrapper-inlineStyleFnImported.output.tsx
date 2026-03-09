@@ -7,26 +7,26 @@ export function App() {
       <ExternalComponent
         isOpen
         {...stylex.props(
-          styles.styledExternal,
-          styles.styledExternalColor("blue"),
-          styles.styledExternalPadding("20px"),
+          styles.external,
+          styles.externalColor("blue"),
+          styles.externalPadding("20px"),
         )}
       />
-      <ExternalComponent isOpen={false} {...stylex.props(styles.styledExternal)} />
+      <ExternalComponent isOpen={false} {...stylex.props(styles.external)} />
     </div>
   );
 }
 
 const styles = stylex.create({
   // This uses styleFnFromProps pattern - prop value is directly used as style value
-  styledExternal: {
+  external: {
     color: "gray",
     padding: "10px",
   },
-  styledExternalColor: (color: string) => ({
+  externalColor: (color: string) => ({
     color,
   }),
-  styledExternalPadding: (padding: string) => ({
+  externalPadding: (padding: string) => ({
     padding,
   }),
 });

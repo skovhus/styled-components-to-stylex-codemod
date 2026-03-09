@@ -6,7 +6,7 @@ export function StyledHeader(props: Pick<React.ComponentProps<"header">, "ref" |
   const { children, ...rest } = props;
 
   return (
-    <header {...rest} sx={styles.styledHeader}>
+    <header {...rest} sx={styles.header}>
       {children}
     </header>
   );
@@ -23,7 +23,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledHeader: {
+  header: {
     display: "flex",
     padding: "16px",
     backgroundColor: "#f0f0f0",

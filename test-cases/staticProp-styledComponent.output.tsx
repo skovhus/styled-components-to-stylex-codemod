@@ -19,7 +19,7 @@ function StyledSelect(props: Omit<React.ComponentPropsWithRef<typeof BaseSelect>
   const { className, children, ...rest } = props;
 
   return (
-    <BaseSelect {...rest} {...mergedSx(styles.styledSelect, className)}>
+    <BaseSelect {...rest} {...mergedSx(styles.select, className)}>
       {children}
     </BaseSelect>
   );
@@ -61,7 +61,7 @@ export function App() {
 }
 
 const styles = stylex.create({
-  styledSelect: {
+  select: {
     width: "240px",
     minHeight: "140px",
     paddingBlock: "12px",

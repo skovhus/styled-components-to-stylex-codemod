@@ -8,10 +8,7 @@ export function StyledCollapseButton(props: Pick<React.ComponentProps<"div">, "r
   const { children, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      sx={[styles.styledCollapseButton, stylex.defaultMarker(), StyledCollapseButtonMarker]}
-    >
+    <div {...rest} sx={[styles.collapseButton, stylex.defaultMarker(), StyledCollapseButtonMarker]}>
       {children}
     </div>
   );
@@ -29,7 +26,7 @@ export function App() {
 }
 
 const styles = stylex.create({
-  styledCollapseButton: {
+  collapseButton: {
     padding: "12px",
     backgroundColor: "#f0f0f0",
     cursor: "pointer",

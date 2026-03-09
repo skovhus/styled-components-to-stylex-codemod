@@ -9,7 +9,7 @@ function ChevronHandle() {
 
   return (
     <svg width="22" height="6">
-      <animated.path d={styles.d} {...stylex.props(stylexStyles.styledPath)} />
+      <animated.path d={styles.d} {...stylex.props(stylexStyles.path)} />
     </svg>
   );
 }
@@ -17,7 +17,7 @@ function ChevronHandle() {
 export const App = () => <ChevronHandle />;
 
 const stylexStyles = stylex.create({
-  styledPath: {
+  path: {
     stroke: "currentColor",
     strokeWidth: 2,
     strokeLinecap: "round",

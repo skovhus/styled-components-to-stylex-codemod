@@ -19,7 +19,7 @@ export function StyledInput<C extends React.ElementType = "input">(
   const { as: Component = "input", className, children, style, sx, ...rest } = props;
 
   return (
-    <Component {...rest} {...mergedSx([styles.styledInput, sx], className, style)}>
+    <Component {...rest} {...mergedSx([styles.input, sx], className, style)}>
       {children}
     </Component>
   );
@@ -40,7 +40,7 @@ export const App = () => {
 };
 
 const styles = stylex.create({
-  styledInput: {
+  input: {
     transitionProperty: "color",
     borderWidth: "1px",
     borderStyle: "solid",

@@ -7,14 +7,14 @@ const dynamicColor = "#BF4F74";
 // because the method body executes at runtime, not during module initialization
 const viewConfig = {
   render() {
-    return <button sx={styles.styledButton}>Click me</button>;
+    return <button sx={styles.button}>Click me</button>;
   },
 };
 
 export const App = () => viewConfig.render();
 
 const styles = stylex.create({
-  styledButton: {
+  button: {
     backgroundColor: dynamicColor,
     padding: "8px",
   },

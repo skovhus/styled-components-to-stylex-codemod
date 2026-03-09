@@ -24,7 +24,7 @@ type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & React.Componen
 function StyledButton(props: StyledButtonProps) {
   const { className, style, sx, ...rest } = props;
 
-  return <Text {...rest} as="button" {...mergedSx([styles.styledButton, sx], className, style)} />;
+  return <Text {...rest} as="button" {...mergedSx([styles.button, sx], className, style)} />;
 }
 
 // A extends B - this MUST preserve B's as="button" semantics
@@ -41,7 +41,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledButton: {
+  button: {
     cursor: "pointer",
   },
   clickableText: {

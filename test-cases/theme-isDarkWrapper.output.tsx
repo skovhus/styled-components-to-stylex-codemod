@@ -18,10 +18,7 @@ function StyledList(
   return (
     <InnerList
       {...props}
-      {...stylex.props(
-        styles.styledList,
-        theme.isDark ? styles.styledListDark : styles.styledListLight,
-      )}
+      {...stylex.props(styles.list, theme.isDark ? styles.listDark : styles.listLight)}
     />
   );
 }
@@ -34,15 +31,15 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledList: {
+  list: {
     display: "flex",
     padding: "4px",
     borderRadius: "6px",
   },
-  styledListDark: {
+  listDark: {
     backgroundColor: $colors.bgBase,
   },
-  styledListLight: {
+  listLight: {
     backgroundColor: $colors.bgSub,
   },
 });

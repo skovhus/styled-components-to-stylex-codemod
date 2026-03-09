@@ -24,7 +24,7 @@ function BaseDivider(props: React.PropsWithChildren<BaseDividerProps>) {
 export function StyledDivider(
   props: Omit<React.ComponentPropsWithRef<typeof BaseDivider>, "className" | "style">,
 ) {
-  return <BaseDivider {...props} {...stylex.props(styles.styledDivider)} />;
+  return <BaseDivider {...props} {...stylex.props(styles.divider)} />;
 }
 
 // Usage: children should work
@@ -35,7 +35,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledDivider: {
+  divider: {
     paddingLeft: "20px",
   },
 });
