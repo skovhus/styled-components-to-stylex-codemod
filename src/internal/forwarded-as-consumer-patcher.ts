@@ -9,9 +9,9 @@
  * `forwardedAs` tells styled-components to pass the prop through to the wrapped
  * component's own `as` prop, preserving StyleX styles.
  */
-import { readFileSync, realpathSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { escapeRegex } from "./utilities/string-utils.js";
+import { toRealPath } from "./utilities/path-utils.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -126,14 +126,4 @@ function patchAttrsAsProp(source: string, componentName: string): string {
     }
     return `${before}forwardedAs${after}`;
   });
-}
-
-/** Resolve symlinks so paths match the keys in transformedFiles. */
-function toRealPath(filePath: string): string {
-  const resolved = pathResolve(filePath);
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
 }

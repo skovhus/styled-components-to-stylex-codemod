@@ -183,25 +183,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    const pseudoGuardProps = appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    );
-
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!pseudoGuardProps.includes(gp)) {
-        pseudoGuardProps.push(gp);
-      }
-    }
+    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
@@ -856,25 +838,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    for (const gp of appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!destructureProps.includes(gp)) {
-        destructureProps.push(gp);
-      }
-    }
-
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
+    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
       }
@@ -1641,6 +1605,35 @@ export function appendPseudoExpandStyleArgs(
         j.identifier(entry.styleKey),
       ) as ExpressionKind,
   );
+}
+
+/**
+ * Appends both pseudo-alias and pseudo-expand style args, deduplicating guard props.
+ * Returns the combined list of guard prop names that need destructuring.
+ */
+export function appendAllPseudoStyleArgs(
+  d: Pick<StyledDecl, "pseudoAliasSelectors" | "pseudoExpandSelectors">,
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  const guardProps = appendPseudoAliasStyleArgs(
+    d.pseudoAliasSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  );
+  for (const gp of appendPseudoExpandStyleArgs(
+    d.pseudoExpandSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  )) {
+    if (!guardProps.includes(gp)) {
+      guardProps.push(gp);
+    }
+  }
+  return guardProps;
 }
 
 /**

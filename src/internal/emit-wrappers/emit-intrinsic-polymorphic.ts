@@ -16,10 +16,7 @@ import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-e
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import {
-  appendPseudoAliasStyleArgs,
-  appendPseudoExpandStyleArgs,
-} from "./emit-intrinsic-simple.js";
+import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
@@ -209,25 +206,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
       }
 
-      // Handle pseudo-alias selectors (e.g., &:${highlight})
-      for (const gp of appendPseudoAliasStyleArgs(
-        d.pseudoAliasSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
-        if (!destructureProps.includes(gp)) {
-          destructureProps.push(gp);
-        }
-      }
-
-      // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-      for (const gp of appendPseudoExpandStyleArgs(
-        d.pseudoExpandSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
+      for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
         if (!destructureProps.includes(gp)) {
           destructureProps.push(gp);
         }

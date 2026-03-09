@@ -12,6 +12,7 @@ import {
   getMemberPathFromIdentifier,
   isAstNode,
   isCallExpressionNode,
+  isEmptyCssBranch,
 } from "../utilities/jscodeshift-utils.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
@@ -659,29 +660,6 @@ function mergeExistingPseudoEntries(target: Record<string, unknown>, source: unk
 }
 
 /**
- * Checks if a conditional branch is an empty CSS value (empty string, null, undefined, false).
- */
-function isEmptyBranch(node: unknown): boolean {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const n = node as { type?: string; value?: unknown; name?: string };
-  if ((n.type === "StringLiteral" || n.type === "Literal") && n.value === "") {
-    return true;
-  }
-  if (n.type === "NullLiteral") {
-    return true;
-  }
-  if (n.type === "Identifier" && n.name === "undefined") {
-    return true;
-  }
-  if (n.type === "BooleanLiteral" && n.value === false) {
-    return true;
-  }
-  return false;
-}
-
-/**
  * Merge variant dimensions while preserving existing (pre-lowered) dimensions first.
  *
  * Resolver-derived dimensions are collected before lower-rules run. Lowering can
@@ -766,8 +744,8 @@ function tryResolveConditionalHelperCallInPseudo(
   }
 
   // Determine which branch is the call expression and which is empty
-  const consIsEmpty = isEmptyBranch(consequent);
-  const altIsEmpty = isEmptyBranch(alternate);
+  const consIsEmpty = isEmptyCssBranch(consequent);
+  const altIsEmpty = isEmptyCssBranch(alternate);
   const consIsCall = !consIsEmpty && isCallExpressionNode(consequent);
   const altIsCall = !altIsEmpty && isCallExpressionNode(alternate);
 

@@ -9,10 +9,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import {
-  appendPseudoAliasStyleArgs,
-  appendPseudoExpandStyleArgs,
-} from "./emit-intrinsic-simple.js";
+import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -90,25 +87,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
           : []),
       ];
 
-      // Handle pseudo-alias selectors (e.g., &:${highlight})
-      const pseudoGuardPropsInput = appendPseudoAliasStyleArgs(
-        d.pseudoAliasSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      );
-
-      // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-      for (const gp of appendPseudoExpandStyleArgs(
-        d.pseudoExpandSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
-        if (!pseudoGuardPropsInput.includes(gp)) {
-          pseudoGuardPropsInput.push(gp);
-        }
-      }
+      const pseudoGuardPropsInput = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
       emitted.push(
         allowClassNameProp
@@ -310,25 +289,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
           : []),
       ];
 
-      // Handle pseudo-alias selectors (e.g., &:${highlight})
-      const pseudoGuardPropsLink = appendPseudoAliasStyleArgs(
-        d.pseudoAliasSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      );
-
-      // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-      for (const gp of appendPseudoExpandStyleArgs(
-        d.pseudoExpandSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
-        if (!pseudoGuardPropsLink.includes(gp)) {
-          pseudoGuardPropsLink.push(gp);
-        }
-      }
+      const pseudoGuardPropsLink = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
       emitted.push(
         allowClassNameProp
@@ -598,25 +559,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         ),
       ];
 
-      // Handle pseudo-alias selectors (e.g., &:${highlight})
-      const pseudoGuardPropsEnum = appendPseudoAliasStyleArgs(
-        d.pseudoAliasSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      );
-
-      // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-      for (const gp of appendPseudoExpandStyleArgs(
-        d.pseudoExpandSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
-        if (!pseudoGuardPropsEnum.includes(gp)) {
-          pseudoGuardPropsEnum.push(gp);
-        }
-      }
+      const pseudoGuardPropsEnum = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
       // Inject guard props into the destructuring pattern
       if (pseudoGuardPropsEnum.length > 0) {

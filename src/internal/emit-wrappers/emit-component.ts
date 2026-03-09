@@ -21,8 +21,7 @@ import {
   type WrapperEmitter,
 } from "./wrapper-emitter.js";
 import {
-  appendPseudoAliasStyleArgs,
-  appendPseudoExpandStyleArgs,
+  appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
 } from "./emit-intrinsic-simple.js";
@@ -455,26 +454,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       },
     );
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    for (const gp of appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!destructureProps.includes(gp)) {
-        destructureProps.push(gp);
-        styleOnlyConditionProps.add(gp);
-      }
-    }
-
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
+    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
         styleOnlyConditionProps.add(gp);

@@ -627,6 +627,43 @@ export function literalToString(node: unknown): string | null {
 }
 
 /**
+ * Returns true if an AST node represents an "empty" CSS branch value.
+ * Styled-components treats falsy interpolations as "omit this declaration".
+ *
+ * Recognized empty values: `""`, empty TemplateLiteral, `null`, `undefined`,
+ * `false`, and trivial `void` expressions (`void 0`, `void null`, etc.).
+ */
+export function isEmptyCssBranch(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; value?: unknown; name?: string; operator?: string };
+  if ((n.type === "StringLiteral" || n.type === "Literal") && n.value === "") {
+    return true;
+  }
+  if (n.type === "TemplateLiteral") {
+    const tpl = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };
+    if (tpl.expressions && tpl.expressions.length > 0) {
+      return false;
+    }
+    return (tpl.quasis ?? []).every((q) => (q.value?.raw ?? "") === "");
+  }
+  if (n.type === "NullLiteral") {
+    return true;
+  }
+  if (n.type === "Identifier" && n.name === "undefined") {
+    return true;
+  }
+  if (n.type === "BooleanLiteral" && n.value === false) {
+    return true;
+  }
+  if (n.type === "UnaryExpression" && n.operator === "void") {
+    return isTriviallyPureVoidArg((node as { argument?: unknown }).argument);
+  }
+  return false;
+}
+
+/**
  * Creates a literal AST node from a static JavaScript value.
  * This is the inverse of `literalToStaticValue`.
  *
@@ -787,4 +824,29 @@ function isMemberOrOptionalMemberExpression(
   }
   const t = (node as { type?: string }).type;
   return t === "MemberExpression" || t === "OptionalMemberExpression";
+}
+
+/** Allow `void 0`, `void null`, `void ""`, `void 1`, `void false` as empty. */
+function isTriviallyPureVoidArg(arg: unknown): boolean {
+  if (!arg || typeof arg !== "object") {
+    return false;
+  }
+  const n = arg as { type?: string; value?: unknown };
+  if (n.type === "NumericLiteral" && n.value === 0) {
+    return true;
+  }
+  if (n.type === "NullLiteral") {
+    return true;
+  }
+  if (n.type === "StringLiteral" && n.value === "") {
+    return true;
+  }
+  if (n.type === "BooleanLiteral" && n.value === false) {
+    return true;
+  }
+  if (n.type === "Literal") {
+    const v = n.value;
+    return v === 0 || v === null || v === "" || v === false;
+  }
+  return false;
 }

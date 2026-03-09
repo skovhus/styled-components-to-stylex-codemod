@@ -15,6 +15,7 @@ import {
   isArrowFunctionExpression,
   isCallExpressionNode,
   isConditionalExpressionNode,
+  isEmptyCssBranch,
   literalToStaticValue,
   literalToString,
   resolveIdentifierToPropName,
@@ -1392,43 +1393,6 @@ function extractSinglePropFromTest(test: unknown, paramName: string): string | n
     return null;
   }
   return testPath[0];
-}
-
-/**
- * Check if a conditional branch represents an "empty" CSS value (no styles).
- * Styled-components treats falsy interpolations as "omit this declaration".
- */
-function isEmptyCssBranch(node: unknown): boolean {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const n = node as { type?: string; value?: unknown; name?: string; operator?: string };
-  if (n.type === "StringLiteral" && n.value === "") {
-    return true;
-  }
-  if (n.type === "Literal" && n.value === "") {
-    return true;
-  }
-  if (n.type === "NullLiteral") {
-    return true;
-  }
-  if (n.type === "Identifier" && n.name === "undefined") {
-    return true;
-  }
-  if (n.type === "BooleanLiteral" && n.value === false) {
-    return true;
-  }
-  // Only treat `void 0` as empty — arbitrary `void <expr>` may carry side effects.
-  if (n.type === "UnaryExpression" && n.operator === "void") {
-    const arg = (n as { argument?: { type?: string; value?: unknown } }).argument;
-    if (
-      (arg?.type === "NumericLiteral" && arg.value === 0) ||
-      (arg?.type === "Literal" && arg.value === 0)
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

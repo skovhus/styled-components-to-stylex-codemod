@@ -41,6 +41,7 @@ import { preflight } from "./internal/transform-steps/preflight.js";
 import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-static-props.js";
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
 import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
+import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export type {
   BridgeComponentResult,
@@ -241,17 +242,4 @@ function resolveToPrepassKey(filePath: string, prepass: GlobalPrepassResult): st
     // File may not exist yet (e.g. dry-run); keep the resolved path
   }
   return resolved;
-}
-
-/**
- * Resolve a file path to its real (symlink-resolved) absolute path.
- * Falls back to pathResolve if realpathSync fails.
- */
-function toRealPath(filePath: string): string {
-  const resolved = pathResolve(filePath);
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
 }
