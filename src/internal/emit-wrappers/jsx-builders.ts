@@ -25,9 +25,11 @@ export type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number]
 /**
  * Builds the `<C extends React.ElementType = "tag">` type parameter for polymorphic wrappers.
  * Parses a dummy function declaration to extract a valid TypeScript type parameter AST node.
+ * When defaultTag is a type expression (e.g. `typeof Flex`), it's emitted unquoted.
  */
 export function buildPolymorphicTypeParams(j: JSCodeshift, defaultTag: string): unknown {
-  return j(`function _<C extends React.ElementType = "${defaultTag}">() { return null }`).get().node
+  const defaultExpr = defaultTag.startsWith("typeof ") ? defaultTag : `"${defaultTag}"`;
+  return j(`function _<C extends React.ElementType = ${defaultExpr}>() { return null }`).get().node
     .program.body[0].typeParameters;
 }
 

@@ -18,7 +18,7 @@ import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -144,9 +144,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
         emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
       const styleArgs: ExpressionKind[] = [
-        ...(d.extendsStyleKey
-          ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-          : []),
+        ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
         ...extraStyleArgs,
         ...emitter.baseStyleExpr(d),
         ...extraStyleArgsAfterBase,

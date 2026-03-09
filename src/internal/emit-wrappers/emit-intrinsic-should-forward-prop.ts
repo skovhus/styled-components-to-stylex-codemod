@@ -19,7 +19,7 @@ import { withLeadingComments } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -319,9 +319,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
@@ -447,10 +445,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
       const callArg = p.callArg ?? propExpr;
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [callArg],
-      );
+      const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
       let expr: ExpressionKind;
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({

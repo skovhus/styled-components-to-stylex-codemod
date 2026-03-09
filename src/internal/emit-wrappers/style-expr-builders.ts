@@ -50,7 +50,14 @@ export function baseStyleExpr(
   if (d.skipBaseStyleRef) {
     return [];
   }
-  return [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.styleKey))];
+  return [styleRef(j, stylesIdentifier, d.styleKey)];
+}
+
+/**
+ * Builds a `styles.key` member expression for accessing a named style key.
+ */
+export function styleRef(j: JSCodeshift, stylesIdentifier: string, key: string): ExpressionKind {
+  return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)) as ExpressionKind;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,7 +80,7 @@ export function splitExtraStyleArgs(
   const beforeBase: ExpressionKind[] = [];
   const afterBase: ExpressionKind[] = [];
   for (const key of d.extraStyleKeys ?? []) {
-    const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+    const expr = styleRef(j, stylesIdentifier, key);
     if (afterBaseKeys.has(key)) {
       afterBase.push(expr);
     } else {
@@ -133,7 +140,7 @@ export function buildInterleavedExtraStyleArgs(
     if (entry === "styleKey" && styleKeyIdx < extraStyleKeys.length) {
       const key = extraStyleKeys[styleKeyIdx]!;
       styleKeyIdx++;
-      const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+      const expr = styleRef(j, stylesIdentifier, key);
       if (afterBaseKeys.has(key)) {
         afterBase.push(expr);
       } else {
@@ -156,7 +163,7 @@ export function buildInterleavedExtraStyleArgs(
   // Append any remaining items not covered by mixinOrder
   for (; styleKeyIdx < extraStyleKeys.length; styleKeyIdx++) {
     const key = extraStyleKeys[styleKeyIdx]!;
-    const expr = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key));
+    const expr = styleRef(j, stylesIdentifier, key);
     if (afterBaseKeys.has(key)) {
       afterBase.push(expr);
     } else {
@@ -518,10 +525,7 @@ export function buildStyleFnExpressions(
   for (const p of styleFnPairs) {
     const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
     const callArg = p.callArg ?? propExpr;
-    const call = j.callExpression(
-      j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-      [callArg],
-    );
+    const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
 
     // Track call arg identifier for destructuring if needed
     if (p.callArg?.type === "Identifier") {

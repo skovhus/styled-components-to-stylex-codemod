@@ -31,7 +31,7 @@ import {
   parseVariantWhenToAst,
 } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -167,9 +167,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
       emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
@@ -818,9 +816,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
@@ -1531,10 +1527,10 @@ export function appendThemeBooleanStyleArgs(
       continue;
     }
     const trueExpr = entry.trueStyleKey
-      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.trueStyleKey))
+      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
       : (j.identifier("undefined") as ExpressionKind);
     const falseExpr = entry.falseStyleKey
-      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.falseStyleKey))
+      ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
       : (j.identifier("undefined") as ExpressionKind);
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
@@ -1552,7 +1548,7 @@ export function appendThemeBooleanStyleArgs(
  *
  * Returns the list of guard prop names that need destructuring.
  */
-export function appendPseudoAliasStyleArgs(
+function appendPseudoAliasStyleArgs(
   entries: StyledDecl["pseudoAliasSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
@@ -1566,7 +1562,7 @@ export function appendPseudoAliasStyleArgs(
       j.property(
         "init",
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
+        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
       ),
     );
     return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
@@ -1581,7 +1577,7 @@ export function appendPseudoAliasStyleArgs(
  *
  * Returns the list of guard prop names that need destructuring.
  */
-export function appendPseudoExpandStyleArgs(
+function appendPseudoExpandStyleArgs(
   entries: StyledDecl["pseudoExpandSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,

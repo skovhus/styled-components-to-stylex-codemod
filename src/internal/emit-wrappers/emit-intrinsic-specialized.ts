@@ -11,6 +11,7 @@ import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
+import { styleRef } from "./style-expr-builders.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;
@@ -64,7 +65,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.checkboxKey)),
+                styleRef(j, stylesIdentifier, aw.checkboxKey),
               ),
             ]
           : []),
@@ -73,7 +74,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.radioKey)),
+                styleRef(j, stylesIdentifier, aw.radioKey),
               ),
             ]
           : []),
@@ -82,7 +83,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.identifier("readOnly"),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.readonlyKey)),
+                styleRef(j, stylesIdentifier, aw.readonlyKey),
               ),
             ]
           : []),
@@ -266,7 +267,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.identifier("isExternal"),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.externalKey)),
+                styleRef(j, stylesIdentifier, aw.externalKey),
               ),
             ]
           : []),
@@ -275,7 +276,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.identifier("isHttps"),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.httpsKey)),
+                styleRef(j, stylesIdentifier, aw.httpsKey),
               ),
             ]
           : []),
@@ -284,7 +285,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
               j.logicalExpression(
                 "&&",
                 j.identifier("isPdf"),
-                j.memberExpression(j.identifier(stylesIdentifier), j.identifier(aw.pdfKey)),
+                styleRef(j, stylesIdentifier, aw.pdfKey),
               ),
             ]
           : []),
@@ -539,7 +540,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         ),
       ]);
 
-      const base = j.memberExpression(j.identifier(stylesIdentifier), j.identifier(baseKey));
+      const base = styleRef(j, stylesIdentifier, baseKey);
       const condPrimary = j.binaryExpression("===", variantId, j.literal(primary.whenValue));
       const condSecondary =
         secondary.kind === "neq"
@@ -551,12 +552,12 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         j.logicalExpression(
           "&&",
           condPrimary as any,
-          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(primary.styleKey)),
+          styleRef(j, stylesIdentifier, primary.styleKey),
         ),
         j.logicalExpression(
           "&&",
           condSecondary as any,
-          j.memberExpression(j.identifier(stylesIdentifier), j.identifier(secondary.styleKey)),
+          styleRef(j, stylesIdentifier, secondary.styleKey),
         ),
       ];
 
