@@ -17,6 +17,7 @@ import {
 } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
@@ -670,11 +671,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             params: [propsParamId],
             bodyStmts: fnBodyStmts,
             typeParameters:
-              allowAsProp && emitTypes
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
-                : undefined,
+              allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
           }),
           d,
         ),
@@ -783,10 +780,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           params: [propsParamId],
           bodyStmts: fnBodyStmts,
           typeParameters:
-            allowAsProp && emitTypes
-              ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
-                  .node.program.body[0].typeParameters
-              : undefined,
+            allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
         }),
         d,
       ),

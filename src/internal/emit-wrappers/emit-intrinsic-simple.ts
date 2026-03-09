@@ -22,6 +22,7 @@ import {
 } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import {
   areEquivalentWhen,
@@ -400,11 +401,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             params: [propsParamId],
             bodyStmts,
             typeParameters:
-              allowAsProp && emitTypes
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
-                : undefined,
+              allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
           }),
         ],
         d,
@@ -1219,9 +1216,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               params: [propsParamId],
               bodyStmts,
               typeParameters: shouldAddTypeParams
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
+                ? buildPolymorphicTypeParams(j, tagName)
                 : undefined,
             }),
           ],

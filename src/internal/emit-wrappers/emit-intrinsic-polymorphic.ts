@@ -16,6 +16,7 @@ import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-e
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
 import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
@@ -341,10 +342,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       fnBodyStmts.push(j.returnStatement(jsx as any));
 
       const polymorphicFnTypeParams =
-        emitTypes && allowAsProp
-          ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get().node
-              .program.body[0].typeParameters
-          : undefined;
+        emitTypes && allowAsProp ? buildPolymorphicTypeParams(j, tagName) : undefined;
 
       emitted.push(
         withLeadingComments(

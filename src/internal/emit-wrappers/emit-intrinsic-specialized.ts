@@ -9,6 +9,7 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
@@ -601,9 +602,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
               j.blockStatement([declStmt, sxDecl, j.returnStatement(jsx as any)]),
             );
             if (allowAsProp && emitTypes) {
-              (fn as any).typeParameters = j(
-                `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-              ).get().node.program.body[0].typeParameters;
+              (fn as any).typeParameters = buildPolymorphicTypeParams(j, tagName);
             }
             return fn;
           })(),

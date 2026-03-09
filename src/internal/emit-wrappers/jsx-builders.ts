@@ -22,6 +22,15 @@ export type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 export type JsxTagName = Parameters<JSCodeshift["jsxOpeningElement"]>[0];
 export type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
 
+/**
+ * Builds the `<C extends React.ElementType = "tag">` type parameter for polymorphic wrappers.
+ * Parses a dummy function declaration to extract a valid TypeScript type parameter AST node.
+ */
+export function buildPolymorphicTypeParams(j: JSCodeshift, defaultTag: string): unknown {
+  return j(`function _<C extends React.ElementType = "${defaultTag}">() { return null }`).get().node
+    .program.body[0].typeParameters;
+}
+
 // ---------------------------------------------------------------------------
 // Primitive value → AST literal
 // ---------------------------------------------------------------------------

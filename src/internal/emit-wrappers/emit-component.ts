@@ -37,6 +37,7 @@ import {
   isFunctionNode,
   isIdentifierNode,
 } from "../utilities/jscodeshift-utils.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
@@ -646,11 +647,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     const propsParamId = j.identifier("props");
-    let polymorphicFnTypeParams: any = null;
+    let polymorphicFnTypeParams: unknown = null;
     if (isPolymorphicComponentWrapper && emitTypes) {
-      polymorphicFnTypeParams = j(
-        `function _<C extends React.ElementType = typeof ${wrappedComponent}>() { return null }`,
-      ).get().node.program.body[0].typeParameters;
+      polymorphicFnTypeParams = buildPolymorphicTypeParams(j, `typeof ${wrappedComponent}`);
       (propsParamId as any).typeAnnotation = j(
         `const x: ${emitter.propsTypeNameFor(d.localName)}<C> = null`,
       ).get().node.program.body[0].declarations[0].id.typeAnnotation;

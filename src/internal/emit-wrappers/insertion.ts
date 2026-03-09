@@ -6,6 +6,7 @@ import nodePath from "node:path";
 import type { ASTNode, Comment } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
 import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
 
@@ -98,9 +99,7 @@ export function insertEmittedWrappers(args: {
         if (propsTypeUsesGeneric) {
           const defaultTag = extractDefaultAsTagFromDestructure(node);
           if (defaultTag) {
-            (node as any).typeParameters = j(
-              `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
-            ).get().node.program.body[0].typeParameters;
+            (node as any).typeParameters = buildPolymorphicTypeParams(j, defaultTag);
           }
         }
       }
