@@ -10,7 +10,16 @@ import type { WarningLog } from "../logger.js";
 import type { UnsupportedCssUsage } from "./css-helpers.js";
 
 export function toStyleKey(name: string): string {
-  return name.charAt(0).toLowerCase() + name.slice(1);
+  const stripped = stripStyledPrefix(name);
+  return stripped.charAt(0).toLowerCase() + stripped.slice(1);
+}
+
+/** Strip "styled"/"Styled" prefix when followed by an uppercase letter (e.g. StyledButton → Button). */
+function stripStyledPrefix(name: string): string {
+  if (/^[sS]tyled[A-Z]/.test(name)) {
+    return name.slice(6);
+  }
+  return name;
 }
 
 /**

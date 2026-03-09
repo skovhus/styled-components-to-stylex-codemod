@@ -1,8 +1,44 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
-import { objectToAst, literalToAst, cssValueToJs, buildUnsupportedCssWarnings } from "./helpers.js";
+import {
+  objectToAst,
+  literalToAst,
+  cssValueToJs,
+  buildUnsupportedCssWarnings,
+  toStyleKey,
+} from "./helpers.js";
 
 const j = jscodeshift.withParser("tsx");
+
+describe("toStyleKey", () => {
+  it("lowercases the first character", () => {
+    expect(toStyleKey("Button")).toBe("button");
+    expect(toStyleKey("NormalName")).toBe("normalName");
+  });
+
+  it("strips 'Styled' prefix (uppercase S) followed by uppercase letter", () => {
+    expect(toStyleKey("StyledButton")).toBe("button");
+    expect(toStyleKey("StyledCanvas")).toBe("canvas");
+    expect(toStyleKey("StyledSection")).toBe("section");
+  });
+
+  it("strips 'styled' prefix (lowercase s) followed by uppercase letter", () => {
+    expect(toStyleKey("styledButton")).toBe("button");
+    expect(toStyleKey("styledCanvas")).toBe("canvas");
+  });
+
+  it("does not strip when not followed by an uppercase letter", () => {
+    expect(toStyleKey("styled")).toBe("styled");
+    expect(toStyleKey("Styled")).toBe("styled");
+    expect(toStyleKey("styledcanvas")).toBe("styledcanvas");
+  });
+
+  it("does not strip partial matches", () => {
+    expect(toStyleKey("Style")).toBe("style");
+    expect(toStyleKey("StyleButton")).toBe("styleButton");
+    expect(toStyleKey("Stylish")).toBe("stylish");
+  });
+});
 
 describe("literalToAst", () => {
   it("passes through AST nodes unchanged", () => {

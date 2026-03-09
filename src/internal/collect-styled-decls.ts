@@ -1371,9 +1371,9 @@ function collectStyledDeclsImpl(args: {
 }
 
 /**
- * For `const StyledFoo = styled(Foo)\`...\``, use `foo` as the style key when the
- * local name follows the `Styled${base}` convention — unless `Foo` is itself a local
- * styled-component, which would cause a key collision.
+ * For `const StyledFoo = styled(Foo)\`...\``, use `foo` as the style key.
+ * When `Foo` is itself a local styled-component, `toStyleKey` would strip the
+ * "Styled" prefix and collide with the base's key, so we fall back to plain lcFirst.
  */
 function resolveStyledComponentStyleKey(
   localName: string,
@@ -1381,9 +1381,10 @@ function resolveStyledComponentStyleKey(
   styledDecls: StyledDecl[],
 ): string {
   const baseIsLocalStyledDecl = styledDecls.some((d) => d.localName === baseName);
-  return localName === `Styled${baseName}` && !baseIsLocalStyledDecl
-    ? toStyleKey(baseName)
-    : toStyleKey(localName);
+  if (!baseIsLocalStyledDecl) {
+    return toStyleKey(localName);
+  }
+  return localName.charAt(0).toLowerCase() + localName.slice(1);
 }
 
 /**
