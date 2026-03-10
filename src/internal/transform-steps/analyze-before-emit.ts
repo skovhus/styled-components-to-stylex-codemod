@@ -15,24 +15,11 @@ import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
+import { FORWARDED_INTRINSIC_ATTRS } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 const INLINE_USAGE_THRESHOLD = 1;
-
-/**
- * HTML attributes that the emitter explicitly forwards to the DOM for specific
- * intrinsic element types. Renaming a transient prop to one of these names would
- * change behavior (e.g., `$disabled` → `disabled` on `<button>` would make the
- * button actually HTML-disabled instead of just styling-disabled).
- */
-const FORWARDED_INTRINSIC_ATTRS: Record<string, readonly string[]> = {
-  button: ["disabled"],
-  input: ["disabled"],
-  select: ["disabled"],
-  textarea: ["disabled"],
-  fieldset: ["disabled"],
-};
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -1383,6 +1370,12 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       if (pas.guard?.when) {
         pas.guard.when = renamePropsInWhenString(pas.guard.when, renames);
       }
+    }
+  }
+
+  if (decl.callSiteCombinedStyles) {
+    for (const cs of decl.callSiteCombinedStyles) {
+      cs.propNames = cs.propNames.map((p) => renames.get(p) ?? p);
     }
   }
 }

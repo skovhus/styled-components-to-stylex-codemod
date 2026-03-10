@@ -721,6 +721,34 @@ export const App = () => <Toggle $active />;
     expect(renameWarnings).toHaveLength(0);
   });
 
+  it("should keep $disabled on styled.button to avoid HTML disabled collision", () => {
+    const source = `
+import styled from "styled-components";
+
+const FancyButton = styled.button<{ $disabled?: boolean }>\`
+  opacity: \${(props) => (props.$disabled ? 0.5 : 1)};
+  cursor: \${(props) => (props.$disabled ? "not-allowed" : "pointer")};
+\`;
+
+export const App = () => (
+  <div>
+    <FancyButton $disabled>Disabled look</FancyButton>
+    <FancyButton>Normal</FancyButton>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$disabled");
+    expect(result.code).not.toContain("disabled={disabled}");
+  });
+
   it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
     const source = `
 import * as React from "react";
