@@ -6,6 +6,7 @@ import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
+import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
   hasUniversalSelectorInRules,
@@ -234,14 +235,6 @@ function getCssHelperPlacementHints(
     declIndex: idx >= 0 ? idx : undefined,
     ...(insertAfterName ? { insertAfterName } : {}),
   };
-}
-
-function getCssHelperTemplateLoc(template: any): Loc {
-  const start = template?.loc?.start;
-  if (start?.line === undefined) {
-    return null;
-  }
-  return { line: start.line, column: start.column ?? 0 };
 }
 
 function parseCssHelperTemplate(args: {
@@ -651,7 +644,7 @@ function detectClosureVariableInTemplate(
   );
   if (closureVar) {
     return {
-      loc: getCssHelperTemplateLoc(template),
+      loc: getNodeLocStart(template),
       reason: "closure-variable",
       closureVariable: closureVar,
     };
@@ -941,10 +934,7 @@ export function extractAndRemoveCssHelpers(args: {
     if (cssHelperUniversalSelectorLoc) {
       return;
     }
-    cssHelperUniversalSelectorLoc = computeUniversalSelectorLoc(
-      getCssHelperTemplateLoc(template),
-      rawCss,
-    );
+    cssHelperUniversalSelectorLoc = computeUniversalSelectorLoc(getNodeLocStart(template), rawCss);
   };
 
   const isStillReferenced = (): boolean =>
@@ -1086,7 +1076,7 @@ export function extractAndRemoveCssHelpers(args: {
         name,
         paramName,
         paramType,
-        loc: getCssHelperTemplateLoc(template),
+        loc: getNodeLocStart(template),
         rules,
         templateExpressions,
         rawCss: parsed.rawCss,

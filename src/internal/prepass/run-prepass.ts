@@ -11,6 +11,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve as pathResolve } from "node:path";
 import type { ExternalInterfaceResult } from "../../adapter.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
+import { escapeRegex } from "../utilities/string-utils.js";
 import {
   fileExports,
   fileImportsFrom,
@@ -563,14 +564,10 @@ function collectImportDeclarationText(source: string): string {
 function importTextMentionsIdentifier(importText: string, identifier: string): boolean {
   let re = IMPORT_IDENTIFIER_RE_CACHE.get(identifier);
   if (!re) {
-    re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegexForRegExp(identifier)}(?:$|[^A-Za-z0-9_$])`);
+    re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegex(identifier)}(?:$|[^A-Za-z0-9_$])`);
     IMPORT_IDENTIFIER_RE_CACHE.set(identifier, re);
   }
   return re.test(importText);
-}
-
-function escapeRegexForRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Quick pre-check: does this source mention className or style in a JSX prop context? */

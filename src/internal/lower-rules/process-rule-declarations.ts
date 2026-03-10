@@ -5,7 +5,7 @@
 import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { cssValueToJs } from "../transform/helpers.js";
+import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 
@@ -104,12 +104,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       const out = outs[i]!;
       let value = cssValueToJs(out.value, d.important, out.prop);
       if (out.prop === "content" && typeof value === "string") {
-        const m = value.match(/^['"]([\s\S]*)['"]$/);
-        if (m) {
-          value = `"${m[1]}"`;
-        } else if (!value.startsWith('"') && !value.endsWith('"')) {
-          value = `"${value}"`;
-        }
+        value = normalizeCssContentValue(value);
       }
       const commentSource =
         i === 0

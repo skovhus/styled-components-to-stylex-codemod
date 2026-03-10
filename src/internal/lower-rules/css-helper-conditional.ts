@@ -27,10 +27,11 @@ import {
   getArrowFnParamBindings,
   getNodeLocStart,
   isCallExpressionNode,
+  isEmptyCssBranch,
   staticValueToLiteral,
   type ASTNodeRecord,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, normalizeCssContentValue, toSuffixFromProp } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import {
@@ -184,63 +185,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
     const { parseChainedTestInfo } = createPropTestHelpers(bindings);
-
-    const isTriviallyPureVoidArg = (arg: any): boolean => {
-      if (!arg || typeof arg !== "object") {
-        return false;
-      }
-      // Allow `void 0`, `void null`, `void ""`, `void 1`, `void false`.
-      if (arg.type === "NumericLiteral" && arg.value === 0) {
-        return true;
-      }
-      if (arg.type === "NullLiteral") {
-        return true;
-      }
-      if (arg.type === "StringLiteral" && arg.value === "") {
-        return true;
-      }
-      if (arg.type === "BooleanLiteral" && arg.value === false) {
-        return true;
-      }
-      if (arg.type === "Literal") {
-        const v = (arg as { value?: unknown }).value;
-        return v === 0 || v === null || v === "" || v === false;
-      }
-      return false;
-    };
-
-    const isEmptyCssBranch = (node: ExpressionKind): boolean => {
-      if (!node || typeof node !== "object") {
-        return false;
-      }
-      if (node.type === "StringLiteral" && node.value === "") {
-        return true;
-      }
-      if (node.type === "Literal" && node.value === "") {
-        return true;
-      }
-      if (node.type === "TemplateLiteral") {
-        const exprs = node.expressions ?? [];
-        if (exprs.length > 0) {
-          return false;
-        }
-        const raw = (node.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
-        return raw.length === 0;
-      }
-      if (node.type === "NullLiteral") {
-        return true;
-      }
-      if (node.type === "Identifier" && node.name === "undefined") {
-        return true;
-      }
-      if (node.type === "BooleanLiteral" && node.value === false) {
-        return true;
-      }
-      if (node.type === "UnaryExpression" && node.operator === "void") {
-        return isTriviallyPureVoidArg((node as any).argument);
-      }
-      return false;
-    };
 
     const readReturnExpr = (stmt: ASTNode | null | undefined): ExpressionKind | null => {
       if (!stmt || typeof stmt !== "object") {
@@ -531,12 +475,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               let value = cssValueToJs(mapped.value, d.important, mapped.prop);
               if (mapped.prop === "content" && typeof value === "string") {
-                const m = value.match(/^['"]([\s\S]*)['"]$/);
-                if (m) {
-                  value = `"${m[1]}"`;
-                } else if (!value.startsWith('"') && !value.endsWith('"')) {
-                  value = `"${value}"`;
-                }
+                value = normalizeCssContentValue(value);
               }
               if (
                 typeof value === "string" ||
@@ -1071,7 +1010,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         conditional,
         paramName,
         replaceParamWithProps,
-        isEmptyCssBranch,
         isPlainTemplateLiteral,
         isCssHelperTaggedTemplate,
         resolveStaticCssBlock,
@@ -2026,7 +1964,6 @@ type BlockThemeConditionalArgs = Pick<
   conditional: { test: ExpressionKind; consequent: ExpressionKind; alternate: ExpressionKind };
   paramName: string | null;
   replaceParamWithProps: (exprNode: ExpressionKind) => ExpressionKind;
-  isEmptyCssBranch: (node: ExpressionKind) => boolean;
   componentInfo: { localName: string; base: string; tagOrIdent: string };
   pseudos: string[] | null;
 };
@@ -2042,7 +1979,6 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
     conditional,
     paramName,
     replaceParamWithProps,
-    isEmptyCssBranch,
     isPlainTemplateLiteral,
     isCssHelperTaggedTemplate,
     resolveStaticCssBlock,

@@ -80,16 +80,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       if (!m || m.type !== "TSPropertySignature") {
         continue;
       }
-      const k: any = m.key;
-      const name =
-        k?.type === "Identifier"
-          ? k.name
-          : k?.type === "StringLiteral"
-            ? k.value
-            : k?.type === "Literal" && typeof k.value === "string"
-              ? k.value
-              : null;
-      if (name === propName) {
+      if (getPropertyNameFromKey(m.key) === propName) {
         return m.typeAnnotation?.typeAnnotation ?? null;
       }
     }
@@ -261,16 +252,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
         if (!m || m.type !== "TSPropertySignature") {
           continue;
         }
-        const k: any = m.key;
-        const name =
-          k?.type === "Identifier"
-            ? k.name
-            : k?.type === "StringLiteral"
-              ? k.value
-              : k?.type === "Literal" && typeof k.value === "string"
-                ? k.value
-                : null;
-        if (name === jsxProp) {
+        if (getPropertyNameFromKey(m.key) === jsxProp) {
           return m.optional === true;
         }
       }
@@ -338,4 +320,24 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
     annotateParamFromJsxProp,
     isJsxPropOptional,
   };
+}
+
+// --- Non-exported helpers ---
+
+/** Extracts the property name string from a TSPropertySignature's key node. */
+function getPropertyNameFromKey(key: unknown): string | null {
+  if (!key || typeof key !== "object") {
+    return null;
+  }
+  const k = key as { type?: string; name?: string; value?: unknown };
+  if (k.type === "Identifier") {
+    return k.name ?? null;
+  }
+  if (k.type === "StringLiteral") {
+    return typeof k.value === "string" ? k.value : null;
+  }
+  if (k.type === "Literal" && typeof k.value === "string") {
+    return k.value;
+  }
+  return null;
 }

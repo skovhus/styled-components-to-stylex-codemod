@@ -6,11 +6,12 @@
  *   1. Import the bridge's GlobalSelector variable from the target module
  *   2. Replace `${Component}` selector references with `${ComponentGlobalSelector}`
  */
-import { readFileSync, realpathSync } from "node:fs";
-import { resolve as pathResolve } from "node:path";
+import { readFileSync } from "node:fs";
 import type { BridgeComponentResult } from "./transform-types.js";
 import type { CrossFileSelectorUsage } from "./prepass/scan-cross-file-selectors.js";
 import { isSelectorContext } from "./utilities/selector-context-heuristic.js";
+import { escapeRegex } from "./utilities/string-utils.js";
+import { toRealPath } from "./utilities/path-utils.js";
 interface ConsumerReplacement {
   /** Local name of the imported component in the consumer file */
   localName: string;
@@ -124,14 +125,14 @@ export function patchConsumerFile(
 
     // Check if there's already an import from this source
     const importRegex = new RegExp(
-      `(import\\s+(?:(?:\\{[^}]*\\}|[^;{]+)\\s+from\\s+['"]${escapeRegExp(importSource)}['"])\\s*;?)`,
+      `(import\\s+(?:(?:\\{[^}]*\\}|[^;{]+)\\s+from\\s+['"]${escapeRegex(importSource)}['"])\\s*;?)`,
     );
     const existingImport = modified.match(importRegex);
 
     if (existingImport) {
       // Try to merge into existing named import
       const namedImportRegex = new RegExp(
-        `(import\\s+(?:[\\w$]+\\s*,\\s*)?\\{)([^}]*)(\\}\\s+from\\s+['"]${escapeRegExp(importSource)}['"]\\s*;?)`,
+        `(import\\s+(?:[\\w$]+\\s*,\\s*)?\\{)([^}]*)(\\}\\s+from\\s+['"]${escapeRegex(importSource)}['"]\\s*;?)`,
       );
       const namedMatch = modified.match(namedImportRegex);
       if (namedMatch) {
@@ -171,7 +172,7 @@ export function patchConsumerFile(
     // We need to be careful to only replace in selector contexts within styled template literals.
     // A simple approach: replace `${localName}` with `${globalSelectorVarName}` when followed
     // by selector-like patterns (whitespace + `{`, `:hover`, etc.)
-    const templateExprRegex = new RegExp(`(\\$\\{\\s*)${escapeRegExp(r.localName)}(\\s*\\})`, "g");
+    const templateExprRegex = new RegExp(`(\\$\\{\\s*)${escapeRegex(r.localName)}(\\s*\\})`, "g");
 
     // For each match, check if it's in a selector context by examining surrounding text
     modified = modified.replace(templateExprRegex, (match, prefix, suffix, offset) => {
@@ -210,20 +211,6 @@ function isInStyledTemplateSelectorContext(
 
 /** Check if a name appears as a distinct identifier in an import specifier list string. */
 function hasExactImportName(importSpecifiers: string, name: string): boolean {
-  const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegExp(name)}(?:$|[^A-Za-z0-9_$])`);
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegex(name)}(?:$|[^A-Za-z0-9_$])`);
   return re.test(importSpecifiers);
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Resolve symlinks so paths match the keys in transformedFiles (which uses realpathSync). */
-function toRealPath(filePath: string): string {
-  const resolved = pathResolve(filePath);
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
 }

@@ -17,7 +17,7 @@ import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
-import { cssValueToJs } from "../transform/helpers.js";
+import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
@@ -500,12 +500,7 @@ export function createCssHelperResolver(args: {
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
             let value = cssValueToJs(mapped.value, d.important, mapped.prop);
             if (mapped.prop === "content" && typeof value === "string") {
-              const m = value.match(/^['"]([\s\S]*)['"]$/);
-              if (m) {
-                value = `"${m[1]}"`;
-              } else if (!value.startsWith('"') && !value.endsWith('"')) {
-                value = `"${value}"`;
-              }
+              value = normalizeCssContentValue(value);
             }
             (target as any)[mapped.prop] = mergeIntoContext(
               value,

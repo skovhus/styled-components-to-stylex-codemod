@@ -196,6 +196,21 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
   return "";
 }
 
+/**
+ * Normalizes a CSS `content` property value for StyleX.
+ * CSS `content` requires quoted strings; this ensures the value is properly double-quoted.
+ */
+export function normalizeCssContentValue(value: string): string {
+  const m = value.match(/^['"]([\s\S]*)['"]$/);
+  if (m) {
+    return `"${m[1]}"`;
+  }
+  if (!value.startsWith('"') && !value.endsWith('"')) {
+    return `"${value}"`;
+  }
+  return value;
+}
+
 // Re-export from style-key-naming.ts for backwards compatibility
 export { toSuffixFromProp } from "../utilities/style-key-naming.js";
 

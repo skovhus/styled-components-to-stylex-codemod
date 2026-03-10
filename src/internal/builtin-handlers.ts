@@ -9,6 +9,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  getSinglePropFromMemberExpr,
   isArrowFunctionExpression,
   isCallExpressionNode,
   isLogicalExpressionNode,
@@ -486,14 +487,10 @@ function extractPropNameFromCondTest(
     return resolved;
   }
 
-  // Simple param: extract prop from member expression like `props.$oneLine`
-  if (bindings.kind === "simple" && (test as { type?: string }).type === "MemberExpression") {
-    const path = getMemberPathFromIdentifier(
-      test as Parameters<typeof getMemberPathFromIdentifier>[0],
-      bindings.paramName,
-    );
-    if (path && path.length === 1 && path[0]) {
-      return path[0];
+  if (bindings.kind === "simple") {
+    const prop = getSinglePropFromMemberExpr(test, bindings.paramName);
+    if (prop) {
+      return prop;
     }
   }
 
@@ -910,17 +907,7 @@ function tryDecomposeConditionalBranches(
   if (!test || typeof test !== "object") {
     return null;
   }
-  const testNode = test as { type?: string };
-  let conditionProp: string | null = null;
-  if (testNode.type === "MemberExpression") {
-    const path = getMemberPathFromIdentifier(
-      test as Parameters<typeof getMemberPathFromIdentifier>[0],
-      paramName,
-    );
-    if (path && path.length === 1 && path[0]) {
-      conditionProp = path[0];
-    }
-  }
+  const conditionProp = getSinglePropFromMemberExpr(test, paramName);
   if (!conditionProp) {
     return null;
   }

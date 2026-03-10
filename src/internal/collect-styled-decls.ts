@@ -8,7 +8,11 @@ import {
   hasUniversalSelectorInRules,
   normalizeStylisAstToIR,
 } from "./css-ir.js";
-import { cloneAstNode, getFunctionBodyExpr } from "./utilities/jscodeshift-utils.js";
+import {
+  cloneAstNode,
+  getFunctionBodyExpr,
+  getNodeLocStart,
+} from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
@@ -50,20 +54,12 @@ function collectStyledDeclsImpl(args: {
   let hasUniversalSelectors = false;
   let universalSelectorLoc: { line: number; column: number } | null = null;
 
-  const getTemplateLoc = (template: any): { line: number; column: number } | null => {
-    const start = template?.loc?.start;
-    if (start?.line === undefined) {
-      return null;
-    }
-    return { line: start.line, column: start.column ?? 0 };
-  };
-
   const noteUniversalSelector = (template: any, rawCss: string): void => {
     hasUniversalSelectors = true;
     if (universalSelectorLoc) {
       return;
     }
-    universalSelectorLoc = computeUniversalSelectorLoc(getTemplateLoc(template), rawCss);
+    universalSelectorLoc = computeUniversalSelectorLoc(getNodeLocStart(template), rawCss);
   };
 
   /**
@@ -813,7 +809,7 @@ function collectStyledDeclsImpl(args: {
         const localName = id.name;
         const tagName = tag.property.name;
         const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
+        const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -847,7 +843,7 @@ function collectStyledDeclsImpl(args: {
           }
           const localName = id.name;
           const template = init.quasi;
-          const templateLoc = getTemplateLoc(template);
+          const templateLoc = getNodeLocStart(template);
           const parsed = parseStyledTemplateLiteral(template);
           const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
             rawCss: parsed.rawCss,
@@ -899,7 +895,7 @@ function collectStyledDeclsImpl(args: {
         const ident = tag.arguments[0].name;
         const styleKey = toStyleKey(localName);
         const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
+        const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -936,7 +932,7 @@ function collectStyledDeclsImpl(args: {
           return;
         }
         const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
+        const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -973,7 +969,7 @@ function collectStyledDeclsImpl(args: {
         const arg0 = tag.arguments[0] as any;
         const tagName = arg0.type === "StringLiteral" ? arg0.value : arg0.value;
         const template = init.quasi;
-        const templateLoc = getTemplateLoc(template);
+        const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
         const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
           rawCss: parsed.rawCss,
@@ -1283,7 +1279,7 @@ function collectStyledDeclsImpl(args: {
 
         if (cssTemplate) {
           // Handle styled.div(props => css`...`) pattern
-          const templateLoc = getTemplateLoc(cssTemplate);
+          const templateLoc = getNodeLocStart(cssTemplate);
           const parsed = parseStyledTemplateLiteral(cssTemplate);
           const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
             rawCss: parsed.rawCss,

@@ -119,4 +119,46 @@ describe("detectUnsupportedPatternsStep", () => {
     const result = detectUnsupportedPatternsStep(ctx);
     expect(result).toEqual(CONTINUE);
   });
+
+  it("detects styled inside class method as HOC pattern", () => {
+    const ctx = createCtx(`
+      import styled from "styled-components";
+      class Factory {
+        create() {
+          styled.div\`color: red;\`;
+        }
+      }
+    `);
+    const result = detectUnsupportedPatternsStep(ctx);
+    expect(result).not.toEqual(CONTINUE);
+    expect(ctx.warnings[0]!.type).toContain("Higher-order styled factory");
+  });
+
+  it("detects styled inside object method as HOC pattern", () => {
+    const ctx = createCtx(`
+      import styled from "styled-components";
+      const factory = {
+        create() {
+          styled.div\`color: red;\`;
+        }
+      };
+    `);
+    const result = detectUnsupportedPatternsStep(ctx);
+    expect(result).not.toEqual(CONTINUE);
+    expect(ctx.warnings[0]!.type).toContain("Higher-order styled factory");
+  });
+
+  it("allows styled assigned inside class method (local usage)", () => {
+    const ctx = createCtx(`
+      import styled from "styled-components";
+      class Factory {
+        create() {
+          const Box = styled.div\`color: red;\`;
+          return <Box />;
+        }
+      }
+    `);
+    const result = detectUnsupportedPatternsStep(ctx);
+    expect(result).toEqual(CONTINUE);
+  });
 });

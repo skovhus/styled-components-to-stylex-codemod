@@ -10,23 +10,17 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type WrapperEmitter } from "./wrapper-emitter.js";
 
-/**
- * Returns the variant bucket "when" keys for a compound variant entry.
- * Used to exclude these entries from regular variant emission (they are
- * emitted as a single compound ternary expression instead).
- */
-export function getCompoundVariantWhenKeys(
-  cv: NonNullable<StyledDecl["compoundVariants"]>[number],
-): string[] {
-  if (cv.kind === "4branch") {
-    return [
-      `${cv.outerProp}_${cv.innerProp}`,
-      `${cv.outerProp}_!${cv.innerProp}`,
-      `!${cv.outerProp}_${cv.innerProp}`,
-      `!${cv.outerProp}_!${cv.innerProp}`,
-    ];
+/** Collects all variant "when" keys consumed by compound variants into a Set. */
+export function collectCompoundVariantKeys(
+  compoundVariants: StyledDecl["compoundVariants"],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const cv of compoundVariants ?? []) {
+    for (const k of getCompoundVariantWhenKeys(cv)) {
+      keys.add(k);
+    }
   }
-  return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
+  return keys;
 }
 
 export type EmitIntrinsicHelpers = {
@@ -507,4 +501,20 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     asDestructureProp,
     emitMinimalWrapper,
   };
+}
+
+// --- Non-exported helpers ---
+
+function getCompoundVariantWhenKeys(
+  cv: NonNullable<StyledDecl["compoundVariants"]>[number],
+): string[] {
+  if (cv.kind === "4branch") {
+    return [
+      `${cv.outerProp}_${cv.innerProp}`,
+      `${cv.outerProp}_!${cv.innerProp}`,
+      `!${cv.outerProp}_${cv.innerProp}`,
+      `!${cv.outerProp}_!${cv.innerProp}`,
+    ];
+  }
+  return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
 }

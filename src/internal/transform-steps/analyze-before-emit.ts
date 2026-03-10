@@ -756,13 +756,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       let cur = p.parentPath;
       while (cur) {
         const node = cur.node;
-        // Check for function-like nodes (includes class/object methods which execute at runtime)
-        if (
-          isFunctionNode(node) ||
-          node?.type === "ClassMethod" ||
-          node?.type === "MethodDefinition" ||
-          node?.type === "ObjectMethod"
-        ) {
+        if (isFunctionNode(node) || node?.type === "MethodDefinition") {
           return true;
         }
         cur = cur.parentPath;

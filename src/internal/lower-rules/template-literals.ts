@@ -3,7 +3,6 @@
  * Core concepts: Stylis parsing, interpolation handling, and variant extraction.
  */
 import type { Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
-import { compile } from "stylis";
 import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import {
@@ -13,7 +12,6 @@ import {
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { isStylexLonghandOnlyShorthand } from "../stylex-shorthands.js";
-import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   cloneAstNode,
   extractRootAndPath,
@@ -25,11 +23,11 @@ import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
 } from "../utilities/jscodeshift-utils.js";
-import { parseStyledTemplateLiteral } from "../styled-css.js";
+import { parseCssTemplateToRules } from "./css-helper.js";
 import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
-import { cssValueToJs } from "../transform/helpers.js";
+import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { WarningLog } from "../logger.js";
 import {
@@ -114,15 +112,9 @@ export function resolveTemplateLiteralBranch(
   } = ctx;
   const { node, paramName, bindings } = args;
 
-  const parsed = parseStyledTemplateLiteral(node);
-  const wrappedRawCss = `& { ${parsed.rawCss} }`;
-  const stylisAst = compile(wrappedRawCss);
-  const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, {
-    rawCss: wrappedRawCss,
-  });
-  const slotExprById = new Map<number, Expression>(
-    parsed.slots.map((s) => [s.index, s.expression]),
-  );
+  const parsed = parseCssTemplateToRules(node);
+  const rules = parsed.rules;
+  const slotExprById = parsed.slotExprById as Map<number, Expression>;
   const style: Record<string, unknown> = {};
   const dynamicEntries: TemplateDynamicEntry[] = [];
   const inlineEntries: TemplateInlineEntry[] = [];
@@ -224,12 +216,7 @@ export function resolveTemplateLiteralBranch(
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
           if (mapped.prop === "content" && typeof value === "string") {
-            const m = value.match(/^['"]([\s\S]*)['"]$/);
-            if (m) {
-              value = `"${m[1]}"`;
-            } else if (!value.startsWith('"') && !value.endsWith('"')) {
-              value = `"${value}"`;
-            }
+            value = normalizeCssContentValue(value);
           }
           setStyleValue(mapped.prop, value);
         }

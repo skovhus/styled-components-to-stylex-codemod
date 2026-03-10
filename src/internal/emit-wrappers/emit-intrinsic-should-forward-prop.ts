@@ -16,12 +16,10 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
-import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import {
-  appendPseudoAliasStyleArgs,
-  appendPseudoExpandStyleArgs,
-} from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
+import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -321,41 +319,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    const pseudoGuardProps = appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    );
+    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!pseudoGuardProps.includes(gp)) {
-        pseudoGuardProps.push(gp);
-      }
-    }
-
-    // Collect keys used by compound variants (they're handled separately)
-    const compoundVariantKeys = new Set<string>();
-    for (const cv of d.compoundVariants ?? []) {
-      for (const k of getCompoundVariantWhenKeys(cv)) {
-        compoundVariantKeys.add(k);
-      }
-    }
+    const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
@@ -467,10 +439,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
       const callArg = p.callArg ?? propExpr;
-      const call = j.callExpression(
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(p.fnKey)),
-        [callArg],
-      );
+      const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
       let expr: ExpressionKind;
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({
@@ -691,11 +660,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             params: [propsParamId],
             bodyStmts: fnBodyStmts,
             typeParameters:
-              allowAsProp && emitTypes
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
-                : undefined,
+              allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
           }),
           d,
         ),
@@ -804,10 +769,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           params: [propsParamId],
           bodyStmts: fnBodyStmts,
           typeParameters:
-            allowAsProp && emitTypes
-              ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get()
-                  .node.program.body[0].typeParameters
-              : undefined,
+            allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
         }),
         d,
       ),

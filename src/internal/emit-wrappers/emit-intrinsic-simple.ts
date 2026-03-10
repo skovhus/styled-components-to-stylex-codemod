@@ -21,7 +21,8 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
-import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import {
   areEquivalentWhen,
@@ -30,7 +31,7 @@ import {
   parseVariantWhenToAst,
 } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -166,9 +167,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
       emitter.splitExtraStyleArgs(d);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
@@ -183,25 +182,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    const pseudoGuardProps = appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    );
-
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!pseudoGuardProps.includes(gp)) {
-        pseudoGuardProps.push(gp);
-      }
-    }
+    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
@@ -418,11 +399,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             params: [propsParamId],
             bodyStmts,
             typeParameters:
-              allowAsProp && emitTypes
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
-                : undefined,
+              allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
           }),
         ],
         d,
@@ -839,9 +816,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey
-        ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-        : []),
+      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
@@ -856,37 +831,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    // Handle pseudo-alias selectors (e.g., &:${highlight})
-    for (const gp of appendPseudoAliasStyleArgs(
-      d.pseudoAliasSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
+    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
       }
     }
 
-    // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-    for (const gp of appendPseudoExpandStyleArgs(
-      d.pseudoExpandSelectors,
-      styleArgs,
-      j,
-      stylesIdentifier,
-    )) {
-      if (!destructureProps.includes(gp)) {
-        destructureProps.push(gp);
-      }
-    }
-
-    // Collect keys used by compound variants (they're handled separately)
-    const compoundVariantKeys = new Set<string>();
-    for (const cv of d.compoundVariants ?? []) {
-      for (const k of getCompoundVariantWhenKeys(cv)) {
-        compoundVariantKeys.add(k);
-      }
-    }
+    const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
@@ -1255,9 +1206,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               params: [propsParamId],
               bodyStmts,
               typeParameters: shouldAddTypeParams
-                ? j(
-                    `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-                  ).get().node.program.body[0].typeParameters
+                ? buildPolymorphicTypeParams(j, tagName)
                 : undefined,
             }),
           ],
@@ -1572,10 +1521,10 @@ export function appendThemeBooleanStyleArgs(
       continue;
     }
     const trueExpr = entry.trueStyleKey
-      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.trueStyleKey))
+      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
       : (j.identifier("undefined") as ExpressionKind);
     const falseExpr = entry.falseStyleKey
-      ? j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.falseStyleKey))
+      ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
       : (j.identifier("undefined") as ExpressionKind);
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
@@ -1593,7 +1542,7 @@ export function appendThemeBooleanStyleArgs(
  *
  * Returns the list of guard prop names that need destructuring.
  */
-export function appendPseudoAliasStyleArgs(
+function appendPseudoAliasStyleArgs(
   entries: StyledDecl["pseudoAliasSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
@@ -1607,7 +1556,7 @@ export function appendPseudoAliasStyleArgs(
       j.property(
         "init",
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
-        j.memberExpression(j.identifier(stylesIdentifier), j.identifier(entry.styleKeys[i]!)),
+        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
       ),
     );
     return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
@@ -1622,7 +1571,7 @@ export function appendPseudoAliasStyleArgs(
  *
  * Returns the list of guard prop names that need destructuring.
  */
-export function appendPseudoExpandStyleArgs(
+function appendPseudoExpandStyleArgs(
   entries: StyledDecl["pseudoExpandSelectors"],
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
@@ -1641,6 +1590,35 @@ export function appendPseudoExpandStyleArgs(
         j.identifier(entry.styleKey),
       ) as ExpressionKind,
   );
+}
+
+/**
+ * Appends both pseudo-alias and pseudo-expand style args, deduplicating guard props.
+ * Returns the combined list of guard prop names that need destructuring.
+ */
+export function appendAllPseudoStyleArgs(
+  d: Pick<StyledDecl, "pseudoAliasSelectors" | "pseudoExpandSelectors">,
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  const guardProps = appendPseudoAliasStyleArgs(
+    d.pseudoAliasSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  );
+  for (const gp of appendPseudoExpandStyleArgs(
+    d.pseudoExpandSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  )) {
+    if (!guardProps.includes(gp)) {
+      guardProps.push(gp);
+    }
+  }
+  return guardProps;
 }
 
 /**

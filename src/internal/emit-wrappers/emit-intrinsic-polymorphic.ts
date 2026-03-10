@@ -15,12 +15,10 @@ import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
-import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
-import {
-  appendPseudoAliasStyleArgs,
-  appendPseudoExpandStyleArgs,
-} from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { buildPolymorphicTypeParams } from "./jsx-builders.js";
+import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
+import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -146,21 +144,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
         emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
       const styleArgs: ExpressionKind[] = [
-        ...(d.extendsStyleKey
-          ? [j.memberExpression(j.identifier(stylesIdentifier), j.identifier(d.extendsStyleKey))]
-          : []),
+        ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
         ...extraStyleArgs,
         ...emitter.baseStyleExpr(d),
         ...extraStyleArgsAfterBase,
       ];
 
-      // Collect keys used by compound variants (they're handled separately)
-      const compoundVariantKeys = new Set<string>();
-      for (const cv of d.compoundVariants ?? []) {
-        for (const k of getCompoundVariantWhenKeys(cv)) {
-          compoundVariantKeys.add(k);
-        }
-      }
+      const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
       // Collect variant and styleFn expressions with source order for interleaving.
       const hasSourceOrder = !!(
@@ -209,25 +199,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
       }
 
-      // Handle pseudo-alias selectors (e.g., &:${highlight})
-      for (const gp of appendPseudoAliasStyleArgs(
-        d.pseudoAliasSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
-        if (!destructureProps.includes(gp)) {
-          destructureProps.push(gp);
-        }
-      }
-
-      // Handle pseudo-expand selectors (e.g., &:${highlightExpand})
-      for (const gp of appendPseudoExpandStyleArgs(
-        d.pseudoExpandSelectors,
-        styleArgs,
-        j,
-        stylesIdentifier,
-      )) {
+      for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
         if (!destructureProps.includes(gp)) {
           destructureProps.push(gp);
         }
@@ -362,10 +334,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       fnBodyStmts.push(j.returnStatement(jsx as any));
 
       const polymorphicFnTypeParams =
-        emitTypes && allowAsProp
-          ? j(`function _<C extends React.ElementType = "${tagName}">() { return null }`).get().node
-              .program.body[0].typeParameters
-          : undefined;
+        emitTypes && allowAsProp ? buildPolymorphicTypeParams(j, tagName) : undefined;
 
       emitted.push(
         withLeadingComments(

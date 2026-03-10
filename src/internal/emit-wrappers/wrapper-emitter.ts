@@ -1639,9 +1639,7 @@ export class WrapperEmitter {
       j.blockStatement(filteredBody),
     );
     if (needsPolymorphicTypeParams) {
-      (fn as any).typeParameters = j(
-        `function _<C extends React.ElementType = "${tagName}">() { return null }`,
-      ).get().node.program.body[0].typeParameters;
+      (fn as any).typeParameters = jb.buildPolymorphicTypeParams(j, tagName);
     }
     return [fn];
   }

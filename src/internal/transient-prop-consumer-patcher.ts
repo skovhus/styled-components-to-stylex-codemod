@@ -6,10 +6,11 @@
  * Unconverted consumer files that use `<CollapseArrowIcon $isOpen={...} />` must be
  * patched to use the new prop names.
  */
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, dirname, relative } from "node:path";
 import type { TransientPropRenameResult } from "./transform-types.js";
 import { escapeRegex } from "./utilities/string-utils.js";
+import { toRealPath } from "./utilities/path-utils.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -125,14 +126,6 @@ export function patchConsumerTransientProps(
 }
 
 /* ── Non-exported helpers ─────────────────────────────────────────────── */
-
-function toRealPath(filePath: string): string {
-  try {
-    return realpathSync(filePath);
-  } catch {
-    return filePath;
-  }
-}
 
 /**
  * Build import source strings that a consumer might use to import from `targetPath`.

@@ -8,6 +8,7 @@ import {
   extractDefaultAsTagFromDestructure,
   isReactElementTypeRef,
 } from "../utilities/polymorphic-as-detection.js";
+import { buildPolymorphicTypeParams } from "../emit-wrappers/jsx-builders.js";
 
 // Standard props that are already in React.ComponentPropsWithRef<C>
 const STANDARD_PROPS = new Set(["className", "style", "children", "ref"]);
@@ -201,10 +202,7 @@ export function upgradePolymorphicAsPropTypesStep(ctx: TransformContext): StepRe
       firstParam.typeAnnotation = newType;
       typesToRemove.add(standardPropsType);
 
-      // Attach <C extends React.ElementType = "tag">
-      fn.typeParameters = j(
-        `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
-      ).get().node.program.body[0].typeParameters;
+      fn.typeParameters = buildPolymorphicTypeParams(j, defaultTag);
       return;
     }
 
@@ -213,10 +211,7 @@ export function upgradePolymorphicAsPropTypesStep(ctx: TransformContext): StepRe
     if (!changed) {
       return;
     }
-    // Attach <C extends React.ElementType = "tag">
-    fn.typeParameters = j(
-      `function _<C extends React.ElementType = "${defaultTag}">() { return null }`,
-    ).get().node.program.body[0].typeParameters;
+    fn.typeParameters = buildPolymorphicTypeParams(j, defaultTag);
   };
 
   // Function declarations
