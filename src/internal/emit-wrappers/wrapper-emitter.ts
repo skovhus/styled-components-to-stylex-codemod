@@ -1161,23 +1161,29 @@ export class WrapperEmitter {
     if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
-    // For exported components with renamed transient props ($prop → prop), omit the
-    // original $-prefixed props from the base type and re-add them with their new names.
-    // Non-exported components skip this since their base components typically don't
-    // have $-prefixed props in their types.
-    if (d.transientPropRenames && d.transientPropRenames.size > 0 && (d.isExported ?? false)) {
-      for (const original of d.transientPropRenames.keys()) {
+    // When transient props are renamed ($prop → prop), omit the original $-prefixed
+    // props from the base type and re-add them with their new names.
+    // This is needed when the base component's type includes the $-prefixed prop
+    // (via transientOmitFromBase) or the component is exported (for v6 forwarding safety).
+    if (d.transientPropRenames && d.transientPropRenames.size > 0) {
+      const propsToOmit =
+        (d.isExported ?? false)
+          ? new Set(d.transientPropRenames.keys())
+          : (d.transientOmitFromBase ?? new Set<string>());
+      for (const original of propsToOmit) {
         omitted.push(`"${original}"`);
       }
       // Only add renamed prop types from the base component when there is no explicit
       // wrapper type. When there is an explicit type, the renamed props are already there.
-      if (!hasExplicitPropsType) {
+      if (!hasExplicitPropsType && propsToOmit.size > 0) {
         // Emit renamed props as mapped types that preserve optionality:
         // { [K in "$isOpen" as "isOpen"]: Base[K] } keeps `?` if Base has `$isOpen?`.
         // These are emitted as separate intersection members since mapped types
         // can't coexist with regular members in the same type literal.
         for (const [original, renamed] of d.transientPropRenames) {
-          renamedPropTypes.push(`{ [K in "${original}" as "${renamed}"]: ${base}[K] }`);
+          if (propsToOmit.has(original)) {
+            renamedPropTypes.push(`{ [K in "${original}" as "${renamed}"]: ${base}[K] }`);
+          }
         }
       }
     }

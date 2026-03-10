@@ -572,6 +572,23 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         continue;
       }
       decl.transientPropRenames = renames;
+      // Determine which $-prefixed props actually exist in the base component's type.
+      // Only those need Omit+remap in the wrapper type to avoid type conflicts.
+      if (decl.base.kind === "component") {
+        const baseTransientProps = new Set<string>();
+        collectBaseComponentPropNames(root, j, decl.base.ident, baseTransientProps, (n) =>
+          n.startsWith("$"),
+        );
+        const omitFromBase = new Set<string>();
+        for (const original of renames.keys()) {
+          if (baseTransientProps.has(original)) {
+            omitFromBase.add(original);
+          }
+        }
+        if (omitFromBase.size > 0) {
+          decl.transientOmitFromBase = omitFromBase;
+        }
+      }
       applyTransientPropRenames(decl, renames);
       renameTransientPropsInReferencedTypes(
         root,
@@ -1053,15 +1070,15 @@ function collectResolverImportNames(ctx: TransformContext): Set<string> {
 }
 
 /**
- * Collects non-`$`-prefixed prop names from a locally-defined base component's
- * type to prevent rename collisions. For `styled(Base)`, if `Base` accepts
- * `color`, we must not rename `$color` → `color`.
+ * Collects prop names from a locally-defined base component's type that match
+ * the given filter. Default filter excludes `$`-prefixed names (for collision checking).
  */
 function collectBaseComponentPropNames(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   componentName: string,
   names: Set<string>,
+  filter: (name: string) => boolean = (n) => !n.startsWith("$"),
 ): void {
   const extractFromParam = (param: any) => {
     const typeRef = param?.typeAnnotation?.typeAnnotation;
@@ -1070,7 +1087,7 @@ function collectBaseComponentPropNames(
     }
     if (typeRef.type === "TSTypeLiteral") {
       walkTypePropNames(typeRef, (n) => {
-        if (!n.startsWith("$")) {
+        if (filter(n)) {
           names.add(n);
         }
       });
@@ -1085,7 +1102,7 @@ function collectBaseComponentPropNames(
             if (
               member.type === "TSPropertySignature" &&
               member.key?.type === "Identifier" &&
-              !member.key.name.startsWith("$")
+              filter(member.key.name)
             ) {
               names.add(member.key.name);
             }
@@ -1097,7 +1114,7 @@ function collectBaseComponentPropNames(
         .filter((p: any) => (p.node as any).id?.name === typeName)
         .forEach((p: any) => {
           walkTypePropNames(p.node.typeAnnotation, (n) => {
-            if (!n.startsWith("$")) {
+            if (filter(n)) {
               names.add(n);
             }
           });

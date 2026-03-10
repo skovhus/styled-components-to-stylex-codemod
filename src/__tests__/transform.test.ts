@@ -720,6 +720,50 @@ export const App = () => <Toggle $active />;
     );
     expect(renameWarnings).toHaveLength(0);
   });
+
+  it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+interface BaseProps {
+  $isOpen: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  children?: React.ReactNode;
+}
+
+function Base(props: BaseProps) {
+  const { $isOpen, className, style, children } = props;
+  return <div className={className} style={style}>{children}</div>;
+}
+
+const Wrapper = styled(Base)\`
+  transform: rotate(\${(props) => (props.$isOpen ? "90deg" : "0deg")});
+\`;
+
+export const App = () => (
+  <div>
+    <Wrapper $isOpen />
+    <Wrapper $isOpen={false} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The wrapper should rename $isOpen to isOpen
+    expect(result.code).toContain("isOpen");
+    // The Omit should include "$isOpen" since the base component has it in its type
+    expect(result.code).toContain('"$isOpen"');
+    // The mapped type should remap $isOpen to isOpen
+    expect(result.code).toContain('"$isOpen" as "isOpen"');
+  });
 });
 
 describe("import cleanup safety", () => {

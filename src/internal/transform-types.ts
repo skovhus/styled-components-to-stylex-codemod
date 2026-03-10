@@ -372,6 +372,11 @@ export type StyledDecl = {
    * plain function is wrapped by an unconverted `styled()` consumer.
    */
   transientPropRenames?: Map<string, string>;
+  /**
+   * Subset of transientPropRenames keys that exist in the base component's type.
+   * Used to emit Omit+remap in the wrapper type only for props the base actually declares.
+   */
+  transientOmitFromBase?: Set<string>;
 
   withConfig?: { componentId?: string };
   attrsInfo?: {
