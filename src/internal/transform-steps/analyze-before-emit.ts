@@ -547,6 +547,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       for (const prop of propsToSkip) {
         renames.delete(prop);
       }
+      if (renames.size === 0) {
+        continue;
+      }
       decl.transientPropRenames = renames;
       applyTransientPropRenames(decl, renames);
       renameTransientPropsInReferencedTypes(
@@ -971,7 +974,7 @@ function isModuleScopeBinding(
   name: string,
   ownerLocalName: string,
 ): boolean {
-  // Check import specifiers
+  // Check import specifiers (named, default, and namespace)
   const hasImport =
     root
       .find(j.ImportSpecifier)
@@ -982,6 +985,10 @@ function isModuleScopeBinding(
       .size() > 0 ||
     root
       .find(j.ImportDefaultSpecifier)
+      .filter((p) => p.node.local?.name === name)
+      .size() > 0 ||
+    root
+      .find(j.ImportNamespaceSpecifier)
       .filter((p) => p.node.local?.name === name)
       .size() > 0;
   if (hasImport) {
