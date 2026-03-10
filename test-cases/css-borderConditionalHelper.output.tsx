@@ -3,14 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
 type SimpleBoxProps = React.PropsWithChildren<{
-  $bordered?: boolean;
+  bordered?: boolean;
 }>;
 
 function SimpleBox(props: SimpleBoxProps) {
-  const { children, $bordered } = props;
+  const { children, bordered } = props;
 
   return (
-    <div sx={[styles.simpleBox, $bordered ? styles.simpleBoxBordered : undefined]}>{children}</div>
+    <div sx={[styles.simpleBox, bordered ? styles.simpleBoxBordered : undefined]}>{children}</div>
   );
 }
 
@@ -37,7 +37,7 @@ function EnumBox(props: EnumBoxProps) {
 
 export const App = () => (
   <div style={{ display: "flex", gap: "10px", padding: "10px" }}>
-    <SimpleBox $bordered>Bordered</SimpleBox>
+    <SimpleBox bordered>Bordered</SimpleBox>
     <SimpleBox>Not Bordered</SimpleBox>
     <EnumBox position="top">Top</EnumBox>
     <EnumBox position="bottom">Bottom</EnumBox>
