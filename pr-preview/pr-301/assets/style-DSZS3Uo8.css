@@ -1868,6 +1868,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #ffffff09;
 }
 
+.x1dp1jgg:not(#\#):not(#\#):not(#\#) {
+  background-color: teal;
+}
+
 .x1aiepmy:not(#\#):not(#\#):not(#\#) {
   background-color: tomato;
 }
@@ -3136,12 +3140,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: red;
 }
 
+.x162lpob:active:not(#\#):not(#\#):not(#\#) {
+  opacity: .9;
+}
+
 .xld6lj4:active:not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
 .x1jplu5e:active:not(#\#):not(#\#):not(#\#) {
   transform: scale(.95);
+}
+
+.x1uqn517:active:not(#\#):not(#\#):not(#\#) {
+  transform: scale(1.02);
 }
 
 @media (width >= 1024px) {
@@ -4249,6 +4261,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
   .xk4b9ki.xk4b9ki:hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     color: #111;
+  }
+
+  .x1q0cuth.x1q0cuth:hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    opacity: .9;
+  }
+
+  .x1u5bsw0.x1u5bsw0:hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    transform: scale(1.02);
   }
 }
 
