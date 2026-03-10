@@ -68,7 +68,8 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       if (sidecarFiles) {
         const dir = dirname(file.path);
         const fileBase = basename(file.path).replace(/\.\w+$/, "");
-        sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+        const ext = /\.tsx$/i.test(file.path) ? ".tsx" : ".ts";
+        sidecarFiles.set(join(dir, `${fileBase}.stylex${ext}`), result.sidecarContent);
       }
     }
 

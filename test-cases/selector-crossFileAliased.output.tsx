@@ -1,12 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon as Arrow } from "./lib/cross-file-icon.styled";
 
-import { CardMarker } from "./selector-crossFileAliased.input.stylex";
-
 export function App() {
   return (
     <div style={{ padding: 16 }}>
-      <div sx={[styles.card, CardMarker]}>
+      <div sx={styles.card}>
         <Arrow {...stylex.props(styles.arrowInCard)} />
         Aliased import
       </div>

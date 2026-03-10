@@ -542,6 +542,28 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // canonical component name) for style keys to avoid collisions when both an aliased
         // bridge import and a local component of the same canonical name exist in one file.
         const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
+
+        // For cross-file bridge selectors, the target component (e.g., Text) must
+        // have JSX usage in this file so the override styles can be applied to it.
+        // Without JSX usage, the override styles would be orphaned dead code.
+        if (crossFileUsage?.bridgeComponentLocalName) {
+          const hasJsxUsage =
+            root
+              .find(j.JSXOpeningElement, {
+                name: { type: "JSXIdentifier", name: jsxLocalName },
+              })
+              .size() > 0;
+          if (!hasJsxUsage) {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: cross-file component selector target has no JSX usage in this file",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+        }
+
         const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(jsxLocalName);
         const overrideStyleKey = `${toStyleKey(jsxLocalName)}In${decl.localName}`;
         ancestorSelectorParents.add(decl.styleKey);
@@ -1895,8 +1917,11 @@ function handleSiblingSelector(
     });
   }
 
-  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls
+  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls.
+  // Also add to siblingMarkerParents to distinguish from forward/reverse selectors —
+  // sibling markers are always needed (stylex.when.siblingBefore() references them).
   ancestorSelectorParents.add(decl.styleKey);
+  state.siblingMarkerParents.add(decl.styleKey);
 
   // Process declarations into a temporary bucket using the shared helper
   const bucket: Record<string, unknown> = {};
