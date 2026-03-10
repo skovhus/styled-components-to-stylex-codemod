@@ -19,7 +19,11 @@ import {
 import { withLeadingComments } from "./comments.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
+import {
+  appendAllPseudoStyleArgs,
+  appendThemeBooleanStyleArgs,
+  buildUseThemeDeclaration,
+} from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
@@ -336,6 +340,14 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     ];
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+
+    const needsUseTheme = appendThemeBooleanStyleArgs(
+      d.needsUseThemeHook,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      () => ctx.markNeedsUseThemeImport(),
+    );
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
@@ -655,6 +667,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       });
 
       const fnBodyStmts: StatementKind[] = [declStmt];
+      if (needsUseTheme) {
+        fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
+      }
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(...cleanupPrefixStmt);
       }
@@ -763,6 +778,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const fnBodyStmts: StatementKind[] = [declStmt];
+    if (needsUseTheme) {
+      fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
+    }
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(...cleanupPrefixStmt);
     }
