@@ -12,7 +12,7 @@ import { cloneAstNode, getFunctionBodyExpr } from "./utilities/jscodeshift-utils
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
-import { toStyleKey, toSuffixFromProp } from "./transform/helpers.js";
+import { stripStyledPrefix, toStyleKey, toSuffixFromProp } from "./transform/helpers.js";
 import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
 
 /**
@@ -755,7 +755,7 @@ function collectStyledDeclsImpl(args: {
       if (arg?.type === "Identifier") {
         return {
           baseInfo: { kind: "component", ident: arg.name },
-          styleKey: resolveStyledComponentStyleKey(localName, arg.name, styledDecls),
+          styleKey: toStyleKey(localName),
         };
       }
 
@@ -897,7 +897,7 @@ function collectStyledDeclsImpl(args: {
       ) {
         const localName = id.name;
         const ident = tag.arguments[0].name;
-        const styleKey = resolveStyledComponentStyleKey(localName, ident, styledDecls);
+        const styleKey = toStyleKey(localName);
         const template = init.quasi;
         const templateLoc = getTemplateLoc(template);
         const parsed = parseStyledTemplateLiteral(template);
@@ -1367,24 +1367,43 @@ function collectStyledDeclsImpl(args: {
       });
     });
 
+  applyStyledPrefixStripping(styledDecls);
+
   return { styledDecls, hasUniversalSelectors, universalSelectorLoc };
 }
 
 /**
- * For `const StyledFoo = styled(Foo)\`...\``, use `foo` as the style key.
- * When `Foo` is itself a local styled-component, `toStyleKey` would strip the
- * "Styled" prefix and collide with the base's key, so we fall back to plain lcFirst.
+ * Post-processing step: strip the "styled"/"Styled" prefix from style keys
+ * when the component name follows the `styledX` / `StyledX` convention
+ * and stripping would NOT collide with another declaration's key.
+ *
+ * Also updates derived keys (styleFnFromProps fnKeys) to stay consistent.
  */
-function resolveStyledComponentStyleKey(
-  localName: string,
-  baseName: string,
-  styledDecls: StyledDecl[],
-): string {
-  const baseIsLocalStyledDecl = styledDecls.some((d) => d.localName === baseName);
-  if (!baseIsLocalStyledDecl) {
-    return toStyleKey(localName);
+function applyStyledPrefixStripping(styledDecls: StyledDecl[]): void {
+  const usedKeys = new Set(styledDecls.map((d) => d.styleKey));
+
+  for (const decl of styledDecls) {
+    const stripped = stripStyledPrefix(decl.localName);
+    if (stripped === decl.localName) {
+      continue;
+    }
+    const strippedKey = toStyleKey(stripped);
+    if (usedKeys.has(strippedKey)) {
+      continue;
+    }
+    const oldKey = decl.styleKey;
+    usedKeys.delete(oldKey);
+    usedKeys.add(strippedKey);
+    decl.styleKey = strippedKey;
+
+    if (decl.styleFnFromProps) {
+      for (const entry of decl.styleFnFromProps) {
+        if (entry.fnKey.startsWith(oldKey)) {
+          entry.fnKey = strippedKey + entry.fnKey.slice(oldKey.length);
+        }
+      }
+    }
   }
-  return localName.charAt(0).toLowerCase() + localName.slice(1);
 }
 
 /**

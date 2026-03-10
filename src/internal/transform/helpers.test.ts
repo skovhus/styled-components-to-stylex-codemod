@@ -6,6 +6,7 @@ import {
   cssValueToJs,
   buildUnsupportedCssWarnings,
   toStyleKey,
+  stripStyledPrefix,
 } from "./helpers.js";
 
 const j = jscodeshift.withParser("tsx");
@@ -14,29 +15,32 @@ describe("toStyleKey", () => {
   it("lowercases the first character", () => {
     expect(toStyleKey("Button")).toBe("button");
     expect(toStyleKey("NormalName")).toBe("normalName");
+    expect(toStyleKey("StyledButton")).toBe("styledButton");
   });
+});
 
+describe("stripStyledPrefix", () => {
   it("strips 'Styled' prefix (uppercase S) followed by uppercase letter", () => {
-    expect(toStyleKey("StyledButton")).toBe("button");
-    expect(toStyleKey("StyledCanvas")).toBe("canvas");
-    expect(toStyleKey("StyledSection")).toBe("section");
+    expect(stripStyledPrefix("StyledButton")).toBe("Button");
+    expect(stripStyledPrefix("StyledCanvas")).toBe("Canvas");
+    expect(stripStyledPrefix("StyledSection")).toBe("Section");
   });
 
   it("strips 'styled' prefix (lowercase s) followed by uppercase letter", () => {
-    expect(toStyleKey("styledButton")).toBe("button");
-    expect(toStyleKey("styledCanvas")).toBe("canvas");
+    expect(stripStyledPrefix("styledButton")).toBe("Button");
+    expect(stripStyledPrefix("styledCanvas")).toBe("Canvas");
   });
 
   it("does not strip when not followed by an uppercase letter", () => {
-    expect(toStyleKey("styled")).toBe("styled");
-    expect(toStyleKey("Styled")).toBe("styled");
-    expect(toStyleKey("styledcanvas")).toBe("styledcanvas");
+    expect(stripStyledPrefix("styled")).toBe("styled");
+    expect(stripStyledPrefix("Styled")).toBe("Styled");
+    expect(stripStyledPrefix("styledcanvas")).toBe("styledcanvas");
   });
 
   it("does not strip partial matches", () => {
-    expect(toStyleKey("Style")).toBe("style");
-    expect(toStyleKey("StyleButton")).toBe("styleButton");
-    expect(toStyleKey("Stylish")).toBe("stylish");
+    expect(stripStyledPrefix("Style")).toBe("Style");
+    expect(stripStyledPrefix("StyleButton")).toBe("StyleButton");
+    expect(stripStyledPrefix("Stylish")).toBe("Stylish");
   });
 });
 

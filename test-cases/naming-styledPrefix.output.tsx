@@ -7,6 +7,8 @@ export const App = () => (
     <canvas sx={styles.canvas} />
     <section sx={styles.section}>Styled Section</section>
     <div sx={styles.normalName}>Normal name (no prefix)</div>
+    <button sx={styles.button}>Button (coral)</button>
+    <button sx={styles.styledButton}>StyledButton (teal)</button>
   </div>
 );
 
@@ -25,5 +27,19 @@ const styles = stylex.create({
   normalName: {
     color: "blue",
     padding: "8px",
+  },
+  // Collision case: Button and StyledButton both exist.
+  // StyledButton must NOT strip to "button" since Button already has that key.
+  button: {
+    backgroundColor: "coral",
+    paddingBlock: "8px",
+    paddingInline: "16px",
+    color: "white",
+  },
+  styledButton: {
+    backgroundColor: "teal",
+    paddingBlock: "12px",
+    paddingInline: "24px",
+    color: "white",
   },
 });
