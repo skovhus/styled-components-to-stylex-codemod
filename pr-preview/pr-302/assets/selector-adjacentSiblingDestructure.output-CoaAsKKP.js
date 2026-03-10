@@ -1,1 +1,0 @@
-import{j as r}from"./index-DFe8-hbZ.js";function e(n){return r.jsx("div",{className:"x6gnr5x x-default-marker",children:n.children})}const i=()=>r.jsxs("div",{children:[r.jsx(e,{children:"First"}),r.jsx(e,{children:"Second"})]});export{i as App};
