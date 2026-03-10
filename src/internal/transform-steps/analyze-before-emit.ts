@@ -21,6 +21,20 @@ type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 const INLINE_USAGE_THRESHOLD = 1;
 
 /**
+ * HTML attributes that the emitter explicitly forwards to the DOM for specific
+ * intrinsic element types. Renaming a transient prop to one of these names would
+ * change behavior (e.g., `$disabled` → `disabled` on `<button>` would make the
+ * button actually HTML-disabled instead of just styling-disabled).
+ */
+const FORWARDED_INTRINSIC_ATTRS: Record<string, readonly string[]> = {
+  button: ["disabled"],
+  input: ["disabled"],
+  select: ["disabled"],
+  textarea: ["disabled"],
+  fieldset: ["disabled"],
+};
+
+/**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
  */
 export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
@@ -510,6 +524,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // wrapper has `$color` — renaming to `color` would collide).
     if (decl.base.kind === "component") {
       collectBaseComponentPropNames(root, j, decl.base.ident, existingPropNames);
+    }
+    // For intrinsic elements, block renames that would collide with HTML attributes
+    // the emitter explicitly forwards to the DOM (e.g., disabled on <button>).
+    if (decl.base.kind === "intrinsic") {
+      for (const attr of FORWARDED_INTRINSIC_ATTRS[decl.base.tagName] ?? []) {
+        existingPropNames.add(attr);
+      }
     }
     const renames = new Map<string, string>();
     for (const prop of transientProps) {

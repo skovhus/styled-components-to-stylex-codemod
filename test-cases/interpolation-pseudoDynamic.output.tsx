@@ -27,7 +27,7 @@ function Button(props: ButtonProps) {
 }
 
 type InvertedButtonProps = React.PropsWithChildren<{
-  disabled?: boolean;
+  $disabled?: boolean;
 }>;
 
 /**
@@ -35,14 +35,13 @@ type InvertedButtonProps = React.PropsWithChildren<{
  * `$disabled ? '' : 'background-color: green;'` → `!$disabled && ...`
  */
 function InvertedButton(props: InvertedButtonProps) {
-  const { children, disabled } = props;
+  const { children, $disabled } = props;
 
   return (
     <button
-      disabled={disabled}
       sx={[
         styles.invertedButton,
-        !disabled &&
+        !$disabled &&
           highlightStyles({
             active: styles.invertedButtonNotDisabledPseudoActive,
             hover: styles.invertedButtonNotDisabledPseudoHover,
@@ -59,7 +58,7 @@ export const App = () => (
     <Button active>Active</Button>
     <Button>Inactive</Button>
     <InvertedButton>Enabled</InvertedButton>
-    <InvertedButton disabled>Disabled</InvertedButton>
+    <InvertedButton $disabled>Disabled</InvertedButton>
   </div>
 );
 
