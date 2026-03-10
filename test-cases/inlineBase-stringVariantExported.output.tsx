@@ -14,7 +14,7 @@ export function Card(props: CardProps) {
     <div
       {...rest}
       {...mergedSx(
-        [styles.card, direction === "column" && styles.cardDirection, sx],
+        [styles.card, direction === "column" && styles.cardDirectionColumn, sx],
         className,
         style,
       )}
@@ -43,7 +43,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#ddd",
   },
-  cardDirection: {
+  cardDirectionColumn: {
     flexDirection: "column",
   },
 });

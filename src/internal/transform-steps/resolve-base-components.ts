@@ -565,10 +565,13 @@ function buildInlineResolverVariantDimensions(args: {
           continue;
         }
       } else {
+        // Include the variant value in the style key for clarity:
+        // e.g., `cardDirectionColumn` instead of just `cardDirection`.
+        const valueSuffix = singleKey.charAt(0).toUpperCase() + singleKey.slice(1);
         staticBooleanVariants.push({
           propName,
           variantKey: singleKey,
-          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}${valueSuffix}`,
           styles: singleVariantStyles,
         });
         continue;
@@ -970,12 +973,6 @@ function buildCallSiteCombinedStyles(args: {
   return result;
 }
 
-/**
- * Checks whether a single variant key represents a value that is truthy at runtime.
- * For boolean props, only `"true"` is truthy (`false` is falsy).
- * For non-boolean props (numbers, strings), "0" and "" are falsy; everything else is truthy.
- * Falsy values cannot use the truthy-guard pattern (`prop && styles.key`) safely.
- */
 /** Returns true if the boolean variant key represents `true` (i.e., `<Comp flag />`). */
 function isBooleanVariantKeyTrue(key: string): boolean {
   return key === "true";

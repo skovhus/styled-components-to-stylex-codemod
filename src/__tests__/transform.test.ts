@@ -379,8 +379,6 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    // Exception: test cases that intentionally test partial conversion with leftover css helpers
-    const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
     const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
       ? ["styled", "keyframes", "createGlobalStyle"]
       : ["styled", "css", "keyframes", "createGlobalStyle"];

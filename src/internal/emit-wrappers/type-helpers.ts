@@ -83,11 +83,6 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
 };
 
 /**
- * Builds a map from prop name to variant object name for dimensions
- * that derive their prop type via `keyof typeof variantObj`.
- * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
- */
-/**
  * Builds a map from prop name to TypeScript type text for static single-key variants.
  * Boolean variants get type `boolean`; non-boolean get a string literal type (e.g., `"column"`).
  * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
