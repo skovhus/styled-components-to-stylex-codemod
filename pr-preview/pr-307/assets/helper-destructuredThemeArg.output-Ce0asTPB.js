@@ -1,1 +1,0 @@
-import{j as r}from"./index-zIWSZqtb.js";function i(x){return r.jsx("div",{className:"x1vvogim x1hr3lfm xso031l x1q0q8m5 x1f3p4rf",children:x.children})}const e=()=>r.jsx("div",{style:{display:"flex",gap:16,padding:16},children:r.jsx(i,{children:"Box with border"})});export{e as App};

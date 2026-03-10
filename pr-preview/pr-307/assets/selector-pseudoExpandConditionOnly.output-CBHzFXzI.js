@@ -1,0 +1,1 @@
+import{j as x}from"./index-DV9-olPI.js";function i(){return x.jsx("div",{style:{display:"flex",gap:16,padding:16},children:x.jsx("div",{className:"xe8ttls x15yo4kd x1mgwg62 xh13cts x162lpob x1q0cuth x1uqn517 x1u5bsw0",children:"Mixed: base + condition-only"})})}export{i as App};
