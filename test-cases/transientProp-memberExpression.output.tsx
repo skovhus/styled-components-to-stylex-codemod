@@ -5,7 +5,7 @@ import { UserAvatar } from "./lib/user-avatar";
 
 type ComponentWrapperProps = { isOpen: boolean } & Omit<
   React.ComponentPropsWithRef<typeof motion.div>,
-  "className" | "style" | "$isOpen"
+  "className" | "style"
 >;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
@@ -23,7 +23,7 @@ function ComponentWrapper(props: ComponentWrapperProps) {
 
 type HighlightedAvatarProps = { highlightColor?: string } & Omit<
   React.ComponentPropsWithRef<typeof UserAvatar>,
-  "className" | "style" | "$highlightColor"
+  "className" | "style"
 >;
 
 function HighlightedAvatar(props: HighlightedAvatarProps) {

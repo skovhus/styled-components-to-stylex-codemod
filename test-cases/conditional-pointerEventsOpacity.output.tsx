@@ -6,10 +6,7 @@ type ContainerProps = {
   open: boolean;
   duration: number;
   delay: number;
-} & Omit<
-  React.ComponentPropsWithRef<typeof Flex>,
-  "className" | "style" | "$duration" | "$open" | "$delay"
->;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 function Container(props: ContainerProps) {
   const { children, duration, delay, open, ...rest } = props;

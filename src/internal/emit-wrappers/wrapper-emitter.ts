@@ -1161,9 +1161,11 @@ export class WrapperEmitter {
     if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
-    // When transient props are renamed ($prop → prop), also omit the original $-prefixed
-    // props from the base type and re-add them with their new names.
-    if (d.transientPropRenames && d.transientPropRenames.size > 0) {
+    // For exported components with renamed transient props ($prop → prop), omit the
+    // original $-prefixed props from the base type and re-add them with their new names.
+    // Non-exported components skip this since their base components typically don't
+    // have $-prefixed props in their types.
+    if (d.transientPropRenames && d.transientPropRenames.size > 0 && (d.isExported ?? false)) {
       for (const original of d.transientPropRenames.keys()) {
         omitted.push(`"${original}"`);
       }
