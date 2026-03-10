@@ -549,12 +549,18 @@ function buildInlineResolverVariantDimensions(args: {
 
       // Single variant key, partial call sites: emit as a conditional style
       // in the main `styles` object rather than a separate lookup object.
-      // Safe without complete callsite visibility because the prop stays in
-      // the component interface — we emit `prop ? styles.x : undefined`.
-      // Only safe when the value is truthy at runtime — falsy values like 0
-      // would fail the truthy guard condition in the emitted code.
+      // We emit `prop ? styles.x : undefined`, so this is only safe when:
+      //  1. The prop is boolean (any truthy value means the same thing), OR
+      //  2. We have complete callsite visibility (no external callers can pass
+      //     a different truthy value that would incorrectly match the guard).
+      // Without these guarantees, a string prop like `direction="column"` would
+      // also match for `direction="row"`, applying the wrong styles.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
-      if (isSingleVariantKeyTruthy(singleKey, booleanOnlyProps.has(propName))) {
+      const isBooleanProp = booleanOnlyProps.has(propName);
+      if (
+        (isBooleanProp || hasCompleteCallsiteVisibility) &&
+        isSingleVariantKeyTruthy(singleKey, isBooleanProp)
+      ) {
         staticBooleanVariants.push({
           propName,
           styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
