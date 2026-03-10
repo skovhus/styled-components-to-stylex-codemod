@@ -1,0 +1,1 @@
+import{j as s}from"./index-JoEXkKkZ.js";function t(x){const{children:e,...o}=x;return s.jsx("path",{...o,className:"x117rol3 x2haq47 x1s4ax4t x6080k5 x15bw8el xsuvyjz",children:e})}const h=()=>s.jsxs("svg",{width:"24",height:"24",viewBox:"0 0 24 24",style:{color:"#bf4f74"},children:[s.jsx(t,{d:"M4 14h16v2H4z"}),s.jsx(t,{d:"M12 4l4 4H8z"})]});export{h as App};
