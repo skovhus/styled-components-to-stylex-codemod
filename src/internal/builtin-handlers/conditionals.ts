@@ -12,6 +12,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  getSinglePropFromMemberExpr,
   isArrowFunctionExpression,
   isCallExpressionNode,
   isConditionalExpressionNode,
@@ -855,7 +856,7 @@ export function tryResolveConditionalCssBlock(
   const { left, right } = body;
   // Resolve test to a prop name: props.$x → $x, or bare Identifier → prop name via bindings
   const testProp = paramName
-    ? extractSinglePropFromTest(left, paramName)
+    ? getSinglePropFromMemberExpr(left, paramName)
     : bindings?.kind === "destructured"
       ? resolveIdentifierToPropName(left, bindings)
       : null;
@@ -928,14 +929,11 @@ export function tryResolveConditionalCssBlockTernary(
       right?: unknown;
     };
 
-    // Simple prop access: props.$dim (MemberExpression with simple param)
-    if (paramName && t.type === "MemberExpression") {
-      const testPath = getMemberPathFromIdentifier(t as any, paramName);
-      const firstProp = testPath?.[0];
-      if (!testPath || testPath.length !== 1 || !firstProp) {
-        return null;
+    if (paramName) {
+      const firstProp = getSinglePropFromMemberExpr(t, paramName);
+      if (firstProp) {
+        return { kind: "boolean", propName: firstProp, isNegated: false };
       }
-      return { kind: "boolean", propName: firstProp, isNegated: false };
     }
 
     // Bare Identifier with destructured bindings: ({ center }) => center ? ...
@@ -949,13 +947,11 @@ export function tryResolveConditionalCssBlockTernary(
     // Negated prop access: !props.$open or !destructuredProp
     if (t.type === "UnaryExpression" && t.operator === "!") {
       const arg = t.argument as { type?: string } | undefined;
-      if (paramName && arg?.type === "MemberExpression") {
-        const testPath = getMemberPathFromIdentifier(arg as any, paramName);
-        const firstProp = testPath?.[0];
-        if (!testPath || testPath.length !== 1 || !firstProp) {
-          return null;
+      if (paramName) {
+        const firstProp = getSinglePropFromMemberExpr(arg, paramName);
+        if (firstProp) {
+          return { kind: "boolean", propName: firstProp, isNegated: true };
         }
-        return { kind: "boolean", propName: firstProp, isNegated: true };
       }
       if (bindings?.kind === "destructured" && arg?.type === "Identifier") {
         const propName = resolveIdentifierToPropName(arg, bindings);
@@ -1381,20 +1377,6 @@ function resolveThemeTemplateToCssVariant(
  * Extract a single-segment prop path from a test expression (e.g. `props.$x` → `$x`).
  * Returns the prop name, or null if the test is not a simple single-level member expression.
  */
-function extractSinglePropFromTest(test: unknown, paramName: string): string | null {
-  if ((test as { type?: string })?.type !== "MemberExpression") {
-    return null;
-  }
-  const testPath = getMemberPathFromIdentifier(
-    test as Parameters<typeof getMemberPathFromIdentifier>[0],
-    paramName,
-  );
-  if (!testPath || testPath.length !== 1 || !testPath[0]) {
-    return null;
-  }
-  return testPath[0];
-}
-
 /**
  * Handle a ternary where one branch is a template literal with theme expressions
  * and the other is empty (undefined/null/false/""). Resolves the template literal
@@ -1417,7 +1399,7 @@ function tryResolveTemplateLiteralTernaryWithEmptyBranch(
     return null;
   }
 
-  const testProp = extractSinglePropFromTest(body.test, paramName);
+  const testProp = getSinglePropFromMemberExpr(body.test, paramName);
   if (!testProp) {
     return null;
   }

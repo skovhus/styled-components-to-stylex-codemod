@@ -139,6 +139,21 @@ export function getMemberPathFromIdentifier(
 }
 
 /**
+ * Extracts a single prop name from a member expression like `props.foo`.
+ * Returns null if the expression doesn't resolve to a single-level property access.
+ */
+export function getSinglePropFromMemberExpr(node: unknown, rootIdentName: string): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const path = getMemberPathFromIdentifier(node as Expression, rootIdentName);
+  if (!path || path.length !== 1 || !path[0]) {
+    return null;
+  }
+  return path[0];
+}
+
+/**
  * Extracts the root JSX identifier name from a JSX name node.
  *
  * Examples:
