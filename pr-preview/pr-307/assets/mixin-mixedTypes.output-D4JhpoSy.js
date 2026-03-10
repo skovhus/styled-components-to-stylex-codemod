@@ -1,0 +1,1 @@
+import{j as x}from"./index-BBUcH_yf.js";const s=()=>x.jsxs("div",{children:[x.jsx("div",{className:"x7z7khe x1e2nbdu x1t391ir",children:"CSS first"}),x.jsx("div",{className:"x1oin6zd x1t391ir x1e2nbdu",children:"Styled first"}),x.jsx("div",{className:"x14odnwx x1e2nbdu x1t391ir x117nqv4",children:"Interleaved"})]});export{s as App};
