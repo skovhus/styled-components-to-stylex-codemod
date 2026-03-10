@@ -16,7 +16,7 @@ import {
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import {
-  buildBooleanVariantPropsSet,
+  buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
   sortVariantEntriesBySpecificity,
   VOID_TAGS,
@@ -626,15 +626,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return "{}";
         }
         const variantDimByProp = buildVariantDimPropTypeMap(d);
-        const booleanVariantProps = buildBooleanVariantPropsSet(d);
+        const staticVariantPropTypes = buildStaticVariantPropTypes(d);
 
         const lines = filtered.map((k) => {
           const variantObj = variantDimByProp.get(k);
           if (variantObj) {
             return `  ${k}?: keyof typeof ${variantObj};`;
           }
-          if (booleanVariantProps.has(k)) {
-            return `  ${k}?: boolean;`;
+          const staticType = staticVariantPropTypes.get(k);
+          if (staticType) {
+            return `  ${k}?: ${staticType};`;
           }
           const attrType = k.startsWith("data-") ? "string" : "any";
           return `  ${k}?: ${attrType};`;

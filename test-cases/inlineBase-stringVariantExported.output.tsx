@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type CardProps = { direction?: keyof typeof cardDirectionVariants } & {
-  sx?: stylex.StyleXStyles;
-} & Pick<React.ComponentProps<"div">, "className" | "style" | "ref" | "children">;
+type CardProps = { direction?: "column" } & { sx?: stylex.StyleXStyles } & Pick<
+    React.ComponentProps<"div">,
+    "className" | "style" | "ref" | "children"
+  >;
 
 export function Card(props: CardProps) {
   const { className, children, style, sx, direction, ...rest } = props;
@@ -13,7 +14,7 @@ export function Card(props: CardProps) {
     <div
       {...rest}
       {...mergedSx(
-        [styles.card, direction != null && cardDirectionVariants[direction], sx],
+        [styles.card, direction === "column" && styles.cardDirection, sx],
         className,
         style,
       )}
@@ -42,10 +43,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#ddd",
   },
-});
-
-const cardDirectionVariants = stylex.create({
-  column: {
+  cardDirection: {
     flexDirection: "column",
   },
 });

@@ -547,22 +547,27 @@ function buildInlineResolverVariantDimensions(args: {
         }
       }
 
-      // Single variant key, partial call sites: emit as a conditional style
-      // in the main `styles` object rather than a separate lookup object.
-      // We emit `prop ? styles.x : undefined`, so this is only safe when:
-      //  1. The prop is boolean (any truthy value means the same thing), OR
-      //  2. We have complete callsite visibility (no external callers can pass
-      //     a different truthy value that would incorrectly match the guard).
-      // Without these guarantees, a string prop like `direction="column"` would
-      // also match for `direction="row"`, applying the wrong styles.
+      // Single variant key: emit as a conditional style in the main `styles`
+      // object rather than a separate lookup object.
+      // - Boolean props use a truthy guard: `prop ? styles.x : undefined`
+      // - Non-boolean props use an equality check: `prop === "value" && styles.x`
+      //   This is safe without complete callsite visibility because the condition
+      //   only matches the specific value, not any truthy value.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
       const isBooleanProp = booleanOnlyProps.has(propName);
-      if (
-        (isBooleanProp || hasCompleteCallsiteVisibility) &&
-        isSingleVariantKeyTruthy(singleKey, isBooleanProp)
-      ) {
+      if (isBooleanProp) {
+        if (isBooleanVariantKeyTrue(singleKey)) {
+          staticBooleanVariants.push({
+            propName,
+            styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+            styles: singleVariantStyles,
+          });
+          continue;
+        }
+      } else {
         staticBooleanVariants.push({
           propName,
+          variantKey: singleKey,
           styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
           styles: singleVariantStyles,
         });
@@ -971,11 +976,9 @@ function buildCallSiteCombinedStyles(args: {
  * For non-boolean props (numbers, strings), "0" and "" are falsy; everything else is truthy.
  * Falsy values cannot use the truthy-guard pattern (`prop && styles.key`) safely.
  */
-function isSingleVariantKeyTruthy(key: string, isBooleanProp: boolean): boolean {
-  if (isBooleanProp) {
-    return key === "true";
-  }
-  return key !== "0" && key !== "";
+/** Returns true if the boolean variant key represents `true` (i.e., `<Comp flag />`). */
+function isBooleanVariantKeyTrue(key: string): boolean {
+  return key === "true";
 }
 
 function serializeRecord(record: Record<string, unknown>): string {
