@@ -625,11 +625,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return "{}";
         }
         const variantDimByProp = buildVariantDimPropTypeMap(d);
+        const booleanVariantProps = new Set(
+          (d.staticBooleanVariants ?? []).map((sbv) => sbv.propName),
+        );
 
         const lines = filtered.map((k) => {
           const variantObj = variantDimByProp.get(k);
           if (variantObj) {
             return `  ${k}?: keyof typeof ${variantObj};`;
+          }
+          if (booleanVariantProps.has(k)) {
+            return `  ${k}?: boolean;`;
           }
           const attrType = k.startsWith("data-") ? "string" : "any";
           return `  ${k}?: ${attrType};`;

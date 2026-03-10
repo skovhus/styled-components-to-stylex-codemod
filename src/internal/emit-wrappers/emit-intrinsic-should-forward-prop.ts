@@ -170,6 +170,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           : explicit;
       }
       const variantDimByProp = buildVariantDimPropTypeMap(d);
+      const booleanVariantProps = new Set(
+        (d.staticBooleanVariants ?? []).map((sbv) => sbv.propName),
+      );
       const lines: string[] = [];
       for (const p of extraProps) {
         if (!isValidIdentifier(p)) {
@@ -178,6 +181,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         const variantObj = variantDimByProp.get(p);
         if (variantObj) {
           lines.push(`  ${p}?: keyof typeof ${variantObj};`);
+          continue;
+        }
+        if (booleanVariantProps.has(p)) {
+          lines.push(`  ${p}?: boolean;`);
           continue;
         }
         const attrType = p.startsWith("data-") ? "string" : "any";
@@ -235,15 +242,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       if (slimBaseTypeText !== undefined) {
         return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
       }
-      return emitter.inferredIntrinsicPropsTypeText({
-        d,
-        tagName,
-        allowClassNameProp,
-        allowStyleProp,
-        allowSxProp,
-        skipProps,
-        includeRef: true,
-      });
+      return emitter.joinIntersection(
+        extrasTypeText,
+        emitter.inferredIntrinsicPropsTypeText({
+          d,
+          tagName,
+          allowClassNameProp,
+          allowStyleProp,
+          allowSxProp,
+          skipProps,
+          includeRef: true,
+        }),
+      );
     })();
     const finalTypeTextWithForwardedAs = withForwardedAsType(finalTypeText, includesForwardedAs);
 

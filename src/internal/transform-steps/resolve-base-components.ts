@@ -527,28 +527,30 @@ function buildInlineResolverVariantDimensions(args: {
     const hasCompleteCallsiteVisibility =
       !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue;
 
-    if (
-      variantKeys.length === 1 &&
-      !hasPropReferencingTemplateExpressions &&
-      hasCompleteCallsiteVisibility
-    ) {
-      const callSitesWithProp = usageResult.propsByUsage.filter(
-        (siteProps) => propName in siteProps,
-      ).length;
+    if (variantKeys.length === 1 && !hasPropReferencingTemplateExpressions) {
+      // Baking in requires complete callsite visibility — we remove the prop
+      // entirely, so external callers must not be able to pass different values.
+      if (hasCompleteCallsiteVisibility) {
+        const callSitesWithProp = usageResult.propsByUsage.filter(
+          (siteProps) => propName in siteProps,
+        ).length;
 
-      if (callSitesWithProp === totalCallSites) {
-        // Every call site uses the same constant value — bake it into the base style.
-        // The prop attribute is stripped from all call sites by inlineResolvedBaseComponent.
-        const [, singleVariantStyles] = Object.entries(variants)[0]!;
-        for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
-          foldedBaseSx[cssKey] = String(cssVal);
+        if (callSitesWithProp === totalCallSites) {
+          // Every call site uses the same constant value — bake it into the base style.
+          // The prop attribute is stripped from all call sites by inlineResolvedBaseComponent.
+          const [, singleVariantStyles] = Object.entries(variants)[0]!;
+          for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
+            foldedBaseSx[cssKey] = String(cssVal);
+          }
+          bakedInConsumedProps.push(propName);
+          continue;
         }
-        bakedInConsumedProps.push(propName);
-        continue;
       }
 
       // Single variant key, partial call sites: emit as a conditional style
       // in the main `styles` object rather than a separate lookup object.
+      // Safe without complete callsite visibility because the prop stays in
+      // the component interface — we emit `prop ? styles.x : undefined`.
       // Only safe when the value is truthy at runtime — falsy values like 0
       // would fail the truthy guard condition in the emitted code.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
