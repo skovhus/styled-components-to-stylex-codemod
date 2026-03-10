@@ -31,7 +31,7 @@ import {
   staticValueToLiteral,
   type ASTNodeRecord,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, normalizeCssContentValue, toSuffixFromProp } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import {
@@ -475,12 +475,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               let value = cssValueToJs(mapped.value, d.important, mapped.prop);
               if (mapped.prop === "content" && typeof value === "string") {
-                const m = value.match(/^['"]([\s\S]*)['"]$/);
-                if (m) {
-                  value = `"${m[1]}"`;
-                } else if (!value.startsWith('"') && !value.endsWith('"')) {
-                  value = `"${value}"`;
-                }
+                value = normalizeCssContentValue(value);
               }
               if (
                 typeof value === "string" ||

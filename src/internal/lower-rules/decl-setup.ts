@@ -17,7 +17,12 @@ import { createVariantApplier } from "./variant-utils.js";
 import { addStyleKeyMixin } from "./precompute.js";
 import type { LowerRulesState } from "./state.js";
 import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey, type ComputedKeyEntry } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  normalizeCssContentValue,
+  toStyleKey,
+  type ComputedKeyEntry,
+} from "../transform/helpers.js";
 import { expandStaticAnimationShorthand } from "../keyframes.js";
 
 export type DeclProcessingState = ReturnType<typeof createDeclProcessingState>;
@@ -325,12 +330,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
           let value = cssValueToJs(mapped.value, d.important, mapped.prop);
           if (mapped.prop === "content" && typeof value === "string") {
-            const m = value.match(/^['"]([\s\S]*)['"]$/);
-            if (m) {
-              value = `"${m[1]}"`;
-            } else if (!value.startsWith('"') && !value.endsWith('"')) {
-              value = `"${value}"`;
-            }
+            value = normalizeCssContentValue(value);
           }
           if (media) {
             const target = mediaStyles.get(media) ?? {};

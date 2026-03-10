@@ -5,6 +5,7 @@
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { isStyledTag } from "../transform/css-helpers.js";
+import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
 
 /**
  * Detects unsupported template patterns (component selectors, specificity hacks) and bails with warnings.
@@ -128,14 +129,6 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     }
     return false;
   };
-
-  const isFunctionNode = (node: any): boolean =>
-    !!node &&
-    (node.type === "FunctionDeclaration" ||
-      node.type === "FunctionExpression" ||
-      node.type === "ArrowFunctionExpression" ||
-      node.type === "ObjectMethod" ||
-      node.type === "ClassMethod");
 
   const isAssignedWithinFunction = (path: any): boolean => {
     let cur: any = path;
