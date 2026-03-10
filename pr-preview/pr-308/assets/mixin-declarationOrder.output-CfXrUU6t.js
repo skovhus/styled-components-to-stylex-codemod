@@ -1,0 +1,1 @@
+import{j as n}from"./index-5CtH5fA_.js";function o(t){return n.jsx("div",{className:"x78zum5 x5yr21d",children:t.children})}const c=(t,l)=>t,e=c(function(){return n.jsx("div",{children:"Hello"})}),i=()=>n.jsxs("div",{children:[n.jsx(o,{children:"Fallback content"}),n.jsx(e,{})]});export{i as App,e as MyComponent};
