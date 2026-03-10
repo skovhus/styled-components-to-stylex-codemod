@@ -1,0 +1,1 @@
+import{j as e}from"./index-D_hOTuXW.js";function t(c){const{children:i,active:s}=c;return e.jsx("div",{...{0:{className:"x1cbl2y9 x1tamke2"},1:{className:"x1tamke2 x1t391ir"}}[!!s<<0],children:i})}const x=()=>e.jsxs("div",{children:[e.jsx(t,{active:!0,children:"Active"}),e.jsx(t,{children:"Inactive"})]});export{x as App};
