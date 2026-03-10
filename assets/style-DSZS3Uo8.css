@@ -244,22 +244,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x18re5ia-B {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes xekv6nw-B {
   0% {
     opacity: 0;
   }
 
   100% {
+    opacity: 1;
+  }
+}
+
+@keyframes x18re5ia-B {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
   }
 }
@@ -1208,7 +1208,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #bf4f74;
 }
 
-.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
+.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -2960,7 +2960,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: 1;
 }
 
-.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
+.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
@@ -3386,8 +3386,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-bottom-color: var(--xufgxy3);
 }
 
+.x1bqy6mi:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-left-radius: 6px;
+}
+
+.x828b17:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-right-radius: 6px;
+}
+
 .x1q0q8m5:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-style: solid;
+}
+
+.x1qhh985:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-width: 0;
 }
 
 .xso031l:not(#\#):not(#\#):not(#\#):not(#\#) {
@@ -3450,8 +3462,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-top-color: var(--x1078q4);
 }
 
+.x1blczqt:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-left-radius: 6px;
+}
+
+.xgs1500:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-right-radius: 6px;
+}
+
 .x13fuv20:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-top-style: solid;
+}
+
+.x972fbf:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-top-width: 0;
 }
 
 .x178xt8z:not(#\#):not(#\#):not(#\#):not(#\#) {
