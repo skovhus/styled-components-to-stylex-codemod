@@ -34,7 +34,7 @@ BaseMenu.Separator = () => (
 function StyledMenu(props: Omit<React.ComponentPropsWithRef<typeof BaseMenu>, "style">) {
   const { className, ...rest } = props;
 
-  return <BaseMenu {...rest} {...mergedSx(styles.styledMenu, className)} />;
+  return <BaseMenu {...rest} {...mergedSx(styles.menu, className)} />;
 }
 
 StyledMenu.Section = (BaseMenu as any).Section;
@@ -60,7 +60,7 @@ export function App() {
 }
 
 const styles = stylex.create({
-  styledMenu: {
+  menu: {
     minWidth: "220px",
     paddingBlock: "10px",
     paddingInline: "12px",

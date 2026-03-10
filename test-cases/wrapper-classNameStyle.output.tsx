@@ -24,7 +24,7 @@ function StyledBadge(
   const { className, children, style, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx(styles.styledBadge, className, style)}>
+    <span {...rest} {...mergedSx(styles.badge, className, style)}>
       {children}
     </span>
   );
@@ -54,7 +54,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledBadge: {
+  badge: {
     display: "inline-block",
     flexShrink: 0,
     width: "12px",

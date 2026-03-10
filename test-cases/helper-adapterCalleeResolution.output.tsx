@@ -3,11 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { fontWeightVars, fontSizeVars, transitionSpeed } from "./tokens.stylex";
 
 export function Text({ children }: { children: React.ReactNode }) {
-  return <span sx={styles.styledText}>{children}</span>;
+  return <span sx={styles.text}>{children}</span>;
 }
 
 export function Button({ children }: { children: React.ReactNode }) {
-  return <button sx={styles.styledButton}>{children}</button>;
+  return <button sx={styles.button}>{children}</button>;
 }
 
 export const App = () => (
@@ -22,12 +22,12 @@ const styles = stylex.create({
    * Test case for adapter callee resolution.
    * The adapter should resolve these helper function calls to StyleX variables.
    */
-  styledText: {
+  text: {
     fontWeight: fontWeightVars.medium,
     fontSize: fontSizeVars.medium,
     transition: `color ${transitionSpeed.fast}`,
   },
-  styledButton: {
+  button: {
     fontWeight: fontWeightVars.bold,
     fontSize: fontSizeVars.small,
     transition: `background ${transitionSpeed.normal}`,

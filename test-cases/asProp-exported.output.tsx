@@ -42,10 +42,7 @@ export function StyledWrapper<C extends React.ElementType = typeof BaseComponent
   return (
     <Component
       {...rest}
-      {...stylex.props(
-        styles.styledWrapper,
-        variant === "primary" && styles.styledWrapperVariantPrimary,
-      )}
+      {...stylex.props(styles.wrapper, variant === "primary" && styles.wrapperVariantPrimary)}
     />
   );
 }
@@ -68,11 +65,11 @@ const styles = stylex.create({
     overflow: "hidden",
     position: "relative",
   },
-  styledWrapper: {
+  wrapper: {
     padding: "16px",
     backgroundColor: "gray",
   },
-  styledWrapperVariantPrimary: {
+  wrapperVariantPrimary: {
     backgroundColor: "blue",
   },
 });

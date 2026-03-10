@@ -13,6 +13,14 @@ export function toStyleKey(name: string): string {
   return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
+/** Strip "styled"/"Styled" prefix when followed by an uppercase letter (e.g. StyledButton → Button). */
+export function stripStyledPrefix(name: string): string {
+  if (/^[sS]tyled[A-Z]/.test(name)) {
+    return name.slice(6);
+  }
+  return name;
+}
+
 /**
  * Entry for a computed property key in style objects.
  * Used for dynamic keys like `[breakpoints.phone]` in StyleX styles.

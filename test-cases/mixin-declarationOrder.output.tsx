@@ -2,14 +2,14 @@ import * as stylex from "@stylexjs/stylex";
 import React from "react";
 
 const styles = stylex.create({
-  styledFallback: {
+  fallback: {
     display: "flex",
     height: "100%",
   },
 });
 
 function StyledFallback(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.styledFallback}>{props.children}</div>;
+  return <div sx={styles.fallback}>{props.children}</div>;
 }
 
 // Simulate a HOC that takes options
