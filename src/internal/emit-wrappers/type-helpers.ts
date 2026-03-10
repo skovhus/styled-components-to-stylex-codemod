@@ -87,6 +87,14 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
  * that derive their prop type via `keyof typeof variantObj`.
  * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
  */
+/**
+ * Builds a set of prop names that correspond to static boolean variants.
+ * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
+ */
+export function buildBooleanVariantPropsSet(d: StyledDecl): Set<string> {
+  return new Set((d.staticBooleanVariants ?? []).map((sbv) => sbv.propName));
+}
+
 export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   return new Map(
     (d.variantDimensions ?? [])

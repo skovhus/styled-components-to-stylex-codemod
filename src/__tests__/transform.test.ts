@@ -16,6 +16,9 @@ import type { CrossFileInfo } from "../internal/transform-types.js";
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 
+/** Test cases that intentionally test partial conversion with leftover css helpers. */
+const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
+
 function isBailOutFixture(filename: string): boolean {
   return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
 }
@@ -329,8 +332,6 @@ describe("output invariants", () => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      // Exception: test cases that intentionally test partial conversion with leftover css helpers
-      const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
       const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
         ? ["styled", "keyframes", "createGlobalStyle"]
         : ["styled", "css", "keyframes", "createGlobalStyle"];

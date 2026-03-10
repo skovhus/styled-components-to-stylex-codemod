@@ -16,6 +16,7 @@ import {
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import {
+  buildBooleanVariantPropsSet,
   buildVariantDimPropTypeMap,
   sortVariantEntriesBySpecificity,
   VOID_TAGS,
@@ -625,9 +626,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return "{}";
         }
         const variantDimByProp = buildVariantDimPropTypeMap(d);
-        const booleanVariantProps = new Set(
-          (d.staticBooleanVariants ?? []).map((sbv) => sbv.propName),
-        );
+        const booleanVariantProps = buildBooleanVariantPropsSet(d);
 
         const lines = filtered.map((k) => {
           const variantObj = variantDimByProp.get(k);

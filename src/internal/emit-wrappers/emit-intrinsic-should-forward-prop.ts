@@ -11,6 +11,7 @@ import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } f
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import {
+  buildBooleanVariantPropsSet,
   buildVariantDimPropTypeMap,
   sortVariantEntriesBySpecificity,
   VOID_TAGS,
@@ -170,9 +171,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           : explicit;
       }
       const variantDimByProp = buildVariantDimPropTypeMap(d);
-      const booleanVariantProps = new Set(
-        (d.staticBooleanVariants ?? []).map((sbv) => sbv.propName),
-      );
+      const booleanVariantProps = buildBooleanVariantPropsSet(d);
       const lines: string[] = [];
       for (const p of extraProps) {
         if (!isValidIdentifier(p)) {
