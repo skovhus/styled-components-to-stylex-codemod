@@ -54,7 +54,11 @@ const FIXTURE_EXTENSIONS: {
 }[] = [
   { inputSuffix: ".input.tsx", outputSuffix: ".output.tsx", parser: "tsx" },
   { inputSuffix: ".input.jsx", outputSuffix: ".output.jsx", parser: "babel" },
-  { inputSuffix: ".flow.input.jsx", outputSuffix: ".flow.output.jsx", parser: "flow" },
+  {
+    inputSuffix: ".flow.input.jsx",
+    outputSuffix: ".flow.output.jsx",
+    parser: "flow",
+  },
 ];
 
 function getTestCases(): FixtureCase[] {
@@ -143,7 +147,12 @@ function readTestCase(
 
   const input = readFileSync(resolvedInputPath, "utf-8");
   const output = readFileSync(resolvedOutputPath, "utf-8");
-  return { input, output, inputPath: resolvedInputPath, outputPath: resolvedOutputPath };
+  return {
+    input,
+    output,
+    inputPath: resolvedInputPath,
+    outputPath: resolvedOutputPath,
+  };
 }
 
 function getExpectedWarningType(source: string, filePath: string): string {
@@ -195,7 +204,12 @@ function runTransformWithDiagnostics(
   const jWithParser = jscodeshift.withParser(parser);
   const result = transformWithWarnings(
     { source, path: filePath },
-    { jscodeshift: jWithParser, j: jWithParser, stats: () => {}, report: () => {} },
+    {
+      jscodeshift: jWithParser,
+      j: jWithParser,
+      stats: () => {},
+      report: () => {},
+    },
     opts,
   );
   return result;
@@ -679,7 +693,7 @@ export const App = () => <Toggle $active />;
     });
   });
 
-  it("should NOT emit transient rename warning for non-exported component", () => {
+  it("should strip $ prefix for non-exported component without emitting warning", () => {
     const source = `
 import styled from "styled-components";
 
@@ -697,7 +711,8 @@ export const App = () => <Toggle $active />;
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("$active");
+    expect(result.code).toContain("active");
+    expect(result.code).not.toContain("$active");
     const renameWarnings = result.warnings.filter(
       (w) =>
         w.type ===
@@ -891,7 +906,10 @@ export const App = () => (
     } satisfies Adapter;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "helper-dynamicTransitionSpeed.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "helper-dynamicTransitionSpeed.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: adapterWithoutCallResolution },
     );
@@ -948,7 +966,10 @@ export const App = () => <Box level="high">Hello</Box>;
     } satisfies Adapter;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "helper-callPropArgResolved.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "helper-callPropArgResolved.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: adapterWithCallableResolution },
     );
@@ -1947,7 +1968,8 @@ export const App = () => <Dot />;
 `;
     const result = runTransformWithDiagnostics(source);
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("$active || $completed");
+    expect(result.code).toContain("active || completed");
+    expect(result.code).not.toContain("$active");
     expect(result.code).toContain("dotActiveOrCompleted");
   });
 
@@ -1966,7 +1988,8 @@ export const App = () => <Step />;
 `;
     const result = runTransformWithDiagnostics(source);
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("!($active || $completed)");
+    expect(result.code).toContain("!(active || completed)");
+    expect(result.code).not.toContain("$active");
     expect(result.code).toContain("stepNotActiveOrCompleted");
   });
 
@@ -1986,7 +2009,8 @@ export const App = () => <Badge />;
 `;
     const result = runTransformWithDiagnostics(source);
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("$primary || $accent");
+    expect(result.code).toContain("primary || accent");
+    expect(result.code).not.toContain("$primary");
     expect(result.code).toContain("badgeVisiblePrimaryOrAccent");
   });
 
@@ -2045,7 +2069,10 @@ export const App = () => <Text>Hello</Text>;
           expr: "helpers.truncate",
           imports: [
             {
-              from: { kind: "specifier" as const, value: "./lib/helpers.stylex" },
+              from: {
+                kind: "specifier" as const,
+                value: "./lib/helpers.stylex",
+              },
               names: [{ imported: "helpers" }],
             },
           ],
@@ -2858,7 +2885,10 @@ export const App = () => <Box>Hello</Box>;
       useSxProp: false,
       themeHook: {
         functionName: "useDesignTheme",
-        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+        importSource: {
+          kind: "specifier" as const,
+          value: "@company/theme-hooks",
+        },
       },
     } as Adapter;
 
@@ -2950,7 +2980,10 @@ export const App = () => <Box>Hello</Box>;
       useSxProp: false,
       themeHook: {
         functionName: "useTheme",
-        importSource: { kind: "specifier" as const, value: "@company/theme-hooks" },
+        importSource: {
+          kind: "specifier" as const,
+          value: "@company/theme-hooks",
+        },
       },
     } as Adapter;
 
@@ -2965,7 +2998,9 @@ export const App = () => <Box>Hello</Box>;
     const outputRoot = j(result.code ?? "");
     let useThemeLocalBindingCount = 0;
     outputRoot
-      .find(j.ImportDeclaration, { source: { value: "@company/theme-hooks" } } as any)
+      .find(j.ImportDeclaration, {
+        source: { value: "@company/theme-hooks" },
+      } as any)
       .forEach((importPath: any) => {
         for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
           if (specifier.type !== "ImportSpecifier") {
@@ -3805,7 +3840,10 @@ export function App() {
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-templateAndJsxVariants.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-templateAndJsxVariants.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -3840,7 +3878,10 @@ export function App() {
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-nonCanonicalNumericKeys.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-nonCanonicalNumericKeys.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -3874,7 +3915,10 @@ export function App() {
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-falsyStringLiteral.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-falsyStringLiteral.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -3901,7 +3945,10 @@ export const Container = styled(Flex)\`
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-noLocalCallsites.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-noLocalCallsites.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -3929,7 +3976,10 @@ export function App() {
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-unknownAttrsSource.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-unknownAttrsSource.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -3986,7 +4036,10 @@ export function App() {
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "inlineBase-overlapTemplateAndInline.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-overlapTemplateAndInline.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4033,7 +4086,10 @@ export function App() {
     let result: ReturnType<typeof transformWithWarnings> | undefined;
     expect(() => {
       result = transformWithWarnings(
-        { source, path: join(testCasesDir, "inlineBase-malformedResolverResult.input.tsx") },
+        {
+          source,
+          path: join(testCasesDir, "inlineBase-malformedResolverResult.input.tsx"),
+        },
         { jscodeshift: j, j, stats: () => {}, report: () => {} },
         { adapter: malformedAdapter },
       );
@@ -4143,7 +4199,10 @@ export const App = () => (
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "event-handler-annotation.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "event-handler-annotation.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4168,7 +4227,10 @@ export const App = () => (
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "event-handler-annotation-parens.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "event-handler-annotation-parens.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4199,7 +4261,10 @@ export const App = () => <Box>URL Background</Box>;
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "backgroundImage-urlPreservation.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "backgroundImage-urlPreservation.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4223,7 +4288,10 @@ export const App = () => <Box>Data URI Background</Box>;
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "backgroundImage-dataUriPreservation.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "backgroundImage-dataUriPreservation.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4251,7 +4319,10 @@ export const App = () => <Box>Gradient Background</Box>;
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "backgroundImage-gradientNormalize.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "backgroundImage-gradientNormalize.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
@@ -4393,7 +4464,10 @@ export const App = () => <Box $animate>Multi</Box>;
 `;
 
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "keyframes-cssConditional.input.tsx") },
+      {
+        source,
+        path: join(testCasesDir, "keyframes-cssConditional.input.tsx"),
+      },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );

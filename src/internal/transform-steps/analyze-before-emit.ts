@@ -78,7 +78,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         }
         const name = getIdentifierName(d.id);
         if (name && declByLocal.has(name)) {
-          exportedComponents.set(name, { exportName: name, isDefault: false, isSpecifier: false });
+          exportedComponents.set(name, {
+            exportName: name,
+            isDefault: false,
+            isSpecifier: false,
+          });
         }
       }
     }
@@ -89,7 +93,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       const localName = getIdentifierName(spec.local);
       if (localName && declByLocal.has(localName)) {
         const exportName = getIdentifierName(spec.exported) ?? localName;
-        exportedComponents.set(localName, { exportName, isDefault: false, isSpecifier: true });
+        exportedComponents.set(localName, {
+          exportName,
+          isDefault: false,
+          isSpecifier: true,
+        });
       }
     }
   });
@@ -98,7 +106,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   root.find(j.ExportDefaultDeclaration).forEach((p) => {
     const name = getIdentifierName(p.node.declaration);
     if (name && declByLocal.has(name)) {
-      exportedComponents.set(name, { exportName: "default", isDefault: true, isSpecifier: false });
+      exportedComponents.set(name, {
+        exportName: "default",
+        isDefault: true,
+        isSpecifier: false,
+      });
     }
   });
 
@@ -341,7 +353,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       } as any)
       .forEach((p: any) => collectFromOpening(p.node.openingElement));
     root
-      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as any)
+      .find(j.JSXSelfClosingElement, {
+        name: { type: "JSXIdentifier", name },
+      } as any)
       .forEach((p: any) => collectFromOpening(p.node));
     return { className: foundClassName, style: foundStyle, ref: foundRef };
   };
@@ -412,7 +426,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       } as object)
       .forEach((p) => checkOpening(p.node.openingElement as { attributes?: JsxAttr[] }));
     root
-      .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as object)
+      .find(j.JSXSelfClosingElement, {
+        name: { type: "JSXIdentifier", name },
+      } as object)
       .forEach((p) => checkOpening(p.node as { attributes?: JsxAttr[] }));
     return found;
   };
@@ -477,15 +493,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsRefProp = extResult.ref;
   }
 
-  // Rename transient ($-prefixed) props for exported components.
-  // styled-components v6 filters $-prefixed props when the wrapped target is a plain function
-  // (not a styled component). The codemod converts styled(Component) to a plain function,
-  // so any consumer wrapping it with styled() would silently lose transient props.
-  // Stripping the $ prefix prevents this filtering.
+  // Rename transient ($-prefixed) props for all styled components.
+  // The $ prefix is a styled-components convention for transient props that should not be
+  // forwarded to the DOM. In StyleX output, these are plain React component props where
+  // the $ prefix is unnecessary and inconsistent with StyleX conventions.
+  // For exported components, cross-file consumer patching is also emitted.
+  const resolverImportNames = collectResolverImportNames(ctx);
   for (const decl of styledDecls) {
-    if (!exportedComponents.has(decl.localName)) {
-      continue;
-    }
     const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       continue;
@@ -508,36 +522,42 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       // Don't rename props when the propsType references a named type (interface
       // or type alias) that is used elsewhere in the file — mutating the shared
       // declaration would break non-styled code that also references it.
-      const referencedTypeName = extractReferencedTypeName(decl.propsType);
+      // Also skip when the type is imported (not locally defined) since we can't
+      // modify the external type declaration.
+      const referencedTypeNames = collectReferencedTypeNames(decl.propsType);
       if (
-        referencedTypeName != null &&
-        isTypeNameUsedElsewhere(root, j, referencedTypeName, decl.localName)
+        referencedTypeNames.some(
+          (name) =>
+            isTypeNameUsedElsewhere(root, j, name, decl.localName) ||
+            !isTypeLocallyDefined(root, j, name),
+        )
       ) {
         continue;
       }
-      decl.transientPropRenames = renames;
-      const exportInfo = exportedComponents.get(decl.localName);
-      const exportName = exportInfo?.exportName ?? decl.localName;
-      const renameRecord: Record<string, string> = {};
-      const renameList: string[] = [];
-      for (const [from, to] of renames) {
-        renameRecord[from] = to;
-        renameList.push(`${from} → ${to}`);
+      // Skip renaming individual props whose $-prefixed name also exists as a
+      // module-scope binding (e.g., import { $colors } from "...") or a
+      // resolver-generated import (e.g., theme token variables), since
+      // renameIdentifiersInAst cannot distinguish prop references from other bindings.
+      const propsToSkip: string[] = [];
+      for (const prop of renames.keys()) {
+        if (isModuleScopeBinding(root, j, prop, decl.localName) || resolverImportNames.has(prop)) {
+          propsToSkip.push(prop);
+        }
       }
-      ctx.warnings.push({
-        severity: "info",
-        type: "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
-        loc: decl.loc ?? null,
-        context: { componentName: decl.localName, renames: renameList.join(", ") },
-      });
-      ctx.transientPropRenames ??= [];
-      ctx.transientPropRenames.push({ exportName, renames: renameRecord });
+      for (const prop of propsToSkip) {
+        renames.delete(prop);
+      }
+      decl.transientPropRenames = renames;
       applyTransientPropRenames(decl, renames);
       renameTransientPropsInReferencedTypes(
         root,
         j,
         decl.propsType as
-          | { type?: string; typeName?: { type?: string; name?: string }; types?: unknown[] }
+          | {
+              type?: string;
+              typeName?: { type?: string; name?: string };
+              types?: unknown[];
+            }
           | undefined,
         renames,
       );
@@ -551,6 +571,28 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
             renameIdentifiersInAst(value, renames);
           }
         }
+      }
+      // For exported components, emit cross-file consumer patching info and warnings
+      const exportInfo = exportedComponents.get(decl.localName);
+      if (exportInfo) {
+        const exportName = exportInfo.exportName ?? decl.localName;
+        const renameRecord: Record<string, string> = {};
+        const renameList: string[] = [];
+        for (const [from, to] of renames) {
+          renameRecord[from] = to;
+          renameList.push(`${from} → ${to}`);
+        }
+        ctx.warnings.push({
+          severity: "info",
+          type: "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
+          loc: decl.loc ?? null,
+          context: {
+            componentName: decl.localName,
+            renames: renameList.join(", "),
+          },
+        });
+        ctx.transientPropRenames ??= [];
+        ctx.transientPropRenames.push({ exportName, renames: renameRecord });
       }
     }
   }
@@ -658,13 +700,18 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind === "intrinsic") {
       // Check for as/forwardedAs usage in JSX
       const el = root.find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+        openingElement: {
+          name: { type: "JSXIdentifier", name: decl.localName },
+        },
       });
       const hasAs =
         el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "as" } }).size() > 0;
       const hasForwardedAs =
-        el.find(j.JSXAttribute, { name: { type: "JSXIdentifier", name: "forwardedAs" } }).size() >
-        0;
+        el
+          .find(j.JSXAttribute, {
+            name: { type: "JSXIdentifier", name: "forwardedAs" },
+          })
+          .size() > 0;
       // Also check if props type contains polymorphic `as`
       const propsTypeHasAs =
         decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType });
@@ -866,6 +913,115 @@ function extractReferencedTypeName(propsType: unknown): string | null {
     return node.typeName.name ?? null;
   }
   return null;
+}
+
+/**
+ * Collects all referenced type names from a propsType AST node,
+ * including those inside intersection types.
+ */
+function collectReferencedTypeNames(propsType: unknown): string[] {
+  const names: string[] = [];
+  const name = extractReferencedTypeName(propsType);
+  if (name) {
+    names.push(name);
+  }
+  const node = propsType as { type?: string; types?: unknown[] } | undefined;
+  if (node?.type === "TSIntersectionType" && Array.isArray(node.types)) {
+    for (const t of node.types) {
+      names.push(...collectReferencedTypeNames(t));
+    }
+  }
+  return names;
+}
+
+/**
+ * Returns true when a type name is defined locally (as an interface or type alias),
+ * as opposed to being imported from another module.
+ */
+function isTypeLocallyDefined(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  typeName: string,
+): boolean {
+  return (
+    root
+      .find(j.TSInterfaceDeclaration)
+      .filter((p: unknown) => {
+        const node = p as { node?: { id?: { name?: string } } };
+        return node.node?.id?.name === typeName;
+      })
+      .size() > 0 ||
+    root
+      .find(j.TSTypeAliasDeclaration)
+      .filter((p: unknown) => {
+        const node = p as { node?: { id?: { name?: string } } };
+        return node.node?.id?.name === typeName;
+      })
+      .size() > 0
+  );
+}
+
+/**
+ * Returns true when a name is bound at module scope (import specifier, top-level
+ * variable, etc.) other than the given owner's declaration.
+ */
+function isModuleScopeBinding(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  name: string,
+  ownerLocalName: string,
+): boolean {
+  // Check import specifiers
+  const hasImport =
+    root
+      .find(j.ImportSpecifier)
+      .filter((p) => {
+        const local = p.node.local?.name ?? p.node.imported?.name;
+        return local === name;
+      })
+      .size() > 0 ||
+    root
+      .find(j.ImportDefaultSpecifier)
+      .filter((p) => p.node.local?.name === name)
+      .size() > 0;
+  if (hasImport) {
+    return true;
+  }
+  // Check top-level variable declarations (excluding the owner)
+  return (
+    root
+      .find(j.VariableDeclarator)
+      .filter((p) => {
+        const id = p.node.id;
+        if (id.type !== "Identifier" || id.name !== name) {
+          return false;
+        }
+        return id.name !== ownerLocalName;
+      })
+      .filter((p) => {
+        // Only top-level declarations
+        const parent = p.parentPath?.parentPath;
+        return parent?.node?.type === "Program";
+      })
+      .size() > 0
+  );
+}
+
+/**
+ * Collects all local identifier names that will be introduced by resolver imports
+ * (e.g., theme token variables like `$colors` from `tokens.stylex`).
+ */
+function collectResolverImportNames(ctx: TransformContext): Set<string> {
+  const names = new Set<string>();
+  for (const imp of ctx.resolverImports.values()) {
+    for (const n of imp.names ?? []) {
+      const local = n.local ?? n.imported;
+      if (local) {
+        names.add(local);
+      }
+    }
+  }
+  return names;
 }
 
 /**
@@ -1277,7 +1433,11 @@ function renameTransientPropsInReferencedTypes(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   propsType:
-    | { type?: string; typeName?: { type?: string; name?: string }; types?: unknown[] }
+    | {
+        type?: string;
+        typeName?: { type?: string; name?: string };
+        types?: unknown[];
+      }
     | undefined,
   renames: Map<string, string>,
 ): void {
@@ -1339,7 +1499,10 @@ function walkTypePropNames(
   }
   if (typeNode.type === "TSTypeLiteral" && Array.isArray(typeNode.members)) {
     for (const member of typeNode.members) {
-      const m = member as { type?: string; key?: { type?: string; name?: string } };
+      const m = member as {
+        type?: string;
+        key?: { type?: string; name?: string };
+      };
       if (m.type === "TSPropertySignature" && m.key?.type === "Identifier" && m.key.name) {
         visitor(m.key.name, m.key as { name: string });
       }
