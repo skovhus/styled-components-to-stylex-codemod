@@ -6,7 +6,7 @@ import { $interaction } from "./lib/interaction.stylex";
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <div sx={[styles.box, styles.boxHighlightExpand]}>Mixed: base + condition-only</div>
+      <div sx={styles.box}>Mixed: base + condition-only</div>
     </div>
   );
 }
@@ -14,9 +14,6 @@ export function App() {
 const styles = stylex.create({
   box: {
     padding: "8px",
-    backgroundColor: "#f0f0f0",
-  },
-  boxHighlightExpand: {
     backgroundColor: {
       default: "#f0f0f0",
       ":active": "#e0e0e0",

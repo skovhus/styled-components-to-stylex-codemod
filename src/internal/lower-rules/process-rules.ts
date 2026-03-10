@@ -38,7 +38,6 @@ import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { findSupportedAtRule, isSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
-import { addStyleKeyMixin } from "./precompute.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -1445,8 +1444,9 @@ function handlePseudoAlias(
 }
 
 /**
- * Handles `pseudoExpand` result: builds ONE merged style object with all pseudo
- * expansions inline, applied statically (no runtime wrapper function).
+ * Handles `pseudoExpand` result: merges pseudo expansions into the root style
+ * object (via perPropPseudo) when unguarded, or creates a separate guarded
+ * style object for conditional application.
  *
  * For each CSS property, creates a nested structure like:
  * ```
@@ -1464,13 +1464,16 @@ function handlePseudoExpand(
     return "bail";
   }
   const { flatBucket, guard } = prepared;
-  const { state, decl, extraStyleObjects, styleObj, cssHelperPropValues, getComposedDefaultValue } =
-    ctx;
+  const {
+    state,
+    decl,
+    extraStyleObjects,
+    perPropPseudo,
+    styleObj,
+    cssHelperPropValues,
+    getComposedDefaultValue,
+  } = ctx;
   const { parseExpr, resolverImports } = state;
-
-  // Build the style key
-  const guardSuffix = guard ? toSuffixFromProp(guard.when) : "";
-  const styleKey = `${decl.styleKey}${guardSuffix}${capitalize(kebabToCamelCase(importedName))}`;
 
   // Pre-parse condition expressions once (reused across all CSS properties via cloneAstNode)
   const parsedConditions = result.expansions.map((e) =>
@@ -1480,33 +1483,65 @@ function handlePseudoExpand(
     return "bail";
   }
 
-  // Build ONE merged style object with all pseudo expansions
-  const mergedStyleObj: Record<string, unknown> = {};
-  for (const prop of Object.keys(flatBucket)) {
-    const value = flatBucket[prop];
-    const baseValue =
-      (styleObj as Record<string, unknown>)[prop] ??
-      (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
-
-    const nested: Record<string, unknown> = { default: baseValue };
+  const applyExpansionPseudos = (target: Record<string, unknown>, value: unknown): void => {
     for (let i = 0; i < result.expansions.length; i++) {
       const expansion = result.expansions[i]!;
       const pseudo = `:${expansion.pseudo}`;
       if (expansion.condition) {
-        nested[pseudo] = {
-          default: null,
-          __computedKeys: [
-            { keyExpr: cloneAstNode(parsedConditions[i]!), value: cloneAstNode(value) },
-          ],
+        const newEntry = {
+          keyExpr: cloneAstNode(parsedConditions[i]!),
+          value: cloneAstNode(value),
         };
+        const existing = target[pseudo];
+        if (existing && typeof existing === "object" && "__computedKeys" in existing) {
+          (existing.__computedKeys as unknown[]).push(newEntry);
+        } else {
+          target[pseudo] = { default: null, __computedKeys: [newEntry] };
+        }
       } else {
-        nested[pseudo] = cloneAstNode(value);
+        target[pseudo] = cloneAstNode(value);
       }
     }
-    mergedStyleObj[prop] = nested;
-  }
+  };
 
-  extraStyleObjects.set(styleKey, mergedStyleObj);
+  if (!guard) {
+    // No guard: merge directly into perPropPseudo so expansions become part of the root style.
+    // NOTE: when after-base segments are active (from resolved styles helpers mid-template),
+    // the pseudo-expand properties still merge into the base styleObj rather than the segment.
+    // This is acceptable because pseudo-expand produces per-property pseudo maps whose
+    // `default` values are copies of the base — they don't introduce new cascade conflicts
+    // beyond what the base already has.
+    for (const prop of Object.keys(flatBucket)) {
+      const value = flatBucket[prop];
+      const baseValue =
+        (styleObj as Record<string, unknown>)[prop] ??
+        (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+      perPropPseudo[prop] ??= {};
+      const existing = perPropPseudo[prop]!;
+      if (!("default" in existing)) {
+        existing.default = baseValue;
+      }
+      applyExpansionPseudos(existing, value);
+    }
+  } else {
+    // Guarded: create separate style object for conditional application
+    const guardSuffix = toSuffixFromProp(guard.when);
+    const styleKey = `${decl.styleKey}${guardSuffix}${capitalize(kebabToCamelCase(importedName))}`;
+    const mergedStyleObj: Record<string, unknown> = {};
+    for (const prop of Object.keys(flatBucket)) {
+      const value = flatBucket[prop];
+      const baseValue =
+        (styleObj as Record<string, unknown>)[prop] ??
+        (cssHelperPropValues.has(prop) ? getComposedDefaultValue(prop) : null);
+      const nested: Record<string, unknown> = { default: baseValue };
+      applyExpansionPseudos(nested, value);
+      mergedStyleObj[prop] = nested;
+    }
+    extraStyleObjects.set(styleKey, mergedStyleObj);
+    decl.pseudoExpandSelectors ??= [];
+    decl.pseudoExpandSelectors.push({ styleKey, guard });
+    decl.needsWrapperComponent = true;
+  }
 
   // Collect imports: shared + per-condition
   for (const impSpec of result.imports) {
@@ -1518,18 +1553,6 @@ function handlePseudoExpand(
         resolverImports.set(JSON.stringify(impSpec), impSpec);
       }
     }
-  }
-
-  // When there's a guard, we need a wrapper component to evaluate the condition at runtime.
-  // Register on pseudoExpandSelectors so the wrapper emitter applies the conditional logic.
-  // When there's no guard, the styleKey is added to extraStyleKeys which works for both
-  // wrapper components and inline JSX paths.
-  if (guard) {
-    decl.pseudoExpandSelectors ??= [];
-    decl.pseudoExpandSelectors.push({ styleKey, guard });
-    decl.needsWrapperComponent = true;
-  } else {
-    addStyleKeyMixin(decl, styleKey, { afterBase: true });
   }
 }
 

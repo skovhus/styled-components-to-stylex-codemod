@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
 
 function Button(props: React.PropsWithChildren<{}>) {
-  return <button sx={[styles.button, styles.buttonHighlightExpand]}>{props.children}</button>;
+  return <button sx={styles.button}>{props.children}</button>;
 }
 
 export function App() {
@@ -20,10 +20,6 @@ const styles = stylex.create({
   button: {
     paddingBlock: "8px",
     paddingInline: "16px",
-    backgroundColor: "#f0f0f0",
-    color: "#333",
-  },
-  buttonHighlightExpand: {
     backgroundColor: {
       default: "#f0f0f0",
       ":active": "#e0e0e0",
