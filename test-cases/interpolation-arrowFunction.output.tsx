@@ -2,19 +2,16 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type GradientBoxProps = React.PropsWithChildren<{
-  $direction?: "horizontal" | "vertical";
+  direction?: "horizontal" | "vertical";
 }>;
 
 // Arrow function in background (10 occurrences)
 function GradientBox(props: GradientBoxProps) {
-  const { children, $direction } = props;
+  const { children, direction } = props;
 
   return (
     <div
-      sx={[
-        styles.gradientBox,
-        $direction === "horizontal" && styles.gradientBoxDirectionHorizontal,
-      ]}
+      sx={[styles.gradientBox, direction === "horizontal" && styles.gradientBoxDirectionHorizontal]}
     >
       {children}
     </div>
@@ -22,19 +19,16 @@ function GradientBox(props: GradientBoxProps) {
 }
 
 type TabItemProps = React.PropsWithChildren<{
-  $isActive?: boolean;
+  isActive?: boolean;
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {
-  const { children, $isActive, ...rest } = props;
+  const { children, isActive, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      sx={[styles.tabItem, $isActive ? styles.tabItemActive : styles.tabItemNotActive]}
-    >
+    <div {...rest} sx={[styles.tabItem, isActive ? styles.tabItemActive : styles.tabItemNotActive]}>
       {children}
     </div>
   );
@@ -42,8 +36,8 @@ function TabItem(props: TabItemProps) {
 
 export const App = () => (
   <div>
-    <GradientBox $direction="horizontal">Horizontal Gradient</GradientBox>
-    <TabItem $isActive>Active Tab</TabItem>
+    <GradientBox direction="horizontal">Horizontal Gradient</GradientBox>
+    <TabItem isActive>Active Tab</TabItem>
     <TabItem>Inactive Tab</TabItem>
   </div>
 );

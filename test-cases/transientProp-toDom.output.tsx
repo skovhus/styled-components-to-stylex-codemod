@@ -39,13 +39,13 @@ export function Image(props: ImageProps) {
 }
 
 type SliderProps = React.PropsWithChildren<{
-  $height: number;
+  height: number;
 }>;
 
 function Slider(props: SliderProps) {
-  const { children, $height } = props;
+  const { children, height } = props;
 
-  return <div sx={[styles.slider, styles.sliderHeight($height)]}>{children}</div>;
+  return <div sx={[styles.slider, styles.sliderHeight(height)]}>{children}</div>;
 }
 
 export function App() {
@@ -59,7 +59,7 @@ export function App() {
       <Image isInactive src="/avatar.png" alt="Avatar" />
       {/* Internal components with transient props */}
       <div sx={styles.point} />
-      <Slider $height={pickerHeight}>Slider content</Slider>
+      <Slider height={pickerHeight}>Slider content</Slider>
     </div>
   );
 }

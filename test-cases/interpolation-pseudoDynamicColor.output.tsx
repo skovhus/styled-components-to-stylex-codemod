@@ -2,20 +2,20 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type SwatchProps = React.PropsWithChildren<{
-  $color: string;
-  $shadow?: string;
+  color: string;
+  shadow?: string;
 }>;
 
 function Swatch(props: SwatchProps) {
-  const { children, $color } = props;
+  const { children, color } = props;
 
   return (
     <div
       sx={[
         styles.swatch,
-        styles.swatchBackgroundColor($color),
+        styles.swatchBackgroundColor(color),
         styles.swatchBoxShadow({
-          $color,
+          color,
         }),
       ]}
     >
@@ -27,9 +27,9 @@ function Swatch(props: SwatchProps) {
 export function App() {
   return (
     <div style={{ display: "flex", gap: 12, padding: 16 }}>
-      <Swatch $color="#bf4f74">Pink</Swatch>
-      <Swatch $color="#4caf50">Green</Swatch>
-      <Swatch $color="#2196f3">Blue</Swatch>
+      <Swatch color="#bf4f74">Pink</Swatch>
+      <Swatch color="#4caf50">Green</Swatch>
+      <Swatch color="#2196f3">Blue</Swatch>
     </div>
   );
 }
@@ -48,7 +48,7 @@ const styles = stylex.create({
   swatchBoxShadow: (props) => ({
     boxShadow: {
       default: null,
-      ":hover": `0 0 0 3px ${props.$color}`,
+      ":hover": `0 0 0 3px ${props.color}`,
     },
   }),
 });

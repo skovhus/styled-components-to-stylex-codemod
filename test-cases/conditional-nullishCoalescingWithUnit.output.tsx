@@ -2,20 +2,20 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type BoxProps = {
-  $delay?: number;
+  delay?: number;
   children?: React.ReactNode;
 };
 
 function Box(props: React.PropsWithChildren<BoxProps>) {
-  const { children, $delay } = props;
+  const { children, delay } = props;
 
-  return <div sx={[styles.box, styles.boxTransitionDelay(`${$delay ?? 0}ms`)]}>{children}</div>;
+  return <div sx={[styles.box, styles.boxTransitionDelay(`${delay ?? 0}ms`)]}>{children}</div>;
 }
 
 export const App = () => (
   <div>
     <Box>Default delay</Box>
-    <Box $delay={100}>Custom delay</Box>
+    <Box delay={100}>Custom delay</Box>
   </div>
 );
 

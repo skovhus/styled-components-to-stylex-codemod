@@ -2,21 +2,21 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ButtonProps = React.PropsWithChildren<{
-  $primary?: boolean;
+  primary?: boolean;
   hollow?: boolean;
 }>;
 
 function Button(props: ButtonProps) {
-  const { children, hollow, $primary } = props;
+  const { children, hollow, primary } = props;
 
   return (
     <button
       sx={[
         styles.button,
-        $primary ? styles.buttonPrimary : undefined,
+        primary ? styles.buttonPrimary : undefined,
         hollow ? styles.buttonHollow : undefined,
-        !hollow && $primary ? styles.buttonNotHollowPrimary : undefined,
-        !hollow && !$primary && styles.buttonNotHollowNotPrimary,
+        !hollow && primary ? styles.buttonNotHollowPrimary : undefined,
+        !hollow && !primary && styles.buttonNotHollowNotPrimary,
       ]}
     >
       {children}
@@ -51,10 +51,10 @@ function Badge(props: BadgeProps) {
 export const App = () => (
   <div>
     <Button>Normal</Button>
-    <Button $primary>Primary</Button>
+    <Button primary>Primary</Button>
     <br />
     <Button hollow>Hollow</Button>
-    <Button hollow $primary>
+    <Button hollow primary>
       Primary Hollow
     </Button>
     <br />

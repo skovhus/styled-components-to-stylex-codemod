@@ -9,8 +9,8 @@ const MAIN_PAGE_MARGIN = 24;
 type Position = "fixed" | "relative";
 
 interface ContainerProps {
-  $sidebarCollapsed: boolean;
-  $position?: Position;
+  sidebarCollapsed: boolean;
+  position?: Position;
 }
 
 function Wrapper(props: React.PropsWithChildren<{}>) {
@@ -18,14 +18,14 @@ function Wrapper(props: React.PropsWithChildren<{}>) {
 }
 
 function Container(props: React.PropsWithChildren<ContainerProps>) {
-  const { children, $sidebarCollapsed, $position } = props;
+  const { children, sidebarCollapsed, position } = props;
 
   return (
     <div
       sx={[
         styles.container,
-        $position === "fixed" && styles.containerPositionFixed,
-        $position === "fixed" && $sidebarCollapsed
+        position === "fixed" && styles.containerPositionFixed,
+        position === "fixed" && sidebarCollapsed
           ? styles.containerPositionFixedSidebarCollapsed
           : undefined,
       ]}
@@ -40,7 +40,7 @@ export const App = () => (
     <div>
       <div>Position fixed + sidebar expanded (24px margins):</div>
       <Wrapper>
-        <Container $sidebarCollapsed={false} $position="fixed">
+        <Container sidebarCollapsed={false} position="fixed">
           Content
         </Container>
       </Wrapper>
@@ -48,7 +48,7 @@ export const App = () => (
     <div>
       <div>Position fixed + sidebar collapsed (0px margins):</div>
       <Wrapper>
-        <Container $sidebarCollapsed={true} $position="fixed">
+        <Container sidebarCollapsed={true} position="fixed">
           Content
         </Container>
       </Wrapper>
@@ -56,7 +56,7 @@ export const App = () => (
     <div>
       <div>Position relative (no absolute positioning, normal flow):</div>
       <Wrapper>
-        <Container $sidebarCollapsed={false} $position="relative">
+        <Container sidebarCollapsed={false} position="relative">
           Content
         </Container>
       </Wrapper>

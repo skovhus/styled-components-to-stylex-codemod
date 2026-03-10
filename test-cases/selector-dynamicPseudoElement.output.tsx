@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type BadgeProps = React.PropsWithChildren<{
-  $badgeColor: string;
+  badgeColor: string;
 }>;
 
 /**
@@ -12,7 +12,7 @@ type BadgeProps = React.PropsWithChildren<{
  * See: https://github.com/facebook/stylex/issues/1396
  */
 function Badge(props: BadgeProps) {
-  const { children, $badgeColor } = props;
+  const { children, badgeColor } = props;
 
   const sx = stylex.props(styles.badge);
 
@@ -22,7 +22,7 @@ function Badge(props: BadgeProps) {
       style={
         {
           ...sx.style,
-          "--Badge-after-backgroundColor": $badgeColor,
+          "--Badge-after-backgroundColor": badgeColor,
         } as React.CSSProperties
       }
     >
@@ -33,9 +33,9 @@ function Badge(props: BadgeProps) {
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <Badge $badgeColor="red">Notification</Badge>
-    <Badge $badgeColor="green">Online</Badge>
-    <Badge $badgeColor="blue">Info</Badge>
+    <Badge badgeColor="red">Notification</Badge>
+    <Badge badgeColor="green">Online</Badge>
+    <Badge badgeColor="blue">Info</Badge>
   </div>
 );
 

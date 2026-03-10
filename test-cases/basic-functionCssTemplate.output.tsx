@@ -4,29 +4,29 @@ import * as stylex from "@stylexjs/stylex";
 type Align = "left" | "right";
 
 type FlexContainerProps = React.PropsWithChildren<{
-  $align?: Align;
+  align?: Align;
 }>;
 
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
-  const { children, $align } = props;
+  const { children, align } = props;
 
   return (
-    <div sx={[styles.flexContainer, $align === "left" && styles.flexContainerAlignLeft]}>
+    <div sx={[styles.flexContainer, align === "left" && styles.flexContainerAlignLeft]}>
       {children}
     </div>
   );
 }
 
 type ColoredBoxProps = React.PropsWithChildren<{
-  $color?: string;
+  color?: string;
 }>;
 
 function ColoredBox(props: ColoredBoxProps) {
-  const { children, $color } = props;
+  const { children, color } = props;
 
   return (
-    <div sx={[styles.coloredBox, $color != null && styles.coloredBoxBackgroundColor($color)]}>
+    <div sx={[styles.coloredBox, color != null && styles.coloredBoxBackgroundColor(color)]}>
       {children}
     </div>
   );
@@ -34,11 +34,11 @@ function ColoredBox(props: ColoredBoxProps) {
 
 export const App = () => (
   <div>
-    <FlexContainer $align="left">
-      <ColoredBox $color="lightblue">Left aligned</ColoredBox>
-      <ColoredBox $color="lightgreen">Item</ColoredBox>
+    <FlexContainer align="left">
+      <ColoredBox color="lightblue">Left aligned</ColoredBox>
+      <ColoredBox color="lightgreen">Item</ColoredBox>
     </FlexContainer>
-    <FlexContainer $align="right">
+    <FlexContainer align="right">
       <ColoredBox>Right aligned</ColoredBox>
     </FlexContainer>
     <div sx={[styles.borderBox, styles.borderBoxBorderColor("red")]}>Red border</div>

@@ -3,18 +3,18 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
 type LineProps = React.PropsWithChildren<{
-  $isRemoval?: boolean;
-  $deletionColor?: string;
+  isRemoval?: boolean;
+  deletionColor?: string;
 }>;
 
 function Line(props: LineProps) {
-  const { children, $isRemoval, $deletionColor } = props;
+  const { children, isRemoval, deletionColor } = props;
 
   return (
     <div
       sx={[
         styles.line,
-        $isRemoval ? styles.lineBackgroundColor($deletionColor ?? $colors.bgBase) : undefined,
+        isRemoval ? styles.lineBackgroundColor(deletionColor ?? $colors.bgBase) : undefined,
       ]}
     >
       {children}
@@ -25,8 +25,8 @@ function Line(props: LineProps) {
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
     <Line />
-    <Line $isRemoval />
-    <Line $isRemoval $deletionColor="#ff0000" />
+    <Line isRemoval />
+    <Line isRemoval deletionColor="#ff0000" />
   </div>
 );
 

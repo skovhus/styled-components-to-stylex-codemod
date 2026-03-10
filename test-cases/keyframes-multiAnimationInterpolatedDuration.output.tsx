@@ -23,20 +23,20 @@ const slideIn = stylex.keyframes({
 });
 
 type AnimatedCardProps = React.PropsWithChildren<{
-  $duration?: number;
+  duration?: number;
 }>;
 
 // First animation has interpolated duration, second has static duration
 // When $duration is provided, animationDuration should be "${$duration}ms, 1s"
 // not just "${$duration}ms" which would drop the second animation's duration
 function AnimatedCard(props: AnimatedCardProps) {
-  const { children, $duration } = props;
+  const { children, duration } = props;
 
   return (
     <div
       sx={[
         styles.animatedCard,
-        $duration != null && styles.animatedCardAnimationDuration(`${$duration ?? 200}ms, 1s`),
+        duration != null && styles.animatedCardAnimationDuration(`${duration ?? 200}ms, 1s`),
       ]}
     >
       {children}
@@ -48,7 +48,7 @@ export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
       <AnimatedCard>Default (200ms, 1s)</AnimatedCard>
-      <AnimatedCard $duration={500}>Custom (500ms, 1s)</AnimatedCard>
+      <AnimatedCard duration={500}>Custom (500ms, 1s)</AnimatedCard>
     </div>
   );
 }

@@ -13,20 +13,20 @@ const fadeIn = stylex.keyframes({
 });
 
 type FadeInWithDelayProps = React.PropsWithChildren<{
-  $duration?: number;
+  duration?: number;
 }>;
 
 // Critical: interpolated time comes BEFORE the static time
 // In CSS animation shorthand, first time = duration, second time = delay
 // So the interpolated value should be duration, and "0.5s" should be delay
 function FadeInWithDelay(props: FadeInWithDelayProps) {
-  const { children, $duration } = props;
+  const { children, duration } = props;
 
   return (
     <span
       sx={[
         styles.fadeInWithDelay,
-        $duration != null && styles.fadeInWithDelayAnimationDuration(`${$duration ?? 200}ms`),
+        duration != null && styles.fadeInWithDelayAnimationDuration(`${duration ?? 200}ms`),
       ]}
     >
       {children}
@@ -38,7 +38,7 @@ export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
       <FadeInWithDelay>Default duration (200ms), delay (0.5s)</FadeInWithDelay>
-      <FadeInWithDelay $duration={800}>Custom duration (800ms), delay (0.5s)</FadeInWithDelay>
+      <FadeInWithDelay duration={800}>Custom duration (800ms), delay (0.5s)</FadeInWithDelay>
     </div>
   );
 }

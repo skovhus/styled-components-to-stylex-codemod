@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type MixedBackgroundProps = React.PropsWithChildren<{
-  $useGradient: boolean;
+  useGradient: boolean;
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
@@ -10,12 +10,12 @@ type MixedBackgroundProps = React.PropsWithChildren<{
 // (which need backgroundColor) in the same conditional. Each variant
 // is emitted with its appropriate StyleX property.
 function MixedBackground(props: MixedBackgroundProps) {
-  const { children, $useGradient, ...rest } = props;
+  const { children, useGradient, ...rest } = props;
 
   return (
     <div
       {...rest}
-      sx={$useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient}
+      sx={useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient}
     >
       {children}
     </div>
@@ -23,19 +23,19 @@ function MixedBackground(props: MixedBackgroundProps) {
 }
 
 type NestedColorBackgroundProps = React.PropsWithChildren<{
-  $color: "red" | "blue" | "default";
+  color: "red" | "blue" | "default";
 }>;
 
 // Nested ternary with all colors (homogeneous) but using || in the default condition
 // Tests that "!(A || B)" condition parsing produces valid identifier suffixes
 function NestedColorBackground(props: NestedColorBackgroundProps) {
-  const { children, $color } = props;
+  const { children, color } = props;
 
   return (
     <div
       sx={[
         styles.nestedColorBackground,
-        $colorVariants[$color as keyof typeof $colorVariants] ?? $colorVariants.default,
+        colorVariants[color as keyof typeof colorVariants] ?? colorVariants.default,
       ]}
     >
       {children}
@@ -45,11 +45,11 @@ function NestedColorBackground(props: NestedColorBackgroundProps) {
 
 export const App = () => (
   <div>
-    <MixedBackground $useGradient={false}>Solid Color</MixedBackground>
-    <MixedBackground $useGradient={true}>Gradient</MixedBackground>
-    <NestedColorBackground $color="red">Red</NestedColorBackground>
-    <NestedColorBackground $color="blue">Blue</NestedColorBackground>
-    <NestedColorBackground $color="default">Default</NestedColorBackground>
+    <MixedBackground useGradient={false}>Solid Color</MixedBackground>
+    <MixedBackground useGradient={true}>Gradient</MixedBackground>
+    <NestedColorBackground color="red">Red</NestedColorBackground>
+    <NestedColorBackground color="blue">Blue</NestedColorBackground>
+    <NestedColorBackground color="default">Default</NestedColorBackground>
     <div sx={styles.resetBackground}>No Background</div>
   </div>
 );
@@ -73,7 +73,7 @@ const styles = stylex.create({
   },
 });
 
-const $colorVariants = stylex.create({
+const colorVariants = stylex.create({
   red: {
     backgroundColor: "crimson",
   },

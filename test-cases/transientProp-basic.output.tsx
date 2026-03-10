@@ -2,13 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type CompProps = React.PropsWithChildren<{
-  $draggable?: boolean;
+  draggable?: boolean;
 }>;
 
 function Comp(props: CompProps) {
-  const { children, $draggable } = props;
+  const { children, draggable } = props;
 
-  return <div sx={[styles.comp, $draggable ? styles.compDraggable : undefined]}>{children}</div>;
+  return <div sx={[styles.comp, draggable ? styles.compDraggable : undefined]}>{children}</div>;
 }
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
@@ -17,18 +17,21 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = { $red?: boolean } & Omit<React.ComponentPropsWithRef<typeof Link>, "style">;
+type StyledLinkProps = { red?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof Link>,
+  "style" | "$red"
+>;
 
 function StyledLink(props: StyledLinkProps) {
-  const { className, $red, ...rest } = props;
+  const { className, red, ...rest } = props;
 
   return (
-    <Link {...rest} {...mergedSx([styles.link, $red ? styles.linkRed : undefined], className)} />
+    <Link {...rest} {...mergedSx([styles.link, red ? styles.linkRed : undefined], className)} />
   );
 }
 
 type PointProps = React.PropsWithChildren<{
-  $size?: number;
+  size?: number;
   "data-testid"?: string;
   style?: React.CSSProperties;
 }>;
@@ -36,7 +39,7 @@ type PointProps = React.PropsWithChildren<{
 // Pattern 3: Transient prop with dynamic value passed to inlined component
 // The prop is declared in type but not used in styles - must be stripped when inlined
 function Point(props: PointProps) {
-  const { children, style, $size, ...rest } = props;
+  const { children, style, size, ...rest } = props;
 
   return (
     <div {...rest} {...mergedSx(styles.point, undefined, style)}>
@@ -87,11 +90,11 @@ export function CollapseArrowIcon(
 
 export const App = () => (
   <div>
-    <Comp $draggable>Draggable</Comp>
+    <Comp draggable>Draggable</Comp>
     <Comp>Not Draggable</Comp>
-    <StyledLink text="Click" $red />
+    <StyledLink text="Click" red />
     <StyledLink text="Click" />
-    <Point $size={100} style={{ top: "10px" }} data-testid="point" />
+    <Point size={100} style={{ top: "10px" }} data-testid="point" />
     <CollapseArrowIcon isOpen />
     <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />

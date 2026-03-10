@@ -16,32 +16,32 @@ const pulse = stylex.keyframes({
 });
 
 type BoxProps = React.PropsWithChildren<{
-  $isAnimating?: boolean;
+  isAnimating?: boolean;
 }>;
 
 // animation shorthand with keyframes reference in css`` conditional
 function Box(props: BoxProps) {
-  const { children, $isAnimating } = props;
+  const { children, isAnimating } = props;
 
-  return <div sx={[styles.box, $isAnimating ? styles.boxAnimating : undefined]}>{children}</div>;
+  return <div sx={[styles.box, isAnimating ? styles.boxAnimating : undefined]}>{children}</div>;
 }
 
 type DotProps = React.PropsWithChildren<{
-  $active?: boolean;
+  active?: boolean;
 }>;
 
 // animation-name longhand with keyframes reference in css`` conditional
 function Dot(props: DotProps) {
-  const { children, $active } = props;
+  const { children, active } = props;
 
-  return <span sx={[styles.dot, $active ? styles.dotActive : undefined]}>{children}</span>;
+  return <span sx={[styles.dot, active ? styles.dotActive : undefined]}>{children}</span>;
 }
 
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16, alignItems: "center" }}>
-    <Box $isAnimating>Animating</Box>
+    <Box isAnimating>Animating</Box>
     <Box>Static</Box>
-    <Dot $active />
+    <Dot active />
     <Dot />
   </div>
 );

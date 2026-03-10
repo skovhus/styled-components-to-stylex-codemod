@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type HoverSwatchProps = React.PropsWithChildren<{
-  $tone: string;
+  tone: string;
 }>;
 
 /**
@@ -10,14 +10,14 @@ type HoverSwatchProps = React.PropsWithChildren<{
  * when preserved via a StyleX style function.
  */
 function HoverSwatch(props: HoverSwatchProps) {
-  const { children, $tone } = props;
+  const { children, tone } = props;
 
   return (
     <div
       sx={[
         styles.hoverSwatch,
         styles.hoverSwatchColor({
-          $tone,
+          tone,
         }),
       ]}
     >
@@ -27,18 +27,18 @@ function HoverSwatch(props: HoverSwatchProps) {
 }
 
 type HoverMediaSwatchProps = React.PropsWithChildren<{
-  $tone: string;
+  tone: string;
 }>;
 
 function HoverMediaSwatch(props: HoverMediaSwatchProps) {
-  const { children, $tone } = props;
+  const { children, tone } = props;
 
   return (
     <div
       sx={[
         styles.hoverMediaSwatch,
         styles.hoverMediaSwatchColor({
-          $tone,
+          tone,
         }),
       ]}
     >
@@ -49,8 +49,8 @@ function HoverMediaSwatch(props: HoverMediaSwatchProps) {
 
 export const App = () => (
   <div>
-    <HoverSwatch $tone="tomato">Hover</HoverSwatch>
-    <HoverMediaSwatch $tone="plum">Hover Media</HoverMediaSwatch>
+    <HoverSwatch tone="tomato">Hover</HoverSwatch>
+    <HoverMediaSwatch tone="plum">Hover Media</HoverMediaSwatch>
   </div>
 );
 
@@ -61,7 +61,7 @@ const styles = stylex.create({
   hoverSwatchColor: (props) => ({
     color: {
       default: null,
-      ":hover": `var(--tone, ${props.$tone})`,
+      ":hover": `var(--tone, ${props.tone})`,
     },
   }),
   hoverMediaSwatch: {
@@ -72,7 +72,7 @@ const styles = stylex.create({
       default: null,
       ":hover": {
         default: null,
-        "@media (hover: hover)": `var(--tone, ${props.$tone})`,
+        "@media (hover: hover)": `var(--tone, ${props.tone})`,
       },
     },
   }),

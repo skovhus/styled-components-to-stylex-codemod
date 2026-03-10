@@ -8,19 +8,19 @@ import * as stylex from "@stylexjs/stylex";
 const OFFSET = 24;
 
 interface Props {
-  $collapsed: boolean;
-  $enabled: boolean;
+  collapsed: boolean;
+  enabled: boolean;
 }
 
 function Container(props: React.PropsWithChildren<Props>) {
-  const { children, $collapsed, $enabled } = props;
+  const { children, collapsed, enabled } = props;
 
   return (
     <div
       sx={[
         styles.container,
-        $enabled ? styles.containerEnabled : undefined,
-        $enabled && $collapsed ? styles.containerEnabledCollapsed : undefined,
+        enabled ? styles.containerEnabled : undefined,
+        enabled && collapsed ? styles.containerEnabledCollapsed : undefined,
       ]}
     >
       {children}
@@ -30,13 +30,13 @@ function Container(props: React.PropsWithChildren<Props>) {
 
 export const App = () => (
   <div style={{ display: "flex", gap: "12px", padding: "12px" }}>
-    <Container $collapsed={false} $enabled={true}>
+    <Container collapsed={false} enabled={true}>
       Enabled, Not Collapsed
     </Container>
-    <Container $collapsed={true} $enabled={true}>
+    <Container collapsed={true} enabled={true}>
       Enabled, Collapsed
     </Container>
-    <Container $collapsed={false} $enabled={false}>
+    <Container collapsed={false} enabled={false}>
       Disabled
     </Container>
   </div>

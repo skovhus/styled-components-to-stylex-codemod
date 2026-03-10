@@ -3,14 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type OptionLabelProps = React.PropsWithChildren<{
-  $disabled?: boolean;
+  disabled?: boolean;
 }>;
 
 function OptionLabel(props: OptionLabelProps) {
-  const { children, $disabled } = props;
+  const { children, disabled } = props;
 
   return (
-    <label sx={[styles.optionLabel, $disabled ? styles.optionLabelDisabled : undefined]}>
+    <label sx={[styles.optionLabel, disabled ? styles.optionLabelDisabled : undefined]}>
       {children}
     </label>
   );
@@ -19,7 +19,7 @@ function OptionLabel(props: OptionLabelProps) {
 export const App = () => (
   <div>
     <OptionLabel>Enabled</OptionLabel>
-    <OptionLabel $disabled>Disabled</OptionLabel>
+    <OptionLabel disabled>Disabled</OptionLabel>
   </div>
 );
 

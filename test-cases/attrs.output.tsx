@@ -10,20 +10,20 @@ const Flex = (
 };
 
 type InputProps = {
-  $padding?: string;
-  $small?: boolean;
+  padding?: string;
+  small?: boolean;
 } & Pick<React.ComponentProps<"input">, "placeholder">;
 
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
-  const { $padding, $small, ...rest } = props;
+  const { padding, small, ...rest } = props;
 
   return (
     <input
-      size={$small ? 5 : undefined}
+      size={small ? 5 : undefined}
       type="text"
       {...rest}
-      sx={[styles.input, $padding != null && styles.inputPadding($padding)]}
+      sx={[styles.input, padding != null && styles.inputPadding(padding)]}
     />
   );
 }
@@ -158,19 +158,19 @@ export function AlignedFlex(props: AlignedFlexProps) {
 }
 
 type DynamicHeightBoxProps = React.PropsWithChildren<{
-  $height: number;
+  height: number;
 }>;
 
 // Pattern 10: dynamic attrs with computed style object
 // The dynamic inline styles should be preserved as inline style prop
 function DynamicHeightBox(props: DynamicHeightBoxProps) {
-  const { children, $height } = props;
+  const { children, height } = props;
 
   return (
     <div
       sx={[
         styles.dynamicHeightBox,
-        $height ? styles.dynamicHeightBoxHeight(`${$height}px`) : undefined,
+        height ? styles.dynamicHeightBoxHeight(`${height}px`) : undefined,
       ]}
     >
       {children}
@@ -180,9 +180,9 @@ function DynamicHeightBox(props: DynamicHeightBoxProps) {
 
 export const App = () => (
   <>
-    <Input $small placeholder="Small" />
+    <Input small placeholder="Small" />
     <Input placeholder="Normal" />
-    <Input $padding="2em" placeholder="Padded" />
+    <Input padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
     <Scrollable>Scrollable content</Scrollable>
@@ -191,7 +191,7 @@ export const App = () => (
     <Box>Box content</Box>
     <AlignedFlex>Aligned content</AlignedFlex>
     <span sx={styles.noWrapText}>No wrapping text</span>
-    <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
+    <DynamicHeightBox height={50}>Dynamic height</DynamicHeightBox>
   </>
 );
 
