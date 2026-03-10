@@ -235,7 +235,7 @@ export function isAstNode(v: unknown): v is { type: string } {
 }
 
 /**
- * Type guard for function-like nodes (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression).
+ * Type guard for function-like nodes including class/object methods.
  */
 export function isFunctionNode(node: unknown): boolean {
   if (!node || typeof node !== "object") {
@@ -245,7 +245,9 @@ export function isFunctionNode(node: unknown): boolean {
   return (
     type === "FunctionDeclaration" ||
     type === "FunctionExpression" ||
-    type === "ArrowFunctionExpression"
+    type === "ArrowFunctionExpression" ||
+    type === "ObjectMethod" ||
+    type === "ClassMethod"
   );
 }
 
