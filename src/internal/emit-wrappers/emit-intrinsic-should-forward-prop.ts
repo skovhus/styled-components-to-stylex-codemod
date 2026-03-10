@@ -16,7 +16,7 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
-import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
@@ -327,13 +327,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
-    // Collect keys used by compound variants (they're handled separately)
-    const compoundVariantKeys = new Set<string>();
-    for (const cv of d.compoundVariants ?? []) {
-      for (const k of getCompoundVariantWhenKeys(cv)) {
-        compoundVariantKeys.add(k);
-      }
-    }
+    const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.

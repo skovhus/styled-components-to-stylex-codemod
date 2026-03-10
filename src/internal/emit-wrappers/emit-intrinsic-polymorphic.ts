@@ -15,7 +15,7 @@ import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
-import { getCompoundVariantWhenKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
+import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
 import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
@@ -150,13 +150,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         ...extraStyleArgsAfterBase,
       ];
 
-      // Collect keys used by compound variants (they're handled separately)
-      const compoundVariantKeys = new Set<string>();
-      for (const cv of d.compoundVariants ?? []) {
-        for (const k of getCompoundVariantWhenKeys(cv)) {
-          compoundVariantKeys.add(k);
-        }
-      }
+      const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
       // Collect variant and styleFn expressions with source order for interleaving.
       const hasSourceOrder = !!(

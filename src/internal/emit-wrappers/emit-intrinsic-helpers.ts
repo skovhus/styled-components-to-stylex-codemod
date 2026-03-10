@@ -29,6 +29,19 @@ export function getCompoundVariantWhenKeys(
   return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
 }
 
+/** Collects all variant "when" keys consumed by compound variants into a Set. */
+export function collectCompoundVariantKeys(
+  compoundVariants: StyledDecl["compoundVariants"],
+): Set<string> {
+  const keys = new Set<string>();
+  for (const cv of compoundVariants ?? []) {
+    for (const k of getCompoundVariantWhenKeys(cv)) {
+      keys.add(k);
+    }
+  }
+  return keys;
+}
+
 export type EmitIntrinsicHelpers = {
   hasForwardedAsUsage: (d: StyledDecl) => boolean;
   withForwardedAsType: (typeText: string, includeForwardedAs: boolean) => string;

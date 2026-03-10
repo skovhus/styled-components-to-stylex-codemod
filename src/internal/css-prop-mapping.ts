@@ -85,25 +85,7 @@ export function parseBorderShorthandParts(valueRaw: string): {
   if (tokens.length === 0) {
     return null;
   }
-  let width: string | undefined;
-  let style: string | undefined;
-  const colorParts: string[] = [];
-  for (const token of tokens) {
-    if (!width && looksLikeLength(token)) {
-      width = token;
-      continue;
-    }
-    if (!style && BORDER_STYLES.has(token)) {
-      style = token;
-      continue;
-    }
-    colorParts.push(token);
-  }
-  const color = colorParts.join(" ").trim();
-  if (!width && !style && !color) {
-    return null;
-  }
-  return { width, style, color: color || undefined };
+  return classifyBorderTokens(tokens);
 }
 
 /**
@@ -138,51 +120,11 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     }
   }
 
-  if (prop === "scroll-margin" && decl.value.kind === "static") {
-    const entries = splitDirectionalProperty({
-      prop: "scrollMargin",
-      rawValue: decl.valueRaw.trim(),
-      important: decl.important,
-      alwaysExpand: true,
-    });
-    if (entries.length > 0) {
-      const order = new Map([
-        ["scrollMarginLeft", 0],
-        ["scrollMarginTop", 1],
-        ["scrollMarginRight", 2],
-        ["scrollMarginBottom", 3],
-      ]);
-      return entries
-        .slice()
-        .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
-        .map((entry) => ({
-          prop: entry.prop,
-          value: { kind: "static", value: entry.value },
-        }));
-    }
-  }
-
-  if (prop === "scroll-padding" && decl.value.kind === "static") {
-    const entries = splitDirectionalProperty({
-      prop: "scrollPadding",
-      rawValue: decl.valueRaw.trim(),
-      important: decl.important,
-      alwaysExpand: true,
-    });
-    if (entries.length > 0) {
-      const order = new Map([
-        ["scrollPaddingLeft", 0],
-        ["scrollPaddingTop", 1],
-        ["scrollPaddingRight", 2],
-        ["scrollPaddingBottom", 3],
-      ]);
-      return entries
-        .slice()
-        .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
-        .map((entry) => ({
-          prop: entry.prop,
-          value: { kind: "static", value: entry.value },
-        }));
+  if ((prop === "scroll-margin" || prop === "scroll-padding") && decl.value.kind === "static") {
+    const camelProp = prop === "scroll-margin" ? "scrollMargin" : "scrollPadding";
+    const result = expandScrollDirectionalProperty(camelProp, decl);
+    if (result) {
+      return result;
     }
   }
 
@@ -320,12 +262,62 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     ];
   }
 
-  const tokens = v.split(/\s+/);
+  const classified = classifyBorderTokens(v.split(/\s+/));
+  if (!classified) {
+    return [{ prop: baseProp, value: { kind: "static", value: v } }];
+  }
+  const out: StylexPropDecl[] = [];
+  if (classified.width) {
+    out.push({ prop: widthProp, value: { kind: "static", value: classified.width } });
+  }
+  if (classified.style) {
+    out.push({ prop: styleProp, value: { kind: "static", value: classified.style } });
+  }
+  if (classified.color) {
+    out.push({ prop: colorProp, value: { kind: "static", value: classified.color } });
+  }
+  return out.length > 0 ? out : [{ prop: baseProp, value: { kind: "static", value: v } }];
+}
 
+// --- Non-exported helpers ---
+
+function expandScrollDirectionalProperty(
+  camelProp: "scrollMargin" | "scrollPadding",
+  decl: CssDeclarationIR,
+): StylexPropDecl[] | null {
+  const entries = splitDirectionalProperty({
+    prop: camelProp,
+    rawValue: decl.valueRaw.trim(),
+    important: decl.important,
+    alwaysExpand: true,
+  });
+  if (entries.length === 0) {
+    return null;
+  }
+  const order = new Map(
+    ["Left", "Top", "Right", "Bottom"].map((dir, i) => [`${camelProp}${dir}`, i]),
+  );
+  return entries
+    .slice()
+    .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
+    .map((entry) => ({
+      prop: entry.prop,
+      value: { kind: "static" as const, value: entry.value },
+    }));
+}
+
+/**
+ * Classifies whitespace-separated border shorthand tokens into width, style, and color.
+ * Returns null if no tokens could be classified.
+ */
+function classifyBorderTokens(tokens: string[]): {
+  width?: string;
+  style?: string;
+  color?: string;
+} | null {
   let width: string | undefined;
   let style: string | undefined;
   const colorParts: string[] = [];
-
   for (const token of tokens) {
     if (!width && looksLikeLength(token)) {
       width = token;
@@ -337,20 +329,9 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     }
     colorParts.push(token);
   }
-
-  const color = colorParts.join(" ").trim();
-  const out: StylexPropDecl[] = [];
-  if (width) {
-    out.push({ prop: widthProp, value: { kind: "static", value: width } });
+  const color = colorParts.join(" ").trim() || undefined;
+  if (!width && !style && !color) {
+    return null;
   }
-  if (style) {
-    out.push({ prop: styleProp, value: { kind: "static", value: style } });
-  }
-  if (color) {
-    out.push({ prop: colorProp, value: { kind: "static", value: color } });
-  }
-  if (out.length === 0) {
-    return [{ prop: baseProp, value: { kind: "static", value: v } }];
-  }
-  return out;
+  return { width, style, color };
 }
