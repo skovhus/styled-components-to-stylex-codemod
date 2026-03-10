@@ -1488,12 +1488,16 @@ function handlePseudoExpand(
       const expansion = result.expansions[i]!;
       const pseudo = `:${expansion.pseudo}`;
       if (expansion.condition) {
-        target[pseudo] = {
-          default: null,
-          __computedKeys: [
-            { keyExpr: cloneAstNode(parsedConditions[i]!), value: cloneAstNode(value) },
-          ],
+        const newEntry = {
+          keyExpr: cloneAstNode(parsedConditions[i]!),
+          value: cloneAstNode(value),
         };
+        const existing = target[pseudo];
+        if (existing && typeof existing === "object" && "__computedKeys" in existing) {
+          (existing.__computedKeys as unknown[]).push(newEntry);
+        } else {
+          target[pseudo] = { default: null, __computedKeys: [newEntry] };
+        }
       } else {
         target[pseudo] = cloneAstNode(value);
       }
@@ -1501,7 +1505,12 @@ function handlePseudoExpand(
   };
 
   if (!guard) {
-    // No guard: merge directly into perPropPseudo so expansions become part of the root style
+    // No guard: merge directly into perPropPseudo so expansions become part of the root style.
+    // NOTE: when after-base segments are active (from resolved styles helpers mid-template),
+    // the pseudo-expand properties still merge into the base styleObj rather than the segment.
+    // This is acceptable because pseudo-expand produces per-property pseudo maps whose
+    // `default` values are copies of the base — they don't introduce new cascade conflicts
+    // beyond what the base already has.
     for (const prop of Object.keys(flatBucket)) {
       const value = flatBucket[prop];
       const baseValue =
