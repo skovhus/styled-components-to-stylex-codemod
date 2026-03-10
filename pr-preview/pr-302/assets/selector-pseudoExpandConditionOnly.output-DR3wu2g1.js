@@ -1,1 +1,0 @@
-import{j as i}from"./index-BvVW4z0l.js";function o(){return i.jsx("div",{style:{display:"flex",gap:16,padding:16},children:i.jsx("div",{className:"xe8ttls x15yo4kd x162lpob x1q0cuth",children:"Condition-only opacity"})})}export{o as App};
