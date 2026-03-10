@@ -16,6 +16,9 @@ import type { CrossFileInfo } from "../internal/transform-types.js";
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 
+/** Test cases that intentionally test partial conversion with leftover css helpers. */
+const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
+
 function isBailOutFixture(filename: string): boolean {
   return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
 }
@@ -325,11 +328,13 @@ describe("test case exports", () => {
 describe("output invariants", () => {
   it.each(fixtureCases)(
     "$outputFile should not import styled/css/keyframes from styled-components",
-    ({ inputPath, outputPath }) => {
+    ({ name, inputPath, outputPath }) => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      const disallowedImports = ["styled", "css", "keyframes", "createGlobalStyle"];
+      const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+        ? ["styled", "keyframes", "createGlobalStyle"]
+        : ["styled", "css", "keyframes", "createGlobalStyle"];
       const importMatch = output.match(
         /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
       );
@@ -374,7 +379,9 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    const disallowedImports = ["styled", "css", "keyframes", "createGlobalStyle"];
+    const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+      ? ["styled", "keyframes", "createGlobalStyle"]
+      : ["styled", "css", "keyframes", "createGlobalStyle"];
     const importMatch = result.match(
       /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
     );

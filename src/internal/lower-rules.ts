@@ -97,18 +97,47 @@ export function lowerRules(ctx: TransformContext): {
     });
   }
 
-  // Derive cross-file markers from relation overrides (single source of truth)
+  // Determine which parent style keys actually need markers (defaultMarker or
+  // defineMarker). A marker is only needed when an override has pseudo conditions
+  // (e.g., `&:hover ${Child}`) that emit `stylex.when.ancestor()`. Overrides
+  // without pseudos (e.g., `& ${Child}`) are unconditional and need no marker.
+  const parentsNeedingMarker = new Set<string>();
+  const overrideByKey = new Map(state.relationOverrides.map((o) => [o.overrideStyleKey, o]));
+  for (const [overrideKey, pseudoBuckets] of state.relationOverridePseudoBuckets) {
+    const hasPseudo = [...pseudoBuckets.keys()].some((key) => key !== null);
+    if (hasPseudo) {
+      const override = overrideByKey.get(overrideKey);
+      if (override) {
+        parentsNeedingMarker.add(override.parentStyleKey);
+      }
+    }
+  }
+
+  // Derive cross-file markers from relation overrides (single source of truth).
+  // Only include markers for parents that actually need them.
   const crossFileMarkers = new Map<string, string>();
   for (const o of state.relationOverrides) {
-    if (o.crossFile && o.markerVarName) {
+    if (o.crossFile && o.markerVarName && parentsNeedingMarker.has(o.parentStyleKey)) {
       crossFileMarkers.set(o.parentStyleKey, o.markerVarName);
+    }
+  }
+
+  // Filter ancestorSelectorParents to only parents needing markers.
+  // Parents without pseudo conditions don't need markers — their override
+  // styles are applied unconditionally via JSX rewriting.
+  // Exception: sibling marker parents always need markers because
+  // stylex.when.siblingBefore() references them at runtime.
+  const filteredAncestorParents = new Set<string>();
+  for (const key of state.ancestorSelectorParents) {
+    if (parentsNeedingMarker.has(key) || state.siblingMarkerParents.has(key)) {
+      filteredAncestorParents.add(key);
     }
   }
 
   return {
     resolvedStyleObjects: state.resolvedStyleObjects,
     relationOverrides: state.relationOverrides,
-    ancestorSelectorParents: state.ancestorSelectorParents,
+    ancestorSelectorParents: filteredAncestorParents,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
     crossFileMarkers,
     bail: state.bail,

@@ -83,10 +83,19 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
 };
 
 /**
- * Builds a map from prop name to variant object name for dimensions
- * that derive their prop type via `keyof typeof variantObj`.
+ * Builds a map from prop name to TypeScript type text for static single-key variants.
+ * Boolean variants get type `boolean`; non-boolean get a string literal type (e.g., `"column"`).
  * Shared by emit-intrinsic-simple and emit-intrinsic-should-forward-prop.
  */
+export function buildStaticVariantPropTypes(d: StyledDecl): Map<string, string> {
+  return new Map(
+    (d.staticBooleanVariants ?? []).map((sbv) => [
+      sbv.propName,
+      sbv.variantKey != null ? `"${sbv.variantKey}"` : "boolean",
+    ]),
+  );
+}
+
 export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   return new Map(
     (d.variantDimensions ?? [])

@@ -527,35 +527,51 @@ function buildInlineResolverVariantDimensions(args: {
     const hasCompleteCallsiteVisibility =
       !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue;
 
-    if (
-      variantKeys.length === 1 &&
-      !hasPropReferencingTemplateExpressions &&
-      hasCompleteCallsiteVisibility
-    ) {
-      const callSitesWithProp = usageResult.propsByUsage.filter(
-        (siteProps) => propName in siteProps,
-      ).length;
+    if (variantKeys.length === 1 && !hasPropReferencingTemplateExpressions) {
+      // Baking in requires complete callsite visibility — we remove the prop
+      // entirely, so external callers must not be able to pass different values.
+      if (hasCompleteCallsiteVisibility) {
+        const callSitesWithProp = usageResult.propsByUsage.filter(
+          (siteProps) => propName in siteProps,
+        ).length;
 
-      if (callSitesWithProp === totalCallSites) {
-        // Every call site uses the same constant value — bake it into the base style.
-        // The prop attribute is stripped from all call sites by inlineResolvedBaseComponent.
-        const [, singleVariantStyles] = Object.entries(variants)[0]!;
-        for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
-          foldedBaseSx[cssKey] = String(cssVal);
+        if (callSitesWithProp === totalCallSites) {
+          // Every call site uses the same constant value — bake it into the base style.
+          // The prop attribute is stripped from all call sites by inlineResolvedBaseComponent.
+          const [, singleVariantStyles] = Object.entries(variants)[0]!;
+          for (const [cssKey, cssVal] of Object.entries(singleVariantStyles)) {
+            foldedBaseSx[cssKey] = String(cssVal);
+          }
+          bakedInConsumedProps.push(propName);
+          continue;
         }
-        bakedInConsumedProps.push(propName);
-        continue;
       }
 
-      // Single variant key, partial call sites: emit as a conditional style
-      // in the main `styles` object rather than a separate lookup object.
-      // Only safe when the value is truthy at runtime — falsy values like 0
-      // would fail the truthy guard condition in the emitted code.
+      // Single variant key: emit as a conditional style in the main `styles`
+      // object rather than a separate lookup object.
+      // - Boolean props use a truthy guard: `prop ? styles.x : undefined`
+      // - Non-boolean props use an equality check: `prop === "value" && styles.x`
+      //   This is safe without complete callsite visibility because the condition
+      //   only matches the specific value, not any truthy value.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
-      if (isSingleVariantKeyTruthy(singleKey, booleanOnlyProps.has(propName))) {
+      const isBooleanProp = booleanOnlyProps.has(propName);
+      if (isBooleanProp) {
+        if (isBooleanVariantKeyTrue(singleKey)) {
+          staticBooleanVariants.push({
+            propName,
+            styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+            styles: singleVariantStyles,
+          });
+          continue;
+        }
+      } else {
+        // Include the variant value in the style key for clarity:
+        // e.g., `cardDirectionColumn` instead of just `cardDirection`.
+        const valueSuffix = singleKey.charAt(0).toUpperCase() + singleKey.slice(1);
         staticBooleanVariants.push({
           propName,
-          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+          variantKey: singleKey,
+          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}${valueSuffix}`,
           styles: singleVariantStyles,
         });
         continue;
@@ -957,17 +973,9 @@ function buildCallSiteCombinedStyles(args: {
   return result;
 }
 
-/**
- * Checks whether a single variant key represents a value that is truthy at runtime.
- * For boolean props, only `"true"` is truthy (`false` is falsy).
- * For non-boolean props (numbers, strings), "0" and "" are falsy; everything else is truthy.
- * Falsy values cannot use the truthy-guard pattern (`prop && styles.key`) safely.
- */
-function isSingleVariantKeyTruthy(key: string, isBooleanProp: boolean): boolean {
-  if (isBooleanProp) {
-    return key === "true";
-  }
-  return key !== "0" && key !== "";
+/** Returns true if the boolean variant key represents `true` (i.e., `<Comp flag />`). */
+function isBooleanVariantKeyTrue(key: string): boolean {
+  return key === "true";
 }
 
 function serializeRecord(record: Record<string, unknown>): string {

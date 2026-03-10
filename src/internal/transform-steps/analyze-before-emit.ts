@@ -804,12 +804,15 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   if (ctx.resolvedStyleObjects) {
     for (const decl of styledDecls) {
       if (decl.staticBooleanVariants?.length) {
-        for (const { propName, styleKey, styles } of decl.staticBooleanVariants) {
+        for (const { propName, variantKey, styleKey, styles } of decl.staticBooleanVariants) {
           ctx.resolvedStyleObjects.set(styleKey, styles);
           if (!decl.variantStyleKeys) {
             decl.variantStyleKeys = {};
           }
-          decl.variantStyleKeys[propName] = styleKey;
+          // Non-boolean single-key variants use equality syntax so the emitter
+          // generates `prop === "value"` instead of a truthy guard.
+          const whenKey = variantKey != null ? `${propName} === "${variantKey}"` : propName;
+          decl.variantStyleKeys[whenKey] = styleKey;
         }
       }
       if (decl.callSiteCombinedStyles?.length) {

@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export function App() {
   return (
-    <div sx={[styles.parent, stylex.defaultMarker()]}>
+    <div sx={styles.parent}>
       <div sx={[styles.child, styles.childInParent]}>child</div>
     </div>
   );

@@ -46,6 +46,8 @@ export const fixtureAdapter = defineAdapter({
         "wrapper-mergerImported",
         "htmlProp-input",
         "transientProp-notForwarded",
+        "inlineBase-booleanVariantKey",
+        "inlineBase-stringVariantExported",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
       return { styles: true, as: false, ref: false };

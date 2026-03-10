@@ -69,6 +69,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
   const relationOverrides: RelationOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
+  const siblingMarkerParents = new Set<string>();
   // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
   // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
   const relationOverridePseudoBuckets = new Map<
@@ -256,6 +257,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     declByLocalName,
     relationOverrides,
     ancestorSelectorParents,
+    siblingMarkerParents,
     relationOverridePseudoBuckets,
     childPseudoMarkers,
     cssHelperValuesByKey,

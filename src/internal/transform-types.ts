@@ -154,6 +154,12 @@ export type StaticBooleanVariant = {
   propName: string;
   styleKey: string;
   styles: Record<string, unknown>;
+  /**
+   * For non-boolean single-key variants, the literal variant key value.
+   * When set, the emitter generates `prop === "value"` instead of a truthy check,
+   * and the prop type becomes a string literal (e.g., `"column"`) instead of `boolean`.
+   */
+  variantKey?: string;
 };
 
 /**

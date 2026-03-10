@@ -1,12 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon } from "./lib/cross-file-icon.styled";
 
-import { CardMarker } from "./selector-crossFileBaseOnly.input.stylex";
-
 export function App() {
   return (
     <div style={{ padding: 16 }}>
-      <div sx={[styles.card, CardMarker]}>
+      <div sx={styles.card}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInCard)} />
         Base only
       </div>

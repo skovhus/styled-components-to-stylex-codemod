@@ -11,7 +11,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <div sx={[styles.toolbar, stylex.defaultMarker()]}>
+    <div sx={styles.toolbar}>
       <button sx={[styles.actionButton, styles.actionButtonInToolbar]}>Action 1</button>
       <button sx={[styles.actionButton, styles.actionButtonInToolbar]}>Action 2</button>
     </div>
