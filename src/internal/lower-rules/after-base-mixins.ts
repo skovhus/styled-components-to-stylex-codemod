@@ -32,19 +32,28 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
     decl: StyledDecl,
     prop: string,
   ): { kind: "literal"; value: string | number } | { kind: "none" } | { kind: "nonLiteral" } => {
-    const readLiteral = (obj: unknown): string | number | null | undefined => {
-      if (!isPlainObject(obj)) {
-        return undefined;
+    // Track the last-seen state for this property across all base sources.
+    // Later sources in the merge order override earlier ones.
+    let last: string | number | null | undefined = undefined;
+    let lastOverriddenByNonLiteral = false;
+
+    const readSource = (obj: unknown): void => {
+      if (!isPlainObject(obj) || !(prop in obj)) {
+        return;
       }
       const v = obj[prop];
-      return typeof v === "string" || typeof v === "number" || v === null ? v : undefined;
+      if (typeof v === "string" || typeof v === "number" || v === null) {
+        last = v;
+        lastOverriddenByNonLiteral = false;
+      } else {
+        lastOverriddenByNonLiteral = true;
+      }
     };
 
     // Simulate the pre-base merge order used by rewrite-jsx:
     // extendsStyleKey -> extraStyleKeys (excluding afterBase) -> base styleKey
-    let last: string | number | null | undefined = undefined;
     if (decl.extendsStyleKey) {
-      last = readLiteral(resolvedStyleObjects.get(decl.extendsStyleKey));
+      readSource(resolvedStyleObjects.get(decl.extendsStyleKey));
     }
 
     const afterBase = new Set(decl.extraStyleKeysAfterBase ?? []);
@@ -52,24 +61,18 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
       if (afterBase.has(key)) {
         continue;
       }
-      const v = readLiteral(resolvedStyleObjects.get(key));
-      if (v !== undefined) {
-        last = v;
-      }
+      readSource(resolvedStyleObjects.get(key));
     }
 
-    const baseV = readLiteral(resolvedStyleObjects.get(decl.styleKey));
-    if (baseV !== undefined) {
-      last = baseV;
-    }
+    readSource(resolvedStyleObjects.get(decl.styleKey));
 
+    if (lastOverriddenByNonLiteral) {
+      return { kind: "nonLiteral" };
+    }
     if (last === undefined || last === null) {
       return { kind: "none" };
     }
-    if (typeof last === "string" || typeof last === "number") {
-      return { kind: "literal", value: last };
-    }
-    return { kind: "nonLiteral" };
+    return { kind: "literal", value: last };
   };
 
   for (const decl of styledDecls) {
@@ -108,7 +111,14 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
         if ((v as Record<string, unknown>).default !== null) {
           continue;
         }
-        // Bail on nested condition objects (conservative).
+
+        const base = getStaticBaseValueForProp(decl, prop);
+        if (base.kind === "none") {
+          // No base value: leaving default:null is semantically fine.
+          continue;
+        }
+
+        // Bail on nested condition objects (conservative) — only when we need to patch.
         for (const condVal of Object.values(v)) {
           if (isPlainObject(condVal)) {
             state.markBail();
@@ -125,11 +135,10 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
           break;
         }
 
-        const base = getStaticBaseValueForProp(decl, prop);
         if (base.kind === "literal") {
           patched[prop] = { ...(v as Record<string, unknown>), default: base.value };
           didPatch = true;
-        } else if (base.kind === "nonLiteral") {
+        } else {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -138,8 +147,6 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
             context: { component: decl.localName, mixinKey, prop },
           });
           break;
-        } else {
-          // No base value: leaving default:null is semantically fine.
         }
       }
 
