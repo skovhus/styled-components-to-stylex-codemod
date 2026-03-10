@@ -45,6 +45,7 @@ export type WarningType =
   | "Directional border helper styles are not supported"
   | "Multi-slot border interpolation could not be resolved"
   | "Resolved border helper value could not be expanded to longhand properties"
+  | "Resolved conditional border variant could not be expanded to longhand properties"
   | "createGlobalStyle is not supported in StyleX. Global styles should be handled separately (e.g., in a CSS file or using CSS reset libraries)"
   | "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396"
   | "Failed to parse theme expressions"
