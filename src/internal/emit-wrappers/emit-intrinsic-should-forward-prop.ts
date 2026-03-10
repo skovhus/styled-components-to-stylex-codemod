@@ -339,8 +339,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       ...extraStyleArgsAfterBase,
     ];
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
-
+    // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
       d.needsUseThemeHook,
       styleArgs,
@@ -348,6 +347,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       stylesIdentifier,
       () => ctx.markNeedsUseThemeImport(),
     );
+
+    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
 
@@ -667,11 +668,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       });
 
       const fnBodyStmts: StatementKind[] = [declStmt];
-      if (needsUseTheme) {
-        fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
-      }
       if (cleanupPrefixStmt) {
         fnBodyStmts.push(...cleanupPrefixStmt);
+      }
+      if (needsUseTheme) {
+        fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
       }
       if (merging.sxDecl) {
         fnBodyStmts.push(merging.sxDecl);
@@ -778,11 +779,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     });
 
     const fnBodyStmts: StatementKind[] = [declStmt];
-    if (needsUseTheme) {
-      fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
-    }
     if (cleanupPrefixStmt) {
       fnBodyStmts.push(...cleanupPrefixStmt);
+    }
+    if (needsUseTheme) {
+      fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
     }
     if (merging.sxDecl) {
       fnBodyStmts.push(merging.sxDecl);

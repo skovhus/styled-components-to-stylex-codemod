@@ -469,8 +469,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     decl.needsWrapperComponent = true;
   }
   if (styleFnFromProps.length) {
-    decl.styleFnFromProps = styleFnFromProps;
-
     // When a style function and a variant bucket share the same style key (same
     // condition), merge the variant's static properties into the style function's
     // return object and remove the duplicate variant reference.
@@ -483,6 +481,18 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       resolvedStyleObjects,
       variantSourceOrder: decl.variantSourceOrder,
     });
+
+    // Consolidate style functions that share the same jsxProp into a single function.
+    // E.g., containerWidth($size), containerHeight($size), containerLineHeight($size)
+    // become a single containerSize($size) with all properties merged.
+    consolidateSameJsxPropStyleFns({
+      styleKey: decl.styleKey,
+      styleFnFromProps,
+      styleFnDecls,
+      hasShouldForwardProp: !!decl.shouldForwardProp,
+    });
+
+    decl.styleFnFromProps = styleFnFromProps;
   }
 
   for (const [k, v] of styleFnDecls.entries()) {
@@ -909,6 +919,166 @@ function mergeVariantBucketsIntoStyleFns(args: {
       if (variantStyleObjKey) {
         args.resolvedStyleObjects.delete(variantStyleObjKey);
       }
+    }
+  }
+}
+
+/**
+ * Consolidates style functions that share the same jsxProp into a single
+ * function with all properties merged. For example, when multiple CSS
+ * declarations depend on the same transient prop `$size`, their separate
+ * style functions are merged into one.
+ *
+ * Before: containerWidth($size), containerHeight($size), containerLineHeight($size)
+ * After:  containerSize($size) with all properties combined
+ */
+function consolidateSameJsxPropStyleFns(args: {
+  styleKey: string;
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+  hasShouldForwardProp: boolean;
+}): void {
+  const { styleKey, styleFnFromProps, styleFnDecls, hasShouldForwardProp } = args;
+
+  // Group entries by jsxProp — only consolidate transient props ($-prefixed) on
+  // shouldForwardProp components. Non-transient props use intentionally separate
+  // style functions with individual parameter types.
+  if (!hasShouldForwardProp) {
+    return;
+  }
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < styleFnFromProps.length; i++) {
+    const entry = styleFnFromProps[i]!;
+    if (entry.jsxProp === "__props" || entry.conditionWhen || !entry.jsxProp.startsWith("$")) {
+      continue;
+    }
+    const indices = groups.get(entry.jsxProp) ?? [];
+    indices.push(i);
+    groups.set(entry.jsxProp, indices);
+  }
+
+  // Only consolidate groups with 2+ entries
+  const indicesToRemove = new Set<number>();
+  for (const [, indices] of groups) {
+    if (indices.length < 2) {
+      continue;
+    }
+
+    // Collect all arrow function bodies and verify they're compatible
+    const firstIdx = indices[0]!;
+    const firstEntry = styleFnFromProps[firstIdx]!;
+    const unifiedParamName = firstEntry.jsxProp;
+    const mergedProperties: unknown[] = [];
+    let firstFnAst: object | undefined;
+
+    let canMerge = true;
+    for (const idx of indices) {
+      const entry = styleFnFromProps[idx]!;
+      const fnAst = styleFnDecls.get(entry.fnKey);
+      if (!fnAst || typeof fnAst !== "object") {
+        canMerge = false;
+        break;
+      }
+      if (idx === firstIdx) {
+        firstFnAst = fnAst;
+      }
+      const body = getFunctionBodyExpr(fnAst);
+      if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+        canMerge = false;
+        break;
+      }
+      // Get the original parameter name for this function
+      const origParam = getArrowFnSingleParamName(fnAst as any);
+      const bodyProps = (body as { properties?: unknown[] }).properties ?? [];
+      if (origParam && origParam !== unifiedParamName) {
+        // Rename all identifier references from the original param to the unified name
+        for (const prop of bodyProps) {
+          renameIdentifierInAst(prop, origParam, unifiedParamName);
+        }
+      }
+      mergedProperties.push(...bodyProps);
+    }
+    if (!canMerge || !firstFnAst) {
+      continue;
+    }
+
+    // Build merged function name: styleKey + suffix from the prop name
+    // (without the "$" prefix, e.g., $size → Size)
+    const propName = firstEntry.jsxProp;
+    const suffix = propName.startsWith("$")
+      ? propName.slice(1).charAt(0).toUpperCase() + propName.slice(2)
+      : propName.charAt(0).toUpperCase() + propName.slice(1);
+    const mergedFnKey = `${styleKey}${suffix}`;
+
+    // Build merged function: take the first function as template, replace body and param
+    const firstBody = getFunctionBodyExpr(firstFnAst);
+    if (!firstBody) {
+      continue;
+    }
+    // Build the unified param with the jsxProp name
+    const firstFn = firstFnAst as { params?: Array<{ name?: string; typeAnnotation?: unknown }> };
+    const firstParam = firstFn.params?.[0];
+    const unifiedParam = firstParam ? { ...firstParam, name: unifiedParamName } : undefined;
+    const mergedBody = { ...(firstBody as object), properties: mergedProperties };
+    const mergedFnAst = {
+      ...firstFnAst,
+      body: mergedBody,
+      params: unifiedParam ? [unifiedParam] : (firstFn.params ?? []),
+    };
+
+    // Update styleFnDecls: add merged, remove old
+    styleFnDecls.set(mergedFnKey, mergedFnAst);
+    for (const idx of indices) {
+      const entry = styleFnFromProps[idx]!;
+      styleFnDecls.delete(entry.fnKey);
+    }
+
+    // Update styleFnFromProps: replace first entry, mark rest for removal
+    styleFnFromProps[firstIdx] = {
+      ...firstEntry,
+      fnKey: mergedFnKey,
+      // Preserve sourceOrder from the first entry
+    };
+    for (let k = 1; k < indices.length; k++) {
+      indicesToRemove.add(indices[k]!);
+    }
+  }
+
+  // Remove consolidated entries (in reverse order to preserve indices)
+  const sortedRemoveIndices = [...indicesToRemove].sort((a, b) => b - a);
+  for (const idx of sortedRemoveIndices) {
+    styleFnFromProps.splice(idx, 1);
+  }
+}
+
+/** Recursively renames all Identifier nodes with `oldName` to `newName` in an AST subtree.
+ *  Skips property keys (the `key` field of Property nodes) to avoid renaming CSS property names. */
+function renameIdentifierInAst(node: unknown, oldName: string, newName: string): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      renameIdentifierInAst(item, oldName, newName);
+    }
+    return;
+  }
+  const n = node as Record<string, unknown>;
+  if (n.type === "Identifier" && n.name === oldName) {
+    n.name = newName;
+    return;
+  }
+  for (const key of Object.keys(n)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    // Skip property keys — only rename in values
+    if (key === "key" && n.type === "Property") {
+      continue;
+    }
+    const child = n[key];
+    if (child && typeof child === "object") {
+      renameIdentifierInAst(child, oldName, newName);
     }
   }
 }

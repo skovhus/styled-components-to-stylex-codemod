@@ -1905,6 +1905,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const e = decl.templateExpressions[slotId] as any;
         let baseExpr = e;
         let propsParam = j.identifier("props");
+        let jsxProp: string = "__props";
         if (e?.type === "ArrowFunctionExpression") {
           if (hasUnsupportedConditionalTest(e)) {
             warnPropInlineStyle(
@@ -1930,22 +1931,32 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           for (const propName of propsUsed) {
             ensureShouldForwardPropDrop(decl, propName);
           }
-          if (e.params?.[0]?.type === "Identifier") {
-            propsParam = j.identifier(e.params[0].name);
-          }
+          // Try to unwrap props access (props.$x → $x) for cleaner style functions.
+          // When only one transient prop is used, emit a single-param function
+          // (e.g., ($size) => ...) instead of (props) => ..., enabling consolidation.
           const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
-          const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
-          if (!inlineExpr) {
-            warnPropInlineStyle(
-              decl,
-              "Unsupported prop-based inline style expression cannot be safely inlined",
-              d.property,
-              loc,
-            );
-            bail = true;
-            break;
+          if (unwrapped && unwrapped.propsUsed.size === 1) {
+            const singleProp = [...unwrapped.propsUsed][0]!;
+            propsParam = j.identifier(singleProp);
+            jsxProp = singleProp;
+            baseExpr = unwrapped.expr;
+          } else {
+            if (e.params?.[0]?.type === "Identifier") {
+              propsParam = j.identifier(e.params[0].name);
+            }
+            const inlineExpr = inlineArrowFunctionBody(j, e);
+            if (!inlineExpr) {
+              warnPropInlineStyle(
+                decl,
+                "Unsupported prop-based inline style expression cannot be safely inlined",
+                d.property,
+                loc,
+              );
+              bail = true;
+              break;
+            }
+            baseExpr = inlineExpr;
           }
-          baseExpr = inlineExpr;
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
         const { prefix, suffix } = extractStaticPartsForDecl(d);
@@ -1963,7 +1974,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
         }
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-          styleFnFromProps.push({ fnKey, jsxProp: "__props" });
+          styleFnFromProps.push({ fnKey, jsxProp });
         }
       }
       if (bail) {

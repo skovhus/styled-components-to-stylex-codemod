@@ -28,17 +28,7 @@ function SizeBox<C extends React.ElementType = "div">(
     <Component
       ref={ref}
       {...rest}
-      {...mergedSx(
-        [
-          styles.sizeBox,
-          styles.sizeBoxWidth(size),
-          styles.sizeBoxMaxWidth(size),
-          styles.sizeBoxMaxHeight(size),
-          sx,
-        ],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.sizeBox, styles.sizeBoxSize(size), sx], className, style)}
     >
       {children}
     </Component>
@@ -65,13 +55,9 @@ const styles = stylex.create({
     padding: "8px",
     color: "white",
   },
-  sizeBoxWidth: (width: number) => ({
-    width: `${width}px`,
-  }),
-  sizeBoxMaxWidth: (maxWidth: number) => ({
-    maxWidth: `${maxWidth}px`,
-  }),
-  sizeBoxMaxHeight: (maxHeight: number) => ({
-    maxHeight: `${maxHeight}px`,
+  sizeBoxSize: (size: number) => ({
+    width: `${size}px`,
+    maxWidth: `${size}px`,
+    maxHeight: `${size}px`,
   }),
 });
