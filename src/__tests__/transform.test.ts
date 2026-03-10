@@ -394,9 +394,8 @@ describe("transform", () => {
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
 
-    // Compare sidecar .stylex.ts(x) content if the test case has one
-    const sidecarExt = /\.tsx$/i.test(inputPath) ? ".tsx" : ".ts";
-    const sidecarPath = inputPath.replace(/\.\w+$/, `.stylex${sidecarExt}`);
+    // Compare sidecar .stylex.ts content if the test case has one
+    const sidecarPath = inputPath.replace(/\.\w+$/, ".stylex.ts");
     if (existsSync(sidecarPath)) {
       const expectedSidecar = readFileSync(sidecarPath, "utf-8");
       expect(diagnostics.sidecarContent).toBeDefined();
