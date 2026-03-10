@@ -1,1 +1,0 @@
-import{j as r}from"./index-CoieXudY.js";function e(n){return r.jsx("div",{className:"x1vvogim x1hr3lfm x1b4wo1g x1y0btm7 x9r1u3d",children:n.children})}function o(){return r.jsx(e,{children:"Hello"})}export{o as App};
