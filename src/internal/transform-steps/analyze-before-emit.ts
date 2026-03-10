@@ -519,6 +519,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         existingPropNames.add(attr);
       }
     }
+    // Block renames where the stripped name already appears as a JSX attribute at
+    // a call site (e.g., <Input size={5} $size="lg" /> — renaming $size → size
+    // would create duplicate attributes).
+    collectCallSiteAttrNames(root, j, decl.localName, existingPropNames);
     const renames = new Map<string, string>();
     for (const prop of transientProps) {
       const stripped = prop.slice(1);
@@ -1054,6 +1058,41 @@ function collectResolverImportNames(ctx: TransformContext): Set<string> {
     }
   }
   return names;
+}
+
+/**
+ * Collects non-`$`-prefixed attribute names from JSX call sites of a component.
+ * Used to prevent renames that would create duplicate attributes
+ * (e.g., `<Input size={5} $size="lg" />` — renaming `$size` → `size` would collide).
+ */
+function collectCallSiteAttrNames(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  componentName: string,
+  names: Set<string>,
+): void {
+  const collectFromElement = (openingElement: { attributes?: unknown[] }) => {
+    for (const attr of (openingElement as any).attributes ?? []) {
+      if (attr.type === "JSXAttribute" && attr.name?.type === "JSXIdentifier") {
+        const name: string = attr.name.name;
+        if (!name.startsWith("$")) {
+          names.add(name);
+        }
+      }
+    }
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: componentName },
+      },
+    } as any)
+    .forEach((p: any) => collectFromElement(p.node.openingElement));
+  root
+    .find(j.JSXSelfClosingElement, {
+      name: { type: "JSXIdentifier", name: componentName },
+    } as any)
+    .forEach((p: any) => collectFromElement(p.node));
 }
 
 /**

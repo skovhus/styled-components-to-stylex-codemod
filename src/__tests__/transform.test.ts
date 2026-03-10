@@ -749,6 +749,32 @@ export const App = () => (
     expect(result.code).not.toContain("disabled={disabled}");
   });
 
+  it("should keep $-prefix when stripped name collides with call-site attribute", () => {
+    const source = `
+import styled from "styled-components";
+
+const StyledInput = styled.input<{ $size?: string }>\`
+  font-size: \${(props) => (props.$size === "lg" ? "18px" : "14px")};
+\`;
+
+export const App = () => (
+  <div>
+    <StyledInput size={5} $size="lg" />
+    <StyledInput $size="sm" />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("$size");
+  });
+
   it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
     const source = `
 import * as React from "react";
