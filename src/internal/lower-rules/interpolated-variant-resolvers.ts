@@ -156,21 +156,33 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       if (quasis.length === 2 && exprs.length === 1) {
         const prefix = quasis[0]?.value?.cooked ?? quasis[0]?.value?.raw ?? "";
         const suffix = quasis[1]?.value?.cooked ?? quasis[1]?.value?.raw ?? "";
-        if (suffix.trim() !== "") {
-          return false;
+
+        // Format 1a: static prefix (width+style), dynamic color, empty suffix
+        if (suffix.trim() === "") {
+          const parsed = parseInterpolatedBorderStaticParts({
+            prop: direction ? `border-${direction.toLowerCase()}` : "border",
+            prefix,
+            suffix,
+          });
+          if (parsed?.width && parsed?.style) {
+            target[widthProp] = j.literal(parsed.width);
+            target[styleProp] = j.literal(parsed.style);
+            target[colorProp] = exprs[0];
+            return true;
+          }
         }
-        const parsed = parseInterpolatedBorderStaticParts({
-          prop: direction ? `border-${direction.toLowerCase()}` : "border",
-          prefix,
-          suffix,
-        });
-        if (!parsed?.width || !parsed?.style) {
-          return false;
+
+        // Format 3: `${width} solid color` - dynamic width, static style+color in suffix
+        // quasis: ["", " solid transparent"], exprs: [widthExpr]
+        if (prefix.trim() === "" && suffix.trim() !== "") {
+          const parsed = parseBorderShorthandParts(suffix.trim());
+          if (parsed?.style && parsed?.color) {
+            target[widthProp] = exprs[0];
+            target[styleProp] = j.literal(parsed.style);
+            target[colorProp] = j.literal(parsed.color);
+            return true;
+          }
         }
-        target[widthProp] = j.literal(parsed.width);
-        target[styleProp] = j.literal(parsed.style);
-        target[colorProp] = exprs[0];
-        return true;
       }
 
       // Format 2: `${width} solid ${color}` - dynamic width, static style, dynamic color
@@ -389,6 +401,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
 
   if (negParsed) {
     if (!applyParsed(styleObj as any, negParsed)) {
+      bailUnsupported(
+        decl,
+        "Resolved conditional border variant could not be expanded to longhand properties",
+      );
       setBail();
       return true;
     }
@@ -401,6 +417,10 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     const whenClean = when.replace(/^!/, "");
     const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
     if (!applyParsed(bucket, parsed)) {
+      bailUnsupported(
+        decl,
+        "Resolved conditional border variant could not be expanded to longhand properties",
+      );
       setBail();
       return true;
     }
