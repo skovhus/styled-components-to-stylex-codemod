@@ -160,12 +160,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-color {
+@property --x-margin {
   syntax: "*";
   inherits: false
 }
 
-@property --x-margin {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
