@@ -174,9 +174,11 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
 
         // Format 3: `${width} solid color` - dynamic width, static style+color in suffix
         // quasis: ["", " solid transparent"], exprs: [widthExpr]
+        // Reject when parseBorderShorthandParts also extracts a width, which means a
+        // numeric token inside the color value (e.g., rgb(0 0 0 / 0.5)) was misclassified.
         if (prefix.trim() === "" && suffix.trim() !== "") {
           const parsed = parseBorderShorthandParts(suffix.trim());
-          if (parsed?.style && parsed?.color) {
+          if (parsed?.style && parsed?.color && !parsed.width) {
             target[widthProp] = exprs[0];
             target[styleProp] = j.literal(parsed.style);
             target[colorProp] = j.literal(parsed.color);

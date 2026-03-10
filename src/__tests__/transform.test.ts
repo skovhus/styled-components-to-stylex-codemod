@@ -3748,6 +3748,36 @@ export function App() {
   });
 });
 
+describe("conditional border helper with complex color", () => {
+  it("should bail rather than emit mangled CSS when border color contains spaces", () => {
+    const source = `
+import styled from "styled-components";
+import { thinBorder } from "./lib/helpers";
+
+const Box = styled.div<{ $bordered?: boolean }>\`
+  padding: 8px;
+  border: \${(props) => (props.$bordered ? thinBorder("rgb(0 0 0 / 0.5)") : "none")};
+\`;
+
+export const App = () => <Box $bordered>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "border-complex-color.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    if (result.code) {
+      // If the transform succeeds, it must NOT contain a mangled color
+      // where numeric channels from rgb() are misclassified as border width
+      expect(result.code).not.toContain('borderWidth: "0"');
+      expect(result.code).not.toContain('borderColor: "rgb(0 0 / 0.5)"');
+    }
+    // Either bail (code is null) or produce correct output — both acceptable
+  });
+});
+
 describe("inline base resolver variant coexistence", () => {
   it("should preserve resolver JSX variants when template variants are also present", () => {
     const source = `
