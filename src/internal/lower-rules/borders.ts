@@ -486,9 +486,11 @@ export function tryHandleInterpolatedBorder(
         }
 
         // Format 3: dynamic width, static style+color in suffix
+        // Reject when parseBorderShorthandParts also extracts a width, which means a
+        // numeric token inside the color value (e.g., rgb(0 0 0 / 0.5)) was misclassified.
         if (prefix.trim() === "" && suffix.trim() !== "") {
           const parsed = parseBorderShorthandParts(suffix.trim());
-          if (parsed?.style && parsed?.color) {
+          if (parsed?.style && parsed?.color && !parsed.width) {
             return { width: exprs[0], style: parsed.style, colorExpr: parsed.color };
           }
         }
