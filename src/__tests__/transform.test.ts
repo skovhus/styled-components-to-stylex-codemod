@@ -3117,6 +3117,70 @@ export const App = () => <Box />;
   });
 });
 
+describe("attrs runtime semantics with usage:props mixins", () => {
+  it("keeps wrapper for transient conditional attrs combined with usage:props mixins", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const Box = styled.div.attrs((props: { $smallFlag?: boolean }) => ({
+  size: props.$smallFlag ? 5 : undefined,
+}))\`
+  \${scrollFadeMaskStyles(18, "both")}
+\`;
+
+export function App() {
+  const smallFlag = Math.random() > 0.5;
+  return <Box $smallFlag={smallFlag}>x</Box>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-runtime-conditional-usage-props.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("function Box(");
+    expect(code).toMatch(/size=\{\$smallFlag \? 5 : undefined\}/);
+    expect(code).not.toContain("size={5}");
+  });
+
+  it("keeps wrapper for transient inverted attrs combined with usage:props mixins", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const Box = styled.div.attrs((props: { $collapsedFlag?: boolean }) => ({
+  "data-open": props.$collapsedFlag !== true,
+}))\`
+  \${scrollFadeMaskStyles(18, "both")}
+\`;
+
+export function App() {
+  const collapsedFlag = Math.random() > 0.5;
+  return <Box $collapsedFlag={collapsedFlag}>x</Box>;
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "attrs-runtime-inverted-usage-props.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("function Box(");
+    expect(code).toMatch(/data-open=\{\$collapsedFlag !== true\}/);
+    expect(code).not.toContain("data-open={true}");
+  });
+});
+
 describe("theme boolean conditionals", () => {
   it("should use adapter-configured theme hook import and function name", () => {
     const source = `

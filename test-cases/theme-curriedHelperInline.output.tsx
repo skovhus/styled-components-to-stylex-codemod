@@ -16,15 +16,11 @@ function Box(props: BoxProps) {
   );
 }
 
-function BorderedBox(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.border}>{props.children}</div>;
-}
-
 export const App = () => (
   <div style={{ margin: "10px", padding: "10px", height: "100px" }}>
     <Box position="top">Top box with themed border</Box>
     <Box position="bottom">Bottom box without border</Box>
-    <BorderedBox>Bordered box</BorderedBox>
+    <div sx={styles.border}>Bordered box</div>
   </div>
 );
 

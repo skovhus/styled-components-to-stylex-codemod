@@ -3,12 +3,8 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
-function Container(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.container, styles.border]}>{props.children}</div>;
-}
-
 export function App() {
-  return <Container>Hello</Container>;
+  return <div sx={[styles.border, styles.container]}>Hello</div>;
 }
 
 const styles = stylex.create({

@@ -1,32 +1,19 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 import { $colors } from "./tokens.stylex";
 
-// Using CSS snippet helper for truncation
-function TruncatedText(props: React.PropsWithChildren<{}>) {
-  return <p sx={[helpers.truncate, styles.truncatedText]}>{props.children}</p>;
-}
-
-// Using CSS snippet helper for flex centering
-function CenteredContainer(props: React.PropsWithChildren<{}>) {
-  return <div sx={[helpers.flexCenter, styles.centeredContainer]}>{props.children}</div>;
-}
-
-function CardTitle(props: React.PropsWithChildren<{}>) {
-  return <h3 sx={[helpers.truncate, styles.cardTitle]}>{props.children}</h3>;
-}
-
 export const App = () => (
-  <CenteredContainer>
+  <div sx={[helpers.flexCenter, styles.centeredContainer]}>
     <div sx={styles.card}>
-      <CardTitle>This is a very long title that should be truncated</CardTitle>
-      <TruncatedText>
+      <h3 sx={[helpers.truncate, styles.cardTitle]}>
+        This is a very long title that should be truncated
+      </h3>
+      <p sx={[helpers.truncate, styles.truncatedText]}>
         This is some text content that will be truncated if it gets too long.
-      </TruncatedText>
+      </p>
       <button sx={styles.button}>Click me</button>
     </div>
-  </CenteredContainer>
+  </div>
 );
 
 const styles = stylex.create({
@@ -45,11 +32,13 @@ const styles = stylex.create({
     borderRadius: "4px",
     cursor: "pointer",
   },
+  // Using CSS snippet helper for truncation
   truncatedText: {
     maxWidth: "200px",
     fontSize: "14px",
     color: $colors.textSecondary,
   },
+  // Using CSS snippet helper for flex centering
   centeredContainer: {
     minHeight: "100px",
     backgroundColor: $colors.bgBase,
