@@ -798,6 +798,31 @@ export const App = (props: { $active?: boolean }) => <Toggle {...props} />;
     expect(result.code).toContain("$active ?");
   });
 
+  it("should keep $-prefix when stripped name collides with exported const binding", () => {
+    const source = `
+import styled from "styled-components";
+
+export const $size = 42;
+
+const Box = styled.div<{ $size?: string }>\`
+  font-size: \${(props) => (props.$size === "lg" ? "18px" : "14px")};
+\`;
+
+export const App = () => <Box $size="lg">Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The wrapper's destructuring must keep $size because renaming to "size"
+    // would cause renameIdentifiersInAst to also rename the exported $size binding.
+    expect(result.code).toContain("$size === ");
+  });
+
   it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
     const source = `
 import * as React from "react";

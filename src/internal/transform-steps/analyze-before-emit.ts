@@ -1027,26 +1027,35 @@ function isModuleScopeBinding(
   if (hasImport) {
     return true;
   }
-  // Check top-level variable declarations (excluding the owner)
+  // Check top-level declarations: variables, functions, classes (excluding the owner).
+  // Walk up the path chain to determine if a binding is at module scope — handles
+  // both `const $x = ...` and `export const $x = ...` parent structures.
+  const isTopLevel = (p: { parentPath?: { node?: { type?: string }; parentPath?: unknown } }) => {
+    let cur = p.parentPath;
+    while (cur) {
+      const t = (cur as { node?: { type?: string } }).node?.type;
+      if (t === "Program") {
+        return true;
+      }
+      if (t && t !== "VariableDeclaration" && t !== "ExportNamedDeclaration") {
+        return false;
+      }
+      cur = (cur as { parentPath?: unknown }).parentPath as typeof cur;
+    }
+    return false;
+  };
   const hasVariable =
     root
       .find(j.VariableDeclarator)
       .filter((p) => {
         const id = p.node.id;
-        if (id.type !== "Identifier" || id.name !== name) {
-          return false;
-        }
-        return id.name !== ownerLocalName;
+        return id.type === "Identifier" && id.name === name && id.name !== ownerLocalName;
       })
-      .filter((p) => {
-        const parent = p.parentPath?.parentPath;
-        return parent?.node?.type === "Program";
-      })
+      .filter((p) => isTopLevel(p))
       .size() > 0;
   if (hasVariable) {
     return true;
   }
-  // Check function declarations (e.g., function $size() {})
   const hasFunction =
     root
       .find(j.FunctionDeclaration)
@@ -1055,7 +1064,6 @@ function isModuleScopeBinding(
   if (hasFunction) {
     return true;
   }
-  // Check class declarations (e.g., class $size {})
   return (
     root
       .find(j.ClassDeclaration)
