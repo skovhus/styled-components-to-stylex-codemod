@@ -207,7 +207,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       if (!explicit) {
         return "{}";
       }
-      const compoundWhenKeys = collectCompoundVariantKeys(d.compoundVariants);
+      const compoundWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {
+        syntheticOnly: true,
+      });
       const variantDimByProp = buildVariantDimPropTypeMap(d);
       const staticVariantPropTypes = buildStaticVariantPropTypes(d);
       const lines: string[] = [];

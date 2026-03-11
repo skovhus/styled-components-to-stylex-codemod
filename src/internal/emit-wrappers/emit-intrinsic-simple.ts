@@ -618,9 +618,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         for (const sbv of d.staticBooleanVariants ?? []) {
           keys.add(sbv.propName);
         }
-        // Remove compound variant when-keys (e.g. "checkedTrue", "checkedFalse")
-        // that are variantStyleKeys entries but not actual prop names.
-        const compoundVariantWhenKeys = collectCompoundVariantKeys(d.compoundVariants);
+        // Remove synthetic compound variant when-keys (e.g. "checkedTrue",
+        // "checkedFalse") that are variantStyleKeys entries but not actual
+        // prop names.  Use syntheticOnly to preserve real prop names like the
+        // outerProp of 3-branch compounds (e.g. "disabled").
+        const compoundVariantWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {
+          syntheticOnly: true,
+        });
         for (const k of compoundVariantWhenKeys) {
           keys.delete(k);
         }
