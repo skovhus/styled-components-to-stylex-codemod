@@ -1,1 +1,0 @@
-import{j as x,K as t}from"./index-D10AsssS.js";function a(e){const s=t();return x.jsx("div",{...{0:{className:"xpyat2d x1exxlbk x1mqxbix"},1:{className:"xpyat2d x1exxlbk x1awj2ng"}}[(s.mode==="dark")<<0],children:e.children})}const n=()=>x.jsx(a,{children:"Theme mode"});export{n as App};

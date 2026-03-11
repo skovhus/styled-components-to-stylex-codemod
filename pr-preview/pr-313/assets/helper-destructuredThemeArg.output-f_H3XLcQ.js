@@ -1,0 +1,1 @@
+import{j as x}from"./index-CwDZyNYm.js";const i=()=>x.jsx("div",{style:{display:"flex",gap:16,padding:16},children:x.jsx("div",{className:"xso031l x1q0q8m5 x1f3p4rf x1vvogim x1hr3lfm",children:"Box with border"})});export{i as App};
