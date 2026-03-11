@@ -1,0 +1,1 @@
+import{j as r}from"./index-Dz4RE-Lu.js";import{E as t}from"./external-component-QZRK4X59.js";function n(){return r.jsx("div",{children:r.jsx(t,{isOpen:!0,className:"xdj266r xv8wvd9 xat24cr x1bawvfr"})})}export{n as App};
