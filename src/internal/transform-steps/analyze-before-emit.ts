@@ -363,7 +363,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
   // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
-  // Exception: single-use intrinsic components can be inlined with mergedSx instead.
+  // Exception: single-use intrinsic components can be inlined with adapter merge handling instead.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
     if (decl.isDirectJsxResolution) {

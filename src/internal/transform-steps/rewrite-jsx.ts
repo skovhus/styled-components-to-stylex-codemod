@@ -606,8 +606,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         // Build final rest with stylex.props inserted after last spread.
-        // For direct JSX resolutions with className/style, use mergedSx to
-        // combine StyleX output with user-provided className/style values.
+        // For inlined components with className/style, use adapter-configured
+        // merger behavior (or verbose fallback when no merger is configured).
         const needsMerge = classNameAttr !== null || styleAttr !== null;
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
         const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
@@ -621,7 +621,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             })()
           : j.jsxSpreadAttribute(
               needsMerge
-                ? buildMergedSxCall(j, styleArgs, classNameAttr, styleAttr)
+                ? buildInlineMergeCall(
+                    j,
+                    styleArgs,
+                    classNameAttr,
+                    styleAttr,
+                    ctx.adapter.styleMerger?.functionName,
+                  )
                 : j.callExpression(
                     j.memberExpression(j.identifier("stylex"), j.identifier("props")),
                     [...styleArgs],
@@ -633,8 +639,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 
-        // Final order: leading attrs, rest (with stylex.props/mergedSx inserted).
-        // When mergedSx is used, className/style are already folded into the call.
+        // Final order: leading attrs, rest (with stylex.props/merge call inserted).
+        // When merge call is used, className/style are already folded into the call.
         opening.attributes = [
           ...keptLeadingAfterVariants,
           ...finalRest,
@@ -659,26 +665,91 @@ function buildInlineVariantLookupFromAttr(
 }
 
 /**
- * Builds `mergedSx(stylesArg, classNameExpr, styleExpr)` for inlined components
- * that receive className and/or style at a call site.
- * `mergedSx` calls `stylex.props()` internally, so we pass raw style objects.
+ * Builds an inline style/class merge call for inlined components that receive
+ * className and/or style at a call site.
+ *
+ * - With configured styleMerger: calls adapter merger (e.g. `stylexProps(...)`).
+ * - Without styleMerger: emits a verbose inline fallback around `stylex.props(...)`.
  */
-function buildMergedSxCall(
+function buildInlineMergeCall(
   j: TransformContext["j"]["jscodeshift"],
   styleArgs: ExpressionKind[],
   classNameAttr: unknown,
   styleAttr: unknown,
+  styleMergerFunctionName: string | undefined,
 ): ExpressionKind {
   const stylesArg = styleArgs.length === 1 ? styleArgs[0]! : j.arrayExpression([...styleArgs]);
 
   const classNameExpr = extractJsxAttrValueExpr(j, classNameAttr);
   const styleExpr = extractJsxAttrValueExpr(j, styleAttr);
 
-  return j.callExpression(j.identifier("mergedSx"), [
-    stylesArg,
-    classNameExpr ?? j.identifier("undefined"),
-    ...(styleExpr ? [styleExpr] : []),
-  ]);
+  if (styleMergerFunctionName) {
+    return j.callExpression(j.identifier(styleMergerFunctionName), [
+      stylesArg,
+      ...(classNameExpr ? [classNameExpr] : styleExpr ? [j.identifier("undefined")] : []),
+      ...(styleExpr ? [styleExpr] : []),
+    ]);
+  }
+
+  return buildInlineVerboseMergeFallback(j, stylesArg, classNameExpr, styleExpr);
+}
+
+function buildInlineVerboseMergeFallback(
+  j: TransformContext["j"]["jscodeshift"],
+  stylesArg: ExpressionKind,
+  classNameExpr: ExpressionKind | undefined,
+  styleExpr: ExpressionKind | undefined,
+): ExpressionKind {
+  const sxIdentifier = j.identifier("sx");
+  const sxClassName = j.memberExpression(sxIdentifier, j.identifier("className"));
+  const sxStyle = j.memberExpression(sxIdentifier, j.identifier("style"));
+
+  const classNameValue = classNameExpr
+    ? j.callExpression(
+        j.memberExpression(
+          j.callExpression(
+            j.memberExpression(
+              j.arrayExpression([sxClassName, classNameExpr]),
+              j.identifier("filter"),
+            ),
+            [j.identifier("Boolean")],
+          ),
+          j.identifier("join"),
+        ),
+        [j.literal(" ")],
+      )
+    : sxClassName;
+
+  const styleValue = styleExpr
+    ? j.conditionalExpression(
+        sxStyle,
+        j.objectExpression([j.spreadElement(sxStyle), j.spreadElement(styleExpr)]),
+        styleExpr,
+      )
+    : sxStyle;
+
+  return j.callExpression(
+    j.arrowFunctionExpression(
+      [],
+      j.blockStatement([
+        j.variableDeclaration("const", [
+          j.variableDeclarator(
+            sxIdentifier,
+            j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("props")), [
+              stylesArg,
+            ]),
+          ),
+        ]),
+        j.returnStatement(
+          j.objectExpression([
+            j.property("init", j.identifier("className"), classNameValue),
+            j.property("init", j.identifier("style"), styleValue),
+          ]),
+        ),
+      ]),
+    ),
+    [],
+  );
 }
 
 /** Extracts the value expression from a JSX attribute node. */

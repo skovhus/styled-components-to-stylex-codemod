@@ -1629,6 +1629,28 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).toMatch(/stylexProps\s*\([^)]*className[^)]*style/);
   });
 
+  it("should use configured merger for single-use intrinsic inline className/style", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = () => <Box className="external" style={{ left: 1 }}>Click</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylexProps(");
+    expect(result.code).not.toContain("mergedSx(");
+  });
+
   it("should not use merger when external styles are disabled", async () => {
     const source = `
 import styled from 'styled-components';
@@ -1678,6 +1700,47 @@ export const App = () => <Box $delay={100} />;
     expect(result.code).not.toContain("stylexProps");
     expect(result.code).toContain("stylex.props");
     expect(result.code).toContain("transitionDelay");
+  });
+
+  it("should use verbose inline fallback when no merger is configured", async () => {
+    const adapterWithoutMerger = {
+      styleMerger: null,
+      useSxProp: false,
+      externalInterface() {
+        return { styles: true, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+    };
+
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = () => <Box className="external" style={{ left: 1 }}>Click</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutMerger },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.props(styles.box)");
+    expect(result.code).toContain('.filter(Boolean).join(" ")');
+    expect(result.code).not.toContain("stylexProps(");
+    expect(result.code).not.toContain("mergedSx(");
   });
 
   it("should use verbose pattern when no merger is configured", async () => {
