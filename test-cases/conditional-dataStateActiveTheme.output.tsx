@@ -13,7 +13,7 @@ function Container(props: React.PropsWithChildren<{}>) {
   );
 }
 
-function Tab(props: React.PropsWithChildren<{ "data-state"?: string }>) {
+function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const { children, ...rest } = props;
 
   return (

@@ -907,7 +907,7 @@ export class WrapperEmitter {
         // When needsBroadAttrs, ComponentProps base already covers this attr
         continue;
       }
-      const attrType = attr.startsWith("data-") ? "string" : "any";
+      const attrType = attr.startsWith("data-") ? "boolean | string" : "any";
       lines.push(`${this.toTypeKey(attr)}?: ${attrType}`);
     }
 
