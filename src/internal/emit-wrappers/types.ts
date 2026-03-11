@@ -7,12 +7,12 @@ import type { ASTNode, JSCodeshift } from "jscodeshift";
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 
 /**
- * HTML attributes that the emitter explicitly forwards to the DOM for specific
- * intrinsic element types. Renaming a transient prop to one of these names would
- * change behavior (e.g., `$disabled` → `disabled` on `<button>` would make the
- * button actually HTML-disabled instead of just styling-disabled).
+ * Native HTML attributes that must not be used as renamed transient prop names
+ * for specific intrinsic element types. Renaming `$disabled` → `disabled` on a
+ * `<button>` would change behavior (the button becomes actually HTML-disabled
+ * instead of just styling-disabled).
  */
-export const FORWARDED_INTRINSIC_ATTRS: Readonly<Record<string, readonly string[]>> = {
+export const BLOCKED_INTRINSIC_ATTR_RENAMES: Readonly<Record<string, readonly string[]>> = {
   button: ["disabled"],
   input: ["disabled"],
   select: ["disabled"],

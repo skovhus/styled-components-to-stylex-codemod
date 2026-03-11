@@ -15,7 +15,7 @@ import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
-import { FORWARDED_INTRINSIC_ATTRS } from "../emit-wrappers/types.js";
+import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 type JsxAttr = JSXAttribute | JSXSpreadAttribute;
@@ -515,7 +515,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // For intrinsic elements, block renames that would collide with HTML attributes
     // the emitter explicitly forwards to the DOM (e.g., disabled on <button>).
     if (decl.base.kind === "intrinsic") {
-      for (const attr of FORWARDED_INTRINSIC_ATTRS[decl.base.tagName] ?? []) {
+      for (const attr of BLOCKED_INTRINSIC_ATTR_RENAMES[decl.base.tagName] ?? []) {
         existingPropNames.add(attr);
       }
     }

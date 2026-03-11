@@ -15,13 +15,7 @@ import type {
 import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
-import {
-  FORWARDED_INTRINSIC_ATTRS,
-  type ExportInfo,
-  type ExpressionKind,
-  type InlineStyleProp,
-  type WrapperPropDefaults,
-} from "./types.js";
+import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -1588,12 +1582,13 @@ export class WrapperEmitter {
       );
     }
 
-    for (const attr of FORWARDED_INTRINSIC_ATTRS[tagName] ?? []) {
-      if (destructureProps.includes(attr)) {
-        jsxAttrs.push(
-          j.jsxAttribute(j.jsxIdentifier(attr), j.jsxExpressionContainer(j.identifier(attr))),
-        );
-      }
+    if (tagName === "button" && destructureProps.includes("disabled")) {
+      jsxAttrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("disabled"),
+          j.jsxExpressionContainer(j.identifier("disabled")),
+        ),
+      );
     }
 
     if (merging.sxPropExpr) {
