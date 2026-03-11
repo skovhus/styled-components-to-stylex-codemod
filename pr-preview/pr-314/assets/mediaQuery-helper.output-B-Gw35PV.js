@@ -1,0 +1,1 @@
+import{j as x}from"./index-BpAZFIRk.js";const e=()=>x.jsxs("div",{children:[x.jsx("div",{className:"xh8yej3 x1uz70x1 xfcx1n5 x1i7j8g4",children:"Responsive container"}),x.jsx("div",{className:"xexx8yu x1sdy3oo xsag5q8 xyhzg9w x4l9tsp x1xdgjpz",children:"Details column"})]});export{e as App};
