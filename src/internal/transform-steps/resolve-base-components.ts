@@ -567,7 +567,12 @@ function buildInlineResolverVariantDimensions(args: {
       } else {
         // Include the variant value in the style key for clarity:
         // e.g., `cardDirectionColumn` instead of just `cardDirection`.
-        const valueSuffix = singleKey.charAt(0).toUpperCase() + singleKey.slice(1);
+        // Sanitize hyphenated CSS values (e.g. "space-between" → "SpaceBetween")
+        // so the resulting style key is a valid JS identifier.
+        const valueSuffix = singleKey
+          .split("-")
+          .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+          .join("");
         staticBooleanVariants.push({
           propName,
           variantKey: singleKey,
