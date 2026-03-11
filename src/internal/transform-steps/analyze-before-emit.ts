@@ -222,6 +222,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       !decl.isDirectJsxResolution &&
       decl.base.kind === "intrinsic" &&
       !decl.bridgeClassName &&
+      // attrWrapper components (input[type="checkbox"], a[href^="https"], etc.) need
+      // specialized wrapper emitters for conditional attribute-based styles.
+      !decl.attrWrapper &&
       // Only safe when the wrapper was SOLELY for extraStylexPropsArgs/extraStyleKeys.
       // Any other dynamic feature (prop-dependent styles, variants, theme hooks, etc.)
       // needs the wrapper for prop destructuring and conditional logic.
