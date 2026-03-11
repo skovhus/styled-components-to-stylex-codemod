@@ -12,8 +12,14 @@ import {
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
-import { getRootJsxIdentifierName, isFunctionNode } from "../utilities/jscodeshift-utils.js";
+import {
+  getRootJsxIdentifierName,
+  isAstNode,
+  isFunctionNode,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
+import type { PromotedStyleEntry } from "../transform-types.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -361,9 +367,21 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     return { className: foundClassName, style: foundStyle, ref: foundRef };
   };
 
+  // Pre-analyze inline style props at JSX call sites to determine if they can be promoted
+  // to static/dynamic stylex.create entries (avoiding wrapper components and mergedSx).
+  analyzePromotableStyleProps(
+    root,
+    j,
+    styledDecls,
+    declByLocal,
+    getJsxUsageCount,
+    ctx.resolvedStyleObjects ?? new Map(),
+  );
+
   // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
   // Exception: single-use intrinsic components can be inlined with adapter merge handling instead.
+  // Exception: components with all promotable style props (no className) can be inlined.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
     if (decl.isDirectJsxResolution) {
@@ -372,6 +390,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
+      // Style props promoted to stylex.create entries don't need a wrapper.
+      if (!className && decl.promotedStyleProps?.length) {
+        continue;
+      }
       if (
         decl.base.kind === "intrinsic" &&
         !decl.needsWrapperComponent &&
@@ -401,6 +423,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // Relation overrides (`Parent > Child`, `${Parent} &`, etc.) are attached at callsites.
     // Keep these children inlined so post-process can inject override style keys conditionally.
     if (relationChildStyleKeys.has(decl.styleKey)) {
+      continue;
+    }
+    // Components with promoted style props at all call sites don't need wrapping;
+    // each call site gets its own promoted style key(s) in the inline output.
+    if (decl.promotedStyleProps?.length) {
       continue;
     }
     const { ref } = getJsxAttributeUsage(decl.localName);
@@ -909,6 +936,20 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (decl.callSiteCombinedStyles?.length) {
         for (const { styleKey, styles } of decl.callSiteCombinedStyles) {
           ctx.resolvedStyleObjects.set(styleKey, styles);
+        }
+      }
+      // Inject promoted style props into resolvedStyleObjects.
+      if (decl.promotedStyleProps?.length) {
+        for (const entry of decl.promotedStyleProps) {
+          if (entry.mergeIntoBase) {
+            // Merge static properties into the component's existing style object.
+            const existing = ctx.resolvedStyleObjects.get(decl.styleKey);
+            if (existing && typeof existing === "object" && !isAstNode(existing)) {
+              Object.assign(existing as Record<string, unknown>, entry.styleValue);
+            }
+          } else {
+            ctx.resolvedStyleObjects.set(entry.styleKey, entry.styleValue);
+          }
         }
       }
     }
@@ -1663,6 +1704,425 @@ function patternContainsName(node: { type?: string } | null | undefined, name: s
   }
   if (node.type === "AssignmentPattern") {
     return patternContainsName((node as any).left, name);
+  }
+  return false;
+}
+
+// --- Promotable style prop analysis ---
+
+/** StyleX shorthand properties that must be expanded. Bail from promotion if encountered.
+ *  Note: margin/padding are NOT forbidden — StyleX accepts them as single-value shorthands. */
+const FORBIDDEN_SHORTHAND_PROPS = new Set([
+  "border",
+  "borderTop",
+  "borderRight",
+  "borderBottom",
+  "borderLeft",
+  "background",
+]);
+
+/**
+ * Returns true if a StyledDecl ultimately renders as an intrinsic element,
+ * either directly (`styled.div`) or through a chain of styled extensions
+ * (`styled(OtherStyledComponent)` where the root is intrinsic).
+ */
+function resolvesToIntrinsic(decl: StyledDecl, declByLocal: Map<string, StyledDecl>): boolean {
+  let current: StyledDecl | undefined = decl;
+  const visited = new Set<string>();
+  while (current) {
+    if (visited.has(current.localName)) {
+      return false; // circular reference guard
+    }
+    visited.add(current.localName);
+    if (current.base.kind === "intrinsic") {
+      return true;
+    }
+    current = declByLocal.get(current.base.ident);
+  }
+  return false;
+}
+
+/** CSS properties whose values are typically numeric (no unit string needed). */
+const NUMERIC_CSS_PROPS = new Set([
+  "zIndex",
+  "opacity",
+  "flex",
+  "flexGrow",
+  "flexShrink",
+  "order",
+  "fontWeight",
+  "lineHeight",
+  "tabSize",
+  "orphans",
+  "widows",
+  "columnCount",
+]);
+
+/**
+ * Infers a TS type keyword for a dynamic expression based on the CSS property it's assigned to.
+ * Numeric-only properties get `number`; others get `string`.
+ */
+function inferTypeForCssProp(cssProp: string): "number" | "string" {
+  if (NUMERIC_CSS_PROPS.has(cssProp)) {
+    return "number";
+  }
+  // Length properties (left, width, height, etc.) accept both numbers and strings.
+  // When the user passes a variable we default to `number` since that's the common case
+  // for pixel values expressed as raw numbers.
+  const isLengthProp =
+    /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/.test(
+      cssProp,
+    );
+  return isLengthProp ? "number" : "string";
+}
+
+/**
+ * Analyzes JSX call-site `style={{ ... }}` objects for all intrinsic styled components
+ * and promotes analyzable style objects to proper `stylex.create` entries.
+ *
+ * This avoids wrapper components and `mergedSx` calls for components whose
+ * call-site style props are static objects (or objects with known dynamic values).
+ */
+function analyzePromotableStyleProps(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  styledDecls: StyledDecl[],
+  declByLocal: Map<string, StyledDecl>,
+  getJsxUsageCount: (name: string) => number,
+  resolvedStyleObjects: Map<string, unknown>,
+): void {
+  for (const decl of styledDecls) {
+    // Only promote for elements that don't already need wrappers and ultimately render
+    // as intrinsic elements (either directly or through a chain of styled extensions).
+    if (decl.isCssHelper || decl.needsWrapperComponent || decl.isDirectJsxResolution) {
+      continue;
+    }
+    if (!resolvesToIntrinsic(decl, declByLocal)) {
+      continue;
+    }
+
+    // Collect all JSX call sites for this component.
+    const callSites: Array<{ opening: any }> = [];
+    root
+      .find(j.JSXElement, {
+        openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
+      } as object)
+      .forEach((p) => callSites.push({ opening: p.node.openingElement }));
+    root
+      .find(j.JSXSelfClosingElement, {
+        name: { type: "JSXIdentifier", name: decl.localName },
+      } as object)
+      .forEach((p) => callSites.push({ opening: p.node }));
+
+    if (callSites.length === 0) {
+      continue;
+    }
+
+    // Check if ALL call sites with style props are promotable.
+    let allPromotable = true;
+    const siteAnalyses: Array<{
+      opening: any;
+      styleAttr: any;
+      properties: Array<{
+        key: string;
+        staticValue: string | number | boolean | null;
+        dynamicExpr: unknown;
+      }>;
+    }> = [];
+
+    for (const { opening } of callSites) {
+      const attrs = (opening.attributes ?? []) as any[];
+
+      // Bail condition 6: JSXSpreadAttribute present
+      if (attrs.some((a: any) => a.type === "JSXSpreadAttribute")) {
+        allPromotable = false;
+        break;
+      }
+
+      let styleAttr: any = null;
+      let hasClassName = false;
+      let hasAsProp = false;
+      for (const a of attrs) {
+        if (a.type !== "JSXAttribute" || a.name?.type !== "JSXIdentifier") {
+          continue;
+        }
+        if (a.name.name === "style") {
+          styleAttr = a;
+        }
+        if (a.name.name === "className") {
+          hasClassName = true;
+        }
+        if (a.name.name === "as" || a.name.name === "forwardedAs") {
+          hasAsProp = true;
+        }
+      }
+
+      // Bail: `as` or `forwardedAs` requires wrapper for polymorphic element handling
+      if (hasAsProp) {
+        allPromotable = false;
+        break;
+      }
+
+      // Bail condition 5: className present (needs mergedSx for className merging)
+      if (hasClassName) {
+        allPromotable = false;
+        break;
+      }
+
+      // No style prop on this call site → it's fine, no promotion needed
+      if (!styleAttr) {
+        siteAnalyses.push({ opening, styleAttr: null, properties: [] });
+        continue;
+      }
+
+      // Bail condition 1: style value is not an inline ObjectExpression
+      const styleValue = styleAttr.value;
+      if (
+        !styleValue ||
+        styleValue.type !== "JSXExpressionContainer" ||
+        !styleValue.expression ||
+        styleValue.expression.type !== "ObjectExpression"
+      ) {
+        allPromotable = false;
+        break;
+      }
+
+      const objExpr = styleValue.expression;
+      const properties: Array<{
+        key: string;
+        staticValue: string | number | boolean | null;
+        dynamicExpr: unknown;
+      }> = [];
+
+      let siteBail = false;
+      for (const prop of objExpr.properties ?? []) {
+        // Bail condition 2: SpreadElement
+        if (prop.type === "SpreadElement" || prop.type === "SpreadProperty") {
+          siteBail = true;
+          break;
+        }
+        // Bail condition 3: Computed property key
+        if (prop.computed) {
+          siteBail = true;
+          break;
+        }
+        const keyName =
+          prop.key?.type === "Identifier"
+            ? prop.key.name
+            : prop.key?.type === "StringLiteral"
+              ? prop.key.value
+              : prop.key?.type === "Literal" && typeof prop.key.value === "string"
+                ? prop.key.value
+                : null;
+        if (!keyName) {
+          siteBail = true;
+          break;
+        }
+        // Bail condition 4: CSS custom property keys
+        if (keyName.startsWith("--")) {
+          siteBail = true;
+          break;
+        }
+        // Bail: forbidden StyleX shorthand properties (e.g., `background`, `border`, `margin`)
+        if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
+          siteBail = true;
+          break;
+        }
+
+        const staticVal = literalToStaticValue(prop.value);
+        if (staticVal !== null) {
+          properties.push({ key: keyName, staticValue: staticVal, dynamicExpr: null });
+        } else {
+          properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value });
+        }
+      }
+
+      if (siteBail) {
+        allPromotable = false;
+        break;
+      }
+
+      siteAnalyses.push({ opening, styleAttr, properties });
+    }
+
+    if (!allPromotable) {
+      continue;
+    }
+
+    // All call sites are promotable. Generate entries and tag JSX nodes.
+    const promotedEntries: PromotedStyleEntry[] = [];
+    const usageCount = getJsxUsageCount(decl.localName);
+    const usedKeyNames = new Set<string>();
+
+    for (const site of siteAnalyses) {
+      if (!site.styleAttr || site.properties.length === 0) {
+        continue;
+      }
+
+      const allStatic = site.properties.every((p) => p.staticValue !== null);
+      const hasDynamic = site.properties.some((p) => p.dynamicExpr !== null);
+
+      if (allStatic && !hasDynamic) {
+        // All-static style object
+        const staticObj: Record<string, unknown> = {};
+        for (const p of site.properties) {
+          staticObj[p.key] = p.staticValue;
+        }
+
+        // Single-use component with extending chain: merge into base style key,
+        // but only if no promoted property overlaps with existing base properties.
+        const canMerge =
+          usageCount <= 1 &&
+          !decl.isExported &&
+          !hasPropertyOverlap(staticObj, resolvedStyleObjects.get(decl.styleKey));
+        if (canMerge) {
+          promotedEntries.push({
+            styleKey: decl.styleKey,
+            styleValue: staticObj,
+            mergeIntoBase: true,
+          });
+          (site.opening as any).__promotedMergeIntoBase = true;
+        } else {
+          // Multi-use or exported: create a new style key.
+          const styleKey = generatePromotedStyleKey(decl.styleKey, usedKeyNames);
+          usedKeyNames.add(styleKey);
+          promotedEntries.push({ styleKey, styleValue: staticObj });
+          (site.opening as any).__promotedStyleKey = styleKey;
+        }
+      } else if (hasDynamic) {
+        // Mixed static+dynamic or all-dynamic: create a dynamic style function.
+        const styleKey = generatePromotedDynamicStyleKey(decl.styleKey, usedKeyNames);
+        usedKeyNames.add(styleKey);
+
+        // Build static part of the style object and collect dynamic params.
+        const staticObj: Record<string, unknown> = {};
+        const dynamicParams: Array<{ cssProp: string; expr: unknown }> = [];
+
+        for (const p of site.properties) {
+          if (p.staticValue !== null) {
+            staticObj[p.key] = p.staticValue;
+          } else {
+            dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr });
+          }
+        }
+
+        // Build the ArrowFunctionExpression AST node.
+        // Use CSS property names as function parameter names for self-documenting code.
+        // Deduplicate parameters with the same CSS property name.
+        const paramEntries: Array<{
+          paramName: string;
+          cssProp: string;
+          type: "number" | "string";
+        }> = [];
+        const seenParamNames = new Set<string>();
+
+        for (const dp of dynamicParams) {
+          const paramName = dp.cssProp;
+          if (!seenParamNames.has(paramName)) {
+            seenParamNames.add(paramName);
+            paramEntries.push({
+              paramName,
+              cssProp: dp.cssProp,
+              type: inferTypeForCssProp(dp.cssProp),
+            });
+          }
+        }
+
+        // Build arrow function params
+        const params = paramEntries.map((pe) => {
+          const id = j.identifier(pe.paramName);
+          (id as any).typeAnnotation = j.tsTypeAnnotation(
+            pe.type === "number" ? j.tsNumberKeyword() : j.tsStringKeyword(),
+          );
+          return id;
+        });
+
+        // Build object expression body
+        const bodyProperties = site.properties.map((p) => {
+          if (p.staticValue !== null) {
+            // Static property
+            const val =
+              typeof p.staticValue === "string"
+                ? j.stringLiteral(p.staticValue)
+                : typeof p.staticValue === "number"
+                  ? j.numericLiteral(p.staticValue)
+                  : j.booleanLiteral(p.staticValue as boolean);
+            return j.property("init", j.identifier(p.key), val);
+          } else {
+            // Dynamic property — param name matches CSS property for shorthand: { left }
+            const prop = j.property("init", j.identifier(p.key), j.identifier(p.key));
+            (prop as any).shorthand = true;
+            return prop;
+          }
+        });
+
+        const fnNode = j.arrowFunctionExpression(params, j.objectExpression(bodyProperties));
+
+        // Store the AST node directly in resolvedStyleObjects (emitter handles AST nodes).
+        promotedEntries.push({
+          styleKey,
+          styleValue: fnNode as unknown as Record<string, unknown>,
+        });
+
+        // Tag the JSX node with the style key and call arguments.
+        (site.opening as any).__promotedStyleKey = styleKey;
+        // The call args are the actual expressions from the style object.
+        const callArgs = dynamicParams.map((dp) => dp.expr);
+        (site.opening as any).__promotedStyleArgs = callArgs;
+      }
+    }
+
+    if (promotedEntries.length > 0) {
+      decl.promotedStyleProps = promotedEntries;
+    }
+  }
+}
+
+/**
+ * Generates a unique style key for a promoted static style entry.
+ * Uses `{baseKey}Inline`, `{baseKey}Inline2`, etc.
+ */
+function generatePromotedStyleKey(baseKey: string, usedKeys: Set<string>): string {
+  let candidate = `${baseKey}Inline`;
+  if (!usedKeys.has(candidate)) {
+    return candidate;
+  }
+  let i = 2;
+  while (usedKeys.has(`${baseKey}Inline${i}`)) {
+    i++;
+  }
+  return `${baseKey}Inline${i}`;
+}
+
+/**
+ * Generates a unique style key for a promoted dynamic style function.
+ * Uses `{baseKey}Dynamic`, `{baseKey}Dynamic2`, etc.
+ */
+function generatePromotedDynamicStyleKey(baseKey: string, usedKeys: Set<string>): string {
+  let candidate = `${baseKey}Dynamic`;
+  if (!usedKeys.has(candidate)) {
+    return candidate;
+  }
+  let i = 2;
+  while (usedKeys.has(`${baseKey}Dynamic${i}`)) {
+    i++;
+  }
+  return `${baseKey}Dynamic${i}`;
+}
+
+/**
+ * Returns true if any property key in `incoming` already exists in `base`.
+ * Used to prevent merge-into-base from overwriting existing style properties.
+ */
+function hasPropertyOverlap(incoming: Record<string, unknown>, base: unknown): boolean {
+  if (!base || typeof base !== "object" || isAstNode(base)) {
+    return false;
+  }
+  const baseObj = base as Record<string, unknown>;
+  for (const key of Object.keys(incoming)) {
+    if (key in baseObj) {
+      return true;
+    }
   }
   return false;
 }

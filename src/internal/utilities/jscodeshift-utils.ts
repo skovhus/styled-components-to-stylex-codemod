@@ -606,6 +606,16 @@ export function literalToStaticValue(node: unknown): string | number | boolean |
   if (type === "NumericLiteral") {
     return (node as { value: number }).value;
   }
+  // Handle UnaryExpression with `-` or `+` operator on a numeric literal (e.g., `-1`, `+0.5`)
+  if (type === "UnaryExpression") {
+    const n = node as { operator?: string; prefix?: boolean; argument?: unknown };
+    if (n.prefix && (n.operator === "-" || n.operator === "+")) {
+      const argVal = literalToStaticValue(n.argument);
+      if (typeof argVal === "number") {
+        return n.operator === "-" ? -argVal : argVal;
+      }
+    }
+  }
   // Handle TemplateLiteral without expressions (static template string)
   if (type === "TemplateLiteral") {
     const n = node as { expressions?: unknown[]; quasis?: Array<{ value?: { raw?: string } }> };

@@ -605,6 +605,36 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
         }
 
+        // Handle promoted style props: consume the style attr by adding promoted
+        // entries to styleArgs instead of using mergedSx.
+        const promotedKey = (opening as any).__promotedStyleKey as string | undefined;
+        const promotedArgs = (opening as any).__promotedStyleArgs as ExpressionKind[] | undefined;
+        const promotedMerge = (opening as any).__promotedMergeIntoBase as boolean | undefined;
+
+        if (promotedKey) {
+          const stylesId = ctx.stylesIdentifier ?? "styles";
+          if (promotedArgs?.length) {
+            // Dynamic function call: styles.fnKey(arg1, arg2, ...)
+            styleArgs.push(
+              j.callExpression(
+                j.memberExpression(j.identifier(stylesId), j.identifier(promotedKey)),
+                promotedArgs as ExpressionKind[],
+              ),
+            );
+          } else {
+            // Static style: styles.staticKey
+            styleArgs.push(j.memberExpression(j.identifier(stylesId), j.identifier(promotedKey)));
+          }
+          // Consume the style attr so it's not passed through or merged.
+          styleAttr = null;
+        }
+
+        // For mergeIntoBase: styles already merged into the base style key,
+        // just consume the style attr.
+        if (promotedMerge) {
+          styleAttr = null;
+        }
+
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).

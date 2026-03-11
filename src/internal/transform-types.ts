@@ -163,6 +163,20 @@ export type StaticBooleanVariant = {
 };
 
 /**
+ * Promoted style entry from a JSX call-site `style={{ ... }}` object.
+ * When analyzable, inline style objects are promoted to proper `stylex.create` entries,
+ * eliminating `mergedSx` overhead and wrapper functions.
+ */
+export type PromotedStyleEntry = {
+  /** Style key for the promoted entry in resolvedStyleObjects */
+  styleKey: string;
+  /** The style value: plain object for static entries */
+  styleValue: Record<string, unknown>;
+  /** Whether to merge into the component's existing style entry instead of creating a new key */
+  mergeIntoBase?: boolean;
+};
+
+/**
  * Combined styles for a unique consumed-prop combination at a direct JSX call site.
  * Merges per-prop style entries into one entry per unique prop set, reducing the
  * number of `stylex.props()` arguments and `stylex.create` entries.
@@ -461,6 +475,12 @@ export type StyledDecl = {
    * combined entry instead of N individual entries.
    */
   callSiteCombinedStyles?: CallSiteCombinedStyle[];
+  /**
+   * Promoted inline style props from JSX call-site `style={{ ... }}` objects.
+   * When set, the style objects were promoted to `stylex.create` entries and
+   * the JSX rewriter should apply them as style args (not merge via `mergedSx`).
+   */
+  promotedStyleProps?: PromotedStyleEntry[];
   /**
    * Additional style keys (from css`` helper blocks) that should be applied
    * alongside this component's base style.

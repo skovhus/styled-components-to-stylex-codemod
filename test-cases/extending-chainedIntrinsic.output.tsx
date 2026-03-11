@@ -1,3 +1,4 @@
+// Extending chain with style props promoted to stylex styles and dynamic functions
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
@@ -13,16 +14,16 @@ export function App() {
   return (
     <div style={{ position: "relative", height: 120, padding: 16 }}>
       <div sx={styles.container}>
-        <div sx={[styles.itemRow, styles.itemRowPositioned]}>
+        <div sx={[styles.itemRow, styles.itemRowInline]}>
           <span>Label A</span>
           <div sx={[styles.fadeBase, styles.fadeLeft, styles.smallFade]} />
         </div>
-        <div ref={measureRef} sx={[styles.itemRow, styles.measureRow]}>
+        <div ref={measureRef} sx={[styles.itemRow, styles.itemRowInline2]}>
           <span>Measure</span>
         </div>
-        <div sx={[styles.fadeBase, styles.fadeLeft, styles.fadeLeftPosition(offset)]} />
-        <div sx={[styles.fadeBase, styles.fadeRight, styles.fadeRightPosition(offset)]} />
-        <div sx={[styles.tick, styles.tickPosition(lineColor)]} />
+        <div sx={[styles.fadeBase, styles.fadeLeft, styles.fadeLeftDynamic(offset)]} />
+        <div sx={[styles.fadeBase, styles.fadeRight, styles.fadeRightDynamic(offset)]} />
+        <div sx={[styles.tick, styles.tickDynamic(lineColor)]} />
       </div>
     </div>
   );
@@ -42,15 +43,6 @@ const styles = stylex.create({
     gap: `${GAP}px`,
     alignItems: "center",
   },
-  itemRowPositioned: {
-    height: 24,
-    left: 10,
-    width: 100,
-  },
-  measureRow: {
-    opacity: 0,
-    zIndex: -1,
-  },
   fadeBase: {
     position: "absolute",
     top: 0,
@@ -68,13 +60,6 @@ const styles = stylex.create({
     width: "10px",
     right: 0,
   },
-  fadeLeftPosition: (left: number) => ({
-    zIndex: 1,
-    left,
-  }),
-  fadeRightPosition: (left: number) => ({
-    left,
-  }),
   tick: {
     position: "absolute",
     top: `-${OFFSET}px`,
@@ -84,7 +69,23 @@ const styles = stylex.create({
     borderRightColor: "transparent",
     zIndex: 1,
   },
-  tickPosition: (borderRightColor: string) => ({
+  itemRowInline: {
+    height: 24,
+    left: 10,
+    width: 100,
+  },
+  itemRowInline2: {
+    opacity: 0,
+    zIndex: -1,
+  },
+  fadeLeftDynamic: (left: number) => ({
+    zIndex: 1,
+    left,
+  }),
+  fadeRightDynamic: (left: number) => ({
+    left,
+  }),
+  tickDynamic: (borderRightColor: string) => ({
     left: 40,
     borderRightColor,
   }),

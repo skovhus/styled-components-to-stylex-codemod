@@ -1,42 +1,16 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
 export function App() {
   return (
     <>
-      <Sentence>Test</Sentence>
-      <PaddedMutedSentence style={{ marginBottom: 0 }}>Test</PaddedMutedSentence>
-      <PaddedSentence>Okay</PaddedSentence>
+      <div sx={styles.sentence}>Test</div>
+      <div sx={[styles.sentence, styles.paddedSentence, styles.paddedMutedSentence]}>Test</div>
+      <div sx={[styles.sentence, styles.paddedSentence]}>Okay</div>
     </>
   );
 }
 App.displayName = "App";
-
-function Sentence(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.sentence}>{props.children}</div>;
-}
-
-function PaddedSentence(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.sentence, styles.paddedSentence]}>{props.children}</div>;
-}
-
-function PaddedMutedSentence(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
-  const { children, style } = props;
-
-  return (
-    <div
-      {...mergedSx(
-        [styles.sentence, styles.paddedSentence, styles.paddedMutedSentence],
-        undefined,
-        style,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
 
 const styles = stylex.create({
   sentence: {
@@ -49,5 +23,6 @@ const styles = stylex.create({
   },
   paddedMutedSentence: {
     color: $colors.labelMuted,
+    marginBottom: 0,
   },
 });

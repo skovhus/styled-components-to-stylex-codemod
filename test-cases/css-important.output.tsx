@@ -8,9 +8,7 @@ export const App = () => (
       Should be pink despite inline style
     </button>
     <div sx={styles.forceWidth}>Full width content</div>
-    <p {...mergedSx(styles.mixedStyles, undefined, { color: "red", margin: "20px" })}>
-      Color and margin should be overridden
-    </p>
+    <p sx={[styles.mixedStyles, styles.mixedStylesInline]}>Color and margin should be overridden</p>
     <a href="#" sx={styles.importantHover}>
       Hover me
     </a>
@@ -62,5 +60,9 @@ const styles = stylex.create({
   overrideText: {
     color: `${$colors.labelMuted} !important`,
     fontSize: "10px !important",
+  },
+  mixedStylesInline: {
+    color: "red",
+    margin: "20px",
   },
 });

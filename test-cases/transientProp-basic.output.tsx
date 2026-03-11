@@ -73,7 +73,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <div data-testid="point" {...mergedSx(styles.point, undefined, { top: "10px" })} />
+    <div data-testid="point" sx={styles.point} />
     <CollapseArrowIcon isOpen />
     <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
@@ -121,6 +121,7 @@ const styles = stylex.create({
     width: "12px",
     height: "8px",
     backgroundColor: "white",
+    top: "10px",
   },
   collapseArrowIcon: {
     transform: "rotate(0deg)",
