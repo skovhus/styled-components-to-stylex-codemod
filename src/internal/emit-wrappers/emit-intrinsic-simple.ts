@@ -698,7 +698,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
+          return emitter.joinIntersection(
+            explicit,
+            customStyleDrivingPropsTypeText,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -712,7 +717,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
+          return emitter.joinIntersection(
+            explicit,
+            customStyleDrivingPropsTypeText,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];

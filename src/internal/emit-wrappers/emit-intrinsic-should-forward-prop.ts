@@ -276,7 +276,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           omitted.push('"style"');
         }
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        return emitter.joinIntersection(extrasTypeText, baseWithOmit);
+        return emitter.joinIntersection(extrasTypeText, consumedPropsTypeText, baseWithOmit);
       }
       if (slimBaseTypeText !== undefined) {
         return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
