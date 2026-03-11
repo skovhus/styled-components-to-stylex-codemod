@@ -1,1 +1,0 @@
-import{j as x}from"./index-BGdo4GKg.js";function e(){return x.jsxs("div",{style:{display:"flex",gap:16,padding:20},children:[x.jsx("div",{className:"xbpkrbd x4afe7t xa3vuyk x1u6ievf xalp5ej x1qhigcl",children:"Zoom In"}),x.jsx("div",{className:"x1pqhjpz x2mfxb x4hg4is x19pma9y x1qhigcl",children:"Slide Down"})]})}export{e as App};
