@@ -78,11 +78,11 @@ const styles = stylex.create({
     opacity: 0,
     zIndex: -1,
   },
-  fadeLeftDynamic: (left: number) => ({
+  fadeLeftDynamic: (left: number | string) => ({
     zIndex: 1,
     left,
   }),
-  fadeRightDynamic: (left: number) => ({
+  fadeRightDynamic: (left: number | string) => ({
     left,
   }),
   tickDynamic: (borderRightColor: string) => ({

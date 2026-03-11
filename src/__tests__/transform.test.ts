@@ -1651,6 +1651,58 @@ export const App = () => <Box className="external" style={{ left: 1 }}>Click</Bo
     expect(result.code).not.toContain("mergedSx(");
   });
 
+  it("should not promote non-identifier inline style keys", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = () => {
+  const bg = "red";
+  return <Box style={{ "background-color": bg }}>Click</Box>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Promotion would create a dynamic style function with invalid identifier syntax.
+    expect(result.code).toContain("stylexProps(");
+    expect(result.code).toContain('"background-color"');
+    expect(result.code).not.toContain("(background-color:");
+  });
+
+  it("should use number | string for promoted length-like style params with unknown type", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = () => {
+  const left = "10px";
+  return <Box style={{ left }}>Click</Box>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("(left: number | string) => ({");
+    expect(result.code).not.toContain("(left: number) => ({");
+  });
+
   it("should not use merger when external styles are disabled", async () => {
     const source = `
 import styled from 'styled-components';

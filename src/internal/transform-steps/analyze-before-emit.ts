@@ -1758,22 +1758,36 @@ const NUMERIC_CSS_PROPS = new Set([
   "columnCount",
 ]);
 
+type PromotedParamType = "number" | "string" | "numberOrString";
+
+const LENGTH_LIKE_CSS_PROP_RE =
+  /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/;
+
+const IDENTIFIER_NAME_RE = /^[$A-Z_][0-9A-Z_$]*$/i;
+
+function isValidIdentifierName(name: string): boolean {
+  return IDENTIFIER_NAME_RE.test(name);
+}
+
 /**
  * Infers a TS type keyword for a dynamic expression based on the CSS property it's assigned to.
- * Numeric-only properties get `number`; others get `string`.
+ * Numeric-only properties get `number`; ambiguous length-like values get `number | string`.
  */
-function inferTypeForCssProp(cssProp: string): "number" | "string" {
+function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType {
+  const staticVal = literalToStaticValue(expr);
+  if (typeof staticVal === "number") {
+    return "number";
+  }
+  if (typeof staticVal === "string") {
+    return "string";
+  }
   if (NUMERIC_CSS_PROPS.has(cssProp)) {
     return "number";
   }
-  // Length properties (left, width, height, etc.) accept both numbers and strings.
-  // When the user passes a variable we default to `number` since that's the common case
-  // for pixel values expressed as raw numbers.
-  const isLengthProp =
-    /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/.test(
-      cssProp,
-    );
-  return isLengthProp ? "number" : "string";
+  if (LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
+    return "numberOrString";
+  }
+  return "string";
 }
 
 /**
@@ -1926,6 +1940,12 @@ function analyzePromotableStyleProps(
           siteBail = true;
           break;
         }
+        // Promotion only supports React-style identifier keys. Non-identifier keys
+        // (e.g. "background-color") are preserved via inline style merging.
+        if (!isValidIdentifierName(keyName)) {
+          siteBail = true;
+          break;
+        }
         // Bail: forbidden StyleX shorthand properties (e.g., `background`, `border`, `margin`)
         if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
           siteBail = true;
@@ -2019,7 +2039,7 @@ function analyzePromotableStyleProps(
         const paramEntries: Array<{
           paramName: string;
           cssProp: string;
-          type: "number" | "string";
+          type: PromotedParamType;
         }> = [];
         const seenParamNames = new Set<string>();
 
@@ -2030,7 +2050,7 @@ function analyzePromotableStyleProps(
             paramEntries.push({
               paramName,
               cssProp: dp.cssProp,
-              type: inferTypeForCssProp(dp.cssProp),
+              type: inferTypeForCssProp(dp.cssProp, dp.expr),
             });
           }
         }
@@ -2038,9 +2058,13 @@ function analyzePromotableStyleProps(
         // Build arrow function params
         const params = paramEntries.map((pe) => {
           const id = j.identifier(pe.paramName);
-          (id as any).typeAnnotation = j.tsTypeAnnotation(
-            pe.type === "number" ? j.tsNumberKeyword() : j.tsStringKeyword(),
-          );
+          const typeNode =
+            pe.type === "number"
+              ? j.tsNumberKeyword()
+              : pe.type === "numberOrString"
+                ? j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()])
+                : j.tsStringKeyword();
+          (id as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
           return id;
         });
 

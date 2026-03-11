@@ -19,7 +19,7 @@ const styles = stylex.create({
     fontWeight: "bold",
     color: "navy",
   },
-  tickDynamic: (left: number) => ({
+  tickDynamic: (left: number | string) => ({
     left,
   }),
 });
