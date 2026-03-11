@@ -165,12 +165,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-color {
+@property --x-margin {
   syntax: "*";
   inherits: false
 }
 
-@property --x-margin {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
@@ -1889,6 +1889,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #00000009;
 }
 
+.xas4zb2:not(#\#):not(#\#):not(#\#) {
+  background-color: #0000000d;
+}
+
 .x15qk9wz:not(#\#):not(#\#):not(#\#) {
   background-color: #ffffff09;
 }
@@ -3389,6 +3393,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xeeq1f2:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-color: #e0e0e0;
+}
+
+.x18vqyxi:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-color: #eee;
 }
 
 .x1ly40go:not(#\#):not(#\#):not(#\#):not(#\#) {
