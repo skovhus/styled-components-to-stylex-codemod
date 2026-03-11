@@ -363,6 +363,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
   // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
+  // Exception: single-use intrinsic components can be inlined with mergedSx instead.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
     if (decl.isDirectJsxResolution) {
@@ -371,6 +372,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
       (decl as any).receivesClassNameOrStyleInJsx = true;
+      if (
+        decl.base.kind === "intrinsic" &&
+        !decl.needsWrapperComponent &&
+        getJsxUsageCount(decl.localName) <= INLINE_USAGE_THRESHOLD
+      ) {
+        continue;
+      }
       if (!decl.needsWrapperComponent) {
         decl.needsWrapperComponent = true;
       }

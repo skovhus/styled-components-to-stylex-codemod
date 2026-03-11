@@ -332,7 +332,6 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ) {
             styleAttr = attr;
           } else if (
-            decl.isDirectJsxResolution &&
             attr.type === "JSXAttribute" &&
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "className"
@@ -609,8 +608,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build final rest with stylex.props inserted after last spread.
         // For direct JSX resolutions with className/style, use mergedSx to
         // combine StyleX output with user-provided className/style values.
-        const needsMerge =
-          decl.isDirectJsxResolution && (classNameAttr !== null || styleAttr !== null);
+        const needsMerge = classNameAttr !== null || styleAttr !== null;
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
         const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
         const stylexAttr = useSxProp
@@ -661,8 +659,8 @@ function buildInlineVariantLookupFromAttr(
 }
 
 /**
- * Builds `mergedSx(stylesArg, classNameExpr, styleExpr)` for direct JSX
- * resolutions that receive className and/or style at a call site.
+ * Builds `mergedSx(stylesArg, classNameExpr, styleExpr)` for inlined components
+ * that receive className and/or style at a call site.
  * `mergedSx` calls `stylex.props()` internally, so we pass raw style objects.
  */
 function buildMergedSxCall(
