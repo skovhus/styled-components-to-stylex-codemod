@@ -233,6 +233,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       Object.keys(decl.variantStyleKeys ?? {}).length === 0 &&
       !decl.enumVariant &&
       !decl.inlineStyleProps?.length &&
+      // attrs-derived runtime props require wrapper evaluation; inline JSX rewrite
+      // cannot preserve dynamic semantics for conditional/default/inverted attrs.
+      (decl.attrsInfo?.conditionalAttrs?.length ?? 0) === 0 &&
+      (decl.attrsInfo?.defaultAttrs?.length ?? 0) === 0 &&
+      (decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) === 0 &&
       // Conditional extraStylexPropsArgs (with `when` guards) are filtered out by the
       // inline path, so they need the wrapper to emit the conditional logic.
       !(decl.extraStylexPropsArgs ?? []).some((arg) => arg.when) &&
