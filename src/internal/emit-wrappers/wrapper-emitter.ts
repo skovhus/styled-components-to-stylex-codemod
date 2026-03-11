@@ -797,7 +797,7 @@ export class WrapperEmitter {
         key?: { type?: string; name?: string; value?: string };
       };
       if (m.type !== "TSPropertySignature") {
-        continue;
+        return null;
       }
       const key = m.key;
       const name =
