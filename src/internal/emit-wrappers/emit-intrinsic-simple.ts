@@ -612,9 +612,27 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         for (const k of invertedPropsForType as Set<unknown>) {
           addIfString(k);
         }
+        // Add static boolean variant prop names (their when-keys in
+        // variantStyleKeys use `prop === "value"` format which the
+        // variantPropsForType extraction doesn't parse into prop names).
+        for (const sbv of d.staticBooleanVariants ?? []) {
+          keys.add(sbv.propName);
+        }
+        // Remove synthetic compound variant when-keys (e.g. "checkedTrue",
+        // "checkedFalse") that are variantStyleKeys entries but not actual
+        // prop names.  Use syntheticOnly to preserve real prop names like the
+        // outerProp of 3-branch compounds (e.g. "disabled").
+        const compoundVariantWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {
+          syntheticOnly: true,
+        });
+        for (const k of compoundVariantWhenKeys) {
+          keys.delete(k);
+        }
+        const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
         const filtered = [...keys].filter(
           (k) =>
             k &&
+            isValidIdentifier(k) &&
             k !== "children" &&
             k !== "className" &&
             k !== "style" &&
@@ -637,7 +655,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           if (staticType) {
             return `  ${k}?: ${staticType};`;
           }
-          const attrType = k.startsWith("data-") ? "string" : "any";
+          const attrType = k.startsWith("data-") ? "boolean | string" : "any";
           return `  ${k}?: ${attrType};`;
         });
         return `{\n${lines.join("\n")}\n}`;
@@ -671,11 +689,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         if (useSlimType) {
           // Non-exported with explicit type: intersect the user type with only
           // the actually-used element props.
-          const combined = emitter.joinIntersection(explicit, baseTypeText, sxTypeIntersection);
+          const combined = emitter.joinIntersection(
+            explicit,
+            customStyleDrivingPropsTypeText,
+            baseTypeText,
+            sxTypeIntersection,
+          );
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
-          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
+          return emitter.joinIntersection(
+            explicit,
+            customStyleDrivingPropsTypeText,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
         }
         if (needsRestForType) {
           // For non-exported components that only use transient props ($-prefixed)
@@ -689,7 +717,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ) {
             return emitter.withChildren(explicit);
           }
-          return emitter.joinIntersection(explicit, extendBaseTypeText, sxTypeIntersection);
+          return emitter.joinIntersection(
+            explicit,
+            customStyleDrivingPropsTypeText,
+            extendBaseTypeText,
+            sxTypeIntersection,
+          );
         }
         if (allowClassNameProp || allowStyleProp) {
           const extras: string[] = [];

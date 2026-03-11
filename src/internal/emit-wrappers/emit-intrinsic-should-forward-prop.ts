@@ -191,7 +191,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           lines.push(`  ${p}?: ${staticType};`);
           continue;
         }
-        const attrType = p.startsWith("data-") ? "string" : "any";
+        const attrType = p.startsWith("data-") ? "boolean | string" : "any";
         lines.push(`  ${p}?: ${attrType};`);
       }
       const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
@@ -200,6 +200,39 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       }
       return literal;
     })();
+    // Build supplemental type for consumed props not in the explicit type.
+    // When explicit is set, extrasTypeText is just the user type, but variant
+    // dimension / static boolean variant props may be missing from it.
+    const consumedPropsTypeText = (() => {
+      if (!explicit) {
+        return "{}";
+      }
+      const compoundWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {
+        syntheticOnly: true,
+      });
+      const variantDimByProp = buildVariantDimPropTypeMap(d);
+      const staticVariantPropTypes = buildStaticVariantPropTypes(d);
+      const lines: string[] = [];
+      for (const p of extraProps) {
+        if (!isValidIdentifier(p) || explicitPropNames.has(p) || compoundWhenKeys.has(p)) {
+          continue;
+        }
+        const variantObj = variantDimByProp.get(p);
+        if (variantObj) {
+          lines.push(`  ${p}?: keyof typeof ${variantObj};`);
+          continue;
+        }
+        const staticType = staticVariantPropTypes.get(p);
+        if (staticType) {
+          lines.push(`  ${p}?: ${staticType};`);
+          continue;
+        }
+        const attrType = p.startsWith("data-") ? "boolean | string" : "any";
+        lines.push(`  ${p}?: ${attrType};`);
+      }
+      return lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
+    })();
+
     // Compute the narrow base once — reused across finalTypeText and extendBaseTypeText.
     const slimBaseTypeText = useSlimType
       ? emitter.inferredIntrinsicPropsTypeText({
@@ -230,7 +263,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           return emitter.withChildren(extrasTypeText);
         }
         if (slimBaseTypeText !== undefined) {
-          return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));
+          return wrapSlimWithChildren(
+            emitter.joinIntersection(extrasTypeText, consumedPropsTypeText, slimBaseTypeText),
+          );
         }
         const base = `React.ComponentProps<"${tagName}">`;
         const omitted: string[] = [];
@@ -241,7 +276,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           omitted.push('"style"');
         }
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
-        return emitter.joinIntersection(extrasTypeText, baseWithOmit);
+        return emitter.joinIntersection(extrasTypeText, consumedPropsTypeText, baseWithOmit);
       }
       if (slimBaseTypeText !== undefined) {
         return wrapSlimWithChildren(emitter.joinIntersection(extrasTypeText, slimBaseTypeText));

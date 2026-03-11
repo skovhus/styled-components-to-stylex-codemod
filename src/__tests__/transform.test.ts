@@ -4194,6 +4194,82 @@ export function App() {
   });
 });
 
+describe("consumed props typing for exported intrinsic wrappers", () => {
+  it("includes consumed inline-base variant props for exported wrappers with explicit props", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+export const Header = styled(Flex)<{ isCompact?: boolean }>\`
+  padding: \${(props) => (props.isCompact ? "4px" : "16px")};
+  background-color: #f0f5ff;
+\`;
+
+export function App() {
+  return (
+    <Header justify="center" gap={12} isCompact>
+      Header
+    </Header>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-exportedExplicitConsumedProps.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("type HeaderProps =");
+    expect(code).toMatch(/isCompact\?: boolean\b/);
+    expect(code).toMatch(/gap\?: keyof typeof [A-Za-z0-9_]+GapVariants\b/);
+    expect(code).toMatch(/justify\?: keyof typeof [A-Za-z0-9_]+JustifyVariants\b/);
+  });
+
+  it("includes consumed inline-base variant props for exported shouldForwardProp wrappers", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+export const Header = styled(Flex).withConfig({
+  shouldForwardProp: (prop) => prop !== "isCompact",
+})<{ isCompact?: boolean }>\`
+  padding: \${(props) => (props.isCompact ? "4px" : "16px")};
+  background-color: #f0f5ff;
+\`;
+
+export function App() {
+  return (
+    <Header justify="center" gap={12} isCompact>
+      Header
+    </Header>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "inlineBase-sfpExportedExplicitConsumedProps.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("type HeaderProps =");
+    expect(code).toMatch(/isCompact\?: boolean\b/);
+    expect(code).toMatch(/gap\?: keyof typeof [A-Za-z0-9_]+GapVariants\b/);
+    expect(code).toMatch(/justify\?: keyof typeof [A-Za-z0-9_]+JustifyVariants\b/);
+  });
+});
+
 describe("inline base resolver safety guards", () => {
   it("should skip base inlining when no local JSX callsites are available", () => {
     const source = `

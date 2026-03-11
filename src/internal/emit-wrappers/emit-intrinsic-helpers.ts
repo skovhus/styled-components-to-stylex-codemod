@@ -10,13 +10,22 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type WrapperEmitter } from "./wrapper-emitter.js";
 
-/** Collects all variant "when" keys consumed by compound variants into a Set. */
+/**
+ * Collects variant "when" keys consumed by compound variants into a Set.
+ *
+ * When `syntheticOnly` is true, only returns synthetic when-keys (e.g.
+ * "checkedTrue", "checkedFalse") and excludes real prop names. Use this
+ * for type generation where real prop names must be preserved. The default
+ * (false) returns all when-keys including real prop names — use this for
+ * style emission where compound variant entries must be skipped.
+ */
 export function collectCompoundVariantKeys(
   compoundVariants: StyledDecl["compoundVariants"],
+  opts?: { syntheticOnly?: boolean },
 ): Set<string> {
   const keys = new Set<string>();
   for (const cv of compoundVariants ?? []) {
-    for (const k of getCompoundVariantWhenKeys(cv)) {
+    for (const k of getCompoundVariantWhenKeys(cv, opts?.syntheticOnly)) {
       keys.add(k);
     }
   }
@@ -507,14 +516,21 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
 
 function getCompoundVariantWhenKeys(
   cv: NonNullable<StyledDecl["compoundVariants"]>[number],
+  syntheticOnly?: boolean,
 ): string[] {
   if (cv.kind === "4branch") {
+    // All 4-branch when-keys are synthetic (e.g. "outer_inner", "!outer_inner")
     return [
       `${cv.outerProp}_${cv.innerProp}`,
       `${cv.outerProp}_!${cv.innerProp}`,
       `!${cv.outerProp}_${cv.innerProp}`,
       `!${cv.outerProp}_!${cv.innerProp}`,
     ];
+  }
+  // For 3-branch, outerProp is a real prop name (e.g. "disabled"), while
+  // "innerPropTrue"/"innerPropFalse" are synthetic when-keys.
+  if (syntheticOnly) {
+    return [`${cv.innerProp}True`, `${cv.innerProp}False`];
   }
   return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
 }
