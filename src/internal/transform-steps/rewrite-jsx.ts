@@ -67,7 +67,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
     // Preserve as a wrapper component for polymorphic/forwarded-as cases.
     // Wrapper emitters keep `forwardedAs` callsite attrs intact when needed.
     if (decl.needsWrapperComponent) {
-      // Rename $-prefixed JSX attributes at call sites for exported components
+      // Rename $-prefixed JSX attributes at call sites for components
       // whose transient props were stripped of the $ prefix.
       if (decl.transientPropRenames && decl.transientPropRenames.size > 0) {
         root
@@ -434,6 +434,22 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
 
+        // Rename $-prefixed JSX attributes for inlined components whose transient
+        // props were stripped of the $ prefix — ensures styleFn/variant lookups match.
+        const renamedTransientValues = decl.transientPropRenames
+          ? new Set(decl.transientPropRenames.values())
+          : undefined;
+        if (decl.transientPropRenames && decl.transientPropRenames.size > 0) {
+          for (const attrNode of [...leading, ...rest]) {
+            if (attrNode.type === "JSXAttribute" && attrNode.name.type === "JSXIdentifier") {
+              const renamed = decl.transientPropRenames.get(attrNode.name.name);
+              if (renamed) {
+                attrNode.name.name = renamed;
+              }
+            }
+          }
+        }
+
         // Helper to process attrs (strip variants, transient props, styleFn props)
         // Returns true if attr should be kept, false if consumed/stripped
         const processAttr = (attr: (typeof leading)[0], output: typeof leading): void => {
@@ -497,10 +513,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           }
 
           if (!hasTemplateVariant) {
-            // Strip transient props (starting with $) only for intrinsic elements.
+            // Strip transient props only for intrinsic elements:
+            // - Props starting with $ (original transient props)
+            // - Props that were renamed from $-prefixed names (via transientPropRenames)
             // For styled(Component), transient props should still reach the wrapped component
             // (unless consumed by styleFnFromProps, which is handled above).
-            if (n.startsWith("$") && decl.base.kind === "intrinsic") {
+            if (
+              (n.startsWith("$") || renamedTransientValues?.has(n)) &&
+              decl.base.kind === "intrinsic"
+            ) {
               return;
             }
             output.push(attr);
@@ -670,7 +691,9 @@ function extractJsxAttrValueExpr(
   if (!attr) {
     return undefined;
   }
-  const a = attr as { value?: { type?: string; value?: unknown; expression?: unknown } };
+  const a = attr as {
+    value?: { type?: string; value?: unknown; expression?: unknown };
+  };
   if (!a.value) {
     return j.literal(true) as unknown as ExpressionKind;
   }
@@ -696,7 +719,10 @@ function matchCallSiteCombinedStyle(
   }
   const attrNames = new Set<string>();
   for (const a of attrs) {
-    const attr = a as { type?: string; name?: { type?: string; name?: string } };
+    const attr = a as {
+      type?: string;
+      name?: { type?: string; name?: string };
+    };
     if (
       attr.type === "JSXAttribute" &&
       attr.name?.type === "JSXIdentifier" &&

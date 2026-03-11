@@ -3,21 +3,21 @@ import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
 
 type ContainerProps = React.PropsWithChildren<{
-  $compact: boolean;
+  compact: boolean;
 }>;
 
 function Container(props: ContainerProps) {
-  const { children, $compact } = props;
+  const { children, compact } = props;
 
   return (
-    <div sx={[styles.container, $compact ? styles.containerCompact : undefined]}>{children}</div>
+    <div sx={[styles.container, compact ? styles.containerCompact : undefined]}>{children}</div>
   );
 }
 
 export const App = () => (
   <div>
-    <Container $compact>Compact mode</Container>
-    <Container $compact={false}>Normal mode</Container>
+    <Container compact>Compact mode</Container>
+    <Container compact={false}>Normal mode</Container>
   </div>
 );
 

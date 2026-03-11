@@ -6,17 +6,15 @@ const color2 = "#0000ff";
 const color3 = "#00ff00";
 
 type PopoverProps = React.PropsWithChildren<{
-  $expanded: boolean;
+  expanded: boolean;
 }>;
 
 // Multiple interpolations in a transform value
 // Should produce a single template literal preserving all transform functions
 function Popover(props: PopoverProps) {
-  const { children, $expanded } = props;
+  const { children, expanded } = props;
 
-  return (
-    <div sx={[styles.popover, $expanded ? styles.popoverExpanded : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.popover, expanded ? styles.popoverExpanded : undefined]}>{children}</div>;
 }
 
 export const App = () => (
@@ -25,8 +23,8 @@ export const App = () => (
     <div sx={styles.radialGradientBox}>Radial</div>
     <div sx={styles.conicGradientBox}>Conic</div>
     <div sx={styles.repeatingLinearGradientBox}>Repeating</div>
-    <Popover $expanded={true}>Expanded</Popover>
-    <Popover $expanded={false}>Collapsed</Popover>
+    <Popover expanded={true}>Expanded</Popover>
+    <Popover expanded={false}>Collapsed</Popover>
   </>
 );
 

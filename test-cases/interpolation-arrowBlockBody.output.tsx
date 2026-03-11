@@ -3,17 +3,17 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type BoxProps = React.PropsWithChildren<{
-  $large?: boolean;
+  large?: boolean;
   style?: React.CSSProperties;
 }>;
 
 // Arrow function with block body (contains comment)
 // Should be equivalent to expression-body: ${props => props.$large ? 34 : 6}px
 function Box(props: BoxProps) {
-  const { children, style, $large } = props;
+  const { children, style, large } = props;
 
   return (
-    <div {...mergedSx([styles.box, $large ? styles.boxLarge : undefined], undefined, style)}>
+    <div {...mergedSx([styles.box, large ? styles.boxLarge : undefined], undefined, style)}>
       {children}
     </div>
   );
@@ -21,7 +21,7 @@ function Box(props: BoxProps) {
 
 export const App = () => (
   <div style={{ position: "relative", height: "200px" }}>
-    <Box $large>Large Box (bottom: 80px)</Box>
+    <Box large>Large Box (bottom: 80px)</Box>
     <Box style={{ left: 200 }}>Small Box (bottom: 20px)</Box>
   </div>
 );

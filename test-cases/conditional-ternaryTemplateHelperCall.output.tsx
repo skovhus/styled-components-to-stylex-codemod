@@ -3,16 +3,16 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type StepLineProps = React.PropsWithChildren<{
-  $faded: boolean;
+  faded: boolean;
 }>;
 
 function StepLine(props: StepLineProps) {
-  const { children, $faded } = props;
+  const { children, faded } = props;
 
-  return <div sx={[styles.stepLine, $faded ? styles.stepLineFaded : undefined]}>{children}</div>;
+  return <div sx={[styles.stepLine, faded ? styles.stepLineFaded : undefined]}>{children}</div>;
 }
 
-export const App = () => <StepLine $faded />;
+export const App = () => <StepLine faded />;
 
 const styles = stylex.create({
   stepLine: {

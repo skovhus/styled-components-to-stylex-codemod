@@ -15,21 +15,21 @@ function SubmitButton(props: {
   );
 }
 
-type StyledSubmitButtonProps = { $hasLabel: boolean } & Omit<
+type StyledSubmitButtonProps = { hasLabel: boolean } & Omit<
   React.ComponentPropsWithRef<typeof SubmitButton>,
   "style"
 >;
 
 // .attrs sets onlyIcon to undefined, and styled wraps with $hasLabel prop
 function StyledSubmitButton(props: StyledSubmitButtonProps) {
-  const { className, children, $hasLabel, ...rest } = props;
+  const { className, children, hasLabel, ...rest } = props;
 
   return (
     <SubmitButton
       {...rest}
       onlyIcon={undefined}
       {...mergedSx(
-        [styles.submitButton, $hasLabel ? styles.submitButtonHasLabel : undefined],
+        [styles.submitButton, hasLabel ? styles.submitButtonHasLabel : undefined],
         className,
       )}
     >
@@ -39,7 +39,7 @@ function StyledSubmitButton(props: StyledSubmitButtonProps) {
 }
 
 export const App = () => (
-  <StyledSubmitButton onClick={() => {}} $hasLabel={true}>
+  <StyledSubmitButton onClick={() => {}} hasLabel={true}>
     Submit
   </StyledSubmitButton>
 );

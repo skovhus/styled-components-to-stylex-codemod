@@ -1,13 +1,13 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CircleProps = { $isAnimated?: boolean } & Pick<React.ComponentProps<"path">, "children" | "d">;
+type CircleProps = { isAnimated?: boolean } & Pick<React.ComponentProps<"path">, "children" | "d">;
 
 function Circle(props: CircleProps) {
-  const { children, $isAnimated, ...rest } = props;
+  const { children, isAnimated, ...rest } = props;
 
   return (
-    <path {...rest} sx={[styles.circle, $isAnimated ? styles.circleAnimated : undefined]}>
+    <path {...rest} sx={[styles.circle, isAnimated ? styles.circleAnimated : undefined]}>
       {children}
     </path>
   );
@@ -20,7 +20,7 @@ export function App() {
       <div sx={styles.slideUp}>Sliding Up</div>
       <div sx={styles.bounceIn}>Bouncing In</div>
       <svg>
-        <Circle $isAnimated d="M10,80 Q95,10 180,80" />
+        <Circle isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
       </svg>
     </div>

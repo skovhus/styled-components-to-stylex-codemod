@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type CardProps = React.PropsWithChildren<{
-  $compact: boolean;
+  compact: boolean;
 }>;
 
 /**
@@ -11,15 +11,15 @@ type CardProps = React.PropsWithChildren<{
  * Exercises the `resolveStaticCssBlock` code path.
  */
 function Card(props: CardProps) {
-  const { children, $compact } = props;
+  const { children, compact } = props;
 
-  return <div sx={[styles.card, $compact ? styles.cardCompact : undefined]}>{children}</div>;
+  return <div sx={[styles.card, compact ? styles.cardCompact : undefined]}>{children}</div>;
 }
 
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Card $compact={false}>Default Card</Card>
-    <Card $compact={true}>Compact Card</Card>
+    <Card compact={false}>Default Card</Card>
+    <Card compact={true}>Compact Card</Card>
   </div>
 );
 

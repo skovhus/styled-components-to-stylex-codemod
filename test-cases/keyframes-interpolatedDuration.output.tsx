@@ -13,18 +13,18 @@ const fadeIn = stylex.keyframes({
 });
 
 type FadeInContainerProps = React.PropsWithChildren<{
-  $fadeInDuration?: number;
+  fadeInDuration?: number;
 }>;
 
 function FadeInContainer(props: FadeInContainerProps) {
-  const { children, $fadeInDuration } = props;
+  const { children, fadeInDuration } = props;
 
   return (
     <span
       sx={[
         styles.fadeInContainer,
-        $fadeInDuration != null &&
-          styles.fadeInContainerAnimationDuration(`${$fadeInDuration ?? 200}ms`),
+        fadeInDuration != null &&
+          styles.fadeInContainerAnimationDuration(`${fadeInDuration ?? 200}ms`),
       ]}
     >
       {children}
@@ -36,7 +36,7 @@ export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <FadeInContainer>Default (200ms)</FadeInContainer>
-      <FadeInContainer $fadeInDuration={500}>Custom (500ms)</FadeInContainer>
+      <FadeInContainer fadeInDuration={500}>Custom (500ms)</FadeInContainer>
     </div>
   );
 }

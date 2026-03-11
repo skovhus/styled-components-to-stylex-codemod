@@ -3,17 +3,17 @@ import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
 type ButtonProps = React.PropsWithChildren<{
-  $active?: boolean;
+  active?: boolean;
 }>;
 
 function Button(props: ButtonProps) {
-  const { children, $active } = props;
+  const { children, active } = props;
 
   return (
     <button
       sx={[
         styles.button,
-        $active
+        active
           ? highlightStyles({
               active: styles.buttonActivePseudoActive,
               hover: styles.buttonActivePseudoHover,
@@ -55,7 +55,7 @@ function InvertedButton(props: InvertedButtonProps) {
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <Button $active>Active</Button>
+    <Button active>Active</Button>
     <Button>Inactive</Button>
     <InvertedButton>Enabled</InvertedButton>
     <InvertedButton $disabled>Disabled</InvertedButton>

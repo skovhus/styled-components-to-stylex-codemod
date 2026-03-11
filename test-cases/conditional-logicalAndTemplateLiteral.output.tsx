@@ -3,14 +3,14 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type TitleProps = React.PropsWithChildren<{
-  $upsideDown?: boolean;
+  upsideDown?: boolean;
 }>;
 
 // Test logical AND with static template literal
 function Title(props: TitleProps) {
-  const { children, $upsideDown } = props;
+  const { children, upsideDown } = props;
 
-  return <h1 sx={[styles.title, $upsideDown ? styles.titleUpsideDown : undefined]}>{children}</h1>;
+  return <h1 sx={[styles.title, upsideDown ? styles.titleUpsideDown : undefined]}>{children}</h1>;
 }
 
 type DropZoneProps = React.PropsWithChildren<{
@@ -65,7 +65,7 @@ export function StatusBar(props: StatusBarProps) {
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
-    <Title $upsideDown>Upside Down Title</Title>
+    <Title upsideDown>Upside Down Title</Title>
     <DropZone isDraggingOver>Dragging</DropZone>
     <DropZone isDraggingOver={false}>Not dragging</DropZone>
     <Card isHighlighted>Highlighted</Card>

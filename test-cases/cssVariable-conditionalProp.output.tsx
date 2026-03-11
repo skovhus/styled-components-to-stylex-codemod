@@ -2,18 +2,18 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ContainerWrapperProps = React.PropsWithChildren<{
-  $width: number | undefined;
+  width: number | undefined;
 }>;
 
 // A wrapper that conditionally sets a CSS custom property based on prop
 function ContainerWrapper(props: ContainerWrapperProps) {
-  const { children, $width } = props;
+  const { children, width } = props;
 
   return (
     <div
       sx={[
         styles.containerWrapper,
-        $width || false ? styles.containerWrapperWithComponentWidth($width) : undefined,
+        width || false ? styles.containerWrapperWithComponentWidth(width) : undefined,
       ]}
     >
       {children}
@@ -28,13 +28,13 @@ function Container(props: React.PropsWithChildren<{}>) {
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-    <ContainerWrapper $width={100}>
+    <ContainerWrapper width={100}>
       <Container>Width: 100px + 60px = 160px</Container>
     </ContainerWrapper>
-    <ContainerWrapper $width={200}>
+    <ContainerWrapper width={200}>
       <Container>Width: 200px + 60px = 260px</Container>
     </ContainerWrapper>
-    <ContainerWrapper $width={undefined}>
+    <ContainerWrapper width={undefined}>
       <Container>Width: undefined (no custom property)</Container>
     </ContainerWrapper>
   </div>

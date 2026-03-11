@@ -2,29 +2,29 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type TitleProps = React.PropsWithChildren<{
-  $upsideDown?: boolean;
+  upsideDown?: boolean;
 }>;
 
 function Title(props: TitleProps) {
-  const { children, $upsideDown } = props;
+  const { children, upsideDown } = props;
 
-  return <h1 sx={[styles.title, $upsideDown ? styles.titleUpsideDown : undefined]}>{children}</h1>;
+  return <h1 sx={[styles.title, upsideDown ? styles.titleUpsideDown : undefined]}>{children}</h1>;
 }
 
 type BoxProps = React.PropsWithChildren<{
-  $isActive?: boolean;
-  $isDisabled?: boolean;
+  isActive?: boolean;
+  isDisabled?: boolean;
 }>;
 
 function Box(props: BoxProps) {
-  const { children, $isActive, $isDisabled } = props;
+  const { children, isActive, isDisabled } = props;
 
   return (
     <div
       sx={[
         styles.box,
-        $isActive ? styles.boxActive : undefined,
-        $isDisabled ? styles.boxDisabled : undefined,
+        isActive ? styles.boxActive : undefined,
+        isDisabled ? styles.boxDisabled : undefined,
       ]}
     >
       {children}
@@ -35,10 +35,10 @@ function Box(props: BoxProps) {
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
-    <Title $upsideDown>Upside Down Title</Title>
+    <Title upsideDown>Upside Down Title</Title>
     <Box>Normal Box</Box>
-    <Box $isActive>Active Box</Box>
-    <Box $isDisabled>Disabled Box</Box>
+    <Box isActive>Active Box</Box>
+    <Box isDisabled>Disabled Box</Box>
   </div>
 );
 

@@ -3,23 +3,21 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type CheckMarkProps = React.PropsWithChildren<{
-  $opaque: boolean;
+  opaque: boolean;
 }>;
 
 function CheckMark(props: CheckMarkProps) {
-  const { children, $opaque } = props;
+  const { children, opaque } = props;
 
-  return (
-    <div sx={[styles.checkMark, $opaque ? styles.checkMarkOpaque : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.checkMark, opaque ? styles.checkMarkOpaque : undefined]}>{children}</div>;
 }
 
 export const App = () => (
   <div>
     <div sx={[styles.groupHeaderRow, styles.rowBase]}>Group</div>
     <div sx={[styles.projectRow, styles.rowBase]}>Project</div>
-    <CheckMark $opaque={true} />
-    <CheckMark $opaque={false} />
+    <CheckMark opaque={true} />
+    <CheckMark opaque={false} />
   </div>
 );
 

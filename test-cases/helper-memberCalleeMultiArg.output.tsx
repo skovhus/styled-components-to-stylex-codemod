@@ -19,11 +19,11 @@ function Toggle(props: React.PropsWithChildren<{}>) {
 }
 
 type BoxProps = React.PropsWithChildren<{
-  $m: number;
+  m: number;
 }>;
 
 function Box(props: BoxProps) {
-  const { children, $m } = props;
+  const { children, m } = props;
 
   const theme = useTheme();
 
@@ -31,7 +31,7 @@ function Box(props: BoxProps) {
     <div
       sx={[
         styles.boxBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2)),
-        styles.boxMargin($m),
+        styles.boxMargin(m),
       ]}
     >
       {children}
@@ -42,7 +42,7 @@ function Box(props: BoxProps) {
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
     <Toggle>Toggle</Toggle>
-    <Box $m={8}>Box with margin</Box>
+    <Box m={8}>Box with margin</Box>
   </div>
 );
 

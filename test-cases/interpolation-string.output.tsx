@@ -31,16 +31,16 @@ const theme = {
 const getColor = (variant: string) => (variant === "primary" ? "#BF4F74" : "#4F74BF");
 
 type DynamicBoxProps = React.PropsWithChildren<{
-  $variant: string;
+  variant: string;
 }>;
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { $variant, children } = props;
+  const { variant, children } = props;
 
   const sx = stylex.props(
     styles.dynamicBoxBase,
-    $variant === "primary" && styles.dynamicBoxPrimary,
-    $variant !== "primary" && styles.dynamicBoxSecondary,
+    variant === "primary" && styles.dynamicBoxPrimary,
+    variant !== "primary" && styles.dynamicBoxSecondary,
   );
 
   return <div {...sx}>{children}</div>;
@@ -52,8 +52,8 @@ export const App = () => (
     <p sx={styles.text}>Some text</p>
     <button sx={styles.conditionalButton}>Conditional</button>
     <div sx={styles.themedCard}>Themed Card</div>
-    <DynamicBox $variant="primary">Primary</DynamicBox>
-    <DynamicBox $variant="secondary">Secondary</DynamicBox>
+    <DynamicBox variant="primary">Primary</DynamicBox>
+    <DynamicBox variant="secondary">Secondary</DynamicBox>
   </div>
 );
 

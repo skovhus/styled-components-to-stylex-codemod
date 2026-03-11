@@ -2,19 +2,19 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type ErrorMessageProps = React.PropsWithChildren<{
-  $inline?: boolean;
+  inline?: boolean;
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
 function ErrorMessage(props: ErrorMessageProps) {
-  const { children, $inline, ...rest } = props;
+  const { children, inline, ...rest } = props;
 
   return (
     <div
       {...rest}
       sx={[
         styles.errorMessage,
-        $inline === true ? styles.errorMessageInline : styles.errorMessageNotInline,
+        inline === true ? styles.errorMessageInline : styles.errorMessageNotInline,
       ]}
     >
       {children}
@@ -24,8 +24,8 @@ function ErrorMessage(props: ErrorMessageProps) {
 
 export const App = () => (
   <div style={{ padding: "16px", position: "relative" }}>
-    <ErrorMessage $inline>Inline error</ErrorMessage>
-    <ErrorMessage $inline={false}>Block error</ErrorMessage>
+    <ErrorMessage inline>Inline error</ErrorMessage>
+    <ErrorMessage inline={false}>Block error</ErrorMessage>
   </div>
 );
 

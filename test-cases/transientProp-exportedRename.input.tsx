@@ -61,7 +61,7 @@ export const StatusBadge = styled.div<{
   color: white;
 `;
 
-// Non-exported component — should keep $-prefix
+// Non-exported component — $-prefix also stripped
 const PrivateLabel = styled.span<{ $bold?: boolean }>`
   font-weight: ${(props) => (props.$bold ? 700 : 400)};
 `;

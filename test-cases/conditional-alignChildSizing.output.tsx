@@ -6,7 +6,7 @@ type Align = "top" | "center" | "bottom";
 
 type ContainerProps = React.PropsWithChildren<{
   align: Align;
-  $property?: "width" | "height";
+  property?: "width" | "height";
   style?: React.CSSProperties;
 }>;
 

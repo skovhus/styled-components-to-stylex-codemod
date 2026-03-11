@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type BannerProps = React.PropsWithChildren<{
-  $prominent: boolean;
+  prominent: boolean;
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
@@ -13,12 +13,12 @@ type BannerProps = React.PropsWithChildren<{
  * ternary with plain template literal branches).
  */
 function Banner(props: BannerProps) {
-  const { children, $prominent, ...rest } = props;
+  const { children, prominent, ...rest } = props;
 
   return (
     <div
       {...rest}
-      sx={[styles.banner, $prominent ? styles.bannerProminent : styles.bannerNotProminent]}
+      sx={[styles.banner, prominent ? styles.bannerProminent : styles.bannerNotProminent]}
     >
       {children}
     </div>
@@ -27,8 +27,8 @@ function Banner(props: BannerProps) {
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
-    <Banner $prominent={false}>Default Banner</Banner>
-    <Banner $prominent={true}>Prominent Banner</Banner>
+    <Banner prominent={false}>Default Banner</Banner>
+    <Banner prominent={true}>Prominent Banner</Banner>
   </div>
 );
 

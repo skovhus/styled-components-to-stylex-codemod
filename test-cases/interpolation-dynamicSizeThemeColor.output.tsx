@@ -14,7 +14,7 @@ type InitialsProps = {
 
 export function Initials({ name, size = 16, className, style }: InitialsProps) {
   return (
-    <Container $size={size} className={className} style={style}>
+    <Container size={size} className={className} style={style}>
       {name.slice(0, 1).toUpperCase()}
     </Container>
   );
@@ -29,13 +29,13 @@ export const App = () => (
 );
 
 type ContainerProps = React.PropsWithChildren<{
-  $size: number;
+  size: number;
   className?: string;
   style?: React.CSSProperties;
 }>;
 
 function Container(props: ContainerProps) {
-  const { className, children, style, $size } = props;
+  const { className, children, style, size } = props;
 
   const theme = useTheme();
 
@@ -45,7 +45,7 @@ function Container(props: ContainerProps) {
         [
           styles.container,
           theme.isDark ? styles.containerDark : styles.containerLight,
-          styles.containerSize($size),
+          styles.containerSize(size),
         ],
         className,
         style,
@@ -70,10 +70,10 @@ const styles = stylex.create({
   containerLight: {
     color: $colors.bgBase,
   },
-  containerSize: ($size: number) => ({
-    width: `${$size}px`,
-    height: `${$size}px`,
-    fontSize: `${Math.round($size * (2 / 3))}px`,
-    lineHeight: `${$size}px`,
+  containerSize: (size: number) => ({
+    width: `${size}px`,
+    height: `${size}px`,
+    fontSize: `${Math.round(size * (2 / 3))}px`,
+    lineHeight: `${size}px`,
   }),
 });

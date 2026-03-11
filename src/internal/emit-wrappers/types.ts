@@ -5,6 +5,20 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
+
+/**
+ * Native HTML attributes that must not be used as renamed transient prop names
+ * for specific intrinsic element types. Renaming `$disabled` → `disabled` on a
+ * `<button>` would change behavior (the button becomes actually HTML-disabled
+ * instead of just styling-disabled).
+ */
+export const BLOCKED_INTRINSIC_ATTR_RENAMES: Readonly<Record<string, readonly string[]>> = {
+  button: ["disabled"],
+  input: ["disabled"],
+  select: ["disabled"],
+  textarea: ["disabled"],
+  fieldset: ["disabled"],
+};
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
 export type WrapperPropDefaultValue = string | number | boolean;

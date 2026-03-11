@@ -38,21 +38,21 @@ function Link(props: LinkProps) {
 }
 
 type BoxProps = React.PropsWithChildren<{
-  $background?: string;
-  $padding?: string;
+  background?: string;
+  padding?: string;
 }>;
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
-  const { children, $background, $padding, ...rest } = props;
+  const { children, background, padding, ...rest } = props;
 
   return (
     <div
       {...rest}
       sx={[
         styles.box,
-        $background != null && styles.boxBackgroundColor($background),
-        $padding != null && styles.boxPadding($padding),
+        background != null && styles.boxBackgroundColor(background),
+        padding != null && styles.boxPadding(padding),
       ]}
     >
       {children}
@@ -97,7 +97,7 @@ export const App = () => (
     </Link>
     <Link href="#">Normal Link</Link>
     <br />
-    <Box $background="#f0f0f0" $padding="24px">
+    <Box background="#f0f0f0" padding="24px">
       Box with transient-like props
     </Box>
     <div sx={[styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74")]}>

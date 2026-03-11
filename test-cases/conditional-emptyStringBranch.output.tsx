@@ -2,78 +2,78 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type BoxProps = React.PropsWithChildren<{
-  $disableMinWidth?: boolean;
+  disableMinWidth?: boolean;
 }>;
 
 // Empty string in conditional - should omit property when truthy
 function Box(props: BoxProps) {
-  const { children, $disableMinWidth } = props;
+  const { children, disableMinWidth } = props;
 
-  return <div sx={[styles.box, !$disableMinWidth && styles.boxNotDisableMinWidth]}>{children}</div>;
+  return <div sx={[styles.box, !disableMinWidth && styles.boxNotDisableMinWidth]}>{children}</div>;
 }
 
 type BoxAltProps = React.PropsWithChildren<{
-  $enableMinWidth?: boolean;
+  enableMinWidth?: boolean;
 }>;
 
 // Empty string alternate - should apply property when truthy
 function BoxAlt(props: BoxAltProps) {
-  const { children, $enableMinWidth } = props;
+  const { children, enableMinWidth } = props;
 
   return (
-    <div sx={[styles.boxAlt, $enableMinWidth ? styles.boxAltEnableMinWidth : undefined]}>
+    <div sx={[styles.boxAlt, enableMinWidth ? styles.boxAltEnableMinWidth : undefined]}>
       {children}
     </div>
   );
 }
 
 type ContainerProps = React.PropsWithChildren<{
-  $compact?: boolean;
+  compact?: boolean;
 }>;
 
 // Multiple CSS declarations in string
 function Container(props: ContainerProps) {
-  const { children, $compact } = props;
+  const { children, compact } = props;
 
-  return <div sx={[styles.container, !$compact && styles.containerNotCompact]}>{children}</div>;
+  return <div sx={[styles.container, !compact && styles.containerNotCompact]}>{children}</div>;
 }
 
 type WrapperProps = React.PropsWithChildren<{
-  $fullWidth?: boolean;
+  fullWidth?: boolean;
 }>;
 
 // css`` tagged template with empty string consequent
 function Wrapper(props: WrapperProps) {
-  const { children, $fullWidth } = props;
+  const { children, fullWidth } = props;
 
-  return <div sx={[styles.wrapper, !$fullWidth && styles.wrapperNotFullWidth]}>{children}</div>;
+  return <div sx={[styles.wrapper, !fullWidth && styles.wrapperNotFullWidth]}>{children}</div>;
 }
 
 type WrapperAltProps = React.PropsWithChildren<{
-  $narrow?: boolean;
+  narrow?: boolean;
 }>;
 
 // css`` tagged template with empty string alternate
 function WrapperAlt(props: WrapperAltProps) {
-  const { children, $narrow } = props;
+  const { children, narrow } = props;
 
   return (
-    <div sx={[styles.wrapperAlt, $narrow ? styles.wrapperAltNarrow : undefined]}>{children}</div>
+    <div sx={[styles.wrapperAlt, narrow ? styles.wrapperAltNarrow : undefined]}>{children}</div>
   );
 }
 
 export const App = () => (
   <div>
     <Box>Normal (has min-width)</Box>
-    <Box $disableMinWidth>Disabled min-width</Box>
+    <Box disableMinWidth>Disabled min-width</Box>
     <BoxAlt>No min-width</BoxAlt>
-    <BoxAlt $enableMinWidth>Has min-width</BoxAlt>
+    <BoxAlt enableMinWidth>Has min-width</BoxAlt>
     <Container>Normal container with margin/border</Container>
-    <Container $compact>Compact container without margin/border</Container>
+    <Container compact>Compact container without margin/border</Container>
     <Wrapper>Wrapper (has max-width/padding)</Wrapper>
-    <Wrapper $fullWidth>Wrapper full width</Wrapper>
+    <Wrapper fullWidth>Wrapper full width</Wrapper>
     <WrapperAlt>WrapperAlt (no max-width)</WrapperAlt>
-    <WrapperAlt $narrow>WrapperAlt narrow</WrapperAlt>
+    <WrapperAlt narrow>WrapperAlt narrow</WrapperAlt>
   </div>
 );
 

@@ -3,22 +3,22 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type DynamicBoxProps = React.PropsWithChildren<{
-  $background?: string;
-  $size?: string;
+  background?: string;
+  size?: string;
   style?: React.CSSProperties;
 }>;
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { children, style, $background, $size } = props;
+  const { children, style, background, size } = props;
 
   return (
     <div
       {...mergedSx(
         [
           styles.dynamicBox,
-          $background != null && styles.dynamicBoxBackgroundColor($background),
-          $size != null && styles.dynamicBoxHeight($size),
-          $size != null && styles.dynamicBoxWidth($size),
+          background != null && styles.dynamicBoxBackgroundColor(background),
+          size != null && styles.dynamicBoxHeight(size),
+          size != null && styles.dynamicBoxWidth(size),
         ],
         undefined,
         style,
@@ -32,7 +32,7 @@ function DynamicBox(props: DynamicBoxProps) {
 export const App = () => (
   <div>
     <div sx={styles.staticBox} />
-    <DynamicBox $background="mediumseagreen" $size="100px" style={{ border: "1px solid red" }} />
+    <DynamicBox background="mediumseagreen" size="100px" style={{ border: "1px solid red" }} />
   </div>
 );
 

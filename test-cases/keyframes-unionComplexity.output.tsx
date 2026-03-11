@@ -47,20 +47,20 @@ export function LoaderCaret<C extends React.ElementType = "div">(
   );
 }
 
-type StyledLoaderCaretProps = { $noPadding?: boolean } & Omit<
+type StyledLoaderCaretProps = { noPadding?: boolean } & Omit<
   React.ComponentPropsWithRef<typeof LoaderCaret>,
   "className" | "style"
 >;
 
 function StyledLoaderCaret(props: StyledLoaderCaretProps) {
-  const { $noPadding, ...rest } = props;
+  const { noPadding, ...rest } = props;
 
   return (
     <LoaderCaret
       {...rest}
       {...stylex.props(
         styles.styledLoaderCaret,
-        $noPadding ? styles.styledLoaderCaretNoPadding : undefined,
+        noPadding ? styles.styledLoaderCaretNoPadding : undefined,
       )}
     />
   );

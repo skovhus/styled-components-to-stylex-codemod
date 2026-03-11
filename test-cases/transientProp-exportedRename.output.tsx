@@ -79,15 +79,15 @@ export function StatusBadge(props: StatusBadgeProps) {
 }
 
 type PrivateLabelProps = React.PropsWithChildren<{
-  $bold?: boolean;
+  bold?: boolean;
 }>;
 
-// Non-exported component — should keep $-prefix
+// Non-exported component — $-prefix also stripped
 function PrivateLabel(props: PrivateLabelProps) {
-  const { children, $bold } = props;
+  const { children, bold } = props;
 
   return (
-    <span sx={[styles.privateLabel, $bold ? styles.privateLabelBold : undefined]}>{children}</span>
+    <span sx={[styles.privateLabel, bold ? styles.privateLabelBold : undefined]}>{children}</span>
   );
 }
 
@@ -148,7 +148,7 @@ export function App() {
           Fail
         </StatusBadge>
       </div>
-      <PrivateLabel $bold>Bold text</PrivateLabel>
+      <PrivateLabel bold>Bold text</PrivateLabel>
       <PrivateLabel>Normal text</PrivateLabel>
       <ColorChip $color="blue" color="white">
         Collision kept
