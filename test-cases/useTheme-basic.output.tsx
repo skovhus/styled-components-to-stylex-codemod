@@ -16,13 +16,11 @@ export function Input(props: InputProps) {
   const theme = useTheme();
   const someCustomColor = theme.color.bgBase;
 
-  return <ColorPickerWrapper style={{ backgroundColor: someCustomColor }} />;
-}
-
-function ColorPickerWrapper(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
-  const { children, style } = props;
-
-  return <div {...mergedSx(styles.colorPickerWrapper, undefined, style)}>{children}</div>;
+  return (
+    <div
+      {...mergedSx(styles.colorPickerWrapper, undefined, { backgroundColor: someCustomColor })}
+    />
+  );
 }
 
 export const App = () => <Input />;

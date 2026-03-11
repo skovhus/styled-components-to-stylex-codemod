@@ -2,13 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
 type CompProps = React.PropsWithChildren<{
-  draggable?: boolean;
+  $draggable?: boolean;
 }>;
 
 function Comp(props: CompProps) {
-  const { children, draggable } = props;
+  const { children, $draggable } = props;
 
-  return <div sx={[styles.comp, draggable ? styles.compDraggable : undefined]}>{children}</div>;
+  return <div sx={[styles.comp, $draggable ? styles.compDraggable : undefined]}>{children}</div>;
 }
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
@@ -17,31 +17,13 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = { red?: boolean } & Omit<React.ComponentPropsWithRef<typeof Link>, "style">;
+type StyledLinkProps = { $red?: boolean } & Omit<React.ComponentPropsWithRef<typeof Link>, "style">;
 
 function StyledLink(props: StyledLinkProps) {
-  const { className, red, ...rest } = props;
+  const { className, $red, ...rest } = props;
 
   return (
-    <Link {...rest} {...mergedSx([styles.link, red ? styles.linkRed : undefined], className)} />
-  );
-}
-
-type PointProps = React.PropsWithChildren<{
-  size?: number;
-  "data-testid"?: string;
-  style?: React.CSSProperties;
-}>;
-
-// Pattern 3: Transient prop with dynamic value passed to inlined component
-// The prop is declared in type but not used in styles - must be stripped when inlined
-function Point(props: PointProps) {
-  const { children, style, size, ...rest } = props;
-
-  return (
-    <div {...rest} {...mergedSx(styles.point, undefined, style)}>
-      {children}
-    </div>
+    <Link {...rest} {...mergedSx([styles.link, $red ? styles.linkRed : undefined], className)} />
   );
 }
 
@@ -87,11 +69,11 @@ export function CollapseArrowIcon(
 
 export const App = () => (
   <div>
-    <Comp draggable>Draggable</Comp>
+    <Comp $draggable>Draggable</Comp>
     <Comp>Not Draggable</Comp>
-    <StyledLink text="Click" red />
+    <StyledLink text="Click" $red />
     <StyledLink text="Click" />
-    <Point size={100} style={{ top: "10px" }} data-testid="point" />
+    <div data-testid="point" {...mergedSx(styles.point, undefined, { top: "10px" })} />
     <CollapseArrowIcon isOpen />
     <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
@@ -132,6 +114,8 @@ const styles = stylex.create({
   linkRed: {
     color: "red",
   },
+  // Pattern 3: Transient prop with dynamic value passed to inlined component
+  // The prop is declared in type but not used in styles - must be stripped when inlined
   point: {
     position: "absolute",
     width: "12px",
