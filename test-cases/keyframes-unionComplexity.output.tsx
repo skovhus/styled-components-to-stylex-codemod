@@ -21,16 +21,7 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
     as?: C;
   };
 
-export function LoaderCaret<C extends React.ElementType = "div">(
-  props: {
-    delay?: number;
-  } & Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof {
-      delay?: number;
-    }
-  > & { sx?: stylex.StyleXStyles; as?: C },
-) {
+export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCaretProps<C>) {
   const { as: Component = "div", className, children, style, sx, delay, ...rest } = props;
 
   return (
