@@ -775,6 +775,29 @@ export const App = () => (
     expect(result.code).toContain("$size");
   });
 
+  it("should keep $-prefix when call sites use spread props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Toggle = styled.div<{ $active?: boolean }>\`
+  color: \${(props) => (props.$active ? "red" : "blue")};
+\`;
+
+export const App = (props: { $active?: boolean }) => <Toggle {...props} />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The wrapper's destructuring must keep the $-prefix because
+    // spread call sites may pass $active which wouldn't match a renamed "active".
+    expect(result.code).toContain("$active ?");
+  });
+
   it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
     const source = `
 import * as React from "react";

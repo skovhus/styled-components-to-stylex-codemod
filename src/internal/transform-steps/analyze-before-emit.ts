@@ -521,8 +521,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     // Block renames where the stripped name already appears as a JSX attribute at
     // a call site (e.g., <Input size={5} $size="lg" /> — renaming $size → size
-    // would create duplicate attributes).
-    collectCallSiteAttrNames(root, j, decl.localName, existingPropNames);
+    // would create duplicate attributes). Also block ALL renames when any call site
+    // uses spread attributes, since the spread may contain $-prefixed keys at runtime.
+    const callSiteHasSpread = collectCallSiteAttrNames(root, j, decl.localName, existingPropNames);
+    if (callSiteHasSpread) {
+      continue;
+    }
     const renames = new Map<string, string>();
     for (const prop of transientProps) {
       const stripped = prop.slice(1);
@@ -1024,7 +1028,7 @@ function isModuleScopeBinding(
     return true;
   }
   // Check top-level variable declarations (excluding the owner)
-  return (
+  const hasVariable =
     root
       .find(j.VariableDeclarator)
       .filter((p) => {
@@ -1035,9 +1039,29 @@ function isModuleScopeBinding(
         return id.name !== ownerLocalName;
       })
       .filter((p) => {
-        // Only top-level declarations
         const parent = p.parentPath?.parentPath;
         return parent?.node?.type === "Program";
+      })
+      .size() > 0;
+  if (hasVariable) {
+    return true;
+  }
+  // Check function declarations (e.g., function $size() {})
+  const hasFunction =
+    root
+      .find(j.FunctionDeclaration)
+      .filter((p) => p.node.id?.name === name && p.node.id?.name !== ownerLocalName)
+      .size() > 0;
+  if (hasFunction) {
+    return true;
+  }
+  // Check class declarations (e.g., class $size {})
+  return (
+    root
+      .find(j.ClassDeclaration)
+      .filter((p) => {
+        const id = p.node.id;
+        return id?.type === "Identifier" && id.name === name && id.name !== ownerLocalName;
       })
       .size() > 0
   );
@@ -1062,18 +1086,22 @@ function collectResolverImportNames(ctx: TransformContext): Set<string> {
 
 /**
  * Collects non-`$`-prefixed attribute names from JSX call sites of a component.
- * Used to prevent renames that would create duplicate attributes
- * (e.g., `<Input size={5} $size="lg" />` — renaming `$size` → `size` would collide).
+ * Returns true if any call site uses a JSX spread attribute (e.g., `{...props}`),
+ * which means the spread may contain `$`-prefixed keys at runtime — all renames
+ * must be blocked to prevent mismatches.
  */
 function collectCallSiteAttrNames(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   componentName: string,
   names: Set<string>,
-): void {
+): boolean {
+  let hasSpread = false;
   const collectFromElement = (openingElement: { attributes?: unknown[] }) => {
     for (const attr of (openingElement as any).attributes ?? []) {
-      if (attr.type === "JSXAttribute" && attr.name?.type === "JSXIdentifier") {
+      if (attr.type === "JSXSpreadAttribute") {
+        hasSpread = true;
+      } else if (attr.type === "JSXAttribute" && attr.name?.type === "JSXIdentifier") {
         const name: string = attr.name.name;
         if (!name.startsWith("$")) {
           names.add(name);
@@ -1093,6 +1121,7 @@ function collectCallSiteAttrNames(
       name: { type: "JSXIdentifier", name: componentName },
     } as any)
     .forEach((p: any) => collectFromElement(p.node));
+  return hasSpread;
 }
 
 /**
