@@ -4,19 +4,19 @@ import styled from "styled-components";
 // When a local variable named `styles` exists, the generated stylex constant
 // should use a different name to avoid shadowing.
 
-const Container = styled.div<{ align: string }>`
+const Container = styled.div<{ title: string }>`
   position: relative;
   flex-shrink: 0;
 `;
 
 interface Props {
   containerStyles?: React.CSSProperties;
-  align?: "top" | "center" | "bottom";
+  title?: string;
   children: React.ReactNode;
 }
 
 export function CollapsingContainer(props: Props) {
-  const { containerStyles, align = "top", children } = props;
+  const { containerStyles, title = "default", children } = props;
 
   // Local variable named "styles" - common pattern in animation components
   const styles = containerStyles
@@ -27,7 +27,7 @@ export function CollapsingContainer(props: Props) {
     : { overflow: "hidden" };
 
   return (
-    <Container align={align} style={styles}>
+    <Container title={title} style={styles}>
       {children}
     </Container>
   );

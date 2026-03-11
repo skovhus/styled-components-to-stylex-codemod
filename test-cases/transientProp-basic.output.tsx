@@ -27,24 +27,6 @@ function StyledLink(props: StyledLinkProps) {
   );
 }
 
-type PointProps = React.PropsWithChildren<{
-  size?: number;
-  "data-testid"?: string;
-  style?: React.CSSProperties;
-}>;
-
-// Pattern 3: Transient prop with dynamic value passed to inlined component
-// The prop is declared in type but not used in styles - must be stripped when inlined
-function Point(props: PointProps) {
-  const { children, style, size, ...rest } = props;
-
-  return (
-    <div {...rest} {...mergedSx(styles.point, undefined, style)}>
-      {children}
-    </div>
-  );
-}
-
 // Pattern 4: styled(Component) where base component declares the transient prop
 // The transient prop is used for styling by the wrapper
 // CollapseArrowIcon pattern - ArrowIcon declares $isOpen in props, wrapper uses it for styling
@@ -91,7 +73,7 @@ export const App = () => (
     <Comp>Not Draggable</Comp>
     <StyledLink text="Click" red />
     <StyledLink text="Click" />
-    <Point size={100} style={{ top: "10px" }} data-testid="point" />
+    <div data-testid="point" sx={styles.point} />
     <CollapseArrowIcon isOpen />
     <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
@@ -132,11 +114,14 @@ const styles = stylex.create({
   linkRed: {
     color: "red",
   },
+  // Pattern 3: Transient prop with dynamic value passed to inlined component
+  // The prop is declared in type but not used in styles - must be stripped when inlined
   point: {
     position: "absolute",
     width: "12px",
     height: "8px",
     backgroundColor: "white",
+    top: "10px",
   },
   collapseArrowIcon: {
     transform: "rotate(0deg)",

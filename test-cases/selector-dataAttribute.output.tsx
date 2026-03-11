@@ -1,29 +1,12 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
-
-function Box(
-  props: React.PropsWithChildren<{
-    "data-visible"?: string;
-    style?: React.CSSProperties;
-  }>,
-) {
-  const { children, style, ...rest } = props;
-
-  return (
-    <div {...rest} {...mergedSx(styles.box, undefined, style)}>
-      {children}
-    </div>
-  );
-}
 
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <Box data-visible="true" style={{ backgroundColor: "lightblue", padding: 20 }}>
+      <div data-visible="true" sx={[styles.box, styles.boxVisible]}>
         Visible
-      </Box>
-      <Box style={{ backgroundColor: "lightcoral", padding: 20 }}>Hidden</Box>
+      </div>
+      <div sx={[styles.box, styles.boxHidden]}>Hidden</div>
     </div>
   );
 }
@@ -35,5 +18,13 @@ const styles = stylex.create({
       ':is([data-visible="true"])': 1,
     },
     transition: "opacity 0.2s",
+  },
+  boxVisible: {
+    backgroundColor: "lightblue",
+    padding: 20,
+  },
+  boxHidden: {
+    backgroundColor: "lightcoral",
+    padding: 20,
   },
 });

@@ -5,17 +5,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function TextDividerContainer(
-  props: React.PropsWithChildren<{
-    className?: string;
-    style?: React.CSSProperties;
-  }>,
-) {
-  const { className, children, style } = props;
-
-  return <div {...mergedSx(styles.textDividerContainer, className, style)}>{children}</div>;
-}
-
 type ActionMenuTextDividerProps = {
   text: string;
   className?: string;
@@ -24,9 +13,9 @@ type ActionMenuTextDividerProps = {
 
 function ActionMenuTextDivider(props: ActionMenuTextDividerProps) {
   return (
-    <TextDividerContainer className={props.className} style={props.style}>
+    <div {...mergedSx(styles.textDividerContainer, props.className, props.style)}>
       <span>{props.text}</span>
-    </TextDividerContainer>
+    </div>
   );
 }
 

@@ -13,23 +13,6 @@ export type Props = {
   size?: Size;
 };
 
-function StyledBadge(
-  props: React.PropsWithChildren<
-    Props & {
-      className?: string;
-      style?: React.CSSProperties;
-    }
-  >,
-) {
-  const { className, children, style, ...rest } = props;
-
-  return (
-    <span {...rest} {...mergedSx(styles.badge, className, style)}>
-      {children}
-    </span>
-  );
-}
-
 type BadgeProps = Props & {
   className?: string;
   style?: React.CSSProperties;
@@ -40,11 +23,7 @@ export function ColorBadge(props: BadgeProps) {
   // className and style should be available from the styled component
   const { className, children, style } = props;
 
-  return (
-    <StyledBadge className={className} style={style}>
-      {children}
-    </StyledBadge>
-  );
+  return <span {...mergedSx(styles.badge, className, style)}>{children}</span>;
 }
 
 export const App = () => (
