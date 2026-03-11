@@ -1,14 +1,9 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-function Box(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.box, styles.borderBottom]}>{props.children}</div>;
-}
-
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Box>Box with border</Box>
+    <div sx={[styles.borderBottom, styles.box]}>Box with border</div>
   </div>
 );
 

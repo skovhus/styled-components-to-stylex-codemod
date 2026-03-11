@@ -1,21 +1,10 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-// Directional border: expands to borderLeftWidth, borderLeftStyle, borderLeftColor
-function BorderedLeft(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.borderLeft}>{props.children}</div>;
-}
-
-// Non-directional border: expands to borderWidth, borderStyle, borderColor
-function BorderedBox(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.border}>{props.children}</div>;
-}
-
 export const App = () => (
   <div style={{ padding: "10px" }}>
-    <BorderedLeft>Bordered left</BorderedLeft>
-    <BorderedBox>Bordered box</BorderedBox>
+    <div sx={styles.borderLeft}>Bordered left</div>
+    <div sx={styles.border}>Bordered box</div>
   </div>
 );
 

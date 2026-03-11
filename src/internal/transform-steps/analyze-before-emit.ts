@@ -149,6 +149,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
   // Pre-pass: set needsWrapperComponent BEFORE emitStylesAndImports
   // This allows comment placement logic to know which decls need wrappers.
+  // Track which decls have the flag set by this pre-pass (vs lowering).
+  const wrapperForcedByPrepass = new Set<string>();
   for (const decl of styledDecls) {
     if (decl.isCssHelper) {
       continue;
@@ -156,6 +158,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.isDirectJsxResolution) {
       continue;
     }
+    const hadWrapperBeforePrepass = decl.needsWrapperComponent;
     // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
     // tend to produce very noisy inline substitutions when there are multiple callsite variations.
     // Prefer emitting a wrapper function component in these cases.
@@ -188,6 +191,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       decl.needsWrapperComponent = true;
     }
 
+    if (!hadWrapperBeforePrepass && decl.needsWrapperComponent) {
+      wrapperForcedByPrepass.add(decl.localName);
+    }
+
     // Bridge className injection: components referenced by unconverted consumer selectors
     // get a deterministic className so the consumer's `${Component} { ... }` still works.
     // Note: for default imports, the prepass stores "default" as importedName; resolve it
@@ -199,6 +206,38 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (isBridgeComponent) {
       const absPath = pathResolve(file.path);
       decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
+    }
+  }
+
+  // Downgrade needsWrapperComponent for intrinsic elements where the wrapper was set only
+  // by lowering for unconditional extraStylexPropsArgs (usage:"props" mixins).
+  // The inline JSX rewrite path already handles unconditional extraStylexPropsArgs,
+  // so the wrapper function is unnecessary for these components.
+  // This must happen before the promotion analysis (which bails on needsWrapperComponent).
+  for (const decl of styledDecls) {
+    if (
+      decl.needsWrapperComponent &&
+      !wrapperForcedByPrepass.has(decl.localName) &&
+      !decl.isCssHelper &&
+      !decl.isDirectJsxResolution &&
+      decl.base.kind === "intrinsic" &&
+      !decl.bridgeClassName &&
+      // Only safe when the wrapper was SOLELY for extraStylexPropsArgs/extraStyleKeys.
+      // Any other dynamic feature (prop-dependent styles, variants, theme hooks, etc.)
+      // needs the wrapper for prop destructuring and conditional logic.
+      (decl.styleFnFromProps ?? []).length === 0 &&
+      !decl.needsUseThemeHook?.length &&
+      Object.keys(decl.variantStyleKeys ?? {}).length === 0 &&
+      !decl.enumVariant &&
+      !decl.inlineStyleProps?.length &&
+      // Conditional extraStylexPropsArgs (with `when` guards) are filtered out by the
+      // inline path, so they need the wrapper to emit the conditional logic.
+      !(decl.extraStylexPropsArgs ?? []).some((arg) => arg.when) &&
+      // Must actually have extraStylexPropsArgs or extraStyleKeys — otherwise the wrapper
+      // was set for some other untracked reason and it's not safe to unset.
+      ((decl.extraStylexPropsArgs ?? []).length > 0 || (decl.extraStyleKeys ?? []).length > 0)
+    ) {
+      decl.needsWrapperComponent = false;
     }
   }
 
