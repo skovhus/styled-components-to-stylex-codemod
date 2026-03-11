@@ -1,0 +1,1 @@
+import{j as s}from"./index-eld8hrh2.js";import{i}from"./helpers-DxXBE32G.js";const t=i("fast"),p=()=>s.jsxs("div",{children:[s.jsx("div",{children:t}),s.jsx("div",{className:"x4lopbt"})]});export{p as App};
