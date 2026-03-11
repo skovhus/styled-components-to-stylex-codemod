@@ -422,6 +422,24 @@ export class WrapperEmitter {
     return null;
   }
 
+  /**
+   * Build an expression to use in `Omit<..., ${expr}>` for excluding the keys
+   * of a props type. When the type is a simple inline object literal, extracts
+   * keys as a union of string literals (e.g. `"size" | "color"`). For named
+   * type references, returns `keyof TypeName`. Falls back to
+   * `keyof (${stringified})` for complex or unresolvable types.
+   */
+  keyofExprForType(propsType: ASTNode | undefined, stringified: string | null): string | null {
+    if (!propsType || !stringified) {
+      return null;
+    }
+    const keys = this.extractDirectPropertyKeys(propsType);
+    if (keys && keys.length > 0) {
+      return keys.map((k) => JSON.stringify(k)).join(" | ");
+    }
+    return `keyof (${stringified})`;
+  }
+
   typeExistsInFile(typeName: string): boolean {
     const { root, j } = this;
     const typeAliases = root.find(j.TSTypeAliasDeclaration, {
@@ -759,6 +777,37 @@ export class WrapperEmitter {
 
   private toTypeKey(name: string): string {
     return this.isValidTypeKeyIdentifier(name) ? name : JSON.stringify(name);
+  }
+
+  /**
+   * Extract property key names directly from an inline TS type literal AST node.
+   * Returns an array of key names for `{ key1: T; key2: U }` literals.
+   * Returns null for named type references, complex types, or when keys
+   * cannot be statically extracted.
+   */
+  private extractDirectPropertyKeys(propsType: ASTNode): string[] | null {
+    if (propsType.type !== "TSTypeLiteral") {
+      return null;
+    }
+    const members = (propsType as ASTNode & { members?: unknown[] }).members ?? [];
+    const keys: string[] = [];
+    for (const member of members) {
+      const m = member as {
+        type?: string;
+        key?: { type?: string; name?: string; value?: string };
+      };
+      if (m.type !== "TSPropertySignature") {
+        return null;
+      }
+      const key = m.key;
+      const name =
+        key?.type === "Identifier" ? key.name : key?.type === "StringLiteral" ? key.value : null;
+      if (!name) {
+        return null;
+      }
+      keys.push(name);
+    }
+    return keys.length > 0 ? keys : null;
   }
 
   getExplicitPropNames(propsType: AstNodeOrNull): Set<string> {

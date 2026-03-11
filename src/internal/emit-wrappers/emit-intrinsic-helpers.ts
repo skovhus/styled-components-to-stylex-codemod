@@ -86,6 +86,7 @@ export type EmitIntrinsicHelpers = {
     allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    extraKeyofExpr?: string | null;
     extraFirst?: boolean;
   }) => { typeExprText: string; genericParams: string };
   propsTypeHasExistingPolymorphicAs: (d: StyledDecl) => boolean;
@@ -335,6 +336,8 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     allowSxProp?: boolean;
     includeForwardedAs?: boolean;
     extra?: string | null;
+    /** Pre-computed expression for omitting extra's keys (e.g. `"size" | "color"` instead of `keyof { size: number; color: string }`). */
+    extraKeyofExpr?: string | null;
     /** When true, place the user's existing type first in the intersection for readability. */
     extraFirst?: boolean;
   }): { typeExprText: string; genericParams: string } => {
@@ -345,6 +348,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       allowSxProp,
       includeForwardedAs,
       extra,
+      extraKeyofExpr,
       extraFirst,
     } = args;
     const genericParams = `C extends React.ElementType = "${tagName}"`;
@@ -368,7 +372,8 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     const sxPropPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
     if (extra) {
       // Omit extra's keys from base so custom props take precedence over native element props
-      const allOmitted = [...omitted, `keyof (${extra})`];
+      const keyExpr = extraKeyofExpr ?? `keyof (${extra})`;
+      const allOmitted = [...omitted, keyExpr];
       const baseWithExtraOmit = `Omit<React.ComponentPropsWithRef<C>, ${allOmitted.join(" | ")}>`;
       if (extraFirst) {
         // User's existing type first for readability (e.g. Props & Omit<...> & { as?: C })

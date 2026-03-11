@@ -12,16 +12,7 @@ type SizeBoxProps<C extends React.ElementType = "div"> = Omit<
   };
 
 /** A container that scales based on a dynamic size prop */
-function SizeBox<C extends React.ElementType = "div">(
-  props: {
-    size: number;
-  } & Omit<
-    React.ComponentPropsWithRef<C>,
-    keyof {
-      size: number;
-    }
-  > & { sx?: stylex.StyleXStyles; as?: C },
-) {
+function SizeBox<C extends React.ElementType = "div">(props: SizeBoxProps<C>) {
   const { as: Component = "div", className, children, style, ref, sx, size, ...rest } = props;
 
   return (

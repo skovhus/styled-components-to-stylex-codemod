@@ -302,8 +302,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const explicitIsExistingTypeRef = !!emitter.getExplicitTypeNameIfExists(d.propsType);
 
     // Emit props type (skip when user already has a well-named type)
+    let typeAliasEmitted = false;
     if (!explicitIsExistingTypeRef) {
-      emitPropsType({
+      typeAliasEmitted = emitPropsType({
         localName: d.localName,
         tagName,
         typeText: finalTypeTextWithForwardedAs,
@@ -558,17 +559,22 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {
-      // When there are no custom props, use inline type
-      // When there ARE custom props (explicit), use inline intersection with user-defined type
-      const sxPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
-      const asPropLiteral = `{ ${sxPart}as?: C }`;
-      const forwardedAsPart = includesForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
-      const propsTypeText = hasNoCustomProps
-        ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
-        : explicit
-          ? `${explicit} & Omit<React.ComponentPropsWithRef<C>, keyof (${explicit})> & ${asPropLiteral}${forwardedAsPart}`
-          : `${emitter.propsTypeNameFor(d.localName)}<C>`;
-      emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+      // When a named type alias was emitted, reference it instead of inlining
+      if (typeAliasEmitted) {
+        const propsTypeText = `${emitter.propsTypeNameFor(d.localName)}<C>`;
+        emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+      } else {
+        const sxPart = allowSxProp ? `${SX_PROP_TYPE_TEXT}; ` : "";
+        const asPropLiteral = `{ ${sxPart}as?: C }`;
+        const forwardedAsPart = includesForwardedAs ? " & { forwardedAs?: React.ElementType }" : "";
+        const keyofExpr = emitter.keyofExprForType(d.propsType, explicit);
+        const propsTypeText = hasNoCustomProps
+          ? `React.ComponentPropsWithRef<C> & ${asPropLiteral}${forwardedAsPart}`
+          : explicit && keyofExpr
+            ? `${explicit} & Omit<React.ComponentPropsWithRef<C>, ${keyofExpr}> & ${asPropLiteral}${forwardedAsPart}`
+            : `${emitter.propsTypeNameFor(d.localName)}<C>`;
+        emitter.annotatePropsParam(propsParamId, d.localName, propsTypeText);
+      }
     } else if (sfpInlineTypeText) {
       emitter.annotatePropsParam(propsParamId, d.localName, sfpInlineTypeText);
     } else {

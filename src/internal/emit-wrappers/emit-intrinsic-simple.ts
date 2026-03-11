@@ -807,6 +807,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
               allowSxProp,
               includeForwardedAs: includesForwardedAs,
               extra: explicit,
+              extraKeyofExpr: emitter.keyofExprForType(d.propsType, explicit),
               extraFirst: explicitIsExistingTypeRef,
             });
             inlineTypeText = poly.typeExprText;

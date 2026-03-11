@@ -88,7 +88,10 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         // When there's a custom props type, omit its keys from element props
         // so custom props take precedence over native element props
         if (explicit) {
-          omitted.push(`keyof (${explicit})`);
+          const keyofExpr = emitter.keyofExprForType(d.propsType, explicit);
+          if (keyofExpr) {
+            omitted.push(keyofExpr);
+          }
         }
         const baseMaybeOmitted =
           omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
