@@ -1802,12 +1802,14 @@ function analyzePromotableStyleProps(
     }
 
     // Collect all JSX call sites for this component.
-    const callSites: Array<{ opening: any }> = [];
+    const callSites: Array<{ opening: any; children?: unknown[] }> = [];
     root
       .find(j.JSXElement, {
         openingElement: { name: { type: "JSXIdentifier", name: decl.localName } },
       } as object)
-      .forEach((p) => callSites.push({ opening: p.node.openingElement }));
+      .forEach((p) =>
+        callSites.push({ opening: p.node.openingElement, children: p.node.children as unknown[] }),
+      );
     root
       .find(j.JSXSelfClosingElement, {
         name: { type: "JSXIdentifier", name: decl.localName },
@@ -1822,6 +1824,7 @@ function analyzePromotableStyleProps(
     let allPromotable = true;
     const siteAnalyses: Array<{
       opening: any;
+      children?: unknown[];
       styleAttr: any;
       properties: Array<{
         key: string;
@@ -1830,7 +1833,7 @@ function analyzePromotableStyleProps(
       }>;
     }> = [];
 
-    for (const { opening } of callSites) {
+    for (const { opening, children } of callSites) {
       const attrs = (opening.attributes ?? []) as any[];
 
       // Bail condition 6: JSXSpreadAttribute present
@@ -1871,7 +1874,7 @@ function analyzePromotableStyleProps(
 
       // No style prop on this call site → it's fine, no promotion needed
       if (!styleAttr) {
-        siteAnalyses.push({ opening, styleAttr: null, properties: [] });
+        siteAnalyses.push({ opening, children, styleAttr: null, properties: [] });
         continue;
       }
 
@@ -1942,7 +1945,7 @@ function analyzePromotableStyleProps(
         break;
       }
 
-      siteAnalyses.push({ opening, styleAttr, properties });
+      siteAnalyses.push({ opening, children, styleAttr, properties });
     }
 
     if (!allPromotable) {
@@ -1984,14 +1987,18 @@ function analyzePromotableStyleProps(
           (site.opening as any).__promotedMergeIntoBase = true;
         } else {
           // Multi-use or exported: create a new style key.
-          const styleKey = generatePromotedStyleKey(decl.styleKey, usedKeyNames);
+          const styleKey = generatePromotedStyleKey(decl.styleKey, usedKeyNames, site.children);
           usedKeyNames.add(styleKey);
           promotedEntries.push({ styleKey, styleValue: staticObj });
           (site.opening as any).__promotedStyleKey = styleKey;
         }
       } else if (hasDynamic) {
         // Mixed static+dynamic or all-dynamic: create a dynamic style function.
-        const styleKey = generatePromotedDynamicStyleKey(decl.styleKey, usedKeyNames);
+        const styleKey = generatePromotedDynamicStyleKey(
+          decl.styleKey,
+          usedKeyNames,
+          site.children,
+        );
         usedKeyNames.add(styleKey);
 
         // Build static part of the style object and collect dynamic params.
@@ -2080,34 +2087,119 @@ function analyzePromotableStyleProps(
 
 /**
  * Generates a unique style key for a promoted static style entry.
- * Uses `{baseKey}Inline`, `{baseKey}Inline2`, etc.
+ * Tries to derive a descriptive suffix from JSX children text content,
+ * falling back to `Inline`, `Inline2`, etc.
  */
-function generatePromotedStyleKey(baseKey: string, usedKeys: Set<string>): string {
-  let candidate = `${baseKey}Inline`;
-  if (!usedKeys.has(candidate)) {
-    return candidate;
-  }
-  let i = 2;
-  while (usedKeys.has(`${baseKey}Inline${i}`)) {
-    i++;
-  }
-  return `${baseKey}Inline${i}`;
+function generatePromotedStyleKey(
+  baseKey: string,
+  usedKeys: Set<string>,
+  children?: unknown[],
+): string {
+  return generateUniqueStyleKey(baseKey, usedKeys, children, "Inline");
 }
 
 /**
  * Generates a unique style key for a promoted dynamic style function.
- * Uses `{baseKey}Dynamic`, `{baseKey}Dynamic2`, etc.
+ * Tries to derive a descriptive suffix from JSX children text content,
+ * falling back to `Dynamic`, `Dynamic2`, etc.
  */
-function generatePromotedDynamicStyleKey(baseKey: string, usedKeys: Set<string>): string {
-  let candidate = `${baseKey}Dynamic`;
+function generatePromotedDynamicStyleKey(
+  baseKey: string,
+  usedKeys: Set<string>,
+  children?: unknown[],
+): string {
+  return generateUniqueStyleKey(baseKey, usedKeys, children, "Dynamic");
+}
+
+/**
+ * Generates a unique style key with an optional text-derived suffix.
+ * Extracts text from JSX children (direct text or text inside a child element)
+ * and converts it to a camelCase suffix. Falls back to the provided fallback suffix.
+ */
+function generateUniqueStyleKey(
+  baseKey: string,
+  usedKeys: Set<string>,
+  children: unknown[] | undefined,
+  fallbackSuffix: string,
+): string {
+  const textSuffix = extractTextSuffixFromChildren(children);
+  // Skip text suffix if it duplicates the base key (e.g., base "tick" + text "Tick" → "tickTick")
+  if (textSuffix && textSuffix.toLowerCase() !== baseKey.toLowerCase()) {
+    const candidate = `${baseKey}${textSuffix}`;
+    if (!usedKeys.has(candidate)) {
+      return candidate;
+    }
+  }
+  // Fall back to numbered suffix
+  let candidate = `${baseKey}${fallbackSuffix}`;
   if (!usedKeys.has(candidate)) {
     return candidate;
   }
   let i = 2;
-  while (usedKeys.has(`${baseKey}Dynamic${i}`)) {
+  while (usedKeys.has(`${baseKey}${fallbackSuffix}${i}`)) {
     i++;
   }
-  return `${baseKey}Dynamic${i}`;
+  return `${baseKey}${fallbackSuffix}${i}`;
+}
+
+/**
+ * Extracts a short camelCase suffix from JSX children text content.
+ * Looks for direct JSXText or text inside the first child element (e.g., `<span>Label A</span>`).
+ * Returns null if no usable text is found.
+ */
+function extractTextSuffixFromChildren(children: unknown[] | undefined): string | null {
+  if (!children?.length) {
+    return null;
+  }
+
+  let text: string | null = null;
+
+  for (const child of children) {
+    const c = child as { type?: string; value?: string; children?: unknown[] };
+    // Direct JSXText (e.g., `<Box>Visible</Box>`)
+    if (c.type === "JSXText" && c.value) {
+      const trimmed = c.value.trim();
+      if (trimmed) {
+        text = trimmed;
+        break;
+      }
+    }
+    // JSXExpressionContainer with a string literal (e.g., `<Box>{"text"}</Box>`)
+    if (c.type === "JSXExpressionContainer") {
+      const expr = (c as { expression?: { type?: string; value?: unknown } }).expression;
+      if (expr?.type === "StringLiteral" && typeof expr.value === "string" && expr.value.trim()) {
+        text = expr.value.trim();
+        break;
+      }
+    }
+    // Text inside a child element (e.g., `<Box><span>Label A</span></Box>`)
+    if (c.type === "JSXElement" && c.children?.length) {
+      const nested = extractTextSuffixFromChildren(c.children);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  if (!text) {
+    return null;
+  }
+
+  // Convert to camelCase suffix: "Label A" → "LabelA", "hello world" → "HelloWorld"
+  // Keep only alphanumeric chars, capitalize each word
+  const words = text.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (words.length === 0) {
+    return null;
+  }
+  // Limit to first 3 words and 20 chars to keep keys readable
+  const suffix = words
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+  if (suffix.length > 20) {
+    return null;
+  }
+  return suffix;
 }
 
 /**

@@ -14,11 +14,11 @@ export function App() {
   return (
     <div style={{ position: "relative", height: 120, padding: 16 }}>
       <div sx={styles.container}>
-        <div sx={[styles.itemRow, styles.itemRowInline]}>
+        <div sx={[styles.itemRow, styles.itemRowLabelA]}>
           <span>Label A</span>
           <div sx={[styles.fadeBase, styles.fadeLeft, styles.smallFade]} />
         </div>
-        <div ref={measureRef} sx={[styles.itemRow, styles.itemRowInline2]}>
+        <div ref={measureRef} sx={[styles.itemRow, styles.itemRowMeasure]}>
           <span>Measure</span>
         </div>
         <div sx={[styles.fadeBase, styles.fadeLeft, styles.fadeLeftDynamic(offset)]} />
@@ -69,12 +69,12 @@ const styles = stylex.create({
     borderRightColor: "transparent",
     zIndex: 1,
   },
-  itemRowInline: {
+  itemRowLabelA: {
     height: 24,
     left: 10,
     width: 100,
   },
-  itemRowInline2: {
+  itemRowMeasure: {
     opacity: 0,
     zIndex: -1,
   },

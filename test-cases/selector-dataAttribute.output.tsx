@@ -3,10 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <div data-visible="true" sx={[styles.box, styles.boxInline]}>
+      <div data-visible="true" sx={[styles.box, styles.boxVisible]}>
         Visible
       </div>
-      <div sx={[styles.box, styles.boxInline2]}>Hidden</div>
+      <div sx={[styles.box, styles.boxHidden]}>Hidden</div>
     </div>
   );
 }
@@ -19,11 +19,11 @@ const styles = stylex.create({
     },
     transition: "opacity 0.2s",
   },
-  boxInline: {
+  boxVisible: {
     backgroundColor: "lightblue",
     padding: 20,
   },
-  boxInline2: {
+  boxHidden: {
     backgroundColor: "lightcoral",
     padding: 20,
   },
