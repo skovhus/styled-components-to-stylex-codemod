@@ -1814,6 +1814,11 @@ function analyzePromotableStyleProps(
     if (!resolvesToIntrinsic(decl, declByLocal)) {
       continue;
     }
+    // Bail if the base style uses !important on any property — promoting call-site
+    // styles to StyleX entries would lose the !important-beats-inline-style semantics.
+    if (baseStyleHasImportant(resolvedStyleObjects.get(decl.styleKey))) {
+      continue;
+    }
 
     // Collect all JSX call sites for this component.
     const callSites: Array<{ opening: any; children?: unknown[] }> = [];
@@ -2241,4 +2246,18 @@ function hasPropertyOverlap(incoming: Record<string, unknown>, base: unknown): b
     }
   }
   return false;
+}
+
+/**
+ * Returns true if any value in the base resolved style object contains `!important`.
+ * When the base uses `!important`, style props must stay as inline styles (via mergedSx)
+ * to preserve the semantics where `!important` CSS beats inline `style` attributes.
+ */
+function baseStyleHasImportant(base: unknown): boolean {
+  if (!base || typeof base !== "object" || isAstNode(base)) {
+    return false;
+  }
+  return Object.values(base as Record<string, unknown>).some(
+    (v) => typeof v === "string" && v.includes("!important"),
+  );
 }
