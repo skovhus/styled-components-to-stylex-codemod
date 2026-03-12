@@ -13,15 +13,15 @@ export const App = () => (
 const styles = stylex.create({
   rangeInput: {
     WebkitAppearance: "none",
-    width: "200px",
-    height: "4px",
+    width: 200,
+    height: 4,
     backgroundColor: $colors.bgBorderSolid,
-    borderRadius: "2px",
+    borderRadius: 2,
     outline: "none",
     "::-webkit-slider-thumb": {
       WebkitAppearance: "none",
-      width: "16px",
-      height: "16px",
+      width: 16,
+      height: 16,
       borderRadius: "50%",
       backgroundColor: {
         default: $colors.controlPrimary,

@@ -41,7 +41,7 @@ const styles = stylex.create({
     animationTimingFunction: "ease-out",
     animationFillMode: "both",
     backgroundColor: "lightsalmon",
-    padding: "20px",
+    padding: 20,
   },
   // Kebab-case keyframe name
   slideDown: {
@@ -49,6 +49,6 @@ const styles = stylex.create({
     animationDuration: "0.4s",
     animationTimingFunction: "ease-in-out",
     backgroundColor: "lightsteelblue",
-    padding: "20px",
+    padding: 20,
   },
 });

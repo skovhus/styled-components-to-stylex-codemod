@@ -60,9 +60,9 @@ export const App = () => (
 
 const styles = stylex.create({
   badge: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
-    borderRadius: "4px",
+    paddingBlock: 8,
+    paddingInline: 12,
+    borderRadius: 4,
     backgroundColor: "#f0f0f0",
   },
   badgeHighlighted: {

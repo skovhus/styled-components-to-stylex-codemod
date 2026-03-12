@@ -37,7 +37,7 @@ const styles = stylex.create({
   optionLabel: {
     display: "flex",
     alignItems: "center",
-    gap: "4px",
+    gap: 4,
     opacity: 1,
   },
   optionLabelDisabled: {

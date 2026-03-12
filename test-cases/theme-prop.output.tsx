@@ -15,13 +15,13 @@ export const App = () => <Box>Theme prop</Box>;
 
 const styles = stylex.create({
   box: {
-    height: "100px",
-    width: "100px",
+    height: 100,
+    width: 100,
   },
   boxDark: {
     padding: pixelVars.thin,
   },
   boxLight: {
-    padding: "100px",
+    padding: 100,
   },
 });

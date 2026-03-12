@@ -42,7 +42,7 @@ const styles = stylex.create({
     alignItems: "center",
     flexShrink: 0,
     backgroundColor: "cornflowerblue",
-    padding: "8px",
+    padding: 8,
     color: "white",
   },
   sizeBoxSize: (size: number) => ({

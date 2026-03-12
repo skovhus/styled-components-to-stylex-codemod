@@ -9,8 +9,8 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
   },
   borderBottom: {
     borderBottomWidth: "1px",

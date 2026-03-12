@@ -12,15 +12,15 @@ const styles = stylex.create({
   link: {
     display: "flex",
     alignItems: "center",
-    paddingBlock: "5px",
-    paddingInline: "10px",
+    paddingBlock: 5,
+    paddingInline: 10,
     backgroundColor: "papayawhip",
     color: "#bf4f74",
   },
   // Reverse component selector with interpolated theme value
   badge: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
     backgroundColor: $colors.bgSub,
   },
   badgeInLink: {

@@ -20,14 +20,14 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: 4,
   },
   row: {
     color: "blue",
-    padding: "8px",
+    padding: 8,
     borderTopWidth: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "1px",
+      [stylex.when.siblingBefore(":is(*)")]: 1,
     },
     borderTopStyle: {
       default: null,

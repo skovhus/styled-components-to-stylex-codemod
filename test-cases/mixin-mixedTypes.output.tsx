@@ -14,7 +14,7 @@ const styles = stylex.create({
   // Test case 1: Color mixin first, then background mixin
   // Order should be: cssMixin, backgroundMixin, cssFirst
   cssFirst: {
-    padding: "10px",
+    padding: 10,
   },
   cssMixin: {
     color: "red",
@@ -25,10 +25,10 @@ const styles = stylex.create({
   // Test case 2: Background mixin first, then color mixin
   // Order should be: backgroundMixin, cssMixin, styledFirst
   first: {
-    margin: "10px",
+    margin: 10,
   },
   interleaved: {
-    padding: "5px",
+    padding: 5,
   },
   cssMixin2: {
     fontWeight: "bold",

@@ -11,15 +11,15 @@ export const App = () => (
 const styles = stylex.create({
   link: {
     display: "flex",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "papayawhip",
     color: "#bf4f74",
   },
   // Two interpolation slots in a single declaration value.
   // Both must resolve independently to their respective theme tokens.
   badge: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
   },
   badgeInLink: {
     boxShadow: {
@@ -28,7 +28,7 @@ const styles = stylex.create({
     },
     borderWidth: {
       default: null,
-      [stylex.when.ancestor(":hover")]: "2px",
+      [stylex.when.ancestor(":hover")]: 2,
     },
     borderStyle: {
       default: null,

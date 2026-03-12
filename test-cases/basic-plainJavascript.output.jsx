@@ -11,17 +11,17 @@ const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
     color: "white",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   card: {
-    paddingBlock: "16px",
-    paddingInline: "12px",
+    paddingBlock: 16,
+    paddingInline: 12,
     backgroundColor: "white",
-    borderRadius: "8px",
+    borderRadius: 8,
   },
 });

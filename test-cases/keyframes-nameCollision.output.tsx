@@ -38,8 +38,8 @@ const styles = stylex.create({
     animationDuration: "0.6s",
     animationTimingFunction: "ease-out",
     backgroundColor: "#e0f2fe",
-    borderRadius: "8px",
-    padding: "16px",
+    borderRadius: 8,
+    padding: 16,
     color: "#0369a1",
   },
 });

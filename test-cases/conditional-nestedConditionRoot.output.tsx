@@ -28,8 +28,8 @@ export const App = () => (
 const styles = stylex.create({
   layer: {
     position: "relative",
-    width: "100px",
-    height: "60px",
+    width: 100,
+    height: 60,
     backgroundColor: "#ddd",
     color: "#222",
   },

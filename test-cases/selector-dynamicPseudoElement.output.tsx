@@ -42,14 +42,14 @@ export const App = () => (
 const styles = stylex.create({
   badge: {
     position: "relative",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#f0f0f0",
     "::after": {
       content: '""',
       position: "absolute",
-      width: "8px",
-      height: "8px",
+      width: 8,
+      height: 8,
       borderRadius: "50%",
       top: 0,
       right: 0,

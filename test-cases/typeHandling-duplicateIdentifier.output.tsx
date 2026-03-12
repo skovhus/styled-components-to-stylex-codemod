@@ -73,7 +73,7 @@ export function App() {
 
 const styles = stylex.create({
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
   cardNotHighlighted: {
@@ -88,7 +88,7 @@ const styles = stylex.create({
   },
   iconButton: {
     paddingBlock: 0,
-    paddingInline: "2px",
+    paddingInline: 2,
     boxShadow: "none",
   },
 });

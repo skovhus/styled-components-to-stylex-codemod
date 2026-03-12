@@ -35,8 +35,8 @@ export const App = () => (
 const styles = stylex.create({
   img: {
     borderRadius: "50%",
-    width: "50px",
-    height: "50px",
+    width: 50,
+    height: 50,
   },
   imgDisabled: {
     filter: "opacity(0.65)",

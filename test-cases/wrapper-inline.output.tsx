@@ -14,8 +14,8 @@ export function App() {
 const styles = stylex.create({
   externalComponent: {
     marginTop: 0,
-    marginRight: "-8px",
+    marginRight: -8,
     marginBottom: 0,
-    marginLeft: "-8px",
+    marginLeft: -8,
   },
 });

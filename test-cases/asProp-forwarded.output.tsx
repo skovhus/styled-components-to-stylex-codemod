@@ -46,14 +46,14 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     display: "inline-block",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#bf4f74",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
     textDecoration: "none",
     cursor: "pointer",
   },

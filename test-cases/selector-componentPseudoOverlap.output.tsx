@@ -11,14 +11,14 @@ export const App = () => (
 const styles = stylex.create({
   link: {
     display: "flex",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "papayawhip",
   },
   // The child has a base :focus pseudo on color, AND a reverse ancestor override on color.
   // The default in the override must be the scalar base value, not the pseudo map object.
   badge: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
     color: {
       default: "gray",
       ":focus": "orange",

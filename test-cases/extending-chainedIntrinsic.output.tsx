@@ -57,14 +57,14 @@ const styles = stylex.create({
     backgroundImage: "linear-gradient(to left, transparent, #f0f5ff)",
   },
   smallFade: {
-    width: "10px",
+    width: 10,
     right: 0,
   },
   tick: {
     position: "absolute",
     top: `-${OFFSET}px`,
-    height: "6px",
-    borderRightWidth: "1px",
+    height: 6,
+    borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: "transparent",
     zIndex: 1,

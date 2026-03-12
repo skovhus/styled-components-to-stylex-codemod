@@ -26,7 +26,7 @@ export const App = () => (
 
 const styles = stylex.create({
   headerTitle: {
-    fontSize: "24px",
+    fontSize: 24,
     fontWeight: 600,
   },
 });

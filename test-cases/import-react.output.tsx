@@ -49,12 +49,12 @@ export function App() {
 
 const styles = stylex.create({
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "blue",
     color: "white",
   },

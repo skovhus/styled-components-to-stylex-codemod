@@ -19,7 +19,7 @@ export const App = () => (
 const styles = stylex.create({
   box: {
     backgroundColor: "gray",
-    padding: "16px",
+    padding: 16,
   },
   boxActive: {
     backgroundColor: "blue",

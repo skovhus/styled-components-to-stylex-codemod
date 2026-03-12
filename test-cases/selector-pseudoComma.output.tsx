@@ -13,8 +13,8 @@ export const App = () => (
 const styles = stylex.create({
   // Comma-separated pseudo-class selectors
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: {
       default: "white",
       ":hover": "#bf4f74",
@@ -25,14 +25,14 @@ const styles = stylex.create({
       ":hover": "white",
       ":focus": "white",
     },
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":hover": "#bf4f74",
       ":focus": "#bf4f74",
     },
-    borderRadius: "4px",
+    borderRadius: 4,
     cursor: "pointer",
     outline: {
       default: null,
@@ -41,8 +41,8 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      ":active": "2px",
-      ":focus-visible": "2px",
+      ":active": 2,
+      ":focus-visible": 2,
     },
   },
   // Three pseudo-selectors combined
@@ -62,16 +62,16 @@ const styles = stylex.create({
   },
   // Mixed with regular styles
   input: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
-    borderWidth: "1px",
+    paddingBlock: 8,
+    paddingInline: 12,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":hover": "#bf4f74",
       ":focus": "#bf4f74",
     },
-    borderRadius: "4px",
+    borderRadius: 4,
     "::placeholder": {
       color: "#999",
     },

@@ -42,19 +42,19 @@ export const App = () => (
 const styles = stylex.create({
   content: {
     backgroundColor: $colors.bgSub,
-    width: "100px",
-    height: "100px",
+    width: 100,
+    height: 100,
   },
   // Test: interpolation with static suffix (e.g., `0 4px 8px ${color}`)
   shadowBox: {
-    width: "50px",
-    height: "50px",
+    width: 50,
+    height: 50,
     backgroundColor: "white",
   },
   icon: {
     display: "inline-block",
-    width: "16px",
-    height: "16px",
+    width: 16,
+    height: 16,
     backgroundColor: "currentColor",
     maskSize: "contain",
     borderRadius: "50%",
@@ -62,15 +62,15 @@ const styles = stylex.create({
   button: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "8px",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    gap: 8,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#BF4F74",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   contentInContainerLink: {
     outline: {
@@ -79,7 +79,7 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: "5px",
+      [stylex.when.ancestor(":focus-visible")]: 5,
     },
   },
   shadowBoxInShadowContainer: {
@@ -89,8 +89,8 @@ const styles = stylex.create({
     },
   },
   iconInButton: {
-    width: "20px",
-    height: "20px",
+    width: 20,
+    height: 20,
     opacity: {
       default: 0.8,
       [stylex.when.ancestor(":hover")]: 1,

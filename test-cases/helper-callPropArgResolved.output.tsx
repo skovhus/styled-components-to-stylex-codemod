@@ -25,9 +25,9 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    height: "50px",
-    width: "50px",
-    padding: "8px",
+    height: 50,
+    width: 50,
+    padding: 8,
     backgroundColor: "#f0f0f0",
   },
   boxBoxShadow: (boxShadow: "dark" | "light") => ({

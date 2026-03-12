@@ -30,7 +30,7 @@ export function App(props: { $color?: string; isOpen: boolean }) {
 const styles = stylex.create({
   external: {
     color: "gray",
-    padding: "10px",
+    padding: 10,
   },
   externalColor: (color: string) => ({
     color,

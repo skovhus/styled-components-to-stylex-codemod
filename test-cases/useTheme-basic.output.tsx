@@ -25,16 +25,16 @@ export const App = () => <Input />;
 const styles = stylex.create({
   colorPickerWrapper: {
     width: "auto",
-    height: "10px",
+    height: 10,
     backgroundColor: $colors.bgBase,
     boxShadow: `0 2px 4px ${$colors.primaryColor}`,
-    borderRadius: "8px",
+    borderRadius: 8,
     display: "flex",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: $colors.bgSub,
-    minWidth: "300px",
-    padding: "12px",
+    minWidth: 300,
+    padding: 12,
   },
   colorPickerWrapperDynamic: (backgroundColor: string) => ({
     backgroundColor,

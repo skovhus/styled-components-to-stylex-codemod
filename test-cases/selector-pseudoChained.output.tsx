@@ -31,16 +31,16 @@ export const App = () => (
 
 const styles = stylex.create({
   input: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
-    borderWidth: "1px",
+    paddingBlock: 8,
+    paddingInline: 12,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":focus:not(:disabled)": "#bf4f74",
       ":hover:not(:disabled):not(:focus)": "#999",
     },
-    borderRadius: "4px",
+    borderRadius: 4,
     backgroundColor: {
       default: "white",
       ":disabled": "#f5f5f5",
@@ -55,8 +55,8 @@ const styles = stylex.create({
     },
   },
   checkbox: {
-    width: "20px",
-    height: "20px",
+    width: 20,
+    height: 20,
     cursor: "pointer",
     accentColor: {
       default: null,
@@ -68,11 +68,11 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      ":focus:not(:disabled)": "2px",
+      ":focus:not(:disabled)": 2,
     },
   },
   listItem: {
-    padding: "8px",
+    padding: 8,
     borderBottomWidth: {
       default: null,
       ":not(:last-child)": "1px",

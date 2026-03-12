@@ -20,6 +20,6 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "3px",
+    borderRadius: 3,
   },
 });

@@ -6,7 +6,7 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    padding: "10px",
+    padding: 10,
   },
   colorMixin: {
     color: "red",

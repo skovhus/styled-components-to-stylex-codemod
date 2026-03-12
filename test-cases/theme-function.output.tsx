@@ -39,18 +39,18 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    paddingBlock: "12px",
-    paddingInline: "16px",
+    paddingBlock: 12,
+    paddingInline: 16,
     backgroundColor: $colors.primaryColor,
     color: "white",
-    borderRadius: "4px",
-    borderWidth: "2px",
+    borderRadius: 4,
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: $colors.bgBorderFaint,
   },
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: $colors.bgBase,
-    borderRadius: "8px",
+    borderRadius: 8,
   },
 });

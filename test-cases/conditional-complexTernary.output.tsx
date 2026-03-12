@@ -48,8 +48,8 @@ const styles = stylex.create({
   cardContainer: {
     display: "flex",
     alignItems: "flex-start",
-    margin: "8px",
-    borderRadius: "6px",
+    margin: 8,
+    borderRadius: 6,
     opacity: 1,
     position: "relative",
     borderWidth: "1px",
@@ -82,7 +82,7 @@ const styles = stylex.create({
   cardContent: {
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
+    gap: 10,
     flex: "1",
   },
 });

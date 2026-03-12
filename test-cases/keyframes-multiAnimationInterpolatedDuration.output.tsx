@@ -58,7 +58,7 @@ const styles = stylex.create({
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "200ms, 1s",
     animationTimingFunction: "ease, linear",
-    padding: "20px",
+    padding: 20,
     backgroundColor: "white",
   },
   animatedCardAnimationDuration: (animationDuration: string) => ({

@@ -71,9 +71,9 @@ export const App = () => (
 
 const styles = stylex.create({
   loaderCaret: {
-    width: "8px",
-    height: "16px",
-    borderRadius: "2px",
+    width: 8,
+    height: 16,
+    borderRadius: 2,
     backgroundColor: "blue",
     opacity: 0,
     animationName: pulse,
@@ -87,7 +87,7 @@ const styles = stylex.create({
   }),
   styledLoaderCaret: {
     position: "absolute",
-    top: "11px",
+    top: 11,
     left: "10px",
   },
   styledLoaderCaretNoPadding: {

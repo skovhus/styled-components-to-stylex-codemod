@@ -12,7 +12,7 @@ export const App = () => (
 const styles = stylex.create({
   link: {
     display: "flex",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "papayawhip",
     color: "#bf4f74",
   },
@@ -20,8 +20,8 @@ const styles = stylex.create({
   // The base value must still be preserved as the default in the override.
   icon: {
     flex: "none",
-    width: "48px",
-    height: "48px",
+    width: 48,
+    height: 48,
     fill: "#bf4f74",
   },
   iconInLink: {

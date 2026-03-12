@@ -29,10 +29,10 @@ export const App = () => (
 
 const styles = stylex.create({
   panel: {
-    paddingBlock: "12px",
-    paddingInline: "16px",
+    paddingBlock: 12,
+    paddingInline: 16,
     backgroundColor: $colors.primaryColor,
     color: "white",
-    borderRadius: "8px",
+    borderRadius: 8,
   },
 });

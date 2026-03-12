@@ -84,15 +84,15 @@ const styles = stylex.create({
     transform: "rotate(180deg)",
   },
   dropZone: {
-    padding: "16px",
-    borderRadius: "8px",
+    padding: 16,
+    borderRadius: 8,
     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.06)",
   },
   dropZoneDraggingOver: {
     boxShadow: `inset 0 0 0 1px ${$colors.primaryColor},0px 1px 2px rgba(0, 0, 0, 0.06)`,
   },
   card: {
-    padding: "16px",
+    padding: 16,
   },
   cardHighlighted: {
     borderWidth: "1px",
@@ -101,7 +101,7 @@ const styles = stylex.create({
     boxShadow: `0 0 8px ${$colors.bgSub}`,
   },
   statusBar: {
-    padding: "8px",
+    padding: 8,
   },
   statusBarDisconnected: {
     backgroundColor: $colors.bgSub,

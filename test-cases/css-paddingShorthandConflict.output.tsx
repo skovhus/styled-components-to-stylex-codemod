@@ -13,16 +13,16 @@ const styles = stylex.create({
   // padding-bottom: 10px then overrides just the bottom
   progressBar: {
     paddingTop: 0,
-    paddingBottom: "10px",
-    paddingInline: "12px",
+    paddingBottom: 10,
+    paddingInline: 12,
     backgroundColor: "#eee",
   },
   // Pattern 2: directional padding with same-axis longhand override
   // padding-top and padding-bottom set block axis individually
   header: {
     paddingTop: 0,
-    paddingBottom: "8px",
-    paddingInline: "16px",
+    paddingBottom: 8,
+    paddingInline: 16,
     backgroundColor: "lightblue",
   },
 });

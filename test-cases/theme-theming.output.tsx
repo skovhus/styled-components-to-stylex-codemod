@@ -20,14 +20,14 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    fontSize: "14px",
+    fontSize: 14,
     margin: 0,
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    borderRadius: "6px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    borderRadius: 6,
     backgroundColor: "white",
     color: $colors.primaryColor,
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: $colors.primaryColor,
   },

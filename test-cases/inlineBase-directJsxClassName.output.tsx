@@ -14,7 +14,7 @@ export function App() {
 
 const styles = stylex.create({
   wrapper: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f5ff",
   },
   flex: {

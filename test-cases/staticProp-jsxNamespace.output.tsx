@@ -61,16 +61,16 @@ export function App() {
 
 const styles = stylex.create({
   menu: {
-    minWidth: "220px",
-    paddingBlock: "10px",
-    paddingInline: "12px",
+    minWidth: 220,
+    paddingBlock: 10,
+    paddingInline: 12,
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    borderWidth: "2px",
+    gap: 8,
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "#2563eb",
-    borderRadius: "10px",
+    borderRadius: 10,
     backgroundColor: "#eef6ff",
   },
 });

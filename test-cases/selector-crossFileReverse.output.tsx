@@ -17,8 +17,8 @@ export function App() {
 const styles = stylex.create({
   badge: {
     display: "inline-block",
-    width: "20px",
-    height: "20px",
+    width: 20,
+    height: 20,
     backgroundColor: "gray",
     transition: "background-color 0.25s",
   },

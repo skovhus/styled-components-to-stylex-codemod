@@ -66,7 +66,7 @@ const styles = stylex.create({
     position: "relative",
   },
   wrapper: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "gray",
   },
   wrapperVariantPrimary: {

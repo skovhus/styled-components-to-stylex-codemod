@@ -14,11 +14,11 @@ export function App() {
 
 const styles = stylex.create({
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#fafafa",
   },
   crossFileIconInCard: {
-    width: "24px",
-    height: "24px",
+    width: 24,
+    height: 24,
   },
 });

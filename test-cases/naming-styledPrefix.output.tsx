@@ -14,32 +14,32 @@ export const App = () => (
 
 const styles = stylex.create({
   canvas: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "black",
-    width: "200px",
-    height: "100px",
+    width: 200,
+    height: 100,
   },
   section: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f0f0",
   },
   normalName: {
     color: "blue",
-    padding: "8px",
+    padding: 8,
   },
   // Collision case: Button and StyledButton both exist.
   // StyledButton must NOT strip to "button" since Button already has that key.
   button: {
     backgroundColor: "coral",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     color: "white",
   },
   styledButton: {
     backgroundColor: "teal",
-    paddingBlock: "12px",
-    paddingInline: "24px",
+    paddingBlock: 12,
+    paddingInline: 24,
     color: "white",
   },
 });

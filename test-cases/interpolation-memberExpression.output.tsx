@@ -10,7 +10,7 @@ const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
     color: "white",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   buttonStylesRootCss: {
     display: "inline-flex",
@@ -22,8 +22,8 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   buttonStylesSizeCss: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    fontSize: "14px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    fontSize: 14,
   },
 });

@@ -28,7 +28,7 @@ export const App = () => <StyledIconButton>Icon</StyledIconButton>;
 
 const styles = stylex.create({
   iconButton: {
-    padding: "4px",
+    padding: 4,
   },
   iconButtonUseRoundStyle: {
     borderRadius: "100%",

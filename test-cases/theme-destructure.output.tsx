@@ -24,13 +24,13 @@ const styles = stylex.create({
   statusBadge: {
     backgroundColor: $colors.labelMuted,
     color: "white",
-    width: "80px",
-    height: "80px",
+    width: 80,
+    height: 80,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     borderRadius: "50%",
-    fontSize: "12px",
+    fontSize: 12,
     fontWeight: "bold",
   },
   statusBadgeEnabled: {

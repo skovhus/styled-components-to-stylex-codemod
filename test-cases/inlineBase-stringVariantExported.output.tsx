@@ -37,9 +37,9 @@ const styles = stylex.create({
   card: {
     display: "flex",
     flexDirection: "row",
-    padding: "12px",
+    padding: 12,
     backgroundColor: "#ffffff",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ddd",
   },

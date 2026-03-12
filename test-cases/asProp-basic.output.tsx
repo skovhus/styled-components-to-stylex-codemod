@@ -58,15 +58,15 @@ const styles = stylex.create({
     margin: "1em",
     paddingBlock: "0.25em",
     paddingInline: "1em",
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "#bf4f74",
-    borderRadius: "3px",
+    borderRadius: 3,
   },
 
   // Pattern 2: styled(Component) where Component has custom props (like variant)
   // When used with as="label", the component's props must be preserved
   text: {
-    marginTop: "4px",
+    marginTop: 4,
   },
 });

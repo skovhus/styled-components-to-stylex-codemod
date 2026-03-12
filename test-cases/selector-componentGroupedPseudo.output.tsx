@@ -9,14 +9,14 @@ export const App = () => (
 const styles = stylex.create({
   link: {
     display: "flex",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "papayawhip",
   },
   // Grouped reverse selectors: ${Link}:focus-visible &, ${Link}:active &
   // Multiple pseudo branches in a single selector.
   badge: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
     color: "gray",
   },
   badgeInLink: {

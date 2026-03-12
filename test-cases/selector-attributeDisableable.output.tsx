@@ -50,8 +50,8 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: {
       default: "#bf4f74",
       ":is([disabled])": "#ccc",
@@ -63,18 +63,18 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
     cursor: {
       default: "pointer",
       ":is([disabled])": "not-allowed",
     },
   },
   select: {
-    padding: "8px",
-    borderWidth: "1px",
+    padding: 8,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
-    borderRadius: "4px",
+    borderRadius: 4,
     backgroundColor: {
       default: null,
       ":is([disabled])": "#f5f5f5",
@@ -85,11 +85,11 @@ const styles = stylex.create({
     },
   },
   textarea: {
-    padding: "8px",
-    borderWidth: "1px",
+    padding: 8,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
-    borderRadius: "4px",
+    borderRadius: 4,
     backgroundColor: {
       default: null,
       ":is([disabled])": "#f5f5f5",

@@ -28,8 +28,8 @@ export const App = () => (
 
 const styles = stylex.create({
   dropZone: {
-    padding: "16px",
-    borderRadius: "8px",
+    padding: 16,
+    borderRadius: 8,
     boxShadow: "0px 1px 2px rgba(0, 0, 0, 0.06)",
   },
   dropZoneDraggingOver: {

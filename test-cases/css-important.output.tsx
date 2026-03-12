@@ -26,9 +26,9 @@ const styles = stylex.create({
     borderWidth: "0 !important",
     borderStyle: "none !important",
     borderColor: "initial !important",
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    borderRadius: "4px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    borderRadius: 4,
   },
   // Overriding specific properties
   forceWidth: {
@@ -39,7 +39,7 @@ const styles = stylex.create({
   },
   // Mixed important and normal
   mixedStyles: {
-    fontSize: "16px",
+    fontSize: 16,
     color: "#333 !important",
     lineHeight: 1.5,
     marginTop: "0 !important",

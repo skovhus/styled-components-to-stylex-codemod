@@ -53,8 +53,8 @@ export const App = () => (
 const styles = stylex.create({
   flexContainer: {
     display: "flex",
-    gap: "8px",
-    padding: "16px",
+    gap: 8,
+    padding: 16,
     backgroundColor: "#f0f0f0",
   },
   flexContainerColumnReverse: {

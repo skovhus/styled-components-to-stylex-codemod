@@ -71,9 +71,9 @@ const styles = stylex.create({
     transitionDelay: "0ms",
     backgroundColor: "#3b82f6",
     color: "white",
-    paddingBlock: "16px",
-    paddingInline: "20px",
-    borderRadius: "8px",
+    paddingBlock: 16,
+    paddingInline: 20,
+    borderRadius: 8,
   },
   containerOpen: (props) => ({
     opacity: 1,

@@ -65,8 +65,8 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     color: "blue",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
   },
   buttonActivePseudoActive: {
     backgroundColor: {
@@ -82,8 +82,8 @@ const styles = stylex.create({
   },
   invertedButton: {
     color: "blue",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
   },
   invertedButtonNotDisabledPseudoActive: {
     backgroundColor: {

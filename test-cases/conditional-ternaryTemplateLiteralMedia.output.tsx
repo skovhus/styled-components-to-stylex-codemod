@@ -26,23 +26,23 @@ export function App() {
 
 const styles = stylex.create({
   card: {
-    borderRadius: "8px",
-    borderWidth: "1px",
+    borderRadius: 8,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
   },
   cardCompact: {
     padding: {
-      default: "8px",
-      "@media (min-width: 768px)": "12px",
+      default: 8,
+      "@media (min-width: 768px)": 12,
     },
-    fontSize: "12px",
+    fontSize: 12,
   },
   cardNotCompact: {
     padding: {
-      default: "16px",
-      "@media (min-width: 768px)": "24px",
+      default: 16,
+      "@media (min-width: 768px)": 24,
     },
-    fontSize: "14px",
+    fontSize: 14,
   },
 });

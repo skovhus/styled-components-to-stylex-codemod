@@ -118,8 +118,8 @@ const styles = stylex.create({
   // The prop is declared in type but not used in styles - must be stripped when inlined
   point: {
     position: "absolute",
-    width: "12px",
-    height: "8px",
+    width: 12,
+    height: 8,
     backgroundColor: "white",
     top: "10px",
   },

@@ -32,8 +32,8 @@ export const App = () => (
 
 const styles = stylex.create({
   badge: {
-    width: "12px",
-    height: "12px",
+    width: 12,
+    height: 12,
     borderRadius: "50%",
     flexShrink: 0,
     backgroundColor: "gray",
@@ -45,15 +45,15 @@ const styles = stylex.create({
 
 const sizeVariants = stylex.create({
   tiny: {
-    width: "7px",
-    height: "7px",
+    width: 7,
+    height: 7,
   },
   small: {
-    width: "9px",
-    height: "9px",
+    width: 9,
+    height: 9,
   },
   normal: {
-    width: "12px",
-    height: "12px",
+    width: 12,
+    height: 12,
   },
 });

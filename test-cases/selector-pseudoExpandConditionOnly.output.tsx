@@ -13,7 +13,7 @@ export function App() {
 
 const styles = stylex.create({
   box: {
-    padding: "8px",
+    padding: 8,
     backgroundColor: {
       default: "#f0f0f0",
       ":active": "#e0e0e0",

@@ -53,7 +53,7 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    height: "100px",
+    height: 100,
   },
   buttonColor: (color: string | undefined) => ({
     color,

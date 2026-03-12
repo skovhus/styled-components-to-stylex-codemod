@@ -15,11 +15,11 @@ App.displayName = "App";
 const styles = stylex.create({
   sentence: {
     textAlign: "center",
-    marginBottom: "32px",
+    marginBottom: 32,
   },
   paddedSentence: {
     paddingBlock: 0,
-    paddingInline: "32px",
+    paddingInline: 32,
   },
   paddedMutedSentence: {
     color: $colors.labelMuted,

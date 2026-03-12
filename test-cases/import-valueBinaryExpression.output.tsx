@@ -10,7 +10,7 @@ export function App() {
 const styles = stylex.create({
   dialogContainer: {
     zIndex: $zIndex.dialog + 1,
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
 });

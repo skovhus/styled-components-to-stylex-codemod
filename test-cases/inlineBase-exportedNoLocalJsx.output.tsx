@@ -19,8 +19,8 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
-    padding: "4px",
+    gap: 16,
+    padding: 4,
     backgroundColor: "#f4f4ff",
   },
 });

@@ -27,7 +27,7 @@ export function App() {
 
 const styles = stylex.create({
   collapseButton: {
-    padding: "12px",
+    padding: 12,
     backgroundColor: "#f0f0f0",
     cursor: "pointer",
   },

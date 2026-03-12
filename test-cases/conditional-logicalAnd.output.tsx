@@ -80,13 +80,13 @@ const styles = stylex.create({
     zIndex,
   }),
   grayscaleImage: {
-    width: "100px",
+    width: 100,
   },
   grayscaleImageBw: {
     filter: "grayscale(100%)",
   },
   dialogText: {
-    fontSize: "14px",
+    fontSize: 14,
   },
   dialogTextRenderingContextDialogLines1: {
     backgroundColor: "hotpink",

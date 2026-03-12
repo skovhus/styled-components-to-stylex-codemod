@@ -25,7 +25,7 @@ export const App = () => (
 const styles = stylex.create({
   tab: {
     color: "#111",
-    borderRadius: "5px",
+    borderRadius: 5,
     boxShadow: "none",
   },
   tabDark: {

@@ -48,6 +48,7 @@ const styles = stylex.create({
   },
   // Calc with CSS variables
   withVariables: {
+    "--base-size": 16,
     width: `calc(${calcVars.baseSize} * 10)`,
     padding: `calc(${calcVars.baseSize} / 2)`,
   },

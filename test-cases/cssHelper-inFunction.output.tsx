@@ -3,9 +3,9 @@ import { $colors } from "./tokens.stylex";
 
 const styles = stylex.create({
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    borderRadius: "4px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    borderRadius: 4,
   },
   getPrimaryStyles: {
     backgroundColor: $colors.primaryColor,

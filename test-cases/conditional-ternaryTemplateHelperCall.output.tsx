@@ -17,8 +17,8 @@ export const App = () => <StepLine faded />;
 const styles = stylex.create({
   stepLine: {
     flex: "1",
-    width: "100px",
-    height: "100px",
+    width: 100,
+    height: 100,
     backgroundImage: `linear-gradient(to bottom, ${$colors.bgSub} 70%, ${$colors.bgSub} 100%)`,
   },
   stepLineFaded: {

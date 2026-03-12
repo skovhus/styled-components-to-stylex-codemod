@@ -12,9 +12,9 @@ const styles = stylex.create({
    * width from thinPixel(), style static, color from color() helper.
    */
   container: {
-    borderRadius: "2px",
-    paddingBlock: "2px",
-    paddingInline: "6px",
+    borderRadius: 2,
+    paddingBlock: 2,
+    paddingInline: 6,
     borderWidth: pixelVars.thin,
     borderStyle: "solid",
     borderColor: $colors.bgBorderFaint,

@@ -65,15 +65,15 @@ export const App = () => (
 const styles = stylex.create({
   card: {
     backgroundColor: "#e0e0e0",
-    padding: "12px",
-    minWidth: "80px",
-    minHeight: "40px",
+    padding: 12,
+    minWidth: 80,
+    minHeight: 40,
   },
   cardCompact: {
     transform: "scale(0.75)",
   },
   cardHighlighted: {
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "blue",
   },

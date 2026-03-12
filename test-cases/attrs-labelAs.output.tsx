@@ -56,7 +56,7 @@ export const App = () => <FormField />;
 
 const styles = stylex.create({
   text: {
-    fontSize: "14px",
+    fontSize: 14,
     lineHeight: 1.5,
   },
   label: {

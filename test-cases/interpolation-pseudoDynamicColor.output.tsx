@@ -36,9 +36,9 @@ export function App() {
 
 const styles = stylex.create({
   swatch: {
-    width: "60px",
-    height: "60px",
-    borderRadius: "8px",
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     cursor: "pointer",
     transition: "box-shadow 0.2s",
   },

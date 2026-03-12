@@ -15,7 +15,7 @@ export function App({ isCompact }: { isCompact: boolean }) {
 
 const styles = stylex.create({
   wrapper: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f5ff",
   },
 });

@@ -18,10 +18,10 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
-    padding: "8px",
+    gap: 12,
+    padding: 8,
     backgroundColor: "#e8f5e9",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#4caf50",
   },

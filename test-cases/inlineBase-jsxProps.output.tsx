@@ -25,9 +25,9 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "column",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "#f0f5ff",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#6a7ab5",
   },

@@ -26,15 +26,15 @@ const styles = stylex.create({
 
 const sizeVariants = stylex.create({
   tiny: {
-    width: "7px",
-    height: "7px",
+    width: 7,
+    height: 7,
   },
   small: {
-    width: "10px",
-    height: "10px",
+    width: 10,
+    height: 10,
   },
   medium: {
-    width: "14px",
-    height: "14px",
+    width: 14,
+    height: 14,
   },
 });

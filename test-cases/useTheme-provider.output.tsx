@@ -22,11 +22,11 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    paddingBlock: "10px",
-    paddingInline: "14px",
+    paddingBlock: 10,
+    paddingInline: 14,
     backgroundColor: "white",
     color: $colors.primaryColor,
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: $colors.primaryColor,
   },

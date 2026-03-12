@@ -26,7 +26,7 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    padding: "8px",
+    padding: 8,
     borderStyle: "none",
   },
   borderBottom: {

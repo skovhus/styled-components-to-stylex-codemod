@@ -206,6 +206,13 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
       }
       return Number(raw);
     }
+
+    // StyleX defaults to pixels for length properties; convert "26px" → 26.
+    const pxMatch = /^(-?\d*\.?\d+)px$/.exec(raw);
+    if (pxMatch) {
+      return Number(pxMatch[1]);
+    }
+
     return raw;
   }
   // interpolated values are handled earlier for now

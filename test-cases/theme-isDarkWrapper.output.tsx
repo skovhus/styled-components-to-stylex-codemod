@@ -33,8 +33,8 @@ export const App = () => (
 const styles = stylex.create({
   list: {
     display: "flex",
-    padding: "4px",
-    borderRadius: "6px",
+    padding: 4,
+    borderRadius: 6,
   },
   listDark: {
     backgroundColor: $colors.bgBase,

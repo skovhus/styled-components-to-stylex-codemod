@@ -49,8 +49,8 @@ export function App() {
 
 const styles = stylex.create({
   external: {
-    borderRadius: "8px",
-    padding: "8px",
+    borderRadius: 8,
+    padding: 8,
     backgroundColor: "#f5f5f5",
   },
 });

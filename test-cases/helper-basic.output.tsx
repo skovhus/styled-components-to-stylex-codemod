@@ -29,18 +29,18 @@ const styles = stylex.create({
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: $colors.bgSub,
-    borderRadius: "4px",
+    borderRadius: 4,
     cursor: "pointer",
   },
   // Using CSS snippet helper for truncation
   truncatedText: {
-    maxWidth: "200px",
-    fontSize: "14px",
+    maxWidth: 200,
+    fontSize: 14,
     color: $colors.textSecondary,
   },
   // Using CSS snippet helper for flex centering
   centeredContainer: {
-    minHeight: "100px",
+    minHeight: 100,
     backgroundColor: $colors.bgBase,
     borderWidth: "1px",
     borderStyle: "solid",
@@ -53,7 +53,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: $colors.bgSub,
-    borderRadius: "8px",
+    borderRadius: 8,
   },
   cardTitle: {
     marginTop: 0,
@@ -61,6 +61,6 @@ const styles = stylex.create({
     marginBottom: "0.5em",
     marginLeft: 0,
     color: $colors.primaryColor,
-    fontSize: "18px",
+    fontSize: 18,
   },
 });

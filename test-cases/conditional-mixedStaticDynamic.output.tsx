@@ -67,9 +67,9 @@ export const App = () => (
 const styles = stylex.create({
   wrapper: {
     position: "relative",
-    height: "80px",
+    height: 80,
     backgroundColor: "#f0f0f0",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
   },
@@ -78,7 +78,7 @@ const styles = stylex.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "paleturquoise",
-    padding: "8px",
+    padding: 8,
   },
   containerPositionFixedSidebarCollapsed: {
     left: "0px",
@@ -86,7 +86,7 @@ const styles = stylex.create({
   },
   containerPositionFixed: {
     position: "absolute",
-    bottom: "16px",
+    bottom: 16,
     left: `${MAIN_PAGE_MARGIN}px`,
     right: `${MAIN_PAGE_MARGIN}px`,
   },

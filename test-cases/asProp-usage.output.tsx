@@ -23,7 +23,7 @@ function FullWidthCopyText<C extends React.ElementType = "div">(
 
 const styles = stylex.create({
   header: {
-    marginBottom: "4px",
+    marginBottom: 4,
   },
   fullWidthCopyText: {
     width: "100%",

@@ -88,9 +88,9 @@ const styles = stylex.create({
   // (from ColorPicker.tsx - Point component with $pickerHeight)
   point: {
     position: "absolute",
-    left: "-3px",
-    width: "12px",
-    height: "4px",
+    left: -3,
+    width: 12,
+    height: 4,
   },
   slider: {
     position: "relative",

@@ -11,6 +11,6 @@ const styles = stylex.create({
   card: {
     backgroundImage: "linear-gradient(to right, transparent, black 80%, hotpink)",
     color: "white",
-    padding: "12px",
+    padding: 12,
   },
 });
