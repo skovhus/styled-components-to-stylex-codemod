@@ -70,6 +70,7 @@ export function resolveDynamicNode(
     tryResolveInlineStyleValueForNestedPropAccess(node) ??
     tryResolvePropAccess(node) ??
     tryResolveConditionalPropStyleFunction(node) ??
+    tryResolveArrowFnPropExpression(node) ??
     tryResolveInlineStyleValueForConditionalExpression(node) ??
     tryResolveInlineStyleValueForLogicalExpression(node) ??
     tryResolveInlineStyleValueFromArrowFn(node)
@@ -979,6 +980,51 @@ function tryDecomposeConditionalBranches(
     dynamicProps,
     isStaticWhenFalse,
   };
+}
+
+/**
+ * Handles arrow functions whose body is a computational expression referencing props.
+ *
+ * Catches expression types not covered by specific handlers (e.g. BinaryExpression,
+ * UnaryExpression) and emits a StyleX style function that takes the props object.
+ *
+ * Pattern: `(props) => props.$depth * 16 + 4`
+ * Output:  `(props) => ({ paddingLeft: \`${props.$depth * 16 + 4}px\` })`
+ */
+function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!body) {
+    return null;
+  }
+  const bodyType = (body as { type?: string }).type;
+  if (bodyType !== "BinaryExpression" && bodyType !== "UnaryExpression") {
+    return null;
+  }
+  if (hasThemeAccessInArrowFn(expr)) {
+    return null;
+  }
+  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
+    [body],
+    paramName,
+  );
+  if (!hasUsableProps) {
+    return null;
+  }
+  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
+    return null;
+  }
+  return { type: "emitStyleFunctionFromPropsObject", props };
 }
 
 function tryResolveInlineStyleValueForNestedPropAccess(node: DynamicNode): HandlerResult | null {

@@ -10,7 +10,12 @@ export function ConditionalContainer(props: ConditionalContainerProps) {
   const { children, size, ...rest } = props;
 
   return (
-    <div {...rest} sx={styles.conditionalContainerFontSizeFromProps(props)}>
+    <div
+      {...rest}
+      sx={styles.conditionalContainerFontSize({
+        size,
+      })}
+    >
       {children}
     </div>
   );
@@ -19,7 +24,7 @@ export function ConditionalContainer(props: ConditionalContainerProps) {
 export const App = () => <ConditionalContainer size={16}>Hello</ConditionalContainer>;
 
 const styles = stylex.create({
-  conditionalContainerFontSizeFromProps: (props: ConditionalContainerProps) => ({
+  conditionalContainerFontSize: (props) => ({
     fontSize: {
       default: null,
       "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 5}px`,
