@@ -9,6 +9,7 @@ import type {
   ImportSource,
   ImportSpec,
   ResolveValueContext,
+  ResolveValueDirectionalResult,
   ResolveValueResult,
 } from "../../adapter.js";
 import type { WarningType } from "../logger.js";
@@ -61,6 +62,19 @@ export type HandlerResult =
       imports: ImportSpec[];
       resolveCallContext?: CallResolveContext;
       resolveCallResult?: CallResolveResult;
+    }
+  | {
+      /**
+       * The node was resolved to directional longhand properties instead of a single
+       * shorthand value. This happens when the adapter returns a `directional` result
+       * for shorthand CSS properties like `padding` or `margin`.
+       */
+      type: "resolvedDirectional";
+      directional: Array<{
+        prop: string;
+        expr: string;
+        imports: ImportSpec[];
+      }>;
     }
   | {
       /**
@@ -387,6 +401,13 @@ export type InternalHandlerContext = {
   api: API;
   filePath: string;
   resolveValue: (context: ResolveValueContext) => ResolveValueResult | undefined;
+  /**
+   * Like `resolveValue` but also returns directional results.
+   * Used by theme resolvers that need directional shorthand expansion.
+   */
+  resolveValueDirectional: (
+    context: ResolveValueContext,
+  ) => ResolveValueResult | ResolveValueDirectionalResult | undefined;
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
   /**
    * Like `resolveCall` but does NOT trigger the global bail flag when the adapter

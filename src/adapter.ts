@@ -22,6 +22,12 @@ type ThemeResolveContext = {
    * Useful for error reporting.
    */
   loc?: { line: number; column: number };
+  /**
+   * CSS property being set (when available).
+   * Useful for adapters to return directional results for shorthand properties.
+   * Example: "padding", "margin", "border"
+   */
+  cssProperty?: string;
 };
 
 type CssVariableResolveContext = {
@@ -67,6 +73,12 @@ type ImportedValueResolveContext = {
    * Useful for error reporting.
    */
   loc?: { line: number; column: number };
+  /**
+   * CSS property being set (when available).
+   * Useful for adapters to return directional results for shorthand properties.
+   * Example: "padding", "margin", "border"
+   */
+  cssProperty?: string;
 };
 
 export type CallResolveContext = {
@@ -124,6 +136,35 @@ export type ResolveValueContext =
   | ThemeResolveContext
   | CssVariableResolveContext
   | ImportedValueResolveContext;
+
+/**
+ * Result for `adapter.resolveValue(...)` when returning directional expansion
+ * instead of a single value. Use this for shorthand CSS properties (e.g., `padding`)
+ * whose theme token resolves to a multi-value string (e.g., `"6px 12px"`).
+ *
+ * Instead of assigning the opaque token to the shorthand (which StyleX would expand
+ * incorrectly to all longhands), the adapter returns pre-split directional entries.
+ */
+export type ResolveValueDirectionalResult = {
+  /** Directional expansion entries — use instead of shorthand property */
+  directional: Array<{
+    /** camelCase CSS property (e.g., "paddingBlock", "paddingInline") */
+    prop: string;
+    /** JS expression string to inline into generated output */
+    expr: string;
+    /** Import statements required by `expr` */
+    imports: ImportSpec[];
+  }>;
+};
+
+/**
+ * Type guard: checks whether a resolve result is a directional expansion.
+ */
+export function isDirectionalResult(
+  r: ResolveValueResult | ResolveValueDirectionalResult,
+): r is ResolveValueDirectionalResult {
+  return "directional" in r;
+}
 
 /**
  * Result for `adapter.resolveValue(...)` (theme + css variables + imported values).
@@ -515,10 +556,14 @@ export interface Adapter {
    *
    * Return:
    * - `{ expr, imports }` for theme, css variables, and imported values.
+   * - `{ directional: [...] }` for shorthand properties (e.g., `padding`) whose token
+   *   resolves to a multi-value string. Each entry specifies a longhand property and expression.
    * - Optionally return `{ dropDefinition: true }` for css variables to remove the local `--x: ...` definition.
    * - `undefined` to bail/skip the file (for cssVariable: keeps the original `var(...)` unchanged)
    */
-  resolveValue: (context: ResolveValueContext) => ResolveValueResult | undefined;
+  resolveValue: (
+    context: ResolveValueContext,
+  ) => ResolveValueResult | ResolveValueDirectionalResult | undefined;
 
   /**
    * Resolver for helper calls found inside template interpolations.
@@ -660,6 +705,15 @@ export interface AdapterInput {
  *   export default defineAdapter({
  *     resolveValue(ctx) {
  *       if (ctx.kind === "theme") {
+ *         // For shorthand properties with multi-value tokens, return directional entries
+ *         if (ctx.cssProperty === "padding" && ctx.path === "input.padding") {
+ *           return {
+ *             directional: [
+ *               { prop: "paddingBlock", expr: "$input.paddingBlock", imports: [{ from: { kind: "specifier", value: "./tokens" }, names: [{ imported: "$input" }] }] },
+ *               { prop: "paddingInline", expr: "$input.paddingInline", imports: [{ from: { kind: "specifier", value: "./tokens" }, names: [{ imported: "$input" }] }] },
+ *             ],
+ *           };
+ *         }
  *         return {
  *           expr: `tokens.${ctx.path}`,
  *           imports: [

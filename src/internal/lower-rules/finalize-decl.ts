@@ -26,6 +26,7 @@ import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
+import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
@@ -96,6 +97,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
 
   resolveDirectionalConflicts(styleObj);
+  warnOpaqueShorthands(styleObj, decl, warnings);
 
   const varsToDrop = new Set<string>();
   rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
@@ -657,6 +659,37 @@ function computeMergedLonghand(
     }
   }
   return merged;
+}
+
+/**
+ * Full CSS shorthand properties that StyleX will expand to longhands.
+ * If the value is an opaque AST node (e.g., a theme token), each longhand
+ * will receive the full multi-value token, producing invalid CSS.
+ */
+const OPAQUE_SHORTHAND_PROPS = new Set(["padding", "margin", "scrollMargin", "scrollPadding"]);
+
+/**
+ * Emits a warning when a full shorthand property has an opaque (AST node) value
+ * that StyleX will expand to longhands. If the value contains multiple parts
+ * (e.g., "6px 12px"), each longhand will receive the full value, producing
+ * invalid CSS. The adapter should use `directional` in resolveValue instead.
+ */
+function warnOpaqueShorthands(
+  styleObj: Record<string, unknown>,
+  decl: StyledDecl,
+  warnings: WarningLog[],
+): void {
+  for (const prop of OPAQUE_SHORTHAND_PROPS) {
+    const val = styleObj[prop];
+    if (val !== undefined && isAstNode(val)) {
+      warnings.push({
+        severity: "warning",
+        type: "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens",
+        loc: decl.loc,
+        context: { prop },
+      });
+    }
+  }
 }
 
 /**

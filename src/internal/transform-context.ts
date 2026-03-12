@@ -4,7 +4,14 @@
  */
 import type { API, FileInfo } from "jscodeshift";
 
-import type { Adapter, ImportSource, ImportSpec } from "../adapter.js";
+import type {
+  Adapter,
+  ImportSource,
+  ImportSpec,
+  ResolveValueContext,
+  ResolveValueDirectionalResult,
+  ResolveValueResult,
+} from "../adapter.js";
 import { assertValidAdapter } from "./public-api-validation.js";
 import type { WarningLog } from "./logger.js";
 import { parseExpr as parseExprImpl } from "./transform-parse-expr.js";
@@ -29,7 +36,10 @@ export class TransformContext {
   hasChanges: boolean;
   adapter: Adapter;
   resolverImports: Map<string, ImportSpec>;
-  resolveValueSafe: Adapter["resolveValue"];
+  resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
+  resolveValueDirectionalSafe: (
+    ctx: ResolveValueContext,
+  ) => ResolveValueResult | ResolveValueDirectionalResult | undefined;
   resolveCallSafe: Adapter["resolveCall"];
   resolveSelectorSafe: Adapter["resolveSelector"];
   resolveBaseComponent?: Adapter["resolveBaseComponent"];
@@ -111,11 +121,16 @@ export class TransformContext {
     );
 
     const resolverImports = new Map<string, ImportSpec>();
-    const { resolveValueSafe, resolveCallSafe, resolveSelectorSafe, bailRef } =
-      createResolveAdapterSafe({
-        adapter,
-        warnings,
-      });
+    const {
+      resolveValueSafe,
+      resolveValueDirectionalSafe,
+      resolveCallSafe,
+      resolveSelectorSafe,
+      bailRef,
+    } = createResolveAdapterSafe({
+      adapter,
+      warnings,
+    });
 
     const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
 
@@ -149,6 +164,7 @@ export class TransformContext {
     this.adapter = adapter;
     this.resolverImports = resolverImports;
     this.resolveValueSafe = resolveValueSafe;
+    this.resolveValueDirectionalSafe = resolveValueDirectionalSafe;
     this.resolveCallSafe = resolveCallSafe;
     this.resolveSelectorSafe = resolveSelectorSafe;
     this.resolveBaseComponent = adapter.resolveBaseComponent;

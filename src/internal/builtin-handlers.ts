@@ -2,7 +2,7 @@
  * Built-in resolution handlers for dynamic interpolations.
  * Core concepts: adapter hooks, conditional splitting, and StyleX emission.
  */
-import type { CallResolveContext, ImportSpec } from "../adapter.js";
+import { type CallResolveContext, type ImportSpec, isDirectionalResult } from "../adapter.js";
 import {
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
@@ -102,14 +102,33 @@ function tryResolveThemeAccess(
     return null;
   }
 
-  const res = ctx.resolveValue({
-    kind: "theme",
-    path,
-    filePath: ctx.filePath,
-    loc: getNodeLocStart(themeExpr) ?? undefined,
-  });
+  const cssProperty = node.css.property;
+  // Use directional-aware resolver when a CSS property is available,
+  // so the adapter can return directional results for shorthand properties.
+  const res = cssProperty
+    ? ctx.resolveValueDirectional({
+        kind: "theme",
+        path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(themeExpr) ?? undefined,
+        cssProperty,
+      })
+    : ctx.resolveValue({
+        kind: "theme",
+        path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(themeExpr) ?? undefined,
+      });
   if (!res) {
     return null;
+  }
+  // Handle directional results: return a special result that the caller
+  // can use to emit multiple longhand properties instead of a single shorthand.
+  if (isDirectionalResult(res)) {
+    return {
+      type: "resolvedDirectional",
+      directional: res.directional,
+    };
   }
   // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
   // review and delete it if their adapter always returns defined values.

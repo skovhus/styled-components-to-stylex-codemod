@@ -3,7 +3,7 @@
  * Core concepts: var() replacement and AST value normalization.
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSpec } from "../adapter.js";
+import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 import { rewriteCssVarsInString } from "./css-vars.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
@@ -14,7 +14,7 @@ export function rewriteCssVarsInStyleObject(args: {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
@@ -27,7 +27,7 @@ function rewriteCssVarsInStyleObjectImpl(args: {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;

@@ -11,6 +11,7 @@ import {
 import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
+import { isDirectionalThemeResult } from "./theme.js";
 
 /**
  * Regex matching border-color properties where the border handler already extracted
@@ -111,7 +112,7 @@ export function tryHandleInterpolatedStringValue(args: {
     expr: any,
   ) => { resolved: any; imports?: any[] } | { bail: true } | null;
   addImport?: (imp: any) => void;
-  resolveThemeValue?: (expr: any) => unknown;
+  resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
 }): boolean {
   const { j, decl, d, styleObj, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
   // Handle common “string interpolation” cases:
@@ -201,7 +202,15 @@ export function tryHandleInterpolatedStringValue(args: {
       }
       return true;
     }
-    const themeResolved = args.resolveThemeValue?.(expr);
+    const cssProp = (d.property ?? "").trim();
+    const themeResolved = args.resolveThemeValue?.(expr, cssProp || undefined);
+    // Handle directional theme results: adapter returned separate longhand entries
+    if (isDirectionalThemeResult(themeResolved)) {
+      for (const entry of themeResolved.__directional) {
+        (styleObj as any)[entry.prop] = entry.expr;
+      }
+      return true;
+    }
     const shouldWrapThemeExpr =
       !themeResolved &&
       expr?.type === "MemberExpression" &&

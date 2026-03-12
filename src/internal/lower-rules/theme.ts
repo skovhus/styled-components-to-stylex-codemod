@@ -10,19 +10,35 @@ import {
   literalToStaticValue,
   unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
+import { isDirectionalResult } from "../../adapter.js";
 import type { LowerRulesState } from "./state.js";
+
+/**
+ * Tagged result returned by `resolveThemeValue` / `resolveThemeValueFromFn`
+ * when the adapter returns a directional expansion instead of a single value.
+ */
+type DirectionalThemeResult = {
+  __directional: Array<{ prop: string; expr: unknown }>;
+};
 
 export function createThemeResolvers(
   args: Pick<
     LowerRulesState,
-    "root" | "j" | "filePath" | "resolveValue" | "parseExpr" | "resolverImports"
+    | "root"
+    | "j"
+    | "filePath"
+    | "resolveValue"
+    | "resolveValueDirectional"
+    | "parseExpr"
+    | "resolverImports"
   >,
 ): {
   hasLocalThemeBinding: boolean;
-  resolveThemeValue: (expr: any) => unknown;
-  resolveThemeValueFromFn: (expr: any) => unknown;
+  resolveThemeValue: (expr: any, cssProperty?: string) => unknown;
+  resolveThemeValueFromFn: (expr: any, cssProperty?: string) => unknown;
 } {
-  const { root, j, filePath, resolveValue, parseExpr, resolverImports } = args;
+  const { root, j, filePath, resolveValue, resolveValueDirectional, parseExpr, resolverImports } =
+    args;
 
   const hasLocalThemeBinding = (() => {
     let found = false;
@@ -44,7 +60,30 @@ export function createThemeResolvers(
     return found;
   })();
 
-  const resolveThemeValue = (expr: any): unknown => {
+  /**
+   * Resolves a theme path to a parsed AST expression or a directional result.
+   * Centralizes the resolve → directional check → import registration → parseExpr pipeline.
+   */
+  const resolveThemePath = (
+    path: string,
+    loc: { line: number; column: number } | undefined,
+    cssProperty: string | undefined,
+  ): unknown => {
+    const ctx = { kind: "theme" as const, path, filePath, loc, cssProperty };
+    const resolved = cssProperty ? resolveValueDirectional(ctx) : resolveValue(ctx);
+    if (!resolved) {
+      return null;
+    }
+    if (isDirectionalResult(resolved)) {
+      return handleDirectionalResult(resolved, resolverImports, parseExpr);
+    }
+    for (const imp of resolved.imports ?? []) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    return parseExpr(resolved.expr);
+  };
+
+  const resolveThemeValue = (expr: any, cssProperty?: string): unknown => {
     if (hasLocalThemeBinding) {
       return null;
     }
@@ -55,22 +94,10 @@ export function createThemeResolvers(
     if (!parts || !parts.length) {
       return null;
     }
-    const resolved = resolveValue({
-      kind: "theme",
-      path: parts.join("."),
-      filePath,
-      loc: getNodeLocStart(expr) ?? undefined,
-    });
-    if (!resolved) {
-      return null;
-    }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
-    return parseExpr(resolved.expr);
+    return resolveThemePath(parts.join("."), getNodeLocStart(expr) ?? undefined, cssProperty);
   };
 
-  const resolveThemeValueFromFn = (expr: any): unknown => {
+  const resolveThemeValueFromFn = (expr: any, cssProperty?: string): unknown => {
     if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
       return null;
     }
@@ -82,8 +109,12 @@ export function createThemeResolvers(
     // The fallback is preserved so users can review and delete it if not needed.
     const unwrappedTheme = unwrapLogicalFallback(bodyExpr);
     const themeAccessExpr = unwrappedTheme ?? bodyExpr;
-    const direct = resolveThemeValue(themeAccessExpr);
+    const direct = resolveThemeValue(themeAccessExpr, cssProperty);
     if (direct) {
+      // Directional results should not be wrapped with logical fallback
+      if (isDirectionalThemeResult(direct)) {
+        return direct;
+      }
       return wrapWithLogicalFallback(direct, bodyExpr, j);
     }
     const paramName =
@@ -127,19 +158,18 @@ export function createThemeResolvers(
     if (!themePath) {
       return null;
     }
-    const resolved = resolveValue({
-      kind: "theme",
-      path: themePath,
-      filePath,
-      loc: getNodeLocStart(unwrapped) ?? undefined,
-    });
+    const resolved = resolveThemePath(
+      themePath,
+      getNodeLocStart(unwrapped) ?? undefined,
+      cssProperty,
+    );
     if (!resolved) {
       return null;
     }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
+    if (isDirectionalThemeResult(resolved)) {
+      return resolved;
     }
-    return wrapWithLogicalFallback(parseExpr(resolved.expr), bodyExpr, j);
+    return wrapWithLogicalFallback(resolved, bodyExpr, j);
   };
 
   return { hasLocalThemeBinding, resolveThemeValue, resolveThemeValueFromFn };
@@ -177,4 +207,34 @@ function wrapWithLogicalFallback(
     resolved as Parameters<typeof j.logicalExpression>[1],
     originalExpr.right as Parameters<typeof j.logicalExpression>[2],
   );
+}
+
+/**
+ * Type guard for the internal `__directional` tagged result.
+ */
+export function isDirectionalThemeResult(value: unknown): value is DirectionalThemeResult {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "__directional" in (value as Record<string, unknown>)
+  );
+}
+
+/**
+ * Converts a `ResolveValueDirectionalResult` from the adapter into the internal
+ * `DirectionalThemeResult` format, registering imports along the way.
+ */
+function handleDirectionalResult(
+  resolved: import("../../adapter.js").ResolveValueDirectionalResult,
+  resolverImports: Map<string, import("../../adapter.js").ImportSpec>,
+  parseExpr: (exprSource: string) => unknown,
+): DirectionalThemeResult {
+  const entries: Array<{ prop: string; expr: unknown }> = [];
+  for (const entry of resolved.directional) {
+    for (const imp of entry.imports) {
+      resolverImports.set(JSON.stringify(imp), imp);
+    }
+    entries.push({ prop: entry.prop, expr: parseExpr(entry.expr) });
+  }
+  return { __directional: entries };
 }

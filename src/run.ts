@@ -17,6 +17,7 @@ import type {
   ResolveBaseComponentContext,
   ResolveBaseComponentResult,
   ResolveValueContext,
+  ResolveValueDirectionalResult,
   ResolveValueResult,
   SelectorResolveContext,
   SelectorResolveResult,
@@ -231,7 +232,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   }
 
-  const resolveValueWithLogging = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
+  const resolveValueWithLogging = (
+    ctx: ResolveValueContext,
+  ): ResolveValueResult | ResolveValueDirectionalResult | undefined => {
     try {
       return adapterInput.resolveValue(ctx);
     } catch (e) {

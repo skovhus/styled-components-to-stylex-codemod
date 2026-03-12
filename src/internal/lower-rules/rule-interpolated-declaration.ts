@@ -902,6 +902,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
+    if (res && res.type === "resolvedDirectional") {
+      // Adapter returned directional longhand entries for a shorthand property.
+      // Emit each longhand directly into the style object.
+      for (const entry of res.directional) {
+        for (const imp of entry.imports) {
+          resolverImports.set(JSON.stringify(imp), imp);
+        }
+        const exprAst = parseExpr(entry.expr);
+        if (exprAst) {
+          (styleObj as Record<string, unknown>)[entry.prop] = exprAst;
+        }
+      }
+      continue;
+    }
+
     if (res && res.type === "resolvedValue") {
       for (const imp of res.imports ?? []) {
         resolverImports.set(JSON.stringify(imp), imp);

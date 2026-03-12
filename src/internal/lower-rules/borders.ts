@@ -130,8 +130,10 @@ export function tryHandleInterpolatedBorder(
         api,
         filePath,
         resolveValue,
+        resolveValueDirectional: resolveValue,
         resolveCall,
         resolveImport: (localName: string) => importMap.get(localName) ?? null,
+        hasImportIgnoringShadowing: (localName: string) => importMap.has(localName),
       } satisfies InternalHandlerContext,
     );
   };

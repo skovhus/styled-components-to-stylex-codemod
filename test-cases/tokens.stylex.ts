@@ -66,6 +66,7 @@ export const testCaseTheme = {
   },
   isDark: true as boolean,
   mode: "light" as "light" | "dark",
+  inputPadding: "6px 12px",
 } as const;
 
 export type TestCaseTheme = typeof testCaseTheme;
@@ -106,6 +107,12 @@ export const $config = stylex.defineVars({
   "ui.spacing.small": "4px",
   "ui.spacing.medium": "8px",
   "ui.spacing.large": "16px",
+});
+
+// Input padding variables — used by interpolation-opaqueShorthand test case
+export const $input = stylex.defineVars({
+  inputPaddingBlock: "6px",
+  inputPaddingInline: "12px",
 });
 
 // Shadow variables — used by helper-callPropArgResolved test case

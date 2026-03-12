@@ -2,20 +2,29 @@
  * Wraps adapter resolution hooks with safety checks and warnings.
  * Core concepts: guarded adapter calls and bail signaling.
  */
-import type {
-  Adapter,
-  CallResolveContext,
-  CallResolveResult,
-  ImportSource,
-  ResolveValueContext,
-  ResolveValueResult,
-  SelectorResolveContext,
-  SelectorResolveResult,
+import {
+  type Adapter,
+  type CallResolveContext,
+  type CallResolveResult,
+  type ImportSource,
+  isDirectionalResult,
+  type ResolveValueContext,
+  type ResolveValueDirectionalResult,
+  type ResolveValueResult,
+  type SelectorResolveContext,
+  type SelectorResolveResult,
 } from "../adapter.js";
 import type { WarningLog } from "./logger.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
   resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
+  /**
+   * Like `resolveValueSafe`, but also returns directional results.
+   * Only used by theme resolvers that know how to handle directional expansions.
+   */
+  resolveValueDirectionalSafe: (
+    ctx: ResolveValueContext,
+  ) => ResolveValueResult | ResolveValueDirectionalResult | undefined;
   resolveCallSafe: (ctx: CallResolveContext) => CallResolveResult | undefined;
   resolveSelectorSafe: (ctx: SelectorResolveContext) => SelectorResolveResult | undefined;
   bailRef: { value: boolean };
@@ -23,7 +32,13 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
   const { adapter } = args;
   const bailRef = { value: false };
 
-  const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
+  /**
+   * Core adapter call with bail handling. Returns the full union type
+   * including directional results.
+   */
+  const resolveValueCore = (
+    ctx: ResolveValueContext,
+  ): ResolveValueResult | ResolveValueDirectionalResult | undefined => {
     if (bailRef.value) {
       return undefined;
     }
@@ -37,6 +52,22 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
       return undefined;
     }
     return res;
+  };
+
+  const resolveValueSafe = (ctx: ResolveValueContext): ResolveValueResult | undefined => {
+    const res = resolveValueCore(ctx);
+    // Directional results are only handled by theme resolvers via resolveValueDirectionalSafe.
+    // For all other call sites, treat as "not resolved" without bailing.
+    if (res && isDirectionalResult(res)) {
+      return undefined;
+    }
+    return res;
+  };
+
+  const resolveValueDirectionalSafe = (
+    ctx: ResolveValueContext,
+  ): ResolveValueResult | ResolveValueDirectionalResult | undefined => {
+    return resolveValueCore(ctx);
   };
 
   const resolveCallSafe = (ctx: CallResolveContext): CallResolveResult | undefined => {
@@ -72,7 +103,13 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
     return adapter.resolveSelector(ctx);
   };
 
-  return { resolveValueSafe, resolveCallSafe, resolveSelectorSafe, bailRef };
+  return {
+    resolveValueSafe,
+    resolveValueDirectionalSafe,
+    resolveCallSafe,
+    resolveSelectorSafe,
+    bailRef,
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
