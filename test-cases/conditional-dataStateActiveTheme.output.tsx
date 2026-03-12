@@ -34,8 +34,8 @@ export const App = () => (
 const styles = stylex.create({
   container: {
     display: "flex",
-    padding: "1px",
-    borderRadius: "6px",
+    padding: 1,
+    borderRadius: 6,
   },
   containerDark: {
     backgroundColor: $colors.bgBase,
@@ -45,13 +45,13 @@ const styles = stylex.create({
   },
   tab: {
     flex: "1",
-    minHeight: "32px",
-    fontSize: "14px",
+    minHeight: 32,
+    fontSize: 14,
     color: {
       default: "#111",
       ':is([data-state="inactive"])': "#999",
     },
-    borderRadius: "5px",
+    borderRadius: 5,
     boxShadow: {
       default: "none",
       ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint},0 1px 2px rgba(0, 0, 0, 0.1)`,

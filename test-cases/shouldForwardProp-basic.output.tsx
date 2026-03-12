@@ -119,7 +119,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   buttonSizeLarge: {
     paddingBlock: "12px",
@@ -144,7 +144,7 @@ const styles = stylex.create({
   box: {
     backgroundColor: "white",
     padding: "16px",
-    borderRadius: "8px",
+    borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
   boxBackgroundColor: (backgroundColor: string) => ({
@@ -156,7 +156,7 @@ const styles = stylex.create({
   // Using nullish coalescing operator for fallbacks
   colorBox: {
     backgroundColor: "#e0e0e0",
-    padding: "16px",
+    padding: 16,
   },
   colorBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
@@ -164,7 +164,7 @@ const styles = stylex.create({
   card: {
     backgroundColor: "#4F74BF",
     borderRadius: "4px",
-    padding: "16px",
+    padding: 16,
     color: "white",
   },
   cardRounded: {

@@ -19,9 +19,9 @@ const styles = stylex.create({
     containerName: "sidebar",
     containerType: "inline-size",
     width: "100%",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
-    padding: "16px",
+    padding: 16,
   },
 });

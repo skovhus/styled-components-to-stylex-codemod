@@ -26,9 +26,9 @@ export const App = () => (
 const styles = stylex.create({
   rangeInput: {
     display: "block",
-    width: "300px",
-    height: "6px",
-    borderRadius: "99999px",
+    width: 300,
+    height: 6,
+    borderRadius: 99999,
     appearance: "none",
   },
 });

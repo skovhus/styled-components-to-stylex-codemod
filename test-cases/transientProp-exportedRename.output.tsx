@@ -163,7 +163,7 @@ const styles = stylex.create({
   treeToggle: {
     transition: "transform 0.15s ease",
     cursor: "pointer",
-    padding: "4px",
+    padding: 4,
   },
   treeToggleExpanded: {
     transform: "rotate(180deg)",
@@ -173,7 +173,7 @@ const styles = stylex.create({
     alignItems: "center",
     paddingBlock: "4px",
     paddingInline: "12px",
-    borderRadius: "12px",
+    borderRadius: 12,
     fontSize: "13px",
     backgroundColor: "red",
     color: "white",
@@ -190,9 +190,9 @@ const styles = stylex.create({
     fontWeight: 700,
   },
   colorChip: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
-    borderRadius: "4px",
+    paddingBlock: 4,
+    paddingInline: 8,
+    borderRadius: 4,
   },
   colorChipBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
@@ -204,9 +204,9 @@ const styles = stylex.create({
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: "gray",
-    paddingBlock: "4px",
-    paddingInline: "8px",
-    borderRadius: "4px",
+    paddingBlock: 4,
+    paddingInline: 8,
+    borderRadius: 4,
   },
   specifierTagHighlighted: {
     borderColor: "gold",

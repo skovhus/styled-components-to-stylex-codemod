@@ -10,6 +10,6 @@ const styles = stylex.create({
   thing: {
     /* Specificity hack stripped (was: &&) */
     color: "red",
-    padding: "8px",
+    padding: 8,
   },
 });

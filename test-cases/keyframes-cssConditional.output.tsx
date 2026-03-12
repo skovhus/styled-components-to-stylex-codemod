@@ -49,7 +49,7 @@ export const App = () => (
 const styles = stylex.create({
   box: {
     backgroundColor: "cornflowerblue",
-    padding: "24px",
+    padding: 24,
     color: "white",
   },
   boxAnimating: {
@@ -60,8 +60,8 @@ const styles = stylex.create({
   },
   dot: {
     display: "inline-block",
-    width: "16px",
-    height: "16px",
+    width: 16,
+    height: 16,
     borderRadius: "50%",
     backgroundColor: "tomato",
   },

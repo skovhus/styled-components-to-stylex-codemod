@@ -71,7 +71,7 @@ const styles = stylex.create({
     margin: "1em",
     paddingBlock: "0.25em",
     paddingInline: "1em",
-    borderRadius: "3px",
+    borderRadius: 3,
   },
   buttonPrimary: {
     color: "white",

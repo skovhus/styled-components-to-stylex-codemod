@@ -62,27 +62,27 @@ const styles = stylex.create({
     justifyContent: "flex-start",
   },
   coloredBox: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "lightgray",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   coloredBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
   // Non-destructured props pattern: (props) => css`...${props.color}...`
   borderBox: {
-    padding: "8px",
-    borderWidth: "2px",
+    padding: 8,
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "black",
-    margin: "4px",
+    margin: 4,
   },
   borderBoxBorderColor: (borderColor: string) => ({
     borderColor,
   }),
   // Non-destructured props with different param name: (p) => css`...${p.color}...`
   shadowBox: {
-    padding: "12px",
+    padding: 12,
     boxShadow: "none",
   },
   shadowBoxBoxShadow: (boxShadow: string) => ({

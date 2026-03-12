@@ -31,23 +31,23 @@ export const App = () => (
 const styles = stylex.create({
   linearGradientBox: {
     backgroundImage: `linear-gradient(${color1}, ${color2})`,
-    width: "200px",
-    height: "100px",
+    width: 200,
+    height: 100,
   },
   radialGradientBox: {
     backgroundImage: `radial-gradient(${color1}, ${color2})`,
-    width: "200px",
-    height: "100px",
+    width: 200,
+    height: 100,
   },
   conicGradientBox: {
     backgroundImage: `conic-gradient(${color1}, ${color2}, ${color3})`,
-    width: "200px",
-    height: "100px",
+    width: 200,
+    height: 100,
   },
   repeatingLinearGradientBox: {
     backgroundImage: `repeating-linear-gradient(${color1} 0%, ${color2} 10%)`,
-    width: "200px",
-    height: "100px",
+    width: 200,
+    height: 100,
   },
   popover: {
     transform: "translateY(-50%) translateX(-8px) scale(0.9)",

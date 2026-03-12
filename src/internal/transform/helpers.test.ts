@@ -143,6 +143,30 @@ describe("cssValueToJs", () => {
     expect(cssValueToJs({ kind: "static", value: "-.5" })).toBe(-0.5);
   });
 
+  it("strips px suffix and returns bare numbers", () => {
+    expect(cssValueToJs({ kind: "static", value: "26px" })).toBe(26);
+    expect(cssValueToJs({ kind: "static", value: "12px" })).toBe(12);
+    expect(cssValueToJs({ kind: "static", value: "1px" })).toBe(1);
+    expect(cssValueToJs({ kind: "static", value: "0px" })).toBe(0);
+    expect(cssValueToJs({ kind: "static", value: "0.5px" })).toBe(0.5);
+    expect(cssValueToJs({ kind: "static", value: "-10px" })).toBe(-10);
+    expect(cssValueToJs({ kind: "static", value: "8px" })).toBe(8);
+  });
+
+  it("preserves non-px unit strings", () => {
+    expect(cssValueToJs({ kind: "static", value: "1rem" })).toBe("1rem");
+    expect(cssValueToJs({ kind: "static", value: "100%" })).toBe("100%");
+    expect(cssValueToJs({ kind: "static", value: "2em" })).toBe("2em");
+    expect(cssValueToJs({ kind: "static", value: "50vh" })).toBe("50vh");
+  });
+
+  it("keeps custom property values as strings", () => {
+    expect(cssValueToJs({ kind: "static", value: "16px" }, false, "--base-size")).toBe("16px");
+    expect(cssValueToJs({ kind: "static", value: "42" }, false, "--count")).toBe("42");
+    expect(cssValueToJs({ kind: "static", value: "0.5" }, false, "--opacity")).toBe("0.5");
+    expect(cssValueToJs({ kind: "static", value: "red" }, false, "--color")).toBe("red");
+  });
+
   it("keeps flex values as strings even when numeric", () => {
     expect(cssValueToJs({ kind: "static", value: "1" }, false, "flex")).toBe("1");
     expect(cssValueToJs({ kind: "static", value: "0" }, false, "flex")).toBe("0");

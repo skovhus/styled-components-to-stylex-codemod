@@ -24,9 +24,9 @@ export const App = () => (
 
 const styles = stylex.create({
   text: {
-    fontSize: "14px",
+    fontSize: 14,
     color: "#333",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "#f5f5f5",
   },
   textTruncate: {

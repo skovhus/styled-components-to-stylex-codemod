@@ -29,16 +29,16 @@ const styles = stylex.create({
   badge: {
     display: "inline-flex",
     alignItems: "center",
-    borderRadius: "4px",
-    height: "20px",
-    fontSize: "12px",
+    borderRadius: 4,
+    height: 20,
+    fontSize: 12,
     paddingBlock: 0,
-    paddingInline: "6px",
+    paddingInline: 6,
   },
   badgeSizeMicro: {
-    height: "16px",
-    fontSize: "10px",
+    height: 16,
+    fontSize: 10,
     paddingBlock: 0,
-    paddingInline: "4px",
+    paddingInline: 4,
   },
 });

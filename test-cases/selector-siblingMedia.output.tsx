@@ -15,13 +15,13 @@ export const App = () => (
 const styles = stylex.create({
   thing: {
     color: "blue",
-    padding: "8px",
+    padding: 8,
     marginTop: {
       default: null,
 
       [stylex.when.siblingBefore(":is(*)")]: {
         default: null,
-        "@media (min-width: 768px)": "16px",
+        "@media (min-width: 768px)": 16,
       },
     },
   },

@@ -9,8 +9,8 @@ export function App() {
 
 const styles = stylex.create({
   container: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
   },
   border: {
     borderWidth: pixelVars.thin,

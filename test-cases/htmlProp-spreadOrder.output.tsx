@@ -43,10 +43,10 @@ export function App() {
 
 const styles = stylex.create({
   thumbnail: {
-    maxWidth: "180px",
+    maxWidth: 180,
     objectFit: "cover",
   },
   box: {
-    padding: "8px",
+    padding: 8,
   },
 });

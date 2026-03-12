@@ -12,7 +12,7 @@ export const App = () => (
 
 const styles = stylex.create({
   tick: {
-    margin: "3px",
+    margin: 3,
     backgroundColor: "coral",
   },
   label: {

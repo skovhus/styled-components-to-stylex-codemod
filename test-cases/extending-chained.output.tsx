@@ -26,12 +26,12 @@ export const App = () => (
 const styles = stylex.create({
   // Non-exported styled component that wraps an imported component
   text: {
-    marginLeft: "8px",
+    marginLeft: 8,
   },
   helpText: {
-    marginLeft: "4px",
+    marginLeft: 4,
   },
   separator: {
-    marginRight: "4px",
+    marginRight: 4,
   },
 });

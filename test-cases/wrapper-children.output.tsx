@@ -36,6 +36,6 @@ export const App = () => (
 
 const styles = stylex.create({
   divider: {
-    paddingLeft: "20px",
+    paddingLeft: 20,
   },
 });

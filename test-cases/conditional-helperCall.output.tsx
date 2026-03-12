@@ -62,13 +62,13 @@ export const App = () => (
 
 const styles = stylex.create({
   text: {
-    fontSize: "14px",
+    fontSize: 14,
   },
   textAlt: {
-    fontSize: "14px",
+    fontSize: 14,
   },
   title: {
-    fontSize: "50px",
+    fontSize: 50,
   },
   titleMaxWidth: (maxWidth: number) => ({
     maxWidth,

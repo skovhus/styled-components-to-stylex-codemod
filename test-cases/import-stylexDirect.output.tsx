@@ -9,8 +9,8 @@ export function App() {
 
 const styles = stylex.create({
   container: {
-    borderRadius: "8px",
-    padding: "6px",
+    borderRadius: 8,
+    padding: 6,
     position: "fixed",
     zIndex: $zIndex.modal,
   },

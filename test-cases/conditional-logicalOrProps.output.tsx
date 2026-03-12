@@ -82,10 +82,10 @@ export function App() {
 
 const styles = stylex.create({
   dot: {
-    width: "14px",
-    height: "14px",
+    width: 14,
+    height: 14,
     borderRadius: "50%",
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "#cbd5e1",
     backgroundColor: "white",
@@ -95,8 +95,8 @@ const styles = stylex.create({
     backgroundColor: "#6366f1",
   },
   step: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#6366f1",
     color: "white",
   },
@@ -105,9 +105,9 @@ const styles = stylex.create({
     color: "#64748b",
   },
   badge: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
-    borderRadius: "4px",
+    paddingBlock: 4,
+    paddingInline: 8,
+    borderRadius: 4,
     backgroundColor: "#e2e8f0",
   },
   badgeVisiblePrimaryOrAccent: {

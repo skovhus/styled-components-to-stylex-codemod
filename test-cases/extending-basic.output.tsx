@@ -14,10 +14,10 @@ const styles = stylex.create({
     margin: "1em",
     paddingBlock: "0.25em",
     paddingInline: "1em",
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "#bf4f74",
-    borderRadius: "3px",
+    borderRadius: 3,
   },
   tomatoButton: {
     color: "tomato",

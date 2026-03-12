@@ -36,8 +36,8 @@ const styles = stylex.create({
   badge: {
     display: "inline-block",
     flexShrink: 0,
-    width: "12px",
-    height: "12px",
+    width: 12,
+    height: 12,
     borderRadius: "50%",
   },
 });

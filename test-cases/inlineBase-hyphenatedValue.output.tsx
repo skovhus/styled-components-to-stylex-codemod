@@ -44,7 +44,7 @@ const styles = stylex.create({
   spacedRow: {
     display: "flex",
     flexDirection: "row",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "#f0f5ff",
   },
   spacedRowAlignFlexStart: {

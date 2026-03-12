@@ -25,7 +25,7 @@ export const App = () => (
 const styles = stylex.create({
   header: {
     display: "flex",
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f0f0",
     borderBottomStyle: {
       default: null,
@@ -44,6 +44,6 @@ const styles = stylex.create({
     "--settings-list-view-border-color": "#bf4f74",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: 8,
   },
 });

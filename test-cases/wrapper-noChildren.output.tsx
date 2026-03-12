@@ -37,6 +37,6 @@ export const App = () => <StyledTextDivider text="Section" />;
 
 const styles = stylex.create({
   textDivider: {
-    paddingLeft: "20px",
+    paddingLeft: 20,
   },
 });

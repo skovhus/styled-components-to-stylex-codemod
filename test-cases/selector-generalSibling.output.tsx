@@ -16,11 +16,11 @@ export const App = () => (
 const styles = stylex.create({
   thing: {
     color: "blue",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     borderBottomWidth: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "2px",
+      [stylex.when.siblingBefore(":is(*)")]: 2,
     },
     borderBottomStyle: {
       default: null,

@@ -30,7 +30,7 @@ const styles = stylex.create({
     transition: "transform 0.3s",
   },
   container: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f5ff",
   },
   gradientPathIncontainerAnimation: {

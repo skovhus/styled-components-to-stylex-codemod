@@ -26,7 +26,7 @@ const styles = stylex.create({
   loading: {
     height: "100%",
     flexDirection: "column",
-    gap: "8px",
+    gap: 8,
     flex: "1",
   },
 });

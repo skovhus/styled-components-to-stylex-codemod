@@ -48,7 +48,7 @@ export function App() {
 
 const styles = stylex.create({
   box: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
   boxNotBordered: {
@@ -63,7 +63,7 @@ const styles = stylex.create({
     backgroundColor,
   }),
   input: {
-    padding: "8px",
+    padding: 8,
     outline: {
       default: null,
       ":focus": "2px solid blue",

@@ -10,8 +10,8 @@ export function App() {
 
 const styles = stylex.create({
   container: {
-    borderRadius: "8px",
-    padding: "6px",
+    borderRadius: 8,
+    padding: 6,
     maxWidth: `${PEEK_MAX_WIDTH}px`,
     position: "fixed",
     zIndex: $zIndex.modal,

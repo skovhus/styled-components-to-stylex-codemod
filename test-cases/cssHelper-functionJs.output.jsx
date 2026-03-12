@@ -20,23 +20,23 @@ export const App = () => (
 const styles = stylex.create({
   styleBox: {
     backgroundColor: "hotpink",
-    width: "30px",
-    margin: "10px",
-    height: "50px",
+    width: 30,
+    margin: 10,
+    height: 50,
   },
 });
 
 const appearanceVariants = stylex.create({
   small: {
-    height: "10px",
+    height: 10,
   },
   medium: {
-    height: "10px",
+    height: 10,
   },
   large: {
-    height: "20px",
+    height: 20,
   },
   xlarge: {
-    height: "20px",
+    height: 20,
   },
 });

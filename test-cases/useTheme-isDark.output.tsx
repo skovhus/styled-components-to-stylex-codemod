@@ -16,7 +16,7 @@ export const App = () => <Text>Label</Text>;
 
 const styles = stylex.create({
   text: {
-    fontSize: "12px",
+    fontSize: 12,
   },
   textDark: {
     color: $colors.labelBase,

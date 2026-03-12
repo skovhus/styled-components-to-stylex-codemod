@@ -40,15 +40,15 @@ const styles = stylex.create({
   bannerProminent: {
     fontWeight: "bold",
     fontSize: {
-      default: "18px",
-      "@media (min-width: 768px)": "24px",
+      default: 18,
+      "@media (min-width: 768px)": 24,
     },
   },
   bannerNotProminent: {
     fontWeight: "normal",
     fontSize: {
-      default: "14px",
-      "@media (min-width: 768px)": "16px",
+      default: 14,
+      "@media (min-width: 768px)": 16,
     },
   },
 });

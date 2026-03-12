@@ -51,9 +51,9 @@ export function TextColor(
 
 const styles = stylex.create({
   box: {
-    width: "42px",
+    width: 42,
     height: "100%",
-    padding: "16px",
+    padding: 16,
   },
   boxBackgroundColorHover: (hoverColor: Color) => ({
     backgroundColor: {

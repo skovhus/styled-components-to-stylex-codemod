@@ -26,8 +26,8 @@ export const App = () => <Box shadow="rgba(0,0,0,0.2)" />;
 
 const styles = stylex.create({
   box: {
-    height: "50px",
-    width: "50px",
+    height: 50,
+    width: 50,
   },
   boxBoxShadow: (boxShadow: string) => ({
     boxShadow: shadow(boxShadow),

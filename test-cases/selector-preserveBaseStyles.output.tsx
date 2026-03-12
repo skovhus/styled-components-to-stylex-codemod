@@ -13,8 +13,8 @@ const styles = stylex.create({
     color: "red",
   },
   parent: {
-    width: "123px",
-    height: "45px",
+    width: 123,
+    height: 45,
     opacity: 0.8,
     transform: "scale(1)",
   },

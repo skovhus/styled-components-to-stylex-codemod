@@ -12,7 +12,7 @@ export const App = () => (
 const styles = stylex.create({
   link: {
     display: "flex",
-    padding: "8px",
+    padding: 8,
     backgroundColor: "papayawhip",
   },
   baseFill: {
@@ -22,8 +22,8 @@ const styles = stylex.create({
   // a direct declaration. Reverse selector overrides must account for
   // composed values when determining the default.
   icon: {
-    width: "48px",
-    height: "48px",
+    width: 48,
+    height: 48,
   },
   iconInLink: {
     fill: {

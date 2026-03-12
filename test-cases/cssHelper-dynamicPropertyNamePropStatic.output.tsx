@@ -53,9 +53,9 @@ const styles = stylex.create({
     display: "flex",
   },
   stripEnabledColumn: {
-    columnGap: "16px",
+    columnGap: 16,
   },
   stripEnabledNotColumn: {
-    rowGap: "16px",
+    rowGap: 16,
   },
 });

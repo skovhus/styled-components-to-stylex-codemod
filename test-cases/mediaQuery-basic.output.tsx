@@ -38,8 +38,8 @@ const styles = stylex.create({
   container: {
     width: {
       default: "100%",
-      "@media (min-width: 768px)": "750px",
-      "@media (min-width: 1024px)": "960px",
+      "@media (min-width: 768px)": 750,
+      "@media (min-width: 1024px)": 960,
     },
     padding: {
       default: "1.5rem",
@@ -51,7 +51,7 @@ const styles = stylex.create({
       "@media (min-width: 768px)": "linear-gradient(135deg, #98fb98 0%, #90ee90 100%)",
       "@media (min-width: 1024px)": "linear-gradient(135deg, #87ceeb 0%, #add8e6 100%)",
     },
-    borderRadius: "12px",
+    borderRadius: 12,
     boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
     marginBlock: {
       default: null,
@@ -90,7 +90,7 @@ const styles = stylex.create({
   card: {
     padding: "1rem",
     backgroundColor: "white",
-    borderRadius: "8px",
+    borderRadius: 8,
     boxShadow: {
       default: "0 2px 4px rgba(0, 0, 0, 0.1)",
       ":hover": {
@@ -128,11 +128,11 @@ const styles = stylex.create({
       "@media (min-width: 768px)": "auto",
     },
     marginTop: "1.5rem",
-    paddingBlock: "12px",
-    paddingInline: "24px",
+    paddingBlock: 12,
+    paddingInline: 24,
     backgroundImage: "linear-gradient(135deg, #4169e1 0%, #6495ed 100%)",
     borderWidth: 0,
-    borderRadius: "8px",
+    borderRadius: 8,
     cursor: "pointer",
     color: "white",
     fontSize: "1rem",

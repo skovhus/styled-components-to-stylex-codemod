@@ -9,7 +9,7 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    padding: "16px",
+    padding: 16,
     boxShadow: `inset 0 0 0 1px ${$colors.bgBorderFaint}`,
     color: $colors.labelBase,
   },

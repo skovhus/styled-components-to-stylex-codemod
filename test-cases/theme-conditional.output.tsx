@@ -26,9 +26,9 @@ export const App = () => (
 const styles = stylex.create({
   optionLabel: {
     display: "flex",
-    gap: "4px",
+    gap: 4,
     alignItems: "center",
-    fontSize: "11px",
+    fontSize: 11,
     color: $colors.labelBase,
     cursor: "pointer",
   },

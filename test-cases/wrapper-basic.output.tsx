@@ -26,14 +26,14 @@ export const App = () => (
 const styles = stylex.create({
   wrapper: {
     /* Constrained height to show scroll */
-    height: "60px",
+    height: 60,
     /* Fixed width */
-    width: "160px",
+    width: 160,
     // This is important
     overflowY: "scroll",
     backgroundColor: "#f0f4f8",
-    borderRadius: "6px",
-    padding: "8px",
-    fontSize: "14px",
+    borderRadius: 6,
+    padding: 8,
+    fontSize: 14,
   },
 });

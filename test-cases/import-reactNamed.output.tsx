@@ -37,12 +37,12 @@ const styles = stylex.create({
   // When transformed, if it needs React (e.g., React.PropsWithChildren),
   // it should add React to the existing import, not create a duplicate
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "gray",
     color: "white",
   },

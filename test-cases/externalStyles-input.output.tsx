@@ -42,7 +42,7 @@ export const App = () => {
 const styles = stylex.create({
   input: {
     transitionProperty: "color",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "blue",
   },

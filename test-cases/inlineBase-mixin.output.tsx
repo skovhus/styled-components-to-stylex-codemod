@@ -7,9 +7,9 @@ export function App() {
 
 const styles = stylex.create({
   container: {
-    padding: "8px",
+    padding: 8,
     backgroundColor: "#e7fff1",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#58a06d",
   },

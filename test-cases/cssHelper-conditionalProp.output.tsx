@@ -52,9 +52,9 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    paddingBlock: "2px",
-    paddingInline: "6px",
-    borderRadius: "3px",
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
   },
   containerBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,

@@ -15,9 +15,9 @@ export const App = () => <Component content="hello" />;
 
 const styles = stylex.create({
   component: {
-    paddingTop: "24px",
+    paddingTop: 24,
     paddingRight: 0,
-    paddingBottom: "48px",
+    paddingBottom: 48,
     paddingLeft: 0,
   },
 });

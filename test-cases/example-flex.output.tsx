@@ -373,10 +373,10 @@ const styles = stylex.create({
     overflow: "hidden",
   },
   flexNoMinWidth: {
-    minWidth: "0px",
+    minWidth: 0,
   },
   flexNoMinHeight: {
-    minHeight: "0px",
+    minHeight: 0,
   },
   flexGrow: (grow: number) => ({
     flexGrow: grow,
@@ -401,7 +401,7 @@ const styles = stylex.create({
     flex: "auto",
   },
   padded: {
-    padding: "16px",
+    padding: 16,
   },
 });
 

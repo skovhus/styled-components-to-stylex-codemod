@@ -20,8 +20,8 @@ export function App() {
 
 const styles = stylex.create({
   card: {
-    padding: "8px",
-    borderWidth: "1px",
+    padding: 8,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
     backgroundColor: "#f8f8f8",

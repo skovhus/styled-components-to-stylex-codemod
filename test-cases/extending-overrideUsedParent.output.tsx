@@ -24,10 +24,10 @@ export const App = () => (
 
 const styles = stylex.create({
   text: {
-    marginLeft: "8px",
+    marginLeft: 8,
     color: "blue",
   },
   helpText: {
-    marginLeft: "4px",
+    marginLeft: 4,
   },
 });

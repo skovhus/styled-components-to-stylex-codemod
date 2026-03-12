@@ -8,11 +8,11 @@ export function App() {
 const styles = stylex.create({
   button: {
     alignItems: "center",
-    gap: "12px",
-    paddingBlock: "8px",
-    paddingInline: "12px",
+    gap: 12,
+    paddingBlock: 8,
+    paddingInline: 12,
     backgroundColor: "#ecf2ff",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#6b7ca8",
     color: "#1f2b43",

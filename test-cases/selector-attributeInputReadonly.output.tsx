@@ -20,16 +20,16 @@ export function App() {
 
 const styles = stylex.create({
   textInput: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
-    borderWidth: "1px",
+    paddingBlock: 8,
+    paddingInline: 12,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":focus": "#bf4f74",
     },
-    borderRadius: "4px",
-    fontSize: "14px",
+    borderRadius: 4,
+    fontSize: 14,
     backgroundColor: "white",
     outline: {
       default: null,

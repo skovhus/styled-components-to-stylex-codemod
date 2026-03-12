@@ -40,8 +40,8 @@ const styles = stylex.create({
     gridColumn: "1/-1",
     alignItems: "center",
     paddingBlock: 0,
-    paddingInline: "8px",
-    minHeight: "36px",
+    paddingInline: 8,
+    minHeight: 36,
     backgroundColor: $colors.bgBase,
   },
   projectRow: {
@@ -51,8 +51,8 @@ const styles = stylex.create({
     },
   },
   checkMark: {
-    width: "10px",
-    height: "10px",
+    width: 10,
+    height: 10,
     backgroundColor: "red",
   },
   checkMarkOpaque: {

@@ -35,15 +35,15 @@ export const App = () => (
 
 const styles = stylex.create({
   tooltipContainer: {
-    padding: "8px",
+    padding: 8,
   },
   tooltipContainerPositionNotTop: {
-    borderTopWidth: "2px",
+    borderTopWidth: 2,
     borderTopStyle: "solid",
     borderTopColor: "black",
   },
   tooltipContainerPositionTop: {
-    borderBottomWidth: "2px",
+    borderBottomWidth: 2,
     borderBottomStyle: "solid",
     borderBottomColor: "black",
   },

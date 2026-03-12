@@ -20,13 +20,13 @@ export const App = () => (
 const styles = stylex.create({
   icon: {
     fill: "gray",
-    width: "24px",
-    height: "24px",
+    width: 24,
+    height: 24,
   },
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
   },

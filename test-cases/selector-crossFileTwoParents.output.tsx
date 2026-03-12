@@ -20,17 +20,17 @@ const styles = stylex.create({
   buttonA: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    gap: 8,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#e8f4e8",
   },
   buttonB: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    gap: 8,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#e8e8f4",
   },
   crossFileIconInButtonA: {

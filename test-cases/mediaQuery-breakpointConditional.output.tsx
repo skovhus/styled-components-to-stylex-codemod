@@ -23,8 +23,8 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    padding: "16px",
-    maxWidth: "800px",
+    padding: 16,
+    maxWidth: 800,
     backgroundColor: "#f5f5f5",
   },
   containerCompact: {

@@ -4,7 +4,7 @@ export const App = () => <div sx={styles.thing}>Hover me!</div>;
 
 const styles = stylex.create({
   thing: {
-    borderRightWidth: "1px",
+    borderRightWidth: 1,
     borderRightStyle: "solid",
     borderRightColor: "hotpink",
     color: {

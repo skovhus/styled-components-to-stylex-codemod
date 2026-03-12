@@ -40,13 +40,13 @@ const styles = stylex.create({
     },
 
     paddingBottom: {
-      default: "12px",
+      default: 12,
       [breakpoints.phone]: 0,
     },
 
     paddingInline: {
-      default: "24px",
-      [breakpoints.phone]: "16px",
+      default: 24,
+      [breakpoints.phone]: 16,
     },
   },
 });

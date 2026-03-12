@@ -107,7 +107,7 @@ const styles = stylex.create({
     gap: props.gap ? `${props.gap}px` : "0",
   }),
   wrapper: {
-    padding: "8px",
+    padding: 8,
   },
   button: {
     backgroundColor: "gray",

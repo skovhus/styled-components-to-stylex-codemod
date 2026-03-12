@@ -58,9 +58,9 @@ const styles = stylex.create({
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "0.3s, 0.5s",
     animationTimingFunction: "ease-out, ease-out",
-    padding: "20px",
+    padding: 20,
     backgroundColor: "white",
-    borderRadius: "8px",
+    borderRadius: 8,
     boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
   },
   // Animation with multiple properties

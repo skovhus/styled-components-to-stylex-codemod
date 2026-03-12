@@ -3699,9 +3699,9 @@ export const App = () => <Input />;
     );
     expect(result.code).not.toBeNull();
     // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
-    // The expansion should split: paddingBlock: "8px", paddingInline: "12px"
-    expect(result.code).toContain('paddingBlock: "8px"');
-    expect(result.code).toContain('paddingInline: "12px"');
+    // The expansion should split: paddingBlock: 8, paddingInline: 12
+    expect(result.code).toContain("paddingBlock: 8");
+    expect(result.code).toContain("paddingInline: 12");
     // Should NOT have the unsplit value
     expect(result.code).not.toContain('"8px 12px"');
   });

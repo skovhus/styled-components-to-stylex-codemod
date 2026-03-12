@@ -31,8 +31,8 @@ export const App = () => (
 
 const styles = stylex.create({
   chip: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: $colors.bgFocus,
   },
 });

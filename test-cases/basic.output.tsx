@@ -33,9 +33,9 @@ const styles = stylex.create({
     backgroundColor: "papayawhip",
   },
   select: {
-    paddingBlock: "4px",
-    paddingInline: "8px",
-    borderRadius: "4px",
-    fontSize: "13px",
+    paddingBlock: 4,
+    paddingInline: 8,
+    borderRadius: 4,
+    fontSize: 13,
   },
 });

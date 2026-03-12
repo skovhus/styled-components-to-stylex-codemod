@@ -27,9 +27,9 @@ export function App() {
 
 const styles = stylex.create({
   button: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    borderRadius: "4px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    borderRadius: 4,
     backgroundColor: $colors.bgBase,
     color: "black",
   },
@@ -42,7 +42,7 @@ const styles = stylex.create({
       inset: "0 4px",
       backgroundColor: "hotpink",
       zIndex: -1,
-      borderRadius: "6px",
+      borderRadius: 6,
     },
   },
 });

@@ -35,7 +35,7 @@ const styles = stylex.create({
   },
 
   containerAfter1: {
-    padding: "16px",
+    padding: 16,
   },
 
   // Pattern 3: Multiple css helpers
@@ -52,7 +52,7 @@ const styles = stylex.create({
   // centered (flex) instead of stacking normally (block), producing a visible pixel diff.
   overrideDisplay: {
     backgroundColor: "lightblue",
-    padding: "16px",
+    padding: 16,
   },
 
   overrideDisplayAfter1: {

@@ -29,12 +29,12 @@ export const App = () => (
 const styles = stylex.create({
   box: {
     position: "absolute",
-    left: "10px",
+    left: 10,
     bottom: "20px",
-    paddingBlock: "12px",
-    paddingInline: "16px",
+    paddingBlock: 12,
+    paddingInline: 16,
     backgroundColor: "paleturquoise",
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "teal",
   },

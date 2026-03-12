@@ -6,7 +6,7 @@ export const App = () => (
 
 const styles = stylex.create({
   finalComponent: {
-    padding: "10px",
+    padding: 10,
   },
   baseStyles: {
     color: "red",

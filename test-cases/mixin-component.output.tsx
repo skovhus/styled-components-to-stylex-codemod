@@ -22,7 +22,7 @@ const styles = stylex.create({
   // Using shared mixins within components
   elementWithMixin: {
     color: "red",
-    padding: "16px",
+    padding: 16,
   },
   elementWithMixinHover: {
     color: {

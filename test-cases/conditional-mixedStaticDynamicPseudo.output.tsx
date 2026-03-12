@@ -45,7 +45,7 @@ export const App = () => (
 const styles = stylex.create({
   container: {
     position: "relative",
-    padding: "20px",
+    padding: 20,
     backgroundColor: "#f5f5f5",
   },
   containerEnabled: {

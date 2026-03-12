@@ -34,7 +34,7 @@ const styles = stylex.create({
   line: {
     height: pixelVars.thin,
     backgroundColor: $colors.bgSub,
-    margin: "10px",
+    margin: 10,
   },
   lineBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,

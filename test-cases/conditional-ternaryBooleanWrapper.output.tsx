@@ -39,11 +39,11 @@ const styles = stylex.create({
   },
   boxInline: {
     paddingBlock: 0,
-    paddingInline: "6px",
-    borderRadius: "4px",
+    paddingInline: 6,
+    borderRadius: 4,
     position: "absolute",
   },
   boxNotInline: {
-    marginTop: "8px",
+    marginTop: 8,
   },
 });

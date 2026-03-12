@@ -69,7 +69,7 @@ const styles = stylex.create({
   // but is NOT a valid value for `background-color` (which only accepts <color> values)
   resetBackground: {
     background: "none",
-    padding: "8px",
+    padding: 8,
   },
 });
 

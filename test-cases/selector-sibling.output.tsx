@@ -23,8 +23,8 @@ const styles = stylex.create({
       default: "blue",
       [stylex.when.siblingBefore(":is(*)")]: "red",
     },
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: {
       default: null,
       [stylex.when.siblingBefore(":is(*)")]: "lime",

@@ -46,10 +46,10 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    width: "480px",
+    width: 480,
     maxWidth: "calc(100vw - 32px)",
-    margin: "48px",
+    margin: 48,
     backgroundColor: "white",
-    borderRadius: "8px",
+    borderRadius: 8,
   },
 });

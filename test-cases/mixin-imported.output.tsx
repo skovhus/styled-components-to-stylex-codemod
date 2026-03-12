@@ -13,9 +13,9 @@ const styles = stylex.create({
   elementWithImportedMixin: {
     color: "red",
     overflow: "visible",
-    maxWidth: "150px",
-    padding: "8px",
-    borderWidth: "1px",
+    maxWidth: 150,
+    padding: 8,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "gray",
   },

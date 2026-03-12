@@ -51,16 +51,16 @@ export const App = () => (
 
 const styles = stylex.create({
   input: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
-    borderWidth: "2px",
+    paddingBlock: 8,
+    paddingInline: 12,
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",
       ":focus": "#bf4f74",
     },
-    borderRadius: "4px",
-    fontSize: "14px",
+    borderRadius: 4,
+    fontSize: 14,
     outline: {
       default: null,
       ":focus": "none",
@@ -83,14 +83,14 @@ const styles = stylex.create({
     },
   },
   inputCheckbox: {
-    width: "20px",
-    height: "20px",
+    width: 20,
+    height: 20,
     paddingBlock: 0,
     paddingInline: 0,
   },
   inputRadio: {
-    width: "20px",
-    height: "20px",
+    width: 20,
+    height: 20,
     paddingBlock: 0,
     paddingInline: 0,
     borderRadius: "50%",

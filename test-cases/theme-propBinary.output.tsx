@@ -22,8 +22,8 @@ export const App = () => <Box>Theme mode</Box>;
 
 const styles = stylex.create({
   box: {
-    height: "100px",
-    width: "100px",
+    height: 100,
+    width: 100,
   },
   boxThemeModeDark: {
     color: "white",

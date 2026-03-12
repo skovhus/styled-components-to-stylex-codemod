@@ -32,17 +32,17 @@ const styles = stylex.create({
   exportedButton: {
     backgroundColor: "#bf4f74",
     color: "white",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
 
   // This is also exported but won't use shouldSupportExternalStyling (for comparison)
   internalBox: {
     backgroundColor: "#f0f0f0",
-    padding: "16px",
+    padding: 16,
   },
 });

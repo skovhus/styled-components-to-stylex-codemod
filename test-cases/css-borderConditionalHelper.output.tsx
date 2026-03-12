@@ -47,10 +47,10 @@ export const App = () => (
 
 const styles = stylex.create({
   simpleBox: {
-    padding: "8px",
+    padding: 8,
     borderStyle: "none",
-    width: "60px",
-    height: "30px",
+    width: 60,
+    height: 30,
   },
   simpleBoxBordered: {
     borderWidth: pixelVars.thin,
@@ -58,10 +58,10 @@ const styles = stylex.create({
     borderColor: "blue",
   },
   enumBox: {
-    padding: "8px",
+    padding: 8,
     borderStyle: "none",
-    width: "60px",
-    height: "30px",
+    width: 60,
+    height: 30,
   },
   enumBoxPositionNotFree: {
     borderWidth: pixelVars.thin,
@@ -70,12 +70,12 @@ const styles = stylex.create({
   },
   enumBoxPositionNotTop: {
     borderTopWidth: 0,
-    borderBottomLeftRadius: "6px",
-    borderBottomRightRadius: "6px",
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
   },
   enumBoxPositionTop: {
     borderBottomWidth: 0,
-    borderTopLeftRadius: "6px",
-    borderTopRightRadius: "6px",
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
   },
 });

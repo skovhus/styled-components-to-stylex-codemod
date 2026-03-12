@@ -38,15 +38,15 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    padding: "8px",
+    padding: 8,
     backgroundColor: "paleturquoise",
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "teal",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    margin: "8px",
+    margin: 8,
   },
   boxWidth: (props) => ({
     width: `${props.size ?? 100}px`,

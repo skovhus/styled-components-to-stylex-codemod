@@ -24,9 +24,9 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    height: "1px",
+    height: 1,
     backgroundColor: "#e0e0e0",
-    marginBlock: "16px",
+    marginBlock: 16,
     marginInline: 0,
   },
   dividerBackgroundColor: (backgroundColor: string) => ({

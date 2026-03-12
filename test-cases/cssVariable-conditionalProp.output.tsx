@@ -50,7 +50,7 @@ const styles = stylex.create({
   container: {
     backgroundColor: "coral",
     width: "calc(var(--component-width) + 60px)",
-    height: "100px",
+    height: 100,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",

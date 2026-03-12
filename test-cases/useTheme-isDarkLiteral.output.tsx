@@ -18,7 +18,7 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    padding: "16px",
+    padding: 16,
   },
   boxDark: {
     mixBlendMode: "color-burn",

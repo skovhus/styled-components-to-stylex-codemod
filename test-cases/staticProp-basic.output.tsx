@@ -76,14 +76,14 @@ export function App() {
 
 const styles = stylex.create({
   listItem: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
+    paddingBlock: 8,
+    paddingInline: 12,
     display: "flex",
     alignItems: "center",
   },
   baseButton: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "gray",
   },
   extendedButton: {
@@ -91,9 +91,9 @@ const styles = stylex.create({
     color: "white",
   },
   commandMenuTextDivider: {
-    paddingLeft: "20px",
+    paddingLeft: 20,
   },
   commandMenuGroupHeader: {
-    paddingInline: "14px",
+    paddingInline: 14,
   },
 });

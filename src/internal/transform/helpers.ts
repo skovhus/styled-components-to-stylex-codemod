@@ -199,6 +199,13 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
       return raw.includes("!important") ? raw : `${raw} !important`;
     }
 
+    // CSS custom properties must stay as strings: downstream var-rewrite
+    // logic (`localVarValues`, `rewriteCssVarsInString`, `dropDefinition`)
+    // relies on `typeof value === "string"`.
+    if (propName?.startsWith("--")) {
+      return raw;
+    }
+
     // Try to return number if purely numeric and no unit.
     if (/^-?\d*\.?\d+$/.test(raw)) {
       if (propName === "flex") {
@@ -206,6 +213,13 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
       }
       return Number(raw);
     }
+
+    // StyleX defaults to pixels for length properties; convert "26px" → 26.
+    const pxMatch = /^(-?\d*\.?\d+)px$/.exec(raw);
+    if (pxMatch) {
+      return Number(pxMatch[1]);
+    }
+
     return raw;
   }
   // interpolated values are handled earlier for now

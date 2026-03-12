@@ -45,14 +45,14 @@ export const App = () => (
 const styles = stylex.create({
   gradientBox: {
     backgroundImage: "linear-gradient(180deg, #bf4f74, #3498db)",
-    padding: "24px",
+    padding: 24,
   },
   gradientBoxDirectionHorizontal: {
     backgroundImage: "linear-gradient(90deg, #bf4f74, #3498db)",
   },
   tabItem: {
-    paddingBlock: "12px",
-    paddingInline: "16px",
+    paddingBlock: 12,
+    paddingInline: 16,
     cursor: "pointer",
   },
   tabItemNotActive: {

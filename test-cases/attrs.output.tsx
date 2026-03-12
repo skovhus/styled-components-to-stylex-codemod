@@ -197,8 +197,8 @@ export const App = () => (
 
 const styles = stylex.create({
   input: {
-    borderRadius: "3px",
-    borderWidth: "1px",
+    borderRadius: 3,
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#bf4f74",
     display: "block",
@@ -214,8 +214,8 @@ const styles = stylex.create({
     padding,
   }),
   textInput: {
-    height: "32px",
-    padding: "8px",
+    height: 32,
+    padding: 8,
     backgroundColor: "white",
   },
   background: {

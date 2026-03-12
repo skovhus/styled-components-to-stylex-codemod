@@ -18,16 +18,16 @@ export function App() {
 const styles = stylex.create({
   // Pattern 1: styled("tagName") - string tag name
   input: {
-    height: "32px",
-    padding: "8px",
+    height: 32,
+    padding: 8,
     backgroundColor: "white",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
   },
   // Pattern 2: styled(Component) - imported component (e.g., from react-spring)
   animatedBox: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "blue",
     color: "white",
     borderWidth: "1px",

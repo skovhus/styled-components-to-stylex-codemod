@@ -76,12 +76,12 @@ const styles = stylex.create({
   conditionalButton: {
     backgroundColor: isPrimary ? "#BF4F74" : "#ccc",
     color: isPrimary ? "white" : "#333",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   themedCard: {
     backgroundColor: `${theme.color.primary}`,
@@ -89,12 +89,12 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: `${theme.color.secondary}`,
     padding: `${theme.spacing.md}`,
-    borderRadius: "8px",
+    borderRadius: 8,
   },
   dynamicBoxBase: {
-    padding: "16px",
+    padding: 16,
     color: "white",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   dynamicBoxPrimary: {
     backgroundColor: "#BF4F74",

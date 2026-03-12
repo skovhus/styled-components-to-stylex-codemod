@@ -13,19 +13,19 @@ export const App = () => (
 
 const styles = stylex.create({
   actionButton: {
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: "#bf4f74",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
-    borderRadius: "4px",
+    borderRadius: 4,
   },
   trigger: {
     display: "flex",
-    gap: "8px",
-    padding: "16px",
+    gap: 8,
+    padding: 16,
     backgroundColor: "#f0f0f0",
   },
   actionButtonInTrigger: {

@@ -25,17 +25,17 @@ export const App = () => (
 
 const styles = stylex.create({
   card: {
-    padding: "16px",
+    padding: 16,
     backgroundColor: "white",
   },
   cardCompact: {
     padding: {
-      default: "8px",
-      "@media (min-width: 768px)": "12px",
+      default: 8,
+      "@media (min-width: 768px)": 12,
     },
     fontSize: {
-      default: "12px",
-      "@media (min-width: 768px)": "14px",
+      default: 12,
+      "@media (min-width: 768px)": 14,
     },
   },
 });

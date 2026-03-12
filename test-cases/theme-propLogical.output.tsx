@@ -28,8 +28,8 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    height: "100px",
-    width: "100px",
+    height: 100,
+    width: 100,
     backgroundColor: "red",
   },
   boxDark: {
