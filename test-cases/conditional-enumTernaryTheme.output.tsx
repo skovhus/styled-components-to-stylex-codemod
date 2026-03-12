@@ -18,23 +18,7 @@ type BarProps = React.PropsWithChildren<{
 function Bar(props: BarProps) {
   const { children, type } = props;
 
-  return (
-    <div
-      sx={[
-        styles.bar,
-        !(
-          type === "success" ||
-          type === "error" ||
-          type === "warning" ||
-          type === "primary" ||
-          type === "gradient"
-        ) && styles.barNotTypeSuccessOrTypeErrorOrTypeWarningOrTypePrimaryOrTypeGradient,
-        type != null && typeVariants[type],
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.bar, type != null && typeVariants[type]]}>{children}</div>;
 }
 
 export const App = () => (
@@ -53,8 +37,6 @@ const styles = stylex.create({
     height: 40,
     paddingBlock: 8,
     paddingInline: 16,
-  },
-  barNotTypeSuccessOrTypeErrorOrTypeWarningOrTypePrimaryOrTypeGradient: {
     backgroundColor: $colors.labelBase,
   },
 });
