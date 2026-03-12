@@ -94,6 +94,20 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Element props only test: consumer passes onClick but no spread
+    // Tests P1 fix: ?? vs || operator - elementProps should enable intrinsic props
+    if (ctx.filePath.includes("naming-elementPropsOnly")) {
+      return {
+        styles: true,
+        as: false,
+        ref: false,
+        className: false,
+        style: false,
+        elementProps: true,
+        spreadProps: false,
+      };
+    }
+
     return { styles: false, as: false, ref: false };
   },
 

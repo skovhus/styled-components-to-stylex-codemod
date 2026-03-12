@@ -589,6 +589,17 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import { Aliased as MyAliased } from "../components/Aliased";\nexport const App = () => <MyAliased className="extra">Text</MyAliased>;',
     );
 
+    // Button component for testing boolean shorthand attrs
+    writeFileSync(
+      path.join(componentsDir, "Button.tsx"),
+      'import styled from "styled-components";\nexport const Button = styled.button`padding: 8px;`;',
+    );
+    // Consumer with boolean shorthand attribute (no `=` sign) - tests P2 fix
+    writeFileSync(
+      path.join(consumersDir, "boolean-shorthand.tsx"),
+      'import { Button } from "../components/Button";\nexport const App = () => <Button className="btn" disabled>Click</Button>;',
+    );
+
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
@@ -667,6 +678,16 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     });
   });
 
+  it("detects boolean shorthand attribute as element prop (P2 fix)", () => {
+    // <Button className="btn" disabled> — `disabled` has no `=`, should still count as elementProps
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Button.tsx:Button"]).toMatchObject({
+      className: true,
+      elementProps: true,
+      styles: true,
+    });
+  });
+
   it("full snapshot", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
@@ -680,6 +701,15 @@ describe("runPrepass createExternalInterface — className/style detection", () 
           "styles": true,
         },
         "components/Box.tsx:Box": {
+          "as": false,
+          "className": true,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": true,
+        },
+        "components/Button.tsx:Button": {
           "as": false,
           "className": true,
           "elementProps": true,
@@ -963,7 +993,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/cssHelper-dynamicPropertyNamePropStatic.input.tsx:Strip": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -981,7 +1011,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/example-actionMenuDivider-exported.input.tsx:TextDividerContainer": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1188,7 +1218,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": false,
