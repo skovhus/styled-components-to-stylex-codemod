@@ -8,6 +8,15 @@ import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-util
 
 type StylexPropDecl = { prop: string; value: CssValue };
 
+type DirectionalProp = "padding" | "margin" | "scrollMargin" | "scrollPadding";
+
+const DIRECTIONAL_SHORTHAND_MAP: Record<string, DirectionalProp> = {
+  padding: "padding",
+  margin: "margin",
+  "scroll-margin": "scrollMargin",
+  "scroll-padding": "scrollPadding",
+};
+
 /**
  * For a `background` CSS property, determine the appropriate StyleX property name.
  * Returns `backgroundImage` for gradients/images, `backgroundColor` for colors.
@@ -106,9 +115,10 @@ export function parseBorderShorthandParts(valueRaw: string): {
 export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): StylexPropDecl[] {
   const prop = decl.property.trim();
 
-  if ((prop === "padding" || prop === "margin") && decl.value.kind === "static") {
+  const directionalProp = DIRECTIONAL_SHORTHAND_MAP[prop];
+  if (directionalProp && decl.value.kind === "static") {
     const entries = splitDirectionalProperty({
-      prop,
+      prop: directionalProp,
       rawValue: decl.valueRaw.trim(),
       important: decl.important,
     });
@@ -117,14 +127,6 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
         prop: entry.prop,
         value: { kind: "static", value: entry.value },
       }));
-    }
-  }
-
-  if ((prop === "scroll-margin" || prop === "scroll-padding") && decl.value.kind === "static") {
-    const camelProp = prop === "scroll-margin" ? "scrollMargin" : "scrollPadding";
-    const result = expandScrollDirectionalProperty(camelProp, decl);
-    if (result) {
-      return result;
     }
   }
 
@@ -277,33 +279,6 @@ function borderShorthandToStylex(valueRaw: string, direction: string): StylexPro
     out.push({ prop: colorProp, value: { kind: "static", value: classified.color } });
   }
   return out.length > 0 ? out : [{ prop: baseProp, value: { kind: "static", value: v } }];
-}
-
-// --- Non-exported helpers ---
-
-function expandScrollDirectionalProperty(
-  camelProp: "scrollMargin" | "scrollPadding",
-  decl: CssDeclarationIR,
-): StylexPropDecl[] | null {
-  const entries = splitDirectionalProperty({
-    prop: camelProp,
-    rawValue: decl.valueRaw.trim(),
-    important: decl.important,
-    alwaysExpand: true,
-  });
-  if (entries.length === 0) {
-    return null;
-  }
-  const order = new Map(
-    ["Left", "Top", "Right", "Bottom"].map((dir, i) => [`${camelProp}${dir}`, i]),
-  );
-  return entries
-    .slice()
-    .sort((a, b) => (order.get(a.prop) ?? 99) - (order.get(b.prop) ?? 99))
-    .map((entry) => ({
-      prop: entry.prop,
-      value: { kind: "static" as const, value: entry.value },
-    }));
 }
 
 /**
