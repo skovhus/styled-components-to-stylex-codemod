@@ -4915,3 +4915,36 @@ export const App = () => <Box $animate>Multi</Box>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("binary expression with bare props param usage", () => {
+  it("should bail when the arrow function body passes props as a bare argument", () => {
+    const source = `
+import styled from "styled-components";
+
+const offset = (props: { $depth: number }) => props.$depth * 4;
+
+const Box = styled.div<{ $depth: number }>\`
+  padding-left: \${(props) => props.$depth * 16 + offset(props)}px;
+\`;
+
+export const App = () => <Box $depth={2}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should transform when all prop references are member accesses", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $depth: number }>\`
+  padding-left: \${(props) => props.$depth * 16 + 4}px;
+\`;
+
+export const App = () => <Box $depth={2}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("props.depth * 16 + 4");
+  });
+});

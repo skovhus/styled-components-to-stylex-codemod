@@ -794,6 +794,45 @@ function collectPropsFromExprTree(
   };
 }
 
+/**
+ * Checks whether the param name is used as a bare identifier anywhere in the
+ * expression tree (i.e., not as the `object` of a MemberExpression like
+ * `props.X`). This detects patterns like `helper(props)` where the full props
+ * object is passed, which would break `emitStyleFunctionFromPropsObject` since
+ * that handler only forwards a subset of collected prop names.
+ */
+function hasBareParamUsage(root: unknown, paramName: string): boolean {
+  const visit = (node: unknown, skipIdent: boolean): boolean => {
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    if (Array.isArray(node)) {
+      return node.some((child) => visit(child, false));
+    }
+    const n = node as Record<string, unknown> & {
+      type?: string;
+      name?: string;
+      computed?: boolean;
+    };
+    if (n.type === "Identifier" && n.name === paramName && !skipIdent) {
+      return true;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      const isMember = n.type === "MemberExpression" || n.type === "OptionalMemberExpression";
+      const childSkip = isMember && (key === "object" || (key === "property" && !n.computed));
+      if (visit(child, childSkip)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  return visit(root, false);
+}
+
 function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerResult | null {
   if (!node.css.property) {
     return null;
@@ -1012,6 +1051,9 @@ function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | nul
     return null;
   }
   if (hasThemeAccessInArrowFn(expr)) {
+    return null;
+  }
+  if (hasBareParamUsage(body, paramName)) {
     return null;
   }
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
