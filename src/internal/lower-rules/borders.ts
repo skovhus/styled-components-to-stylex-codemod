@@ -14,7 +14,7 @@ import {
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import { extractStaticParts } from "./interpolations.js";
-import { toSuffixFromProp } from "../transform/helpers.js";
+import { styleKeyWithSuffix } from "../transform/helpers.js";
 import { looksLikeLength } from "../utilities/string-utils.js";
 import type { LowerRulesState } from "./state.js";
 
@@ -341,14 +341,14 @@ export function tryHandleInterpolatedBorder(
             ...variantBuckets.get(notWhen),
             ...altParsed,
           });
-          variantStyleKeys[notWhen] ??= `${decl.styleKey}${toSuffixFromProp(notWhen)}`;
+          variantStyleKeys[notWhen] ??= styleKeyWithSuffix(decl.styleKey, notWhen);
         }
         if (consParsed) {
           variantBuckets.set(when, {
             ...variantBuckets.get(when),
             ...consParsed,
           });
-          variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
         }
       } else {
         // Original behavior: default to alternate, conditionally apply consequent
@@ -360,7 +360,7 @@ export function tryHandleInterpolatedBorder(
             ...variantBuckets.get(when),
             [colorProp]: consParsed[colorProp],
           });
-          variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
         }
       }
       return true;

@@ -24,7 +24,7 @@ import {
   getArrowFnParamBindings,
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
@@ -1425,10 +1425,10 @@ function handlePseudoAlias(
 
   // Build N style objects (one per pseudo value)
   const styleKeys: string[] = [];
-  const styleKeySuffix = guard ? toSuffixFromProp(guard.when) : "";
+  const guardBase = guard ? styleKeyWithSuffix(decl.styleKey, guard.when) : decl.styleKey;
   for (const pseudoName of result.values) {
     const pseudo = `:${pseudoName}`;
-    const styleKey = `${decl.styleKey}${styleKeySuffix}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
+    const styleKey = `${guardBase}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`;
     styleKeys.push(styleKey);
 
     const styleObjForPseudo: Record<string, unknown> = {};
@@ -1547,8 +1547,8 @@ function handlePseudoExpand(
     }
   } else {
     // Guarded: create separate style object for conditional application
-    const guardSuffix = toSuffixFromProp(guard.when);
-    const styleKey = `${decl.styleKey}${guardSuffix}${capitalize(kebabToCamelCase(importedName))}`;
+    const guardBase = styleKeyWithSuffix(decl.styleKey, guard.when);
+    const styleKey = `${guardBase}${capitalize(kebabToCamelCase(importedName))}`;
     const mergedStyleObj: Record<string, unknown> = {};
     for (const prop of Object.keys(flatBucket)) {
       const value = flatBucket[prop];
@@ -2020,7 +2020,7 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
   if (attrsInfo.attrsDynamicStyles?.length) {
     const { j } = state;
     for (const entry of attrsInfo.attrsDynamicStyles) {
-      const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.cssProp)}`;
+      const fnKey = styleKeyWithSuffix(decl.styleKey, entry.cssProp);
       const paramName = cssPropertyToIdentifier(entry.cssProp);
       const param = j.identifier(paramName);
       (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());

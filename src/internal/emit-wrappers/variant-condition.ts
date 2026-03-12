@@ -313,6 +313,34 @@ export function buildExtraStylexPropsExprs(
   return result;
 }
 
+/**
+ * Finds the next unconsumed entry in sorted variant entries (as `[when, key]` tuples)
+ * that has a complementary "when" condition to the entry at `index`.
+ * Used by both intrinsic-simple and component emitters for ternary merging.
+ */
+export function findComplementaryVariantEntry(
+  entries: ReadonlyArray<readonly [string, string]>,
+  index: number,
+  consumed: ReadonlySet<number>,
+): number | null {
+  const when = entries[index]?.[0];
+  if (!when) {
+    return null;
+  }
+  let next = index + 1;
+  while (next < entries.length && consumed.has(next)) {
+    next++;
+  }
+  if (next >= entries.length) {
+    return null;
+  }
+  const otherWhen = entries[next]?.[0];
+  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
+    return next;
+  }
+  return null;
+}
+
 // --- Non-exported helpers ---
 
 /**
@@ -357,10 +385,11 @@ function areComparisonInverses(a: string, b: string): string | null {
   const bNorm = normalizeWhenForComparison(b);
   const eqOp = "===";
   const neqOp = "!==";
-  const aHasEq = aNorm.includes(eqOp);
+  // Check !== before === since !== contains === as a substring
   const aHasNeq = aNorm.includes(neqOp);
-  const bHasEq = bNorm.includes(eqOp);
+  const aHasEq = !aHasNeq && aNorm.includes(eqOp);
   const bHasNeq = bNorm.includes(neqOp);
+  const bHasEq = !bHasNeq && bNorm.includes(eqOp);
 
   // One must have === and the other !==
   if (aHasEq && !aHasNeq && bHasNeq && !bHasEq) {

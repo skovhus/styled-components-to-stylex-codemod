@@ -3,7 +3,12 @@
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { cssValueToJs, literalToAst, toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  literalToAst,
+  toStyleKey,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
 import {
@@ -385,14 +390,16 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
           });
 
           variantBuckets.set(disabledPrimaryWhen, mkBucket(primaryHover));
-          variantStyleKeys[disabledPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+          variantStyleKeys[disabledPrimaryWhen] ??= styleKeyWithSuffix(
+            decl.styleKey,
             disabledPrimaryWhen,
-          )}`;
+          );
 
           variantBuckets.set(disabledNotPrimaryWhen, mkBucket(baseHover));
-          variantStyleKeys[disabledNotPrimaryWhen] ??= `${decl.styleKey}${toSuffixFromProp(
+          variantStyleKeys[disabledNotPrimaryWhen] ??= styleKeyWithSuffix(
+            decl.styleKey,
             disabledNotPrimaryWhen,
-          )}`;
+          );
         }
       }
     }
@@ -819,7 +826,7 @@ function tryResolveConditionalHelperCallInPseudo(
   // Apply as a variant bucket
   const { variantBuckets, variantStyleKeys, decl } = ctx;
   variantBuckets.set(when, { ...variantBuckets.get(when), ...pseudoWrappedStyle });
-  variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+  variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
 
   // Drop the transient prop from forwarding
   ensureShouldForwardPropDrop(decl, testProp);

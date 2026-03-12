@@ -60,6 +60,49 @@ export function buildThemeStyleKeys(
 }
 
 /**
+ * Combines a base style key with a PascalCase suffix, deduplicating
+ * PascalCase words that overlap at the boundary.
+ *
+ * @example
+ * - `styleKeyWithSuffix("textBorder", "borderWidth")` → "textBorderWidth" (avoids "textBorderBorderWidth")
+ * - `styleKeyWithSuffix("fooBar", "backgroundColor")` → "fooBarBackgroundColor" (no overlap)
+ * - `styleKeyWithSuffix("textColor", "color")` → "textColorColor" (kept: full dedup would collide with base key)
+ */
+export function styleKeyWithSuffix(baseKey: string, propName: string): string {
+  const suffix = toSuffixFromProp(propName);
+  if (!suffix) {
+    return baseKey;
+  }
+  const baseWords = baseKey.split(/(?=[A-Z])/).filter(Boolean);
+  const suffixWords = suffix.split(/(?=[A-Z])/).filter(Boolean);
+
+  // Find the longest overlap between tail of base and head of suffix
+  for (let overlap = Math.min(baseWords.length, suffixWords.length); overlap > 0; overlap--) {
+    let matches = true;
+    for (let i = 0; i < overlap; i++) {
+      if (
+        baseWords[baseWords.length - overlap + i]!.toLowerCase() !== suffixWords[i]!.toLowerCase()
+      ) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      const remaining = suffixWords.slice(overlap);
+      // If the entire suffix would be consumed (remaining is empty), the deduped
+      // key equals the base key — which would collide with the static style entry.
+      // Keep the original concatenation in that case.
+      if (remaining.length === 0) {
+        return baseKey + suffix;
+      }
+      return baseKey + remaining.join("");
+    }
+  }
+
+  return baseKey + suffix;
+}
+
+/**
  * Converts a prop/condition string to a PascalCase suffix for style keys.
  *
  * @example

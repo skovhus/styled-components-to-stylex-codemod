@@ -14,7 +14,7 @@ import {
   setIdentifierTypeAnnotation,
 } from "../utilities/jscodeshift-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
-import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
 
@@ -204,7 +204,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
 
     // Default value into base style, plus a style function applied when prop is provided.
     for (const out of cssDeclarationToStylexDeclarations(d)) {
-      const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+      const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
       // Wrap fallback with static parts if present (e.g., 0 -> "0ms")
       const baseValue = hasStaticParts ? `${prefix}${fallback}${suffix}` : fallback;
       styleObj[out.prop] = baseValue;
@@ -364,7 +364,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     const outs = cssDeclarationToStylexDeclarations(d);
     for (const out of outs) {
       (styleObj as any)[out.prop] = baseTheme as any;
-      const baseFnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+      const baseFnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
       let fnKey = baseFnKey;
       if (styleFnDecls.has(fnKey)) {
         let idx = 1;
@@ -550,7 +550,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         ...variantBuckets.get(c.when),
         ...styleFromValue(c.value),
       });
-      variantStyleKeys[c.when] ??= `${decl.styleKey}${toSuffixFromProp(c.when)}`;
+      variantStyleKeys[c.when] ??= styleKeyWithSuffix(decl.styleKey, c.when);
     }
 
     return true;
@@ -673,8 +673,8 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       const firstPseudo = opts.pseudos?.[0];
       const fnKey =
         opts.pseudos?.length && firstPseudo
-          ? `${decl.styleKey}${toSuffixFromProp(out.prop)}${pseudoSuffix(firstPseudo)}`
-          : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+          ? `${styleKeyWithSuffix(decl.styleKey, out.prop)}${pseudoSuffix(firstPseudo)}`
+          : styleKeyWithSuffix(decl.styleKey, out.prop);
       styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
       if (!styleFnDecls.has(fnKey)) {

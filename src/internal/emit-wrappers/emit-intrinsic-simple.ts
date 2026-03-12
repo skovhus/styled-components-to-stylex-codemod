@@ -27,6 +27,7 @@ import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import {
   areEquivalentWhen,
+  findComplementaryVariantEntry,
   getPositiveWhen,
   makeConditionalStyleExpr,
   parseVariantWhenToAst,
@@ -1337,33 +1338,6 @@ function maybeApplySafeTruthyDefaultFromExtraStyleConditionals(args: {
       expr.test = j.identifier(propName);
     }
   }
-}
-
-/**
- * Finds the next unconsumed entry in sorted variant entries that has a
- * complementary "when" condition to the entry at `index`.
- */
-function findComplementaryVariantEntry(
-  entries: ReadonlyArray<readonly [string, string]>,
-  index: number,
-  consumed: ReadonlySet<number>,
-): number | null {
-  const when = entries[index]?.[0];
-  if (!when) {
-    return null;
-  }
-  let next = index + 1;
-  while (next < entries.length && consumed.has(next)) {
-    next++;
-  }
-  if (next >= entries.length) {
-    return null;
-  }
-  const otherWhen = entries[next]?.[0];
-  if (otherWhen && getPositiveWhen(when, otherWhen) !== null) {
-    return next;
-  }
-  return null;
 }
 
 /**

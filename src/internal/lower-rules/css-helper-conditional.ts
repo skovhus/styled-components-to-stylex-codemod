@@ -31,7 +31,11 @@ import {
   staticValueToLiteral,
   type ASTNodeRecord,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, normalizeCssContentValue, toSuffixFromProp } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  normalizeCssContentValue,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import {
@@ -596,7 +600,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             return false;
           }
           for (const dyn of dynamicProps) {
-            const fnKey = `${decl.styleKey}${toSuffixFromProp(dyn.stylexProp)}`;
+            const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
             if (!styleFnDecls.has(fnKey)) {
               const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
               const param = j.identifier(dynParamName);
@@ -686,7 +690,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
             // Create style functions for dynamic entries
             for (const entry of dynamicEntries) {
-              const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+              const fnKey = styleKeyWithSuffix(decl.styleKey, entry.stylexProp);
               if (!styleFnDecls.has(fnKey)) {
                 const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
                 const param = j.identifier(entryParamName);
@@ -775,7 +779,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       for (const entry of entries) {
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(entry.stylexProp)}`;
+        const fnKey = styleKeyWithSuffix(decl.styleKey, entry.stylexProp);
         if (!styleFnDecls.has(fnKey)) {
           const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
           const param = j.identifier(entryParamName);
