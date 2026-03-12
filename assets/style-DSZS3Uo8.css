@@ -115,11 +115,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-columnGap {
   syntax: "*";
   inherits: false
@@ -131,6 +126,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
@@ -240,13 +240,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x2t3rfm-B {
+@keyframes xekv6nw-B {
   0% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: .55;
+    opacity: 0;
   }
 
   100% {
@@ -254,9 +250,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
+@keyframes x2t3rfm-B {
   0% {
-    opacity: 0;
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .55;
   }
 
   100% {
@@ -393,6 +393,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   --x1f1yon1: 1000;
   --xdughlu: 900;
   --x1ofp3te: 800;
+}
+
+:root, .xsmfk3e {
+  --x1ilkneg: 6px;
+  --xpax1r4: 12px;
 }
 
 :root, .x1hn0dvb {
@@ -1072,6 +1077,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1vvogim:not(#\#):not(#\#) {
   padding-block: 8px;
+}
+
+.x1io4imo:not(#\#):not(#\#) {
+  padding-block: var(--x1ilkneg);
 }
 
 .x1ldls28:not(#\#):not(#\#) {
@@ -4034,6 +4043,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x17apdc0:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-right: var(--scrollbar-width, 12px);
+}
+
+.x1bnciah:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-right: var(--xpax1r4);
 }
 
 .xexx8yu:not(#\#):not(#\#):not(#\#):not(#\#) {
