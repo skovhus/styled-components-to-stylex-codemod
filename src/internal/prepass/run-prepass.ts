@@ -161,6 +161,10 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, Set<string>>();
+  const classNameUsages = new Map<string, Set<string>>();
+  const styleUsages = new Map<string, Set<string>>();
+  const elementPropUsages = new Map<string, Set<string>>();
+  const spreadPropUsages = new Map<string, Set<string>>();
   const styledWrapperUsages: { file: string; localStyledName: string; wrappedName: string }[] = [];
 
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
@@ -313,11 +317,27 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       // Use targeted rg to find files containing className/style props (fast, small pattern)
       const rgHits = rgClassNameStyleFilter(uniqueAllFiles);
 
+      const scanAndRecord = (filePath: string, source: string) => {
+        for (const result of scanConsumerProps(source, allStyledNames)) {
+          addToSetMap(classNameStyleUsages, result.name, filePath);
+          if (result.className) {
+            addToSetMap(classNameUsages, result.name, filePath);
+          }
+          if (result.style) {
+            addToSetMap(styleUsages, result.name, filePath);
+          }
+          if (result.elementProps) {
+            addToSetMap(elementPropUsages, result.name, filePath);
+          }
+          if (result.spreadProps) {
+            addToSetMap(spreadPropUsages, result.name, filePath);
+          }
+        }
+      };
+
       // Scan files already cached from Phase 1 first (no I/O cost)
       for (const [filePath, source] of fileContents) {
-        for (const name of scanClassNameStyleUsages(source, allStyledNames)) {
-          addToSetMap(classNameStyleUsages, name, filePath);
-        }
+        scanAndRecord(filePath, source);
       }
 
       // Then scan uncached files that matched the rg pre-filter.
@@ -333,9 +353,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         if (!source) {
           continue;
         }
-        for (const name of scanClassNameStyleUsages(source, allStyledNames)) {
-          addToSetMap(classNameStyleUsages, name, filePath);
-        }
+        scanAndRecord(filePath, source);
       }
     }
   }
@@ -350,7 +368,15 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       const key = `${toRealPath(filePath)}:${name}`;
       let entry = consumerAnalysis!.get(key);
       if (!entry) {
-        entry = { styles: false, as: false, ref: false };
+        entry = {
+          styles: false,
+          as: false,
+          ref: false,
+          className: false,
+          style: false,
+          elementProps: false,
+          spreadProps: false,
+        };
         consumerAnalysis!.set(key, entry);
       }
       return entry;
@@ -396,6 +422,10 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     matchUsagesToDefinitions(asUsages, "as");
     matchUsagesToDefinitions(refUsages, "ref");
     matchUsagesToDefinitions(classNameStyleUsages, "styles");
+    matchUsagesToDefinitions(classNameUsages, "className");
+    matchUsagesToDefinitions(styleUsages, "style");
+    matchUsagesToDefinitions(elementPropUsages, "elementProps");
+    matchUsagesToDefinitions(spreadPropUsages, "spreadProps");
 
     // re-styled: resolve imports to find definition files
     {
@@ -431,7 +461,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           continue;
         }
 
-        ensure(defFile, exportedName).styles = true;
+        const entry = ensure(defFile, exportedName);
+        entry.styles = true;
+        // Re-styling: conservative fallback — can't see all consumers of the wrapper
+        entry.elementProps = true;
+        entry.spreadProps = true;
       }
     }
   }
@@ -596,15 +630,38 @@ function buildLocalToImportedMap(source: string): Map<string, string> {
   return map;
 }
 
+/** Props that don't indicate element-specific usage (non-element props). */
+const KNOWN_NON_ELEMENT_PROPS = new Set([
+  "className",
+  "style",
+  "as",
+  "ref",
+  "forwardedAs",
+  "key",
+  "children",
+]);
+
+interface ConsumerPropResult {
+  name: string;
+  className: boolean;
+  style: boolean;
+  elementProps: boolean;
+  spreadProps: boolean;
+}
+
 /**
- * Scan source for JSX usage of specific components with className or style props.
+ * Scan source for JSX usage of specific components with className, style,
+ * element-specific props, or JSX spread.
  * Uses a two-step approach: first quick-checks for className/style keywords,
  * then scans JSX open tags to match component names — avoids building a huge
  * alternation regex when there are hundreds of component names.
  * Handles aliased imports (e.g., `import { Alert as MyAlert }`) by resolving
  * local tag names back to their original exported names.
  */
-function scanClassNameStyleUsages(source: string, componentNames: ReadonlySet<string>): string[] {
+function scanConsumerProps(
+  source: string,
+  componentNames: ReadonlySet<string>,
+): ConsumerPropResult[] {
   if (!CLASSNAME_STYLE_QUICK_RE.test(source)) {
     return [];
   }
@@ -612,28 +669,75 @@ function scanClassNameStyleUsages(source: string, componentNames: ReadonlySet<st
   // Build alias map lazily — only if needed
   let aliasMap: Map<string, string> | undefined;
 
-  // Match JSX open tags: `<ComponentName ... className=` or `<ComponentName ... style=`
-  // We use a generic tag regex and check the name against the set.
-  const matches: string[] = [];
-  const tagRe = /<([A-Z][A-Za-z0-9]*)\b[^<>]*\b(?:className|style)\s*[={]/gs;
+  // Accumulate per-component results (merge across multiple JSX tags)
+  const resultMap = new Map<string, ConsumerPropResult>();
+
+  // Match JSX open tags: `<ComponentName ...>` or `<ComponentName ... />`
+  const tagRe = /<([A-Z][A-Za-z0-9]*)\b([^<>]*?)(?:\/>|>)/gs;
   for (const m of source.matchAll(tagRe)) {
     const tagName = m[1];
+    const attrText = m[2] ?? "";
     if (!tagName) {
       continue;
     }
-    // Direct match: tag name is the original exported name
+
+    // Resolve to original component name
+    let resolvedName: string | undefined;
     if (componentNames.has(tagName)) {
-      matches.push(tagName);
+      resolvedName = tagName;
+    } else {
+      aliasMap ??= buildLocalToImportedMap(source);
+      const originalName = aliasMap.get(tagName);
+      if (originalName && componentNames.has(originalName)) {
+        resolvedName = originalName;
+      }
+    }
+    if (!resolvedName) {
       continue;
     }
-    // Alias match: tag name is a local alias — resolve to original imported name
-    aliasMap ??= buildLocalToImportedMap(source);
-    const originalName = aliasMap.get(tagName);
-    if (originalName && componentNames.has(originalName)) {
-      matches.push(originalName);
+
+    // Skip tags that don't mention className or style at all
+    if (!/\b(?:className|style)\s*[={]/.test(attrText) && !/\{\.\.\./.test(attrText)) {
+      continue;
+    }
+
+    let entry = resultMap.get(resolvedName);
+    if (!entry) {
+      entry = {
+        name: resolvedName,
+        className: false,
+        style: false,
+        elementProps: false,
+        spreadProps: false,
+      };
+      resultMap.set(resolvedName, entry);
+    }
+
+    if (/\bclassName\s*[={]/.test(attrText)) {
+      entry.className = true;
+    }
+    if (/\bstyle\s*[={]/.test(attrText)) {
+      entry.style = true;
+    }
+    if (/\{\.\.\./.test(attrText)) {
+      entry.spreadProps = true;
+    }
+
+    // Check for element-specific props (lowercase props not in known set)
+    // Matches:
+    // 1. prop= or prop{ - value prop
+    // 2. prop followed by whitespace and another prop - boolean shorthand
+    // 3. prop at end of attributes - boolean shorthand
+    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
+    for (const pm of attrText.matchAll(propRe)) {
+      const propName = pm[1]!;
+      if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
+        entry.elementProps = true;
+        break;
+      }
     }
   }
-  return matches;
+  return [...resultMap.values()];
 }
 
 /**

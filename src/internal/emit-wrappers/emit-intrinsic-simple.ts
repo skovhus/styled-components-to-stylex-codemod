@@ -105,7 +105,21 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const shouldUseIntrinsicProps = (() => {
-        if (supportsExternalStyles) {
+        // Use intrinsic props when consumers use spread or element props (explicit true),
+        // OR when both flags are undefined and supportsExternalStyles is true (legacy fallback).
+        // When flags are explicitly false, respect the narrower type.
+        if (
+          d.consumerUsesSpread === true ||
+          d.consumerUsesElementProps === true ||
+          (d.consumerUsesSpread === undefined &&
+            d.consumerUsesElementProps === undefined &&
+            supportsExternalStyles)
+        ) {
+          return true;
+        }
+        // When className/style/sx props are allowed, include them in the type even if
+        // elementProps/spreadProps are explicitly false (consumer only passes className/style).
+        if (allowClassNameProp || allowStyleProp || allowSxProp) {
           return true;
         }
         const used = emitter.getUsedAttrs(d.localName);
@@ -559,7 +573,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         !!d.usedAsValue ||
         usedAttrsForType.has("*") ||
         // External callers need full HTML props (id, onClick, aria-*, etc.)
-        supportsExternalStyles ||
+        // Use spread/element props when explicitly true, or fall back to supportsExternalStyles
+        // only when both flags are undefined.
+        d.consumerUsesSpread === true ||
+        d.consumerUsesElementProps === true ||
+        (d.consumerUsesSpread === undefined &&
+          d.consumerUsesElementProps === undefined &&
+          supportsExternalStyles) ||
         // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
         // include element props in type so those props are available
         hasElementPropsInDefaultAttrs(d) ||

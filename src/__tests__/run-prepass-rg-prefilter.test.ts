@@ -91,6 +91,10 @@ describe("runPrepass rg prefilter", () => {
     expect(execSyncMock.mock.calls[0]?.[0]).toContain("--glob '*.mts'");
 
     const key = `${realComponentFile}:Button`;
-    expect(result.consumerAnalysis?.get(key)).toEqual({ styles: true, as: false, ref: false });
+    expect(result.consumerAnalysis?.get(key)).toMatchObject({
+      styles: true,
+      as: false,
+      ref: false,
+    });
   });
 });

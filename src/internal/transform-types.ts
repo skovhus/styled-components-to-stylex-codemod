@@ -323,6 +323,14 @@ export type StyledDecl = {
    * True when the adapter opts-in or ref usage is detected (prepass or in-file).
    */
   supportsRefProp?: boolean;
+  /** Whether cross-file consumers pass className */
+  consumerUsesClassName?: boolean;
+  /** Whether cross-file consumers pass style */
+  consumerUsesStyle?: boolean;
+  /** Whether cross-file consumers pass element-specific props (onClick, aria-*, etc.) */
+  consumerUsesElementProps?: boolean;
+  /** Whether cross-file consumers use JSX spread ({...props}) */
+  consumerUsesSpread?: boolean;
   /**
    * Metadata for declarations whose imported base component was resolved via
    * `adapter.resolveBaseComponent(...)` and inlined to an intrinsic element.
