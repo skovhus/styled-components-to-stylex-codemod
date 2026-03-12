@@ -724,7 +724,11 @@ function scanConsumerProps(
     }
 
     // Check for element-specific props (lowercase props not in known set)
-    const propRe = /\b([a-z][a-zA-Z-]*)\s*[={]/g;
+    // Matches:
+    // 1. prop= or prop{ - value prop
+    // 2. prop followed by whitespace and another prop - boolean shorthand
+    // 3. prop at end of attributes - boolean shorthand
+    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
     for (const pm of attrText.matchAll(propRe)) {
       const propName = pm[1]!;
       if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
