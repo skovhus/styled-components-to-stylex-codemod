@@ -57,6 +57,8 @@ export type EmitIntrinsicHelpers = {
     allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
+    /** Pre-computed keyof expression for the extra type, avoids duplicating the full type in `keyof (...)`. */
+    extraKeyofExpr?: string | null;
   }) => boolean;
   emitSimplePropsType: (localName: string, typeText: string, allowAsProp: boolean) => boolean;
   canUseSimplePropsType: (args: {
@@ -439,6 +441,8 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     allowSxProp?: boolean;
     /** When true, there are no custom user-defined props. Skip generating a named type for polymorphic wrappers. */
     hasNoCustomProps?: boolean;
+    /** Pre-computed keyof expression for the extra type, avoids duplicating the full type in `keyof (...)`. */
+    extraKeyofExpr?: string | null;
   }): boolean => {
     const {
       localName,
@@ -449,6 +453,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       allowStyleProp,
       allowSxProp,
       hasNoCustomProps,
+      extraKeyofExpr,
     } = args;
     if (!allowAsProp) {
       const typeAliasEmitted = emitNamedPropsType(localName, typeText);
@@ -469,6 +474,7 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
       allowStyleProp,
       allowSxProp,
       extra: typeText,
+      extraKeyofExpr: extraKeyofExpr ?? undefined,
     });
     // Try to emit a named props type. If it already exists (user-defined), the inline
     // function parameter will use the intersection pattern instead.

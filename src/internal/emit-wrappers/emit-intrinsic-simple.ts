@@ -767,6 +767,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           allowStyleProp,
           allowSxProp,
           hasNoCustomProps: hasNoCustomProps || explicitIsExistingTypeRef,
+          extraKeyofExpr: emitter.keyofExprForType(d.propsType, typeTextWithForwardedAs),
         });
       } else if (!hasNoCustomProps) {
         typeAliasEmitted = emitSimplePropsType(d.localName, typeTextWithForwardedAs, allowAsProp);
