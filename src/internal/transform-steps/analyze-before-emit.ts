@@ -585,6 +585,44 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   for (const decl of styledDecls) {
     const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
+      // Even if this wrapper has no $-prefixed props in its own styling data,
+      // inherit transient prop renames from the base component so that the emitter
+      // correctly renames the type, destructuring, and JSX call sites.
+      if (decl.base.kind === "component") {
+        const baseIdent = decl.base.ident;
+        const baseDecl = styledDecls.find((d) => d.localName === baseIdent);
+        if (baseDecl?.transientPropRenames && baseDecl.transientPropRenames.size > 0) {
+          decl.transientPropRenames = new Map(baseDecl.transientPropRenames);
+          decl.transientPropRenamesInherited = true;
+          // Note: we intentionally do NOT set transientOmitFromBase here because
+          // the base component's type has already been renamed ($prop → prop).
+          // The Omit+remap approach only works when the base type still has the
+          // $-prefixed prop name. Since it was already renamed, the base type
+          // natively includes the renamed prop — no Omit+remap needed.
+
+          // Rename in the wrapper's own propsType if it has one
+          if (decl.propsType) {
+            walkTypePropNames(decl.propsType, (name, keyNode) => {
+              const renamed = decl.transientPropRenames!.get(name);
+              if (renamed) {
+                keyNode.name = renamed;
+              }
+            });
+            renameTransientPropsInReferencedTypes(
+              root,
+              j,
+              decl.propsType as
+                | {
+                    type?: string;
+                    typeName?: { type?: string; name?: string };
+                    types?: unknown[];
+                  }
+                | undefined,
+              decl.transientPropRenames,
+            );
+          }
+        }
+      }
       continue;
     }
     const existingPropNames = collectDeclPropNames(j, decl, (n) => !n.startsWith("$"));

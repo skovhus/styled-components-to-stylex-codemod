@@ -1214,7 +1214,11 @@ export class WrapperEmitter {
     // props from the base type and re-add them with their new names.
     // This is needed when the base component's type includes the $-prefixed prop
     // (via transientOmitFromBase) or the component is exported (for v6 forwarding safety).
-    if (d.transientPropRenames && d.transientPropRenames.size > 0) {
+    if (
+      d.transientPropRenames &&
+      d.transientPropRenames.size > 0 &&
+      !d.transientPropRenamesInherited
+    ) {
       const propsToOmit =
         (d.isExported ?? false)
           ? new Set(d.transientPropRenames.keys())
