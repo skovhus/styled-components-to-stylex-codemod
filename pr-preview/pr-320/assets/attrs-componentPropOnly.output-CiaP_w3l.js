@@ -1,1 +1,0 @@
-import{j as t}from"./index-Cdl_2D2t.js";import{T as r}from"./text-CamBIPhe.js";const e=()=>t.jsx("div",{style:{padding:"16px"},children:t.jsx(r,{variant:"title2",children:"Hello World"})});export{e as App};
