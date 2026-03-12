@@ -12,32 +12,32 @@ export const App = () => (
 const styles = stylex.create({
   // Single-value shorthand: should stay as scrollMargin
   section: {
-    scrollMargin: "12px",
+    scrollMargin: 12,
     backgroundColor: "lightblue",
-    padding: "16px",
+    padding: 16,
   },
   // Multi-value shorthand: should expand to block/inline
   card: {
-    scrollMarginBlock: "8px",
-    scrollMarginInline: "16px",
-    scrollPaddingBlock: "4px",
-    scrollPaddingInline: "12px",
+    scrollMarginBlock: 8,
+    scrollMarginInline: 16,
+    scrollPaddingBlock: 4,
+    scrollPaddingInline: 12,
     backgroundColor: "lightyellow",
-    padding: "16px",
+    padding: 16,
   },
   // Four-value shorthand: should expand to directional longhands
   panel: {
-    scrollMarginTop: "1px",
-    scrollMarginRight: "2px",
-    scrollMarginBottom: "3px",
-    scrollMarginLeft: "4px",
+    scrollMarginTop: 1,
+    scrollMarginRight: 2,
+    scrollMarginBottom: 3,
+    scrollMarginLeft: 4,
     backgroundColor: "lightgreen",
-    padding: "16px",
+    padding: 16,
   },
   // Single-value scroll-padding
   container: {
-    scrollPadding: "20px",
+    scrollPadding: 20,
     backgroundColor: "lavender",
-    padding: "16px",
+    padding: 16,
   },
 });
