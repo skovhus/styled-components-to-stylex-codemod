@@ -391,6 +391,13 @@ export type StyledDecl = {
    * Used to emit Omit+remap in the wrapper type only for props the base actually declares.
    */
   transientOmitFromBase?: Set<string>;
+  /**
+   * True when transientPropRenames was inherited from the base component
+   * (the wrapper itself has no $-prefixed props in its styling data).
+   * In this case, the base type already uses the renamed names, so
+   * Omit+remap in the wrapper type is skipped.
+   */
+  transientPropRenamesInherited?: boolean;
 
   withConfig?: { componentId?: string };
   attrsInfo?: {

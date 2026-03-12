@@ -585,6 +585,47 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   for (const decl of styledDecls) {
     const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
+      // Even if this wrapper has no $-prefixed props in its own styling data,
+      // inherit transient prop renames from the base component so that the emitter
+      // correctly renames the type, destructuring, and JSX call sites.
+      if (decl.base.kind === "component") {
+        const baseIdent = decl.base.ident;
+        const baseDecl = styledDecls.find((d) => d.localName === baseIdent);
+        if (baseDecl?.transientPropRenames && baseDecl.transientPropRenames.size > 0) {
+          decl.transientPropRenames = new Map(baseDecl.transientPropRenames);
+          decl.transientPropRenamesInherited = true;
+          // Note: we intentionally do NOT set transientOmitFromBase here because
+          // the base component's type has already been renamed ($prop → prop).
+          // The Omit+remap approach only works when the base type still has the
+          // $-prefixed prop name. Since it was already renamed, the base type
+          // natively includes the renamed prop — no Omit+remap needed.
+
+          // Emit cross-file consumer patching info for inherited renames
+          emitTransientPropRenameWarning(ctx, decl, decl.transientPropRenames, exportedComponents);
+
+          // Rename in the wrapper's own propsType if it has one
+          if (decl.propsType) {
+            walkTypePropNames(decl.propsType, (name, keyNode) => {
+              const renamed = decl.transientPropRenames!.get(name);
+              if (renamed) {
+                keyNode.name = renamed;
+              }
+            });
+            renameTransientPropsInReferencedTypes(
+              root,
+              j,
+              decl.propsType as
+                | {
+                    type?: string;
+                    typeName?: { type?: string; name?: string };
+                    types?: unknown[];
+                  }
+                | undefined,
+              decl.transientPropRenames,
+            );
+          }
+        }
+      }
       continue;
     }
     const existingPropNames = collectDeclPropNames(j, decl, (n) => !n.startsWith("$"));
@@ -691,27 +732,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         }
       }
       // For exported components, emit cross-file consumer patching info and warnings
-      const exportInfo = exportedComponents.get(decl.localName);
-      if (exportInfo) {
-        const exportName = exportInfo.exportName ?? decl.localName;
-        const renameRecord: Record<string, string> = {};
-        const renameList: string[] = [];
-        for (const [from, to] of renames) {
-          renameRecord[from] = to;
-          renameList.push(`${from} → ${to}`);
-        }
-        ctx.warnings.push({
-          severity: "info",
-          type: "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
-          loc: decl.loc ?? null,
-          context: {
-            componentName: decl.localName,
-            renames: renameList.join(", "),
-          },
-        });
-        ctx.transientPropRenames ??= [];
-        ctx.transientPropRenames.push({ exportName, renames: renameRecord });
-      }
+      emitTransientPropRenameWarning(ctx, decl, renames, exportedComponents);
     }
   }
 
@@ -1723,6 +1744,40 @@ function walkTypePropNames(
       walkTypePropNames(t as TypeNodeLike, visitor);
     }
   }
+}
+
+/**
+ * Emits a warning and cross-file consumer patching info when an exported
+ * component has transient prop renames.
+ */
+function emitTransientPropRenameWarning(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  renames: Map<string, string>,
+  exportedComponents: Map<string, { exportName?: string }>,
+): void {
+  const exportInfo = exportedComponents.get(decl.localName);
+  if (!exportInfo) {
+    return;
+  }
+  const exportName = exportInfo.exportName ?? decl.localName;
+  const renameRecord: Record<string, string> = {};
+  const renameList: string[] = [];
+  for (const [from, to] of renames) {
+    renameRecord[from] = to;
+    renameList.push(`${from} → ${to}`);
+  }
+  ctx.warnings.push({
+    severity: "info",
+    type: "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names",
+    loc: decl.loc ?? null,
+    context: {
+      componentName: decl.localName,
+      renames: renameList.join(", "),
+    },
+  });
+  ctx.transientPropRenames ??= [];
+  ctx.transientPropRenames.push({ exportName, renames: renameRecord });
 }
 
 /** Recursively check if a pattern (Identifier, ArrayPattern, ObjectPattern, etc.) contains a binding with the given name. */

@@ -679,12 +679,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           }
           // Exported / external: prefer full intrinsic props typing so common
           // props (e.g. onChange) get correct types when forwarding `...rest`.
-          return needsRestForType
-            ? emitter.joinIntersection(
-                extendBaseTypeText,
-                customStyleDrivingPropsTypeText,
-                sxTypeIntersection,
-              )
+          if (needsRestForType) {
+            return emitter.joinIntersection(
+              extendBaseTypeText,
+              customStyleDrivingPropsTypeText,
+              sxTypeIntersection,
+            );
+          }
+          // Even without rest-forwarding, include custom style-driving props
+          // in the type so callers can pass them (e.g. variant/conditional props).
+          return customStyleDrivingPropsTypeText !== "{}"
+            ? emitter.joinIntersection(baseTypeText, customStyleDrivingPropsTypeText)
             : baseTypeText;
         }
         if (useSlimType) {

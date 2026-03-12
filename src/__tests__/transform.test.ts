@@ -693,6 +693,43 @@ export const App = () => <Toggle $active />;
     });
   });
 
+  it("should emit transientPropRenames for exported wrapper inheriting base renames", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Base = styled.div<{ $active?: boolean }>\`
+  color: \${(props) => (props.$active ? "red" : "blue")};
+\`;
+
+export const Wrapper = styled(Base)\`
+  font-weight: bold;
+\`;
+
+export const App = () => (
+  <div>
+    <Base $active />
+    <Wrapper $active />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Both Base and Wrapper should have transientPropRenames for cross-file patching
+    expect(result.transientPropRenames).toBeDefined();
+    const renamedExports = result.transientPropRenames!.map((r) => r.exportName);
+    expect(renamedExports).toContain("Base");
+    expect(renamedExports).toContain("Wrapper");
+    // Both should map $active → active
+    const wrapperRenames = result.transientPropRenames!.find((r) => r.exportName === "Wrapper");
+    expect(wrapperRenames?.renames).toEqual({ $active: "active" });
+  });
+
   it("should strip $ prefix for non-exported component without emitting warning", () => {
     const source = `
 import styled from "styled-components";
