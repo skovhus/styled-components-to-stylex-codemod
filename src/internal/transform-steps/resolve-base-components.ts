@@ -592,6 +592,7 @@ function buildInlineResolverVariantDimensions(args: {
       // produces precise types and no runtime cast is needed.
       isOptional: true,
       propTypeFromKeyof: true,
+      isBooleanProp: booleanOnlyProps.has(propName),
     });
   }
 

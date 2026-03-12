@@ -98,7 +98,7 @@ export function buildStaticVariantPropTypes(d: StyledDecl): Map<string, string> 
 
 /**
  * Returns a map from variant dimension prop name to the TypeScript type text
- * for that prop.  Boolean-only variants (single `"true"` key) get `boolean`;
+ * for that prop.  Boolean-only variants (isBooleanProp flag) get `boolean`;
  * all others get `keyof typeof <variantObjectName>`.
  */
 export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
@@ -106,11 +106,7 @@ export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
     (d.variantDimensions ?? [])
       .filter((dim) => dim.propTypeFromKeyof)
       .map((dim) => {
-        const keys = Object.keys(dim.variants);
-        const typeText =
-          keys.length === 1 && keys[0] === "true"
-            ? "boolean"
-            : `keyof typeof ${dim.variantObjectName}`;
+        const typeText = dim.isBooleanProp ? "boolean" : `keyof typeof ${dim.variantObjectName}`;
         return [dim.propName, typeText];
       }),
   );
