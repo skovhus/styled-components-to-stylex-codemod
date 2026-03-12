@@ -1,0 +1,1 @@
+import{j as s}from"./index-Cdl_2D2t.js";import{C as i}from"./cross-file-icon.styled-_E66ylRI.js";function e(){return s.jsx("div",{style:{padding:16},children:s.jsxs("div",{className:"x1tamke2 xj4hn0o",children:[s.jsx(i,{className:"xf0lols x1y0btm7 x1118g2m"}),"Aliased import"]})})}export{e as App};
