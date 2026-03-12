@@ -391,6 +391,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // and pseudo-alias selectors). These should NOT be forwarded to the wrapped component
     // because they are style-only concerns and may not be valid HTML/component attributes.
     const styleOnlyConditionProps = new Set<string>();
+    // Track props that carry CSS values (style functions and inline styles).
+    // These are a subset of styleOnlyConditionProps but with stronger non-forwarding signal:
+    // when declared in the wrapper's explicit type, they should not be forwarded to the base
+    // component even when the base type can't be resolved (imported component).
+    const styleFnValueProps = new Set<string>();
 
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
@@ -513,6 +518,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         destructureProps.push(prop);
       }
       styleOnlyConditionProps.add(prop);
+      styleFnValueProps.add(prop);
     }
 
     // Add style function calls for dynamic prop-based styles
@@ -529,7 +535,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // These props are destructured for dynamic style calls (e.g., styles.width(width))
     // and should not be forwarded unless the base component explicitly accepts them.
     for (let i = prevLengthStyleFn; i < destructureProps.length; i++) {
-      styleOnlyConditionProps.add(destructureProps[i]!);
+      const prop = destructureProps[i]!;
+      styleOnlyConditionProps.add(prop);
+      styleFnValueProps.add(prop);
     }
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
@@ -547,6 +555,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Track transient props that are defined in the WRAPPER's explicit type (not the base's).
     // These should NOT be passed back to the base component because the base doesn't accept them.
     const wrapperOnlyTransientProps: string[] = [];
+    // Track ALL prop names defined in the wrapper's explicit type parameter.
+    // Used to avoid forwarding style-only props to the base component when the base type
+    // can't be resolved (imported component): if a prop is declared in the wrapper type
+    // and only used for styling, it almost certainly doesn't belong on the base component.
+    const wrapperExplicitPropNames = new Set<string>();
     {
       // Finds prop names in a named type (interface or type alias) matching a predicate.
       const findMatchingPropsInTypeName = (
@@ -615,6 +628,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         for (const member of explicit.members) {
           if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
             const memberName = member.key.name;
+            wrapperExplicitPropNames.add(memberName);
             if (memberName.startsWith("$") || renamedTransientValues?.has(memberName)) {
               transientProps.push(memberName);
               wrapperOnlyTransientProps.push(memberName);
@@ -625,6 +639,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // Check if explicit type is a reference to an interface/type alias
       else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
         const typeName = explicit.typeName.name;
+        for (const p of findMatchingPropsInTypeName(typeName, () => true)) {
+          wrapperExplicitPropNames.add(p);
+        }
         transientProps = findMatchingPropsInTypeName(typeName, (n) => n.startsWith("$"));
         // After interface renaming, $-prefixed members may have been renamed.
         // Also find renamed-from-transient members.
@@ -688,6 +705,35 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           destructureProps.push(prop);
           // Track that this prop is for filtering only, not for styling
           filterOnlyTransientProps.push(prop);
+        }
+      }
+    }
+
+    // For imported base components (type unresolvable), don't destructure non-transient
+    // style-fn props that are declared in the wrapper's explicit type. Leaving them in
+    // `...rest` naturally forwards them to the base component (matching styled-components
+    // semantics) while avoiding an explicit `prop={prop}` attribute that would cause TS
+    // errors if the base component doesn't accept it. The style function already references
+    // `props.propName`, so destructuring is unnecessary for styling.
+    // Transient props ($-prefixed or renamed from $-prefixed) MUST stay destructured to
+    // prevent them from leaking to the base component.
+    if (!baseComponentPropsType) {
+      const renamedTransientValues = d.transientPropRenames
+        ? new Set(d.transientPropRenames.values())
+        : undefined;
+      for (const prop of styleFnValueProps) {
+        if (
+          wrapperExplicitPropNames.has(prop) &&
+          !prop.startsWith("$") &&
+          !wrapperOnlyTransientProps.includes(prop) &&
+          !filterOnlyTransientProps.includes(prop) &&
+          !renamedTransientValues?.has(prop)
+        ) {
+          const idx = destructureProps.indexOf(prop);
+          if (idx !== -1) {
+            destructureProps.splice(idx, 1);
+          }
+          styleOnlyConditionProps.delete(prop);
         }
       }
     }
