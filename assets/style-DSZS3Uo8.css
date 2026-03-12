@@ -205,6 +205,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-borderWidth {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-textAlign {
   syntax: "*";
   inherits: false
@@ -881,6 +886,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-width: 5px;
 }
 
+.x1mw0n95:not(#\#):not(#\#) {
+  border-width: var(--x-borderWidth);
+}
+
 .x1b4wo1g:not(#\#):not(#\#) {
   border-width: var(--xdppooy);
 }
@@ -1123,6 +1132,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1hl2dhg:not(#\#):not(#\#) {
   text-decoration: none;
+}
+
+.x1bvjpef:not(#\#):not(#\#) {
+  text-decoration: underline;
 }
 
 .xvzc9z4:not(#\#):not(#\#) {
@@ -1411,6 +1424,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1qjc9v5:not(#\#):not(#\#):not(#\#) {
   align-items: stretch;
+}
+
+.xamitd3:not(#\#):not(#\#):not(#\#) {
+  align-self: center;
 }
 
 .x1cvtzd2:not(#\#):not(#\#):not(#\#) {
