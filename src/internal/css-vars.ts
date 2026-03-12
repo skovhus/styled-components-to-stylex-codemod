@@ -3,14 +3,14 @@
  * Core concepts: var() parsing, adapter resolution, and import injection.
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { Adapter, ImportSpec } from "../adapter.js";
+import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 
 export function rewriteCssVarsInString(args: {
   raw: string;
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
@@ -96,7 +96,7 @@ function rewriteCssVarsInStringImpl(args: {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;

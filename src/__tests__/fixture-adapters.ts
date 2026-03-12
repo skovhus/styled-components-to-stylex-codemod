@@ -8,6 +8,7 @@ import {
   defineAdapter,
   type ExternalInterfaceResult,
   type ResolveValueContext,
+  type ResolveValueDirectionalResult,
   type ResolveValueResult,
   type SelectorResolveContext,
   type SelectorResolveResult,
@@ -148,6 +149,36 @@ export const fixtureAdapter = defineAdapter({
 
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
+      // Directional expansion for opaque shorthand tokens:
+      // When `cssProperty` is "padding" and path is "inputPadding",
+      // return separate paddingBlock/paddingInline tokens.
+      if (ctx.cssProperty === "padding" && ctx.path === "inputPadding") {
+        return {
+          directional: [
+            {
+              prop: "paddingBlock",
+              expr: "$input.inputPaddingBlock",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+            {
+              prop: "paddingInline",
+              expr: "$input.inputPaddingInline",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+          ],
+        } satisfies ResolveValueDirectionalResult;
+      }
+
       // Test fixtures use a small ThemeProvider theme shape:
       //   props.theme.color.labelBase  -> $colors.labelBase
       //   props.theme.color[bg]        -> $colors[bg]

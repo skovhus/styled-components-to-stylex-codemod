@@ -104,7 +104,8 @@ export type WarningType =
   | "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match"
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
   | "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts"
-  | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names";
+  | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names"
+  | "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens";
 
 export interface WarningLog {
   severity: Severity;

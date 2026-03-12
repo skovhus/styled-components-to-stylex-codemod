@@ -4,7 +4,13 @@
  */
 import { compile } from "stylis";
 
-import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
+import type {
+  Adapter,
+  ImportSource,
+  ImportSpec,
+  ResolveValueContext,
+  ResolveValueResult,
+} from "../../adapter.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
@@ -86,7 +92,7 @@ function extractPrefixSuffix(parts: ValuePart[]): { prefix: string; suffix: stri
 export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   resolveSelector?: Adapter["resolveSelector"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;

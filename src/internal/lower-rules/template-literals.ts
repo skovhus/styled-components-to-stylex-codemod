@@ -3,7 +3,13 @@
  * Core concepts: Stylis parsing, interpolation handling, and variant extraction.
  */
 import type { Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
-import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
+import type {
+  Adapter,
+  ImportSource,
+  ImportSpec,
+  ResolveValueContext,
+  ResolveValueResult,
+} from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
@@ -81,7 +87,7 @@ export type TemplateLiteralContext = {
   j: JSCodeshift;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   resolveCall: Adapter["resolveCall"];
   resolveSelector?: Adapter["resolveSelector"];
   resolveImportInScope: ResolveImportInScope;
@@ -578,7 +584,7 @@ function resolveDynamicTemplateExpr(args: {
   bindings?: ArrowFnParamBindings;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   resolverImports: Map<string, ImportSpec>;
 }): { jsxProp: string; callArg: ExpressionKind; condition?: "always" } | null {
   const { j, expr, paramName, bindings, filePath, parseExpr, resolveValue, resolverImports } = args;
@@ -701,7 +707,7 @@ function resolveThemeFromPropsMember(args: {
   paramName: string;
   filePath: string;
   parseExpr: (exprSource: string) => ExpressionKind | null;
-  resolveValue: Adapter["resolveValue"];
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   resolverImports: Map<string, ImportSpec>;
 }): ExpressionKind | null {
   const { expr, paramName, filePath, parseExpr, resolveValue, resolverImports } = args;
