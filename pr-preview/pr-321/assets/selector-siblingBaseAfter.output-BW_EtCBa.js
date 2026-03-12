@@ -1,0 +1,1 @@
+import{j as e}from"./index-DxpPaJ3w.js";function i(n){return e.jsx("div",{className:"xju2f9n x1o6lflp x1vvogim x1hr3lfm x-default-marker",children:n.children})}const l=()=>e.jsxs("div",{style:{display:"flex",flexDirection:"column",gap:4,padding:16},children:[e.jsx(i,{children:"First (blue)"}),e.jsx(i,{children:"Second (red - adjacent)"})]});export{l as App};
