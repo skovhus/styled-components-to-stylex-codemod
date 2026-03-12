@@ -709,6 +709,35 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
     }
 
+    // For imported base components (type unresolvable), don't destructure non-transient
+    // style-fn props that are declared in the wrapper's explicit type. Leaving them in
+    // `...rest` naturally forwards them to the base component (matching styled-components
+    // semantics) while avoiding an explicit `prop={prop}` attribute that would cause TS
+    // errors if the base component doesn't accept it. The style function already references
+    // `props.propName`, so destructuring is unnecessary for styling.
+    // Transient props ($-prefixed or renamed from $-prefixed) MUST stay destructured to
+    // prevent them from leaking to the base component.
+    if (!baseComponentPropsType) {
+      const renamedTransientValues = d.transientPropRenames
+        ? new Set(d.transientPropRenames.values())
+        : undefined;
+      for (const prop of styleFnValueProps) {
+        if (
+          wrapperExplicitPropNames.has(prop) &&
+          !prop.startsWith("$") &&
+          !wrapperOnlyTransientProps.includes(prop) &&
+          !filterOnlyTransientProps.includes(prop) &&
+          !renamedTransientValues?.has(prop)
+        ) {
+          const idx = destructureProps.indexOf(prop);
+          if (idx !== -1) {
+            destructureProps.splice(idx, 1);
+          }
+          styleOnlyConditionProps.delete(prop);
+        }
+      }
+    }
+
     const propsParamId = j.identifier("props");
     let polymorphicFnTypeParams: unknown = null;
     if (isPolymorphicComponentWrapper && emitTypes) {
@@ -974,15 +1003,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             // style-only concerns. Forward them when the base component explicitly
             // accepts them, or when the base type can't be resolved (styled-components
             // forwards all non-transient props to wrapped components by default).
-            // Exception: style function / inline style props (CSS value carriers) that
-            // are declared in the wrapper's explicit type should NOT be forwarded to
-            // imported base components — they are almost certainly not base component
-            // props (e.g., a `gutter` prop used only for `scrollbar-gutter`).
-            if (styleFnValueProps.has(propName) && wrapperExplicitPropNames.has(propName)) {
-              if (baseExplicitProps?.has(propName)) {
-                pushForwardedProp(propName);
-              }
-            } else if (!baseExplicitProps || baseExplicitProps.has(propName)) {
+            if (!baseExplicitProps || baseExplicitProps.has(propName)) {
               pushForwardedProp(propName);
             }
             continue;
