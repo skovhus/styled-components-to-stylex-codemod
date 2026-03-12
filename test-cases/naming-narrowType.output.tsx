@@ -27,7 +27,7 @@ export const App = () => (
 const styles = stylex.create({
   textColor: {
     color: "blue",
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
   },
 });

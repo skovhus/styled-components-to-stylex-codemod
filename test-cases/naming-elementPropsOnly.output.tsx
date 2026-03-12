@@ -23,7 +23,7 @@ export const App = () => (
 const styles = stylex.create({
   clickableBox: {
     backgroundColor: "lightblue",
-    padding: "16px",
+    padding: 16,
     cursor: "pointer",
   },
 });
