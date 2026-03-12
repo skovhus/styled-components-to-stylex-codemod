@@ -147,6 +147,12 @@ export type VariantDimension = {
    * Set for dimensions from base-component resolution where the variant values are known.
    */
   propTypeFromKeyof?: boolean;
+  /**
+   * When true, this dimension's prop is a boolean (not a string that happens to equal "true").
+   * Used to emit `prop && variants.true` (truthy guard) instead of `variants[prop]` (lookup),
+   * and to type the prop as `boolean` instead of `keyof typeof`.
+   */
+  isBooleanProp?: boolean;
 };
 
 /** A single boolean-gated style entry from base-component singleton prop folding. */

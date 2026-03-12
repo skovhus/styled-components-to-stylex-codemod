@@ -181,9 +181,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         if (!isValidIdentifier(p)) {
           continue;
         }
-        const variantObj = variantDimByProp.get(p);
-        if (variantObj) {
-          lines.push(`  ${p}?: keyof typeof ${variantObj};`);
+        const variantType = variantDimByProp.get(p);
+        if (variantType) {
+          lines.push(`  ${p}?: ${variantType};`);
           continue;
         }
         const staticType = staticVariantPropTypes.get(p);
@@ -217,9 +217,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         if (!isValidIdentifier(p) || explicitPropNames.has(p) || compoundWhenKeys.has(p)) {
           continue;
         }
-        const variantObj = variantDimByProp.get(p);
-        if (variantObj) {
-          lines.push(`  ${p}?: keyof typeof ${variantObj};`);
+        const variantType = variantDimByProp.get(p);
+        if (variantType) {
+          lines.push(`  ${p}?: ${variantType};`);
           continue;
         }
         const staticType = staticVariantPropTypes.get(p);
