@@ -368,18 +368,21 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   // with its own StyleX property (backgroundImage for gradients, backgroundColor for colors)
   if (isHeterogeneousBackground) {
     // Each variant gets its own StyleX property based on its value
-    // All branches go to variant buckets (no base style for heterogeneous backgrounds)
+    // (backgroundImage for gradients, backgroundColor for colors).
+    // The default (negative/falsy) branch goes into the base style so
+    // active variants override it via StyleX array ordering.
     const isNestedTernary = allPosParsed.length > 1;
 
-    // Apply negative (falsy) variant to its own bucket
     if (neg && negParsed) {
       const negStylexProp = resolveBackgroundStylexProp(neg.expr);
-      // Use the negated condition name for the bucket (e.g., "!$useGradient" -> "!$useGradient")
-      const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
-      applyParsed(bucket, negParsed, negStylexProp);
-      variantBuckets.set(neg.when, bucket);
-      const suffix = toSuffixFromProp(neg.when);
-      variantStyleKeys[neg.when] ??= `${decl.styleKey}${suffix}`;
+      if (!applyParsed(styleObj as any, negParsed, negStylexProp)) {
+        bailUnsupported(
+          decl,
+          "Resolved conditional border variant could not be expanded to longhand properties",
+        );
+        setBail();
+        return true;
+      }
     }
 
     // Apply positive variants to their own buckets
