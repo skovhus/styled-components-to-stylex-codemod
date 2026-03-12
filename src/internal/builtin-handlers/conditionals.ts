@@ -20,6 +20,7 @@ import {
   literalToStaticValue,
   literalToString,
   resolveIdentifierToPropName,
+  resolveStaticExpressionValue,
 } from "../utilities/jscodeshift-utils.js";
 import { parseExpr } from "../transform-parse-expr.js";
 import {
@@ -389,12 +390,13 @@ export function tryResolveConditionalValue(
 
   // Helper to extract condition info from a binary expression test.
   // Supports both `props.foo === "x"` (MemberExpression) and destructured `foo === "x"` (Identifier).
+  // Also resolves enum member expressions (e.g., `ProgressType.success` → "success").
   type CondInfo = { propName: string; rhsValue: string; rhsRaw: unknown; cond: string } | null;
   const extractConditionInfo = (test: any): CondInfo => {
     if (test.type !== "BinaryExpression" || (test.operator !== "===" && test.operator !== "!==")) {
       return null;
     }
-    const rhsRaw = literalToStaticValue(test.right as any);
+    const rhsRaw = resolveStaticExpressionValue(test.right, ctx.enumValueMap);
     if (rhsRaw === null) {
       return null;
     }

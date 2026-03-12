@@ -5,6 +5,7 @@
 import type {
   ArrowFunctionExpression,
   ASTNode,
+  Collection,
   Expression,
   Identifier,
   JSCodeshift,
@@ -651,6 +652,71 @@ export function literalToStaticValue(node: unknown): string | number | boolean |
 export function literalToString(node: unknown): string | null {
   const v = literalToStaticValue(node);
   return typeof v === "string" ? v : null;
+}
+
+export type EnumValueMap = Map<string, Map<string, string | number | boolean>>;
+
+/**
+ * Scans the file AST for TypeScript string/numeric enum declarations and
+ * returns a two-level map: enumName -> memberName -> static value.
+ * Only handles members with literal initializers.
+ */
+export function buildEnumValueMap(root: Collection<ASTNode>, j: JSCodeshift): EnumValueMap {
+  const map: EnumValueMap = new Map();
+  root.find(j.TSEnumDeclaration).forEach((path) => {
+    const enumNode = path.value;
+    const enumName = (enumNode.id as { name: string }).name;
+    const members = new Map<string, string | number | boolean>();
+    let nextNumericValue = 0;
+    for (const member of enumNode.members) {
+      const memberName =
+        (member.id as { type: string; name?: string; value?: string }).type === "Identifier"
+          ? (member.id as { name: string }).name
+          : (member.id as { value: string }).value;
+      if (member.initializer) {
+        const val = literalToStaticValue(member.initializer);
+        if (val !== null) {
+          members.set(memberName, val);
+          nextNumericValue = typeof val === "number" ? val + 1 : 0;
+        }
+      } else {
+        members.set(memberName, nextNumericValue);
+        nextNumericValue++;
+      }
+    }
+    if (members.size > 0) {
+      map.set(enumName, members);
+    }
+  });
+  return map;
+}
+
+/**
+ * Resolves a MemberExpression node (e.g., `ProgressType.success`) to its
+ * static enum value using a pre-built enum map. Returns null if the node
+ * is not a MemberExpression or doesn't reference a known enum member.
+ */
+export function resolveStaticExpressionValue(
+  node: unknown,
+  enumValueMap: EnumValueMap | undefined,
+): string | number | boolean | null {
+  const v = literalToStaticValue(node);
+  if (v !== null) {
+    return v;
+  }
+  if (!enumValueMap || !node || typeof node !== "object") {
+    return null;
+  }
+  const n = node as { type?: string; object?: unknown; property?: unknown; computed?: boolean };
+  if (n.type !== "MemberExpression" || n.computed) {
+    return null;
+  }
+  const obj = n.object as { type?: string; name?: string } | undefined;
+  const prop = n.property as { type?: string; name?: string } | undefined;
+  if (obj?.type !== "Identifier" || !obj.name || prop?.type !== "Identifier" || !prop.name) {
+    return null;
+  }
+  return enumValueMap.get(obj.name)?.get(prop.name) ?? null;
 }
 
 /**

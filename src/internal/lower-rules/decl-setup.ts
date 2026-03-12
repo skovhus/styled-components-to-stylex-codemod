@@ -49,6 +49,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolveCssHelperTemplate,
     resolveImportInScope,
     usedCssHelperFunctions,
+    enumValueMap,
     markBail,
   } = state;
 
@@ -210,6 +211,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     ...sharedFromState,
     api,
     importMap,
+    enumValueMap,
     decl,
     styleObj,
     variantBuckets,
@@ -232,6 +234,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolveCallOptional,
     resolveImport: resolveImportInScope,
     hasImportIgnoringShadowing: (localName: string) => importMap.has(localName),
+    enumValueMap,
   };
 
   // Build component info for resolveDynamicNode calls
