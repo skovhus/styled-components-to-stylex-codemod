@@ -1,0 +1,1 @@
+import{p}from"./stylex-DS3CntOa.js";function u(f,t,e){const n=p(f);if(!t&&!e)return n;let r=n.className;if(typeof t=="string")r=r?r+" "+t:t;else if(t)for(let i=0;i<t.length;i++){const o=t[i];o&&(r=r?r+" "+o:o)}return{className:r,style:e?n.style?Object.assign({},n.style,e):e:n.style}}export{u as m};
