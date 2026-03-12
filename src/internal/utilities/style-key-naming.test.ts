@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
-import { extractConditionName, toSuffixFromProp } from "./style-key-naming";
+import { extractConditionName, styleKeyWithSuffix, toSuffixFromProp } from "./style-key-naming";
 
 const j = jscodeshift.withParser("tsx");
 
@@ -82,6 +82,23 @@ describe("toSuffixFromProp", () => {
     it("handles CSS variable names", () => {
       expect(toSuffixFromProp("--component-width")).toBe("ComponentWidth");
     });
+  });
+});
+
+describe("styleKeyWithSuffix", () => {
+  it("concatenates base key with suffix", () => {
+    expect(styleKeyWithSuffix("fooBar", "backgroundColor")).toBe("fooBarBackgroundColor");
+  });
+
+  it("does not collide when base ends with suffix prefix word", () => {
+    // "myBorder" + "width" and "myBorder" + "borderWidth" must produce different keys
+    const keyFromWidth = styleKeyWithSuffix("myBorder", "width");
+    const keyFromBorderWidth = styleKeyWithSuffix("myBorder", "borderWidth");
+    expect(keyFromWidth).not.toBe(keyFromBorderWidth);
+  });
+
+  it("returns base key + Variant when propName is empty (toSuffixFromProp returns 'Variant')", () => {
+    expect(styleKeyWithSuffix("foo", "")).toBe("fooVariant");
   });
 });
 

@@ -16,7 +16,7 @@ export function Text(props: TextProps & Omit<React.ComponentProps<"span">, "clas
       {...rest}
       sx={[
         styles.text,
-        align ? styles.textAlign(align) : undefined,
+        align ? styles.textTextAlign(align) : undefined,
         selectable ? styles.textSelectable : undefined,
       ]}
     >
@@ -42,7 +42,7 @@ const styles = stylex.create({
   textSelectable: {
     userSelect: "text",
   },
-  textAlign: (textAlign: "left" | "center" | "right") => ({
+  textTextAlign: (textAlign: "left" | "center" | "right") => ({
     textAlign,
   }),
 });

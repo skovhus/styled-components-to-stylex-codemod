@@ -8,6 +8,20 @@ import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
+/** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
+function shouldDropProp(decl: StyledDecl, propName: string): boolean {
+  if (!decl.shouldForwardProp) {
+    return false;
+  }
+  if (decl.shouldForwardProp.dropProps.includes(propName)) {
+    return true;
+  }
+  if (decl.shouldForwardProp.dropPrefix && propName.startsWith(decl.shouldForwardProp.dropPrefix)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Rewrites JSX usages and removes styled declarations when wrappers are not required.
  */
@@ -537,7 +551,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 return;
               }
             } else if (!hasTemplateVariant) {
-              output.push(attr);
+              if (!shouldDropProp(decl, n)) {
+                output.push(attr);
+              }
               return;
             }
           }
@@ -560,9 +576,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 return;
               }
             }
-            // No match — keep the attr if it's not also a template variant
+            // No match — drop if shouldForwardProp says to, otherwise keep
             if (!hasTemplateVariant) {
-              output.push(attr);
+              if (!shouldDropProp(decl, n)) {
+                output.push(attr);
+              }
               return;
             }
           }

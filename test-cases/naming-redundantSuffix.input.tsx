@@ -1,4 +1,4 @@
-// Dynamic style key deduplicates trailing word overlap between component name and CSS prop
+// Dynamic style key always concatenates full suffix to avoid collisions
 import * as React from "react";
 import styled from "styled-components";
 

@@ -42,7 +42,7 @@ export const App = () => (
       <ColoredBox>Right aligned</ColoredBox>
     </FlexContainer>
     <div sx={[styles.borderBox, styles.borderBoxBorderColor("red")]}>Red border</div>
-    <div sx={[styles.shadowBox, styles.shadowBoxShadow("0 2px 4px rgba(0,0,0,0.2)")]}>
+    <div sx={[styles.shadowBox, styles.shadowBoxBoxShadow("0 2px 4px rgba(0,0,0,0.2)")]}>
       With shadow
     </div>
     <div sx={[styles.blockBox, styles.blockBoxWidth("50%")]}>Half width</div>
@@ -85,7 +85,7 @@ const styles = stylex.create({
     padding: "12px",
     boxShadow: "none",
   },
-  shadowBoxShadow: (boxShadow: string) => ({
+  shadowBoxBoxShadow: (boxShadow: string) => ({
     boxShadow,
   }),
   // Block body with return statement: (props) => { return css`...`; }
