@@ -160,6 +160,13 @@ describe("cssValueToJs", () => {
     expect(cssValueToJs({ kind: "static", value: "50vh" })).toBe("50vh");
   });
 
+  it("keeps custom property values as strings", () => {
+    expect(cssValueToJs({ kind: "static", value: "16px" }, false, "--base-size")).toBe("16px");
+    expect(cssValueToJs({ kind: "static", value: "42" }, false, "--count")).toBe("42");
+    expect(cssValueToJs({ kind: "static", value: "0.5" }, false, "--opacity")).toBe("0.5");
+    expect(cssValueToJs({ kind: "static", value: "red" }, false, "--color")).toBe("red");
+  });
+
   it("keeps flex values as strings even when numeric", () => {
     expect(cssValueToJs({ kind: "static", value: "1" }, false, "flex")).toBe("1");
     expect(cssValueToJs({ kind: "static", value: "0" }, false, "flex")).toBe("0");
