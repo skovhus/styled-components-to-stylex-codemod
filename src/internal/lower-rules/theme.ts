@@ -228,13 +228,17 @@ function handleDirectionalResult(
   resolved: import("../../adapter.js").ResolveValueDirectionalResult,
   resolverImports: Map<string, import("../../adapter.js").ImportSpec>,
   parseExpr: (exprSource: string) => unknown,
-): DirectionalThemeResult {
+): DirectionalThemeResult | null {
   const entries: Array<{ prop: string; expr: unknown }> = [];
   for (const entry of resolved.directional) {
+    const exprAst = parseExpr(entry.expr);
+    if (!exprAst) {
+      return null;
+    }
     for (const imp of entry.imports) {
       resolverImports.set(JSON.stringify(imp), imp);
     }
-    entries.push({ prop: entry.prop, expr: parseExpr(entry.expr) });
+    entries.push({ prop: entry.prop, expr: exprAst });
   }
   return { __directional: entries };
 }

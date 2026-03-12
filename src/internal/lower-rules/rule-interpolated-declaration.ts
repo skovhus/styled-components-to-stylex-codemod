@@ -904,15 +904,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (res && res.type === "resolvedDirectional") {
       // Adapter returned directional longhand entries for a shorthand property.
-      // Emit each longhand directly into the style object.
+      // Route each longhand through applyResolvedPropValue to preserve
+      // media/pseudo/attribute scoping.
+      let directionalFailed = false;
       for (const entry of res.directional) {
         for (const imp of entry.imports) {
           resolverImports.set(JSON.stringify(imp), imp);
         }
         const exprAst = parseExpr(entry.expr);
-        if (exprAst) {
-          (styleObj as Record<string, unknown>)[entry.prop] = exprAst;
+        if (!exprAst) {
+          warnings.push({
+            severity: "error",
+            type: "Adapter resolveCall returned an unparseable value expression",
+            loc: decl.loc,
+            context: { localName: decl.localName, entry },
+          });
+          directionalFailed = true;
+          break;
         }
+        applyResolvedPropValue(entry.prop, exprAst, null);
+      }
+      if (directionalFailed) {
+        bail = true;
+        break;
       }
       continue;
     }
