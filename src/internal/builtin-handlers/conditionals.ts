@@ -291,9 +291,53 @@ export function tryResolveConditionalValue(
       return null;
     }
 
+    // Check if a call expression has any arguments that are theme member accesses
+    // (e.g., props.theme.isDark or theme.color.bgBase).
+    const callHasThemeArg = (call: CallExpressionNode): boolean =>
+      (call.arguments ?? []).some((arg: unknown) => {
+        if (
+          !arg ||
+          typeof arg !== "object" ||
+          (arg as { type?: string }).type !== "MemberExpression"
+        ) {
+          return false;
+        }
+        if (propsParamName) {
+          const parts = getMemberPathFromIdentifier(
+            arg as Parameters<typeof getMemberPathFromIdentifier>[0],
+            propsParamName,
+          );
+          return parts !== null && parts[0] === "theme" && parts.length > 1;
+        }
+        if (themeBindingName) {
+          const parts = getMemberPathFromIdentifier(
+            arg as Parameters<typeof getMemberPathFromIdentifier>[0],
+            themeBindingName,
+          );
+          return parts !== null && parts.length > 0;
+        }
+        return false;
+      });
+
+    const markAsRuntimeCall = (call: CallExpressionNode): void => {
+      runtimeCallState.info = {
+        resolveCallContext: {
+          callSiteFilePath: ctx.filePath,
+          calleeImportedName: "<local>",
+          calleeSource: { kind: "specifier", value: ctx.filePath },
+          args: [],
+          ...(call.loc?.start
+            ? { loc: { line: call.loc.start.line, column: call.loc.start.column } }
+            : {}),
+        },
+        resolveCallResult: { preserveRuntimeCall: true },
+      };
+    };
+
     // Helper to resolve call expressions (simple or curried) via adapter.
     // Preserves the full CallResolveResult including `kind` for proper CSS value vs StyleX ref detection.
     // Also tracks preserveRuntimeCall results so the caller can emit runtimeCallOnly.
+    // For local (non-imported) functions with theme args, automatically marks as runtime call.
     const resolveCallExpr = (
       call: CallExpressionNode,
       cssProperty: string | undefined,
@@ -342,6 +386,11 @@ export function tryResolveConditionalValue(
             }
           }
         }
+      }
+      // Local (non-imported) or unresolvable call with theme args:
+      // preserve the call at runtime so the expression stays intact.
+      if (callHasThemeArg(call)) {
+        markAsRuntimeCall(call);
       }
       return null;
     };
