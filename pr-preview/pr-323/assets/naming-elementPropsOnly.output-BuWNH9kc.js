@@ -1,1 +1,0 @@
-import{j as e}from"./index-B5XjysnV.js";function c(i){const{children:l,...s}=i;return e.jsx("div",{...s,className:"x15neal0 x1tamke2 x1ypdohk",children:l})}const t=()=>e.jsx("div",{style:{display:"flex",gap:8,padding:16},children:e.jsx(c,{onClick:()=>alert("clicked"),children:"Click me"})});export{t as App,c as ClickableBox};
