@@ -105,7 +105,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     {
       const explicit = emitter.stringifyTsType(d.propsType);
       const shouldUseIntrinsicProps = (() => {
-        if (supportsExternalStyles) {
+        if (d.consumerUsesSpread ?? d.consumerUsesElementProps ?? supportsExternalStyles) {
           return true;
         }
         const used = emitter.getUsedAttrs(d.localName);
@@ -559,7 +559,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         !!d.usedAsValue ||
         usedAttrsForType.has("*") ||
         // External callers need full HTML props (id, onClick, aria-*, etc.)
-        supportsExternalStyles ||
+        (d.consumerUsesSpread ?? d.consumerUsesElementProps ?? supportsExternalStyles) ||
         // When defaultAttrs reference element props (like tabIndex: props.tabIndex ?? 0),
         // include element props in type so those props are available
         hasElementPropsInDefaultAttrs(d) ||

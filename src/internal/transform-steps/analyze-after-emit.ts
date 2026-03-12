@@ -348,6 +348,12 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     );
     if (!hasDelegate) {
       parentDecl.supportsExternalStyles = false;
+      // Also reset consumer flags so emitters don't see stale data from the
+      // before-emit extendedBy path
+      parentDecl.consumerUsesClassName = undefined;
+      parentDecl.consumerUsesStyle = undefined;
+      parentDecl.consumerUsesElementProps = undefined;
+      parentDecl.consumerUsesSpread = undefined;
       // Leave supportsAsProp untouched (undefined for extendedBy parents) so that
       // shouldAllowAsPropForIntrinsic can still auto-derive `as` from JSX usage.
     }

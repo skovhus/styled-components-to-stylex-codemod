@@ -13,6 +13,14 @@ import {
   type SelectorResolveResult,
 } from "../adapter.ts";
 
+/** Broad consumer props — shorthand for when all element-level flags are enabled. */
+const BROAD_CONSUMER_PROPS = {
+  className: true,
+  style: true,
+  elementProps: true,
+  spreadProps: true,
+} as const;
+
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
   // Use mergedSx merger function for cleaner className/style merging output
@@ -33,7 +41,7 @@ export const fixtureAdapter = defineAdapter({
         ctx.filePath.includes(filePath),
       )
     ) {
-      return { styles: true, as: true, ref: true };
+      return { styles: true, as: true, ref: true, ...BROAD_CONSUMER_PROPS };
     }
 
     // Enable external styles only (no `as`) for test cases that only need className/style merging
@@ -50,19 +58,19 @@ export const fixtureAdapter = defineAdapter({
         "inlineBase-stringVariantExported",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {
-      return { styles: true, as: false, ref: false };
+      return { styles: true, as: false, ref: false, ...BROAD_CONSUMER_PROPS };
     }
 
     // Enable styles + as to reproduce duplicate declaration bug
     if (ctx.filePath.includes("naming-duplicateDeclaration")) {
-      return { styles: true, as: true, ref: true };
+      return { styles: true, as: true, ref: true, ...BROAD_CONSUMER_PROPS };
     }
 
     // wrapper-propsIncomplete - TextColor and ThemeText should extend HTMLAttributes
     // Highlight wraps a component and shouldn't support external styles
     if (ctx.filePath.includes("wrapper-propsIncomplete")) {
       if (ctx.componentName === "TextColor" || ctx.componentName === "ThemeText") {
-        return { styles: true, as: false, ref: false };
+        return { styles: true, as: false, ref: false, ...BROAD_CONSUMER_PROPS };
       }
     }
 
@@ -71,6 +79,19 @@ export const fixtureAdapter = defineAdapter({
       ["asProp-exported", "asProp-crossFile"].some((filePath) => ctx.filePath.includes(filePath))
     ) {
       return { styles: false, as: true, ref: false };
+    }
+
+    // Narrow type test: only className, no style/elementProps/spread
+    if (ctx.filePath.includes("naming-narrowType")) {
+      return {
+        styles: true,
+        as: false,
+        ref: false,
+        className: true,
+        style: false,
+        elementProps: false,
+        spreadProps: false,
+      };
     }
 
     return { styles: false, as: false, ref: false };

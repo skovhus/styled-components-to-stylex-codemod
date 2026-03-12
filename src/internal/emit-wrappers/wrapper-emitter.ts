@@ -241,7 +241,10 @@ export class WrapperEmitter {
    * Decide whether a wrapper component should accept/merge external `className`/`style`.
    */
   shouldAllowClassNameProp(d: StyledDecl): boolean {
-    if (d.supportsExternalStyles) {
+    if (d.consumerUsesClassName ?? d.supportsExternalStyles) {
+      return true;
+    }
+    if (d.consumerUsesSpread) {
       return true;
     }
     if ((d as any).usedAsValue) {
@@ -252,7 +255,10 @@ export class WrapperEmitter {
   }
 
   shouldAllowStyleProp(d: StyledDecl): boolean {
-    if (d.supportsExternalStyles) {
+    if (d.consumerUsesStyle ?? d.supportsExternalStyles) {
+      return true;
+    }
+    if (d.consumerUsesSpread) {
       return true;
     }
     if ((d as any).usedAsValue) {

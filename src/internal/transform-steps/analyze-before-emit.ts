@@ -553,6 +553,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     //    support for intrinsic-based components.
     if (extendedBy.has(decl.localName)) {
       decl.supportsExternalStyles = true;
+      // Same-file extensions: conservative — the extending component may pass any props
+      decl.consumerUsesClassName = true;
+      decl.consumerUsesStyle = true;
+      decl.consumerUsesElementProps = true;
+      decl.consumerUsesSpread = true;
       continue;
     }
 
@@ -574,6 +579,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsExternalStyles = extResult.styles;
     decl.supportsAsProp = extResult.as;
     decl.supportsRefProp = extResult.ref;
+    decl.consumerUsesClassName = extResult.className ?? extResult.styles;
+    decl.consumerUsesStyle = extResult.style ?? extResult.styles;
+    decl.consumerUsesElementProps = extResult.elementProps ?? extResult.styles;
+    decl.consumerUsesSpread = extResult.spreadProps ?? extResult.styles;
   }
 
   // Rename transient ($-prefixed) props for all styled components.

@@ -439,7 +439,19 @@ export interface ExternalInterfaceContext {
  * - `{ styles: true, as: true, ref: true }` → full external interface
  * - `{ styles: false, as: false, ref: false }` → no external interface support
  */
-export type ExternalInterfaceResult = { styles: boolean; as: boolean; ref: boolean };
+export type ExternalInterfaceResult = {
+  styles: boolean;
+  as: boolean;
+  ref: boolean;
+  /** Whether cross-file consumers pass className prop (undefined → derive from `styles`) */
+  className?: boolean;
+  /** Whether cross-file consumers pass style prop (undefined → derive from `styles`) */
+  style?: boolean;
+  /** Whether cross-file consumers pass element-specific props (onClick, aria-*, etc.) */
+  elementProps?: boolean;
+  /** Whether cross-file consumers use JSX spread ({...props}) */
+  spreadProps?: boolean;
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
