@@ -19,7 +19,7 @@ import {
   type ComponentInfo,
   type TemplateLiteralContext,
 } from "./template-literals.js";
-import { cssValueToJs, toSuffixFromProp } from "../transform/helpers.js";
+import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import type { LowerRulesState } from "./state.js";
 
 type CssHelperHandlersContext = Pick<
@@ -378,7 +378,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
           const nextBucket = existingBucket ? { ...existingBucket } : {};
           mergeStyleObjects(nextBucket, res.style);
           variantBuckets.set(when, nextBucket);
-          variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
         }
 
         // Ensure prop is dropped from DOM (unless transient)

@@ -23,7 +23,7 @@ import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-utils.js";
 import { cssPropertyToIdentifier, makeCssPropKey } from "./shared.js";
-import { toSuffixFromProp } from "../transform/helpers.js";
+import { styleKeyWithSuffix } from "../transform/helpers.js";
 
 type InlineStyleFromPropsContext = {
   j: JSCodeshift;
@@ -159,7 +159,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           );
         };
         const valueExpr = wrapValue(valueExprRaw);
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}FromProps`;
+        const fnKey = `${styleKeyWithSuffix(decl.styleKey, out.prop)}FromProps`;
         if (!styleFnDecls.has(fnKey)) {
           const p = j.property(
             "init",
@@ -229,7 +229,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
         }
         const fnKey = baseKeyAvailable
           ? decl.styleKey
-          : `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+          : styleKeyWithSuffix(decl.styleKey, out.prop);
         if (!styleFnDecls.has(fnKey)) {
           const paramName = cssPropertyToIdentifier(out.prop, ctx.avoidNames);
           const param = j.identifier(paramName);
@@ -309,7 +309,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           );
         };
         const valueExpr = wrapValue(valueExprRaw);
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}FromProps`;
+        const fnKey = `${styleKeyWithSuffix(decl.styleKey, out.prop)}FromProps`;
         if (!styleFnDecls.has(fnKey)) {
           const p = j.property(
             "init",

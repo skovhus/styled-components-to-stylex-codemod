@@ -14,7 +14,7 @@ import {
 } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
-import { toSuffixFromProp } from "../transform/helpers.js";
+import { styleKeyWithSuffix } from "../transform/helpers.js";
 
 // --- Shared animation token classifiers ---
 
@@ -476,7 +476,7 @@ function emitInterpolatedAnimTimeFunctions(
     );
 
     const cssPropId = cssPropertyToIdentifier(interp.longhand, avoidNames);
-    const fnKey = `${decl.styleKey}${toSuffixFromProp(interp.longhand)}`;
+    const fnKey = styleKeyWithSuffix(decl.styleKey, interp.longhand);
     if (!styleFnDecls.has(fnKey)) {
       const param = j.identifier(cssPropId);
       (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());

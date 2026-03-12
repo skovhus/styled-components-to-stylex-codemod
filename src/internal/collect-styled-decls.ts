@@ -16,7 +16,7 @@ import {
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
-import { stripStyledPrefix, toStyleKey, toSuffixFromProp } from "./transform/helpers.js";
+import { stripStyledPrefix, toStyleKey, styleKeyWithSuffix } from "./transform/helpers.js";
 import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
 
 /**
@@ -1084,7 +1084,7 @@ function collectStyledDeclsImpl(args: {
             if (propName && fallback !== null) {
               wantsDollarStrip = true;
               styleObj[styleKey] = fallback;
-              const fnKey = `${toStyleKey(id.name)}${toSuffixFromProp(styleKey)}`;
+              const fnKey = styleKeyWithSuffix(toStyleKey(id.name), styleKey);
               styleFnFromProps.push({ fnKey, jsxProp: propName });
               if (!preResolvedFnDecls[fnKey]) {
                 const param = j.identifier(styleKey);

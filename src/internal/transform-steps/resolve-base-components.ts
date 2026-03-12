@@ -12,7 +12,7 @@ import type {
   StyledDecl,
   VariantDimension,
 } from "../transform-types.js";
-import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { toStyleKey, styleKeyWithSuffix, toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
@@ -559,7 +559,7 @@ function buildInlineResolverVariantDimensions(args: {
         if (isBooleanVariantKeyTrue(singleKey)) {
           staticBooleanVariants.push({
             propName,
-            styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}`,
+            styleKey: styleKeyWithSuffix(decl.styleKey, propName),
             styles: singleVariantStyles,
           });
           continue;
@@ -576,7 +576,7 @@ function buildInlineResolverVariantDimensions(args: {
         staticBooleanVariants.push({
           propName,
           variantKey: singleKey,
-          styleKey: `${decl.styleKey}${toSuffixFromProp(propName)}${valueSuffix}`,
+          styleKey: `${styleKeyWithSuffix(decl.styleKey, propName)}${valueSuffix}`,
           styles: singleVariantStyles,
         });
         continue;
@@ -585,7 +585,7 @@ function buildInlineResolverVariantDimensions(args: {
 
     dimensions.push({
       propName,
-      variantObjectName: `${decl.styleKey}${toSuffixFromProp(propName)}Variants`,
+      variantObjectName: `${styleKeyWithSuffix(decl.styleKey, propName)}Variants`,
       variants,
       // Base-component-resolved props have no explicit type in the styled declaration.
       // Derive the prop type from the variant object (`keyof typeof`) so the emitter

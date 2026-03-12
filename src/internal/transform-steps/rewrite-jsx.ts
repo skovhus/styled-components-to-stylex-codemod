@@ -8,6 +8,20 @@ import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
+/** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
+function shouldDropProp(decl: StyledDecl, propName: string): boolean {
+  if (!decl.shouldForwardProp) {
+    return false;
+  }
+  if (decl.shouldForwardProp.dropProps.includes(propName)) {
+    return true;
+  }
+  if (decl.shouldForwardProp.dropPrefix && propName.startsWith(decl.shouldForwardProp.dropPrefix)) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Rewrites JSX usages and removes styled declarations when wrappers are not required.
  */
@@ -111,6 +125,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const inlineVariantProps = new Set(
           inlineVariantDimensions.map((dimension) => dimension.propName),
         );
+        // Prop names from staticBooleanVariants that use equality-based when-keys
+        // (e.g., `align === "center"`) — these aren't found by `n in variantStyleKeys`
+        // since the key includes the value, not just the prop name.
+        const staticBooleanVariantProps = new Set(
+          (decl.staticBooleanVariants ?? []).map((sbv) => sbv.propName),
+        );
         const combinedStylePropNames = new Set(
           (decl.callSiteCombinedStyles ?? []).flatMap((c) => c.propNames),
         );
@@ -184,6 +204,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 return true;
               }
               if (decl.variantStyleKeys && n in decl.variantStyleKeys) {
+                return true;
+              }
+              if (staticBooleanVariantProps.has(n)) {
                 return true;
               }
               return false;
@@ -428,6 +451,28 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
+
+        // Build a map from prop name → equality-based variant entries.
+        // variantStyleKeys may contain keys like `align === "center"` from
+        // staticBooleanVariants; these need special handling because the JSX
+        // attribute name is just `align`, not the full when-key.
+        const equalityVariantsByProp = new Map<
+          string,
+          Array<{ value: string; styleKey: string }>
+        >();
+        for (const [whenKey, styleKey] of Object.entries(variantKeys)) {
+          const eqMatch = whenKey.match(/^(\w+)\s*===\s*"([^"]+)"$/);
+          if (eqMatch) {
+            const propName = eqMatch[1]!;
+            const value = eqMatch[2]!;
+            let arr = equalityVariantsByProp.get(propName);
+            if (!arr) {
+              arr = [];
+              equalityVariantsByProp.set(propName, arr);
+            }
+            arr.push({ value, styleKey });
+          }
+        }
         const keptLeadingAfterVariants: typeof leading = [];
         const keptRestAfterVariants: typeof rest = [];
         const styleFnPairs = decl.styleFnFromProps ?? [];
@@ -506,7 +551,36 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 return;
               }
             } else if (!hasTemplateVariant) {
-              output.push(attr);
+              if (!shouldDropProp(decl, n)) {
+                output.push(attr);
+              }
+              return;
+            }
+          }
+
+          // Handle equality-based variants from staticBooleanVariants (e.g., `align === "center"`).
+          // Match JSX attr value against known variant values and add the corresponding style.
+          const eqVariants = equalityVariantsByProp.get(n);
+          if (eqVariants) {
+            const attrValue = readStaticJsxLiteral(attr);
+            if (attrValue !== undefined) {
+              const strValue = String(attrValue);
+              const matched = eqVariants.find((ev) => ev.value === strValue);
+              if (matched) {
+                styleArgs.push(
+                  j.memberExpression(
+                    j.identifier(ctx.stylesIdentifier ?? "styles"),
+                    j.identifier(matched.styleKey),
+                  ),
+                );
+                return;
+              }
+            }
+            // No match — drop if shouldForwardProp says to, otherwise keep
+            if (!hasTemplateVariant) {
+              if (!shouldDropProp(decl, n)) {
+                output.push(attr);
+              }
               return;
             }
           }

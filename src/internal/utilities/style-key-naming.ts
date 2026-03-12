@@ -60,6 +60,26 @@ export function buildThemeStyleKeys(
 }
 
 /**
+ * Combines a base style key with a PascalCase suffix.
+ *
+ * Always concatenates without deduplication to avoid collisions where
+ * different CSS properties would map to the same key (e.g., "myBorder" +
+ * "width" → "myBorderWidth" vs "myBorder" + "borderWidth" → "myBorderBorderWidth").
+ *
+ * @example
+ * - `styleKeyWithSuffix("textBorder", "borderWidth")` → "textBorderBorderWidth"
+ * - `styleKeyWithSuffix("fooBar", "backgroundColor")` → "fooBarBackgroundColor"
+ * - `styleKeyWithSuffix("textColor", "color")` → "textColorColor"
+ */
+export function styleKeyWithSuffix(baseKey: string, propName: string): string {
+  const suffix = toSuffixFromProp(propName);
+  if (!suffix) {
+    return baseKey;
+  }
+  return baseKey + suffix;
+}
+
+/**
  * Converts a prop/condition string to a PascalCase suffix for style keys.
  *
  * @example

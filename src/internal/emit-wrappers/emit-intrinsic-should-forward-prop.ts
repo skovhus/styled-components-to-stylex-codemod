@@ -304,15 +304,31 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // Emit props type (skip when user already has a well-named type)
     let typeAliasEmitted = false;
     if (!explicitIsExistingTypeRef) {
+      // For polymorphic (allowAsProp) wrappers, pass just the user's custom props type.
+      // polymorphicIntrinsicPropsTypeText already adds React.ComponentPropsWithRef<C>,
+      // so including element props in typeText would duplicate them and produce
+      // verbose `keyof (userType & React.ComponentProps<"tag">)` instead of `"propName"`.
+      const typeTextForEmit = allowAsProp
+        ? withForwardedAsType(
+            consumedPropsTypeText !== "{}"
+              ? emitter.joinIntersection(extrasTypeText, consumedPropsTypeText)
+              : extrasTypeText,
+            includesForwardedAs,
+          )
+        : finalTypeTextWithForwardedAs;
+      const extraKeyofExpr = allowAsProp
+        ? emitter.keyofExprForType(d.propsType, explicit)
+        : undefined;
       typeAliasEmitted = emitPropsType({
         localName: d.localName,
         tagName,
-        typeText: finalTypeTextWithForwardedAs,
+        typeText: typeTextForEmit,
         allowAsProp,
         allowClassNameProp,
         allowStyleProp,
         allowSxProp,
         hasNoCustomProps,
+        extraKeyofExpr,
       });
     }
     // For NON-POLYMORPHIC components (without `as` support), extend user-defined types

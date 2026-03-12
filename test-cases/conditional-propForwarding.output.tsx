@@ -16,8 +16,9 @@ function TooltipContainer(props: TooltipContainerProps) {
       {...rest}
       {...stylex.props(
         styles.tooltipContainer,
-        position === "top" && styles.tooltipContainerPositionTop,
-        position !== "top" && styles.tooltipContainerPositionNotTop,
+        position === "top"
+          ? styles.tooltipContainerPositionTop
+          : styles.tooltipContainerPositionNotTop,
       )}
     >
       {children}

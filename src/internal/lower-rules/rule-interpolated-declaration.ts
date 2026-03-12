@@ -56,7 +56,7 @@ import {
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { extractUnionLiteralValues } from "./variants.js";
-import { toStyleKey, toSuffixFromProp } from "../transform/helpers.js";
+import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
@@ -256,7 +256,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const out = outs[0]!;
-    const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+    const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
     if (!styleFnDecls.has(fnKey)) {
       const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
       const param = j.identifier(outParamName);
@@ -784,7 +784,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ...variantBuckets.get(when),
             [stylexProp]: { default: cons.value, ...variantPseudoEntries },
           });
-          variantStyleKeys[when] ??= `${decl.styleKey}${toSuffixFromProp(when)}`;
+          variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
           continue;
         }
       }
@@ -1112,7 +1112,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Process pos variants (same in both branches)
         for (const pos of posVariants) {
           variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
-          variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+          variantStyleKeys[pos.when] ??= styleKeyWithSuffix(decl.styleKey, pos.when);
         }
 
         if (shouldFoldNegIntoBase) {
@@ -1121,7 +1121,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         } else {
           // Different property sets — keep neg as a variant bucket too
           variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
-          variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+          variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       } else if (negVariants.length === 1 && posVariants.length === 0) {
         // Only negated variant: style is conditional on !prop
@@ -1129,25 +1129,25 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const neg = negVariants[0]!;
         variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
         // toSuffixFromProp handles negated props: !$open → NotOpen
-        variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+        variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
       } else if (posVariants.length > 0) {
         // Positive variants (with or without multiple negatives)
         // Pattern: prop ? A : "" or prop === "a" ? A : ""
         // Also handles: hollow ? A : (inner ternary produces multiple negatives)
         for (const pos of posVariants) {
           variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
-          variantStyleKeys[pos.when] ??= `${decl.styleKey}${toSuffixFromProp(pos.when)}`;
+          variantStyleKeys[pos.when] ??= styleKeyWithSuffix(decl.styleKey, pos.when);
         }
         // Also process negative variants (compound conditions like !hollow && $primary)
         for (const neg of negVariants) {
           variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
-          variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+          variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       } else if (negVariants.length > 0) {
         // Only negative variants (multiple compound conditions)
         for (const neg of negVariants) {
           variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
-          variantStyleKeys[neg.when] ??= `${decl.styleKey}${toSuffixFromProp(neg.when)}`;
+          variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       }
       continue;
@@ -1307,7 +1307,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Add fallback to base styleObj
         styleObj[out.prop] = fallbackAst as any;
 
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         if (!styleFnDecls.has(fnKey)) {
           // Get prop type from component's type annotation if available
           const propTsType = findJsxPropTsType(res.propName);
@@ -1380,7 +1380,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           continue;
         }
 
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         if (!styleFnDecls.has(fnKey)) {
           // Get prop type from component's type annotation if available
           const propTsType = findJsxPropTsType(res.propName);
@@ -1519,7 +1519,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         } else {
           // --- Standalone path: create new conditional style function ---
           for (const out of cssDeclarationToStylexDeclarations(d)) {
-            const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+            const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
             if (!styleFnDecls.has(fnKey)) {
               const param = j.identifier("props");
               const body = j.objectExpression([
@@ -1583,7 +1583,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           if (!out.prop) {
             continue;
           }
-          const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+          const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           if (!styleFnDecls.has(fnKey)) {
             const valueExprRaw = cloneAstNode(bodyExpr);
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
@@ -1689,7 +1689,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
 
         // Add dynamic style function (same as emitStyleFunction)
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         styleFnFromProps.push({ fnKey, jsxProp });
 
         if (!styleFnDecls.has(fnKey)) {
@@ -1731,7 +1731,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const outs = cssDeclarationToStylexDeclarations(d);
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
-          const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+          const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           styleFnFromProps.push({ fnKey, jsxProp });
 
           if (!styleFnDecls.has(fnKey)) {
@@ -1962,7 +1962,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const { prefix, suffix } = extractStaticPartsForDecl(d);
         const expr =
           prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
-        const fnKey = `${decl.styleKey}${toSuffixFromProp(out.prop)}`;
+        const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         if (!styleFnDecls.has(fnKey)) {
           const body = j.objectExpression([
             j.property(
@@ -2554,7 +2554,7 @@ function tryHandleLocalHelperCall(args: {
 
   // Create style functions for each extracted CSS property
   for (const cssProp of Object.keys(parsedCss)) {
-    const fnKey = `${decl.styleKey}${toSuffixFromProp(cssProp)}`;
+    const fnKey = styleKeyWithSuffix(decl.styleKey, cssProp);
     const derivedCallArg = propToCallArg.get(cssProp);
     if (!styleFnDecls.has(fnKey)) {
       const paramName_ = cssPropertyToIdentifier(cssProp, avoidNames);

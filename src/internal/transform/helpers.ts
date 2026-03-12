@@ -10,6 +10,22 @@ import type { WarningLog } from "../logger.js";
 import type { UnsupportedCssUsage } from "./css-helpers.js";
 
 export function toStyleKey(name: string): string {
+  // If the entire name is uppercase (e.g. "SVG", "URL"), lowercase it entirely
+  if (/^[A-Z]+$/.test(name)) {
+    return name.toLowerCase();
+  }
+  // If it starts with consecutive uppercase chars (e.g. "SVGIcon"), lowercase the
+  // leading acronym portion except the last char which starts the next word
+  const leadingUpper = name.match(/^[A-Z]+/);
+  if (leadingUpper && leadingUpper[0].length > 1) {
+    const acronymLen = leadingUpper[0].length;
+    // If the entire string is the acronym, lowercase all
+    if (acronymLen === name.length) {
+      return name.toLowerCase();
+    }
+    // Lowercase all but the last uppercase char (which starts the next word)
+    return name.slice(0, acronymLen - 1).toLowerCase() + name.slice(acronymLen - 1);
+  }
   return name.charAt(0).toLowerCase() + name.slice(1);
 }
 
@@ -212,7 +228,7 @@ export function normalizeCssContentValue(value: string): string {
 }
 
 // Re-export from style-key-naming.ts for backwards compatibility
-export { toSuffixFromProp } from "../utilities/style-key-naming.js";
+export { styleKeyWithSuffix, toSuffixFromProp } from "../utilities/style-key-naming.js";
 
 export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): WarningLog[] {
   return usages.map((usage) => {

@@ -13,13 +13,12 @@ const pulse = stylex.keyframes({
 });
 
 type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
-  { delay?: number } & React.ComponentProps<"div">,
+  {
+    delay?: number;
+  },
   "as"
 > &
-  Omit<React.ComponentPropsWithRef<C>, keyof ({ delay?: number } & React.ComponentProps<"div">)> & {
-    sx?: stylex.StyleXStyles;
-    as?: C;
-  };
+  Omit<React.ComponentPropsWithRef<C>, "delay"> & { sx?: stylex.StyleXStyles; as?: C };
 
 export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCaretProps<C>) {
   const { as: Component = "div", className, children, style, sx, delay, ...rest } = props;
