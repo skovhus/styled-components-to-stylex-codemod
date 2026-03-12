@@ -965,8 +965,9 @@ export function tryResolveConditionalCssBlockTernary(
     }
 
     // Comparison: props.variant === "micro" or destructuredVar === "micro"
+    // Also resolves enum member expressions (e.g., MyEnum.value → "value").
     if (t.type === "BinaryExpression" && (t.operator === "===" || t.operator === "!==")) {
-      const rhsRaw = literalToStaticValue(t.right);
+      const rhsRaw = resolveStaticExpressionValue(t.right, ctx.enumValueMap);
       if (rhsRaw === null) {
         return null;
       }

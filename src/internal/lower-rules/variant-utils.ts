@@ -151,7 +151,6 @@ export const createPropTestHelpers = (
       // Helper to get rhs value, including special handling for undefined Identifier
       const getRhsValue = (): string | null => {
         const rhsTyped = test.right as { type?: string; name?: string };
-        // Handle undefined Identifier
         if (rhsTyped.type === "Identifier" && rhsTyped.name === "undefined") {
           return "undefined";
         }

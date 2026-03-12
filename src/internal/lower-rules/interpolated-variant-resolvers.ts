@@ -378,7 +378,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       if (!applyParsed(styleObj as any, negParsed, negStylexProp)) {
         bailUnsupported(
           decl,
-          "Resolved conditional border variant could not be expanded to longhand properties",
+          "Resolved conditional background default could not be applied to base style",
         );
         setBail();
         return true;
