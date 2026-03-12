@@ -1,0 +1,1 @@
+import{j as x}from"./index-7fibWm8V.js";const s=()=>x.jsxs("div",{style:{display:"flex",flexDirection:"column",gap:8,padding:16},children:[x.jsx("div",{className:"xexx8yu x1a8lsjc xaope02 x18jlpol",children:"Progress Bar"}),x.jsx("div",{className:"xexx8yu xwib8y2 x1hr3lfm x15neal0",children:"Header"})]});export{s as App};
