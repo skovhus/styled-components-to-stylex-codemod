@@ -117,6 +117,11 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ) {
           return true;
         }
+        // When className/style/sx props are allowed, include them in the type even if
+        // elementProps/spreadProps are explicitly false (consumer only passes className/style).
+        if (allowClassNameProp || allowStyleProp || allowSxProp) {
+          return true;
+        }
         const used = emitter.getUsedAttrs(d.localName);
         if (used.has("*")) {
           return true;
