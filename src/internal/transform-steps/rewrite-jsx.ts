@@ -765,6 +765,11 @@ function buildInlineVariantLookupFromAttr(
   if (value === undefined) {
     return undefined;
   }
+  // Boolean `true` (from bare JSX attributes like `<Foo column>`) must use dot access
+  // (`variants.true`) since literal `true` can't be a computed property index in TypeScript.
+  if (value === true) {
+    return j.memberExpression(j.identifier(variantObjectName), j.identifier("true"));
+  }
   return j.memberExpression(j.identifier(variantObjectName), j.literal(value), true /* computed */);
 }
 

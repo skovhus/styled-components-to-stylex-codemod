@@ -1206,6 +1206,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": true,
           "styles": true,
         },
+        "test-cases/transientProp-sharedTypeSpread.input.tsx:CardB": {
+          "as": false,
+          "className": false,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": true,
+          "style": false,
+          "styles": true,
+        },
         "test-cases/typeHandling-duplicateIdentifier.input.tsx:Card": {
           "as": false,
           "className": true,

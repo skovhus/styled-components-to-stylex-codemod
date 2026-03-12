@@ -668,9 +668,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         const staticVariantPropTypes = buildStaticVariantPropTypes(d);
 
         const lines = filtered.map((k) => {
-          const variantObj = variantDimByProp.get(k);
-          if (variantObj) {
-            return `  ${k}?: keyof typeof ${variantObj};`;
+          const variantType = variantDimByProp.get(k);
+          if (variantType) {
+            return `  ${k}?: ${variantType};`;
           }
           const staticType = staticVariantPropTypes.get(k);
           if (staticType) {

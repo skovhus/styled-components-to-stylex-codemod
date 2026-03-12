@@ -338,7 +338,18 @@ export function buildVariantDimensionLookups(
     const variantsId = j.identifier(dim.variantObjectName);
     const propId = j.identifier(dim.propName);
 
-    if (dim.defaultValue === "default") {
+    // Boolean-only variant (single "true" key): emit `prop && variants.true`
+    const variantKeys = Object.keys(dim.variants);
+    const isBooleanOnly = variantKeys.length === 1 && variantKeys[0] === "true";
+
+    if (isBooleanOnly) {
+      const lookup = j.memberExpression(variantsId, j.identifier("true"));
+      if (dim.isOptional) {
+        pushExpr(j.logicalExpression("&&", propId, lookup), dim);
+      } else {
+        pushExpr(lookup, dim);
+      }
+    } else if (dim.defaultValue === "default") {
       const castProp = buildKeyofTypeofCast(j, propId, dim.variantObjectName);
       const lookup = j.memberExpression(variantsId, castProp, true /* computed */);
       const defaultAccess = j.memberExpression(

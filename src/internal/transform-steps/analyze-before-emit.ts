@@ -745,6 +745,40 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // When multiple styled components share a type declaration and one component's
+  // rename was applied to the shared type but another component was skipped (e.g.,
+  // due to call-site spreads), the skipped component's styling data still has
+  // $-prefixed prop names while the type now has renamed names. Detect this
+  // inconsistency and apply the same renames to the styling data.
+  for (const decl of styledDecls) {
+    if (decl.transientPropRenames) {
+      continue;
+    }
+    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
+    if (transientProps.size === 0) {
+      continue;
+    }
+    // Collect prop names from the resolved type (may be a TSTypeReference)
+    const typePropNames = collectResolvedTypePropNames(root, j, decl.propsType);
+    if (typePropNames.size === 0) {
+      continue;
+    }
+    const inheritedRenames = new Map<string, string>();
+    for (const prop of transientProps) {
+      const stripped = prop.slice(1);
+      // The type has the renamed name but not the original $-prefixed name —
+      // another component sharing this type already applied the rename.
+      if (typePropNames.has(stripped) && !typePropNames.has(prop)) {
+        inheritedRenames.set(prop, stripped);
+      }
+    }
+    if (inheritedRenames.size > 0) {
+      decl.transientPropRenames = inheritedRenames;
+      applyTransientPropRenames(decl, inheritedRenames);
+      emitTransientPropRenameWarning(ctx, decl, inheritedRenames, exportedComponents);
+    }
+  }
+
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
@@ -1756,6 +1790,58 @@ function walkTypePropNames(
 }
 
 /**
+ * Collects prop names from a propsType AST node, resolving through
+ * TSTypeReference nodes to the underlying type declaration.
+ */
+function collectResolvedTypePropNames(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  propsType: unknown,
+): Set<string> {
+  const names = new Set<string>();
+  const visit = (node: unknown): void => {
+    const n = node as TypeNodeLike & { typeName?: { type?: string; name?: string } };
+    if (!n) {
+      return;
+    }
+    if (n.type === "TSTypeLiteral") {
+      walkTypePropNames(n, (name) => {
+        names.add(name);
+      });
+    } else if (n.type === "TSIntersectionType" && Array.isArray(n.types)) {
+      for (const t of n.types) {
+        visit(t);
+      }
+    } else if (n.type === "TSTypeReference" && n.typeName?.type === "Identifier") {
+      const typeName = n.typeName.name;
+      root
+        .find(j.TSInterfaceDeclaration)
+        .filter(
+          (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
+        )
+        .forEach((p: unknown) => {
+          const body = ((p as any).node.body?.body ?? []) as any[];
+          for (const member of body) {
+            if (member?.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+              names.add(member.key.name);
+            }
+          }
+        });
+      root
+        .find(j.TSTypeAliasDeclaration)
+        .filter(
+          (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
+        )
+        .forEach((p: unknown) => {
+          visit((p as any).node.typeAnnotation);
+        });
+    }
+  };
+  visit(propsType);
+  return names;
+}
+
+/**
  * Emits a warning and cross-file consumer patching info when an exported
  * component has transient prop renames.
  */
@@ -1869,6 +1955,16 @@ const NUMERIC_CSS_PROPS = new Set([
   "columnCount",
 ]);
 
+/** CSS properties that accept both numeric and string values (e.g., grid line numbers or span syntax). */
+const NUMBER_OR_STRING_CSS_PROPS = new Set([
+  "gridRow",
+  "gridColumn",
+  "gridRowStart",
+  "gridRowEnd",
+  "gridColumnStart",
+  "gridColumnEnd",
+]);
+
 type PromotedParamType = "number" | "string" | "numberOrString";
 
 const LENGTH_LIKE_CSS_PROP_RE =
@@ -1895,7 +1991,7 @@ function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType 
   if (NUMERIC_CSS_PROPS.has(cssProp)) {
     return "number";
   }
-  if (LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
+  if (NUMBER_OR_STRING_CSS_PROPS.has(cssProp) || LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
     return "numberOrString";
   }
   return "string";
