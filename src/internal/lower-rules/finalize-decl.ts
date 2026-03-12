@@ -26,7 +26,7 @@ import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { getOrCreateRelationOverrideBucket } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
-import { isStyleConditionKey } from "./utils.js";
+import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -56,12 +56,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     warnings,
   } = state;
 
-  for (const [prop, map] of Object.entries(perPropPseudo)) {
-    styleObj[prop] = map;
-  }
-  for (const [prop, map] of Object.entries(perPropMedia)) {
-    styleObj[prop] = map;
-  }
+  mergeConditionBucket(styleObj, perPropPseudo);
+  mergeConditionBucket(styleObj, perPropMedia);
   // Merge computed media keys (from adapter.resolveSelector and sibling selectors)
   // Preserves any existing @media or pseudo entries already in styleObj[prop]
   for (const [prop, entry] of perPropComputedMedia) {
@@ -517,6 +513,30 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Merges a per-property condition bucket (pseudo or media) into the style object.
+ * When a property already exists as an object in styleObj, merges entries to
+ * preserve both pseudo-class and media query entries on the same property.
+ */
+function mergeConditionBucket(
+  styleObj: Record<string, unknown>,
+  bucket: Record<string, Record<string, unknown>>,
+): void {
+  for (const [prop, map] of Object.entries(bucket)) {
+    const existing = styleObj[prop];
+    if (
+      existing &&
+      typeof existing === "object" &&
+      !isAstNode(existing) &&
+      !Array.isArray(existing)
+    ) {
+      mergeStyleObjects(existing as Record<string, unknown>, map);
+    } else {
+      styleObj[prop] = map;
+    }
+  }
+}
 
 /**
  * Axis shorthand → longhand pairs that StyleX treats as conflicting.
