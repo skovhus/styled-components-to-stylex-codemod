@@ -3,20 +3,16 @@ import * as stylex from "@stylexjs/stylex";
 
 type MixedBackgroundProps = React.PropsWithChildren<{
   useGradient: boolean;
-  ref?: React.Ref<HTMLDivElement>;
 }>;
 
 // This pattern mixes gradients (which need backgroundImage) and colors
 // (which need backgroundColor) in the same conditional. Each variant
 // is emitted with its appropriate StyleX property.
 function MixedBackground(props: MixedBackgroundProps) {
-  const { children, useGradient, ...rest } = props;
+  const { children, useGradient } = props;
 
   return (
-    <div
-      {...rest}
-      sx={useGradient ? styles.mixedBackgroundUseGradient : styles.mixedBackgroundNotUseGradient}
-    >
+    <div sx={[styles.mixedBackground, useGradient ? styles.mixedBackgroundUseGradient : undefined]}>
       {children}
     </div>
   );
@@ -55,11 +51,12 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  mixedBackgroundNotUseGradient: {
+  mixedBackground: {
     backgroundColor: "green",
   },
   mixedBackgroundUseGradient: {
     backgroundImage: "linear-gradient(90deg, red, blue)",
+    backgroundColor: "transparent",
   },
   nestedColorBackground: {
     backgroundColor: "gray",
