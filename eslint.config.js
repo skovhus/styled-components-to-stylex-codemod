@@ -40,7 +40,35 @@ export default [
       "stylex/sort-keys": "off",
       "stylex/valid-shorthands": "error",
 
-      // TODO: false positives with colors
+      "stylex/valid-styles": "error",
+    },
+  },
+  {
+    // stylex/valid-styles false positives: @stylexjs/eslint-plugin limitations
+    // - Dynamic style fn params: rule can't validate runtime values
+    // - Multi-animation comma values: rule only validates single values
+    // - !important suffix: rule doesn't parse !important from value
+    // - Computed stylex.when.*() keys: rule reports "Keys must be strings"
+    // - outlineOffset/strokeDasharray numeric values: rule rejects valid numbers
+    files: [
+      "test-cases/conditional-runtimeCallBranch.output.tsx",
+      "test-cases/conditional-runtimeCallLocal.output.tsx",
+      "test-cases/conditional-runtimeCallThemeBool.output.tsx",
+      "test-cases/css-important.output.tsx",
+      "test-cases/helper-callPropArg.output.tsx",
+      "test-cases/helper-memberCalleeMultiArg.output.tsx",
+      "test-cases/interpolation-destructuredDefaults.output.tsx",
+      "test-cases/interpolation-destructuredRename.output.tsx",
+      "test-cases/keyframes-inlineDefinition.output.tsx",
+      "test-cases/keyframes-multipleAnimations.output.tsx",
+      "test-cases/mixin-dynamicArgDefault.output.tsx",
+      "test-cases/selector-descendantComponent.output.tsx",
+      "test-cases/selector-pseudoChained.output.tsx",
+      "test-cases/selector-pseudoComma.output.tsx",
+      "test-cases/selector-siblingMedia.output.tsx",
+      "test-cases/theme-indexedLookupPropFallback.output.tsx",
+    ],
+    rules: {
       "stylex/valid-styles": "off",
     },
   },

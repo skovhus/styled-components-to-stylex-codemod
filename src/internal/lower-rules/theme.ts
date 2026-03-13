@@ -6,8 +6,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
-  isLogicalExpressionNode,
-  literalToStaticValue,
+  hasNonLiteralLogicalFallback,
   unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
 import { isDirectionalResult } from "../../adapter.js";
@@ -106,16 +105,18 @@ export function createThemeResolvers(
       return null;
     }
     // Detect logical fallback patterns: `props.theme.X ?? "default"` / `|| "default"`.
-    // The fallback is preserved so users can review and delete it if not needed.
+    // Literal fallbacks are dropped (StyleX tokens always resolve); non-literal ones bail.
     const unwrappedTheme = unwrapLogicalFallback(bodyExpr);
     const themeAccessExpr = unwrappedTheme ?? bodyExpr;
     const direct = resolveThemeValue(themeAccessExpr, cssProperty);
     if (direct) {
-      // Directional results should not be wrapped with logical fallback
-      if (isDirectionalThemeResult(direct)) {
-        return direct;
+      // StyleX `defineVars` tokens always resolve, so literal fallbacks are
+      // unnecessary. But non-literal fallbacks (e.g., `?? props.fallbackColor`)
+      // reference runtime values — bail to avoid silently dropping them.
+      if (hasNonLiteralLogicalFallback(bodyExpr)) {
+        return null;
       }
-      return wrapWithLogicalFallback(direct, bodyExpr, j);
+      return direct;
     }
     const paramName =
       expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
@@ -166,48 +167,17 @@ export function createThemeResolvers(
     if (!resolved) {
       return null;
     }
-    if (isDirectionalThemeResult(resolved)) {
-      return resolved;
+    // Same non-literal fallback bail as the direct path above.
+    if (hasNonLiteralLogicalFallback(bodyExpr)) {
+      return null;
     }
-    return wrapWithLogicalFallback(resolved, bodyExpr, j);
+    return resolved;
   };
 
   return { hasLocalThemeBinding, resolveThemeValue, resolveThemeValueFromFn };
 }
 
 // --- Non-exported helpers ---
-
-/**
- * If `originalExpr` was a logical fallback (`X ?? "default"` / `X || "default"`),
- * wraps the resolved AST node in a LogicalExpression preserving the original
- * operator and fallback value.
- *
- * Returns null if the fallback (RHS) is not a static literal, because dynamic
- * references (e.g., `props.fallbackColor`) would be invalid in a static
- * `stylex.create()` context where `props` is not in scope.
- */
-function wrapWithLogicalFallback(
-  resolved: unknown,
-  originalExpr: unknown,
-  j: LowerRulesState["j"],
-): unknown {
-  if (
-    !isLogicalExpressionNode(originalExpr) ||
-    (originalExpr.operator !== "??" && originalExpr.operator !== "||")
-  ) {
-    return resolved;
-  }
-  // Only preserve fallback if RHS is a static value (string/number/boolean literal).
-  // Dynamic references like `props.fallbackColor` are not valid in static StyleX output.
-  if (literalToStaticValue(originalExpr.right) === null) {
-    return null;
-  }
-  return j.logicalExpression(
-    originalExpr.operator as "??" | "||",
-    resolved as Parameters<typeof j.logicalExpression>[1],
-    originalExpr.right as Parameters<typeof j.logicalExpression>[2],
-  );
-}
 
 /**
  * Type guard for the internal `__directional` tagged result.
