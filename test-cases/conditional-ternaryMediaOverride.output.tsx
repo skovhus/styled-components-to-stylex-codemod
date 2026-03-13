@@ -19,13 +19,14 @@ type CardProps = React.PropsWithChildren<{
 }>;
 
 function Card(props: CardProps) {
-  const { children, disabled, checked } = props;
+  const { children, checked, disabled } = props;
 
   return (
     <label
       sx={[
         styles.card,
         disabled ? styles.cardDisabled : checked ? styles.cardCheckedTrue : styles.cardCheckedFalse,
+        checked && styles.cardChecked,
       ]}
     >
       {children}
@@ -78,6 +79,12 @@ const styles = stylex.create({
     borderColor: "#ccc",
     borderRadius: 6,
     cursor: "pointer",
+  },
+  cardChecked: {
+    borderColor: {
+      default: "#0066cc",
+      ":hover": "#0066cc",
+    },
   },
   cardDisabled: {
     cursor: "not-allowed",
