@@ -14,6 +14,7 @@ import {
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
   inlineArrowFunctionBody,
+  rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
@@ -111,7 +112,8 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
         );
       }
       const valueExprRaw = (() => {
-        if (hasThemeAccessInArrowFn(e)) {
+        const hasThemeAccess = hasThemeAccessInArrowFn(e);
+        if (hasThemeAccess && !hasSimpleIdentifierParam(e)) {
           warnPropInlineStyle(
             decl,
             "Unsupported prop-based inline style props.theme access is not supported",
@@ -132,7 +134,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           setBail();
           return null;
         }
-        const baseExpr = inlineExpr;
+        const baseExpr = hasThemeAccess ? rewritePropsThemeToThemeVar(inlineExpr) : inlineExpr;
+        if (hasThemeAccess) {
+          markDeclNeedsUseThemeHook(decl);
+        }
         const { prefix, suffix } = extractStaticPartsForDecl(d);
         return prefix || suffix
           ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
@@ -185,11 +190,8 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       });
       return bailNow();
     }
-    const propsUsed = collectPropsFromArrowFn(e);
-    for (const propName of propsUsed) {
-      ensureShouldForwardPropDrop(decl, propName);
-    }
-    if (hasThemeAccessInArrowFn(e)) {
+    const hasThemeAccess = hasThemeAccessInArrowFn(e);
+    if (hasThemeAccess && !hasSimpleIdentifierParam(e)) {
       warnPropInlineStyle(
         decl,
         "Unsupported prop-based inline style props.theme access is not supported",
@@ -198,7 +200,14 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       );
       return bailNow();
     }
-    const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
+    const propsUsed = collectPropsFromArrowFn(e);
+    for (const propName of propsUsed) {
+      if (hasThemeAccess && propName === "theme") {
+        continue;
+      }
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+    const unwrapped = hasThemeAccess ? null : unwrapArrowFunctionToPropsExpr(j, e);
     const inlineExpr = unwrapped?.expr ?? inlineArrowFunctionBody(j, e);
     if (!inlineExpr) {
       warnPropInlineStyle(
@@ -210,7 +219,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       return bailNow();
     }
     decl.needsWrapperComponent = true;
-    const baseExpr = inlineExpr;
+    const baseExpr = hasThemeAccess ? rewritePropsThemeToThemeVar(inlineExpr) : inlineExpr;
+    if (hasThemeAccess) {
+      markDeclNeedsUseThemeHook(decl);
+    }
     // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
     const { prefix, suffix } = extractStaticPartsForDecl(d);
     const valueExpr =
@@ -347,4 +359,24 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
   }
 
   return true;
+}
+
+// --- Non-exported helpers ---
+
+function hasSimpleIdentifierParam(expr: { params?: Array<{ type?: string }> }): boolean {
+  return expr.params?.length === 1 && expr.params[0]?.type === "Identifier";
+}
+
+function markDeclNeedsUseThemeHook(decl: StyledDecl): void {
+  if (!decl.needsUseThemeHook) {
+    decl.needsUseThemeHook = [];
+  }
+  if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
+    decl.needsUseThemeHook.push({
+      themeProp: "__runtimeCall",
+      trueStyleKey: null,
+      falseStyleKey: null,
+    });
+  }
+  decl.needsWrapperComponent = true;
 }

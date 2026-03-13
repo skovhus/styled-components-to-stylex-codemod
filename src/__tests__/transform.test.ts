@@ -3573,8 +3573,7 @@ export const App = () => <Box>Hello</Box>;
     `);
   });
 
-  it("should bail on complex conditions combining theme boolean with other expressions", () => {
-    // This tests that we bail when the condition is more complex than just theme.prop
+  it("should handle complex conditions combining theme boolean with prop access as inline style", () => {
     const source = `
 import styled from "styled-components";
 
@@ -3591,24 +3590,11 @@ export const App = () => <Box isActive>Hello</Box>;
       { adapter: fixtureAdapter },
     );
 
-    // Should bail out - complex conditions are not supported
-    expect(result.code).toBeNull();
-    expect(result.warnings).toMatchInlineSnapshot(`
-      [
-        {
-          "context": {
-            "localName": "Box",
-            "propLabel": "color",
-          },
-          "loc": {
-            "column": 11,
-            "line": 5,
-          },
-          "severity": "warning",
-          "type": "Unsupported prop-based inline style props.theme access is not supported",
-        },
-      ]
-    `);
+    // Now handled via inline style with useTheme() hook
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("useTheme");
+    expect(result.code).toContain("theme.isDark");
   });
 
   it("should not treat closure variables as destructured props in theme conditionals", () => {

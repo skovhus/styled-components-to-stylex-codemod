@@ -1583,14 +1583,39 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           break;
         }
         if (hasThemeAccessInArrowFn(e)) {
-          warnPropInlineStyle(
-            decl,
-            "Unsupported prop-based inline style props.theme access is not supported",
-            d.property,
-            loc,
-          );
-          bail = true;
-          break;
+          // StyleX style functions can't use runtime theme values.
+          // Redirect to inline styles with useTheme() hook instead.
+          const inlinedExpr = inlineArrowFunctionBody(j, e);
+          if (!inlinedExpr) {
+            warnPropInlineStyle(
+              decl,
+              "Unsupported prop-based inline style expression cannot be safely inlined",
+              d.property,
+              loc,
+            );
+            bail = true;
+            break;
+          }
+          const themeRewritten = rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind);
+          const { prefix, suffix } = extractStaticPartsForDecl(d);
+          const valueExpr =
+            prefix || suffix
+              ? buildTemplateWithStaticParts(j, themeRewritten, prefix, suffix)
+              : themeRewritten;
+          markDeclNeedsUseThemeHook(decl);
+          for (const propName of res.props ?? []) {
+            if (propName === "theme") {
+              continue;
+            }
+            ensureShouldForwardPropDrop(decl, propName);
+          }
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (!out.prop) {
+              continue;
+            }
+            inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+          }
+          continue;
         }
         const bodyExpr = getFunctionBodyExpr(e);
         if (!bodyExpr) {
@@ -1944,7 +1969,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             bail = true;
             break;
           }
-          if (hasThemeAccessInArrowFn(e)) {
+          const hasThemeAccess = hasThemeAccessInArrowFn(e);
+          if (hasThemeAccess && e.params?.[0]?.type !== "Identifier") {
             warnPropInlineStyle(
               decl,
               "Unsupported prop-based inline style props.theme access is not supported",
@@ -1956,12 +1982,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
           const propsUsed = collectPropsFromArrowFn(e);
           for (const propName of propsUsed) {
+            if (hasThemeAccess && propName === "theme") {
+              continue;
+            }
             ensureShouldForwardPropDrop(decl, propName);
           }
           // Try to unwrap props access (props.$x → $x) for cleaner style functions.
           // When only one transient prop is used, emit a single-param function
           // (e.g., ($size) => ...) instead of (props) => ..., enabling consolidation.
-          const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
+          // Skip unwrapping when theme is accessed — theme refs need full inlining + rewriting.
+          const unwrapped = hasThemeAccess ? null : unwrapArrowFunctionToPropsExpr(j, e);
           if (unwrapped && unwrapped.propsUsed.size === 1) {
             const singleProp = [...unwrapped.propsUsed][0]!;
             propsParam = j.identifier(singleProp);
@@ -1982,7 +2012,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            baseExpr = inlineExpr;
+            baseExpr = hasThemeAccess
+              ? rewritePropsThemeToThemeVar(inlineExpr as ExpressionKind)
+              : inlineExpr;
+            if (hasThemeAccess) {
+              markDeclNeedsUseThemeHook(decl);
+            }
           }
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
@@ -2767,6 +2802,20 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
   decl.needsWrapperComponent = true;
 
   return true;
+}
+
+function markDeclNeedsUseThemeHook(decl: StyledDecl): void {
+  if (!decl.needsUseThemeHook) {
+    decl.needsUseThemeHook = [];
+  }
+  if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
+    decl.needsUseThemeHook.push({
+      themeProp: "__runtimeCall",
+      trueStyleKey: null,
+      falseStyleKey: null,
+    });
+  }
+  decl.needsWrapperComponent = true;
 }
 
 /** CSS shorthand properties that cannot be represented as a single var() custom property. */
