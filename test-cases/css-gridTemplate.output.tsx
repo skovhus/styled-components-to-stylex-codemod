@@ -1,24 +1,17 @@
-import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Gutter(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.gutter}>{props.children}</div>;
-}
-
-function Code(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.code}>{props.children}</div>;
-}
-
-export const App = () => (
+export const App = ({ highlightRow }: { highlightRow: string }) => (
   <div sx={styles.container}>
-    <Gutter>1</Gutter>
-    <Code>const answer = 42;</Code>
-    <Gutter>2</Gutter>
-    <Code>function add(a, b) {"{"}</Code>
-    <Gutter>3</Gutter>
-    <Code>{"  "}return a + b;</Code>
-    <Gutter>4</Gutter>
-    <Code>{"}"}</Code>
+    <div sx={styles.gutter}>1</div>
+    <div sx={styles.code}>const answer = 42;</div>
+    <div sx={styles.gutter}>2</div>
+    <div sx={styles.code}>function add(a, b) {"{"}</div>
+    <div sx={styles.gutter}>3</div>
+    <div sx={styles.code}>{"  "}return a + b;</div>
+    <div sx={styles.gutter}>4</div>
+    <div sx={styles.code}>{"}"}</div>
+    <div sx={[styles.gutter, styles.gutterDynamic(highlightRow)]}>*</div>
+    <div sx={[styles.code, styles.codeHighlighted]}>highlighted</div>
   </div>
 );
 
@@ -52,5 +45,11 @@ const styles = stylex.create({
     fontFamily:
       'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace',
     fontSize: 12,
+  },
+  gutterDynamic: (gridRow: string) => ({
+    gridRow,
+  }),
+  codeHighlighted: {
+    gridRow: "2",
   },
 });
