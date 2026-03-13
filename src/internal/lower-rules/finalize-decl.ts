@@ -405,6 +405,15 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
 
+  // Merge simple boolean variant flat values into compound variant pseudo/media maps.
+  //
+  // When a simple boolean bucket (e.g., "checked") has a flat value for a CSS property
+  // and a compound condition bucket (e.g., "!disabled && checked") has a pseudo/media map
+  // for the SAME property, the flat value would override the pseudo-map in stylex.props()
+  // because it appears later in the array. Fix by merging the flat value as the "default"
+  // of the pseudo-map in matching compound buckets, then removing it from the simple bucket.
+  mergeSimpleVariantsIntoPseudoMaps(variantBuckets);
+
   // Group enum-like variant conditions into dimensions for StyleX variants recipe pattern
   const { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip } =
     groupVariantBucketsIntoDimensions(
@@ -974,6 +983,109 @@ function mergeConditionBucket(
       styleObj[prop] = map;
     }
   }
+}
+
+/**
+ * Merges flat CSS property values from simple boolean variant buckets into
+ * pseudo/media maps in compound variant buckets that contain the same condition.
+ *
+ * Example: bucket "checked" has `borderColor: "#0066cc"` and bucket
+ * "!disabled && checked" has `borderColor: { default: "#ccc", ":hover": "#0044aa" }`.
+ * The flat value replaces the default in the pseudo map, and the property is
+ * removed from the simple bucket to avoid the override.
+ *
+ * Only acts when the compound bucket holds a pseudo/media map for the property —
+ * two flat values for the same property across buckets are NOT merged (they
+ * participate in the normal StyleX cascade without conflict).
+ */
+function mergeSimpleVariantsIntoPseudoMaps(
+  variantBuckets: Map<string, Record<string, unknown>>,
+): void {
+  // Collect simple condition keys (single boolean prop names without operators)
+  const simpleKeys: string[] = [];
+  for (const key of variantBuckets.keys()) {
+    // Simple boolean condition: just a prop name, no spaces or operators
+    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)) {
+      simpleKeys.push(key);
+    }
+  }
+  if (simpleKeys.length === 0) {
+    return;
+  }
+
+  for (const simpleKey of simpleKeys) {
+    const simpleBucket = variantBuckets.get(simpleKey);
+    if (!simpleBucket) {
+      continue;
+    }
+
+    // For each CSS property in the simple bucket that is a flat value (not a pseudo/media map)
+    const propsToRemove: string[] = [];
+    for (const [cssProp, flatValue] of Object.entries(simpleBucket)) {
+      if (isMediaOrPseudoMap(flatValue)) {
+        continue;
+      }
+
+      // Find compound buckets that include this simple condition
+      // and have a pseudo/media map for the same CSS property
+      let merged = false;
+      for (const [compoundKey, compoundBucket] of variantBuckets.entries()) {
+        if (compoundKey === simpleKey) {
+          continue;
+        }
+        // Check if the compound condition includes the simple condition as a term.
+        // Match patterns like "!disabled && checked" containing "checked",
+        // or "checked && !disabled" containing "checked".
+        if (!variantKeyImpliesCondition(compoundKey, simpleKey)) {
+          continue;
+        }
+        const compoundValue = compoundBucket[cssProp];
+        if (!isMediaOrPseudoMap(compoundValue)) {
+          continue;
+        }
+        // Merge: replace the default with the flat value from the simple bucket
+        compoundValue.default = flatValue;
+        merged = true;
+      }
+
+      if (merged) {
+        propsToRemove.push(cssProp);
+      }
+    }
+
+    // Remove merged properties from the simple bucket
+    for (const prop of propsToRemove) {
+      delete simpleBucket[prop];
+    }
+
+    // If the simple bucket is now empty, remove it entirely
+    if (Object.keys(simpleBucket).length === 0) {
+      variantBuckets.delete(simpleKey);
+    }
+  }
+}
+
+/**
+ * Checks whether a variant bucket key implies the given boolean condition is true.
+ *
+ * Handles two patterns:
+ * 1. Compound conditions with "&&": e.g., "!disabled && checked" includes "checked"
+ * 2. Boolean-suffixed keys: e.g., "checkedTrue" implies "checked" is true.
+ *    This convention is set by `handleSplitMultiPropVariantsResolvedValue` in
+ *    `interpolated-variant-resolvers.ts` (innerTruthyWhen = `${innerProp}True`).
+ */
+function variantKeyImpliesCondition(candidateKey: string, simpleKey: string): boolean {
+  // Pattern 1: compound "&&" conditions
+  if (candidateKey.includes("&&")) {
+    const parts = candidateKey.split(/\s*&&\s*/);
+    return parts.some((part) => part.trim() === simpleKey);
+  }
+  // Pattern 2: boolean-suffixed key (e.g., "checkedTrue" for "checked").
+  // Only "True" suffix — "False" is the negated branch and must not match.
+  if (candidateKey === `${simpleKey}True`) {
+    return true;
+  }
+  return false;
 }
 
 /**

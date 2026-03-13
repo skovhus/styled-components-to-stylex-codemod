@@ -32,6 +32,7 @@ type SplitVariantsContext = Pick<
   variantStyleKeys: Record<string, string>;
   pseudos: string[] | null;
   media: string | undefined;
+  resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
   setBail: () => void;
   bailUnsupported: (decl: StyledDecl, type: WarningType) => void;
 };
@@ -47,6 +48,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     variantStyleKeys,
     pseudos,
     media,
+    resolvedSelectorMedia,
     parseExpr,
     resolverImports,
     warnings,
@@ -263,42 +265,44 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       resolverImports.set(JSON.stringify(imp), imp);
     }
 
+    // Get or create a condition map (pseudo/media) for a property, preserving the default value.
+    const getOrCreateConditionMap = (prop: string): Record<string, unknown> => {
+      const existing = target[prop];
+      const map =
+        existing && typeof existing === "object" && !Array.isArray(existing) && !isAstNode(existing)
+          ? (existing as Record<string, unknown>)
+          : ({} as Record<string, unknown>);
+      if (!("default" in map)) {
+        const baseValue = existing ?? styleObj[prop];
+        map.default = baseValue ?? null;
+      }
+      target[prop] = map;
+      return map;
+    };
+
     // Helper: apply a single prop value to target, respecting media/pseudo context.
     const applyWithContext = (prop: string, valueAst: unknown): void => {
       if (media) {
-        const existing = target[prop];
-        const map =
-          existing &&
-          typeof existing === "object" &&
-          !Array.isArray(existing) &&
-          !isAstNode(existing)
-            ? (existing as Record<string, unknown>)
-            : ({} as Record<string, unknown>);
-        if (!("default" in map)) {
-          const baseValue = existing ?? styleObj[prop];
-          map.default = baseValue ?? null;
-        }
+        const map = getOrCreateConditionMap(prop);
         map[media] = valueAst as any;
-        target[prop] = map;
+        return;
+      }
+      if (resolvedSelectorMedia) {
+        // Computed media key from adapter.resolveSelector (e.g., [breakpoints.phone])
+        const map = getOrCreateConditionMap(prop);
+        const computedKeys = ((map as any).__computedKeys ?? []) as Array<{
+          keyExpr: unknown;
+          value: unknown;
+        }>;
+        computedKeys.push({ keyExpr: resolvedSelectorMedia.keyExpr, value: valueAst });
+        (map as any).__computedKeys = computedKeys;
         return;
       }
       if (pseudos?.length) {
-        const existing = target[prop];
-        const map =
-          existing &&
-          typeof existing === "object" &&
-          !Array.isArray(existing) &&
-          !isAstNode(existing)
-            ? (existing as Record<string, unknown>)
-            : ({} as Record<string, unknown>);
-        if (!("default" in map)) {
-          const baseValue = existing ?? styleObj[prop];
-          map.default = baseValue ?? null;
-        }
+        const map = getOrCreateConditionMap(prop);
         for (const ps of pseudos) {
           map[ps] = valueAst as any;
         }
-        target[prop] = map;
         return;
       }
       target[prop] = valueAst as any;
