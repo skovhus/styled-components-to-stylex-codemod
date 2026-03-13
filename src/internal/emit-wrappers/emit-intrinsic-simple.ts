@@ -1569,20 +1569,16 @@ export function appendThemeBooleanStyleArgs(
     if (!entry.trueStyleKey && !entry.falseStyleKey) {
       continue;
     }
-    const trueRef = entry.trueStyleKey ? styleRef(j, stylesIdentifier, entry.trueStyleKey) : null;
-    const falseRef = entry.falseStyleKey
+    const trueExpr = entry.trueStyleKey
+      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
+      : (j.identifier("undefined") as ExpressionKind);
+    const falseExpr = entry.falseStyleKey
       ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
-      : null;
+      : (j.identifier("undefined") as ExpressionKind);
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
       : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
-    if (trueRef && falseRef) {
-      styleArgs.push(j.conditionalExpression(condition, trueRef, falseRef));
-    } else if (trueRef) {
-      styleArgs.push(j.logicalExpression("&&", condition, trueRef));
-    } else if (falseRef) {
-      styleArgs.push(j.logicalExpression("&&", j.unaryExpression("!", condition), falseRef));
-    }
+    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
   }
   return true;
 }

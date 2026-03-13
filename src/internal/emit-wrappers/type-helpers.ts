@@ -209,11 +209,21 @@ export function injectStylePropsIntoTypeLiteralString(
 type AnyASTNode = { type?: string; [key: string]: unknown };
 
 function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {
+  for (const name of extractBooleanProps(node)) {
+    result.add(name);
+    if (name.startsWith("$")) {
+      result.add(name.slice(1));
+    }
+  }
+}
+
+function extractBooleanProps(node: unknown): Set<string> {
   const typed = node as AnyASTNode | null | undefined;
   if (!typed || typeof typed !== "object") {
-    return;
+    return new Set();
   }
   if (typed.type === "TSTypeLiteral") {
+    const props = new Set<string>();
     for (const member of (typed.members as AnyASTNode[]) ?? []) {
       if (member?.type !== "TSPropertySignature") {
         continue;
@@ -226,17 +236,33 @@ function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>):
       const annotation = member.typeAnnotation as AnyASTNode | undefined;
       const innerType = annotation?.typeAnnotation as AnyASTNode | undefined;
       if (innerType?.type === "TSBooleanKeyword") {
-        result.add(name);
-        if (name.startsWith("$")) {
-          result.add(name.slice(1));
-        }
+        props.add(name);
       }
     }
-    return;
+    return props;
   }
-  if (typed.type === "TSIntersectionType" || typed.type === "TSUnionType") {
+  if (typed.type === "TSIntersectionType") {
+    const combined = new Set<string>();
     for (const t of (typed.types as AnyASTNode[]) ?? []) {
-      collectBooleanPropsFromTypeLiteral(t, result);
+      for (const p of extractBooleanProps(t)) {
+        combined.add(p);
+      }
     }
+    return combined;
   }
+  if (typed.type === "TSUnionType") {
+    const arms = ((typed.types as AnyASTNode[]) ?? []).map(extractBooleanProps);
+    if (arms.length === 0) {
+      return new Set();
+    }
+    const first = arms[0]!;
+    const intersection = new Set<string>();
+    for (const name of first) {
+      if (arms.every((arm) => arm.has(name))) {
+        intersection.add(name);
+      }
+    }
+    return intersection;
+  }
+  return new Set();
 }

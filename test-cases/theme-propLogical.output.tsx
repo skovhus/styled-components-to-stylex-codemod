@@ -11,7 +11,12 @@ function Box(props: BoxProps) {
   const { children, enabled } = props;
 
   const theme = useTheme();
-  return <div sx={[styles.box, theme.isDark && props.enabled && styles.boxDark]}>{children}</div>;
+
+  return (
+    <div sx={[styles.box, theme.isDark && props.enabled ? styles.boxDark : undefined]}>
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (

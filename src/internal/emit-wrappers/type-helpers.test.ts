@@ -123,4 +123,33 @@ describe("collectBooleanPropNames", () => {
     const result = collectBooleanPropNames(d);
     expect(result.size).toBe(0);
   });
+
+  it("only marks props boolean if boolean in ALL union arms", () => {
+    const d = {
+      propsType: makePropsType(
+        "{ active: boolean; mode: string } | { active: string; mode: string }",
+      ),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(false);
+  });
+
+  it("marks props boolean when boolean in all union arms", () => {
+    const d = {
+      propsType: makePropsType(
+        "{ active: boolean; mode: string } | { active: boolean; size: number }",
+      ),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(true);
+  });
+
+  it("collects boolean props from intersection types", () => {
+    const d = {
+      propsType: makePropsType("{ active: boolean } & { visible: boolean }"),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(true);
+    expect(result.has("visible")).toBe(true);
+  });
 });
