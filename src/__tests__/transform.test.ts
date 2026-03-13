@@ -1740,6 +1740,55 @@ export const App = () => {
     expect(result.code).not.toContain("(left: number) => ({");
   });
 
+  it("should use string type for promoted grid property params (StyleX types grid props as string)", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = ({ row }: { row: number }) => {
+  return <Box style={{ gridRow: row }}>Click</Box>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("(gridRow: string) => ({");
+    expect(result.code).not.toContain("number | string");
+    expect(result.code).not.toContain("gridRow: number");
+  });
+
+  it("should coerce static numeric gridRow values to strings", async () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: blue;
+\`;
+
+export const App = () => {
+  return <Box style={{ gridRow: 1 }}>Click</Box>;
+};
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: mergerAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('gridRow: "1"');
+    expect(result.code).not.toContain("gridRow: 1");
+  });
+
   it("should not use merger when external styles are disabled", async () => {
     const source = `
 import styled from 'styled-components';
