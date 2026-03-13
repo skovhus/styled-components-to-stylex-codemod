@@ -11,6 +11,7 @@ import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
 import {
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  resolveStaticExpressionValue,
   setIdentifierTypeAnnotation,
 } from "../utilities/jscodeshift-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
@@ -31,6 +32,7 @@ type ValuePatternContext = Pick<
   | "hasLocalThemeBinding"
   | "markBail"
   | "importMap"
+  | "enumValueMap"
 > & {
   decl: StyledDecl;
   styleObj: Record<string, unknown>;
@@ -495,7 +497,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         if (propName !== p) {
           return false;
         }
-        const rhs = literalToStaticValue(test.right);
+        const rhs = resolveStaticExpressionValue(test.right, ctx.enumValueMap);
         if (rhs === null) {
           return false;
         }

@@ -15,7 +15,7 @@ import {
 } from "./precompute.js";
 import { createImportResolver } from "./import-resolution.js";
 import { literalToStaticValue } from "./types.js";
-import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import { buildEnumValueMap, cloneAstNode } from "../utilities/jscodeshift-utils.js";
 
 export type RelationOverride = {
   parentStyleKey: string;
@@ -226,6 +226,8 @@ export function createLowerRulesState(ctx: TransformContext) {
     importMap,
   });
 
+  const enumValueMap = buildEnumValueMap(root, j);
+
   // Build cross-file selector lookup: localName → usage info
   const crossFileSelectorsByLocal = new Map<string, CrossFileSelectorUsage>();
   if (ctx.crossFileSelectorUsages) {
@@ -276,6 +278,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveCssHelperTemplate,
     resolveImportInScope,
     resolveImportForExpr,
+    enumValueMap,
     crossFileSelectorsByLocal,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     bail: false,

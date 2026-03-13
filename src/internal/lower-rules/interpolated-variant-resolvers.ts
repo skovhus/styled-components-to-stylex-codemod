@@ -368,18 +368,24 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   // with its own StyleX property (backgroundImage for gradients, backgroundColor for colors)
   if (isHeterogeneousBackground) {
     // Each variant gets its own StyleX property based on its value
-    // All branches go to variant buckets (no base style for heterogeneous backgrounds)
+    // (backgroundImage for gradients, backgroundColor for colors).
+    // The default goes into the base style. Variants that use a different
+    // property (e.g., backgroundImage when default is backgroundColor)
+    // include a "transparent" reset so the base color doesn't bleed through
+    // semi-transparent gradients — matching what the CSS `background`
+    // shorthand does when switching between color and gradient values.
     const isNestedTernary = allPosParsed.length > 1;
+    const defaultStylexProp = neg ? resolveBackgroundStylexProp(neg.expr) : null;
 
-    // Apply negative (falsy) variant to its own bucket
     if (neg && negParsed) {
-      const negStylexProp = resolveBackgroundStylexProp(neg.expr);
-      // Use the negated condition name for the bucket (e.g., "!$useGradient" -> "!$useGradient")
-      const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
-      applyParsed(bucket, negParsed, negStylexProp);
-      variantBuckets.set(neg.when, bucket);
-      const suffix = toSuffixFromProp(neg.when);
-      variantStyleKeys[neg.when] ??= `${decl.styleKey}${suffix}`;
+      if (!applyParsed(styleObj as any, negParsed, defaultStylexProp!)) {
+        bailUnsupported(
+          decl,
+          "Resolved conditional border variant could not be expanded to longhand properties",
+        );
+        setBail();
+        return true;
+      }
     }
 
     // Apply positive variants to their own buckets
@@ -390,6 +396,9 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       const whenClean = when.replace(/^!/, "");
       const bucket = { ...variantBuckets.get(whenClean) } as Record<string, unknown>;
       applyParsed(bucket, parsed, posStylexProp);
+      if (defaultStylexProp && posStylexProp !== defaultStylexProp) {
+        bucket[defaultStylexProp] = j.literal("transparent");
+      }
       variantBuckets.set(whenClean, bucket);
       const genericHints = new Set(["truthy", "falsy", "default", "match"]);
       const useMeaningfulHint = isNestedTernary && nameHint && !genericHints.has(nameHint);

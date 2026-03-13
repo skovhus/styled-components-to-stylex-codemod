@@ -13,6 +13,7 @@ import type {
   ResolveValueResult,
 } from "../../adapter.js";
 import type { WarningType } from "../logger.js";
+import type { EnumValueMap } from "../utilities/jscodeshift-utils.js";
 
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
@@ -424,6 +425,8 @@ export type InternalHandlerContext = {
   } | null;
   /** Check if an import exists for localName, ignoring shadowing. Used to detect shadowed imports. */
   hasImportIgnoringShadowing?: (localName: string) => boolean;
+  /** Pre-built map of TypeScript enum declarations for resolving enum member expressions. */
+  enumValueMap?: EnumValueMap;
 };
 
 export type ThemeParamInfo =
