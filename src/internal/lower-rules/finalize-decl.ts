@@ -724,7 +724,7 @@ function mergeBaseIntoSingleStyleFn(args: {
     return;
   }
 
-  // Collect existing property keys in the function body to avoid duplicates
+  // Collect existing property keys in the function body
   const existingKeys = new Set<string>();
   for (const prop of bodyObj.properties) {
     const key = (prop as { key?: { name?: string; value?: string } }).key;
@@ -733,12 +733,16 @@ function mergeBaseIntoSingleStyleFn(args: {
     }
   }
 
+  // Bail if any static property overlaps with the function body — avoids
+  // reasoning about override priority between static and dynamic values.
+  const staticKeys = Object.keys(styleObj).filter((k) => !k.startsWith("__"));
+  if (staticKeys.some((k) => existingKeys.has(k))) {
+    return;
+  }
+
   // Prepend base static properties to the function body
   const prependProps: unknown[] = [];
   for (const [cssProp, cssValue] of Object.entries(styleObj)) {
-    if (existingKeys.has(cssProp)) {
-      continue;
-    }
     // Skip internal metadata keys
     if (cssProp.startsWith("__")) {
       continue;
