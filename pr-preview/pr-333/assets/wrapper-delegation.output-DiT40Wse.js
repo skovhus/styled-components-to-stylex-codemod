@@ -1,0 +1,1 @@
+import{j as x}from"./index-avDLskJh.js";function s(){return x.jsxs(x.Fragment,{children:[x.jsx("div",{className:"x2b8uid x1iymm2a",children:"Test"}),x.jsx("div",{className:"x2b8uid xt970qd xj7an9n xvbvf6b xat24cr",children:"Test"}),x.jsx("div",{className:"x2b8uid x1iymm2a xt970qd xj7an9n",children:"Okay"})]})}s.displayName="App";export{s as App};
