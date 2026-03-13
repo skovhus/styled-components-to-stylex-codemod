@@ -16,11 +16,14 @@ function Container(props: ContainerProps) {
       {...rest}
       {...stylex.props(
         styles.container,
-        styles.containerTransition(props.duration),
-        open &&
-          styles.containerOpen({
-            delay,
-          }),
+        styles.containerTransition({
+          transition: props.duration,
+        }),
+        open
+          ? styles.containerOpen({
+              delay,
+            })
+          : undefined,
       )}
     >
       {children}
@@ -50,7 +53,7 @@ const styles = stylex.create({
     opacity: 1,
     transitionDelay: `${props.delay}ms`,
   }),
-  containerTransition: (transition: number) => ({
-    transition: `opacity ${transition}ms`,
+  containerTransition: (props: { transition: number }) => ({
+    transition: `opacity ${props.transition}ms`,
   }),
 });

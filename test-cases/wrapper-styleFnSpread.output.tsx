@@ -15,7 +15,13 @@ function StyledExternal(props: StyledExternalProps) {
     <ExternalComponent
       {...rest}
       {...mergedSx(
-        [styles.external, props.$color != null && styles.externalColor(props.$color)],
+        [
+          styles.external,
+          props.$color != null &&
+            styles.externalColor({
+              color: props.$color,
+            }),
+        ],
         className,
         style,
       )}
@@ -32,7 +38,7 @@ const styles = stylex.create({
     color: "gray",
     padding: 10,
   },
-  externalColor: (color: string) => ({
-    color,
+  externalColor: (props: { color: string }) => ({
+    color: props.color,
   }),
 });

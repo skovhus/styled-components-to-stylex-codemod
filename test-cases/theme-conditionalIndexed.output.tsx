@@ -13,7 +13,17 @@ export function Badge(
   const { children, textColor, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.badge, textColor ? styles.badgeColor(textColor) : undefined]}>
+    <div
+      {...rest}
+      sx={[
+        styles.badge,
+        textColor
+          ? styles.badgeColor({
+              textColor: textColor,
+            })
+          : undefined,
+      ]}
+    >
       {children}
     </div>
   );
@@ -34,7 +44,7 @@ const styles = stylex.create({
     borderRadius: 4,
     color: $colors.labelTitle,
   },
-  badgeColor: (textColor: Colors) => ({
-    color: $colors[textColor],
+  badgeColor: (props: { textColor: Colors }) => ({
+    color: $colors[props.textColor],
   }),
 });

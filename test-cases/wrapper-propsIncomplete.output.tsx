@@ -21,7 +21,19 @@ export function TextColor(
   const { className, children, style, sx, color, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)}>
+    <span
+      {...rest}
+      {...mergedSx(
+        [
+          styles.textColorColor({
+            color: color,
+          }),
+          sx,
+        ],
+        className,
+        style,
+      )}
+    >
       {children}
     </span>
   );
@@ -78,15 +90,27 @@ export function ThemeText(
   const { className, children, style, sx, themeColor, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx([styles.themeTextColor(themeColor), sx], className, style)}>
+    <span
+      {...rest}
+      {...mergedSx(
+        [
+          styles.themeTextColor({
+            themeColor: themeColor,
+          }),
+          sx,
+        ],
+        className,
+        style,
+      )}
+    >
       {children}
     </span>
   );
 }
 
 const styles = stylex.create({
-  textColorColor: (color: string) => ({
-    color,
+  textColorColor: (props: { color: string }) => ({
+    color: props.color,
   }),
   highlight: {
     backgroundColor: "transparent",
@@ -94,7 +118,7 @@ const styles = stylex.create({
   highlightHighlighted: {
     backgroundColor: "yellow",
   },
-  themeTextColor: (themeColor: Colors) => ({
-    color: $colors[themeColor],
+  themeTextColor: (props: { themeColor: Colors }) => ({
+    color: $colors[props.themeColor],
   }),
 });

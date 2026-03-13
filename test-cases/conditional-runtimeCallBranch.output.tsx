@@ -14,12 +14,11 @@ function CardContainer(props: CardContainerProps) {
 
   return (
     <label
-      sx={[
-        styles.cardContainer,
-        styles.cardContainerBackgroundColor(
-          props.checked ? ColorConverter.cssWithAlpha(theme.color.bgSelected, 0.8) : "transparent",
-        ),
-      ]}
+      sx={styles.cardContainer({
+        backgroundColor: props.checked
+          ? ColorConverter.cssWithAlpha(theme.color.bgSelected, 0.8)
+          : "transparent",
+      })}
     >
       {children}
     </label>
@@ -34,11 +33,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  cardContainer: {
+  cardContainer: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 12,
-  },
-  cardContainerBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+    backgroundColor: props.backgroundColor,
   }),
 });

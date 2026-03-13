@@ -9,7 +9,17 @@ type DividerProps = {
 function Divider(props: DividerProps) {
   const { color } = props;
 
-  return <hr sx={[styles.divider, color != null && styles.dividerBackgroundColor(color)]} />;
+  return (
+    <hr
+      sx={[
+        styles.divider,
+        color != null &&
+          styles.dividerBackgroundColor({
+            backgroundColor: color,
+          }),
+      ]}
+    />
+  );
 }
 
 export const App = () => (
@@ -29,7 +39,7 @@ const styles = stylex.create({
     marginBlock: 16,
     marginInline: 0,
   },
-  dividerBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  dividerBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
 });

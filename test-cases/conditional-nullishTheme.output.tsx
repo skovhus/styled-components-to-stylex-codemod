@@ -12,7 +12,14 @@ function Line(props: LineProps) {
 
   return (
     <div
-      sx={[styles.line, isRemoval && styles.lineBackgroundColor(deletionColor ?? $colors.bgBase)]}
+      sx={[
+        styles.line,
+        isRemoval
+          ? styles.lineBackgroundColor({
+              backgroundColor: deletionColor ?? $colors.bgBase,
+            })
+          : undefined,
+      ]}
     >
       {children}
     </div>
@@ -33,7 +40,7 @@ const styles = stylex.create({
     backgroundColor: $colors.bgSub,
     margin: 10,
   },
-  lineBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  lineBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
 });

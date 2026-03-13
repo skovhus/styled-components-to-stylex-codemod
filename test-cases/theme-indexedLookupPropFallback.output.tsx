@@ -12,7 +12,18 @@ type ViewProps = React.PropsWithChildren<{
 function View(props: ViewProps) {
   const { children, backgroundColor } = props;
 
-  return <div sx={[styles.view, styles.viewBackgroundColor(backgroundColor)]}>{children}</div>;
+  return (
+    <div
+      sx={[
+        styles.view,
+        styles.viewBackgroundColor({
+          backgroundColor: backgroundColor,
+        }),
+      ]}
+    >
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (
@@ -31,7 +42,7 @@ const styles = stylex.create({
     fontSize: 14,
     fontWeight: 500,
   },
-  viewBackgroundColor: (backgroundColor: Color) => ({
-    backgroundColor: $colors[backgroundColor] || `${backgroundColor}`,
+  viewBackgroundColor: (props: { backgroundColor: Color }) => ({
+    backgroundColor: $colors[props.backgroundColor] || `${props.backgroundColor}`,
   }),
 });

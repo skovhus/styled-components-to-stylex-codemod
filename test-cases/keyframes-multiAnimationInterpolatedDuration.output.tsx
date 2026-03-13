@@ -36,7 +36,10 @@ function AnimatedCard(props: AnimatedCardProps) {
     <div
       sx={[
         styles.animatedCard,
-        duration != null && styles.animatedCardAnimationDuration(`${duration ?? 200}ms, 1s`),
+        duration != null &&
+          styles.animatedCardAnimationDuration({
+            animationDuration: `${duration ?? 200}ms, 1s`,
+          }),
       ]}
     >
       {children}
@@ -61,7 +64,7 @@ const styles = stylex.create({
     padding: 20,
     backgroundColor: "white",
   },
-  animatedCardAnimationDuration: (animationDuration: string) => ({
-    animationDuration,
+  animatedCardAnimationDuration: (props: { animationDuration: string }) => ({
+    animationDuration: props.animationDuration,
   }),
 });

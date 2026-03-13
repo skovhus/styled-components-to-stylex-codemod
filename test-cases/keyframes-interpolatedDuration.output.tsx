@@ -24,7 +24,9 @@ function FadeInContainer(props: FadeInContainerProps) {
       sx={[
         styles.fadeInContainer,
         fadeInDuration != null &&
-          styles.fadeInContainerAnimationDuration(`${fadeInDuration ?? 200}ms`),
+          styles.fadeInContainerAnimationDuration({
+            animationDuration: `${fadeInDuration ?? 200}ms`,
+          }),
       ]}
     >
       {children}
@@ -47,7 +49,7 @@ const styles = stylex.create({
     animationDuration: "200ms",
     animationTimingFunction: "ease-out",
   },
-  fadeInContainerAnimationDuration: (animationDuration: string) => ({
-    animationDuration,
+  fadeInContainerAnimationDuration: (props: { animationDuration: string }) => ({
+    animationDuration: props.animationDuration,
   }),
 });

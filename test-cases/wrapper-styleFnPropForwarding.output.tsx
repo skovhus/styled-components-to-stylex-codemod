@@ -5,13 +5,29 @@ export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
     <Flex
       gap={8}
-      {...stylex.props(styles.box, styles.boxBackgroundColor("#bf4f74"), styles.boxColor("white"))}
+      {...stylex.props(
+        styles.box,
+        styles.boxBackgroundColor({
+          backgroundColor: "#bf4f74",
+        }),
+        styles.boxColor({
+          color: "white",
+        }),
+      )}
     >
       Red
     </Flex>
     <Flex
       gap={12}
-      {...stylex.props(styles.box, styles.boxBackgroundColor("#4f74bf"), styles.boxColor("black"))}
+      {...stylex.props(
+        styles.box,
+        styles.boxBackgroundColor({
+          backgroundColor: "#4f74bf",
+        }),
+        styles.boxColor({
+          color: "black",
+        }),
+      )}
     >
       Blue
     </Flex>
@@ -22,10 +38,10 @@ const styles = stylex.create({
   box: {
     padding: 8,
   },
-  boxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  boxBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
-  boxColor: (color: string) => ({
-    color,
+  boxColor: (props: { color: string }) => ({
+    color: props.color,
   }),
 });

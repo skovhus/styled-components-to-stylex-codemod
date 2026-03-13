@@ -10,7 +10,15 @@ function LayeredBox(props: LayeredBoxProps) {
   const { children, zIndex } = props;
 
   return (
-    <div sx={[styles.layeredBox, zIndex !== undefined && styles.layeredBoxZIndex(zIndex)]}>
+    <div
+      sx={[
+        styles.layeredBox,
+        zIndex !== undefined &&
+          styles.layeredBoxZIndex({
+            zIndex: zIndex,
+          }),
+      ]}
+    >
       {children}
     </div>
   );
@@ -76,8 +84,8 @@ const styles = stylex.create({
   layeredBox: {
     position: "absolute",
   },
-  layeredBoxZIndex: (zIndex: number) => ({
-    zIndex,
+  layeredBoxZIndex: (props: { zIndex: number }) => ({
+    zIndex: props.zIndex,
   }),
   grayscaleImage: {
     width: 100,

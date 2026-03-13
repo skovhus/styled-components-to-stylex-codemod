@@ -41,7 +41,18 @@ type SliderProps = React.PropsWithChildren<{
 function Slider(props: SliderProps) {
   const { children, height } = props;
 
-  return <div sx={[styles.slider, styles.sliderHeight(height)]}>{children}</div>;
+  return (
+    <div
+      sx={[
+        styles.slider,
+        styles.sliderHeight({
+          height: height,
+        }),
+      ]}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function App() {
@@ -91,7 +102,7 @@ const styles = stylex.create({
   slider: {
     position: "relative",
   },
-  sliderHeight: (height: number) => ({
-    height: `${height}px`,
+  sliderHeight: (props: { height: number }) => ({
+    height: `${props.height}px`,
   }),
 });

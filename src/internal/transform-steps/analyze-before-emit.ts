@@ -1503,6 +1503,9 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
   if (decl.styleFnFromProps) {
     for (const sf of decl.styleFnFromProps) {
       sf.jsxProp = renames.get(sf.jsxProp) ?? sf.jsxProp;
+      if (sf.propsObjectKey) {
+        sf.propsObjectKey = renames.get(sf.propsObjectKey) ?? sf.propsObjectKey;
+      }
       if (sf.conditionWhen) {
         sf.conditionWhen = renamePropsInWhenString(sf.conditionWhen, renames);
       }
@@ -1685,7 +1688,8 @@ function renameIdentifiersInAst(node: unknown, renames: Map<string, string>): vo
     if (renamed) {
       n.name = renamed;
     }
-    return;
+    // Continue walking into Identifier's other properties (e.g., typeAnnotation)
+    // which may contain nested identifiers that need renaming.
   }
   for (const [key, value] of Object.entries(n)) {
     if (AST_METADATA_KEYS.has(key)) {

@@ -14,7 +14,14 @@ export function Badge(props: Props & Omit<React.ComponentProps<"div">, "classNam
   return (
     <div
       {...rest}
-      sx={[styles.badge, sizeVariants[size], color != null && styles.badgeBackgroundColor(color)]}
+      sx={[
+        styles.badge,
+        sizeVariants[size],
+        color != null &&
+          styles.badgeBackgroundColor({
+            backgroundColor: color,
+          }),
+      ]}
     >
       {children}
     </div>
@@ -38,8 +45,8 @@ const styles = stylex.create({
     flexShrink: 0,
     backgroundColor: "gray",
   },
-  badgeBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  badgeBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
 });
 

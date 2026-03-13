@@ -16,7 +16,15 @@ export function Box(props: BoxProps) {
   const { children, shadow, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.box, styles.boxBoxShadow(shadow)]}>
+    <div
+      {...rest}
+      sx={[
+        styles.box,
+        styles.boxBoxShadow({
+          boxShadow: shadow,
+        }),
+      ]}
+    >
       {children}
     </div>
   );
@@ -29,7 +37,7 @@ const styles = stylex.create({
     height: 50,
     width: 50,
   },
-  boxBoxShadow: (boxShadow: string) => ({
-    boxShadow: shadow(boxShadow),
+  boxBoxShadow: (props: { boxShadow: string }) => ({
+    boxShadow: shadow(props.boxShadow),
   }),
 });

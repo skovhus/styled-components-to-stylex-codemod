@@ -14,7 +14,15 @@ function Box(props: BoxProps) {
 
   return (
     <div
-      sx={[styles.box, styles.boxBackgroundColorHover(hoverColor), styles.boxBackgroundColor(bg)]}
+      sx={[
+        styles.box,
+        styles.boxBackgroundColorHover({
+          hoverColor: hoverColor,
+        }),
+        styles.boxBackgroundColor({
+          bg: bg,
+        }),
+      ]}
     >
       {children}
     </div>
@@ -43,7 +51,12 @@ export function TextColor(
   const { children, color, ...rest } = props;
 
   return (
-    <span {...rest} sx={styles.textColorColor(color)}>
+    <span
+      {...rest}
+      sx={styles.textColorColor({
+        color: color,
+      })}
+    >
       {children}
     </span>
   );
@@ -55,16 +68,16 @@ const styles = stylex.create({
     height: "100%",
     padding: 16,
   },
-  boxBackgroundColorHover: (hoverColor: Color) => ({
+  boxBackgroundColorHover: (props: { hoverColor: Color }) => ({
     backgroundColor: {
       default: null,
-      ":hover": $colors[hoverColor],
+      ":hover": $colors[props.hoverColor],
     },
   }),
-  boxBackgroundColor: (bg: Color) => ({
-    backgroundColor: $colors[bg],
+  boxBackgroundColor: (props: { bg: Color }) => ({
+    backgroundColor: $colors[props.bg],
   }),
-  textColorColor: (color: Colors) => ({
-    color: $colors[color],
+  textColorColor: (props: { color: Colors }) => ({
+    color: $colors[props.color],
   }),
 });

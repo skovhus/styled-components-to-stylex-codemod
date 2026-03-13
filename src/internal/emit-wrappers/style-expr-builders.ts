@@ -61,6 +61,24 @@ export function styleRef(j: JSCodeshift, stylesIdentifier: string, key: string):
   return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)) as ExpressionKind;
 }
 
+/**
+ * When a style function uses a `props` object parameter, wraps the raw call
+ * argument in `{ [propsObjectKey]: rawArg }`. Returns `rawArg` unchanged when
+ * `propsObjectKey` is not set.
+ */
+export function wrapCallArgForPropsObject(
+  j: JSCodeshift,
+  rawArg: ExpressionKind,
+  propsObjectKey: string | undefined,
+): ExpressionKind {
+  if (!propsObjectKey) {
+    return rawArg;
+  }
+  return j.objectExpression([
+    j.property("init", j.identifier(propsObjectKey), rawArg),
+  ]) as unknown as ExpressionKind;
+}
+
 // ---------------------------------------------------------------------------
 // Extra style key splitting
 // ---------------------------------------------------------------------------
@@ -541,7 +559,8 @@ export function buildStyleFnExpressions(
 
   for (const p of styleFnPairs) {
     const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
-    const callArg = p.callArg ?? propExpr;
+    const rawCallArg = p.callArg ?? propExpr;
+    const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
     const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
 
     // Track call arg identifier for destructuring if needed

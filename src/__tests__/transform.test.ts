@@ -4359,9 +4359,14 @@ export const Header = styled(Flex)<{ isCompact?: boolean }>\`
 
 export function App() {
   return (
-    <Header justify="center" gap={12} isCompact>
-      Header
-    </Header>
+    <>
+      <Header justify="center" gap={12} isCompact>
+        Header
+      </Header>
+      <Header justify="flex-start" gap={8}>
+        Header 2
+      </Header>
+    </>
   );
 }
 `;
@@ -4397,9 +4402,14 @@ export const Header = styled(Flex).withConfig({
 
 export function App() {
   return (
-    <Header justify="center" gap={12} isCompact>
-      Header
-    </Header>
+    <>
+      <Header justify="center" gap={12} isCompact>
+        Header
+      </Header>
+      <Header justify="flex-start" gap={8}>
+        Header 2
+      </Header>
+    </>
   );
 }
 `;
@@ -4535,7 +4545,9 @@ export function App() {
 
     expect(result.code).not.toBeNull();
     const code = result.code ?? "";
-    expect(code).toContain("containerGapVariants");
+    // Single-key consumed prop emits as conditional style, not a variant object
+    expect(code).toContain("styles.containerGap8");
+    // Template expression also produces a conditional style for gap
     expect(code).toContain("styles.containerGap");
   });
 

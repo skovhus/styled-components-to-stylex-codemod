@@ -18,7 +18,19 @@ export function TextColor(
   const { className, children, style, sx, color, ...rest } = props;
 
   return (
-    <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)}>
+    <span
+      {...rest}
+      {...mergedSx(
+        [
+          styles.textColorColor({
+            color: color,
+          }),
+          sx,
+        ],
+        className,
+        style,
+      )}
+    >
       {children}
     </span>
   );
@@ -32,7 +44,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  textColorColor: (color: string) => ({
-    color,
+  textColorColor: (props: { color: string }) => ({
+    color: props.color,
   }),
 });

@@ -22,7 +22,10 @@ export function Scrollable(props: ScrollableProps) {
       {...stylex.props(
         styles.scrollable,
         applyBackground ? styles.scrollableApplyBackground : undefined,
-        props.gutter != null && styles.scrollableScrollbarGutter(props.gutter),
+        props.gutter != null &&
+          styles.scrollableScrollbarGutter({
+            scrollbarGutter: props.gutter,
+          }),
       )}
     >
       {children}
@@ -55,7 +58,7 @@ const styles = stylex.create({
   scrollableApplyBackground: {
     backgroundColor: "gray",
   },
-  scrollableScrollbarGutter: (scrollbarGutter: "auto" | "stable" | string) => ({
-    scrollbarGutter,
+  scrollableScrollbarGutter: (props: { scrollbarGutter: "auto" | "stable" | string }) => ({
+    scrollbarGutter: props.scrollbarGutter,
   }),
 });

@@ -39,10 +39,26 @@ function PositionBase<C extends React.ElementType = "div">(
       {...rest}
       {...mergedSx(
         [
-          top ? styles.positionBaseTop(top) : undefined,
-          right ? styles.positionBaseRight(right) : undefined,
-          bottom ? styles.positionBaseBottom(bottom) : undefined,
-          left ? styles.positionBaseLeft(left) : undefined,
+          top
+            ? styles.positionBaseTop({
+                top: top,
+              })
+            : undefined,
+          right
+            ? styles.positionBaseRight({
+                right: right,
+              })
+            : undefined,
+          bottom
+            ? styles.positionBaseBottom({
+                bottom: bottom,
+              })
+            : undefined,
+          left
+            ? styles.positionBaseLeft({
+                left: left,
+              })
+            : undefined,
           sx,
         ],
         className,
@@ -82,17 +98,17 @@ export function App() {
 }
 
 const styles = stylex.create({
-  positionBaseTop: (top: string) => ({
-    top,
+  positionBaseTop: (props: { top: string }) => ({
+    top: props.top,
   }),
-  positionBaseRight: (right: string) => ({
-    right,
+  positionBaseRight: (props: { right: string }) => ({
+    right: props.right,
   }),
-  positionBaseBottom: (bottom: string) => ({
-    bottom,
+  positionBaseBottom: (props: { bottom: string }) => ({
+    bottom: props.bottom,
   }),
-  positionBaseLeft: (left: string) => ({
-    left,
+  positionBaseLeft: (props: { left: string }) => ({
+    left: props.left,
   }),
   relative: {
     position: "relative",

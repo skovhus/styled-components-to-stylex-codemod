@@ -8,10 +8,9 @@ function Toggle(props: React.PropsWithChildren<{}>) {
 
   return (
     <div
-      sx={[
-        styles.toggle,
-        styles.toggleBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)),
-      ]}
+      sx={styles.toggle({
+        backgroundColor: ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4),
+      })}
     >
       {props.children}
     </div>
@@ -30,8 +29,12 @@ function Box(props: BoxProps) {
   return (
     <div
       sx={[
-        styles.boxBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2)),
-        styles.boxMargin(m),
+        styles.boxBackgroundColor({
+          backgroundColor: ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2),
+        }),
+        styles.boxMargin({
+          margin: m,
+        }),
       ]}
     >
       {children}
@@ -47,17 +50,15 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  toggle: {
+  toggle: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 16,
-  },
-  toggleBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+    backgroundColor: props.backgroundColor,
   }),
-  boxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  boxBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
-  boxMargin: (margin: number) => ({
-    margin: `${margin}px`,
+  boxMargin: (props: { margin: number }) => ({
+    margin: `${props.margin}px`,
   }),
 });

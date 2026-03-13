@@ -11,7 +11,15 @@ type ButtonProps = React.PropsWithChildren<{
 function Button(props: ButtonProps) {
   const { children, color } = props;
 
-  return <button sx={styles.button((props.color ?? "hotpink") || "blue")}>{children}</button>;
+  return (
+    <button
+      sx={styles.button({
+        color: (props.color ?? "hotpink") || "blue",
+      })}
+    >
+      {children}
+    </button>
+  );
 }
 
 type CardProps = React.PropsWithChildren<{
@@ -70,7 +78,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  button: (color: string | undefined) => ({
-    color,
+  button: (props: { color: string | undefined }) => ({
+    color: props.color,
   }),
 });

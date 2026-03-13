@@ -6,6 +6,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
@@ -531,13 +532,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                     : null;
             if (valueExpr) {
               for (const p of pairs) {
+                const callArg = wrapCallArgForPropsObject(j, valueExpr, p.propsObjectKey);
                 styleArgs.push(
                   j.callExpression(
                     j.memberExpression(
                       j.identifier(ctx.stylesIdentifier ?? "styles"),
                       j.identifier(p.fnKey),
                     ),
-                    [valueExpr],
+                    [callArg],
                   ),
                 );
               }

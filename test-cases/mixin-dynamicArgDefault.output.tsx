@@ -32,11 +32,12 @@ function ColorTitleText(props: ColorTitleTextProps) {
   return (
     <div
       sx={[
-        styles.colorTitleText,
         oneLine === undefined || oneLine
           ? helpers.truncateMultiline(1)
           : helpers.truncateMultiline(2),
-        styles.colorTitleTextColor(props.oneLine === undefined ? "purple" : "teal"),
+        styles.colorTitleText({
+          color: props.oneLine === undefined ? "purple" : "teal",
+        }),
       ]}
     >
       {children}
@@ -57,10 +58,8 @@ const styles = stylex.create({
   titleText: {
     lineHeight: "1rem",
   },
-  colorTitleText: {
+  colorTitleText: (props: { color: string | undefined }) => ({
     lineHeight: "1rem",
-  },
-  colorTitleTextColor: (color: string | undefined) => ({
-    color,
+    color: props.color,
   }),
 });

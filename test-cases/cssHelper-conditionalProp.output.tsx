@@ -34,7 +34,14 @@ export function Container(props: ContainerProps) {
     <Flex
       {...rest}
       {...mergedSx(
-        [styles.container, props.color ? styles.containerBackgroundColor(props.color) : undefined],
+        [
+          styles.container,
+          props.color
+            ? styles.containerBackgroundColor({
+                backgroundColor: props.color,
+              })
+            : undefined,
+        ],
         className,
         style,
       )}
@@ -56,7 +63,7 @@ const styles = stylex.create({
     paddingInline: 6,
     borderRadius: 3,
   },
-  containerBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  containerBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
 });

@@ -25,7 +25,12 @@ import {
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
 } from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
+import {
+  mergeOrderedEntries,
+  styleRef,
+  wrapCallArgForPropsObject,
+  type OrderedStyleEntry,
+} from "./style-expr-builders.js";
 import type { JSCodeshift, Identifier } from "jscodeshift";
 
 /**
@@ -514,7 +519,8 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         : p.jsxProp === "__props"
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
-      const callArg = p.callArg ?? propExpr;
+      const rawCallArg = p.callArg ?? propExpr;
+      const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
       const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
       let expr: ExpressionKind;
       if (p.conditionWhen) {

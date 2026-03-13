@@ -8,8 +8,12 @@ export function App() {
         isOpen
         {...stylex.props(
           styles.external,
-          styles.externalColor("blue"),
-          styles.externalPadding("20px"),
+          styles.externalColor({
+            color: "blue",
+          }),
+          styles.externalPadding({
+            padding: "20px",
+          }),
         )}
       />
       <ExternalComponent isOpen={false} {...stylex.props(styles.external)} />
@@ -23,10 +27,10 @@ const styles = stylex.create({
     color: "gray",
     padding: "10px",
   },
-  externalColor: (color: string) => ({
-    color,
+  externalColor: (props: { color: string }) => ({
+    color: props.color,
   }),
-  externalPadding: (padding: string) => ({
-    padding,
+  externalPadding: (props: { padding: string }) => ({
+    padding: props.padding,
   }),
 });

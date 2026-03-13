@@ -10,7 +10,17 @@ function Swatch(props: SwatchProps) {
   const { children, color } = props;
 
   return (
-    <div sx={[styles.swatch, styles.swatchBackgroundColor(color), styles.swatchBoxShadow(props)]}>
+    <div
+      sx={[
+        styles.swatch,
+        styles.swatchBackgroundColor({
+          backgroundColor: color,
+        }),
+        styles.swatchBoxShadow({
+          color,
+        }),
+      ]}
+    >
       {children}
     </div>
   );
@@ -34,10 +44,10 @@ const styles = stylex.create({
     cursor: "pointer",
     transition: "box-shadow 0.2s",
   },
-  swatchBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  swatchBackgroundColor: (props: { backgroundColor: string }) => ({
+    backgroundColor: props.backgroundColor,
   }),
-  swatchBoxShadow: (props: SwatchProps) => ({
+  swatchBoxShadow: (props) => ({
     boxShadow: {
       default: null,
       ":hover": `0 0 0 3px ${props.color}`,

@@ -46,7 +46,11 @@ export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "cl
       {...mergedSx(
         [
           wrap ? styles.flexBoxWrap : undefined,
-          alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
+          alignSelf
+            ? styles.flexBoxAlignSelf({
+                alignSelf: alignSelf,
+              })
+            : undefined,
           typeof gap === "number" ? styles.flexBoxGap(gap) : undefined,
           typeof wrapGap === "number"
             ? column
@@ -94,8 +98,8 @@ const styles = stylex.create({
   flexBoxWrap: {
     flexWrap: "wrap",
   },
-  flexBoxAlignSelf: (alignSelf: AlignValues) => ({
-    alignSelf,
+  flexBoxAlignSelf: (props: { alignSelf: AlignValues }) => ({
+    alignSelf: props.alignSelf,
   }),
   flexBoxGap: (gap: number) => ({
     gap: `${gap}px`,

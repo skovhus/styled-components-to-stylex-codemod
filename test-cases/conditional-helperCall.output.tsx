@@ -38,7 +38,11 @@ function Title(props: TitleProps) {
       sx={[
         styles.title,
         truncateTitle ? helpers.truncate : undefined,
-        maxWidth ? styles.titleMaxWidth(maxWidth) : undefined,
+        maxWidth
+          ? styles.titleMaxWidth({
+              maxWidth: maxWidth,
+            })
+          : undefined,
       ]}
     >
       {children}
@@ -70,7 +74,7 @@ const styles = stylex.create({
   title: {
     fontSize: 50,
   },
-  titleMaxWidth: (maxWidth: number) => ({
-    maxWidth,
+  titleMaxWidth: (props: { maxWidth: number }) => ({
+    maxWidth: props.maxWidth,
   }),
 });
