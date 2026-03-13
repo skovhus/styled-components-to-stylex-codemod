@@ -19,7 +19,7 @@ export const App = ({ highlightRow }: { highlightRow: string }) => (
     <Code>{"  "}return a + b;</Code>
     <Gutter>4</Gutter>
     <Code>{"}"}</Code>
-    <div sx={[styles.gutter, styles.gutterDynamic(highlightRow)]}>*</div>
+    <div sx={[styles.gutter, styles.gutterDynamic(String(highlightRow))]}>*</div>
     <div sx={[styles.code, styles.codeHighlighted]}>highlighted</div>
   </div>
 );

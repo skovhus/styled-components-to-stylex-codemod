@@ -1763,6 +1763,8 @@ export const App = ({ row }: { row: number }) => {
     expect(result.code).toContain("(gridRow: string) => ({");
     expect(result.code).not.toContain("number | string");
     expect(result.code).not.toContain("gridRow: number");
+    // Call site must coerce numeric arg to string
+    expect(result.code).toContain("String(row)");
   });
 
   it("should coerce static numeric gridRow values to strings", async () => {

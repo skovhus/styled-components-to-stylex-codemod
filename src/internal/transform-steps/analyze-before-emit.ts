@@ -13,6 +13,7 @@ import {
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
+  type ExpressionKind,
   getRootJsxIdentifierName,
   isAstNode,
   isFunctionNode,
@@ -2325,7 +2326,12 @@ function analyzePromotableStyleProps(
         // Tag the JSX node with the style key and call arguments.
         (site.opening as any).__promotedStyleKey = styleKey;
         // The call args are the actual expressions from the style object.
-        const callArgs = dynamicParams.map((dp) => dp.expr);
+        // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
+        const callArgs = dynamicParams.map((dp) =>
+          STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+            ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
+            : dp.expr,
+        );
         (site.opening as any).__promotedStyleArgs = callArgs;
       }
     }
