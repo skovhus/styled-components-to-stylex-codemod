@@ -1,0 +1,1 @@
+import{j as x}from"./index-Cv5kaEz4.js";function e(){return x.jsx("div",{style:{display:"flex",gap:16,padding:16},children:x.jsx("button",{className:"x1vvogim x1hr3lfm x15yo4kd x1mgwg62 xh13cts x1525slw x1kojvy2 xk4b9ki",children:"Hover me"})})}export{e as App};
