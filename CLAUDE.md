@@ -23,7 +23,7 @@ pnpm check       # Run lint + tsc + test
 - src folder code should never depend on test-cases or test-case logic
 - transformations should be safe and lossless, bail if we cannot preserve the semantics of the input
 - always run "pnpm run ci" to validate changes
-- when fixing bugs or addressing review comments, add a test case or unit test to document the regression and prevent future breakage
+- when fixing bugs or addressing review comments, add test coverage to document the regression and prevent future breakage. **Prefer extending an existing test case** over creating a new one — only create a new test case when no existing case covers the same category/feature area
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
 - when `adapter.externalInterface` is `"auto"`, treat prepass as required: if prepass fails, throw (do not silently fall back); only function-based `externalInterface` may continue on prepass failure with a warning
 
@@ -104,6 +104,18 @@ Test cases that the codemod cannot transform use two prefixes to distinguish the
 - **`_unimplemented.<case>.input.tsx`** — StyleX **has the APIs** to express this, but the codemod **hasn't built the transform yet** (e.g., sibling selectors via `stylex.when.siblingBefore()`, cross-file component selectors via `stylex.defineMarker()`). These are planned future work.
 
 Both prefixes should **NOT** have an output file. Both are excluded from supported test runs, Storybook, and the playground.
+
+### Prefer Extending Existing Test Cases
+
+Before creating a new test case, check whether an existing test case already covers the same category or feature area. If so, **extend the existing test case** by adding the new pattern as additional styled components or JSX variations in the `App` component. This keeps test cases comprehensive and avoids test sprawl.
+
+For example, to test a new grid property behavior, extend `css-gridTemplate` rather than creating a new `css-gridRowType` test case. To test a new conditional pattern, extend an existing `conditional-*` case if one already covers similar ground.
+
+Only create a new test case when:
+
+- No existing case covers the same category
+- The pattern is fundamentally different enough to warrant its own file
+- Adding to an existing case would make it unwieldy or unclear
 
 ### Creating a Test Case Step-by-Step
 

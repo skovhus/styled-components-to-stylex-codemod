@@ -32,7 +32,7 @@ const Code = styled.div`
   font-size: 12px;
 `;
 
-export const App = () => (
+export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
   <Container>
     <Gutter>1</Gutter>
     <Code>const answer = 42;</Code>
@@ -42,5 +42,7 @@ export const App = () => (
     <Code>{"  "}return a + b;</Code>
     <Gutter>4</Gutter>
     <Code>{"}"}</Code>
+    <Gutter style={{ gridRow: highlightRow }}>*</Gutter>
+    <Code style={{ gridRow: 2 }}>highlighted</Code>
   </Container>
 );

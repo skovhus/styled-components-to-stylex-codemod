@@ -13,6 +13,7 @@ import {
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
+  type ExpressionKind,
   getRootJsxIdentifierName,
   isAstNode,
   isFunctionNode,
@@ -472,16 +473,17 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (relationChildStyleKeys.has(decl.styleKey)) {
       continue;
     }
-    // Components with promoted style props at all call sites don't need wrapping;
-    // each call site gets its own promoted style key(s) in the inline output.
-    if (decl.promotedStyleProps?.length) {
+    // When every call site has promoted style props, each site is fully inlined;
+    // a wrapper would be generated but never used. Skip wrapping in that case.
+    const usageCount = getJsxUsageCount(decl.localName);
+    if (decl.promotedStyleProps?.length && decl.promotedStyleProps.length >= usageCount) {
       continue;
     }
     const { ref } = getJsxAttributeUsage(decl.localName);
     if (ref) {
       continue;
     }
-    if (getJsxUsageCount(decl.localName) > INLINE_USAGE_THRESHOLD) {
+    if (usageCount > INLINE_USAGE_THRESHOLD) {
       decl.needsWrapperComponent = true;
     }
   }
@@ -1955,8 +1957,11 @@ const NUMERIC_CSS_PROPS = new Set([
   "columnCount",
 ]);
 
-/** CSS properties that accept both numeric and string values (e.g., grid line numbers or span syntax). */
-const NUMBER_OR_STRING_CSS_PROPS = new Set([
+/**
+ * CSS properties that accept numeric values in standard CSS / React inline styles
+ * but are typed as `string` in StyleX. Numeric values must be coerced to strings.
+ */
+const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "gridRow",
   "gridColumn",
   "gridRowStart",
@@ -1976,11 +1981,22 @@ function isValidIdentifierName(name: string): boolean {
   return IDENTIFIER_NAME_RE.test(name);
 }
 
+function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
+  if (STYLEX_STRING_ONLY_CSS_PROPS.has(cssProp) && typeof value === "number") {
+    return String(value);
+  }
+  return value;
+}
+
 /**
  * Infers a TS type keyword for a dynamic expression based on the CSS property it's assigned to.
  * Numeric-only properties get `number`; ambiguous length-like values get `number | string`.
+ * Properties in STYLEX_STRING_ONLY_CSS_PROPS always get `string` even when the value is numeric.
  */
 function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType {
+  if (STYLEX_STRING_ONLY_CSS_PROPS.has(cssProp)) {
+    return "string";
+  }
   const staticVal = literalToStaticValue(expr);
   if (typeof staticVal === "number") {
     return "number";
@@ -1991,7 +2007,7 @@ function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType 
   if (NUMERIC_CSS_PROPS.has(cssProp)) {
     return "number";
   }
-  if (NUMBER_OR_STRING_CSS_PROPS.has(cssProp) || LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
+  if (LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
     return "numberOrString";
   }
   return "string";
@@ -2201,7 +2217,7 @@ function analyzePromotableStyleProps(
         // All-static style object
         const staticObj: Record<string, unknown> = {};
         for (const p of site.properties) {
-          staticObj[p.key] = p.staticValue;
+          staticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
         }
 
         // Single-use component with extending chain: merge into base style key,
@@ -2239,7 +2255,7 @@ function analyzePromotableStyleProps(
 
         for (const p of site.properties) {
           if (p.staticValue !== null) {
-            staticObj[p.key] = p.staticValue;
+            staticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
           } else {
             dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr });
           }
@@ -2310,7 +2326,12 @@ function analyzePromotableStyleProps(
         // Tag the JSX node with the style key and call arguments.
         (site.opening as any).__promotedStyleKey = styleKey;
         // The call args are the actual expressions from the style object.
-        const callArgs = dynamicParams.map((dp) => dp.expr);
+        // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
+        const callArgs = dynamicParams.map((dp) =>
+          STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+            ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
+            : dp.expr,
+        );
         (site.opening as any).__promotedStyleArgs = callArgs;
       }
     }
