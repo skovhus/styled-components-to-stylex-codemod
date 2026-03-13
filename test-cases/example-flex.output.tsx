@@ -323,10 +323,7 @@ export const App = () => (
     </Flex>
 
     {/* Non-polymorphic wrapper around generic Flex */}
-    <Flex
-      onContextMenu={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
-      {...stylex.props(styles.flex, styles.padded)}
-    >
+    <Flex onContextMenu={(e) => e.stopPropagation()} {...stylex.props(styles.flex, styles.padded)}>
       Padded content
     </Flex>
 

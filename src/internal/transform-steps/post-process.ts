@@ -153,11 +153,14 @@ export function postProcessStep(ctx: TransformContext): StepResult {
         .some((p: { node?: { attributes?: unknown[] } }) => hasAsAttr(p.node?.attributes as any));
     };
 
+    // Only annotate event handlers on polymorphic `as` components where
+    // the element type (and thus event types) varies at runtime.
+    // Non-polymorphic components have stable types that TypeScript infers.
     const convertedNames = new Set<string>();
     const componentTagMap = new Map<string, string>();
     for (const decl of styledDecls) {
       const isPolymorphic = !!decl.supportsAsProp || hasLocalAsUsage(decl.localName);
-      if (decl.base.kind === "intrinsic" && !isPolymorphic) {
+      if (decl.base.kind === "intrinsic" && isPolymorphic) {
         convertedNames.add(decl.localName);
         componentTagMap.set(decl.localName, decl.base.tagName);
       }

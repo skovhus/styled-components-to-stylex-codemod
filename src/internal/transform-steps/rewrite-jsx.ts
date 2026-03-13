@@ -122,7 +122,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // plain call sites keep using the wrapper function.
         if (decl.needsWrapperComponent) {
           const hasPromoted =
-            (opening as any).__promotedStyleKey && !(opening as any).__promotedMergeIntoBase;
+            ((opening as any).__promotedStyleKey && !(opening as any).__promotedMergeIntoBase) ||
+            (opening as any).__promotedMergeArgs;
           if (!hasPromoted) {
             return;
           }
@@ -446,6 +447,21 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // style — the combined entry already includes all base + consumed-prop styles.
         const baseStyleKey = matchedCombinedStyleKey ?? decl.styleKey;
 
+        // When a dynamic merge replaced the base with an arrow function, emit
+        // the base as a function call: styles.foo(arg1, arg2).
+        // Only use mergeArgs when NOT using a combined style key (combined keys
+        // are always static objects, not functions).
+        const mergeArgs = matchedCombinedStyleKey
+          ? undefined
+          : ((opening as any).__promotedMergeArgs as ExpressionKind[] | undefined);
+        const baseMember = j.memberExpression(
+          j.identifier(ctx.stylesIdentifier ?? "styles"),
+          j.identifier(baseStyleKey),
+        );
+        const baseExpr: ExpressionKind = mergeArgs
+          ? j.callExpression(baseMember, mergeArgs)
+          : baseMember;
+
         const styleArgs: ExpressionKind[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -456,10 +472,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               ]
             : []),
           ...extraMixinArgs,
-          j.memberExpression(
-            j.identifier(ctx.stylesIdentifier ?? "styles"),
-            j.identifier(baseStyleKey),
-          ),
+          baseExpr,
           ...extraAfterBaseArgs,
         ];
 

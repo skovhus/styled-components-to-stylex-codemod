@@ -14,7 +14,7 @@ export function Select(props: Omit<React.ComponentProps<"select">, "className" |
 export const App = () => (
   <section sx={styles.wrapper}>
     <h1 sx={styles.title}>Hello World!</h1>
-    <Select onChange={(e: React.ChangeEvent<HTMLSelectElement>) => console.log(e.target.value)} />
+    <Select onChange={(e) => console.log(e.target.value)} />
   </section>
 );
 

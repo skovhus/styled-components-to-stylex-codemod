@@ -22,8 +22,8 @@ export function App() {
           <span>Measure</span>
         </div>
         <div sx={[styles.fadeBase, styles.fadeLeft, styles.fadeLeftDynamic(offset)]} />
-        <div sx={[styles.fadeBase, styles.fadeRight, styles.fadeRightDynamic(offset)]} />
-        <div sx={[styles.tick, styles.tickDynamic(lineColor)]} />
+        <div sx={[styles.fadeBase, styles.fadeRight(offset)]} />
+        <div sx={styles.tick(lineColor)} />
       </div>
     </div>
   );
@@ -52,23 +52,25 @@ const styles = stylex.create({
     width: `${FADE_WIDTH}px`,
     backgroundImage: "linear-gradient(to right, transparent, #f0f5ff)",
   },
-  fadeRight: {
+  fadeRight: (left: number | string) => ({
     width: `${FADE_WIDTH}px`,
     backgroundImage: "linear-gradient(to left, transparent, #f0f5ff)",
-  },
+    left,
+  }),
   smallFade: {
     width: 10,
     right: 0,
   },
-  tick: {
+  tick: (borderRightColor: string) => ({
     position: "absolute",
     top: `-${OFFSET}px`,
     height: 6,
     borderRightWidth: 1,
     borderRightStyle: "solid",
-    borderRightColor: "transparent",
     zIndex: 1,
-  },
+    left: 40,
+    borderRightColor,
+  }),
   itemRowLabelA: {
     height: 24,
     left: 10,
@@ -81,12 +83,5 @@ const styles = stylex.create({
   fadeLeftDynamic: (left: number | string) => ({
     zIndex: 1,
     left,
-  }),
-  fadeRightDynamic: (left: number | string) => ({
-    left,
-  }),
-  tickDynamic: (borderRightColor: string) => ({
-    left: 40,
-    borderRightColor,
   }),
 });

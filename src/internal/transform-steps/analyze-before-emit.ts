@@ -655,18 +655,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     // Block renames where the stripped name already appears as a JSX attribute at
     // a call site (e.g., <Input size={5} $size="lg" /> — renaming $size → size
-    // would create duplicate attributes). Also block ALL renames when any call site
-    // uses spread attributes, since the spread may contain $-prefixed keys at runtime.
-    const callSiteHasSpread = collectCallSiteAttrNames(root, j, decl.localName, existingPropNames);
-    if (callSiteHasSpread) {
-      continue;
-    }
+    // would create duplicate attributes). When a call site uses spread attributes,
+    // only allow renames for $-prefixed props that are explicitly passed at ALL
+    // spread-containing sites (explicit attrs override spread values, so the rename
+    // is safe).
+    const { hasSpread, explicitTransientAtSpreadSites } = collectCallSiteAttrNames(
+      root,
+      j,
+      decl.localName,
+      existingPropNames,
+    );
     const renames = new Map<string, string>();
     for (const prop of transientProps) {
       const stripped = prop.slice(1);
-      if (!existingPropNames.has(stripped)) {
-        renames.set(prop, stripped);
+      if (existingPropNames.has(stripped)) {
+        continue;
       }
+      // When spreads exist, only rename props explicitly passed at all spread sites
+      if (hasSpread && !explicitTransientAtSpreadSites?.has(prop)) {
+        continue;
+      }
+      renames.set(prop, stripped);
     }
     if (renames.size > 0) {
       // Don't rename props when the propsType references a named type (interface
@@ -1055,10 +1064,15 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (decl.promotedStyleProps?.length) {
         for (const entry of decl.promotedStyleProps) {
           if (entry.mergeIntoBase) {
-            // Merge static properties into the component's existing style object.
-            const existing = ctx.resolvedStyleObjects.get(decl.styleKey);
-            if (existing && typeof existing === "object" && !isAstNode(existing)) {
-              Object.assign(existing as Record<string, unknown>, entry.styleValue);
+            if (isAstNode(entry.styleValue)) {
+              // Dynamic merge: replace the base entry with the arrow function.
+              ctx.resolvedStyleObjects.set(decl.styleKey, entry.styleValue);
+            } else {
+              // Static merge: merge properties into the component's existing style object.
+              const existing = ctx.resolvedStyleObjects.get(decl.styleKey);
+              if (existing && typeof existing === "object" && !isAstNode(existing)) {
+                Object.assign(existing as Record<string, unknown>, entry.styleValue);
+              }
             }
           } else {
             ctx.resolvedStyleObjects.set(entry.styleKey, entry.styleValue);
@@ -1257,26 +1271,49 @@ function collectResolverImportNames(ctx: TransformContext): Set<string> {
 /**
  * Collects non-`$`-prefixed attribute names from JSX call sites of a component.
  * Returns true if any call site uses a JSX spread attribute (e.g., `{...props}`),
- * which means the spread may contain `$`-prefixed keys at runtime — all renames
- * must be blocked to prevent mismatches.
+ * which means the spread may contain `$`-prefixed keys at runtime — renames are
+ * only safe for `$`-props that appear **after** the last spread at every call site,
+ * since in JSX later attributes override earlier ones.
  */
+interface CallSiteAttrResult {
+  hasSpread: boolean;
+  /**
+   * `$`-prefixed props explicitly passed at every spread-containing call site.
+   * Renames for these are safe even with spreads (explicit attrs override spread values).
+   * `null` when no spread sites exist.
+   */
+  explicitTransientAtSpreadSites: Set<string> | null;
+}
+
 function collectCallSiteAttrNames(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   componentName: string,
   names: Set<string>,
-): boolean {
+): CallSiteAttrResult {
   let hasSpread = false;
+  const spreadSiteTransientProps: Set<string>[] = [];
   const collectFromElement = (openingElement: { attributes?: unknown[] }) => {
+    let siteHasSpread = false;
+    const siteTransientAfterSpread = new Set<string>();
     for (const attr of (openingElement as any).attributes ?? []) {
       if (attr.type === "JSXSpreadAttribute") {
         hasSpread = true;
+        siteHasSpread = true;
+        // Any $-props seen BEFORE this spread are overridden by the spread,
+        // so clear them — only props AFTER the last spread are safe to rename.
+        siteTransientAfterSpread.clear();
       } else if (attr.type === "JSXAttribute" && attr.name?.type === "JSXIdentifier") {
         const name: string = attr.name.name;
-        if (!name.startsWith("$")) {
+        if (name.startsWith("$")) {
+          siteTransientAfterSpread.add(name);
+        } else {
           names.add(name);
         }
       }
+    }
+    if (siteHasSpread) {
+      spreadSiteTransientProps.push(siteTransientAfterSpread);
     }
   };
   root
@@ -1291,7 +1328,22 @@ function collectCallSiteAttrNames(
       name: { type: "JSXIdentifier", name: componentName },
     } as any)
     .forEach((p: any) => collectFromElement(p.node));
-  return hasSpread;
+  if (!hasSpread) {
+    return { hasSpread: false, explicitTransientAtSpreadSites: null };
+  }
+  // Intersect: find $-prefixed props that appear at ALL spread-containing sites
+  if (spreadSiteTransientProps.length === 0) {
+    return { hasSpread: true, explicitTransientAtSpreadSites: new Set() };
+  }
+  const intersection = new Set(spreadSiteTransientProps[0]);
+  for (let i = 1; i < spreadSiteTransientProps.length; i++) {
+    for (const prop of intersection) {
+      if (!spreadSiteTransientProps[i]!.has(prop)) {
+        intersection.delete(prop);
+      }
+    }
+  }
+  return { hasSpread: true, explicitTransientAtSpreadSites: intersection };
 }
 
 /**
@@ -2246,23 +2298,65 @@ function analyzePromotableStyleProps(
         }
       } else if (hasDynamic) {
         // Mixed static+dynamic or all-dynamic: create a dynamic style function.
-        const styleKey = generatePromotedDynamicStyleKey(
-          decl.styleKey,
-          usedKeyNames,
-          site.children,
-        );
-        usedKeyNames.add(styleKey);
-
         // Build static part of the style object and collect dynamic params.
-        const staticObj: Record<string, unknown> = {};
+        const inlineStaticObj: Record<string, unknown> = {};
         const dynamicParams: Array<{ cssProp: string; expr: unknown }> = [];
 
         for (const p of site.properties) {
           if (p.staticValue !== null) {
-            staticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
+            inlineStaticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
           } else {
             dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr });
           }
+        }
+
+        // Check if we can merge the base static styles into this dynamic function.
+        // This produces a single style entry instead of separate static + dynamic keys.
+        // Bail when base values include non-primitive, non-AST objects (e.g., pseudo-selector maps).
+        const baseObj = resolvedStyleObjects.get(decl.styleKey);
+        const baseIsSimpleObject =
+          baseObj &&
+          typeof baseObj === "object" &&
+          !isAstNode(baseObj) &&
+          Object.values(baseObj as Record<string, unknown>).every(
+            (v) =>
+              typeof v === "string" ||
+              typeof v === "number" ||
+              typeof v === "boolean" ||
+              isAstNode(v),
+          );
+        // Don't merge if another styled component extends this one — converting
+        // the base style to a function would break the child's static style reference.
+        const isExtendedByOther = styledDecls.some(
+          (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
+        );
+        const canMergeDynamic =
+          usageCount <= 1 &&
+          !decl.isExported &&
+          !isExtendedByOther &&
+          baseIsSimpleObject &&
+          !hasPropertyOverlap(inlineStaticObj, baseObj as Record<string, unknown>);
+
+        // Collect all static properties (base + inline) for the merged function body.
+        // Dynamic params override base properties with the same key, so filter them out.
+        const dynamicPropKeys = new Set(dynamicParams.map((dp) => dp.cssProp));
+        const mergedStaticProps: Array<{ key: string; value: unknown }> = [];
+        if (canMergeDynamic) {
+          for (const [k, v] of Object.entries(baseObj as Record<string, unknown>)) {
+            if (!dynamicPropKeys.has(k)) {
+              mergedStaticProps.push({ key: k, value: v });
+            }
+          }
+        }
+        for (const [k, v] of Object.entries(inlineStaticObj)) {
+          mergedStaticProps.push({ key: k, value: v });
+        }
+
+        const styleKey = canMergeDynamic
+          ? decl.styleKey
+          : generatePromotedDynamicStyleKey(decl.styleKey, usedKeyNames, site.children);
+        if (!canMergeDynamic) {
+          usedKeyNames.add(styleKey);
         }
 
         // Build the ArrowFunctionExpression AST node.
@@ -2300,43 +2394,60 @@ function analyzePromotableStyleProps(
           return id;
         });
 
-        // Build object expression body
-        const bodyProperties = site.properties.map((p) => {
-          if (p.staticValue !== null) {
-            // Static property
-            const val =
-              typeof p.staticValue === "string"
-                ? j.stringLiteral(p.staticValue)
-                : typeof p.staticValue === "number"
-                  ? j.numericLiteral(p.staticValue)
-                  : j.booleanLiteral(p.staticValue as boolean);
-            return j.property("init", j.identifier(p.key), val);
-          } else {
-            // Dynamic property — param name matches CSS property for shorthand: { left }
+        // Build object expression body with merged base + inline properties
+        const bodyProperties: ReturnType<typeof j.property>[] = [];
+        for (const sp of mergedStaticProps) {
+          const val = isAstNode(sp.value)
+            ? (sp.value as ExpressionKind) // Already an AST node — use directly
+            : typeof sp.value === "string"
+              ? j.stringLiteral(sp.value)
+              : typeof sp.value === "number"
+                ? j.numericLiteral(sp.value)
+                : j.booleanLiteral(sp.value as boolean);
+          bodyProperties.push(j.property("init", j.identifier(sp.key), val));
+        }
+        for (const p of site.properties) {
+          if (p.dynamicExpr !== null) {
             const prop = j.property("init", j.identifier(p.key), j.identifier(p.key));
             (prop as any).shorthand = true;
-            return prop;
+            bodyProperties.push(prop);
           }
-        });
+        }
 
         const fnNode = j.arrowFunctionExpression(params, j.objectExpression(bodyProperties));
 
-        // Store the AST node directly in resolvedStyleObjects (emitter handles AST nodes).
-        promotedEntries.push({
-          styleKey,
-          styleValue: fnNode as unknown as Record<string, unknown>,
-        });
+        if (canMergeDynamic) {
+          // Replace the base static entry with the merged function.
+          promotedEntries.push({
+            styleKey: decl.styleKey,
+            styleValue: fnNode as unknown as Record<string, unknown>,
+            mergeIntoBase: true,
+          });
+          // Tag JSX: merge consumes the style attr, and the base key becomes a fn call.
+          (site.opening as any).__promotedMergeIntoBase = true;
+          (site.opening as any).__promotedMergeArgs = dynamicParams.map((dp) =>
+            STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+              ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
+              : dp.expr,
+          );
+        } else {
+          // Store the AST node directly in resolvedStyleObjects (emitter handles AST nodes).
+          promotedEntries.push({
+            styleKey,
+            styleValue: fnNode as unknown as Record<string, unknown>,
+          });
 
-        // Tag the JSX node with the style key and call arguments.
-        (site.opening as any).__promotedStyleKey = styleKey;
-        // The call args are the actual expressions from the style object.
-        // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
-        const callArgs = dynamicParams.map((dp) =>
-          STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
-            ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
-            : dp.expr,
-        );
-        (site.opening as any).__promotedStyleArgs = callArgs;
+          // Tag the JSX node with the style key and call arguments.
+          (site.opening as any).__promotedStyleKey = styleKey;
+          // The call args are the actual expressions from the style object.
+          // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
+          const callArgs = dynamicParams.map((dp) =>
+            STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+              ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
+              : dp.expr,
+          );
+          (site.opening as any).__promotedStyleArgs = callArgs;
+        }
       }
     }
 

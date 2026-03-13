@@ -4678,7 +4678,7 @@ export const App = () => (
 });
 
 describe("event handler annotation typing", () => {
-  it("annotates onChange handlers with intrinsic element types", () => {
+  it("does not annotate event handlers on non-polymorphic intrinsic components", () => {
     const source = `
 import React from "react";
 import styled from "styled-components";
@@ -4709,11 +4709,12 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
-    expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
+    // Non-polymorphic components: TypeScript infers event types, no annotation needed
+    expect(result.code).not.toContain("React.ChangeEvent");
+    expect(result.code).toContain("(e) => console.log(e.target.value)");
   });
 
-  it("wraps unparenthesized arrow params in parens when adding type annotations", () => {
+  it("does not add type annotations on non-polymorphic components", () => {
     const source = `
 import React from "react";
 import styled from "styled-components";
@@ -4737,13 +4738,11 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
-    // Must have parentheses around the typed parameter — not `e: Type =>`
-    expect(result.code).toContain(
-      "(e: React.KeyboardEvent<HTMLDivElement>) => e.stopPropagation()",
-    );
-    expect(result.code).toContain("(e: React.MouseEvent<HTMLDivElement>) => console.log(e)");
-    // Must NOT have the broken unparenthesized form
-    expect(result.code).not.toContain("{e: React.");
+    // Non-polymorphic: no type annotations added
+    expect(result.code).not.toContain("React.KeyboardEvent");
+    expect(result.code).not.toContain("React.MouseEvent");
+    expect(result.code).toContain("e => e.stopPropagation()");
+    expect(result.code).toContain("e => console.log(e)");
   });
 });
 
