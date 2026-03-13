@@ -1,0 +1,1 @@
+import{j as e}from"./index-B6q1r6cZ.js";function s(){return e.jsxs("div",{style:{display:"flex",gap:"12px",padding:"16px"},children:[e.jsx("svg",{"aria-hidden":!0,width:14,height:14,className:"xamitd3 x2lah0s",children:e.jsx("rect",{width:"14",height:"14",fill:"coral"})}),e.jsx("div",{className:"xju2f9n x1bvjpef",children:"https://example.com"})]})}export{s as App};
