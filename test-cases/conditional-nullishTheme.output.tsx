@@ -14,11 +14,10 @@ function Line(props: LineProps) {
     <div
       sx={[
         styles.line,
-        isRemoval
-          ? styles.lineBackgroundColor({
-              backgroundColor: deletionColor ?? $colors.bgBase,
-            })
-          : undefined,
+        isRemoval &&
+          styles.lineBackgroundColor({
+            backgroundColor: deletionColor ?? $colors.bgBase,
+          }),
       ]}
     >
       {children}

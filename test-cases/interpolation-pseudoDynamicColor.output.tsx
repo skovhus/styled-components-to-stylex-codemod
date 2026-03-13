@@ -16,9 +16,7 @@ function Swatch(props: SwatchProps) {
         styles.swatchBackgroundColor({
           backgroundColor: color,
         }),
-        styles.swatchBoxShadow({
-          color,
-        }),
+        styles.swatchBoxShadow(props),
       ]}
     >
       {children}
@@ -47,7 +45,7 @@ const styles = stylex.create({
   swatchBackgroundColor: (props: { backgroundColor: string }) => ({
     backgroundColor: props.backgroundColor,
   }),
-  swatchBoxShadow: (props) => ({
+  swatchBoxShadow: (props: SwatchProps) => ({
     boxShadow: {
       default: null,
       ":hover": `0 0 0 3px ${props.color}`,

@@ -29,6 +29,8 @@ import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
 
+export { replaceIdentifierInAst };
+
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
     state,
@@ -908,6 +910,10 @@ function replaceIdentifierInAst(
   // For all other node types, walk children and replace matching Identifiers
   for (const key of Object.keys(n)) {
     if (key === "type" || key === "loc" || key === "start" || key === "end" || key === "comments") {
+      continue;
+    }
+    // Skip non-computed MemberExpression.property — it's a property name, not a variable reference
+    if (key === "property" && n.type === "MemberExpression" && !n.computed) {
       continue;
     }
     const child = n[key];

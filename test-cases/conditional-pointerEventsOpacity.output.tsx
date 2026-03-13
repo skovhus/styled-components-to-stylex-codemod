@@ -19,11 +19,10 @@ function Container(props: ContainerProps) {
         styles.containerTransition({
           transition: props.duration,
         }),
-        open
-          ? styles.containerOpen({
-              delay,
-            })
-          : undefined,
+        open &&
+          styles.containerOpen({
+            delay,
+          }),
       )}
     >
       {children}

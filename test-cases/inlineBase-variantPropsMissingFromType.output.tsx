@@ -18,7 +18,7 @@ function Header(props: HeaderProps) {
         align === "center" && styles.headerAlignCenter,
         gap != null && headerGapVariants[gap],
         justify != null && headerJustifyVariants[justify],
-        isCompact ? styles.headerCompact : undefined,
+        isCompact && styles.headerCompact,
       ]}
     >
       {children}

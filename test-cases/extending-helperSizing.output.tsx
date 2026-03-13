@@ -21,7 +21,7 @@ function AvatarContainer(props: AvatarContainerProps) {
     <div
       sx={[
         styles.avatarContainer,
-        disabled ? styles.avatarContainerDisabled : undefined,
+        disabled && styles.avatarContainerDisabled,
         styles.avatarContainerWidth({
           width: sizeMap[size],
         }),

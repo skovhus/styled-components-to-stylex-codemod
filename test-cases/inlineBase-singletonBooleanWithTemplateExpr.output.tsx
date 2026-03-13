@@ -16,8 +16,8 @@ export function Container(props: ContainerProps) {
       {...mergedSx(
         [
           styles.container,
-          column ? styles.containerColumn : undefined,
-          isCompact ? styles.containerCompact : undefined,
+          column && styles.containerColumn,
+          isCompact && styles.containerCompact,
           sx,
         ],
         className,
