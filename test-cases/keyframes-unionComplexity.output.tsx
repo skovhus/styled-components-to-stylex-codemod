@@ -27,13 +27,7 @@ export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCa
     <Component
       {...rest}
       {...mergedSx(
-        [
-          styles.loaderCaret,
-          styles.loaderCaretAnimationDelay({
-            animationDelay: `${delay ?? 1000}ms`,
-          }),
-          sx,
-        ],
+        [styles.loaderCaret, styles.loaderCaretAnimationDelay(`${delay ?? 1000}ms`), sx],
         className,
         style,
       )}
@@ -85,8 +79,8 @@ const styles = stylex.create({
     animationTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
     animationDelay: "1000ms",
   },
-  loaderCaretAnimationDelay: (props: { animationDelay: string }) => ({
-    animationDelay: props.animationDelay,
+  loaderCaretAnimationDelay: (animationDelay: string) => ({
+    animationDelay,
   }),
   styledLoaderCaret: {
     position: "absolute",

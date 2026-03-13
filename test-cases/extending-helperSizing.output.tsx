@@ -22,12 +22,8 @@ function AvatarContainer(props: AvatarContainerProps) {
       sx={[
         styles.avatarContainer,
         disabled && styles.avatarContainerDisabled,
-        styles.avatarContainerWidth({
-          width: sizeMap[size],
-        }),
-        styles.avatarContainerHeight({
-          height: sizeMap[size],
-        }),
+        styles.avatarContainerWidth(sizeMap[size]),
+        styles.avatarContainerHeight(sizeMap[size]),
       ]}
     >
       {children}
@@ -117,10 +113,10 @@ const styles = stylex.create({
   avatarContainerDisabled: {
     opacity: 0.5,
   },
-  avatarContainerWidth: (props: { width: number | string }) => ({
-    width: props.width,
+  avatarContainerWidth: (width: number | string) => ({
+    width,
   }),
-  avatarContainerHeight: (props: { height: number | string }) => ({
-    height: props.height,
+  avatarContainerHeight: (height: number | string) => ({
+    height,
   }),
 });

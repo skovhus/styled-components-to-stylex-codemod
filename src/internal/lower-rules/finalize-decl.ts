@@ -519,8 +519,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   });
 
   // Convert single-positional-param style functions to use a named `props`
-  // object parameter: `(color: string) => ({color})` → `(props: {color: string}) => ({color: props.color})`.
-  convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps);
+  // object parameter, but only when the function key IS the base style key
+  // (i.e., merged base). Separate derived keys like `boxBoxShadow` already
+  // encode the parameter name, so positional args are clearer there.
+  convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
 
   insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
     styleKey: decl.styleKey,
@@ -780,6 +782,7 @@ function convertStyleFnsToPropsPattern(
   j: Parameters<typeof literalToAst>[0],
   styleFnDecls: Map<string, unknown>,
   styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+  baseStyleKey: string,
 ): void {
   // Build a set of fnKeys that have matching styleFnFromProps entries.
   // Only convert functions whose call sites are managed via styleFnFromProps;
@@ -788,6 +791,12 @@ function convertStyleFnsToPropsPattern(
   const managedFnKeys = new Set(styleFnFromProps.map((p) => p.fnKey));
 
   for (const [fnKey, fnAst] of styleFnDecls.entries()) {
+    // Only convert merged-base functions (fnKey === baseStyleKey). Separate
+    // derived keys like `boxBoxShadow` already encode the parameter name,
+    // so positional args are clearer: `styles.boxBoxShadow(shadow)`.
+    if (fnKey !== baseStyleKey) {
+      continue;
+    }
     if (!managedFnKeys.has(fnKey)) {
       continue;
     }

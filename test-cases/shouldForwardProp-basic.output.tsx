@@ -15,10 +15,7 @@ function Button(props: ButtonProps) {
       {...rest}
       sx={[
         styles.button,
-        color != null &&
-          styles.buttonBackgroundColor({
-            backgroundColor: color,
-          }),
+        color != null && styles.buttonBackgroundColor(color),
         size === "large" && styles.buttonSizeLarge,
       ]}
     >
@@ -54,14 +51,8 @@ function Box(props: BoxProps) {
       {...rest}
       sx={[
         styles.box,
-        background != null &&
-          styles.boxBackgroundColor({
-            backgroundColor: background,
-          }),
-        padding != null &&
-          styles.boxPadding({
-            padding: padding,
-          }),
+        background != null && styles.boxBackgroundColor(background),
+        padding != null && styles.boxPadding(padding),
       ]}
     >
       {children}
@@ -109,14 +100,7 @@ export const App = () => (
     <Box background="#f0f0f0" padding="24px">
       Box with transient-like props
     </Box>
-    <div
-      sx={[
-        styles.colorBox,
-        styles.colorBoxBackgroundColor({
-          backgroundColor: "#bf4f74",
-        }),
-      ]}
-    >
+    <div sx={[styles.colorBox, styles.colorBoxBackgroundColor("#bf4f74")]}>
       Nullish Coalescing Box
     </div>
     <Card variant="primary" elevation={3} rounded>
@@ -142,8 +126,8 @@ const styles = stylex.create({
     paddingInline: "24px",
     fontSize: "18px",
   },
-  buttonBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  buttonBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
   link: {
     color: {
@@ -163,19 +147,19 @@ const styles = stylex.create({
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
-  boxBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  boxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
-  boxPadding: (props: { padding: string }) => ({
-    padding: props.padding,
+  boxPadding: (padding: string) => ({
+    padding,
   }),
   // Using nullish coalescing operator for fallbacks
   colorBox: {
     backgroundColor: "#e0e0e0",
     padding: 16,
   },
-  colorBoxBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  colorBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
   card: {
     backgroundColor: "#4F74BF",

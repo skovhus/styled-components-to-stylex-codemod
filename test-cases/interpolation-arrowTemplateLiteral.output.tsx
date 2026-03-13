@@ -10,20 +10,7 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, width, height } = props;
 
-  return (
-    <div
-      sx={[
-        styles.boxWidth({
-          width: width,
-        }),
-        styles.boxHeight({
-          height: height,
-        }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.boxWidth(width), styles.boxHeight(height)]}>{children}</div>;
 }
 
 type MixedBoxProps = React.PropsWithChildren<{
@@ -92,11 +79,11 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  boxWidth: (props: { width: string }) => ({
-    width: props.width,
+  boxWidth: (width: string) => ({
+    width,
   }),
-  boxHeight: (props: { height: string }) => ({
-    height: props.height,
+  boxHeight: (height: string) => ({
+    height,
   }),
   mixedBox: {
     backgroundColor: "blue",

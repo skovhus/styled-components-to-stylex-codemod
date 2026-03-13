@@ -9,18 +9,7 @@ type BoxProps = {
 function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, delay } = props;
 
-  return (
-    <div
-      sx={[
-        styles.box,
-        styles.boxTransitionDelay({
-          transitionDelay: `${delay ?? 0}ms`,
-        }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, styles.boxTransitionDelay(`${delay ?? 0}ms`)]}>{children}</div>;
 }
 
 export const App = () => (
@@ -37,7 +26,7 @@ const styles = stylex.create({
     transitionDuration: "200ms",
     transitionTimingFunction: "ease-out",
   },
-  boxTransitionDelay: (props: { transitionDelay: string }) => ({
-    transitionDelay: props.transitionDelay,
+  boxTransitionDelay: (transitionDelay: string) => ({
+    transitionDelay,
   }),
 });

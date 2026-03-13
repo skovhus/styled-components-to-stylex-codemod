@@ -21,15 +21,8 @@ export function ColorBadge(
       sx={[
         styles.colorBadge,
         hollow ? styles.colorBadgeHollow : undefined,
-        hollow
-          ? styles.colorBadgeBorderColor({
-              borderColor: color ? color : $colors.labelMuted,
-            })
-          : undefined,
-        !hollow &&
-          styles.colorBadgeBackgroundColor({
-            backgroundColor: color ? color : $colors.labelMuted,
-          }),
+        hollow ? styles.colorBadgeBorderColor(color ? color : $colors.labelMuted) : undefined,
+        !hollow && styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
         sizeVariants[size],
       ]}
     >
@@ -61,11 +54,11 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
   },
-  colorBadgeBorderColor: (props: { borderColor: string }) => ({
-    borderColor: props.borderColor,
+  colorBadgeBorderColor: (borderColor: string) => ({
+    borderColor,
   }),
-  colorBadgeBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  colorBadgeBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
 });
 

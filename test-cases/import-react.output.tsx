@@ -37,12 +37,7 @@ export function ThemeSpan(
   const { children, variant, ...rest } = props;
 
   return (
-    <span
-      {...rest}
-      sx={styles.themeSpanColor({
-        variant: variant,
-      })}
-    >
+    <span {...rest} sx={styles.themeSpanColor(variant)}>
       {children}
     </span>
   );
@@ -63,7 +58,7 @@ const styles = stylex.create({
     backgroundColor: "blue",
     color: "white",
   },
-  themeSpanColor: (props: { variant: "labelBase" | "labelMuted" | "labelTitle" }) => ({
-    color: $colors[props.variant],
+  themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
+    color: $colors[variant],
   }),
 });

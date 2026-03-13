@@ -131,11 +131,7 @@ export function Flex<C extends React.ElementType = "div">(
           justify != null && justifyVariants[justify],
           center === true && styles.flexCenter,
           wrap ? styles.flexWrap : undefined,
-          alignSelf
-            ? styles.flexAlignSelf({
-                alignSelf: alignSelf,
-              })
-            : undefined,
+          alignSelf ? styles.flexAlignSelf(alignSelf) : undefined,
           overflowHidden ? styles.flexOverflowHidden : undefined,
           noMinWidth ? styles.flexNoMinWidth : undefined,
           noMinHeight ? styles.flexNoMinHeight : undefined,
@@ -388,8 +384,8 @@ const styles = stylex.create({
   flexShrink: (shrink: number) => ({
     flexShrink: shrink,
   }),
-  flexAlignSelf: (props: { alignSelf: AlignValues }) => ({
-    alignSelf: props.alignSelf,
+  flexAlignSelf: (alignSelf: AlignValues) => ({
+    alignSelf,
   }),
   flexGap: (gap: number) => ({
     gap: `${gap}px`,

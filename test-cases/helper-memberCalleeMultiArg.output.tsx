@@ -29,12 +29,8 @@ function Box(props: BoxProps) {
   return (
     <div
       sx={[
-        styles.boxBackgroundColor({
-          backgroundColor: ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2),
-        }),
-        styles.boxMargin({
-          margin: m,
-        }),
+        styles.boxBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2)),
+        styles.boxMargin(m),
       ]}
     >
       {children}
@@ -55,10 +51,10 @@ const styles = stylex.create({
     paddingInline: 16,
     backgroundColor: props.backgroundColor,
   }),
-  boxBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  boxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
-  boxMargin: (props: { margin: number }) => ({
-    margin: `${props.margin}px`,
+  boxMargin: (margin: number) => ({
+    margin: `${margin}px`,
   }),
 });

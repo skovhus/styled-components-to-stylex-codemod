@@ -26,10 +26,7 @@ function FadeInWithDelay(props: FadeInWithDelayProps) {
     <span
       sx={[
         styles.fadeInWithDelay,
-        duration != null &&
-          styles.fadeInWithDelayAnimationDuration({
-            animationDuration: `${duration ?? 200}ms`,
-          }),
+        duration != null && styles.fadeInWithDelayAnimationDuration(`${duration ?? 200}ms`),
       ]}
     >
       {children}
@@ -53,7 +50,7 @@ const styles = stylex.create({
     animationTimingFunction: "ease-out",
     animationDelay: "0.5s",
   },
-  fadeInWithDelayAnimationDuration: (props: { animationDuration: string }) => ({
-    animationDuration: props.animationDuration,
+  fadeInWithDelayAnimationDuration: (animationDuration: string) => ({
+    animationDuration,
   }),
 });

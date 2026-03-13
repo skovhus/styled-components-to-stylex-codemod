@@ -18,12 +18,8 @@ function AvatarContainer(props: AvatarContainerProps) {
     <div
       sx={[
         styles.avatarContainer,
-        styles.avatarContainerWidth({
-          size: size,
-        }),
-        styles.avatarContainerHeight({
-          size: size,
-        }),
+        styles.avatarContainerWidth(size),
+        styles.avatarContainerHeight(size),
       ]}
     >
       {children}
@@ -43,10 +39,10 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
   },
-  avatarContainerWidth: (props: { size: AvatarSize }) => ({
-    width: `${props.size}px`,
+  avatarContainerWidth: (size: AvatarSize) => ({
+    width: `${size}px`,
   }),
-  avatarContainerHeight: (props: { size: AvatarSize }) => ({
-    height: `${props.size}px`,
+  avatarContainerHeight: (size: AvatarSize) => ({
+    height: `${size}px`,
   }),
 });

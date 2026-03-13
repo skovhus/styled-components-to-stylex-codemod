@@ -97,15 +97,7 @@ export function ColorChip(props: ColorChipProps) {
   return (
     <div
       {...rest}
-      sx={[
-        styles.colorChip,
-        styles.colorChipBackgroundColor({
-          backgroundColor: $color,
-        }),
-        styles.colorChipColor({
-          color: color,
-        }),
-      ]}
+      sx={[styles.colorChip, styles.colorChipBackgroundColor($color), styles.colorChipColor(color)]}
     >
       {children}
     </div>
@@ -196,11 +188,11 @@ const styles = stylex.create({
     paddingInline: 8,
     borderRadius: 4,
   },
-  colorChipBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  colorChipBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
-  colorChipColor: (props: { color: string }) => ({
-    color: props.color,
+  colorChipColor: (color: string) => ({
+    color,
   }),
   specifierTag: {
     borderWidth: "2px",

@@ -9,18 +9,7 @@ type MyBorderProps = React.PropsWithChildren<{
 function MyBorder(props: MyBorderProps) {
   const { children, borderWidth } = props;
 
-  return (
-    <div
-      sx={[
-        styles.myBorder,
-        styles.myBorderBorderWidth({
-          borderWidth: borderWidth,
-        }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.myBorder, styles.myBorderBorderWidth(borderWidth)]}>{children}</div>;
 }
 
 export function App() {
@@ -36,7 +25,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "black",
   },
-  myBorderBorderWidth: (props: { borderWidth: number }) => ({
-    borderWidth: `${props.borderWidth}px`,
+  myBorderBorderWidth: (borderWidth: number) => ({
+    borderWidth: `${borderWidth}px`,
   }),
 });

@@ -23,13 +23,7 @@ function Input(props: InputProps) {
       size={small ? 5 : undefined}
       type="text"
       {...rest}
-      sx={[
-        styles.input,
-        padding != null &&
-          styles.inputPadding({
-            padding: padding,
-          }),
-      ]}
+      sx={[styles.input, padding != null && styles.inputPadding(padding)]}
     />
   );
 }
@@ -176,11 +170,7 @@ function DynamicHeightBox(props: DynamicHeightBoxProps) {
     <div
       sx={[
         styles.dynamicHeightBox,
-        height
-          ? styles.dynamicHeightBoxHeight({
-              height: `${height}px`,
-            })
-          : undefined,
+        height ? styles.dynamicHeightBoxHeight(`${height}px`) : undefined,
       ]}
     >
       {children}
@@ -220,8 +210,8 @@ const styles = stylex.create({
       color: "#bf4f74",
     },
   },
-  inputPadding: (props: { padding: string }) => ({
-    padding: props.padding,
+  inputPadding: (padding: string) => ({
+    padding,
   }),
   textInput: {
     height: 32,
@@ -265,7 +255,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
   },
-  dynamicHeightBoxHeight: (props: { height: string }) => ({
-    height: props.height,
+  dynamicHeightBoxHeight: (height: string) => ({
+    height,
   }),
 });

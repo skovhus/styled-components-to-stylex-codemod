@@ -16,13 +16,7 @@ type IconWithTeamColorProps = { color?: string } & Omit<
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
   const { children, color, ...rest } = props;
 
-  const sx = stylex.props(
-    color
-      ? styles.iconWithTeamColorFill({
-          fill: color,
-        })
-      : undefined,
-  );
+  const sx = stylex.props(color ? styles.iconWithTeamColorFill(color) : undefined);
 
   return (
     <svg {...rest} {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")}>
@@ -83,8 +77,8 @@ export function App() {
 }
 
 const styles = stylex.create({
-  iconWithTeamColorFill: (props: { fill: string }) => ({
-    fill: props.fill,
+  iconWithTeamColorFill: (fill: string) => ({
+    fill,
   }),
   iconWithTransformNoDateNotSelectedStatusActive: {
     transform: "scale(0.66)",

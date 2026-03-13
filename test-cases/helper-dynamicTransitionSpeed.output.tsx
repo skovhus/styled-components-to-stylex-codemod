@@ -15,16 +15,7 @@ function AnimatedPath(props: AnimatedPathProps) {
   return (
     <path
       {...rest}
-      {...mergedSx(
-        [
-          styles.animatedPath,
-          styles.animatedPathStrokeWidth({
-            strokeWidth: width,
-          }),
-        ],
-        undefined,
-        style,
-      )}
+      {...mergedSx([styles.animatedPath, styles.animatedPathStrokeWidth(width)], undefined, style)}
     >
       {children}
     </path>
@@ -64,7 +55,7 @@ const styles = stylex.create({
     stroke: "#bf4f74",
     fill: "none",
   },
-  animatedPathStrokeWidth: (props: { strokeWidth: number }) => ({
-    strokeWidth: `${props.strokeWidth}px`,
+  animatedPathStrokeWidth: (strokeWidth: number) => ({
+    strokeWidth: `${strokeWidth}px`,
   }),
 });

@@ -21,10 +21,7 @@ export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "classNa
       sx={[
         styles.box,
         bordered ? styles.boxBordered : styles.boxNotBordered,
-        bg != null &&
-          styles.boxBackgroundColor({
-            backgroundColor: bg,
-          }),
+        bg != null && styles.boxBackgroundColor(bg),
       ]}
     >
       {children}
@@ -62,8 +59,8 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "gray",
   },
-  boxBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  boxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
   input: {
     padding: 8,

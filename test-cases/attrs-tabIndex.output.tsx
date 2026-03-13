@@ -20,10 +20,7 @@ export function ScrollableFlex(props: Props) {
         [
           styles.scrollableFlex,
           applyBackground ? styles.scrollableFlexApplyBackground : undefined,
-          props.gutter != null &&
-            styles.scrollableFlexScrollbarGutter({
-              scrollbarGutter: props.gutter,
-            }),
+          props.gutter != null && styles.scrollableFlexScrollbarGutter(props.gutter),
           sx,
         ],
         className,
@@ -48,10 +45,7 @@ export function ScrollableDiv(
         [
           styles.scrollableDiv,
           applyBackground ? styles.scrollableDivApplyBackground : undefined,
-          gutter != null &&
-            styles.scrollableDivScrollbarGutter({
-              scrollbarGutter: gutter,
-            }),
+          gutter != null && styles.scrollableDivScrollbarGutter(gutter),
           sx,
         ],
         className,
@@ -93,8 +87,8 @@ const styles = stylex.create({
   scrollableFlexApplyBackground: {
     backgroundColor: $colors.bgBase,
   },
-  scrollableFlexScrollbarGutter: (props: { scrollbarGutter: string }) => ({
-    scrollbarGutter: props.scrollbarGutter,
+  scrollableFlexScrollbarGutter: (scrollbarGutter: string) => ({
+    scrollbarGutter,
   }),
   scrollableDiv: {
     overflowY: "auto",
@@ -109,7 +103,7 @@ const styles = stylex.create({
   scrollableDivApplyBackground: {
     backgroundColor: $colors.bgBase,
   },
-  scrollableDivScrollbarGutter: (props: { scrollbarGutter: string }) => ({
-    scrollbarGutter: props.scrollbarGutter,
+  scrollableDivScrollbarGutter: (scrollbarGutter: string) => ({
+    scrollbarGutter,
   }),
 });

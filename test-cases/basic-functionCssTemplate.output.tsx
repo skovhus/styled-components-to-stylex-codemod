@@ -26,15 +26,7 @@ function ColoredBox(props: ColoredBoxProps) {
   const { children, color } = props;
 
   return (
-    <div
-      sx={[
-        styles.coloredBox,
-        color != null &&
-          styles.coloredBoxBackgroundColor({
-            backgroundColor: color,
-          }),
-      ]}
-    >
+    <div sx={[styles.coloredBox, color != null && styles.coloredBoxBackgroundColor(color)]}>
       {children}
     </div>
   );
@@ -49,36 +41,11 @@ export const App = () => (
     <FlexContainer align="right">
       <ColoredBox>Right aligned</ColoredBox>
     </FlexContainer>
-    <div
-      sx={[
-        styles.borderBox,
-        styles.borderBoxBorderColor({
-          borderColor: "red",
-        }),
-      ]}
-    >
-      Red border
-    </div>
-    <div
-      sx={[
-        styles.shadowBox,
-        styles.shadowBoxBoxShadow({
-          boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-        }),
-      ]}
-    >
+    <div sx={[styles.borderBox, styles.borderBoxBorderColor("red")]}>Red border</div>
+    <div sx={[styles.shadowBox, styles.shadowBoxBoxShadow("0 2px 4px rgba(0,0,0,0.2)")]}>
       With shadow
     </div>
-    <div
-      sx={[
-        styles.blockBox,
-        styles.blockBoxWidth({
-          width: "50%",
-        }),
-      ]}
-    >
-      Half width
-    </div>
+    <div sx={[styles.blockBox, styles.blockBoxWidth("50%")]}>Half width</div>
   </div>
 );
 
@@ -99,8 +66,8 @@ const styles = stylex.create({
     backgroundColor: "lightgray",
     borderRadius: 4,
   },
-  coloredBoxBackgroundColor: (props: { backgroundColor: string }) => ({
-    backgroundColor: props.backgroundColor,
+  coloredBoxBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
   // Non-destructured props pattern: (props) => css`...${props.color}...`
   borderBox: {
@@ -110,23 +77,23 @@ const styles = stylex.create({
     borderColor: "black",
     margin: 4,
   },
-  borderBoxBorderColor: (props: { borderColor: string }) => ({
-    borderColor: props.borderColor,
+  borderBoxBorderColor: (borderColor: string) => ({
+    borderColor,
   }),
   // Non-destructured props with different param name: (p) => css`...${p.color}...`
   shadowBox: {
     padding: 12,
     boxShadow: "none",
   },
-  shadowBoxBoxShadow: (props: { boxShadow: string }) => ({
-    boxShadow: props.boxShadow,
+  shadowBoxBoxShadow: (boxShadow: string) => ({
+    boxShadow,
   }),
   // Block body with return statement: (props) => { return css`...`; }
   blockBox: {
     display: "block",
     width: "100%",
   },
-  blockBoxWidth: (props: { width: string }) => ({
-    width: props.width,
+  blockBoxWidth: (width: string) => ({
+    width,
   }),
 });

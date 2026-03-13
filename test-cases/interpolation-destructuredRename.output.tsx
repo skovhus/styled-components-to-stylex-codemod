@@ -28,19 +28,7 @@ type CardProps = React.PropsWithChildren<{
 function Card(props: CardProps) {
   const { children, padding } = props;
 
-  return (
-    <div
-      sx={[
-        styles.card,
-        padding != null &&
-          styles.cardPadding({
-            padding: padding,
-          }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.card, padding != null && styles.cardPadding(padding)]}>{children}</div>;
 }
 
 type BoxProps = React.PropsWithChildren<{
@@ -51,49 +39,21 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, margin } = props;
 
-  return (
-    <div
-      sx={[
-        styles.box,
-        margin != null &&
-          styles.boxMargin({
-            margin: margin,
-          }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, margin != null && styles.boxMargin(margin)]}>{children}</div>;
 }
 
 export const App = () => (
   <>
     <Button color="red">Click</Button>
     <Button>Click (default)</Button>
-    <a
-      href="#"
-      sx={styles.linkFontSize({
-        fontSize: "14px",
-      })}
-    >
+    <a href="#" sx={styles.linkFontSize("14px")}>
       Link
     </a>
     <Card>Card</Card>
     <Card padding="24px">Card with padding</Card>
     <Box>Box</Box>
     <Box margin="12px">Box with margin</Box>
-    <span
-      sx={[
-        styles.textFontWeight({
-          fontWeight: "bold",
-        }),
-        styles.textFontSize({
-          fontSize: "16px",
-        }),
-      ]}
-    >
-      Text
-    </span>
+    <span sx={[styles.textFontWeight("bold"), styles.textFontSize("16px")]}>Text</span>
   </>
 );
 
@@ -102,25 +62,25 @@ const styles = stylex.create({
     height: 100,
     color: props.color,
   }),
-  linkFontSize: (props: { fontSize: string }) => ({
-    fontSize: props.fontSize,
+  linkFontSize: (fontSize: string) => ({
+    fontSize,
   }),
   card: {
     padding: "16px",
   },
-  cardPadding: (props: { padding: string }) => ({
-    padding: props.padding,
+  cardPadding: (padding: string) => ({
+    padding,
   }),
   box: {
     margin: "8px",
   },
-  boxMargin: (props: { margin: string }) => ({
-    margin: props.margin,
+  boxMargin: (margin: string) => ({
+    margin,
   }),
-  textFontWeight: (props: { fontWeight: string }) => ({
-    fontWeight: props.fontWeight,
+  textFontWeight: (fontWeight: string) => ({
+    fontWeight,
   }),
-  textFontSize: (props: { fontSize: string }) => ({
-    fontSize: props.fontSize,
+  textFontSize: (fontSize: string) => ({
+    fontSize,
   }),
 });

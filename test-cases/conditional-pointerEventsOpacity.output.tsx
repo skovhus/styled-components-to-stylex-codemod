@@ -16,9 +16,7 @@ function Container(props: ContainerProps) {
       {...rest}
       {...stylex.props(
         styles.container,
-        styles.containerTransition({
-          transition: props.duration,
-        }),
+        styles.containerTransition(props.duration),
         open &&
           styles.containerOpen({
             delay,
@@ -52,7 +50,7 @@ const styles = stylex.create({
     opacity: 1,
     transitionDelay: `${props.delay}ms`,
   }),
-  containerTransition: (props: { transition: number }) => ({
-    transition: `opacity ${props.transition}ms`,
+  containerTransition: (transition: number) => ({
+    transition: `opacity ${transition}ms`,
   }),
 });
