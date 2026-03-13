@@ -85,6 +85,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontSize {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -106,16 +116,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-maxHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-lineHeight {
   syntax: "*";
   inherits: false
 }
@@ -176,6 +176,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-color {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-paddingLeft {
   syntax: "*";
   inherits: false
 }
@@ -259,22 +264,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x18re5ia-B {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes xekv6nw-B {
   0% {
     opacity: 0;
   }
 
   100% {
+    opacity: 1;
+  }
+}
+
+@keyframes x18re5ia-B {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
   }
 }
@@ -1277,7 +1282,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #bf4f74;
 }
 
-.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
+.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -3089,7 +3094,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: 1;
 }
 
-.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
+.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
@@ -4065,6 +4070,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x5tiur9:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-left: 20px;
+}
+
+.x13e46o5:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-left: var(--x-paddingLeft);
 }
 
 .x1xpa7k:not(#\#):not(#\#):not(#\#):not(#\#) {
