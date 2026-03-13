@@ -36,7 +36,11 @@ import {
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./interpolations.js";
-import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
+import {
+  ensureShouldForwardPropDrop,
+  literalToStaticValue,
+  markDeclNeedsUseThemeHook,
+} from "./types.js";
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
@@ -232,16 +236,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         : baseRuntimeExpr;
 
     if (hasThemeAccess) {
-      if (!decl.needsUseThemeHook) {
-        decl.needsUseThemeHook = [];
-      }
-      if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
-        decl.needsUseThemeHook.push({
-          themeProp: "__runtimeCall",
-          trueStyleKey: null,
-          falseStyleKey: null,
-        });
-      }
+      markDeclNeedsUseThemeHook(decl);
     }
 
     const outs = cssDeclarationToStylexDeclarations(d);
@@ -2802,20 +2797,6 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
   decl.needsWrapperComponent = true;
 
   return true;
-}
-
-function markDeclNeedsUseThemeHook(decl: StyledDecl): void {
-  if (!decl.needsUseThemeHook) {
-    decl.needsUseThemeHook = [];
-  }
-  if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
-    decl.needsUseThemeHook.push({
-      themeProp: "__runtimeCall",
-      trueStyleKey: null,
-      falseStyleKey: null,
-    });
-  }
-  decl.needsWrapperComponent = true;
 }
 
 /** CSS shorthand properties that cannot be represented as a single var() custom property. */

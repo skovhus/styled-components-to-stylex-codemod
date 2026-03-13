@@ -21,7 +21,7 @@ import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
-import { ensureShouldForwardPropDrop } from "./types.js";
+import { ensureShouldForwardPropDrop, markDeclNeedsUseThemeHook } from "./types.js";
 import { cloneAstNode, getFunctionBodyExpr } from "../utilities/jscodeshift-utils.js";
 import { cssPropertyToIdentifier, makeCssPropKey } from "./shared.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
@@ -365,18 +365,4 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
 
 function hasSimpleIdentifierParam(expr: { params?: Array<{ type?: string }> }): boolean {
   return expr.params?.length === 1 && expr.params[0]?.type === "Identifier";
-}
-
-function markDeclNeedsUseThemeHook(decl: StyledDecl): void {
-  if (!decl.needsUseThemeHook) {
-    decl.needsUseThemeHook = [];
-  }
-  if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
-    decl.needsUseThemeHook.push({
-      themeProp: "__runtimeCall",
-      trueStyleKey: null,
-      falseStyleKey: null,
-    });
-  }
-  decl.needsWrapperComponent = true;
 }
