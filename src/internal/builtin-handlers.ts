@@ -131,15 +131,21 @@ function tryResolveThemeAccess(
       directional: res.directional,
     };
   }
-  // Preserve logical fallback (`?? "default"` / `|| "default"`) so users can
-  // review and delete it if their adapter always returns defined values.
-  // Returns null when the fallback is non-literal (e.g., props.fallbackColor) —
-  // bail so a downstream handler can emit keepOriginal or inline style.
-  const resultExpr = appendLogicalFallback(expr.body, res.expr);
-  if (resultExpr === null) {
-    return null;
+  // The adapter resolved the theme path to a concrete StyleX token expression
+  // (e.g., `$colors.labelBase`). StyleX `defineVars` tokens always resolve at
+  // runtime, so literal fallbacks (`?? "default"`) are unnecessary and dropped.
+  // However, non-literal fallbacks (e.g., `?? props.fallbackColor`) reference
+  // runtime values the user depends on — bail so a downstream handler can emit
+  // keepOriginal or an inline style instead of silently dropping them.
+  if (
+    isLogicalExpressionNode(expr.body) &&
+    (expr.body.operator === "??" || expr.body.operator === "||")
+  ) {
+    if (literalToStaticValue(expr.body.right) === null) {
+      return null;
+    }
   }
-  return { type: "resolvedValue", expr: resultExpr, imports: res.imports };
+  return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }
 
 /**
@@ -151,8 +157,8 @@ function tryResolveThemeAccess(
  *   (LogicalExpression with `??` or `||` and theme access on the left)
  *
  * Returns the MemberExpression node, or null if the pattern doesn't match.
- * The fallback (right side of `??`/`||`) is preserved by the caller via
- * `appendLogicalFallback` so users can review and delete it.
+ * The fallback (right side of `??`/`||`) is dropped because StyleX `defineVars`
+ * tokens always resolve at runtime.
  */
 function extractThemeMemberExpression(body: unknown): { type: "MemberExpression" } | null {
   if (!body || typeof body !== "object") {
@@ -1214,27 +1220,4 @@ function hasBooleanBranch(node: unknown): boolean {
     return true;
   }
   return false;
-}
-
-/**
- * If `body` is a logical fallback expression (`X ?? "default"` / `X || "default"`),
- * appends the operator and fallback literal to the resolved expression string.
- *
- * Returns `null` when the body IS a logical expression but the fallback is non-literal
- * (e.g., `props.fallbackColor`, `null`, `undefined`), signalling to the caller that
- * it's unsafe to drop the fallback — the caller should bail instead of resolving.
- *
- * Returns `resolvedExpr` unchanged when the body is NOT a logical expression (no
- * fallback to preserve).
- */
-function appendLogicalFallback(body: unknown, resolvedExpr: string): string | null {
-  if (!isLogicalExpressionNode(body) || (body.operator !== "??" && body.operator !== "||")) {
-    return resolvedExpr;
-  }
-  const fallback = literalToStaticValue(body.right);
-  if (fallback === null) {
-    // Fallback is non-literal — unsafe to drop it silently
-    return null;
-  }
-  return `${resolvedExpr} ${body.operator} ${JSON.stringify(fallback)}`;
 }
