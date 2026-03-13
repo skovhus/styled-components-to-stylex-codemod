@@ -63,6 +63,8 @@ export const App = () => (
     <CollapseArrowIcon $isOpen />
     <CollapseArrowIcon $isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
+    <FaderConsumer>Visible</FaderConsumer>
+    <FaderConsumerReversed>Reversed</FaderConsumerReversed>
   </div>
 );
 
@@ -83,3 +85,31 @@ function AnimatedContainer(props: AnimatedContainerProps) {
 const StyledAnimatedContainer = styled(AnimatedContainer)`
   max-width: 90vw;
 `;
+
+// Pattern 6: Transient props with spread at call site — $-prefixed props
+// explicitly passed should still be renamed even when spread is present
+const Fader = styled.div<{ $open: boolean; $duration: number }>`
+  opacity: ${(props) => (props.$open ? 1 : 0)};
+  transition: opacity ${(props) => props.$duration}ms;
+  pointer-events: ${(props) => (props.$open ? "inherit" : "none")};
+`;
+
+function FaderConsumer(props: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader {...rest} $open={!!children} $duration={350}>
+      {children}
+    </Fader>
+  );
+}
+
+// Pattern 7: $open appears BEFORE spread — spread may override it at runtime,
+// so it must NOT be renamed (renaming would break the override relationship).
+function FaderConsumerReversed(props: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader $open={!!children} $duration={350} {...rest}>
+      {children}
+    </Fader>
+  );
+}

@@ -5,21 +5,19 @@ const TICK_OFFSET = 4;
 
 export const App = () => (
   <div style={{ display: "flex", gap: 8 }}>
-    <div sx={[styles.tick, styles.tickDynamic(6 + TICK_OFFSET)]}>Tick</div>
+    <div sx={styles.tick(6 + TICK_OFFSET)}>Tick</div>
     <span {...mergedSx(styles.label, "custom-label")}>Label</span>
   </div>
 );
 
 const styles = stylex.create({
-  tick: {
+  tick: (left: number | string) => ({
     margin: 3,
     backgroundColor: "coral",
-  },
+    left,
+  }),
   label: {
     fontWeight: "bold",
     color: "navy",
   },
-  tickDynamic: (left: number | string) => ({
-    left,
-  }),
 });

@@ -1,6 +1,6 @@
 /**
  * Step: post-process transformed AST and cleanup imports.
- * Core concepts: relation overrides, import reconciliation, and event handler annotations.
+ * Core concepts: relation overrides and import reconciliation.
  */
 import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
@@ -8,7 +8,6 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ImportSource } from "../../adapter.js";
 import { TransformContext } from "../transform-context.js";
-import { annotateEventHandlerParams } from "../post-process/event-handler-annotations.js";
 
 /**
  * Performs post-processing rewrites, import cleanup, and descendant/ancestor selector adjustments.
@@ -118,53 +117,11 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   // After conversion, inline arrow function event handlers may lose type inference
   // (e.g., `onKeyDown={e => ...}` gets implicit-any). Add explicit React event type annotations.
   if (/\.(ts|tsx)$/.test(file.path)) {
-    // Only annotate event handlers for intrinsic-based components (styled.div, etc.).
-    // Wrappers around custom components may use callback props with non-React payloads,
-    // so injecting React.*Event annotations could make those handlers type-incompatible.
-    // Also skip components with polymorphic `as` support - their element type is
-    // intentionally inferred from props, so hard-coding the base tag event type
-    // (e.g. HTMLDivElement) can be misleading.
-    const hasLocalAsUsage = (componentName: string): boolean => {
-      const hasAsAttr = (
-        attrs: Array<{ type?: string; name?: { type?: string; name?: string } }> | undefined,
-      ): boolean =>
-        (attrs ?? []).some(
-          (attr) =>
-            attr?.type === "JSXAttribute" &&
-            attr.name?.type === "JSXIdentifier" &&
-            (attr.name.name === "as" || attr.name.name === "forwardedAs"),
-        );
-
-      const jsxElementHasAs = root
-        .find(j.JSXElement, {
-          openingElement: { name: { type: "JSXIdentifier", name: componentName } },
-        } as any)
-        .some((p: { node?: { openingElement?: { attributes?: unknown[] } } }) =>
-          hasAsAttr(p.node?.openingElement?.attributes as any),
-        );
-      if (jsxElementHasAs) {
-        return true;
-      }
-
-      return root
-        .find(j.JSXSelfClosingElement, {
-          name: { type: "JSXIdentifier", name: componentName },
-        } as any)
-        .some((p: { node?: { attributes?: unknown[] } }) => hasAsAttr(p.node?.attributes as any));
-    };
-
-    const convertedNames = new Set<string>();
-    const componentTagMap = new Map<string, string>();
-    for (const decl of styledDecls) {
-      const isPolymorphic = !!decl.supportsAsProp || hasLocalAsUsage(decl.localName);
-      if (decl.base.kind === "intrinsic" && !isPolymorphic) {
-        convertedNames.add(decl.localName);
-        componentTagMap.set(decl.localName, decl.base.tagName);
-      }
-    }
-    if (annotateEventHandlerParams({ root, j, convertedNames, componentTagMap })) {
-      ctx.markChanged();
-    }
+    // Event handler annotation is disabled: non-polymorphic components have
+    // stable element types that TypeScript infers automatically, and polymorphic
+    // components use the base tag which may be wrong when `as` overrides it
+    // (e.g., `<Box as="input" onChange={...}>` where Box is based on `div`
+    // would incorrectly annotate with HTMLDivElement instead of HTMLInputElement).
   }
 
   return CONTINUE;

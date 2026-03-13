@@ -4678,7 +4678,7 @@ export const App = () => (
 });
 
 describe("event handler annotation typing", () => {
-  it("annotates onChange handlers with intrinsic element types", () => {
+  it("does not annotate event handlers on non-polymorphic intrinsic components", () => {
     const source = `
 import React from "react";
 import styled from "styled-components";
@@ -4709,11 +4709,12 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("React.ChangeEvent<HTMLSelectElement>");
-    expect(result.code).toContain("React.ChangeEvent<HTMLInputElement>");
+    // Non-polymorphic components: TypeScript infers event types, no annotation needed
+    expect(result.code).not.toContain("React.ChangeEvent");
+    expect(result.code).toContain("(e) => console.log(e.target.value)");
   });
 
-  it("wraps unparenthesized arrow params in parens when adding type annotations", () => {
+  it("does not add type annotations on non-polymorphic components", () => {
     const source = `
 import React from "react";
 import styled from "styled-components";
@@ -4737,13 +4738,89 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
-    // Must have parentheses around the typed parameter — not `e: Type =>`
-    expect(result.code).toContain(
-      "(e: React.KeyboardEvent<HTMLDivElement>) => e.stopPropagation()",
+    // Non-polymorphic: no type annotations added
+    expect(result.code).not.toContain("React.KeyboardEvent");
+    expect(result.code).not.toContain("React.MouseEvent");
+    expect(result.code).toContain("e => e.stopPropagation()");
+    expect(result.code).toContain("e => console.log(e)");
+  });
+
+  it("does not annotate event handlers on polymorphic components (base tag may be wrong)", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <div>
+    <Box as="input" onChange={(e) => console.log(e.target.value)} />
+    <Box onClick={(e) => console.log(e)} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "event-handler-polymorphic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: {
+          ...fixtureAdapter,
+          externalInterface: () => ({ styles: true, as: true, ref: false }),
+        },
+      },
     );
-    expect(result.code).toContain("(e: React.MouseEvent<HTMLDivElement>) => console.log(e)");
-    // Must NOT have the broken unparenthesized form
-    expect(result.code).not.toContain("{e: React.");
+
+    expect(result.code).not.toBeNull();
+    // Polymorphic: base tag is div but as="input" changes the element type,
+    // so annotating with HTMLDivElement would be wrong
+    expect(result.code).not.toContain("React.ChangeEvent");
+    expect(result.code).not.toContain("React.MouseEvent");
+  });
+});
+
+describe("transient prop rename with duplicate attrs", () => {
+  it("blocks rename when same $-prop appears both before and after spread", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+const Fader = styled.div<{ $open: boolean }>\`
+  opacity: \${(props) => (props.$open ? 1 : 0)};
+\`;
+
+function Consumer(props: { children: React.ReactNode }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader $open={!!children} {...rest} $open={true}>
+      {children}
+    </Fader>
+  );
+}
+
+export const App = () => <Consumer>Test</Consumer>;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "transient-duplicate-spread.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // $open appears both before and after the spread — renaming would produce
+    // duplicate "open" attributes, so the $ prefix must be preserved.
+    // Verify $open is NOT renamed: prop type, destructuring, and JSX all keep "$open"
+    expect(result.code).toContain("$open");
+    expect(result.code).not.toMatch(/[^$]\bopen\b\s*[?:=,)]/); // no bare "open" prop (without $)
   });
 });
 

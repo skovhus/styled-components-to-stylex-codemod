@@ -15,18 +15,15 @@ export function Input(props: InputProps) {
   const theme = useTheme();
   const someCustomColor = theme.color.bgBase;
 
-  return (
-    <div sx={[styles.colorPickerWrapper, styles.colorPickerWrapperDynamic(someCustomColor)]} />
-  );
+  return <div sx={styles.colorPickerWrapper(someCustomColor)} />;
 }
 
 export const App = () => <Input />;
 
 const styles = stylex.create({
-  colorPickerWrapper: {
+  colorPickerWrapper: (backgroundColor: string) => ({
     width: "auto",
     height: 10,
-    backgroundColor: $colors.bgBase,
     boxShadow: `0 2px 4px ${$colors.primaryColor}`,
     borderRadius: 8,
     display: "flex",
@@ -35,8 +32,6 @@ const styles = stylex.create({
     borderColor: $colors.bgSub,
     minWidth: 300,
     padding: 12,
-  },
-  colorPickerWrapperDynamic: (backgroundColor: string) => ({
     backgroundColor,
   }),
 });

@@ -75,6 +75,8 @@ export const App = () => (
     <CollapseArrowIcon isOpen />
     <CollapseArrowIcon isOpen={false} />
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
+    <FaderConsumer>Visible</FaderConsumer>
+    <FaderConsumerReversed>Reversed</FaderConsumerReversed>
   </div>
 );
 
@@ -96,6 +98,50 @@ function StyledAnimatedContainer(props: React.ComponentPropsWithRef<typeof Anima
   const { className, style, ...rest } = props;
 
   return <AnimatedContainer {...rest} {...mergedSx(styles.animatedContainer, className, style)} />;
+}
+
+type FaderProps = {
+  $open: boolean;
+  $duration: number;
+} & React.ComponentProps<"div">;
+
+// Pattern 6: Transient props with spread at call site — $-prefixed props
+// explicitly passed should still be renamed even when spread is present
+function Fader(props: FaderProps) {
+  const { className, children, style, $duration, $open, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...mergedSx(
+        [styles.fader, $open && styles.faderOpen, styles.faderTransition($duration)],
+        className,
+        style,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function FaderConsumer(props: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader {...rest} $open={!!children} $duration={350}>
+      {children}
+    </Fader>
+  );
+}
+
+// Pattern 7: $open appears BEFORE spread — spread may override it at runtime,
+// so it must NOT be renamed (renaming would break the override relationship).
+function FaderConsumerReversed(props: { children: React.ReactNode; style?: React.CSSProperties }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader $open={!!children} $duration={350} {...rest}>
+      {children}
+    </Fader>
+  );
 }
 
 const styles = stylex.create({
@@ -131,4 +177,15 @@ const styles = stylex.create({
   animatedContainer: {
     maxWidth: "90vw",
   },
+  fader: {
+    opacity: 0,
+    pointerEvents: "none",
+  },
+  faderOpen: {
+    opacity: 1,
+    pointerEvents: "inherit",
+  },
+  faderTransition: (transition: number) => ({
+    transition: `opacity ${transition}ms`,
+  }),
 });
