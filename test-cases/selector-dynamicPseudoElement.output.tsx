@@ -7,27 +7,12 @@ type BadgeProps = React.PropsWithChildren<{
 
 /**
  * Test case for dynamic styles in pseudo elements (::before / ::after).
- * Uses CSS custom properties on the parent element, referenced via var()
- * in the pseudo-element's static StyleX styles.
+ * Emits a StyleX dynamic style function with pseudo-element nesting.
  */
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
 
-  const sx = stylex.props(styles.badge);
-
-  return (
-    <span
-      {...sx}
-      style={
-        {
-          ...sx.style,
-          "--Badge-after-backgroundColor": badgeColor,
-        } as React.CSSProperties
-      }
-    >
-      {children}
-    </span>
-  );
+  return <span sx={[styles.badge, styles.badgeAfterBackgroundColor(badgeColor)]}>{children}</span>;
 }
 
 export const App = () => (
@@ -52,7 +37,11 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
-      backgroundColor: "var(--Badge-after-backgroundColor)",
     },
   },
+  badgeAfterBackgroundColor: (backgroundColor: string) => ({
+    "::after": {
+      backgroundColor,
+    },
+  }),
 });

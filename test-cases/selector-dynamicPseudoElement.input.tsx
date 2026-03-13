@@ -2,8 +2,7 @@ import styled from "styled-components";
 
 /**
  * Test case for dynamic styles in pseudo elements (::before / ::after).
- * Uses CSS custom properties on the parent element, referenced via var()
- * in the pseudo-element's static StyleX styles.
+ * Emits a StyleX dynamic style function with pseudo-element nesting.
  */
 const Badge = styled.span<{ $badgeColor: string }>`
   position: relative;
