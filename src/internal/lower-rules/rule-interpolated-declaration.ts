@@ -1642,21 +1642,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-            const callArg = j.objectExpression(
-              (res.props ?? []).map((propName) => {
-                const prop = j.property(
-                  "init",
-                  j.identifier(propName),
-                  j.identifier(propName),
-                ) as any;
-                prop.shorthand = true;
-                return prop;
-              }),
-            );
             styleFnFromProps.push({
               fnKey,
               jsxProp: "__props",
-              callArg,
             });
           }
         }

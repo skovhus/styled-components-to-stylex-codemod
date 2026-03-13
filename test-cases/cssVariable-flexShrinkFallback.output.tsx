@@ -21,10 +21,7 @@ export function ColumnContainer(props: ColumnContainerProps) {
         [
           styles.columnContainer,
           noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
-          styles.columnContainerFlexShrink({
-            noGrowOrShrink,
-            basis,
-          }),
+          styles.columnContainerFlexShrink(props),
         ],
         undefined,
         style,
