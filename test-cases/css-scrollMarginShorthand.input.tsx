@@ -1,4 +1,4 @@
-// scroll-margin and scroll-padding shorthand preservation
+// scroll-margin and scroll-padding shorthand expansion to physical longhands
 import styled from "styled-components";
 
 // Single-value shorthand: should stay as scrollMargin

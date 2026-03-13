@@ -12,16 +12,23 @@ export const App = () => (
 const styles = stylex.create({
   // Single-value shorthand: should stay as scrollMargin
   section: {
-    scrollMargin: 12,
+    scrollMarginTop: 12,
+    scrollMarginRight: 12,
+    scrollMarginBottom: 12,
+    scrollMarginLeft: 12,
     backgroundColor: "lightblue",
     padding: 16,
   },
   // Multi-value shorthand: should expand to block/inline
   card: {
-    scrollMarginBlock: 8,
-    scrollMarginInline: 16,
-    scrollPaddingBlock: 4,
-    scrollPaddingInline: 12,
+    scrollMarginTop: 8,
+    scrollMarginRight: 16,
+    scrollMarginBottom: 8,
+    scrollMarginLeft: 16,
+    scrollPaddingTop: 4,
+    scrollPaddingRight: 12,
+    scrollPaddingBottom: 4,
+    scrollPaddingLeft: 12,
     backgroundColor: "lightyellow",
     padding: 16,
   },
@@ -36,7 +43,10 @@ const styles = stylex.create({
   },
   // Single-value scroll-padding
   container: {
-    scrollPadding: 20,
+    scrollPaddingTop: 20,
+    scrollPaddingRight: 20,
+    scrollPaddingBottom: 20,
+    scrollPaddingLeft: 20,
     backgroundColor: "lavender",
     padding: 16,
   },
