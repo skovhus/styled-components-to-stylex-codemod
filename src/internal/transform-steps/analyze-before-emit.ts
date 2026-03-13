@@ -472,16 +472,17 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (relationChildStyleKeys.has(decl.styleKey)) {
       continue;
     }
-    // Components with promoted style props at all call sites don't need wrapping;
-    // each call site gets its own promoted style key(s) in the inline output.
-    if (decl.promotedStyleProps?.length) {
+    // When every call site has promoted style props, each site is fully inlined;
+    // a wrapper would be generated but never used. Skip wrapping in that case.
+    const usageCount = getJsxUsageCount(decl.localName);
+    if (decl.promotedStyleProps?.length && decl.promotedStyleProps.length >= usageCount) {
       continue;
     }
     const { ref } = getJsxAttributeUsage(decl.localName);
     if (ref) {
       continue;
     }
-    if (getJsxUsageCount(decl.localName) > INLINE_USAGE_THRESHOLD) {
+    if (usageCount > INLINE_USAGE_THRESHOLD) {
       decl.needsWrapperComponent = true;
     }
   }

@@ -102,7 +102,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             }
           });
       }
-      continue;
+      if (!decl.promotedStyleProps?.length) {
+        continue;
+      }
     }
 
     // Replace JSX elements <Decl> with intrinsic tag and stylex.props
@@ -114,6 +116,17 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
       })
       .forEach((p) => {
         const opening = p.node.openingElement;
+
+        // For wrapper components, only inline call sites with non-merge promoted styles;
+        // plain call sites keep using the wrapper function.
+        if (decl.needsWrapperComponent) {
+          const hasPromoted =
+            (opening as any).__promotedStyleKey && !(opening as any).__promotedMergeIntoBase;
+          if (!hasPromoted) {
+            return;
+          }
+        }
+
         const closing = p.node.closingElement;
         let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
         const inlineVariantDimensions = decl.inlinedBaseComponent?.hasInlineJsxVariants
