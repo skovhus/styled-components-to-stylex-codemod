@@ -632,14 +632,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding: var(--xdppooy);
 }
 
-.xf1oon:not(#\#) {
-  scroll-margin: 12px;
-}
-
-.xg13xpe:not(#\#) {
-  scroll-padding: 20px;
-}
-
 @media (width <= 768px) {
   .xikmuw8.xikmuw8:not(#\#) {
     padding: 10px;
@@ -1164,22 +1156,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xu5haf1:not(#\#):not(#\#) {
   padding-inline: var(--xnsb05n);
-}
-
-.xuw2hrk:not(#\#):not(#\#) {
-  scroll-margin-block: 8px;
-}
-
-.xoppby3:not(#\#):not(#\#) {
-  scroll-margin-inline: 16px;
-}
-
-.x1odosgh:not(#\#):not(#\#) {
-  scroll-padding-block: 4px;
-}
-
-.x1r1wg5l:not(#\#):not(#\#) {
-  scroll-padding-inline: 12px;
 }
 
 .x1hl2dhg:not(#\#):not(#\#) {
@@ -4122,20 +4098,84 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   right: var(--x-right);
 }
 
+.x168mdt3:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-bottom: 12px;
+}
+
 .x140phw4:not(#\#):not(#\#):not(#\#):not(#\#) {
   scroll-margin-bottom: 3px;
+}
+
+.xij4z81:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-bottom: 8px;
+}
+
+.xralmqh:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-left: 12px;
+}
+
+.xwvrg2m:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-left: 16px;
 }
 
 .x6kqg82:not(#\#):not(#\#):not(#\#):not(#\#) {
   scroll-margin-left: 4px;
 }
 
+.x1uc91tv:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-right: 12px;
+}
+
+.xxqe0jl:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-right: 16px;
+}
+
 .x1gvhz00:not(#\#):not(#\#):not(#\#):not(#\#) {
   scroll-margin-right: 2px;
 }
 
+.xr2l1fr:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-top: 12px;
+}
+
 .x1m1h3jm:not(#\#):not(#\#):not(#\#):not(#\#) {
   scroll-margin-top: 1px;
+}
+
+.xggygye:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-margin-top: 8px;
+}
+
+.xk9mrk3:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-bottom: 20px;
+}
+
+.xios0pu:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-bottom: 4px;
+}
+
+.x1du8wam:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-left: 12px;
+}
+
+.xgfo89a:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-left: 20px;
+}
+
+.x1blu6zo:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-right: 12px;
+}
+
+.xzb737s:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-right: 20px;
+}
+
+.xm1t4go:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-top: 20px;
+}
+
+.x1pevrx1:not(#\#):not(#\#):not(#\#):not(#\#) {
+  scroll-padding-top: 4px;
 }
 
 .x1fo6t33:not(#\#):not(#\#):not(#\#):not(#\#) {
