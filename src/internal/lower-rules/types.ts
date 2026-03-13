@@ -6,6 +6,20 @@ import type { StyledDecl } from "../transform-types.js";
 
 export { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 
+export function markDeclNeedsUseThemeHook(decl: StyledDecl): void {
+  if (!decl.needsUseThemeHook) {
+    decl.needsUseThemeHook = [];
+  }
+  if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
+    decl.needsUseThemeHook.push({
+      themeProp: "__runtimeCall",
+      trueStyleKey: null,
+      falseStyleKey: null,
+    });
+  }
+  decl.needsWrapperComponent = true;
+}
+
 export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string): void {
   // Ensure we generate a wrapper so we can consume the styling prop without forwarding it to DOM.
   decl.needsWrapperComponent = true;

@@ -36,7 +36,11 @@ import {
   tryHandleInterpolatedStringValue,
   wrapExprWithStaticParts,
 } from "./interpolations.js";
-import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
+import {
+  ensureShouldForwardPropDrop,
+  literalToStaticValue,
+  markDeclNeedsUseThemeHook,
+} from "./types.js";
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
@@ -242,16 +246,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         : baseRuntimeExpr;
 
     if (hasThemeAccess) {
-      if (!decl.needsUseThemeHook) {
-        decl.needsUseThemeHook = [];
-      }
-      if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtimeCall")) {
-        decl.needsUseThemeHook.push({
-          themeProp: "__runtimeCall",
-          trueStyleKey: null,
-          falseStyleKey: null,
-        });
-      }
+      markDeclNeedsUseThemeHook(decl);
     }
 
     const outs = cssDeclarationToStylexDeclarations(d);
@@ -1650,14 +1645,39 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           break;
         }
         if (hasThemeAccessInArrowFn(e)) {
-          warnPropInlineStyle(
-            decl,
-            "Unsupported prop-based inline style props.theme access is not supported",
-            d.property,
-            loc,
-          );
-          bail = true;
-          break;
+          // StyleX style functions can't use runtime theme values.
+          // Redirect to inline styles with useTheme() hook instead.
+          const inlinedExpr = inlineArrowFunctionBody(j, e);
+          if (!inlinedExpr) {
+            warnPropInlineStyle(
+              decl,
+              "Unsupported prop-based inline style expression cannot be safely inlined",
+              d.property,
+              loc,
+            );
+            bail = true;
+            break;
+          }
+          const themeRewritten = rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind);
+          const { prefix, suffix } = extractStaticPartsForDecl(d);
+          const valueExpr =
+            prefix || suffix
+              ? buildTemplateWithStaticParts(j, themeRewritten, prefix, suffix)
+              : themeRewritten;
+          markDeclNeedsUseThemeHook(decl);
+          for (const propName of res.props ?? []) {
+            if (propName === "theme") {
+              continue;
+            }
+            ensureShouldForwardPropDrop(decl, propName);
+          }
+          for (const out of cssDeclarationToStylexDeclarations(d)) {
+            if (!out.prop) {
+              continue;
+            }
+            inlineStyleProps.push({ prop: out.prop, expr: valueExpr });
+          }
+          continue;
         }
         const bodyExpr = getFunctionBodyExpr(e);
         if (!bodyExpr) {
@@ -2011,6 +2031,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             bail = true;
             break;
           }
+          // shouldForwardProp style functions are module-scoped in stylex.create(),
+          // so runtime theme values from useTheme() are not available there.
           if (hasThemeAccessInArrowFn(e)) {
             warnPropInlineStyle(
               decl,
