@@ -193,6 +193,42 @@ describe("findSelectorLineOffset", () => {
   }`;
     expect(findSelectorLineOffset(css, "& > button")).toBe(2);
   });
+
+  it("finds adjacent sibling selectors (Stylis '&+span' → raw '+ span {')", () => {
+    const css = `color: red;
+
+  & + span {
+    margin-left: 8px;
+  }`;
+    expect(findSelectorLineOffset(css, "&+span")).toBe(2);
+  });
+
+  it("finds general sibling selectors (Stylis '&~div' → raw '~ div {')", () => {
+    const css = `color: red;
+
+  & ~ div {
+    opacity: 0.5;
+  }`;
+    expect(findSelectorLineOffset(css, "&~div")).toBe(2);
+  });
+
+  it("finds sibling selectors written without & (Stylis '&+span' → raw '+ span {')", () => {
+    const css = `color: red;
+
+  + span {
+    margin-left: 8px;
+  }`;
+    expect(findSelectorLineOffset(css, "&+span")).toBe(2);
+  });
+
+  it("finds child combinator with Stylis-normalized spaces (Stylis '&>button' → raw '> button {')", () => {
+    const css = `color: red;
+
+  > button {
+    opacity: 0.5;
+  }`;
+    expect(findSelectorLineOffset(css, "&>button")).toBe(2);
+  });
 });
 
 /** Helper to create a minimal slot for testing (expression is unused by the IR). */

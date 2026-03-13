@@ -634,11 +634,15 @@ export function findSelectorLineOffset(rawCss: string, selector: string): number
     }
   }
 
-  // For element selectors: Stylis produces "& svg" from "svg { ... }".
-  // Strip the "& " prefix and search for the tag name followed by whitespace or {.
-  const stripped = selector.replace(/^&\s+/, "").replace(/^&\s*>\s*/, "");
+  // For element/combinator selectors: Stylis produces "& svg" from "svg { ... }",
+  // "&>button" from "> button { ... }", "&+span" from "+ span { ... }", etc.
+  // Strip the "& " prefix and any combinator (>, +, ~), then search for the
+  // remaining text followed by whitespace or {.
+  const stripped = selector.replace(/^&\s+/, "").replace(/^&\s*[>+~]\s*/, "");
   if (stripped !== selector) {
-    const tagMatch = rawCss.match(new RegExp(`(?:^|\\s)${escapeRegExp(stripped)}\\s*[{,]`, "m"));
+    const tagMatch = rawCss.match(
+      new RegExp(`(?:^|[\\s>+~])${escapeRegExp(stripped)}\\s*[{,]`, "m"),
+    );
     if (tagMatch) {
       return countNewlinesBefore(rawCss, tagMatch.index! + 1);
     }
