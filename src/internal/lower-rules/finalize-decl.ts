@@ -405,6 +405,10 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
 
+  // Prevent flat variant values from clobbering pseudo/media maps.
+  // Promotes flat values to pseudo-maps so StyleX merges them correctly.
+  liftFlatVariantsToPseudoMaps(variantBuckets);
+
   // Group enum-like variant conditions into dimensions for StyleX variants recipe pattern
   const { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip } =
     groupVariantBucketsIntoDimensions(
@@ -974,6 +978,102 @@ function mergeConditionBucket(
       styleObj[prop] = map;
     }
   }
+}
+
+/**
+ * Prevents flat variant values from clobbering pseudo/media maps in the StyleX cascade.
+ *
+ * When a simple boolean variant bucket (e.g., "checked") has a flat value like
+ * `borderColor: "#0066cc"` and a related compound bucket (e.g., "checkedTrue")
+ * has a pseudo-map like `borderColor: { default: "#ccc", ":hover": "#0044aa" }`,
+ * the flat value would override the entire pseudo-map because it appears later
+ * in the `stylex.props()` array.
+ *
+ * Fix: promote the flat value in the simple bucket to a pseudo-map that preserves
+ * the pseudo/media entries from the matching compound bucket. The compound bucket's
+ * default is also updated to the flat value. Both buckets now use pseudo-maps, so
+ * StyleX merges them correctly and the simple bucket remains independently applicable
+ * (important for 3-branch compound ternaries where the inner branch may not be reached).
+ */
+function liftFlatVariantsToPseudoMaps(variantBuckets: Map<string, Record<string, unknown>>): void {
+  // Collect simple condition keys (single boolean prop names without operators)
+  const simpleKeys: string[] = [];
+  for (const key of variantBuckets.keys()) {
+    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)) {
+      simpleKeys.push(key);
+    }
+  }
+  if (simpleKeys.length === 0) {
+    return;
+  }
+
+  for (const simpleKey of simpleKeys) {
+    const simpleBucket = variantBuckets.get(simpleKey);
+    if (!simpleBucket) {
+      continue;
+    }
+
+    for (const [cssProp, flatValue] of Object.entries(simpleBucket)) {
+      if (isMediaOrPseudoMap(flatValue)) {
+        continue;
+      }
+
+      // Find a matching compound bucket that has a pseudo/media map for the same property.
+      // Matching means the compound key implies the simple condition is true:
+      //   - "checkedTrue" implies "checked" (3-branch synthetic suffix)
+      //   - "!disabled && checked" implies "checked" (compound && condition)
+      for (const [compoundKey, compoundBucket] of variantBuckets.entries()) {
+        if (compoundKey === simpleKey) {
+          continue;
+        }
+        if (!variantKeyImpliesCondition(compoundKey, simpleKey)) {
+          continue;
+        }
+        const compoundValue = compoundBucket[cssProp];
+        if (!isMediaOrPseudoMap(compoundValue)) {
+          continue;
+        }
+        // Promote the simple bucket's flat value to a pseudo-map by copying the
+        // condition keys (e.g., ":hover") from the compound map. The flat value
+        // becomes the "default" and each condition key gets the flat value too
+        // (the simple bucket asserts the same value across all pseudo states).
+        const liftedMap: Record<string, unknown> = { default: flatValue };
+        for (const condKey of Object.keys(compoundValue)) {
+          if (condKey !== "default" && isStyleConditionKey(condKey)) {
+            liftedMap[condKey] = flatValue;
+          }
+        }
+        simpleBucket[cssProp] = liftedMap;
+
+        // Also update the compound bucket's default to the flat value so that
+        // when only the compound bucket is applied (without the simple bucket),
+        // the correct base value is used.
+        compoundValue.default = flatValue;
+        break; // one match is enough to lift the value
+      }
+    }
+  }
+}
+
+/**
+ * Checks whether a variant bucket key implies the given boolean condition is true.
+ *
+ * Handles two patterns:
+ * 1. Compound conditions with "&&": e.g., "!disabled && checked" includes "checked"
+ * 2. Synthetic 3-branch suffix: e.g., "checkedTrue" implies "checked" is true.
+ *    This convention is set by `handleSplitMultiPropVariantsResolvedValue` in
+ *    `interpolated-variant-resolvers.ts` (innerTruthyWhen = `${innerProp}True`).
+ */
+function variantKeyImpliesCondition(candidateKey: string, simpleKey: string): boolean {
+  if (candidateKey.includes("&&")) {
+    const parts = candidateKey.split(/\s*&&\s*/);
+    return parts.some((part) => part.trim() === simpleKey);
+  }
+  // Only "True" suffix — "False" is the negated branch and must not match.
+  if (candidateKey === `${simpleKey}True`) {
+    return true;
+  }
+  return false;
 }
 
 /**

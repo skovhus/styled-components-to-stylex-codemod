@@ -72,7 +72,17 @@ type InterpolatedDeclarationContext = {
   applyResolvedPropValue: (prop: string, value: unknown, commentSource: CommentSource) => void;
 };
 export function handleInterpolatedDeclaration(args: InterpolatedDeclarationContext): void {
-  const { ctx, rule, d, media, pseudos, pseudoElement, attrTarget, applyResolvedPropValue } = args;
+  const {
+    ctx,
+    rule,
+    d,
+    media,
+    pseudos,
+    pseudoElement,
+    attrTarget,
+    resolvedSelectorMedia,
+    applyResolvedPropValue,
+  } = args;
   const {
     state,
     decl,
@@ -1117,6 +1127,48 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
       }
 
+      // When inside a media context (static or computed), wrap each variant's style
+      // properties in media maps so the media condition is preserved.
+      const wrapInMedia = (
+        style: Record<string, unknown>,
+        target: Record<string, unknown>,
+      ): void => {
+        for (const [prop, value] of Object.entries(style)) {
+          if (media) {
+            const existing = target[prop];
+            const map =
+              existing && typeof existing === "object" && !Array.isArray(existing)
+                ? { ...(existing as Record<string, unknown>) }
+                : ({} as Record<string, unknown>);
+            if (!("default" in map)) {
+              const baseValue = existing ?? (styleObj as Record<string, unknown>)[prop];
+              map.default = baseValue ?? null;
+            }
+            map[media] = value;
+            target[prop] = map;
+          } else if (resolvedSelectorMedia) {
+            const existing = target[prop];
+            const map =
+              existing && typeof existing === "object" && !Array.isArray(existing)
+                ? { ...(existing as Record<string, unknown>) }
+                : ({} as Record<string, unknown>);
+            if (!("default" in map)) {
+              const baseValue = existing ?? (styleObj as Record<string, unknown>)[prop];
+              map.default = baseValue ?? null;
+            }
+            const computedKeys = ((map as any).__computedKeys ?? []) as Array<{
+              keyExpr: unknown;
+              value: unknown;
+            }>;
+            computedKeys.push({ keyExpr: resolvedSelectorMedia.keyExpr, value });
+            (map as any).__computedKeys = computedKeys;
+            target[prop] = map;
+          } else {
+            target[prop] = value;
+          }
+        }
+      };
+
       const negVariants = res.variants.filter((v) => v.when.startsWith("!"));
       const posVariants = res.variants.filter((v) => !v.when.startsWith("!"));
 
@@ -1140,23 +1192,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
         // Process pos variants (same in both branches)
         for (const pos of posVariants) {
-          variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
+          const bucket = { ...variantBuckets.get(pos.when) } as Record<string, unknown>;
+          wrapInMedia(pos.style, bucket);
+          variantBuckets.set(pos.when, bucket);
           variantStyleKeys[pos.when] ??= styleKeyWithSuffix(decl.styleKey, pos.when);
         }
 
         if (shouldFoldNegIntoBase) {
           // Same property sets — fold neg into base (default branch)
-          Object.assign(styleObj, neg.style);
+          wrapInMedia(neg.style, styleObj);
         } else {
           // Different property sets — keep neg as a variant bucket too
-          variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+          const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+          wrapInMedia(neg.style, bucket);
+          variantBuckets.set(neg.when, bucket);
           variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       } else if (negVariants.length === 1 && posVariants.length === 0) {
         // Only negated variant: style is conditional on !prop
         // Pattern: !prop ? A : "" → A is conditional on !prop (i.e., when prop is false)
         const neg = negVariants[0]!;
-        variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+        const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+        wrapInMedia(neg.style, bucket);
+        variantBuckets.set(neg.when, bucket);
         // toSuffixFromProp handles negated props: !$open → NotOpen
         variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
       } else if (posVariants.length > 0) {
@@ -1164,18 +1222,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Pattern: prop ? A : "" or prop === "a" ? A : ""
         // Also handles: hollow ? A : (inner ternary produces multiple negatives)
         for (const pos of posVariants) {
-          variantBuckets.set(pos.when, { ...variantBuckets.get(pos.when), ...pos.style });
+          const bucket = { ...variantBuckets.get(pos.when) } as Record<string, unknown>;
+          wrapInMedia(pos.style, bucket);
+          variantBuckets.set(pos.when, bucket);
           variantStyleKeys[pos.when] ??= styleKeyWithSuffix(decl.styleKey, pos.when);
         }
         // Also process negative variants (compound conditions like !hollow && $primary)
         for (const neg of negVariants) {
-          variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+          const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+          wrapInMedia(neg.style, bucket);
+          variantBuckets.set(neg.when, bucket);
           variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       } else if (negVariants.length > 0) {
         // Only negative variants (multiple compound conditions)
         for (const neg of negVariants) {
-          variantBuckets.set(neg.when, { ...variantBuckets.get(neg.when), ...neg.style });
+          const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+          wrapInMedia(neg.style, bucket);
+          variantBuckets.set(neg.when, bucket);
           variantStyleKeys[neg.when] ??= styleKeyWithSuffix(decl.styleKey, neg.when);
         }
       }
@@ -1229,6 +1293,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         variantStyleKeys,
         pseudos,
         media,
+        resolvedSelectorMedia,
         parseExpr,
         resolverImports,
         warnings,
@@ -1252,6 +1317,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         variantStyleKeys,
         pseudos,
         media,
+        resolvedSelectorMedia,
         parseExpr,
         resolverImports,
         warnings,
@@ -1275,6 +1341,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         variantStyleKeys,
         pseudos,
         media,
+        resolvedSelectorMedia,
         parseExpr,
         resolverImports,
         warnings,
