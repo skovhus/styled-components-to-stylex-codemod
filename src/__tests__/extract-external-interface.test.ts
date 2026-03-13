@@ -275,22 +275,16 @@ describe("runPrepass createExternalInterface", () => {
       'import { Internal } from "../components/Internal";\nexport const App = () => <Internal className="x">Text</Internal>;',
     );
 
-    // Run unified prepass
-    const originalCwd = process.cwd();
-    try {
-      process.chdir(fixtureDir);
-      const allFiles = collectFiles(fixtureDir);
-      const resolver = createModuleResolver();
-      const prepassResult = await runPrepass({
-        filesToTransform: allFiles,
-        consumerPaths: [],
-        resolver,
-        createExternalInterface: true,
-      });
-      result = prepassResult.consumerAnalysis!;
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Run unified prepass (all paths are absolute; no chdir needed)
+    const allFiles = collectFiles(fixtureDir);
+    const resolver = createModuleResolver();
+    const prepassResult = await runPrepass({
+      filesToTransform: allFiles,
+      consumerPaths: [],
+      resolver,
+      createExternalInterface: true,
+    });
+    result = prepassResult.consumerAnalysis!;
   });
 
   afterAll(() => {
@@ -600,21 +594,15 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import { Button } from "../components/Button";\nexport const App = () => <Button className="btn" disabled>Click</Button>;',
     );
 
-    const originalCwd = process.cwd();
-    try {
-      process.chdir(fixtureDir);
-      const allFiles = collectFiles(fixtureDir);
-      const resolver = createModuleResolver();
-      const prepassResult = await runPrepass({
-        filesToTransform: allFiles,
-        consumerPaths: [],
-        resolver,
-        createExternalInterface: true,
-      });
-      result = prepassResult.consumerAnalysis!;
-    } finally {
-      process.chdir(originalCwd);
-    }
+    const allFiles = collectFiles(fixtureDir);
+    const resolver = createModuleResolver();
+    const prepassResult = await runPrepass({
+      filesToTransform: allFiles,
+      consumerPaths: [],
+      resolver,
+      createExternalInterface: true,
+    });
+    result = prepassResult.consumerAnalysis!;
   });
 
   afterAll(() => {
@@ -853,25 +841,19 @@ describe("runPrepass createExternalInterface — wildcard exports in monorepo", 
       ].join("\n"),
     );
 
-    // Run unified prepass from the fixture root
-    const originalCwd = process.cwd();
-    try {
-      process.chdir(fixtureDir);
-      const allFiles = [
-        ...collectFiles(path.join(fixtureDir, "app", "src")),
-        ...collectFiles(path.join(fixtureDir, "packages")),
-      ];
-      const resolver = createModuleResolver();
-      const prepassResult = await runPrepass({
-        filesToTransform: allFiles,
-        consumerPaths: [],
-        resolver,
-        createExternalInterface: true,
-      });
-      result = prepassResult.consumerAnalysis!;
-    } finally {
-      process.chdir(originalCwd);
-    }
+    // Run unified prepass from the fixture root (all paths are absolute; no chdir needed)
+    const allFiles = [
+      ...collectFiles(path.join(fixtureDir, "app", "src")),
+      ...collectFiles(path.join(fixtureDir, "packages")),
+    ];
+    const resolver = createModuleResolver();
+    const prepassResult = await runPrepass({
+      filesToTransform: allFiles,
+      consumerPaths: [],
+      resolver,
+      createExternalInterface: true,
+    });
+    result = prepassResult.consumerAnalysis!;
   });
 
   afterAll(() => {

@@ -7,6 +7,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     testTimeout: 20000,
     hookTimeout: 10000,
+    pool: "threads",
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
