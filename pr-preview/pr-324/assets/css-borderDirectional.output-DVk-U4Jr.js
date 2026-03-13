@@ -1,1 +1,0 @@
-import{j as d}from"./index-DccEGi3h.js";const e=()=>d.jsxs("div",{style:{padding:"10px"},children:[d.jsx("div",{className:"x1kvmibo x19ypqd9 x1dtrvc8",children:"Bordered left"}),d.jsx("div",{className:"x1b4wo1g x1y0btm7 xd8ztd4",children:"Bordered box"})]});export{e as App};
