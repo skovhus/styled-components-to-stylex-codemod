@@ -226,7 +226,10 @@ function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>):
       const annotation = member.typeAnnotation as AnyASTNode | undefined;
       const innerType = annotation?.typeAnnotation as AnyASTNode | undefined;
       if (innerType?.type === "TSBooleanKeyword") {
-        result.add(name.replace(/^\$/, ""));
+        result.add(name);
+        if (name.startsWith("$")) {
+          result.add(name.slice(1));
+        }
       }
     }
     return;

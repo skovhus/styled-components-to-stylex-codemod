@@ -13,7 +13,7 @@ function ContainerWrapper(props: ContainerWrapperProps) {
     <div
       sx={[
         styles.containerWrapper,
-        (width || false) && styles.containerWrapperWithComponentWidth(width),
+        width || false ? styles.containerWrapperWithComponentWidth(width) : undefined,
       ]}
     >
       {children}

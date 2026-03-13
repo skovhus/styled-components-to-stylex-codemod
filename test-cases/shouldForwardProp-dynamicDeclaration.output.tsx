@@ -47,9 +47,12 @@ export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "cl
         [
           wrap ? styles.flexBoxWrap : undefined,
           alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
-          typeof gap === "number" && styles.flexBoxGap(gap),
-          typeof wrapGap === "number" &&
-            (column ? styles.flexBoxColumnGap(wrapGap) : styles.flexBoxRowGap(wrapGap)),
+          typeof gap === "number" ? styles.flexBoxGap(gap) : undefined,
+          typeof wrapGap === "number"
+            ? column
+              ? styles.flexBoxColumnGap(wrapGap)
+              : styles.flexBoxRowGap(wrapGap)
+            : undefined,
         ],
         undefined,
         style,

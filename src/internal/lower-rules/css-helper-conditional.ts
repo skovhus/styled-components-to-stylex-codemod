@@ -1353,12 +1353,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
               altCallExpr,
             );
 
-            // Build outer conditional: outerTest && innerTernary
+            // Build outer conditional: outerTest ? innerTernary : undefined
             // Replace props.X with bare X since the component destructures all props.
-            const outerCondExpr = j.logicalExpression(
-              "&&",
+            const outerCondExpr = j.conditionalExpression(
               replacePropsWithBareIdent(conditional.test as ExpressionKind),
               innerTernary,
+              j.identifier("undefined") as ExpressionKind,
             );
 
             decl.extraStylexPropsArgs ??= [];
@@ -1487,15 +1487,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       // Create conditional expression for stylex.props.
       // Replace props.X with bare X since the component destructures all props.
-      const condTest = replacePropsWithBareIdent(conditional.test as ExpressionKind);
-      const hasCons = consMap.size > 0;
-      const hasAlt = altMap.size > 0;
-      const condExpr =
-        hasCons && hasAlt
-          ? j.conditionalExpression(condTest, makeStyleCall(consKey), makeStyleCall(altKey))
-          : hasCons
-            ? j.logicalExpression("&&", condTest, makeStyleCall(consKey))
-            : j.logicalExpression("&&", j.unaryExpression("!", condTest), makeStyleCall(altKey));
+      const condExpr = j.conditionalExpression(
+        replacePropsWithBareIdent(conditional.test as ExpressionKind),
+        consMap.size > 0 ? makeStyleCall(consKey) : (j.identifier("undefined") as ExpressionKind),
+        altMap.size > 0 ? makeStyleCall(altKey) : (j.identifier("undefined") as ExpressionKind),
+      );
 
       // Add to extraStylexPropsArgs (afterVariants preserves CSS cascade: standalone
       // conditional interpolations appear after property-level declarations in the
