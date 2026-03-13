@@ -796,10 +796,11 @@ function collectPropsFromExprTree(
 
 /**
  * Checks whether the param name is used as a bare identifier anywhere in the
- * expression tree (i.e., not as the `object` of a MemberExpression like
- * `props.X`). This detects patterns like `helper(props)` where the full props
- * object is passed, which would break `emitStyleFunctionFromPropsObject` since
- * that handler only forwards a subset of collected prop names.
+ * expression tree (i.e., not as the `object` of a non-computed MemberExpression
+ * like `props.X`). This detects patterns like `helper(props)` or computed access
+ * `props[expr]` where the full props object is needed, which would break
+ * `emitStyleFunctionFromPropsObject` since that handler only forwards a subset
+ * of collected prop names.
  */
 function hasBareParamUsage(root: unknown, paramName: string): boolean {
   const visit = (node: unknown, skipIdent: boolean): boolean => {
@@ -823,7 +824,7 @@ function hasBareParamUsage(root: unknown, paramName: string): boolean {
       }
       const child = n[key];
       const isMember = n.type === "MemberExpression" || n.type === "OptionalMemberExpression";
-      const childSkip = isMember && (key === "object" || (key === "property" && !n.computed));
+      const childSkip = isMember && !n.computed && (key === "object" || key === "property");
       if (visit(child, childSkip)) {
         return true;
       }
