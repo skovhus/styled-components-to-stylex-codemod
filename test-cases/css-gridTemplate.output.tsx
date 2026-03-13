@@ -9,7 +9,7 @@ function Code(props: React.PropsWithChildren<{}>) {
   return <div sx={styles.code}>{props.children}</div>;
 }
 
-export const App = ({ highlightRow }: { highlightRow: string }) => (
+export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
   <div sx={styles.container}>
     <Gutter>1</Gutter>
     <Code>const answer = 42;</Code>

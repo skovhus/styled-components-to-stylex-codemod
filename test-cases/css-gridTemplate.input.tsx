@@ -32,7 +32,7 @@ const Code = styled.div`
   font-size: 12px;
 `;
 
-export const App = ({ highlightRow }: { highlightRow: string }) => (
+export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
   <Container>
     <Gutter>1</Gutter>
     <Code>const answer = 42;</Code>
