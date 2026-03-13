@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, copyFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -29,9 +30,12 @@ describe("index.ts barrel exports", () => {
 
 describe("runTransform (e2e)", () => {
   it("transforms a fixture in a temp folder and matches the .output.tsx file", async () => {
-    // Ensure the dist runner is up-to-date; `runTransform` requires built artifacts when running from `src/`.
     const repoRoot = join(__dirname, "..", "..");
-    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
+    const distTransform = join(repoRoot, "dist", "transform.mjs");
+
+    if (!existsSync(distTransform)) {
+      execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
+    }
 
     const fixtureName = "cssVariable-basic";
 
