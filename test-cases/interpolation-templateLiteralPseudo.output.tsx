@@ -58,7 +58,7 @@ const styles = stylex.create({
   hoverSwatch: {
     display: "inline-block",
   },
-  hoverSwatchColor: (props) => ({
+  hoverSwatchColor: (props: HoverSwatchProps) => ({
     color: {
       default: null,
       ":hover": `var(--tone, ${props.tone})`,
@@ -67,7 +67,7 @@ const styles = stylex.create({
   hoverMediaSwatch: {
     display: "inline-block",
   },
-  hoverMediaSwatchColor: (props) => ({
+  hoverMediaSwatchColor: (props: HoverMediaSwatchProps) => ({
     color: {
       default: null,
       ":hover": {

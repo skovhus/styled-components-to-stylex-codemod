@@ -37,7 +37,7 @@ const styles = stylex.create({
     padding: 8,
     color: "white",
   },
-  boxPaddingLeft: (props) => ({
+  boxPaddingLeft: (props: BoxProps) => ({
     paddingLeft: `${props.depth * 16 + 4}px`,
   }),
 });

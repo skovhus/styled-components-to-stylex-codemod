@@ -61,7 +61,7 @@ const styles = stylex.create({
   columnContainerNoGrowOrShrink: {
     flexGrow: 0,
   },
-  columnContainerFlexShrink: (props) => ({
+  columnContainerFlexShrink: (props: ColumnContainerProps) => ({
     flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,
   }),
 });

@@ -48,10 +48,10 @@ const styles = stylex.create({
     justifyContent: "center",
     margin: 8,
   },
-  boxWidth: (props) => ({
+  boxWidth: (props: BoxProps) => ({
     width: `${props.size ?? 100}px`,
   }),
-  boxHeight: (props) => ({
+  boxHeight: (props: BoxProps) => ({
     height: `${props.size ?? 100}px`,
   }),
 });

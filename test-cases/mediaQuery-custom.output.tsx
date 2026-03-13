@@ -24,7 +24,7 @@ export function ConditionalContainer(props: ConditionalContainerProps) {
 export const App = () => <ConditionalContainer size={16}>Hello</ConditionalContainer>;
 
 const styles = stylex.create({
-  conditionalContainerFontSize: (props) => ({
+  conditionalContainerFontSize: (props: ConditionalContainerProps) => ({
     fontSize: {
       default: null,
       "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${props.size - 5}px`,
