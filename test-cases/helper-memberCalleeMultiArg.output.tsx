@@ -8,10 +8,9 @@ function Toggle(props: React.PropsWithChildren<{}>) {
 
   return (
     <div
-      sx={[
-        styles.toggle,
-        styles.toggleBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)),
-      ]}
+      sx={styles.toggle({
+        backgroundColor: ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4),
+      })}
     >
       {props.children}
     </div>
@@ -47,12 +46,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  toggle: {
+  toggle: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 16,
-  },
-  toggleBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+    backgroundColor: props.backgroundColor,
   }),
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,

@@ -29,6 +29,8 @@ import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
 
+export { replaceIdentifierInAst };
+
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
     state,
@@ -500,9 +502,35 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     decl.styleFnFromProps = styleFnFromProps;
   }
 
-  for (const [k, v] of styleFnDecls.entries()) {
-    resolvedStyleObjects.set(k, v);
-  }
+  // Merge base static properties into a single unconditional style function when:
+  // - there is exactly one unconditional styleFn (no conditionWhen)
+  // - the base styleObj has properties to merge
+  // - there are no variant style keys, extra style objects, or enum variants
+  // - the component is not extended by other styled components
+  mergeBaseIntoSingleStyleFn({
+    j: state.j,
+    decl,
+    styleObj,
+    styleFnFromProps,
+    styleFnDecls,
+    remainingStyleKeys,
+    extraStyleObjects,
+    styledDecls: state.styledDecls,
+  });
+
+  // Convert single-positional-param style functions to use a named `props`
+  // object parameter, but only when the function key IS the base style key
+  // (i.e., merged base). Separate derived keys like `boxBoxShadow` already
+  // encode the parameter name, so positional args are clearer there.
+  convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
+
+  insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
+    styleKey: decl.styleKey,
+    extraStyleObjects,
+    remainingStyleKeys,
+    attrBuckets,
+    enumVariant: decl.enumVariant,
+  });
   // When the base styleKey is a dynamic function (not a static style object),
   // skip the bare `styles.{styleKey}` reference in stylex.props() to avoid
   // passing a function instead of a style object.
@@ -515,6 +543,414 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Inserts styleFnDecls entries into resolvedStyleObjects right after the last
+ * entry belonging to the current component. This ensures dynamic style functions
+ * appear adjacent to their static counterparts in stylex.create() output.
+ */
+function insertStyleFnDeclsAfterComponent(
+  resolvedStyleObjects: Map<string, unknown>,
+  styleFnDecls: Map<string, unknown>,
+  component: {
+    styleKey: string;
+    extraStyleObjects: Map<string, Record<string, unknown>>;
+    remainingStyleKeys: Record<string, string>;
+    attrBuckets: Map<string, Record<string, unknown>>;
+    enumVariant?: { baseKey: string; cases: Array<{ styleKey: string }> } | null;
+  },
+): void {
+  if (styleFnDecls.size === 0) {
+    return;
+  }
+
+  // Collect all keys this component added to resolvedStyleObjects
+  const componentKeys = new Set<string>();
+  componentKeys.add(component.styleKey);
+  for (const k of component.extraStyleObjects.keys()) {
+    componentKeys.add(k);
+  }
+  for (const k of Object.values(component.remainingStyleKeys)) {
+    componentKeys.add(k);
+  }
+  for (const k of component.attrBuckets.keys()) {
+    componentKeys.add(k);
+  }
+  if (component.enumVariant) {
+    componentKeys.add(component.enumVariant.baseKey);
+    for (const c of component.enumVariant.cases) {
+      componentKeys.add(c.styleKey);
+    }
+  }
+
+  // Also include keys from styleFnDecls that are already in resolvedStyleObjects
+  // (e.g. merged variant buckets that share a key with the styleFn).
+  for (const k of styleFnDecls.keys()) {
+    if (resolvedStyleObjects.has(k)) {
+      componentKeys.add(k);
+    }
+  }
+
+  // Find the last component key in the Map's insertion order
+  let lastComponentKey: string | null = null;
+  for (const k of resolvedStyleObjects.keys()) {
+    if (componentKeys.has(k)) {
+      lastComponentKey = k;
+    }
+  }
+
+  if (lastComponentKey === null) {
+    // Fallback: append at end
+    for (const [k, v] of styleFnDecls.entries()) {
+      resolvedStyleObjects.set(k, v);
+    }
+    return;
+  }
+
+  // Rebuild the Map, inserting styleFnDecls right after lastComponentKey.
+  // When a styleFnDecl key matches an existing entry (e.g. a merged variant bucket
+  // or a fully-dynamic base), replace the value in-place. New styleFnDecl keys
+  // are inserted after lastComponentKey.
+  const emittedFnKeys = new Set<string>();
+  const entries = [...resolvedStyleObjects.entries()];
+  resolvedStyleObjects.clear();
+  for (const [k, v] of entries) {
+    if (styleFnDecls.has(k)) {
+      resolvedStyleObjects.set(k, styleFnDecls.get(k));
+      emittedFnKeys.add(k);
+    } else {
+      resolvedStyleObjects.set(k, v);
+    }
+    if (k === lastComponentKey) {
+      for (const [fk, fv] of styleFnDecls.entries()) {
+        if (!emittedFnKeys.has(fk)) {
+          resolvedStyleObjects.set(fk, fv);
+          emittedFnKeys.add(fk);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Merges static base properties into a single unconditional style function.
+ *
+ * When a styled component has both static CSS properties and a single
+ * unconditional dynamic style function, the static properties are folded
+ * into the function's return object so that the emitted code uses a single
+ * `styles.key(arg)` call instead of separate `styles.key, styles.keyDynamic(arg)`.
+ *
+ * Preconditions:
+ * - Exactly one unconditional styleFn entry (no conditionWhen)
+ * - Base styleObj has at least one property
+ * - No variant style keys, extra style objects, or enum variants
+ * - The component is not extended by other styled components
+ */
+function mergeBaseIntoSingleStyleFn(args: {
+  j: Parameters<typeof literalToAst>[0];
+  decl: StyledDecl;
+  styleObj: Record<string, unknown>;
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+  remainingStyleKeys: Record<string, string>;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
+  styledDecls: StyledDecl[];
+}): void {
+  const {
+    j,
+    decl,
+    styleObj,
+    styleFnFromProps,
+    styleFnDecls,
+    remainingStyleKeys,
+    extraStyleObjects,
+    styledDecls,
+  } = args;
+
+  // Must have base properties to merge
+  if (Object.keys(styleObj).length === 0) {
+    return;
+  }
+
+  // Must have styleFn entries
+  if (styleFnFromProps.length === 0) {
+    return;
+  }
+
+  // Must have no variant style keys (variants reference base independently)
+  if (Object.keys(remainingStyleKeys).length > 0) {
+    return;
+  }
+
+  // Must have no extra style objects (css`` helpers interleave with base)
+  if (extraStyleObjects.size > 0) {
+    return;
+  }
+
+  // Must have no enum variant
+  if (decl.enumVariant) {
+    return;
+  }
+
+  // Must not be extended by other styled components
+  for (const other of styledDecls) {
+    if (other !== decl && other.extendsStyleKey === decl.styleKey) {
+      return;
+    }
+  }
+
+  // Find unconditional styleFn entries with "always" condition.
+  // Entries with "truthy" condition are guarded (e.g. `prop ? styles.fn(prop) : undefined`),
+  // so the base static properties must remain separate as defaults when the guard is false.
+  const unconditionalEntries = styleFnFromProps.filter(
+    (p) => !p.conditionWhen && p.condition === "always",
+  );
+  if (unconditionalEntries.length !== 1) {
+    return;
+  }
+
+  const entry = unconditionalEntries[0]!;
+  const fnKey = entry.fnKey;
+  const fnAst = styleFnDecls.get(fnKey);
+  if (!fnAst || typeof fnAst !== "object") {
+    return;
+  }
+
+  // Extract the function body (ObjectExpression)
+  const body = getFunctionBodyExpr(fnAst as { body?: unknown });
+  if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+    return;
+  }
+  const bodyObj = body as { properties?: unknown[] };
+  if (!Array.isArray(bodyObj.properties)) {
+    return;
+  }
+
+  // Collect existing property keys in the function body
+  const existingKeys = new Set<string>();
+  for (const prop of bodyObj.properties) {
+    const key = (prop as { key?: { name?: string; value?: string } }).key;
+    if (key) {
+      existingKeys.add(key.name ?? key.value ?? "");
+    }
+  }
+
+  // Bail if any static property overlaps with the function body — avoids
+  // reasoning about override priority between static and dynamic values.
+  const staticKeys = Object.keys(styleObj).filter((k) => !k.startsWith("__"));
+  if (staticKeys.some((k) => existingKeys.has(k))) {
+    return;
+  }
+
+  // Prepend base static properties to the function body
+  const prependProps: unknown[] = [];
+  for (const [cssProp, cssValue] of Object.entries(styleObj)) {
+    // Skip internal metadata keys
+    if (cssProp.startsWith("__")) {
+      continue;
+    }
+    const valueAst = literalToAst(j, cssValue);
+    const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cssProp)
+      ? j.identifier(cssProp)
+      : j.literal(cssProp);
+    prependProps.push(j.property("init", key, valueAst));
+  }
+  bodyObj.properties.unshift(...prependProps);
+
+  // Rename the function key from fnKey to decl.styleKey
+  if (fnKey !== decl.styleKey) {
+    styleFnDecls.delete(fnKey);
+    styleFnDecls.set(decl.styleKey, fnAst);
+    entry.fnKey = decl.styleKey;
+  }
+
+  // Clear the base styleObj so it becomes empty in resolvedStyleObjects
+  for (const key of Object.keys(styleObj)) {
+    delete styleObj[key];
+  }
+}
+
+/**
+ * Converts single-positional-param style functions to use a named `props`
+ * object parameter. Skips functions that already use a `props` parameter
+ * (e.g. consolidated multi-param functions).
+ *
+ * Before: `(color: string) => ({ color })`
+ * After:  `(props: { color: string }) => ({ color: props.color })`
+ */
+function convertStyleFnsToPropsPattern(
+  j: Parameters<typeof literalToAst>[0],
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+  baseStyleKey: string,
+): void {
+  // Build a set of fnKeys that have matching styleFnFromProps entries.
+  // Only convert functions whose call sites are managed via styleFnFromProps;
+  // functions with inline call sites (e.g., in extraStylexPropsArgs) cannot be
+  // updated and must keep their positional parameter.
+  const managedFnKeys = new Set(styleFnFromProps.map((p) => p.fnKey));
+
+  for (const [fnKey, fnAst] of styleFnDecls.entries()) {
+    // Only convert merged-base functions (fnKey === baseStyleKey). Separate
+    // derived keys like `boxBoxShadow` already encode the parameter name,
+    // so positional args are clearer: `styles.boxBoxShadow(shadow)`.
+    if (fnKey !== baseStyleKey) {
+      continue;
+    }
+    if (!managedFnKeys.has(fnKey)) {
+      continue;
+    }
+    if (!fnAst || typeof fnAst !== "object") {
+      continue;
+    }
+    const fn = fnAst as { params?: unknown[]; body?: unknown };
+    if (!Array.isArray(fn.params) || fn.params.length !== 1) {
+      continue;
+    }
+
+    const param = fn.params[0] as { type?: string; name?: string; typeAnnotation?: unknown };
+    if (param.type !== "Identifier" || !param.name || param.name === "props") {
+      continue;
+    }
+
+    const paramName = param.name;
+    const paramTypeAnnotation = param.typeAnnotation;
+    // Extract the function body
+    const body = getFunctionBodyExpr(fn);
+    if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+      continue;
+    }
+
+    // Replace all references to paramName with props.paramName in the body
+    replaceIdentifierInAst(j, body, paramName);
+
+    // Build the new `props` parameter with type `{ paramName: type }`
+    const propsParam = j.identifier("props");
+    if (paramTypeAnnotation) {
+      // Extract the inner type from the old param's annotation
+      const innerType = (paramTypeAnnotation as { typeAnnotation?: unknown }).typeAnnotation;
+      if (innerType) {
+        const propSignature = j.tsPropertySignature(
+          j.identifier(paramName),
+          j.tsTypeAnnotation(innerType as any),
+        );
+        (propsParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsTypeLiteral([propSignature]),
+        );
+      }
+    }
+
+    fn.params[0] = propsParam;
+
+    // Set propsObjectKey on the matching styleFnFromProps entry
+    for (const entry of styleFnFromProps) {
+      if (entry.fnKey === fnKey && !entry.propsObjectKey) {
+        entry.propsObjectKey = paramName;
+      }
+    }
+  }
+}
+
+/**
+ * Recursively replaces all `Identifier` references matching `oldName` with
+ * `props.oldName` (a MemberExpression). Handles shorthand properties by
+ * un-shorthanding them.
+ */
+function replaceIdentifierInAst(
+  j: Parameters<typeof literalToAst>[0],
+  node: unknown,
+  oldName: string,
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const n = node as Record<string, unknown>;
+
+  if (n.type === "ObjectExpression") {
+    const properties = n.properties as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(properties)) {
+      return;
+    }
+    for (const prop of properties) {
+      if (prop.type === "SpreadElement" || prop.type === "SpreadProperty") {
+        if (
+          (prop.argument as { type?: string; name?: string })?.type === "Identifier" &&
+          (prop.argument as { name?: string }).name === oldName
+        ) {
+          prop.argument = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+        } else {
+          replaceIdentifierInAst(j, prop.argument, oldName);
+        }
+        continue;
+      }
+      if (prop.type !== "Property") {
+        continue;
+      }
+      // Handle shorthand: `{ color }` → `{ color: props.color }`
+      if (
+        prop.shorthand &&
+        (prop.value as { type?: string; name?: string })?.type === "Identifier" &&
+        (prop.value as { name?: string }).name === oldName
+      ) {
+        prop.shorthand = false;
+        prop.value = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+        continue;
+      }
+      // Recurse into value (but not key unless computed)
+      if (prop.computed) {
+        if (
+          (prop.key as { type?: string; name?: string })?.type === "Identifier" &&
+          (prop.key as { name?: string }).name === oldName
+        ) {
+          prop.key = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+        } else {
+          replaceIdentifierInAst(j, prop.key, oldName);
+        }
+      }
+      // Direct replacement when value is the target Identifier
+      if (
+        (prop.value as { type?: string; name?: string })?.type === "Identifier" &&
+        (prop.value as { name?: string }).name === oldName
+      ) {
+        prop.value = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+      } else {
+        replaceIdentifierInAst(j, prop.value, oldName);
+      }
+    }
+    return;
+  }
+
+  // For all other node types, walk children and replace matching Identifiers
+  for (const key of Object.keys(n)) {
+    if (key === "type" || key === "loc" || key === "start" || key === "end" || key === "comments") {
+      continue;
+    }
+    // Skip non-computed MemberExpression.property — it's a property name, not a variable reference
+    if (key === "property" && n.type === "MemberExpression" && !n.computed) {
+      continue;
+    }
+    const child = n[key];
+    if (Array.isArray(child)) {
+      for (let i = 0; i < child.length; i++) {
+        if (
+          (child[i] as { type?: string; name?: string })?.type === "Identifier" &&
+          (child[i] as { name?: string }).name === oldName
+        ) {
+          child[i] = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+        } else {
+          replaceIdentifierInAst(j, child[i], oldName);
+        }
+      }
+    } else if (
+      (child as { type?: string; name?: string })?.type === "Identifier" &&
+      (child as { name?: string }).name === oldName
+    ) {
+      n[key] = j.memberExpression(j.identifier("props"), j.identifier(oldName));
+    } else if (child && typeof child === "object" && (child as { type?: string }).type) {
+      replaceIdentifierInAst(j, child, oldName);
+    }
+  }
+}
 
 /**
  * Merges a per-property condition bucket (pseudo or media) into the style object.

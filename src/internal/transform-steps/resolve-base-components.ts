@@ -527,10 +527,12 @@ function buildInlineResolverVariantDimensions(args: {
     const hasCompleteCallsiteVisibility =
       !willHaveExternalInterface(ctx, decl, styledDecls) && !decl.usedAsValue;
 
-    if (variantKeys.length === 1 && !hasPropReferencingTemplateExpressions) {
-      // Baking in requires complete callsite visibility — we remove the prop
-      // entirely, so external callers must not be able to pass different values.
-      if (hasCompleteCallsiteVisibility) {
+    if (variantKeys.length === 1) {
+      // Baking in requires complete callsite visibility AND no prop-referencing
+      // template expressions — we remove the prop entirely, so external callers
+      // must not be able to pass different values, and template arrow functions
+      // may reference the consumed prop at runtime.
+      if (hasCompleteCallsiteVisibility && !hasPropReferencingTemplateExpressions) {
         const callSitesWithProp = usageResult.propsByUsage.filter(
           (siteProps) => propName in siteProps,
         ).length;
@@ -551,8 +553,8 @@ function buildInlineResolverVariantDimensions(args: {
       // object rather than a separate lookup object.
       // - Boolean props use a truthy guard: `prop ? styles.x : undefined`
       // - Non-boolean props use an equality check: `prop === "value" && styles.x`
-      //   This is safe without complete callsite visibility because the condition
-      //   only matches the specific value, not any truthy value.
+      //   This is safe regardless of template expressions because the conditional
+      //   path does not remove the prop — it only adds a style guard.
       const [singleKey, singleVariantStyles] = Object.entries(variants)[0]!;
       const isBooleanProp = booleanOnlyProps.has(propName);
       if (isBooleanProp) {

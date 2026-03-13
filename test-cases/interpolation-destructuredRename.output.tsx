@@ -10,7 +10,13 @@ function Button(props: ButtonProps) {
   const { children, color } = props;
 
   return (
-    <button sx={[styles.button, styles.buttonColor(props.color || "hotpink")]}>{children}</button>
+    <button
+      sx={styles.button({
+        color: props.color || "hotpink",
+      })}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -52,11 +58,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  button: {
+  button: (props: { color: string | undefined }) => ({
     height: 100,
-  },
-  buttonColor: (color: string | undefined) => ({
-    color,
+    color: props.color,
   }),
   linkFontSize: (fontSize: string) => ({
     fontSize,

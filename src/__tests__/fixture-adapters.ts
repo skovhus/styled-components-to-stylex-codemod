@@ -56,6 +56,7 @@ export const fixtureAdapter = defineAdapter({
         "htmlProp-input",
         "transientProp-notForwarded",
         "inlineBase-booleanVariantKey",
+        "inlineBase-singletonBooleanWithTemplateExpr",
         "inlineBase-stringVariantExported",
       ].some((filePath) => ctx.filePath.includes(filePath))
     ) {

@@ -13,7 +13,16 @@ export function Tile(props: TileProps & Omit<React.ComponentProps<"div">, "class
   const { children, style, gap, ...rest } = props;
 
   return (
-    <div {...rest} {...mergedSx([styles.tile, styles.tileGap(`${gap ?? 8}px`)], undefined, style)}>
+    <div
+      {...rest}
+      {...mergedSx(
+        styles.tile({
+          gap: `${gap ?? 8}px`,
+        }),
+        undefined,
+        style,
+      )}
+    >
       {children}
     </div>
   );
@@ -33,10 +42,8 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  tile: {
+  tile: (props: { gap: string }) => ({
     display: "inline-flex",
-  },
-  tileGap: (gap: string) => ({
-    gap,
+    gap: props.gap,
   }),
 });

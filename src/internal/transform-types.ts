@@ -368,6 +368,11 @@ export type StyledDecl = {
     callArg?: ExpressionKind;
     /** Source order index for CSS cascade ordering against variant entries. */
     sourceOrder?: number;
+    /**
+     * When set, the style function uses a `props` object parameter and the call
+     * site must wrap the argument in `{ [propsObjectKey]: callArg }`.
+     */
+    propsObjectKey?: string;
   }>;
   shouldForwardProp?: {
     dropProps: string[];

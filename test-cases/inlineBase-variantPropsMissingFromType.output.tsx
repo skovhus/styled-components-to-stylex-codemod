@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type HeaderProps = React.PropsWithChildren<{
   isCompact?: boolean;
-  align?: keyof typeof headerAlignVariants;
+  align?: "center";
   gap?: keyof typeof headerGapVariants;
   justify?: keyof typeof headerJustifyVariants;
 }>;
@@ -15,9 +15,9 @@ function Header(props: HeaderProps) {
     <div
       sx={[
         styles.header,
+        align === "center" && styles.headerAlignCenter,
         gap != null && headerGapVariants[gap],
         justify != null && headerJustifyVariants[justify],
-        align != null && headerAlignVariants[align],
         isCompact && styles.headerCompact,
       ]}
     >
@@ -52,6 +52,9 @@ const styles = stylex.create({
   headerCompact: {
     padding: "4px",
   },
+  headerAlignCenter: {
+    alignItems: "center",
+  },
 });
 
 const headerGapVariants = stylex.create({
@@ -69,11 +72,5 @@ const headerJustifyVariants = stylex.create({
   },
   "flex-start": {
     justifyContent: "flex-start",
-  },
-});
-
-const headerAlignVariants = stylex.create({
-  center: {
-    alignItems: "center",
   },
 });
