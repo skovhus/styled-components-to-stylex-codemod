@@ -20,7 +20,7 @@ export function ColumnContainer(props: ColumnContainerProps) {
       {...mergedSx(
         [
           styles.columnContainer,
-          noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
+          noGrowOrShrink && styles.columnContainerNoGrowOrShrink,
           styles.columnContainerFlexShrink(props),
         ],
         undefined,

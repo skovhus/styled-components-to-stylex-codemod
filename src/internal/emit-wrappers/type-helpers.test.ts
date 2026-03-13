@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import jscodeshift from "jscodeshift";
+import type { StyledDecl } from "../transform-types.js";
 import {
+  collectBooleanPropNames,
   injectRefPropIntoTypeLiteralString,
   injectStylePropsIntoTypeLiteralString,
 } from "./type-helpers.js";
+
+const j = jscodeshift.withParser("tsx");
 
 describe("injectRefPropIntoTypeLiteralString", () => {
   it("injects ref into empty type literal", () => {
@@ -71,5 +76,80 @@ describe("injectStylePropsIntoTypeLiteralString", () => {
   it("handles intersection fallback for non-literal types", () => {
     const result = injectStylePropsIntoTypeLiteralString("SomeType", { className: true });
     expect(result).toBe("SomeType & { className?: string }");
+  });
+});
+
+describe("collectBooleanPropNames", () => {
+  function makePropsType(typeText: string): unknown {
+    const root = j(`type T = ${typeText};`);
+    const alias = root.find(j.TSTypeAliasDeclaration).at(0).get();
+    return alias.node.typeAnnotation;
+  }
+
+  it("extracts boolean props from propsType AST", () => {
+    const d = { propsType: makePropsType("{ $isActive?: boolean; $fill?: string }") } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("$isActive")).toBe(true);
+    expect(result.has("isActive")).toBe(true);
+    expect(result.has("$fill")).toBe(false);
+    expect(result.has("fill")).toBe(false);
+  });
+
+  it("includes boolean props from staticBooleanVariants", () => {
+    const d = {
+      staticBooleanVariants: [{ propName: "disabled", styleKey: "boxDisabled", styles: {} }],
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("disabled")).toBe(true);
+  });
+
+  it("includes boolean props from variantDimensions", () => {
+    const d = {
+      variantDimensions: [
+        {
+          propName: "checked",
+          variantObjectName: "checkedVariants",
+          variants: { true: {} },
+          isBooleanProp: true,
+        },
+      ],
+    } as unknown as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("checked")).toBe(true);
+  });
+
+  it("returns empty set when no boolean props found", () => {
+    const d = { propsType: makePropsType("{ size?: string; count?: number }") } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.size).toBe(0);
+  });
+
+  it("only marks props boolean if boolean in ALL union arms", () => {
+    const d = {
+      propsType: makePropsType(
+        "{ active: boolean; mode: string } | { active: string; mode: string }",
+      ),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(false);
+  });
+
+  it("marks props boolean when boolean in all union arms", () => {
+    const d = {
+      propsType: makePropsType(
+        "{ active: boolean; mode: string } | { active: boolean; size: number }",
+      ),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(true);
+  });
+
+  it("collects boolean props from intersection types", () => {
+    const d = {
+      propsType: makePropsType("{ active: boolean } & { visible: boolean }"),
+    } as StyledDecl;
+    const result = collectBooleanPropNames(d);
+    expect(result.has("active")).toBe(true);
+    expect(result.has("visible")).toBe(true);
   });
 });

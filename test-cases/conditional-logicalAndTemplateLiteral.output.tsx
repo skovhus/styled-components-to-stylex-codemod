@@ -10,7 +10,7 @@ type TitleProps = React.PropsWithChildren<{
 function Title(props: TitleProps) {
   const { children, upsideDown } = props;
 
-  return <h1 sx={[styles.title, upsideDown ? styles.titleUpsideDown : undefined]}>{children}</h1>;
+  return <h1 sx={[styles.title, upsideDown && styles.titleUpsideDown]}>{children}</h1>;
 }
 
 type DropZoneProps = React.PropsWithChildren<{
@@ -22,7 +22,7 @@ export function DropZone(props: DropZoneProps) {
   const { children, isDraggingOver, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.dropZone, isDraggingOver ? styles.dropZoneDraggingOver : undefined]}>
+    <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]}>
       {children}
     </div>
   );
@@ -37,7 +37,7 @@ export function Card(props: CardProps) {
   const { children, isHighlighted, ...rest } = props;
 
   return (
-    <div {...rest} sx={[styles.card, isHighlighted ? styles.cardHighlighted : undefined]}>
+    <div {...rest} sx={[styles.card, isHighlighted && styles.cardHighlighted]}>
       {children}
     </div>
   );
@@ -53,10 +53,7 @@ export function StatusBar(props: StatusBarProps) {
   const { children, isDisconnected, ...rest } = props;
 
   return (
-    <div
-      {...rest}
-      sx={[styles.statusBar, isDisconnected ? styles.statusBarDisconnected : undefined]}
-    >
+    <div {...rest} sx={[styles.statusBar, isDisconnected && styles.statusBarDisconnected]}>
       {children}
     </div>
   );

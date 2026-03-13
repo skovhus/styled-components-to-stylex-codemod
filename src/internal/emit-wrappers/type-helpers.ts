@@ -112,6 +112,31 @@ export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   );
 }
 
+/**
+ * Collects prop names that are known to have `boolean` type from all available sources:
+ * - `staticBooleanVariants` without a variantKey (confirmed boolean from prepass)
+ * - `variantDimensions` with `isBooleanProp` flag
+ * - `propsType` AST type literal with `boolean` type annotations
+ *
+ * Used to emit `cond && styles.key` (valid for StyleXArray since `false` is accepted)
+ * instead of `cond ? styles.key : undefined` for boolean-guarded variant conditions.
+ */
+export function collectBooleanPropNames(d: StyledDecl): ReadonlySet<string> {
+  const result = new Set<string>();
+  for (const sbv of d.staticBooleanVariants ?? []) {
+    if (!sbv.variantKey) {
+      result.add(sbv.propName);
+    }
+  }
+  for (const dim of d.variantDimensions ?? []) {
+    if (dim.isBooleanProp) {
+      result.add(dim.propName);
+    }
+  }
+  collectBooleanPropsFromTypeLiteral(d.propsType, result);
+  return result;
+}
+
 export function getAttrsAsString(d: StyledDecl): string | null {
   const v = d.attrsInfo?.staticAttrs?.as;
   return typeof v === "string" ? v : null;
@@ -177,4 +202,67 @@ export function injectStylePropsIntoTypeLiteralString(
   }
   // Fallback: intersect with a minimal props type.
   return `${typeText} & { ${propsToAdd.join(", ")} }`;
+}
+
+// --- Non-exported helpers ---
+
+type AnyASTNode = { type?: string; [key: string]: unknown };
+
+function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {
+  for (const name of extractBooleanProps(node)) {
+    result.add(name);
+    if (name.startsWith("$")) {
+      result.add(name.slice(1));
+    }
+  }
+}
+
+function extractBooleanProps(node: unknown): Set<string> {
+  const typed = node as AnyASTNode | null | undefined;
+  if (!typed || typeof typed !== "object") {
+    return new Set();
+  }
+  if (typed.type === "TSTypeLiteral") {
+    const props = new Set<string>();
+    for (const member of (typed.members as AnyASTNode[]) ?? []) {
+      if (member?.type !== "TSPropertySignature") {
+        continue;
+      }
+      const key = member.key as AnyASTNode | undefined;
+      const name = key?.type === "Identifier" ? (key.name as string) : null;
+      if (!name) {
+        continue;
+      }
+      const annotation = member.typeAnnotation as AnyASTNode | undefined;
+      const innerType = annotation?.typeAnnotation as AnyASTNode | undefined;
+      if (innerType?.type === "TSBooleanKeyword") {
+        props.add(name);
+      }
+    }
+    return props;
+  }
+  if (typed.type === "TSIntersectionType") {
+    const combined = new Set<string>();
+    for (const t of (typed.types as AnyASTNode[]) ?? []) {
+      for (const p of extractBooleanProps(t)) {
+        combined.add(p);
+      }
+    }
+    return combined;
+  }
+  if (typed.type === "TSUnionType") {
+    const arms = ((typed.types as AnyASTNode[]) ?? []).map(extractBooleanProps);
+    if (arms.length === 0) {
+      return new Set();
+    }
+    const first = arms[0]!;
+    const intersection = new Set<string>();
+    for (const name of first) {
+      if (arms.every((arm) => arm.has(name))) {
+        intersection.add(name);
+      }
+    }
+    return intersection;
+  }
+  return new Set();
 }

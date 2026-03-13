@@ -19,8 +19,8 @@ export function Container(props: ContainerProps) {
       {...mergedSx(
         [
           styles.container,
-          column ? styles.containerColumn : undefined,
-          overflowHidden ? styles.containerOverflowHidden : undefined,
+          column && styles.containerColumn,
+          overflowHidden && styles.containerOverflowHidden,
           sx,
         ],
         className,

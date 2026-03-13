@@ -9,9 +9,7 @@ type ContainerProps = React.PropsWithChildren<{
 function Container(props: ContainerProps) {
   const { children, compact } = props;
 
-  return (
-    <div sx={[styles.container, compact ? styles.containerCompact : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.container, compact && styles.containerCompact]}>{children}</div>;
 }
 
 export const App = () => (

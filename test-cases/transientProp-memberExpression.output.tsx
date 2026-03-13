@@ -14,7 +14,7 @@ function ComponentWrapper(props: ComponentWrapperProps) {
   return (
     <motion.div
       {...rest}
-      {...stylex.props(styles.componentWrapper, isOpen ? styles.componentWrapperOpen : undefined)}
+      {...stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen)}
     >
       {children}
     </motion.div>

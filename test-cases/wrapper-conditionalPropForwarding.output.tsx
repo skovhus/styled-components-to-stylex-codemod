@@ -41,11 +41,7 @@ export function Card(props: CardProps) {
       highlighted={highlighted}
       {...rest}
       {...mergedSx(
-        [
-          styles.card,
-          compact ? styles.cardCompact : undefined,
-          highlighted ? styles.cardHighlighted : undefined,
-        ],
+        [styles.card, compact && styles.cardCompact, highlighted && styles.cardHighlighted],
         className,
         style,
       )}

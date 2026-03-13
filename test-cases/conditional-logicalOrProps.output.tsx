@@ -12,9 +12,7 @@ function Dot(props: DotProps) {
   const { children, active, completed } = props;
 
   return (
-    <div sx={[styles.dot, active || completed ? styles.dotActiveOrCompleted : undefined]}>
-      {children}
-    </div>
+    <div sx={[styles.dot, (active || completed) && styles.dotActiveOrCompleted]}>{children}</div>
   );
 }
 
@@ -45,12 +43,7 @@ function Badge(props: BadgeProps) {
   const { children, visible, primary, accent } = props;
 
   return (
-    <span
-      sx={[
-        styles.badge,
-        visible && (primary || accent) ? styles.badgeVisiblePrimaryOrAccent : undefined,
-      ]}
-    >
+    <span sx={[styles.badge, visible && (primary || accent) && styles.badgeVisiblePrimaryOrAccent]}>
       {children}
     </span>
   );

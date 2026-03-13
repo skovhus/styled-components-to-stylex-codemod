@@ -18,7 +18,7 @@ function Header(props: HeaderProps) {
         gap != null && headerGapVariants[gap],
         justify != null && headerJustifyVariants[justify],
         align != null && headerAlignVariants[align],
-        isCompact ? styles.headerCompact : undefined,
+        isCompact && styles.headerCompact,
       ]}
     >
       {children}

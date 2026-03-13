@@ -14,7 +14,7 @@ type PopoverProps = React.PropsWithChildren<{
 function Popover(props: PopoverProps) {
   const { children, expanded } = props;
 
-  return <div sx={[styles.popover, expanded ? styles.popoverExpanded : undefined]}>{children}</div>;
+  return <div sx={[styles.popover, expanded && styles.popoverExpanded]}>{children}</div>;
 }
 
 export const App = () => (

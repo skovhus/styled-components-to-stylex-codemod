@@ -26,6 +26,7 @@ import {
   buildUseThemeDeclaration,
 } from "./emit-intrinsic-simple.js";
 import {
+  collectBooleanPropNames,
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
   injectStylePropsIntoTypeLiteralString,
@@ -417,6 +418,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Collect variant and styleFn expressions with source order for interleaving.
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
     const orderedEntries: OrderedStyleEntry[] = [];
+    const booleanProps = collectBooleanPropNames(d);
 
     // Add variant style arguments if this component has variants
     if (d.variantStyleKeys) {
@@ -439,7 +441,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           consumedVariantIndices.add(complementIdx);
           const [otherWhen, otherKey] = sortedEntries[complementIdx]!;
           const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
-          const { cond } = emitter.collectConditionProps({ when: positiveWhen, destructureProps });
+          const { cond } = emitter.collectConditionProps({
+            when: positiveWhen,
+            destructureProps,
+            booleanProps,
+          });
           for (let i = prevLength; i < destructureProps.length; i++) {
             styleOnlyConditionProps.add(destructureProps[i]!);
           }
@@ -464,7 +470,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           continue;
         }
 
-        const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+        const { cond, isBoolean } = emitter.collectConditionProps({
+          when,
+          destructureProps,
+          booleanProps,
+        });
         // Track newly added props as style-only (variant condition props)
         for (let i = prevLength; i < destructureProps.length; i++) {
           styleOnlyConditionProps.add(destructureProps[i]!);

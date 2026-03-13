@@ -14,7 +14,11 @@ import {
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { sortVariantEntriesBySpecificity, VOID_TAGS } from "./type-helpers.js";
+import {
+  collectBooleanPropNames,
+  sortVariantEntriesBySpecificity,
+  VOID_TAGS,
+} from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
@@ -154,6 +158,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       ];
 
       const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
+      const booleanProps = collectBooleanPropNames(d);
 
       // Collect variant and styleFn expressions with source order for interleaving.
       const hasSourceOrder = !!(
@@ -169,13 +174,16 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           if (compoundVariantKeys.has(when)) {
             continue;
           }
-          const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+          const { cond, isBoolean } = emitter.collectConditionProps({
+            when,
+            destructureProps,
+            booleanProps,
+          });
           const styleExpr = j.memberExpression(
             j.identifier(stylesIdentifier),
             j.identifier(variantKey),
           );
-          // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
-          // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+          // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
           const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
           const order = d.variantSourceOrder?.[when];
           if (hasSourceOrder && order !== undefined) {

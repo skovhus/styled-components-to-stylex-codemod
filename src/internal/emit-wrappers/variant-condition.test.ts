@@ -24,6 +24,22 @@ describe("parseVariantWhenToAst", () => {
     const parsedComparison = parseVariantWhenToAst(j, 'theme.mode === "dark"');
     expect(parsedComparison.props).toEqual([]);
   });
+
+  it("marks simple identifiers as boolean when in booleanProps set", () => {
+    const booleanProps = new Set(["disabled"]);
+    const parsed = parseVariantWhenToAst(j, "disabled", booleanProps);
+    expect(parsed.isBoolean).toBe(true);
+  });
+
+  it("keeps simple identifiers as non-boolean when not in booleanProps set", () => {
+    const parsed = parseVariantWhenToAst(j, "fill");
+    expect(parsed.isBoolean).toBe(false);
+  });
+
+  it("marks simple identifiers as non-boolean when booleanProps is not provided", () => {
+    const parsed = parseVariantWhenToAst(j, "disabled");
+    expect(parsed.isBoolean).toBe(false);
+  });
 });
 
 describe("collectConditionProps", () => {

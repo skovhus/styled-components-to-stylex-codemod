@@ -17,11 +17,10 @@ function Container(props: ContainerProps) {
       {...stylex.props(
         styles.container,
         styles.containerTransition(props.duration),
-        open
-          ? styles.containerOpen({
-              delay,
-            })
-          : undefined,
+        open &&
+          styles.containerOpen({
+            delay,
+          }),
       )}
     >
       {children}

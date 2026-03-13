@@ -10,9 +10,7 @@ function OptionLabel(props: OptionLabelProps) {
   const { children, disabled } = props;
 
   return (
-    <label sx={[styles.optionLabel, disabled ? styles.optionLabelDisabled : undefined]}>
-      {children}
-    </label>
+    <label sx={[styles.optionLabel, disabled && styles.optionLabelDisabled]}>{children}</label>
   );
 }
 

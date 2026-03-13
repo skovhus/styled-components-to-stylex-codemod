@@ -13,9 +13,9 @@ function Button(props: ButtonProps) {
     <button
       sx={[
         styles.button,
-        primary ? styles.buttonPrimary : undefined,
-        hollow ? styles.buttonHollow : undefined,
-        !hollow && primary ? styles.buttonNotHollowPrimary : undefined,
+        primary && styles.buttonPrimary,
+        hollow && styles.buttonHollow,
+        !hollow && primary && styles.buttonNotHollowPrimary,
         !hollow && !primary && styles.buttonNotHollowNotPrimary,
       ]}
     >

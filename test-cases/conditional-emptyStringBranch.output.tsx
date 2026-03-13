@@ -20,11 +20,7 @@ type BoxAltProps = React.PropsWithChildren<{
 function BoxAlt(props: BoxAltProps) {
   const { children, enableMinWidth } = props;
 
-  return (
-    <div sx={[styles.boxAlt, enableMinWidth ? styles.boxAltEnableMinWidth : undefined]}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.boxAlt, enableMinWidth && styles.boxAltEnableMinWidth]}>{children}</div>;
 }
 
 type ContainerProps = React.PropsWithChildren<{
@@ -57,9 +53,7 @@ type WrapperAltProps = React.PropsWithChildren<{
 function WrapperAlt(props: WrapperAltProps) {
   const { children, narrow } = props;
 
-  return (
-    <div sx={[styles.wrapperAlt, narrow ? styles.wrapperAltNarrow : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.wrapperAlt, narrow && styles.wrapperAltNarrow]}>{children}</div>;
 }
 
 export const App = () => (

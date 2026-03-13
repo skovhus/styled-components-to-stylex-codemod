@@ -10,7 +10,7 @@ export function Button(props: ButtonProps) {
   const { children, primary, ...rest } = props;
 
   return (
-    <button {...rest} sx={[styles.button, primary ? styles.buttonPrimary : undefined]}>
+    <button {...rest} sx={[styles.button, primary && styles.buttonPrimary]}>
       {children}
     </button>
   );

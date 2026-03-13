@@ -67,11 +67,7 @@ export function StatusBadge(props: StatusBadgeProps) {
   return (
     <div
       {...rest}
-      sx={[
-        styles.statusBadge,
-        compact ? styles.statusBadgeCompact : undefined,
-        variantVariants[variant],
-      ]}
+      sx={[styles.statusBadge, compact && styles.statusBadgeCompact, variantVariants[variant]]}
     >
       {children}
     </div>
@@ -86,9 +82,7 @@ type PrivateLabelProps = React.PropsWithChildren<{
 function PrivateLabel(props: PrivateLabelProps) {
   const { children, bold } = props;
 
-  return (
-    <span sx={[styles.privateLabel, bold ? styles.privateLabelBold : undefined]}>{children}</span>
-  );
+  return <span sx={[styles.privateLabel, bold && styles.privateLabelBold]}>{children}</span>;
 }
 
 type ColorChipProps = {
@@ -120,7 +114,7 @@ function SpecifierTag(props: SpecifierTagProps) {
     <div
       {...rest}
       {...mergedSx(
-        [styles.specifierTag, highlighted ? styles.specifierTagHighlighted : undefined],
+        [styles.specifierTag, highlighted && styles.specifierTagHighlighted],
         className,
         style,
       )}

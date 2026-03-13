@@ -28,10 +28,7 @@ function StyledSubmitButton(props: StyledSubmitButtonProps) {
     <SubmitButton
       {...rest}
       onlyIcon={undefined}
-      {...mergedSx(
-        [styles.submitButton, hasLabel ? styles.submitButtonHasLabel : undefined],
-        className,
-      )}
+      {...mergedSx([styles.submitButton, hasLabel && styles.submitButtonHasLabel], className)}
     >
       {children}
     </SubmitButton>

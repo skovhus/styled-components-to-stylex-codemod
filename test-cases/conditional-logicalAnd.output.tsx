@@ -22,7 +22,7 @@ type GrayscaleImageProps = { isBw?: boolean } & Pick<React.ComponentProps<"img">
 function GrayscaleImage(props: GrayscaleImageProps) {
   const { isBw, ...rest } = props;
 
-  return <img {...rest} sx={[styles.grayscaleImage, isBw ? styles.grayscaleImageBw : undefined]} />;
+  return <img {...rest} sx={[styles.grayscaleImage, isBw && styles.grayscaleImageBw]} />;
 }
 
 type DialogTextProps = React.PropsWithChildren<{

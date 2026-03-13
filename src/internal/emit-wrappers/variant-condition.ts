@@ -30,7 +30,11 @@ const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.tes
  * - Disjunction: `"a || b"` → `a || b`
  * - Grouped negation: `"!(a || b)"` → `!(a || b)`
  */
-export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantConditionResult {
+export function parseVariantWhenToAst(
+  j: JSCodeshift,
+  when: string,
+  booleanProps?: ReadonlySet<string>,
+): VariantConditionResult {
   const buildMemberExpr = (raw: string): ExpressionKind | null => {
     if (!raw.includes(".")) {
       return null;
@@ -99,7 +103,7 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
   // before checking for || to avoid incorrect splitting
   if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
     const inner = trimmed.slice(2, -1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -113,7 +117,7 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
       .split("&&")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p));
+    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps));
     const firstParsed = parsed[0];
     if (!firstParsed) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -133,7 +137,7 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
       .split(" || ")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p));
+    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps));
     const firstParsedOr = parsed[0];
     if (!firstParsedOr) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -150,7 +154,7 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
   // Handle simple negation without parentheses: !prop
   if (trimmed.startsWith("!")) {
     const inner = trimmed.slice(1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -181,12 +185,15 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
     };
   }
 
-  // Simple identifier - NOT guaranteed to be boolean (could be "" or 0)
+  // Simple identifier — NOT guaranteed to be boolean (could be "" or 0).
+  // When callers provide booleanProps, identifiers matching known boolean props
+  // produce `cond && expr` instead of `cond ? expr : undefined`.
   const simple = parsePropRef(trimmed);
+  const propIsBoolean = !!(simple.propName && booleanProps?.has(simple.propName));
   return {
     cond: simple.expr,
     props: simple.propName ? [simple.propName] : [],
-    isBoolean: false,
+    isBoolean: propIsBoolean,
   };
 }
 
@@ -197,10 +204,10 @@ export function parseVariantWhenToAst(j: JSCodeshift, when: string): VariantCond
  */
 export function collectConditionProps(
   j: JSCodeshift,
-  args: { when: string; destructureProps?: string[] },
+  args: { when: string; destructureProps?: string[]; booleanProps?: ReadonlySet<string> },
 ): VariantConditionResult {
-  const { when, destructureProps } = args;
-  const parsed = parseVariantWhenToAst(j, when);
+  const { when, destructureProps, booleanProps } = args;
+  const parsed = parseVariantWhenToAst(j, when, booleanProps);
   if (destructureProps) {
     for (const p of parsed.props) {
       if (p && !destructureProps.includes(p)) {
@@ -213,8 +220,9 @@ export function collectConditionProps(
 
 /**
  * Creates a conditional style expression that's safe for stylex.props().
- * For boolean conditions, uses && (since false is valid for stylex.props).
- * For non-boolean conditions (could be "" or 0), uses ternary with undefined fallback.
+ * For boolean conditions, uses `cond && expr` (since `false` is a valid StyleXArray element).
+ * For non-boolean conditions, uses `cond ? expr : undefined` to avoid producing
+ * values like `""` or `0` which are not valid StyleXArray elements.
  */
 export function makeConditionalStyleExpr(
   j: JSCodeshift,
@@ -269,9 +277,10 @@ export function buildExtraStylexPropsExprs(
   args: {
     entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
     destructureProps?: string[];
+    booleanProps?: ReadonlySet<string>;
   },
 ): ExpressionKind[] {
-  const { entries, destructureProps } = args;
+  const { entries, destructureProps, booleanProps } = args;
   const result: ExpressionKind[] = [];
   const consumed = new Set<number>();
 
@@ -306,6 +315,7 @@ export function buildExtraStylexPropsExprs(
     const { cond, isBoolean } = collectConditionProps(j, {
       when: entry.when,
       destructureProps,
+      booleanProps,
     });
     result.push(makeConditionalStyleExpr(j, { cond, expr: entry.expr, isBoolean }));
   }
