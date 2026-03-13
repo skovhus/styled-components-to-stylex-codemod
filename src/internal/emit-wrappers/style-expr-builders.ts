@@ -537,6 +537,8 @@ export function buildStyleFnExpressions(
     return null;
   };
 
+  const booleanProps = collectBooleanPropNames(d);
+
   for (const p of styleFnPairs) {
     const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
     const callArg = p.callArg ?? propExpr;
@@ -581,7 +583,6 @@ export function buildStyleFnExpressions(
 
     // Handle conditional style based on conditionWhen
     if (p.conditionWhen) {
-      const booleanProps = collectBooleanPropNames(d);
       const { cond, isBoolean } = collectConditionProps(j, {
         when: p.conditionWhen,
         destructureProps,

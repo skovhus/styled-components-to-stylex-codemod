@@ -113,7 +113,7 @@ describe("collectBooleanPropNames", () => {
           isBooleanProp: true,
         },
       ],
-    } as StyledDecl;
+    } as unknown as StyledDecl;
     const result = collectBooleanPropNames(d);
     expect(result.has("checked")).toBe(true);
   });
