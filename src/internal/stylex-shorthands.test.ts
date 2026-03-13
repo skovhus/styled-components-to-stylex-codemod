@@ -109,4 +109,56 @@ describe("splitDirectionalProperty", () => {
     });
     expect(result).toEqual([{ prop: "margin", value: "0" }]);
   });
+
+  it("always expands scrollPadding single value to physical longhands", () => {
+    const result = splitDirectionalProperty({
+      prop: "scrollPadding",
+      rawValue: "8px",
+    });
+    expect(result).toEqual([
+      { prop: "scrollPaddingTop", value: "8px" },
+      { prop: "scrollPaddingRight", value: "8px" },
+      { prop: "scrollPaddingBottom", value: "8px" },
+      { prop: "scrollPaddingLeft", value: "8px" },
+    ]);
+  });
+
+  it("always expands scrollMargin single value to physical longhands", () => {
+    const result = splitDirectionalProperty({
+      prop: "scrollMargin",
+      rawValue: "12px",
+    });
+    expect(result).toEqual([
+      { prop: "scrollMarginTop", value: "12px" },
+      { prop: "scrollMarginRight", value: "12px" },
+      { prop: "scrollMarginBottom", value: "12px" },
+      { prop: "scrollMarginLeft", value: "12px" },
+    ]);
+  });
+
+  it("expands scrollPadding two values to physical longhands (not Block/Inline)", () => {
+    const result = splitDirectionalProperty({
+      prop: "scrollPadding",
+      rawValue: "4px 12px",
+    });
+    expect(result).toEqual([
+      { prop: "scrollPaddingTop", value: "4px" },
+      { prop: "scrollPaddingRight", value: "12px" },
+      { prop: "scrollPaddingBottom", value: "4px" },
+      { prop: "scrollPaddingLeft", value: "12px" },
+    ]);
+  });
+
+  it("collapses identical scroll values to physical longhands", () => {
+    const result = splitDirectionalProperty({
+      prop: "scrollMargin",
+      rawValue: "8px 8px 8px 8px",
+    });
+    expect(result).toEqual([
+      { prop: "scrollMarginTop", value: "8px" },
+      { prop: "scrollMarginRight", value: "8px" },
+      { prop: "scrollMarginBottom", value: "8px" },
+      { prop: "scrollMarginLeft", value: "8px" },
+    ]);
+  });
 });
