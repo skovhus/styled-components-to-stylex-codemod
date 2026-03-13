@@ -22,14 +22,7 @@ function Base<C extends React.ElementType = "div">(
     <Component
       {...rest}
       {...mergedSx(
-        [
-          styles.base,
-          column ? styles.baseColumn : undefined,
-          styles.baseGap({
-            gap,
-          }),
-          sx,
-        ],
+        [styles.base, column ? styles.baseColumn : undefined, styles.baseGap(props), sx],
         className,
         style,
       )}
@@ -71,9 +64,7 @@ export function Button(
       sx={[
         styles.button,
         variant === "primary" && styles.buttonVariantPrimary,
-        styles.buttonFontSize({
-          size,
-        }),
+        styles.buttonFontSize(props),
       ]}
     >
       {children}

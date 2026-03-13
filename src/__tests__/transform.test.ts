@@ -4915,3 +4915,64 @@ export const App = () => <Box $animate>Multi</Box>;
     expect(result.code).toBeNull();
   });
 });
+
+describe("binary expression with bare props param usage", () => {
+  it("should bail when the arrow function body passes props as a bare argument", () => {
+    const source = `
+import styled from "styled-components";
+
+const offset = (props: { $depth: number }) => props.$depth * 4;
+
+const Box = styled.div<{ $depth: number }>\`
+  padding-left: \${(props) => props.$depth * 16 + offset(props)}px;
+\`;
+
+export const App = () => <Box $depth={2}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when the arrow function body uses computed member access", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $base: number; $key: string }>\`
+  padding-left: \${(props) => props.$base + props[props.$key]}px;
+\`;
+
+export const App = () => <Box $base={10} $key="$base">Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when the arrow function body uses string-literal computed access", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $offset: number }>\`
+  padding-left: \${(props) => props.$offset + props["$offset"]}px;
+\`;
+
+export const App = () => <Box $offset={10}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).toBeNull();
+  });
+
+  it("should transform when all prop references are member accesses", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $depth: number }>\`
+  padding-left: \${(props) => props.$depth * 16 + 4}px;
+\`;
+
+export const App = () => <Box $depth={2}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("props.depth * 16 + 4");
+  });
+});

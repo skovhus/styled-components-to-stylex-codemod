@@ -21,10 +21,7 @@ export function ColumnContainer(props: ColumnContainerProps) {
         [
           styles.columnContainer,
           noGrowOrShrink ? styles.columnContainerNoGrowOrShrink : undefined,
-          styles.columnContainerFlexShrink({
-            noGrowOrShrink,
-            basis,
-          }),
+          styles.columnContainerFlexShrink(props),
         ],
         undefined,
         style,
@@ -61,7 +58,7 @@ const styles = stylex.create({
   columnContainerNoGrowOrShrink: {
     flexGrow: 0,
   },
-  columnContainerFlexShrink: (props) => ({
+  columnContainerFlexShrink: (props: ColumnContainerProps) => ({
     flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,
   }),
 });

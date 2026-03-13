@@ -1622,6 +1622,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
                 : valueExprRaw;
             const param = j.identifier(paramName);
+            if (/\.(ts|tsx)$/.test(filePath)) {
+              const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
+              const isNamedTypeRef = propsTypeKind === "TSTypeReference";
+              if (!isNamedTypeRef) {
+                const typeName = `${decl.localName}Props`;
+                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                  j.tsTypeReference(j.identifier(typeName)),
+                );
+              }
+            }
             const body = j.objectExpression([
               j.property(
                 "init",
@@ -1632,21 +1642,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-            const callArg = j.objectExpression(
-              (res.props ?? []).map((propName) => {
-                const prop = j.property(
-                  "init",
-                  j.identifier(propName),
-                  j.identifier(propName),
-                ) as any;
-                prop.shorthand = true;
-                return prop;
-              }),
-            );
             styleFnFromProps.push({
               fnKey,
               jsxProp: "__props",
-              callArg,
             });
           }
         }

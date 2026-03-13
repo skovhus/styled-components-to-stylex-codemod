@@ -11,21 +11,7 @@ type BoxProps = React.PropsWithChildren<{
 function Box(props: BoxProps) {
   const { children, size } = props;
 
-  return (
-    <div
-      sx={[
-        styles.box,
-        styles.boxWidth({
-          size,
-        }),
-        styles.boxHeight({
-          size,
-        }),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, styles.boxWidth(props), styles.boxHeight(props)]}>{children}</div>;
 }
 
 export const App = () => (
@@ -48,10 +34,10 @@ const styles = stylex.create({
     justifyContent: "center",
     margin: 8,
   },
-  boxWidth: (props) => ({
+  boxWidth: (props: BoxProps) => ({
     width: `${props.size ?? 100}px`,
   }),
-  boxHeight: (props) => ({
+  boxHeight: (props: BoxProps) => ({
     height: `${props.size ?? 100}px`,
   }),
 });
