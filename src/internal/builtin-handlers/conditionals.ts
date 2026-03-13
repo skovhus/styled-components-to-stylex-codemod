@@ -2,7 +2,7 @@
  * Conditional expression handlers for the built-in handler system.
  * Core concepts: ternary splitting, CSS block conditionals, and nested variant extraction.
  */
-import type { ImportSpec } from "../../adapter.js";
+import type { CallResolveContext, CallResolveResult, ImportSpec } from "../../adapter.js";
 import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
@@ -58,11 +58,31 @@ export function tryResolveConditionalValue(
   }
   const info = getArrowFnThemeParamInfo(expr);
   const paramName = info?.kind === "propsParam" ? info.propsName : null;
+  const propsParamName = paramName ?? undefined;
+  const themeBindingName = info?.kind === "themeBinding" ? info.themeName : undefined;
 
   // For destructured params like ({ inline, column }) => ..., resolve bindings
   // so we can map bare Identifiers in the test to prop names.
   const paramBindings: ArrowFnParamBindings | null =
     !paramName && !info ? getArrowFnParamBindings(expr) : null;
+
+  // Tracks whether any branch in the conditional resolved to preserveRuntimeCall.
+  // When set, the whole conditional can be emitted as a runtime call expression
+  // (e.g., checked ? ColorConverter.cssWithAlpha(theme.color.x, 0.8) : "transparent").
+  // Uses an object wrapper so TypeScript's control flow analysis tracks mutations from closures.
+  type RuntimeCallInfo = {
+    resolveCallContext: CallResolveContext;
+    resolveCallResult: CallResolveResult;
+  };
+  const runtimeCallState: { info: RuntimeCallInfo | null } = { info: null };
+  const buildRuntimeCallResult = (): HandlerResult | null =>
+    runtimeCallState.info
+      ? {
+          type: "runtimeCallOnly",
+          resolveCallContext: runtimeCallState.info.resolveCallContext,
+          resolveCallResult: runtimeCallState.info.resolveCallResult,
+        }
+      : null;
 
   // Use getFunctionBodyExpr to handle both expression-body and block-body arrow functions.
   // Block bodies with a single return statement (possibly with comments) are supported.
@@ -271,26 +291,106 @@ export function tryResolveConditionalValue(
       return null;
     }
 
+    // Check if a call expression has any arguments that are theme member accesses
+    // (e.g., props.theme.isDark or theme.color.bgBase).
+    const callHasThemeArg = (call: CallExpressionNode): boolean =>
+      (call.arguments ?? []).some((arg: unknown) => {
+        if (
+          !arg ||
+          typeof arg !== "object" ||
+          (arg as { type?: string }).type !== "MemberExpression"
+        ) {
+          return false;
+        }
+        if (propsParamName) {
+          const parts = getMemberPathFromIdentifier(
+            arg as Parameters<typeof getMemberPathFromIdentifier>[0],
+            propsParamName,
+          );
+          return parts !== null && parts[0] === "theme" && parts.length > 1;
+        }
+        if (themeBindingName) {
+          const parts = getMemberPathFromIdentifier(
+            arg as Parameters<typeof getMemberPathFromIdentifier>[0],
+            themeBindingName,
+          );
+          return parts !== null && parts.length > 0;
+        }
+        return false;
+      });
+
+    const markAsRuntimeCall = (call: CallExpressionNode): void => {
+      runtimeCallState.info = {
+        resolveCallContext: {
+          callSiteFilePath: ctx.filePath,
+          calleeImportedName: "<local>",
+          calleeSource: { kind: "specifier", value: ctx.filePath },
+          args: [],
+          ...(call.loc?.start
+            ? { loc: { line: call.loc.start.line, column: call.loc.start.column } }
+            : {}),
+        },
+        resolveCallResult: { preserveRuntimeCall: true },
+      };
+    };
+
     // Helper to resolve call expressions (simple or curried) via adapter.
     // Preserves the full CallResolveResult including `kind` for proper CSS value vs StyleX ref detection.
+    // Also tracks preserveRuntimeCall results so the caller can emit runtimeCallOnly.
+    // For local (non-imported) functions with theme args, automatically marks as runtime call.
     const resolveCallExpr = (
       call: CallExpressionNode,
       cssProperty: string | undefined,
     ): { expr: string; imports: ImportSpec[]; usage?: "create" | "props" } | null => {
-      const res = resolveImportedHelperCall(call, ctx, undefined, cssProperty);
-      if (res.kind === "resolved" && "expr" in res.result) {
-        return res.result;
+      const res = resolveImportedHelperCall(
+        call,
+        ctx,
+        propsParamName,
+        cssProperty,
+        themeBindingName,
+      );
+      if (res.kind === "resolved") {
+        if ("expr" in res.result) {
+          return res.result;
+        }
+        if (res.result.preserveRuntimeCall) {
+          runtimeCallState.info = {
+            resolveCallContext: res.resolveCallContext,
+            resolveCallResult: res.resolveCallResult,
+          };
+          return null;
+        }
       }
       // Try curried pattern: helper(...)(propsParam)
       if (isCallExpressionNode(call.callee)) {
         const inner = call.callee;
         const outerArgs = call.arguments ?? [];
         if (outerArgs.length === 1 && outerArgs[0] && typeof outerArgs[0] === "object") {
-          const innerRes = resolveImportedHelperCall(inner, ctx, undefined, cssProperty);
-          if (innerRes.kind === "resolved" && "expr" in innerRes.result) {
-            return innerRes.result;
+          const innerRes = resolveImportedHelperCall(
+            inner,
+            ctx,
+            propsParamName,
+            cssProperty,
+            themeBindingName,
+          );
+          if (innerRes.kind === "resolved") {
+            if ("expr" in innerRes.result) {
+              return innerRes.result;
+            }
+            if (innerRes.result.preserveRuntimeCall) {
+              runtimeCallState.info = {
+                resolveCallContext: innerRes.resolveCallContext,
+                resolveCallResult: innerRes.resolveCallResult,
+              };
+              return null;
+            }
           }
         }
+      }
+      // Local (non-imported) or unresolvable call with theme args:
+      // preserve the call at runtime so the expression stays intact.
+      if (callHasThemeArg(call)) {
+        markAsRuntimeCall(call);
       }
       return null;
     };
@@ -644,7 +744,7 @@ export function tryResolveConditionalValue(
     }
 
     if (!cons || !alt) {
-      return null;
+      return buildRuntimeCallResult();
     }
     const allUsages = new Set([cons.usage, alt.usage]);
     if (allUsages.size !== 1) {
@@ -696,6 +796,9 @@ export function tryResolveConditionalValue(
           : { type: "splitVariantsResolvedValue", variants };
       }
     }
+    if (!cons || !alt) {
+      return buildRuntimeCallResult();
+    }
   }
 
   // 1c) Destructured params + bare Identifier test: ({ inline }) => inline ? "inline-flex" : "flex"
@@ -740,6 +843,10 @@ export function tryResolveConditionalValue(
             return result;
           }
         }
+      }
+
+      if (!cons || !alt) {
+        return buildRuntimeCallResult();
       }
     }
   }
@@ -821,7 +928,7 @@ export function tryResolveConditionalValue(
     }
   }
 
-  return null;
+  return buildRuntimeCallResult();
 }
 
 export function tryResolveConditionalCssBlock(

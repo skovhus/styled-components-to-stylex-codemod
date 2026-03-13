@@ -177,6 +177,14 @@ export const ColorConverter = {
 };
 
 /**
+ * Returns a highlight background color based on the dark mode flag.
+ * Used to test preserveRuntimeCall with theme boolean arguments.
+ */
+export function getRowHighlightColor(isDark: boolean): string {
+  return isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)";
+}
+
+/**
  * Component wrapper helper - wraps a component for testing styled(wrapper(Component)) patterns
  */
 export function wrapComponent<P extends object>(

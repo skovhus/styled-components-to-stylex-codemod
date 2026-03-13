@@ -427,6 +427,14 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle getRowHighlightColor(theme.isDark) helper
+    // Takes a theme boolean arg — preserve as runtime call.
+    if (ctx.calleeImportedName === "getRowHighlightColor" && arg0?.kind === "theme") {
+      return {
+        preserveRuntimeCall: true,
+      };
+    }
+
     // Handle shadow() helper — demonstrates dynamic prop arg resolution.
     // shadow("dark") → $shadow.dark (literal arg)
     // shadow(props.level) → $shadow[level] (dynamic arg — adapter remaps callee with member access)
