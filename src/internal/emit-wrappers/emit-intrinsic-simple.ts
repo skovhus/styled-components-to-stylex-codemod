@@ -18,6 +18,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import {
   buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
+  collectBooleanPropNames,
   sortVariantEntriesBySpecificity,
   VOID_TAGS,
 } from "./type-helpers.js";
@@ -905,6 +906,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     }
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
+    const booleanProps = collectBooleanPropNames(d);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
@@ -936,7 +938,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           const otherWhen = complementEntry?.[0] ?? "";
           const otherKey = complementEntry?.[1] ?? "";
           const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
-          const { cond } = emitter.collectConditionProps({ when: positiveWhen, destructureProps });
+          const { cond } = emitter.collectConditionProps({
+            when: positiveWhen,
+            destructureProps,
+            booleanProps,
+          });
 
           const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
           const trueKey = isCurrentPositive ? variantKey : otherKey;
@@ -959,13 +965,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           continue;
         }
 
-        const { cond, isBoolean } = emitter.collectConditionProps({ when, destructureProps });
+        const { cond, isBoolean } = emitter.collectConditionProps({
+          when,
+          destructureProps,
+          booleanProps,
+        });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
-        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+        // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
         const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
         const order = d.variantSourceOrder?.[when];
         if (hasSourceOrder && order !== undefined) {
@@ -1560,16 +1569,20 @@ export function appendThemeBooleanStyleArgs(
     if (!entry.trueStyleKey && !entry.falseStyleKey) {
       continue;
     }
-    const trueExpr = entry.trueStyleKey
-      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
-      : (j.identifier("undefined") as ExpressionKind);
-    const falseExpr = entry.falseStyleKey
+    const trueRef = entry.trueStyleKey ? styleRef(j, stylesIdentifier, entry.trueStyleKey) : null;
+    const falseRef = entry.falseStyleKey
       ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
-      : (j.identifier("undefined") as ExpressionKind);
+      : null;
     const condition = entry.conditionExpr
       ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
       : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
-    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+    if (trueRef && falseRef) {
+      styleArgs.push(j.conditionalExpression(condition, trueRef, falseRef));
+    } else if (trueRef) {
+      styleArgs.push(j.logicalExpression("&&", condition, trueRef));
+    } else if (falseRef) {
+      styleArgs.push(j.logicalExpression("&&", j.unaryExpression("!", condition), falseRef));
+    }
   }
   return true;
 }
@@ -1671,12 +1684,13 @@ function appendGuardedStyleArgs<T extends { guard?: { when: string } }>(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   buildExpr: (entry: T) => ExpressionKind,
+  booleanProps?: ReadonlySet<string>,
 ): string[] {
   const guardProps: string[] = [];
   for (const entry of entries) {
     const expr = buildExpr(entry);
     if (entry.guard) {
-      const parsed = parseVariantWhenToAst(j, entry.guard.when);
+      const parsed = parseVariantWhenToAst(j, entry.guard.when, booleanProps);
       for (const p of parsed.props) {
         if (p && !guardProps.includes(p)) {
           guardProps.push(p);

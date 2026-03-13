@@ -15,7 +15,7 @@ export function Scrollable<C extends React.ElementType = "div">(props: Scrollabl
     <Component
       {...rest}
       {...mergedSx(
-        [styles.scrollable, applyBackground ? styles.scrollableApplyBackground : undefined, sx],
+        [styles.scrollable, applyBackground && styles.scrollableApplyBackground, sx],
         className,
         style,
       )}

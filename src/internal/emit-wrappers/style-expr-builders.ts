@@ -10,6 +10,7 @@ import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
+import { collectBooleanPropNames } from "./type-helpers.js";
 import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condition.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 
@@ -580,9 +581,11 @@ export function buildStyleFnExpressions(
 
     // Handle conditional style based on conditionWhen
     if (p.conditionWhen) {
+      const booleanProps = collectBooleanPropNames(d);
       const { cond, isBoolean } = collectConditionProps(j, {
         when: p.conditionWhen,
         destructureProps,
+        booleanProps,
       });
       pushExpr(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
       continue;

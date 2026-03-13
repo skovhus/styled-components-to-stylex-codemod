@@ -31,7 +31,7 @@ function Link(props: LinkProps) {
   const { children, isActive, ...rest } = props;
 
   return (
-    <a {...rest} sx={[styles.link, isActive ? styles.linkActive : undefined]}>
+    <a {...rest} sx={[styles.link, isActive && styles.linkActive]}>
       {children}
     </a>
   );
@@ -77,7 +77,7 @@ function Card(props: CardProps) {
         styles.card,
         variant === "primary" && styles.cardVariantPrimary,
         styles.cardBoxShadow(props),
-        rounded ? styles.cardRounded : undefined,
+        rounded && styles.cardRounded,
       ]}
     >
       {children}

@@ -5,7 +5,7 @@ import { pixelVars } from "./tokens.stylex";
 
 function Box(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
-  return <div sx={theme.isDark ? undefined : styles.boxLight}>{props.children}</div>;
+  return <div sx={!theme.isDark && styles.boxLight}>{props.children}</div>;
 }
 
 export const App = () => <Box />;

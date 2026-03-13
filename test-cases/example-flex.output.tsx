@@ -135,14 +135,11 @@ export function Flex<C extends React.ElementType = "div">(
           overflowHidden ? styles.flexOverflowHidden : undefined,
           noMinWidth ? styles.flexNoMinWidth : undefined,
           noMinHeight ? styles.flexNoMinHeight : undefined,
-          typeof grow === "number" ? styles.flexGrow(grow) : undefined,
-          typeof shrink === "number" ? styles.flexShrink(shrink) : undefined,
-          typeof gap === "number" ? styles.flexGap(gap) : undefined,
-          typeof wrapGap === "number"
-            ? column
-              ? styles.flexColumnGap(wrapGap)
-              : styles.flexRowGap(wrapGap)
-            : undefined,
+          typeof grow === "number" && styles.flexGrow(grow),
+          typeof shrink === "number" && styles.flexShrink(shrink),
+          typeof gap === "number" && styles.flexGap(gap),
+          typeof wrapGap === "number" &&
+            (column ? styles.flexColumnGap(wrapGap) : styles.flexRowGap(wrapGap)),
           sx,
         ],
         className,

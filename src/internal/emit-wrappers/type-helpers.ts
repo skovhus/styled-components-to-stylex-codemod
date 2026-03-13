@@ -112,6 +112,31 @@ export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   );
 }
 
+/**
+ * Collects prop names that are known to have `boolean` type from all available sources:
+ * - `staticBooleanVariants` without a variantKey (confirmed boolean from prepass)
+ * - `variantDimensions` with `isBooleanProp` flag
+ * - `propsType` AST type literal with `boolean` type annotations
+ *
+ * Used to emit `cond && styles.key` (valid for StyleXArray since `false` is accepted)
+ * instead of `cond ? styles.key : undefined` for boolean-guarded variant conditions.
+ */
+export function collectBooleanPropNames(d: StyledDecl): ReadonlySet<string> {
+  const result = new Set<string>();
+  for (const sbv of d.staticBooleanVariants ?? []) {
+    if (!sbv.variantKey) {
+      result.add(sbv.propName);
+    }
+  }
+  for (const dim of d.variantDimensions ?? []) {
+    if (dim.isBooleanProp) {
+      result.add(dim.propName);
+    }
+  }
+  collectBooleanPropsFromTypeLiteral(d.propsType, result);
+  return result;
+}
+
 export function getAttrsAsString(d: StyledDecl): string | null {
   const v = d.attrsInfo?.staticAttrs?.as;
   return typeof v === "string" ? v : null;
@@ -177,4 +202,38 @@ export function injectStylePropsIntoTypeLiteralString(
   }
   // Fallback: intersect with a minimal props type.
   return `${typeText} & { ${propsToAdd.join(", ")} }`;
+}
+
+// --- Non-exported helpers ---
+
+type AnyASTNode = { type?: string; [key: string]: unknown };
+
+function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {
+  const typed = node as AnyASTNode | null | undefined;
+  if (!typed || typeof typed !== "object") {
+    return;
+  }
+  if (typed.type === "TSTypeLiteral") {
+    for (const member of (typed.members as AnyASTNode[]) ?? []) {
+      if (member?.type !== "TSPropertySignature") {
+        continue;
+      }
+      const key = member.key as AnyASTNode | undefined;
+      const name = key?.type === "Identifier" ? (key.name as string) : null;
+      if (!name) {
+        continue;
+      }
+      const annotation = member.typeAnnotation as AnyASTNode | undefined;
+      const innerType = annotation?.typeAnnotation as AnyASTNode | undefined;
+      if (innerType?.type === "TSBooleanKeyword") {
+        result.add(name.replace(/^\$/, ""));
+      }
+    }
+    return;
+  }
+  if (typed.type === "TSIntersectionType" || typed.type === "TSUnionType") {
+    for (const t of (typed.types as AnyASTNode[]) ?? []) {
+      collectBooleanPropsFromTypeLiteral(t, result);
+    }
+  }
 }

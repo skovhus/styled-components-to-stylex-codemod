@@ -8,7 +8,7 @@ type CompProps = React.PropsWithChildren<{
 function Comp(props: CompProps) {
   const { children, draggable } = props;
 
-  return <div sx={[styles.comp, draggable ? styles.compDraggable : undefined]}>{children}</div>;
+  return <div sx={[styles.comp, draggable && styles.compDraggable]}>{children}</div>;
 }
 
 const Link = ({ className, text, ...props }: { className?: string; text: string }) => (
@@ -22,9 +22,7 @@ type StyledLinkProps = { red?: boolean } & Omit<React.ComponentPropsWithRef<type
 function StyledLink(props: StyledLinkProps) {
   const { className, red, ...rest } = props;
 
-  return (
-    <Link {...rest} {...mergedSx([styles.link, red ? styles.linkRed : undefined], className)} />
-  );
+  return <Link {...rest} {...mergedSx([styles.link, red && styles.linkRed], className)} />;
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop

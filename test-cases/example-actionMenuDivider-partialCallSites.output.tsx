@@ -16,10 +16,7 @@ function TextDividerContainer(props: TextDividerContainerProps) {
   return (
     <div
       {...mergedSx(
-        [
-          styles.textDividerContainer,
-          noMinWidth ? styles.textDividerContainerNoMinWidth : undefined,
-        ],
+        [styles.textDividerContainer, noMinWidth && styles.textDividerContainerNoMinWidth],
         className,
         style,
       )}

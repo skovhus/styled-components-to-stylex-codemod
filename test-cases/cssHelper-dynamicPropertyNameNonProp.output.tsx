@@ -21,11 +21,8 @@ export function Stack(props: StackProps & Omit<React.ComponentProps<"div">, "cla
       {...mergedSx(
         [
           styles.stack,
-          Browser.isSafari
-            ? column
-              ? styles.stackColumnGapMarginTop(gap)
-              : styles.stackRowGapMarginTop(gap)
-            : undefined,
+          Browser.isSafari &&
+            (column ? styles.stackColumnGapMarginTop(gap) : styles.stackRowGapMarginTop(gap)),
         ],
         undefined,
         style,

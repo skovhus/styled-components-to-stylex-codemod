@@ -12,7 +12,7 @@ function MixedBackground(props: MixedBackgroundProps) {
   const { children, useGradient } = props;
 
   return (
-    <div sx={[styles.mixedBackground, useGradient ? styles.mixedBackgroundUseGradient : undefined]}>
+    <div sx={[styles.mixedBackground, useGradient && styles.mixedBackgroundUseGradient]}>
       {children}
     </div>
   );

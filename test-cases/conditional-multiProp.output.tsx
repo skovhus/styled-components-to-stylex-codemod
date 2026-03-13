@@ -26,8 +26,8 @@ export function Spacer(props: Props & Omit<React.ComponentProps<"div">, "classNa
       {...rest}
       {...mergedSx(
         [
-          showProperty(width) ? styles.spacerWithWidth(width) : undefined,
-          showProperty(height) ? styles.spacerWithHeight(height) : undefined,
+          showProperty(width) && styles.spacerWithWidth(width),
+          showProperty(height) && styles.spacerWithHeight(height),
         ],
         undefined,
         style,

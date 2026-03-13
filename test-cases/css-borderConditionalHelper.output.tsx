@@ -9,9 +9,7 @@ type SimpleBoxProps = React.PropsWithChildren<{
 function SimpleBox(props: SimpleBoxProps) {
   const { children, bordered } = props;
 
-  return (
-    <div sx={[styles.simpleBox, bordered ? styles.simpleBoxBordered : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.simpleBox, bordered && styles.simpleBoxBordered]}>{children}</div>;
 }
 
 type EnumBoxProps = React.PropsWithChildren<{

@@ -1715,7 +1715,11 @@ export class WrapperEmitter {
     return vc.parseVariantWhenToAst(this.j, when);
   }
 
-  collectConditionProps(args: { when: string; destructureProps?: string[] }) {
+  collectConditionProps(args: {
+    when: string;
+    destructureProps?: string[];
+    booleanProps?: ReadonlySet<string>;
+  }) {
     return vc.collectConditionProps(this.j, args);
   }
 
@@ -1730,6 +1734,7 @@ export class WrapperEmitter {
   buildExtraStylexPropsExprs(args: {
     entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
     destructureProps?: string[];
+    booleanProps?: ReadonlySet<string>;
   }): ExpressionKind[] {
     return vc.buildExtraStylexPropsExprs(this.j, args);
   }

@@ -36,11 +36,7 @@ function Badge(props: BadgeProps) {
     <Badge_
       highlighted={highlighted}
       {...rest}
-      {...mergedSx(
-        [styles.badge, highlighted ? styles.badgeHighlighted : undefined],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.badge, highlighted && styles.badgeHighlighted], className, style)}
     >
       {children}
     </Badge_>

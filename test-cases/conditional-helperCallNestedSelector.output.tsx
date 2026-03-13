@@ -12,7 +12,7 @@ type TextProps = React.PropsWithChildren<{
 function Text(props: TextProps) {
   const { children, truncate } = props;
 
-  return <p sx={[styles.text, truncate ? styles.textTruncate : undefined]}>{children}</p>;
+  return <p sx={[styles.text, truncate && styles.textTruncate]}>{children}</p>;
 }
 
 export const App = () => (

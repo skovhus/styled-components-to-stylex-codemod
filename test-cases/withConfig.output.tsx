@@ -14,7 +14,7 @@ type InputProps = { hasError?: boolean } & Pick<React.ComponentProps<"input">, "
 function Input(props: InputProps) {
   const { hasError, ...rest } = props;
 
-  return <input {...rest} sx={[styles.input, hasError ? styles.inputHasError : undefined]} />;
+  return <input {...rest} sx={[styles.input, hasError && styles.inputHasError]} />;
 }
 
 export const App = () => (

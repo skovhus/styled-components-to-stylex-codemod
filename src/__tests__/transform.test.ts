@@ -832,7 +832,7 @@ export const App = (props: { $active?: boolean }) => <Toggle {...props} />;
     expect(result.code).not.toBeNull();
     // The wrapper's destructuring must keep the $-prefix because
     // spread call sites may pass $active which wouldn't match a renamed "active".
-    expect(result.code).toContain("$active ?");
+    expect(result.code).toContain("$active &&");
   });
 
   it("should keep $-prefix when stripped name collides with exported const binding", () => {

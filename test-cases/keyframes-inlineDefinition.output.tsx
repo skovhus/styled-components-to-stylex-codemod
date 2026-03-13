@@ -7,7 +7,7 @@ function Circle(props: CircleProps) {
   const { children, isAnimated, ...rest } = props;
 
   return (
-    <path {...rest} sx={[styles.circle, isAnimated ? styles.circleAnimated : undefined]}>
+    <path {...rest} sx={[styles.circle, isAnimated && styles.circleAnimated]}>
       {children}
     </path>
   );

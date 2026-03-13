@@ -9,7 +9,7 @@ type StepLineProps = React.PropsWithChildren<{
 function StepLine(props: StepLineProps) {
   const { children, faded } = props;
 
-  return <div sx={[styles.stepLine, faded ? styles.stepLineFaded : undefined]}>{children}</div>;
+  return <div sx={[styles.stepLine, faded && styles.stepLineFaded]}>{children}</div>;
 }
 
 export const App = () => <StepLine faded />;

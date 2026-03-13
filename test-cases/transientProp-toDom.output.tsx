@@ -16,11 +16,7 @@ export function Box(props: BoxProps) {
   return (
     <div
       {...rest}
-      sx={[
-        styles.box,
-        size === "large" && styles.boxSizeLarge,
-        isActive ? styles.boxActive : undefined,
-      ]}
+      sx={[styles.box, size === "large" && styles.boxSizeLarge, isActive && styles.boxActive]}
     >
       {children}
     </div>
@@ -35,7 +31,7 @@ type ImageProps = { isInactive?: boolean } & Omit<
 export function Image(props: ImageProps) {
   const { isInactive, ...rest } = props;
 
-  return <img {...rest} sx={[styles.image, isInactive ? styles.imageInactive : undefined]} />;
+  return <img {...rest} sx={[styles.image, isInactive && styles.imageInactive]} />;
 }
 
 type SliderProps = React.PropsWithChildren<{

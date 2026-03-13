@@ -13,6 +13,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import {
   buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
+  collectBooleanPropNames,
   sortVariantEntriesBySpecificity,
   VOID_TAGS,
 } from "./type-helpers.js";
@@ -403,6 +404,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
+    const booleanProps = collectBooleanPropNames(d);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
@@ -416,13 +418,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { cond, isBoolean } = emitter.collectConditionProps({ when });
+        const { cond, isBoolean } = emitter.collectConditionProps({ when, booleanProps });
         const styleExpr = j.memberExpression(
           j.identifier(stylesIdentifier),
           j.identifier(variantKey),
         );
-        // Use makeConditionalStyleExpr to handle boolean vs non-boolean conditions correctly.
-        // For boolean conditions, && is used. For non-boolean (could be "" or 0), ternary is used.
+        // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
         const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
         const order = d.variantSourceOrder?.[when];
         if (hasSourceOrder && order !== undefined) {
@@ -520,6 +521,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         const { cond, isBoolean } = emitter.collectConditionProps({
           when: p.conditionWhen,
           destructureProps: destructureParts,
+          booleanProps,
         });
         expr = emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean });
       } else {

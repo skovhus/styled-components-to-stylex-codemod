@@ -13,9 +13,7 @@ function Box(props: BoxProps) {
   const { children, style, large } = props;
 
   return (
-    <div {...mergedSx([styles.box, large ? styles.boxLarge : undefined], undefined, style)}>
-      {children}
-    </div>
+    <div {...mergedSx([styles.box, large && styles.boxLarge], undefined, style)}>{children}</div>
   );
 }
 
