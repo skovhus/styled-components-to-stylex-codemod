@@ -369,20 +369,17 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   if (isHeterogeneousBackground) {
     // Each variant gets its own StyleX property based on its value
     // (backgroundImage for gradients, backgroundColor for colors).
-    // The default (negative/falsy) branch goes into the base style so
-    // active variants override it via StyleX array ordering.
+    // All branches go to variant buckets to preserve CSS exclusivity:
+    // background-color must NOT persist when a gradient variant is active.
     const isNestedTernary = allPosParsed.length > 1;
 
     if (neg && negParsed) {
       const negStylexProp = resolveBackgroundStylexProp(neg.expr);
-      if (!applyParsed(styleObj as any, negParsed, negStylexProp)) {
-        bailUnsupported(
-          decl,
-          "Resolved conditional background default could not be applied to base style",
-        );
-        setBail();
-        return true;
-      }
+      const bucket = { ...variantBuckets.get(neg.when) } as Record<string, unknown>;
+      applyParsed(bucket, negParsed, negStylexProp);
+      variantBuckets.set(neg.when, bucket);
+      const suffix = isNestedTernary ? "Default" : toSuffixFromProp(neg.when);
+      variantStyleKeys[neg.when] ??= `${decl.styleKey}${suffix}`;
     }
 
     // Apply positive variants to their own buckets
