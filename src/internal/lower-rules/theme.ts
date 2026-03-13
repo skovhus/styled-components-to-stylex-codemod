@@ -6,8 +6,7 @@ import {
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
-  isLogicalExpressionNode,
-  literalToStaticValue,
+  hasNonLiteralLogicalFallback,
   unwrapLogicalFallback,
 } from "../utilities/jscodeshift-utils.js";
 import { isDirectionalResult } from "../../adapter.js";
@@ -114,11 +113,7 @@ export function createThemeResolvers(
       // StyleX `defineVars` tokens always resolve, so literal fallbacks are
       // unnecessary. But non-literal fallbacks (e.g., `?? props.fallbackColor`)
       // reference runtime values — bail to avoid silently dropping them.
-      if (
-        isLogicalExpressionNode(bodyExpr) &&
-        (bodyExpr.operator === "??" || bodyExpr.operator === "||") &&
-        literalToStaticValue(bodyExpr.right) === null
-      ) {
+      if (hasNonLiteralLogicalFallback(bodyExpr)) {
         return null;
       }
       return direct;
@@ -170,6 +165,10 @@ export function createThemeResolvers(
       cssProperty,
     );
     if (!resolved) {
+      return null;
+    }
+    // Same non-literal fallback bail as the direct path above.
+    if (hasNonLiteralLogicalFallback(bodyExpr)) {
       return null;
     }
     return resolved;

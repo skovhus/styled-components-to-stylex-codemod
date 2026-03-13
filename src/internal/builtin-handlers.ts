@@ -12,6 +12,7 @@ import {
   getSinglePropFromMemberExpr,
   isArrowFunctionExpression,
   isCallExpressionNode,
+  hasNonLiteralLogicalFallback,
   isLogicalExpressionNode,
   literalToStaticValue,
   resolveIdentifierToPropName,
@@ -137,13 +138,8 @@ function tryResolveThemeAccess(
   // However, non-literal fallbacks (e.g., `?? props.fallbackColor`) reference
   // runtime values the user depends on — bail so a downstream handler can emit
   // keepOriginal or an inline style instead of silently dropping them.
-  if (
-    isLogicalExpressionNode(expr.body) &&
-    (expr.body.operator === "??" || expr.body.operator === "||")
-  ) {
-    if (literalToStaticValue(expr.body.right) === null) {
-      return null;
-    }
+  if (hasNonLiteralLogicalFallback(expr.body)) {
+    return null;
   }
   return { type: "resolvedValue", expr: res.expr, imports: res.imports };
 }

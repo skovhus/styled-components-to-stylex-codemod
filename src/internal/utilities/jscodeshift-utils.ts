@@ -836,6 +836,21 @@ export function unwrapLogicalFallback(expr: unknown): unknown {
 }
 
 /**
+ * Returns true when `expr` is a `??` / `||` logical expression whose
+ * right-hand side is a non-literal value (e.g., `props.fallbackColor`).
+ *
+ * Used to bail on theme resolution when the fallback references a runtime
+ * value the user depends on — dropping it silently would change semantics.
+ */
+export function hasNonLiteralLogicalFallback(expr: unknown): boolean {
+  return (
+    isLogicalExpressionNode(expr) &&
+    (expr.operator === "??" || expr.operator === "||") &&
+    literalToStaticValue(expr.right) === null
+  );
+}
+
+/**
  * Type guard for ConditionalExpression nodes.
  */
 export function isConditionalExpressionNode(node: unknown): node is {
