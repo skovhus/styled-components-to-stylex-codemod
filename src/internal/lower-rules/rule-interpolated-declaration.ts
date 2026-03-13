@@ -319,22 +319,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) {
       continue;
     }
-    // Dynamic styles inside ::before/::after pseudo-elements are not natively supported
-    // by StyleX (see https://github.com/facebook/stylex/issues/1396).
-    // Workaround: use CSS custom properties set as inline styles on the parent element,
-    // referenced via var() in the pseudo-element's static StyleX styles.
     if (isPseudoElementSelector(pseudoElement)) {
       if (tryHandleDynamicPseudoElementViaCustomProperty(args)) {
         continue;
       }
-      warnings.push({
-        severity: "error",
-        type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
-        loc: decl.loc,
-        context: { pseudoElement },
-      });
-      bail = true;
-      break;
     }
     if (
       tryHandleInterpolatedBorder(
@@ -2326,7 +2314,8 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
  *   Output: StyleX  → `"::after": { backgroundColor: "var(--Badge-after-backgroundColor)" }`
  *           Inline  → `style={{ "--Badge-after-backgroundColor": $badgeColor }}`
  *
- * Bails (returns false) for unsupported shapes: multi-slot interpolations or CSS shorthands.
+ * Returns false for shapes it cannot handle (multi-slot interpolations, CSS shorthands,
+ * theme access); callers fall through to other handlers.
  */
 function tryHandleDynamicPseudoElementViaCustomProperty(
   args: InterpolatedDeclarationContext,
