@@ -4744,6 +4744,84 @@ export const App = () => (
     expect(result.code).toContain("e => e.stopPropagation()");
     expect(result.code).toContain("e => console.log(e)");
   });
+
+  it("does not annotate event handlers on polymorphic components (base tag may be wrong)", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+export const Box = styled.div\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <div>
+    <Box as="input" onChange={(e) => console.log(e.target.value)} />
+    <Box onClick={(e) => console.log(e)} />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "event-handler-polymorphic.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: {
+          ...fixtureAdapter,
+          externalInterface: () => ({ styles: true, as: true, ref: false }),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Polymorphic: base tag is div but as="input" changes the element type,
+    // so annotating with HTMLDivElement would be wrong
+    expect(result.code).not.toContain("React.ChangeEvent");
+    expect(result.code).not.toContain("React.MouseEvent");
+  });
+});
+
+describe("transient prop rename with duplicate attrs", () => {
+  it("blocks rename when same $-prop appears both before and after spread", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+const Fader = styled.div<{ $open: boolean }>\`
+  opacity: \${(props) => (props.$open ? 1 : 0)};
+\`;
+
+function Consumer(props: { children: React.ReactNode }) {
+  const { children, ...rest } = props;
+  return (
+    <Fader $open={!!children} {...rest} $open={true}>
+      {children}
+    </Fader>
+  );
+}
+
+export const App = () => <Consumer>Test</Consumer>;
+`;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "transient-duplicate-spread.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // $open appears both before and after the spread — renaming would produce
+    // duplicate "open" attributes, so the $ prefix must be preserved.
+    // Verify $open is NOT renamed: prop type, destructuring, and JSX all keep "$open"
+    expect(result.code).toContain("$open");
+    expect(result.code).not.toMatch(/[^$]\bopen\b\s*[?:=,)]/); // no bare "open" prop (without $)
+  });
 });
 
 describe("backgroundImage URL preservation", () => {

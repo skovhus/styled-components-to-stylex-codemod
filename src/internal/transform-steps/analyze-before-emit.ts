@@ -1296,12 +1296,16 @@ function collectCallSiteAttrNames(
   const collectFromElement = (openingElement: { attributes?: unknown[] }) => {
     let siteHasSpread = false;
     const siteTransientAfterSpread = new Set<string>();
+    const siteTransientBeforeSpread = new Set<string>();
     for (const attr of (openingElement as any).attributes ?? []) {
       if (attr.type === "JSXSpreadAttribute") {
         hasSpread = true;
         siteHasSpread = true;
-        // Any $-props seen BEFORE this spread are overridden by the spread,
-        // so clear them — only props AFTER the last spread are safe to rename.
+        // Track props seen before any spread, then clear — only props AFTER
+        // the last spread are safe to rename.
+        for (const name of siteTransientAfterSpread) {
+          siteTransientBeforeSpread.add(name);
+        }
         siteTransientAfterSpread.clear();
       } else if (attr.type === "JSXAttribute" && attr.name?.type === "JSXIdentifier") {
         const name: string = attr.name.name;
@@ -1313,6 +1317,12 @@ function collectCallSiteAttrNames(
       }
     }
     if (siteHasSpread) {
+      // Remove props that appear both before AND after a spread — renaming
+      // would produce duplicate JSX attributes (e.g., `$open={a} {...rest} $open={b}`
+      // → `open={a} {...rest} open={b}` = TS17001 error).
+      for (const name of siteTransientBeforeSpread) {
+        siteTransientAfterSpread.delete(name);
+      }
       spreadSiteTransientProps.push(siteTransientAfterSpread);
     }
   };
