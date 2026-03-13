@@ -112,8 +112,9 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
         );
       }
       const valueExprRaw = (() => {
-        const hasThemeAccess = hasThemeAccessInArrowFn(e);
-        if (hasThemeAccess && !hasSimpleIdentifierParam(e)) {
+        // Pseudo/media style functions are module-scoped in stylex.create(),
+        // so runtime theme values from useTheme() are not available there.
+        if (hasThemeAccessInArrowFn(e)) {
           warnPropInlineStyle(
             decl,
             "Unsupported prop-based inline style props.theme access is not supported",
@@ -134,14 +135,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           setBail();
           return null;
         }
-        const baseExpr = hasThemeAccess ? rewritePropsThemeToThemeVar(inlineExpr) : inlineExpr;
-        if (hasThemeAccess) {
-          markDeclNeedsUseThemeHook(decl);
-        }
         const { prefix, suffix } = extractStaticPartsForDecl(d);
         return prefix || suffix
-          ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix)
-          : baseExpr;
+          ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix)
+          : inlineExpr;
       })();
       if (!valueExprRaw) {
         return true;

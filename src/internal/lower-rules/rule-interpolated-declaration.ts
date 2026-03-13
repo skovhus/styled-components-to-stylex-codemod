@@ -1964,8 +1964,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             bail = true;
             break;
           }
-          const hasThemeAccess = hasThemeAccessInArrowFn(e);
-          if (hasThemeAccess && e.params?.[0]?.type !== "Identifier") {
+          // shouldForwardProp style functions are module-scoped in stylex.create(),
+          // so runtime theme values from useTheme() are not available there.
+          if (hasThemeAccessInArrowFn(e)) {
             warnPropInlineStyle(
               decl,
               "Unsupported prop-based inline style props.theme access is not supported",
@@ -1977,16 +1978,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
           const propsUsed = collectPropsFromArrowFn(e);
           for (const propName of propsUsed) {
-            if (hasThemeAccess && propName === "theme") {
-              continue;
-            }
             ensureShouldForwardPropDrop(decl, propName);
           }
           // Try to unwrap props access (props.$x → $x) for cleaner style functions.
           // When only one transient prop is used, emit a single-param function
           // (e.g., ($size) => ...) instead of (props) => ..., enabling consolidation.
-          // Skip unwrapping when theme is accessed — theme refs need full inlining + rewriting.
-          const unwrapped = hasThemeAccess ? null : unwrapArrowFunctionToPropsExpr(j, e);
+          const unwrapped = unwrapArrowFunctionToPropsExpr(j, e);
           if (unwrapped && unwrapped.propsUsed.size === 1) {
             const singleProp = [...unwrapped.propsUsed][0]!;
             propsParam = j.identifier(singleProp);
@@ -2007,12 +2004,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            baseExpr = hasThemeAccess
-              ? rewritePropsThemeToThemeVar(inlineExpr as ExpressionKind)
-              : inlineExpr;
-            if (hasThemeAccess) {
-              markDeclNeedsUseThemeHook(decl);
-            }
+            baseExpr = inlineExpr;
           }
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)

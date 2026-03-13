@@ -3597,6 +3597,54 @@ export const App = () => <Box isActive>Hello</Box>;
     expect(result.code).toContain("theme.isDark");
   });
 
+  it("should bail on theme access inside pseudo/media context (module-scoped style fn)", () => {
+    // Theme-rewritten expressions can't be placed in module-scoped stylex.create functions.
+    // The `theme` variable from useTheme() is only available in the wrapper component body.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  &:hover {
+    color: \${(props) => props.theme.isDark && props.$isActive ? "red" : "blue"};
+  }
+\`;
+
+export const App = () => <Box $isActive>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-pseudo-scope.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail because theme access in pseudo/media context would put
+    // the expression in a module-scoped stylex.create() style function
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail on theme access in shouldForwardProp context (module-scoped style fn)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  width: \${(props) => props.theme.size * 2}px;
+\`.withConfig({ shouldForwardProp: (p) => p !== "size" });
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-sfp-scope.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail because theme access in shouldForwardProp context would put
+    // the expression in a module-scoped stylex.create() style function
+    expect(result.code).toBeNull();
+  });
+
   it("should not treat closure variables as destructured props in theme conditionals", () => {
     // When the arrow param is ({ theme }) and the test is `closureVar`,
     // closureVar is NOT a destructured prop — it comes from outer scope.
