@@ -13,6 +13,12 @@ const Box = styled.div<{ $isActive?: boolean; $isDisabled?: boolean }>`
   cursor: ${(props) => (props.$isDisabled ? "not-allowed" : "pointer")};
 `;
 
+// Ternary CSS block returning declaration text or empty string
+export const Highlight = styled.span<{ $dim: boolean }>`
+  font-weight: var(--font-weight-medium);
+  ${(props) => (props.$dim ? "opacity: 0.5;" : "")}
+`;
+
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
@@ -20,5 +26,7 @@ export const App = () => (
     <Box>Normal Box</Box>
     <Box $isActive>Active Box</Box>
     <Box $isDisabled>Disabled Box</Box>
+    <Highlight $dim>Dim</Highlight>
+    <Highlight $dim={false}>No dim</Highlight>
   </div>
 );

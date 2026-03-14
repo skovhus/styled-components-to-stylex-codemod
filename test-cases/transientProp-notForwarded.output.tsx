@@ -58,12 +58,57 @@ export function Scrollable(props: ScrollableProps) {
   );
 }
 
+type BoxProps = {
+  isActive?: boolean;
+  size?: "small" | "large";
+} & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles };
+
+// DOM elements: transient props must NOT leak to the underlying element
+export function Box(props: BoxProps) {
+  const { className, children, style, sx, isActive, size, ...rest } = props;
+
+  return (
+    <div
+      {...rest}
+      {...mergedSx(
+        [styles.box, size === "large" && styles.boxSizeLarge, isActive && styles.boxActive, sx],
+        className,
+        style,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+type ImageProps = { isInactive?: boolean } & React.ComponentProps<"img"> & {
+    sx?: stylex.StyleXStyles;
+  };
+
+export function Image(props: ImageProps) {
+  const { className, style, sx, isInactive, ...rest } = props;
+
+  return (
+    <img
+      {...rest}
+      {...mergedSx([styles.image, isInactive && styles.imageInactive, sx], className, style)}
+    />
+  );
+}
+
 // Usage
 export const App = () => (
-  <Scrollable applyBackground column gap={10}>
-    <div>Item 1</div>
-    <div>Item 2</div>
-  </Scrollable>
+  <div>
+    <Scrollable applyBackground column gap={10}>
+      <div>Item 1</div>
+      <div>Item 2</div>
+    </Scrollable>
+    <Box isActive size="large">
+      Active large box
+    </Box>
+    <Box size="small">Small inactive box</Box>
+    <Image isInactive src="/avatar.png" alt="Avatar" />
+  </div>
 );
 
 const styles = stylex.create({
@@ -73,5 +118,23 @@ const styles = stylex.create({
   },
   scrollableApplyBackground: {
     backgroundColor: "gray",
+  },
+  box: {
+    padding: "8px",
+    backgroundColor: "gray",
+    color: "white",
+  },
+  boxActive: {
+    backgroundColor: "blue",
+  },
+  boxSizeLarge: {
+    padding: "16px",
+  },
+  image: {
+    opacity: 1,
+    borderRadius: "50%",
+  },
+  imageInactive: {
+    opacity: 0.5,
   },
 });

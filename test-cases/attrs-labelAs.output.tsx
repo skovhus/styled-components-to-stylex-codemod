@@ -5,14 +5,24 @@ import { mergedSx } from "./lib/mergedSx";
 // Simplified Text component for test case
 type TextProps = React.PropsWithChildren<{
   as?: React.ElementType;
+  variant?: "small" | "regular" | "large";
   className?: string;
   style?: React.CSSProperties;
 }> & { sx?: stylex.StyleXStyles };
 
 function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
-  const { as: Component = "span", className, children, style, sx, ...rest } = props;
+  const {
+    as: Component = "span",
+    className,
+    children,
+    style,
+    sx,
+    variant = "regular",
+    ...rest
+  } = props;
+
   return (
-    <Component {...rest} {...mergedSx([styles.text, sx], className, style)}>
+    <Component {...rest} {...mergedSx([styles.text, variants[variant], sx], className, style)}>
       {children}
     </Component>
   );
@@ -42,7 +52,7 @@ export function FormField() {
 
   return (
     <div>
-      <Label ref={labelRef} htmlFor="input-id">
+      <Label ref={labelRef} htmlFor="input-id" variant="regular">
         Username
       </Label>
       <input id="input-id" type="text" />
@@ -54,11 +64,23 @@ export const App = () => <FormField />;
 
 const styles = stylex.create({
   text: {
-    fontSize: 14,
+    fontSize: "14px",
     lineHeight: 1.5,
   },
   label: {
     cursor: "pointer",
     userSelect: "none",
+  },
+});
+
+const variants = stylex.create({
+  large: {
+    fontSize: "18px",
+  },
+  small: {
+    fontSize: "12px",
+  },
+  regular: {
+    fontSize: "14px",
   },
 });

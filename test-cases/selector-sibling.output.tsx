@@ -1,8 +1,19 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
   return <div sx={[styles.thing, stylex.defaultMarker()]}>{props.children}</div>;
+}
+
+// Adjacent sibling with theme interpolation
+function ThingThemed(props: React.PropsWithChildren<{}>) {
+  return <div sx={[styles.thingThemed, stylex.defaultMarker()]}>{props.children}</div>;
+}
+
+// Minimal adjacent sibling (margin-top spacing pattern)
+function Row(props: React.PropsWithChildren<{}>) {
+  return <div sx={[styles.row, stylex.defaultMarker()]}>{props.children}</div>;
 }
 
 // NOTE: StyleX siblingBefore() emits `~ *` (general sibling), not `+ *`
@@ -14,6 +25,10 @@ export const App = () => (
     <Thing>First (blue)</Thing>
     <Thing>Second (red, lime - adjacent)</Thing>
     <Thing>Third (red, lime - adjacent)</Thing>
+    <ThingThemed>First themed</ThingThemed>
+    <ThingThemed>Second themed (theme color)</ThingThemed>
+    <Row>First row</Row>
+    <Row>Second row (margin-top)</Row>
   </div>
 );
 
@@ -28,6 +43,18 @@ const styles = stylex.create({
     backgroundColor: {
       default: null,
       [stylex.when.siblingBefore(":is(*)")]: "lime",
+    },
+  },
+  thingThemed: {
+    color: {
+      default: "blue",
+      [stylex.when.siblingBefore(":is(*)")]: $colors.labelBase,
+    },
+  },
+  row: {
+    marginTop: {
+      default: null,
+      [stylex.when.siblingBefore(":is(*)")]: 16,
     },
   },
 });

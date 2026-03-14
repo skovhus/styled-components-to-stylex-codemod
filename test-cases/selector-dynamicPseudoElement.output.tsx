@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 
 type BadgeProps = React.PropsWithChildren<{
   badgeColor: string;
@@ -73,7 +74,7 @@ function Button(props: ButtonProps) {
 }
 
 export const App = () => (
-  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560 }}>
+  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
     <Badge badgeColor="red">Notification</Badge>
     <Badge badgeColor="green">Online</Badge>
     <Badge badgeColor="blue">Info</Badge>
@@ -82,6 +83,7 @@ export const App = () => (
     <Tag tagColor="tomato">With color</Tag>
     <Tag>No color</Tag>
     <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
+    <input placeholder="Muted placeholder" sx={styles.input} />
   </div>
 );
 
@@ -148,4 +150,15 @@ const styles = stylex.create({
       },
     },
   }),
+  // Dynamic ::placeholder with theme color
+  input: {
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
+    backgroundColor: "white",
+    "::placeholder": {
+      color: $colors.labelMuted,
+    },
+  },
 });

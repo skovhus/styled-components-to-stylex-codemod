@@ -32,6 +32,17 @@ export const ScrollableDiv = styled.div.attrs((props) => ({
   }
 `;
 
+// tabIndex used in BOTH attrs (with default) AND in styles
+export const TabIndexInStyle = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+}))<{ $applyBackground?: boolean }>`
+  overflow-y: auto;
+  position: relative;
+  flex-grow: 1;
+  background-color: ${(props) => (props.$applyBackground ? props.theme.color.bgBase : "inherit")};
+  outline: ${(props) => (props.tabIndex === 0 ? "none" : "auto")};
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "200px" }}>
     <ScrollableFlex gutter="stable" $applyBackground>
@@ -44,5 +55,6 @@ export const App = () => (
         Div: Tab me! (scrollable with stable gutter)
       </div>
     </ScrollableDiv>
+    <TabIndexInStyle>Tab index in style</TabIndexInStyle>
   </div>
 );

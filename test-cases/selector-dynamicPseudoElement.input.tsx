@@ -68,8 +68,19 @@ const Button = styled.button<{ $glowColor: string }>`
   }
 `;
 
+// Dynamic ::placeholder with theme color
+const StyledInput = styled.input`
+  padding: 12px;
+  border: 1px solid #ccc;
+  background: white;
+
+  &::placeholder {
+    color: ${(props) => props.theme.color.labelMuted};
+  }
+`;
+
 export const App = () => (
-  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560 }}>
+  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
     <Badge $badgeColor="red">Notification</Badge>
     <Badge $badgeColor="green">Online</Badge>
     <Badge $badgeColor="blue">Info</Badge>
@@ -78,5 +89,6 @@ export const App = () => (
     <Tag $tagColor="tomato">With color</Tag>
     <Tag>No color</Tag>
     <Button $glowColor="rgba(0,128,255,0.3)">Hover me</Button>
+    <StyledInput placeholder="Muted placeholder" />
   </div>
 );
