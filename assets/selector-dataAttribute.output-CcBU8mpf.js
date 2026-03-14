@@ -1,0 +1,1 @@
+import{j as x}from"./index-DtA5QXXt.js";function e(){return x.jsxs("div",{style:{display:"flex",gap:16,padding:16},children:[x.jsx("div",{"data-visible":"true",className:"xg01cxk x1ke1ukj x1hzt7jf x15neal0 x1qhigcl",children:"Visible"}),x.jsx("div",{className:"xg01cxk x1ke1ukj x1hzt7jf x1f6xnkq x1qhigcl",children:"Hidden"})]})}export{e as App};
