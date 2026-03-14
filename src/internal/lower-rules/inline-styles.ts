@@ -210,11 +210,11 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
   // Simple identifier param: (props) => ...
   if (param?.type === "Identifier") {
     const paramName = param.name;
-    return mapAst(cloneAstNode(bodyExpr), (node) => {
+    return mapAst(cloneAstNode(bodyExpr), (node, recurse) => {
       if (node.type === "Identifier" && node.name === paramName) {
         return j.identifier("props");
       }
-      return undefined; // default traversal
+      return recurseReferencePositionsOnly(node, recurse);
     }) as ExpressionKind;
   }
 
@@ -226,7 +226,7 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
 
   // Replace destructured identifiers with props.propName
   // If there's a default value, wrap with nullish coalescing: props.propName ?? defaultValue
-  return mapAst(cloneAstNode(bodyExpr), (node) => {
+  return mapAst(cloneAstNode(bodyExpr), (node, recurse) => {
     if (node.type === "Identifier" && bindings.bindings.has(node.name as string)) {
       const propName = bindings.bindings.get(node.name as string)!;
       const memberExpr = j.memberExpression(j.identifier("props"), j.identifier(propName));
@@ -236,7 +236,7 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
       }
       return memberExpr;
     }
-    return undefined; // default traversal
+    return recurseReferencePositionsOnly(node, recurse);
   }) as ExpressionKind;
 }
 
@@ -319,4 +319,32 @@ export function normalizeDollarProps(j: JSCodeshift, exprNode: ExpressionKind): 
     }
     return undefined; // default traversal
   }) as ExpressionKind;
+}
+
+// ── Non-exported helpers ────────────────────────────────────────────
+
+/**
+ * For MemberExpression and Property nodes, only recurse into reference
+ * positions (object, computed keys, values) — not non-computed property keys.
+ * Returns `undefined` for other node types to let mapAst use default traversal.
+ */
+function recurseReferencePositionsOnly(
+  node: Record<string, unknown>,
+  recurse: (n: unknown) => unknown,
+): Record<string, unknown> | undefined {
+  if (isMemberExpression(node)) {
+    node.object = recurse(node.object);
+    if (node.computed) {
+      node.property = recurse(node.property);
+    }
+    return node;
+  }
+  if (node.type === "Property" || node.type === "ObjectProperty") {
+    if (node.computed) {
+      node.key = recurse(node.key);
+    }
+    node.value = recurse(node.value);
+    return node;
+  }
+  return undefined; // default traversal for all other nodes
 }
