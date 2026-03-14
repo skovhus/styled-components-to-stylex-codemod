@@ -82,7 +82,10 @@ export default [
   {
     // Computed stylex.when.*() keys: rule reports "Keys must be strings"
     // for valid computed property keys like [stylex.when.siblingBefore(...)].
-    files: ["test-cases/selector-siblingMedia.output.tsx"],
+    files: [
+      "test-cases/selector-componentSiblingCombinator.output.tsx",
+      "test-cases/selector-siblingMedia.output.tsx",
+    ],
     rules: { "stylex/valid-styles": "off" },
   },
   {

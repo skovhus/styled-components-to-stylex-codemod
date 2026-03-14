@@ -26,6 +26,8 @@ export function postProcessTransformedAst(args: {
   stylesIdentifier?: string;
   /** Cross-file marker variables: parentStyleKey → markerVarName */
   crossFileMarkers?: Map<string, string>;
+  /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
+  parentsNeedingDefaultMarker?: Set<string>;
 }): { changed: boolean; needsReactImport: boolean } {
   const {
     root,
@@ -39,6 +41,7 @@ export function postProcessTransformedAst(args: {
     newImportSourcesByLocal,
     stylesIdentifier = "styles",
     crossFileMarkers,
+    parentsNeedingDefaultMarker,
   } = args;
   let changed = false;
 
@@ -236,7 +239,11 @@ export function postProcessTransformedAst(args: {
                 call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
                 changed = true;
               }
-            } else if (!hasDefaultMarker(call)) {
+            }
+            // Only add defaultMarker() when this parent has at least one override
+            // without a scoped marker. Pure sibling/no-pseudo cases only need
+            // their scoped marker — defaultMarker() would be unnecessary overhead.
+            if (parentsNeedingDefaultMarker?.has(parentKey) && !hasDefaultMarker(call)) {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
@@ -253,7 +260,9 @@ export function postProcessTransformedAst(args: {
                 addArgsToSxAttr(sxAttr, [j.identifier(markerVarName)]);
                 changed = true;
               }
-            } else if (!hasDefaultMarkerInSxArgs(sxAttr)) {
+            }
+            // Only add defaultMarker() when needed — see comment in stylex.props() branch above.
+            if (parentsNeedingDefaultMarker?.has(parentKey) && !hasDefaultMarkerInSxArgs(sxAttr)) {
               addArgsToSxAttr(sxAttr, [makeDefaultMarkerCall()]);
               changed = true;
             }

@@ -50,6 +50,8 @@ type WrapperEmitterArgs = {
   crossFileMarkers?: Map<string, string>;
   /** Style keys that use sibling markers (scoped marker replaces defaultMarker) */
   siblingMarkerKeys?: Set<string>;
+  /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
+  parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
 };
 
@@ -68,6 +70,7 @@ export class WrapperEmitter {
   readonly ancestorSelectorParents: Set<string>;
   readonly crossFileMarkers: Map<string, string>;
   readonly siblingMarkerKeys: Set<string>;
+  readonly parentsNeedingDefaultMarker: Set<string>;
   readonly useSxProp: boolean;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
@@ -95,6 +98,7 @@ export class WrapperEmitter {
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
     this.crossFileMarkers = args.crossFileMarkers ?? new Map<string, string>();
     this.siblingMarkerKeys = args.siblingMarkerKeys ?? new Set<string>();
+    this.parentsNeedingDefaultMarker = args.parentsNeedingDefaultMarker ?? new Set<string>();
     this.useSxProp = args.useSxProp;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
