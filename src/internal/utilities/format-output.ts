@@ -1,4 +1,33 @@
 /**
+ * When a double-quoted string literal contains escaped double quotes (e.g. `"\"foo\""`),
+ * convert it to single quotes to avoid the escaping (e.g. `'"foo"'`).
+ * Returns null if conversion is not possible (e.g. content contains single quotes).
+ */
+function tryConvertToSingleQuoted(escapedContent: string): string | null {
+  let result = "";
+  let hasEscapedQuote = false;
+  for (let i = 0; i < escapedContent.length; i++) {
+    const ch = escapedContent[i];
+    if (ch === "\\") {
+      const next = escapedContent[i + 1];
+      if (next === '"') {
+        result += '"';
+        hasEscapedQuote = true;
+        i++;
+      } else {
+        result += ch + (next ?? "");
+        i++;
+      }
+    } else if (ch === "'") {
+      return null;
+    } else {
+      result += ch;
+    }
+  }
+  return hasEscapedQuote ? `'${result}'` : null;
+}
+
+/**
  * Remove blank lines inside stylex.create({...}) blocks.
  * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
  * then removes blank lines between properties within that region.
@@ -67,7 +96,11 @@ function removeBlankLinesInStylexCreate(code: string): string {
       .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
       // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
       .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
-      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
+      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'")
+      // Prefer single quotes for strings containing double quotes to avoid escaping
+      .replace(/"((?:[^"\\]|\\.)*)"/g, (match, content: string) => {
+        return tryConvertToSingleQuoted(content) ?? match;
+      });
 
     result += cleaned;
     pos = blockEnd + 1;
