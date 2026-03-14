@@ -6,7 +6,7 @@ import type { JSCodeshift } from "jscodeshift";
 import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { CssDeclarationIR } from "../css-ir.js";
+import type { CssDeclarationIR, CssValuePart } from "../css-ir.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
@@ -539,6 +539,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (result === "bail") {
+          // Clear partially-processed entries from the firstBucket before
+          // attempting the dynamic fallback.  processDeclarationsIntoBucket may
+          // have written some static declarations before encountering the
+          // unresolvable interpolation that caused the bail.  The fallback
+          // re-processes ALL declarations itself, so stale entries in the
+          // bucket would create duplicate outputs in finalizeRelationOverrides.
+          for (const key of Object.keys(firstBucket)) {
+            delete firstBucket[key];
+          }
+
           // Try dynamic style fallback before bailing: if the unresolved
           // interpolations are prop-based arrow functions, we can emit styleFn
           // entries with ancestor pseudo wrapping instead.
@@ -2255,10 +2265,11 @@ function tryDynamicRelationOverrideFallback(args: {
       return false;
     }
 
-    // Extract slots — only support single-slot interpolations for now
-    const parts: Array<{ kind?: string; slotId?: number }> = d.value.parts ?? [];
+    // Extract slots — only support single-slot interpolations for now.
+    // After the kind === "interpolated" check above, d.value is guaranteed to have parts.
+    const parts: CssValuePart[] = (d.value as { parts: CssValuePart[] }).parts;
     const slotParts = parts.filter(
-      (p): p is { kind: "slot"; slotId: number } => p.kind === "slot" && p.slotId !== undefined,
+      (p): p is CssValuePart & { kind: "slot"; slotId: number } => p.kind === "slot",
     );
     if (slotParts.length !== 1) {
       return false;
@@ -2334,16 +2345,12 @@ function tryDynamicRelationOverrideFallback(args: {
         }
 
         // Build { default: null, [stylex.when.ancestor(pseudo, marker?)]: paramExpr }
-        const pseudoEntries = ancestorPseudos.map((pseudo) => {
-          const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
-          return Object.assign(j.property("init", ancestorKey, j.identifier(outParamName)), {
-            computed: true,
-          });
-        });
-        const conditionalMap = j.objectExpression([
-          j.property("init", j.identifier("default"), j.literal(null)),
-          ...pseudoEntries,
-        ]);
+        const conditionalMap = buildAncestorPseudoMap(
+          j,
+          j.identifier(outParamName),
+          ancestorPseudos,
+          markerVarName,
+        );
 
         const cssPropKeyNode = makeCssPropKey(j, out.prop);
         const bodyProp = j.property("init", cssPropKeyNode, conditionalMap);
