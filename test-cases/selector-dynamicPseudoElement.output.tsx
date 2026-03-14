@@ -42,6 +42,21 @@ function Tooltip(props: TooltipProps) {
   );
 }
 
+type TagProps = React.PropsWithChildren<{
+  tagColor?: string;
+}>;
+
+// Optional simple identity prop in pseudo-element: should emit null guard
+function Tag(props: TagProps) {
+  const { children, tagColor } = props;
+
+  return (
+    <span sx={[styles.tag, tagColor != null && styles.tagAfterBackgroundColor(tagColor)]}>
+      {children}
+    </span>
+  );
+}
+
 type ButtonProps = React.PropsWithChildren<{
   glowColor: string;
 }>;
@@ -68,6 +83,8 @@ export const App = () => (
     <Badge badgeColor="blue">Info</Badge>
     <Tooltip tipColor="navy">With color</Tooltip>
     <Tooltip>Default</Tooltip>
+    <Tag tagColor="tomato">With color</Tag>
+    <Tag>No color</Tag>
     <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
   </div>
 );
@@ -98,6 +115,22 @@ const styles = stylex.create({
       top: -4,
       left: "50%",
       backgroundColor: props.backgroundColor,
+    },
+  }),
+  tag: {
+    position: "relative",
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "#e0e0e0",
+    "::after": {
+      content: '""',
+      display: "block",
+      height: 2,
+    },
+  },
+  tagAfterBackgroundColor: (tagColor: string) => ({
+    "::after": {
+      backgroundColor: tagColor,
     },
   }),
   button: (props: { glowColor: string }) => ({

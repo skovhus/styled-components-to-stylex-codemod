@@ -35,6 +35,20 @@ const Tooltip = styled.div<{ $tipColor?: string }>`
   }
 `;
 
+// Optional simple identity prop in pseudo-element: should emit null guard
+const Tag = styled.span<{ $tagColor?: string }>`
+  position: relative;
+  padding: 4px 8px;
+  background-color: #e0e0e0;
+
+  &::after {
+    content: "";
+    display: block;
+    height: 2px;
+    background-color: ${(props) => props.$tagColor};
+  }
+`;
+
 // Dynamic pseudo-element style inside :hover context
 const Button = styled.button<{ $glowColor: string }>`
   padding: 8px 16px;
@@ -61,6 +75,8 @@ export const App = () => (
     <Badge $badgeColor="blue">Info</Badge>
     <Tooltip $tipColor="navy">With color</Tooltip>
     <Tooltip>Default</Tooltip>
+    <Tag $tagColor="tomato">With color</Tag>
+    <Tag>No color</Tag>
     <Button $glowColor="rgba(0,128,255,0.3)">Hover me</Button>
   </div>
 );
