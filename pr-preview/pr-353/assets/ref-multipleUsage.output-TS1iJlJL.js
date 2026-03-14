@@ -1,0 +1,1 @@
+import{r as s,j as e}from"./index-LqAZ_g7b.js";function x(){const t=s.useRef(null),r=s.useRef(null);return e.jsxs("div",{style:{display:"grid",gap:8},children:[e.jsx("div",{ref:t,className:"xe8ttls xmkeg23 x1y0btm7 xtb30c9 x1augkcw",children:"First card"}),e.jsx("div",{ref:r,className:"xe8ttls xmkeg23 x1y0btm7 xtb30c9 x1augkcw",children:"Second card"})]})}export{x as App};
