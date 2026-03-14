@@ -1,4 +1,4 @@
-// Multi-animation with interpolated duration in one segment
+// Multi-animation with interpolated duration in both segments
 import * as React from "react";
 import styled, { keyframes } from "styled-components";
 
@@ -20,11 +20,9 @@ const slideIn = keyframes`
   }
 `;
 
-// First animation has interpolated duration, second has static duration
-// When $duration is provided, animationDuration should be "${$duration}ms, 1s"
-// not just "${$duration}ms" which would drop the second animation's duration
+// Both animations share the same interpolated duration prop
 const AnimatedCard = styled.div<{ $duration?: number }>`
-  animation: ${fadeIn} ${(props) => props.$duration ?? 200}ms ease, ${slideIn} 1s linear;
+  animation: ${fadeIn} ${(props) => props.$duration ?? 200}ms ease, ${slideIn} ${(props) => props.$duration ?? 1000}ms linear;
   padding: 20px;
   background: white;
 `;
@@ -32,8 +30,8 @@ const AnimatedCard = styled.div<{ $duration?: number }>`
 export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
-      <AnimatedCard>Default (200ms, 1s)</AnimatedCard>
-      <AnimatedCard $duration={500}>Custom (500ms, 1s)</AnimatedCard>
+      <AnimatedCard>Default (200ms, 1000ms)</AnimatedCard>
+      <AnimatedCard $duration={500}>Custom (500ms, 500ms)</AnimatedCard>
     </div>
   );
 }
