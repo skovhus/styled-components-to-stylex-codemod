@@ -1875,7 +1875,7 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
 
 /**
  * Handles a self-referencing sibling selector (`& + &` or `& ~ &`) by processing
- * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)')`.
+ * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)', Marker)`.
  *
  * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
  * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
@@ -1884,11 +1884,10 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
  * In practice this rarely matters because `& + &` is almost always used with
  * consecutive homogeneous lists. For `& ~ &`, the mapping is semantically exact.
  *
- * Uses `defaultMarker()` (via `ancestorSelectorParents`) instead of per-component
- * `defineMarker()`, avoiding the `.stylex` file requirement. Because the marker
- * is file-global rather than component-scoped, styles from one component could
- * theoretically leak to another if both use sibling selectors and appear as
- * siblings in the same render tree.
+ * Uses per-component `defineMarker()` (emitted in a `.stylex` sidecar file) so that
+ * sibling matching is component-scoped. Without a scoped marker, `defaultMarker()` is
+ * file-global and styles from one component could leak to another if both use sibling
+ * selectors and appear as siblings in the same render tree.
  *
  * **`:is(*)` workaround:** The StyleX Babel plugin mandates a pseudo argument
  * starting with `:` for `siblingBefore()`. `:is(*)` is a universal match with
@@ -1917,11 +1916,17 @@ function handleSiblingSelector(
     });
   }
 
-  // Add to ancestorSelectorParents so defaultMarker() is injected into stylex.props() calls.
+  // Add to ancestorSelectorParents so the marker is injected into stylex.props() calls.
   // Also add to siblingMarkerParents to distinguish from forward/reverse selectors —
   // sibling markers are always needed (stylex.when.siblingBefore() references them).
   ancestorSelectorParents.add(decl.styleKey);
   state.siblingMarkerParents.add(decl.styleKey);
+
+  // Register a per-component marker for scoped sibling matching.
+  // The marker variable (e.g. "ThingMarker") is emitted as defineMarker() in a
+  // sidecar .stylex file and passed as the second argument to siblingBefore().
+  const markerVarName = state.siblingMarkerNames.get(decl.styleKey) ?? `${decl.localName}Marker`;
+  state.siblingMarkerNames.set(decl.styleKey, markerVarName);
 
   // Process declarations into a temporary bucket using the shared helper
   const bucket: Record<string, unknown> = {};
@@ -1944,14 +1949,15 @@ function handleSiblingSelector(
     return "break";
   }
 
-  // Build a fresh stylex.when.siblingBefore(':is(*)') AST node per property.
+  // Build a fresh stylex.when.siblingBefore(':is(*)', Marker) AST node per property.
+  // The second argument scopes sibling matching to the component's own marker.
   const makeSiblingKeyExpr = () =>
     j.callExpression(
       j.memberExpression(
         j.memberExpression(j.identifier("stylex"), j.identifier("when")),
         j.identifier("siblingBefore"),
       ),
-      [j.literal(":is(*)")],
+      [j.literal(":is(*)"), j.identifier(markerVarName)],
     );
 
   // Wrap values in media/container condition objects when inside an @media or @container at-rule

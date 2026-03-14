@@ -1,12 +1,13 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { RowMarker } from "./selector-siblingMarkerScoping.input.stylex";
 
 // NOTE: defaultMarker() is file-global — not scoped per component.
 // If another component in the same file also uses defaultMarker() (e.g. for
 // an ancestor relation override), its marker could incorrectly activate
 // Row's sibling styles. Use defineMarker() for strict scoping.
 function Row(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.row, stylex.defaultMarker()]}>{props.children}</div>;
+  return <div sx={[styles.row, RowMarker]}>{props.children}</div>;
 }
 
 export const App = () => (
@@ -27,15 +28,15 @@ const styles = stylex.create({
     padding: 8,
     borderTopWidth: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: 1,
+      [stylex.when.siblingBefore(":is(*)", RowMarker)]: 1,
     },
     borderTopStyle: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "solid",
+      [stylex.when.siblingBefore(":is(*)", RowMarker)]: "solid",
     },
     borderTopColor: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "gray",
+      [stylex.when.siblingBefore(":is(*)", RowMarker)]: "gray",
     },
   },
 });
