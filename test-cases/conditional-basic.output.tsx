@@ -32,7 +32,6 @@ type HighlightProps = React.PropsWithChildren<{
 // Ternary CSS block returning declaration text or empty string
 export function Highlight(props: HighlightProps) {
   const { children, dim, ...rest } = props;
-
   return (
     <span {...rest} sx={[styles.highlight, dim && styles.highlightDim]}>
       {children}

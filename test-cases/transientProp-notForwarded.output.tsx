@@ -66,7 +66,6 @@ type BoxProps = {
 // DOM elements: transient props must NOT leak to the underlying element
 export function Box(props: BoxProps) {
   const { className, children, style, sx, isActive, size, ...rest } = props;
-
   return (
     <div
       {...rest}
@@ -87,7 +86,6 @@ type ImageProps = { isInactive?: boolean } & React.ComponentProps<"img"> & {
 
 export function Image(props: ImageProps) {
   const { className, style, sx, isInactive, ...rest } = props;
-
   return (
     <img
       {...rest}

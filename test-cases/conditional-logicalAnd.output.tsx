@@ -53,7 +53,6 @@ type DropZoneProps = React.PropsWithChildren<{
 // Pattern 4: Logical AND with template literal containing theme expression
 export function DropZone(props: DropZoneProps) {
   const { children, isDraggingOver, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]}>
       {children}
@@ -68,7 +67,6 @@ type CardProps = React.PropsWithChildren<{
 // Pattern 5: Logical AND with template literal containing multiple theme expressions
 export function Card(props: CardProps) {
   const { children, isHighlighted, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.card, isHighlighted && styles.cardHighlighted]}>
       {children}
@@ -83,7 +81,6 @@ type StatusBarProps = React.PropsWithChildren<{
 // Pattern 6: Ternary with template literal containing theme expression and undefined alternate
 export function StatusBar(props: StatusBarProps) {
   const { children, isDisconnected, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.statusBar, isDisconnected && styles.statusBarDisconnected]}>
       {children}

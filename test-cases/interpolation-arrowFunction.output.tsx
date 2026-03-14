@@ -41,7 +41,6 @@ type BlockBodyBoxProps = React.PropsWithChildren<{
 // Arrow function with block body (contains comment)
 function BlockBodyBox(props: BlockBodyBoxProps) {
   const { children, style, large } = props;
-
   return (
     <div {...mergedSx([styles.blockBodyBox, large && styles.blockBodyBoxLarge], undefined, style)}>
       {children}

@@ -62,7 +62,6 @@ type TabIndexInStyleProps = { applyBackground?: boolean } & React.ComponentProps
 // tabIndex used in BOTH attrs (with default) AND in styles
 export function TabIndexInStyle(props: TabIndexInStyleProps) {
   const { className, children, style, sx, applyBackground, tabIndex = 0, ...rest } = props;
-
   return (
     <div
       tabIndex={tabIndex ?? 0}

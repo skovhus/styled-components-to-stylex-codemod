@@ -31,7 +31,6 @@ type RowProps = React.PropsWithChildren<{
 // Preserved runtime call using a theme boolean argument (plain function, not member expression)
 function Row(props: RowProps) {
   const { children, isHighlighted } = props;
-
   const theme = useTheme();
 
   return (

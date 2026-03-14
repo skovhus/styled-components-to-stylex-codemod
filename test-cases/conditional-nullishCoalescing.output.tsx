@@ -18,7 +18,6 @@ type FadeBoxProps = React.PropsWithChildren<{
 // Nullish coalescing with numeric fallback and unit suffix
 function FadeBox(props: FadeBoxProps) {
   const { children, delay } = props;
-
   return (
     <div
       sx={styles.fadeBox({

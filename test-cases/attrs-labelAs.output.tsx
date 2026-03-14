@@ -20,7 +20,6 @@ function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.St
     variant = "regular",
     ...rest
   } = props;
-
   return (
     <Component {...rest} {...mergedSx([styles.text, variants[variant], sx], className, style)}>
       {children}
