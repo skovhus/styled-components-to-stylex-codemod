@@ -252,3 +252,74 @@ function parseStaticExprString(expr: string): string | number | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// Generic AST tree-walkers
+// ---------------------------------------------------------------------------
+
+type AnyNode = Record<string, unknown>;
+
+/**
+ * Recursively walk an AST tree and return `true` if the predicate matches any node.
+ * Skips `loc` and `comments` keys. Short-circuits on first match.
+ */
+export function findInAst(root: unknown, predicate: (node: AnyNode) => boolean): boolean {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object" || found) {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as AnyNode;
+    if (predicate(n)) {
+      found = true;
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+  return found;
+}
+
+/**
+ * Recursively walk an AST tree and call `visitor` on each node to collect data.
+ * Skips `loc` and `comments` keys.
+ */
+export function walkAst(root: unknown, visitor: (node: AnyNode) => void): void {
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as AnyNode;
+    visitor(n);
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+}

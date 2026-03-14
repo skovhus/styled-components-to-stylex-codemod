@@ -11,6 +11,7 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
+import { findInAst, walkAst } from "./utils.js";
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
@@ -169,36 +170,17 @@ export function collectPropsFromArrowFn(expr: any): Set<string> {
   if (!paramName) {
     return props;
   }
-  const visit = (node: any): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
+  walkAst(getFunctionBodyExpr(expr), (node) => {
     if (
       (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-      node.object?.type === "Identifier" &&
-      node.object.name === paramName &&
-      node.property?.type === "Identifier" &&
+      (node.object as any)?.type === "Identifier" &&
+      (node.object as any)?.name === paramName &&
+      (node.property as any)?.type === "Identifier" &&
       node.computed === false
     ) {
-      props.add(node.property.name);
+      props.add((node.property as { name: string }).name);
     }
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = (node as any)[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(getFunctionBodyExpr(expr));
+  });
   return props;
 }
 
@@ -254,40 +236,16 @@ export function hasThemeAccessInArrowFn(expr: any): boolean {
   if (!bodyExpr) {
     return false;
   }
-  let found = false;
-  const visit = (node: any): void => {
-    if (!node || typeof node !== "object" || found) {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-    if (
+  return findInAst(
+    bodyExpr,
+    (node) =>
       (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-      node.object?.type === "Identifier" &&
-      node.object.name === paramName &&
-      node.property?.type === "Identifier" &&
-      node.property.name === "theme" &&
-      node.computed === false
-    ) {
-      found = true;
-      return;
-    }
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = (node as any)[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(bodyExpr);
-  return found;
+      (node.object as any)?.type === "Identifier" &&
+      (node.object as any)?.name === paramName &&
+      (node.property as any)?.type === "Identifier" &&
+      (node.property as any)?.name === "theme" &&
+      node.computed === false,
+  );
 }
 
 export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKind | null {
@@ -407,36 +365,13 @@ export function hasUnsupportedConditionalTest(expr: any): boolean {
   if (!bodyExpr) {
     return false;
   }
-  let found = false;
-  const visit = (node: any): void => {
-    if (!node || typeof node !== "object" || found) {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-    if (
+  return findInAst(
+    bodyExpr,
+    (node) =>
       node.type === "ConditionalExpression" &&
-      (node.test?.type === "LogicalExpression" || node.test?.type === "ConditionalExpression")
-    ) {
-      found = true;
-      return;
-    }
-    for (const key of Object.keys(node)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = (node as any)[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(bodyExpr);
-  return found;
+      ((node.test as Record<string, unknown>)?.type === "LogicalExpression" ||
+        (node.test as Record<string, unknown>)?.type === "ConditionalExpression"),
+  );
 }
 
 /**
@@ -448,44 +383,24 @@ export function collectPropsFromExpressions(
   expressions: Iterable<unknown>,
   propsUsed: Set<string>,
 ): void {
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-    const n = node as ASTNodeRecord;
-    if (
-      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
-      (n.object as ASTNodeRecord)?.type === "Identifier" &&
-      (n.object as { name?: string })?.name === "props" &&
-      (n.property as ASTNodeRecord)?.type === "Identifier" &&
-      n.computed === false
-    ) {
-      propsUsed.add((n.property as { name: string }).name);
-    }
-    if (n.type === "Identifier") {
-      const identName = n.name as string | undefined;
-      if (identName?.startsWith("$")) {
-        propsUsed.add(identName);
-      }
-    }
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
   for (const expr of expressions) {
-    visit(expr);
+    walkAst(expr, (n) => {
+      if (
+        (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+        (n.object as ASTNodeRecord)?.type === "Identifier" &&
+        (n.object as { name?: string })?.name === "props" &&
+        (n.property as ASTNodeRecord)?.type === "Identifier" &&
+        n.computed === false
+      ) {
+        propsUsed.add((n.property as { name: string }).name);
+      }
+      if (n.type === "Identifier") {
+        const identName = n.name as string | undefined;
+        if (identName?.startsWith("$")) {
+          propsUsed.add(identName);
+        }
+      }
+    });
   }
 }
 

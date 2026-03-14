@@ -29,6 +29,7 @@ import {
   expandStaticAnimationShorthand,
 } from "../keyframes.js";
 import {
+  findInAst,
   findSupportedAtRule,
   resolveMediaAtRulePlaceholders,
   type ResolvedMedia,
@@ -173,73 +174,23 @@ export function createCssHelperResolver(args: {
     if (!expr || typeof expr !== "object" || !paramName) {
       return false;
     }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (
+    return findInAst(
+      expr,
+      (node) =>
         (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-        node.object?.type === "Identifier" &&
-        node.object.name === paramName &&
-        node.property?.type === "Identifier" &&
-        node.property.name === "theme" &&
-        node.computed === false
-      ) {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = node[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(expr);
-    return found;
+        (node.object as any)?.type === "Identifier" &&
+        (node.object as any)?.name === paramName &&
+        (node.property as any)?.type === "Identifier" &&
+        (node.property as any)?.name === "theme" &&
+        node.computed === false,
+    );
   };
 
   const hasCallExpressionInExpr = (expr: any): boolean => {
     if (!expr || typeof expr !== "object") {
       return false;
     }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (node.type === "CallExpression") {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = node[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(expr);
-    return found;
+    return findInAst(expr, (node) => node.type === "CallExpression");
   };
 
   /**
