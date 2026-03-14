@@ -1,0 +1,12 @@
+/*
+ * Base background-color applied via the bridge class selector at normal CSS
+ * specificity (0-1-0) so styled-components consumers can override it with
+ * hover selectors like `.parent:hover .sc2sx-CollapseArrowIcon-a1b2c3d4`.
+ *
+ * StyleX's compiled selectors use `:not(#\#)` to boost specificity to 3-1-0,
+ * making them impossible to override with normal CSS class selectors.
+ * Keeping background-color in a plain CSS rule avoids this conflict.
+ */
+.sc2sx-CollapseArrowIcon-a1b2c3d4 {
+  background-color: #999;
+}

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import "./converted-collapse-icon.css";
 
 // Already-converted StyleX component (simulates Run 1 output).
 // Includes bridge class + className/style merging so both unconverted
@@ -12,7 +13,8 @@ const styles = stylex.create({
     display: "inline-block",
     width: 24,
     height: 24,
-    backgroundColor: "#999",
+    // backgroundColor is applied via the bridge class CSS file at normal
+    // specificity so styled-components consumer hover rules can override it.
     transition: "background-color 0.2s",
   },
 });
