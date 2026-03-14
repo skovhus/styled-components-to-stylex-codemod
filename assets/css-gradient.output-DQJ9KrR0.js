@@ -1,0 +1,1 @@
+import{j as t}from"./index-BZdvn_zz.js";import{p as n}from"./stylex-DS3CntOa.js";import{h as o}from"./helpers.stylex-CG0dAmn2.js";function i(r){const{children:e,...s}=r;return t.jsx("span",{...s,...n([o.gradient,p.gradientText]),children:e})}const d=()=>t.jsx(i,{children:"Gradient text"}),p={gradientText:{k63SB2:"x1s688f",$$css:!0}};export{d as App,i as GradientText};
