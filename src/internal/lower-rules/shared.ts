@@ -8,6 +8,27 @@ import type { ExpressionKind } from "./decl-types.js";
 import type { RelationOverride } from "./state.js";
 
 /**
+ * Builds a `stylex.when.ancestor(pseudo, marker?)` AST call expression.
+ */
+export function makeAncestorKeyExpr(
+  j: JSCodeshift,
+  pseudo: string,
+  markerVarName?: string,
+): ExpressionKind {
+  const callArgs: ExpressionKind[] = [j.literal(pseudo)];
+  if (markerVarName) {
+    callArgs.push(j.identifier(markerVarName));
+  }
+  return j.callExpression(
+    j.memberExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+      j.identifier("ancestor"),
+    ),
+    callArgs,
+  );
+}
+
+/**
  * Creates an AST key node for a CSS property name.
  * For CSS variables (e.g., --component-width), returns a string literal.
  * For regular property names (e.g., backgroundColor), returns an identifier.

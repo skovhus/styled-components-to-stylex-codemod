@@ -7,6 +7,7 @@ import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { literalToAst } from "../transform/helpers.js";
 import type { RelationOverride } from "./state.js";
+import { makeAncestorKeyExpr } from "./shared.js";
 
 export const finalizeRelationOverrides = (args: {
   j: JSCodeshift;
@@ -40,20 +41,6 @@ export const finalizeRelationOverrides = (args: {
       overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
     }
   }
-
-  const makeAncestorKey = (pseudo: string, markerVarName?: string) => {
-    const callArgs: ExpressionKind[] = [j.literal(pseudo)];
-    if (markerVarName) {
-      callArgs.push(j.identifier(markerVarName));
-    }
-    return j.callExpression(
-      j.memberExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("when")),
-        j.identifier("ancestor"),
-      ),
-      callArgs,
-    );
-  };
 
   // Local type guard that narrows to ExpressionKind for use with jscodeshift builders
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
@@ -130,7 +117,7 @@ export const finalizeRelationOverrides = (args: {
             objProps.push(j.property("init", j.literal(pseudo), valExpr));
           } else {
             // Ancestor pseudo: use stylex.when.ancestor() computed key
-            const ancestorKey = makeAncestorKey(pseudo, markerVarName);
+            const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
             const propNode = Object.assign(j.property("init", ancestorKey, valExpr), {
               computed: true,
             });

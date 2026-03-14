@@ -29,7 +29,9 @@ import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
   getOrCreateRelationOverrideBucket,
+  makeAncestorKeyExpr,
   makeCssProperty,
+  makeCssPropKey,
 } from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
@@ -37,6 +39,12 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
+import {
+  unwrapArrowFunctionToPropsExpr,
+  hasThemeAccessInArrowFn,
+  buildTemplateWithStaticParts,
+} from "./inline-styles.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   findSupportedAtRule,
   isMemberExpression,
@@ -526,13 +534,28 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (result === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unresolved interpolation in reverse component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          // Try dynamic style fallback before bailing: if the unresolved
+          // interpolations are prop-based arrow functions, we can emit styleFn
+          // entries with ancestor pseudo wrapping instead.
+          const dynamicHandled = tryDynamicRelationOverrideFallback({
+            rule,
+            decl,
+            ctx,
+            j,
+            overrideStyleKey,
+            ancestorPseudos,
+            markerVarName: reverseMarkerVarName,
           });
-          break;
+          if (!dynamicHandled) {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: unresolved interpolation in reverse component selector",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+          continue;
         }
 
         // Copy only the declarations written by THIS rule into remaining pseudo buckets.
@@ -2178,6 +2201,147 @@ function handleSiblingSelector(
     const entry = getOrCreateComputedMediaEntry(prop, ctx);
     entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
   }
+}
+
+/**
+ * Fallback for component selector rules with unresolvable (prop-based) interpolations.
+ * Instead of bailing the entire component, emits dynamic styleFn entries that wrap
+ * values in `stylex.when.ancestor()` pseudo maps.
+ *
+ * Handles both static declarations (already in the bucket from processDeclarationsIntoBucket)
+ * and dynamic arrow-function interpolations (emitted as styleFn + styleFnFromProps entries).
+ *
+ * Returns `true` if all declarations were handled, `false` if any cannot be processed
+ * (caller should bail as before).
+ */
+function tryDynamicRelationOverrideFallback(args: {
+  rule: { declarations: CssDeclarationIR[] };
+  decl: StyledDecl;
+  ctx: DeclProcessingState;
+  j: JSCodeshift;
+  overrideStyleKey: string;
+  ancestorPseudos: string[];
+  markerVarName?: string;
+}): boolean {
+  const { rule, decl, ctx, j, overrideStyleKey, ancestorPseudos, markerVarName } = args;
+  const { styleFnDecls, styleFnFromProps } = ctx;
+  const filePath = ctx.state.filePath;
+  const avoidNames = new Set(ctx.state.importMap.keys());
+
+  for (const d of rule.declarations) {
+    if (d.value.kind === "static") {
+      // Static declarations were already processed by processDeclarationsIntoBucket
+      // before it encountered the unresolvable slot and bailed. Skip them here.
+      continue;
+    }
+
+    if (d.value.kind !== "interpolated" || !d.property) {
+      return false;
+    }
+
+    // Extract slots — only support single-slot interpolations for now
+    const parts: Array<{ kind?: string; slotId?: number }> = d.value.parts ?? [];
+    const slotParts = parts.filter(
+      (p): p is { kind: "slot"; slotId: number } => p.kind === "slot" && p.slotId !== undefined,
+    );
+    if (slotParts.length !== 1) {
+      return false;
+    }
+
+    const slotPart = slotParts[0]!;
+    const expr = decl.templateExpressions[slotPart.slotId] as { type?: string } | undefined;
+    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+      return false;
+    }
+
+    // Theme accesses should have been handled by processDeclarationsIntoBucket — if they
+    // weren't, something unexpected happened; bail.
+    if (hasThemeAccessInArrowFn(expr)) {
+      return false;
+    }
+
+    const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+    if (!unwrapped) {
+      return false;
+    }
+
+    const { expr: inlineExpr, propsUsed } = unwrapped;
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
+    const valueExpr: ExpressionKind =
+      prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
+
+    // Determine if the expression is a simple identity prop reference
+    const isSimpleIdentity =
+      propsUsed.size === 1 &&
+      !prefix &&
+      !suffix &&
+      inlineExpr.type === "Identifier" &&
+      propsUsed.has((inlineExpr as { name: string }).name);
+
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+    const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
+
+    for (const out of stylexDecls) {
+      if (!out.prop) {
+        continue;
+      }
+      const fnKey = styleKeyWithSuffix(overrideStyleKey, out.prop);
+      if (!styleFnDecls.has(fnKey)) {
+        const outParamName =
+          isSimpleIdentity && jsxProp.startsWith("$")
+            ? jsxProp.slice(1)
+            : cssPropertyToIdentifier(out.prop, avoidNames);
+        const param = j.identifier(outParamName);
+        if (isSimpleIdentity && jsxProp !== "__props") {
+          ctx.annotateParamFromJsxProp(param, jsxProp);
+        } else if (/\.(ts|tsx)$/.test(filePath)) {
+          (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            j.tsStringKeyword(),
+          );
+        }
+
+        // Build { default: null, [stylex.when.ancestor(pseudo, marker?)]: paramExpr }
+        const pseudoEntries = ancestorPseudos.map((pseudo) => {
+          const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
+          return Object.assign(j.property("init", ancestorKey, j.identifier(outParamName)), {
+            computed: true,
+          });
+        });
+        const conditionalMap = j.objectExpression([
+          j.property("init", j.identifier("default"), j.literal(null)),
+          ...pseudoEntries,
+        ]);
+
+        const cssPropKeyNode = makeCssPropKey(j, out.prop);
+        const bodyProp = j.property("init", cssPropKeyNode, conditionalMap);
+        const body = j.objectExpression([bodyProp]);
+        styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      }
+
+      if (isSimpleIdentity) {
+        const isOptional = ctx.isJsxPropOptional(jsxProp);
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp,
+          ...(isOptional ? {} : { condition: "always" as const }),
+        });
+      } else {
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp: "__props" as const,
+          condition: "always" as const,
+          callArg: cloneAstNode(valueExpr) as ExpressionKind,
+        });
+      }
+    }
+
+    for (const propName of propsUsed) {
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+  }
+
+  decl.needsWrapperComponent = true;
+  return true;
 }
 
 /**
