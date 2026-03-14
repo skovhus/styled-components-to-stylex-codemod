@@ -19,6 +19,7 @@ import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
 import { capitalize } from "../utilities/string-utils.js";
+import { registerImports } from "./utils.js";
 
 type SplitVariantsContext = Pick<
   LowerRulesState,
@@ -261,9 +262,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     stylexPropOverride?: string,
   ): boolean => {
     const effectiveStylexProp = stylexPropOverride ?? stylexProp;
-    for (const imp of parsed.imports) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(parsed.imports, resolverImports);
 
     // Get or create a condition map (pseudo/media) for a property, preserving the default value.
     const getOrCreateConditionMap = (prop: string): Record<string, unknown> => {
@@ -529,9 +528,7 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     target: Record<string, unknown>,
     parsed: { exprAst: unknown; imports: any[] },
   ): void => {
-    for (const imp of parsed.imports) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(parsed.imports, resolverImports);
     if (pseudos?.length) {
       const existing = target[stylexPropMulti];
       const map =
@@ -658,9 +655,7 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
     target: Record<string, unknown>,
     parsed: { exprAst: unknown; imports: any[] },
   ): void => {
-    for (const imp of parsed.imports) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(parsed.imports, resolverImports);
     if (pseudos?.length) {
       const existing = target[stylexProp];
       const map =

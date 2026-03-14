@@ -23,6 +23,7 @@ import {
   resolveStaticExpressionValue,
 } from "../utilities/jscodeshift-utils.js";
 import { parseExpr } from "../transform-parse-expr.js";
+import { isMemberExpression } from "../lower-rules/utils.js";
 import {
   parseCssDeclarationBlock,
   parseCssDeclarationBlockWithTemplateExpr,
@@ -1717,11 +1718,7 @@ function replaceThemeRefsWithHookVar(
     const n = node as Record<string, unknown>;
 
     // For propsParam pattern: replace <paramName>.theme.X with theme.X
-    if (
-      info?.kind === "propsParam" &&
-      paramName &&
-      (n.type === "MemberExpression" || n.type === "OptionalMemberExpression")
-    ) {
+    if (info?.kind === "propsParam" && paramName && isMemberExpression(n)) {
       const obj = n.object as Record<string, unknown> | undefined;
       const prop = n.property as Record<string, unknown> | undefined;
       // Match: <paramName>.theme

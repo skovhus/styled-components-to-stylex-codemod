@@ -14,7 +14,6 @@ import {
   buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
   collectBooleanPropNames,
-  sortVariantEntriesBySpecificity,
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingComments } from "./comments.js";
@@ -23,9 +22,9 @@ import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
+  buildInitialStyleArgs,
   buildUseThemeDeclaration,
-} from "./emit-intrinsic-simple.js";
-import {
+  buildVariantStyleExprs,
   mergeOrderedEntries,
   styleRef,
   wrapCallArgForPropsObject,
@@ -390,12 +389,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-    const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-    ];
+    const styleArgs = buildInitialStyleArgs(
+      j,
+      stylesIdentifier,
+      d,
+      extraStyleArgs,
+      extraStyleArgsAfterBase,
+    );
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
@@ -416,28 +416,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
     const orderedEntries: OrderedStyleEntry[] = [];
 
-    if (d.variantStyleKeys) {
-      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-      for (const [when, variantKey] of sortedEntries) {
-        // Skip keys handled by compound variants
-        if (compoundVariantKeys.has(when)) {
-          continue;
-        }
-        const { cond, isBoolean } = emitter.collectConditionProps({ when, booleanProps });
-        const styleExpr = j.memberExpression(
-          j.identifier(stylesIdentifier),
-          j.identifier(variantKey),
-        );
-        // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
-        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
-        const order = d.variantSourceOrder?.[when];
-        if (hasSourceOrder && order !== undefined) {
-          orderedEntries.push({ order, expr });
-        } else {
-          styleArgs.push(expr);
-        }
-      }
-    }
+    buildVariantStyleExprs({
+      d,
+      emitter,
+      j,
+      stylesIdentifier,
+      styleArgs,
+      orderedEntries,
+      hasSourceOrder,
+      booleanProps,
+      compoundVariantKeys,
+    });
 
     const dropProps = d.shouldForwardProp?.dropProps ?? [];
 

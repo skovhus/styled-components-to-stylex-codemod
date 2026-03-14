@@ -29,7 +29,10 @@ import {
   expandStaticAnimationShorthand,
 } from "../keyframes.js";
 import {
+  findInAst,
   findSupportedAtRule,
+  isMemberExpression,
+  registerImports,
   resolveMediaAtRulePlaceholders,
   type ResolvedMedia,
 } from "./utils.js";
@@ -146,7 +149,7 @@ export function createCssHelperResolver(args: {
       return { ast: expr, exprString: JSON.stringify(expr.value) };
     }
     const path =
-      paramName && (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression")
+      paramName && isMemberExpression(expr)
         ? getMemberPathFromIdentifier(expr as any, paramName)
         : null;
     if (!path || path[0] !== "theme") {
@@ -162,9 +165,7 @@ export function createCssHelperResolver(args: {
     if (!res) {
       return null;
     }
-    for (const imp of res.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(res.imports, resolverImports);
     const exprAst = parseExpr(res.expr);
     return exprAst ? { ast: exprAst, exprString: res.expr } : null;
   };
@@ -173,73 +174,23 @@ export function createCssHelperResolver(args: {
     if (!expr || typeof expr !== "object" || !paramName) {
       return false;
     }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (
-        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
-        node.object?.type === "Identifier" &&
-        node.object.name === paramName &&
-        node.property?.type === "Identifier" &&
-        node.property.name === "theme" &&
-        node.computed === false
-      ) {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = node[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(expr);
-    return found;
+    return findInAst(
+      expr,
+      (node) =>
+        isMemberExpression(node) &&
+        (node.object as any)?.type === "Identifier" &&
+        (node.object as any)?.name === paramName &&
+        (node.property as any)?.type === "Identifier" &&
+        (node.property as any)?.name === "theme" &&
+        node.computed === false,
+    );
   };
 
   const hasCallExpressionInExpr = (expr: any): boolean => {
     if (!expr || typeof expr !== "object") {
       return false;
     }
-    let found = false;
-    const visit = (node: any): void => {
-      if (!node || typeof node !== "object" || found) {
-        return;
-      }
-      if (Array.isArray(node)) {
-        for (const child of node) {
-          visit(child);
-        }
-        return;
-      }
-      if (node.type === "CallExpression") {
-        found = true;
-        return;
-      }
-      for (const key of Object.keys(node)) {
-        if (key === "loc" || key === "comments") {
-          continue;
-        }
-        const child = node[key];
-        if (child && typeof child === "object") {
-          visit(child);
-        }
-      }
-    };
-    visit(expr);
-    return found;
+    return findInAst(expr, (node) => node.type === "CallExpression");
   };
 
   /**
@@ -284,9 +235,7 @@ export function createCssHelperResolver(args: {
         if (!res) {
           return null;
         }
-        for (const impSpec of res.imports ?? []) {
-          resolverImports.set(JSON.stringify(impSpec), impSpec);
-        }
+        registerImports(res.imports, resolverImports);
         const exprAst = parseExpr(res.expr);
         return exprAst ? { ast: exprAst, exprString: res.expr } : null;
       }

@@ -18,6 +18,7 @@ import { buildSafeIndexedParamName } from "./import-resolution.js";
 import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
+import { registerImports } from "./utils.js";
 
 type ValuePatternContext = Pick<
   LowerRulesState,
@@ -294,9 +295,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       if (!resolved) {
         return null;
       }
-      for (const imp of resolved.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      registerImports(resolved.imports, resolverImports);
       const exprAst = parseExpr(resolved.expr);
       if (!exprAst) {
         return null;
@@ -649,9 +648,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return false;
     }
 
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(resolved.imports, resolverImports);
 
     // Ensure we generate a wrapper so we can consume the prop without forwarding it to DOM.
     ensureShouldForwardPropDrop(decl, indexPropName);

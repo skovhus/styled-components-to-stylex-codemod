@@ -6,6 +6,7 @@ import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { isStyledTag } from "../transform/css-helpers.js";
 import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
+import { isMemberExpression } from "../lower-rules/utils.js";
 
 /**
  * Detects unsupported template patterns (component selectors, specificity hacks) and bails with warnings.
@@ -121,7 +122,7 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
     if (tag.type === "Identifier") {
       return factoryNames.has(tag.name);
     }
-    if (tag.type === "MemberExpression" || tag.type === "OptionalMemberExpression") {
+    if (isMemberExpression(tag)) {
       return isFactoryTag(factoryNames, tag.object);
     }
     if (tag.type === "CallExpression") {

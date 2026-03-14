@@ -11,6 +11,7 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import { isDirectionalResult } from "../../adapter.js";
 import type { LowerRulesState } from "./state.js";
+import { registerImports } from "./utils.js";
 
 /**
  * Tagged result returned by `resolveThemeValue` / `resolveThemeValueFromFn`
@@ -76,9 +77,7 @@ export function createThemeResolvers(
     if (isDirectionalResult(resolved)) {
       return handleDirectionalResult(resolved, resolverImports, parseExpr);
     }
-    for (const imp of resolved.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(resolved.imports, resolverImports);
     return parseExpr(resolved.expr);
   };
 
@@ -205,9 +204,7 @@ function handleDirectionalResult(
     if (!exprAst) {
       return null;
     }
-    for (const imp of entry.imports) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(entry.imports, resolverImports);
     entries.push({ prop: entry.prop, expr: exprAst });
   }
   return { __directional: entries };

@@ -10,6 +10,24 @@ import { literalToStaticValue } from "./types.js";
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
 
+/** Registers resolved imports into a deduplication map keyed by JSON.stringify. */
+export function registerImports(
+  imports: Iterable<ImportSpec> | null | undefined,
+  resolverImports: Map<string, ImportSpec>,
+): void {
+  if (!imports) {
+    return;
+  }
+  for (const imp of imports) {
+    resolverImports.set(JSON.stringify(imp), imp);
+  }
+}
+
+/** Returns true if the AST node is a `MemberExpression` or `OptionalMemberExpression`. */
+export function isMemberExpression(node: { type?: string } | null | undefined): boolean {
+  return node?.type === "MemberExpression" || node?.type === "OptionalMemberExpression";
+}
+
 /** Returns true for at-rules the codemod can transform (`@media`, `@container`). */
 export function isSupportedAtRule(atRule: string): boolean {
   return atRule.startsWith("@media") || atRule.startsWith("@container");
@@ -71,9 +89,7 @@ export function resolveMediaAtRulePlaceholders(
           if (result?.kind === "media") {
             const keyExpr = ctx.parseExpr(result.expr);
             if (keyExpr) {
-              for (const impSpec of result.imports ?? []) {
-                ctx.resolverImports.set(JSON.stringify(impSpec), impSpec);
-              }
+              registerImports(result.imports, ctx.resolverImports);
               return { kind: "computed", keyExpr, imports: result.imports ?? [] };
             }
           }
@@ -227,9 +243,7 @@ function resolveSlotExprToStaticValue(
     return null;
   }
 
-  for (const impSpec of result.imports ?? []) {
-    resolverImports.set(JSON.stringify(impSpec), impSpec);
-  }
+  registerImports(result.imports, resolverImports);
 
   return parseStaticExprString(result.expr);
 }
@@ -251,4 +265,112 @@ function parseStaticExprString(expr: string): string | number | null {
     return trimmed.slice(1, -1);
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Generic AST tree-walkers
+// ---------------------------------------------------------------------------
+
+type AnyNode = Record<string, unknown>;
+
+/**
+ * Recursively walk an AST tree and return `true` if the predicate matches any node.
+ * Skips `loc` and `comments` keys. Short-circuits on first match.
+ */
+export function findInAst(root: unknown, predicate: (node: AnyNode) => boolean): boolean {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object" || found) {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as AnyNode;
+    if (predicate(n)) {
+      found = true;
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+  return found;
+}
+
+/**
+ * Recursively transform an AST tree by applying a replacer to each node.
+ * The replacer receives a node and a `recurse` callback for continuing traversal.
+ * If the replacer returns a value, that value replaces the node (no further traversal).
+ * If it returns `undefined`, the default recursive traversal continues.
+ * Skips `loc` and `comments` keys.
+ */
+export function mapAst(
+  root: unknown,
+  replacer: (node: AnyNode, recurse: (n: unknown) => unknown) => unknown,
+): unknown {
+  const visit = (node: unknown): unknown => {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map(visit);
+    }
+    const n = node as AnyNode;
+    const replaced = replacer(n, visit);
+    if (replaced !== undefined) {
+      return replaced;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        n[key] = visit(child);
+      }
+    }
+    return n;
+  };
+  return visit(root);
+}
+
+/**
+ * Recursively walk an AST tree and call `visitor` on each node to collect data.
+ * Skips `loc` and `comments` keys.
+ */
+export function walkAst(root: unknown, visitor: (node: AnyNode) => void): void {
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const n = node as AnyNode;
+    visitor(n);
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
 }

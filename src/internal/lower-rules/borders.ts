@@ -17,6 +17,7 @@ import { extractStaticParts } from "./interpolations.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
 import { looksLikeLength } from "../utilities/string-utils.js";
 import type { LowerRulesState } from "./state.js";
+import { registerImports, isMemberExpression } from "./utils.js";
 
 type BorderHandlerContext = Pick<
   LowerRulesState,
@@ -168,9 +169,8 @@ export function tryHandleInterpolatedBorder(
           const slot1Res = callResolveDynamicNode(slot1.slotId, slot1Expr);
 
           if (slot0Res?.type === "resolvedValue" && slot1Res?.type === "resolvedValue") {
-            for (const imp of [...(slot0Res.imports ?? []), ...(slot1Res.imports ?? [])]) {
-              resolverImports.set(JSON.stringify(imp), imp);
-            }
+            registerImports(slot0Res.imports, resolverImports);
+            registerImports(slot1Res.imports, resolverImports);
             const slot0Ast = parseExpr(slot0Res.expr);
             const slot1Ast = parseExpr(slot1Res.expr);
             if (slot0Ast && slot1Ast) {
@@ -372,9 +372,7 @@ export function tryHandleInterpolatedBorder(
   if (expr?.type === "ArrowFunctionExpression" && expr.body?.type === "ConditionalExpression") {
     const cons = expr.body.consequent as any;
     const alt = expr.body.alternate as any;
-    const isMemberExpr = (n: any): boolean =>
-      n?.type === "MemberExpression" || n?.type === "OptionalMemberExpression";
-    if (isMemberExpr(cons) || isMemberExpr(alt)) {
+    if (isMemberExpression(cons) || isMemberExpression(alt)) {
       // Defer to the dynamic resolver by treating this as the target border interpolation.
       d.property = targetCssProperty;
       return false;
@@ -566,9 +564,7 @@ export function tryHandleInterpolatedBorder(
         return true;
       }
 
-      for (const imp of resolved.imports) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      registerImports(resolved.imports, resolverImports);
 
       if (resolved.kind === "okStyles") {
         if (directionRaw) {
@@ -715,9 +711,7 @@ export function tryHandleInterpolatedBorder(
           loc: getNodeLocStart(expr) ?? undefined,
         });
         if (resolved) {
-          for (const imp of resolved.imports ?? []) {
-            resolverImports.set(JSON.stringify(imp), imp);
-          }
+          registerImports(resolved.imports, resolverImports);
           const exprAst = parseExpr(resolved.expr);
           if (exprAst) {
             applyResolvedPropValue(targetProp, exprAst as any);

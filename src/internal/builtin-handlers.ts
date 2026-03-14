@@ -20,7 +20,7 @@ import {
 } from "./utilities/jscodeshift-utils.js";
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
-import { isSupportedAtRule } from "./lower-rules/utils.js";
+import { isMemberExpression, isSupportedAtRule } from "./lower-rules/utils.js";
 import { styleFromSingleDeclaration } from "./builtin-handlers/css-parsing.js";
 import {
   buildResolvedHandlerResult,
@@ -771,7 +771,7 @@ function collectPropsFromExprTree(
       return;
     }
     const n = node as { type?: string };
-    if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+    if (isMemberExpression(n)) {
       const path = getMemberPathFromIdentifier(node as any, paramName);
       const firstPathPart = path?.[0];
       if (path && path.length > 0 && firstPathPart) {
@@ -825,7 +825,7 @@ function hasBareParamUsage(root: unknown, paramName: string): boolean {
         continue;
       }
       const child = n[key];
-      const isMember = n.type === "MemberExpression" || n.type === "OptionalMemberExpression";
+      const isMember = isMemberExpression(n);
       const childSkip = isMember && !n.computed && (key === "object" || key === "property");
       if (visit(child, childSkip)) {
         return true;

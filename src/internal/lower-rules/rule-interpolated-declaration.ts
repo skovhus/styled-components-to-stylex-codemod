@@ -62,6 +62,7 @@ import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
+import { isMemberExpression } from "./utils.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
 type InterpolatedDeclarationContext = {
@@ -154,6 +155,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const bailUnsupportedLocal = (declArg: StyledDecl, type: WarningType) => {
     bail = true;
     state.bailUnsupported(declArg, type);
+  };
+  const addResolverImports = (imports: Iterable<unknown> | undefined | null) => {
+    if (!imports) {
+      return;
+    }
+    for (const imp of imports) {
+      resolverImports.set(
+        JSON.stringify(imp),
+        imp as typeof resolverImports extends Map<string, infer V> ? V : never,
+      );
+    }
   };
 
   /**
@@ -548,7 +560,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return null;
     };
     const addImport = (imp: any) => {
-      resolverImports.set(JSON.stringify(imp), imp);
+      addResolverImports([imp]);
     };
     if (d.property && d.value.kind === "interpolated") {
       const slotParts =
@@ -692,9 +704,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 decl.extraStylexPropsArgs = extras;
                 decl.mixinOrder = order;
                 // Merge imports
-                for (const imp of resolved.imports) {
-                  resolverImports.set(JSON.stringify(imp), imp);
-                }
+                addResolverImports(resolved.imports);
                 continue;
               }
             }
@@ -854,9 +864,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
-      for (const imp of res.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.imports);
       const exprAst = parseExpr(res.expr);
       if (!exprAst) {
         const resolveCallMeta =
@@ -901,9 +909,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // media/pseudo/attribute scoping.
       let directionalFailed = false;
       for (const entry of res.directional) {
-        for (const imp of entry.imports) {
-          resolverImports.set(JSON.stringify(imp), imp);
-        }
+        addResolverImports(entry.imports);
         const exprAst = parseExpr(entry.expr);
         if (!exprAst) {
           warnings.push({
@@ -925,9 +931,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     if (res && res.type === "resolvedValue") {
-      for (const imp of res.imports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.imports);
 
       // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
       const { prefix, suffix } = extractStaticPartsForDecl(d);
@@ -994,12 +998,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // Handle theme boolean conditional patterns (e.g., theme.isDark, theme.isHighContrast)
     if (res && res.type === "splitThemeBooleanVariants") {
       // Add imports if present
-      for (const imp of res.trueImports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
-      for (const imp of res.falseImports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.trueImports);
+      addResolverImports(res.falseImports);
 
       const { trueKey: trueStyleKey, falseKey: falseStyleKey } = buildThemeStyleKeys(
         decl.styleKey,
@@ -1052,9 +1052,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // is emitted as a conditional inline style using the useTheme() hook.
     if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
       // Add imports for the resolved value
-      for (const imp of res.resolvedImports ?? []) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.resolvedImports);
 
       // Ensure useTheme() is imported and called by adding a needsUseThemeHook entry
       // with both keys null (no style buckets needed — only the import/declaration)
@@ -1103,11 +1101,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (res && res.type === "splitVariants") {
       // Extract any imports from variants (used by template literal theme resolution)
       for (const v of res.variants) {
-        if (v.imports) {
-          for (const imp of v.imports) {
-            resolverImports.set(JSON.stringify(imp), imp);
-          }
-        }
+        addResolverImports(v.imports);
       }
 
       // When inside a media context (static or computed), wrap each variant's style
@@ -1241,9 +1235,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         break;
       }
       for (const v of res.variants) {
-        for (const imp of v.imports ?? []) {
-          resolverImports.set(JSON.stringify(imp), imp);
-        }
+        addResolverImports(v.imports);
         const exprAst = parseExpr(v.expr);
         if (!exprAst) {
           warnings.push({
@@ -1348,12 +1340,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       //   Usage: styles.badge, textColor != null && styles.badgeColor(textColor)
 
       // Add imports from both theme resolutions
-      for (const imp of res.themeObjectImports) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
-      for (const imp of res.fallbackImports) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.themeObjectImports);
+      addResolverImports(res.fallbackImports);
 
       // Mark prop to not forward to DOM
       ensureShouldForwardPropDrop(decl, res.propName);
@@ -1429,9 +1417,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // Output: (backgroundColor: Color) => ({ backgroundColor: $colors[backgroundColor] ?? backgroundColor })
 
       // Add imports from theme resolution
-      for (const imp of res.themeObjectImports) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      addResolverImports(res.themeObjectImports);
 
       // Mark prop to not forward to DOM
       ensureShouldForwardPropDrop(decl, res.propName);
@@ -1860,11 +1846,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 const vt = (res as { valueTransform?: CallValueTransform }).valueTransform;
                 if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
                   // Add adapter-resolved imports if present
-                  if (vt.resolvedImports) {
-                    for (const imp of vt.resolvedImports) {
-                      resolverImports.set(JSON.stringify(imp), imp);
-                    }
-                  }
+                  addResolverImports(vt.resolvedImports);
                   // Use adapter-resolved expression, choosing call or member access
                   // based on resolvedUsage (default: "call")
                   if (vt.resolvedExpr) {
@@ -2182,7 +2164,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           context: { identifier: expr.name },
         };
       }
-      if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+      if (isMemberExpression(expr)) {
         return {
           type: "Unsupported interpolation: member expression",
           context: { memberExpression: expr.type },

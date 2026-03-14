@@ -50,7 +50,12 @@ import {
 } from "./types.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
-import { findSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
+import {
+  findSupportedAtRule,
+  isMemberExpression,
+  registerImports,
+  resolveMediaAtRulePlaceholders,
+} from "./utils.js";
 import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
@@ -279,7 +284,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         const n = node as ASTNodeRecord;
         if (
           bindings.kind === "simple" &&
-          (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") &&
+          isMemberExpression(n) &&
           (n.object as ASTNodeRecord)?.type === "Identifier" &&
           (n.object as { name?: string })?.name === bindings.paramName &&
           (n.property as ASTNodeRecord)?.type === "Identifier" &&
@@ -293,10 +298,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (bindings.kind === "simple" && nodeName === bindings.paramName) {
             const p = parent as ASTNodeRecord | undefined;
             const isMemberProp =
-              p &&
-              (p.type === "MemberExpression" || p.type === "OptionalMemberExpression") &&
-              p.property === n &&
-              p.computed === false;
+              p && isMemberExpression(p) && p.property === n && p.computed === false;
             const isObjectKey = p && p.type === "Property" && p.key === n && p.shorthand !== true;
             if (!isMemberProp && !isObjectKey) {
               return j.identifier("props");
@@ -327,7 +329,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             return memberExpr;
           }
         }
-        if (n.type === "MemberExpression" || n.type === "OptionalMemberExpression") {
+        if (isMemberExpression(n)) {
           n.object = replace(n.object, n);
           if (n.computed) {
             n.property = replace(n.property, n);
@@ -1084,7 +1086,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         const rec = n as ASTNodeRecord;
         if (
-          (rec.type === "MemberExpression" || rec.type === "OptionalMemberExpression") &&
+          isMemberExpression(rec) &&
           (rec.object as { type?: string; name?: string })?.type === "Identifier" &&
           (rec.object as { name?: string })?.name === "props" &&
           (rec.property as { type?: string; name?: string })?.type === "Identifier" &&
@@ -1878,9 +1880,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
 
       dropAllTestInfoProps(testInfo);
-      for (const imp of resolved.imports) {
-        resolverImports.set(JSON.stringify(imp), imp);
-      }
+      registerImports(resolved.imports, resolverImports);
       const exprAst = parseExpr(resolved.expr);
       if (!exprAst) {
         return false;
@@ -1925,7 +1925,7 @@ function extractThemeConditionInfo(
     return leftInfo ?? extractThemeConditionInfo(right as ExpressionKind);
   }
 
-  if (rec.type === "MemberExpression" || rec.type === "OptionalMemberExpression") {
+  if (isMemberExpression(rec)) {
     const obj = rec.object as { type?: string; name?: string } | undefined;
     const prop = rec.property as { type?: string; name?: string } | undefined;
     if (obj?.type === "Identifier" && obj.name === "theme" && prop?.type === "Identifier") {

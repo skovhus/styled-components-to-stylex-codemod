@@ -8,11 +8,26 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
-import { buildStyleFnConditionExpr, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
-import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
-import { collectBooleanPropNames } from "./type-helpers.js";
-import { collectConditionProps, makeConditionalStyleExpr } from "./variant-condition.js";
-import type { WrapperEmitter } from "./wrapper-emitter.js";
+import {
+  buildStyleFnConditionExpr,
+  cloneAstNode,
+  collectIdentifiers,
+} from "../utilities/jscodeshift-utils.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type WrapperPropDefaults,
+} from "./types.js";
+import { collectBooleanPropNames, sortVariantEntriesBySpecificity } from "./type-helpers.js";
+import {
+  areEquivalentWhen,
+  collectConditionProps,
+  findComplementaryVariantEntry,
+  getPositiveWhen,
+  makeConditionalStyleExpr,
+  parseVariantWhenToAst,
+} from "./variant-condition.js";
+import type { StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
 
 // ---------------------------------------------------------------------------
 // keyof typeof cast helper
@@ -81,6 +96,29 @@ export function wrapCallArgForPropsObject(
     prop.shorthand = true;
   }
   return j.objectExpression([prop]) as unknown as ExpressionKind;
+}
+
+// ---------------------------------------------------------------------------
+// Initial style args assembly
+// ---------------------------------------------------------------------------
+
+/**
+ * Assembles the initial `styleArgs` array from extends, extra before/after base,
+ * and the base style expression. This is the common pattern used by all emitters.
+ */
+export function buildInitialStyleArgs(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+  extraStyleArgs: ExpressionKind[],
+  extraStyleArgsAfterBase: ExpressionKind[],
+): ExpressionKind[] {
+  return [
+    ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
+    ...extraStyleArgs,
+    ...baseStyleExpr(j, stylesIdentifier, d),
+    ...extraStyleArgsAfterBase,
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -686,10 +724,417 @@ export function collectDestructurePropsFromStyleFns(
 }
 
 // ---------------------------------------------------------------------------
+// Variant style expression builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds variant-conditional style expressions from a StyledDecl's variantStyleKeys.
+ *
+ * Handles two modes:
+ * - **Complementary merging** (when `enableComplementaryMerging` is true): looks for
+ *   complementary condition pairs (e.g., `$active` / `!$active`) and merges them into
+ *   ternary expressions (`cond ? styles.a : styles.b`).
+ * - **Simple linear**: wraps each variant in `cond && styles.key` via `makeConditionalStyleExpr`.
+ *
+ * Results are pushed to `styleArgs` (or `orderedEntries` when source order tracking is active).
+ */
+export function buildVariantStyleExprs(opts: {
+  d: StyledDecl;
+  emitter: WrapperEmitter;
+  j: JSCodeshift;
+  stylesIdentifier: string;
+  styleArgs: ExpressionKind[];
+  orderedEntries: OrderedStyleEntry[];
+  hasSourceOrder: boolean;
+  destructureProps?: string[];
+  booleanProps?: ReadonlySet<string>;
+  compoundVariantKeys?: ReadonlySet<string>;
+  enableComplementaryMerging?: boolean;
+  /** Called for each newly added destructure prop (e.g., to track style-only condition props). */
+  onNewDestructureProp?: (prop: string) => void;
+}): void {
+  const {
+    d,
+    emitter,
+    j,
+    stylesIdentifier,
+    styleArgs,
+    orderedEntries,
+    hasSourceOrder,
+    destructureProps,
+    booleanProps,
+    compoundVariantKeys,
+    enableComplementaryMerging,
+    onNewDestructureProp,
+  } = opts;
+
+  if (!d.variantStyleKeys) {
+    return;
+  }
+
+  const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+
+  /** Push an expression to orderedEntries (if source ordering) or directly to styleArgs. */
+  const pushExpr = (expr: ExpressionKind, when: string): void => {
+    const order = d.variantSourceOrder?.[when];
+    if (hasSourceOrder && order !== undefined) {
+      orderedEntries.push({ order, expr });
+    } else {
+      styleArgs.push(expr);
+    }
+  };
+
+  if (enableComplementaryMerging) {
+    const consumedVariantIndices = new Set<number>();
+    const prevLengthRef = destructureProps ? { value: destructureProps.length } : undefined;
+    for (let vi = 0; vi < sortedEntries.length; vi++) {
+      if (consumedVariantIndices.has(vi)) {
+        continue;
+      }
+      const [when, variantKey] = sortedEntries[vi]!;
+      if (compoundVariantKeys?.has(when)) {
+        continue;
+      }
+      if (prevLengthRef && destructureProps) {
+        prevLengthRef.value = destructureProps.length;
+      }
+
+      // Look for a complementary pair to merge into a ternary expression
+      const complementIdx = findComplementaryVariantEntry(
+        sortedEntries,
+        vi,
+        consumedVariantIndices,
+      );
+      if (complementIdx !== null) {
+        consumedVariantIndices.add(complementIdx);
+        const [otherWhen, otherKey] = sortedEntries[complementIdx]!;
+        const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
+        const { cond } = emitter.collectConditionProps({
+          when: positiveWhen,
+          destructureProps,
+          booleanProps,
+        });
+        if (onNewDestructureProp && prevLengthRef && destructureProps) {
+          for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
+            onNewDestructureProp(destructureProps[i]!);
+          }
+        }
+        const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
+        const trueKey = isCurrentPositive ? variantKey : otherKey;
+        const falseKey = isCurrentPositive ? otherKey : variantKey;
+        const trueExpr = styleRef(j, stylesIdentifier, trueKey);
+        const falseExpr = styleRef(j, stylesIdentifier, falseKey);
+        pushExpr(j.conditionalExpression(cond, trueExpr, falseExpr), when);
+        continue;
+      }
+
+      const { cond, isBoolean } = emitter.collectConditionProps({
+        when,
+        destructureProps,
+        booleanProps,
+      });
+      if (onNewDestructureProp && prevLengthRef && destructureProps) {
+        for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
+          onNewDestructureProp(destructureProps[i]!);
+        }
+      }
+      const styleExpr = styleRef(j, stylesIdentifier, variantKey);
+      pushExpr(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }), when);
+    }
+  } else {
+    // Simple linear mode: no complementary merging
+    for (const [when, variantKey] of sortedEntries) {
+      if (compoundVariantKeys?.has(when)) {
+        continue;
+      }
+      const { cond, isBoolean } = emitter.collectConditionProps({
+        when,
+        destructureProps,
+        booleanProps,
+      });
+      const styleExpr = styleRef(j, stylesIdentifier, variantKey);
+      pushExpr(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }), when);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Template literal escaping
 // ---------------------------------------------------------------------------
 
 /** Escape characters that are special inside template literal quasi strings. */
 function escapeTemplateRaw(s: string): string {
   return s.replace(/\\|`|\$\{/g, "\\$&");
+}
+
+// ---------------------------------------------------------------------------
+// Theme boolean & pseudo style-arg helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Appends conditional style args driven by theme boolean props (e.g., `theme.isDark`).
+ * Returns `true` if the hook is needed (and calls `markNeedsUseThemeImport`).
+ */
+export function appendThemeBooleanStyleArgs(
+  hooks: StyledDecl["needsUseThemeHook"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  markNeedsUseThemeImport: () => void,
+): boolean {
+  if (!hooks || hooks.length === 0) {
+    return false;
+  }
+  markNeedsUseThemeImport();
+  for (const entry of hooks) {
+    // Skip entries used only for triggering useTheme import/declaration
+    // (e.g., when the theme conditional uses inline styles instead of style buckets)
+    if (!entry.trueStyleKey && !entry.falseStyleKey) {
+      continue;
+    }
+    const trueExpr = entry.trueStyleKey
+      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
+      : (j.identifier("undefined") as ExpressionKind);
+    const falseExpr = entry.falseStyleKey
+      ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
+      : (j.identifier("undefined") as ExpressionKind);
+    const condition = entry.conditionExpr
+      ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
+      : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
+    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
+  }
+  return true;
+}
+
+/**
+ * Shared logic for appending style args with optional guard wrapping.
+ * Each entry is mapped to an expression via `buildExpr`, then optionally
+ * wrapped in a conditional if the entry has a `guard`.
+ */
+function appendGuardedStyleArgs<T extends { guard?: { when: string } }>(
+  entries: T[],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  buildExpr: (entry: T) => ExpressionKind,
+  booleanProps?: ReadonlySet<string>,
+): string[] {
+  const guardProps: string[] = [];
+  for (const entry of entries) {
+    const expr = buildExpr(entry);
+    if (entry.guard) {
+      const parsed = parseVariantWhenToAst(j, entry.guard.when, booleanProps);
+      for (const p of parsed.props) {
+        if (p && !guardProps.includes(p)) {
+          guardProps.push(p);
+        }
+      }
+      styleArgs.push(
+        makeConditionalStyleExpr(j, {
+          cond: parsed.cond,
+          expr,
+          isBoolean: parsed.isBoolean,
+        }),
+      );
+    } else {
+      styleArgs.push(expr);
+    }
+  }
+  return guardProps;
+}
+
+/**
+ * Appends pseudo-alias style args to `styleArgs`.
+ *
+ * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
+ * When the entry has a `guard`, the call is wrapped: `cond && selectorExpr(...)`.
+ *
+ * Returns the list of guard prop names that need destructuring.
+ */
+function appendPseudoAliasStyleArgs(
+  entries: StyledDecl["pseudoAliasSelectors"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  if (!entries?.length) {
+    return [];
+  }
+  return appendGuardedStyleArgs(entries, styleArgs, j, (entry) => {
+    const properties = entry.pseudoNames.map((name, i) =>
+      j.property(
+        "init",
+        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
+        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
+      ),
+    );
+    return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+      j.objectExpression(properties),
+    ]) as ExpressionKind;
+  });
+}
+
+/**
+ * Appends pseudo-expand style args as static `styles.key` references.
+ * When the entry has a `guard`, the ref is wrapped: `cond && styles.key`.
+ *
+ * Returns the list of guard prop names that need destructuring.
+ */
+function appendPseudoExpandStyleArgs(
+  entries: StyledDecl["pseudoExpandSelectors"],
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  if (!entries?.length) {
+    return [];
+  }
+  return appendGuardedStyleArgs(
+    entries,
+    styleArgs,
+    j,
+    (entry) =>
+      j.memberExpression(
+        j.identifier(stylesIdentifier),
+        j.identifier(entry.styleKey),
+      ) as ExpressionKind,
+  );
+}
+
+/**
+ * Appends both pseudo-alias and pseudo-expand style args, deduplicating guard props.
+ * Returns the combined list of guard prop names that need destructuring.
+ */
+export function appendAllPseudoStyleArgs(
+  d: Pick<StyledDecl, "pseudoAliasSelectors" | "pseudoExpandSelectors">,
+  styleArgs: ExpressionKind[],
+  j: JSCodeshift,
+  stylesIdentifier: string,
+): string[] {
+  const guardProps = appendPseudoAliasStyleArgs(
+    d.pseudoAliasSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  );
+  for (const gp of appendPseudoExpandStyleArgs(
+    d.pseudoExpandSelectors,
+    styleArgs,
+    j,
+    stylesIdentifier,
+  )) {
+    if (!guardProps.includes(gp)) {
+      guardProps.push(gp);
+    }
+  }
+  return guardProps;
+}
+
+/**
+ * Builds all variant, dimension, compound variant, pseudo, inline-prop, and style-function
+ * expressions, collecting destructure props along the way. This is the common sequence
+ * shared across emit-intrinsic-simple, emit-intrinsic-polymorphic, emit-intrinsic-should-forward-prop,
+ * and emit-component.
+ */
+export function buildAllVariantAndStyleExprs(opts: {
+  d: StyledDecl;
+  emitter: WrapperEmitter;
+  j: JSCodeshift;
+  stylesIdentifier: string;
+  styleArgs: ExpressionKind[];
+  destructureProps: string[];
+  propDefaults: WrapperPropDefaults;
+  compoundVariantKeys: ReadonlySet<string>;
+  afterVariantStyleArgs?: ExpressionKind[];
+  enableComplementaryMerging?: boolean;
+  /** Custom compound variant builder from ctx.helpers */
+  buildCompoundVariantExpressions: (
+    compoundVariants: NonNullable<StyledDecl["compoundVariants"]>,
+    styleArgs: ExpressionKind[],
+    destructureProps: string[],
+  ) => void;
+}): void {
+  const {
+    d,
+    emitter,
+    j,
+    stylesIdentifier,
+    styleArgs,
+    destructureProps,
+    propDefaults,
+    compoundVariantKeys,
+    afterVariantStyleArgs,
+    enableComplementaryMerging,
+    buildCompoundVariantExpressions,
+  } = opts;
+
+  const booleanProps = collectBooleanPropNames(d);
+  const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+  const orderedEntries: OrderedStyleEntry[] = [];
+
+  buildVariantStyleExprs({
+    d,
+    emitter,
+    j,
+    stylesIdentifier,
+    styleArgs,
+    orderedEntries,
+    hasSourceOrder,
+    destructureProps,
+    booleanProps,
+    compoundVariantKeys,
+    enableComplementaryMerging,
+  });
+
+  if (d.variantDimensions) {
+    emitter.buildVariantDimensionLookups({
+      dimensions: d.variantDimensions,
+      styleArgs,
+      destructureProps,
+      propDefaults,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+    });
+  }
+
+  if (d.compoundVariants) {
+    buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
+  }
+
+  for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
+    if (!destructureProps.includes(gp)) {
+      destructureProps.push(gp);
+    }
+  }
+
+  for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+    if (!destructureProps.includes(prop)) {
+      destructureProps.push(prop);
+    }
+  }
+
+  emitter.buildStyleFnExpressions({
+    d,
+    styleArgs,
+    destructureProps,
+    orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+  });
+  emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+  mergeOrderedEntries(orderedEntries, styleArgs);
+
+  if (afterVariantStyleArgs && afterVariantStyleArgs.length > 0) {
+    styleArgs.push(...afterVariantStyleArgs);
+  }
+}
+
+/** Builds a `const theme = useTheme();` variable declaration. */
+export function buildUseThemeDeclaration(
+  j: JSCodeshift,
+  themeHookFunctionName: string,
+): StatementKind {
+  return j.variableDeclaration("const", [
+    j.variableDeclarator(
+      j.identifier("theme"),
+      j.callExpression(j.identifier(themeHookFunctionName), []),
+    ),
+  ]);
 }

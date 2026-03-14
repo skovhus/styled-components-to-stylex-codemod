@@ -37,7 +37,13 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
-import { findSupportedAtRule, isSupportedAtRule, resolveMediaAtRulePlaceholders } from "./utils.js";
+import {
+  findSupportedAtRule,
+  isMemberExpression,
+  isSupportedAtRule,
+  registerImports,
+  resolveMediaAtRulePlaceholders,
+} from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
@@ -612,11 +618,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
       // Selector interpolation that's a MemberExpression (e.g., screenSize.phone)
       // Try to resolve it via the adapter as a media query helper.
-      if (
-        !otherLocal &&
-        slotExpr &&
-        (slotExpr.type === "MemberExpression" || slotExpr.type === "OptionalMemberExpression")
-      ) {
+      if (!otherLocal && slotExpr && isMemberExpression(slotExpr)) {
         const info = extractRootAndPath(slotExpr);
         const identifierDesc = info
           ? info.path.length > 0
@@ -644,9 +646,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               if (mediaExpr) {
                 resolvedSelectorMedia = { keyExpr: mediaExpr, exprSource: selectorResult.expr };
                 // Add required imports
-                for (const impSpec of selectorResult.imports ?? []) {
-                  resolverImports.set(JSON.stringify(impSpec), impSpec);
-                }
+                registerImports(selectorResult.imports, resolverImports);
                 resolved = true;
               }
             }
@@ -1458,9 +1458,7 @@ function handlePseudoAlias(
   });
 
   // Add imports from the adapter result
-  for (const impSpec of result.imports) {
-    resolverImports.set(JSON.stringify(impSpec), impSpec);
-  }
+  registerImports(result.imports, resolverImports);
 
   decl.needsWrapperComponent = true;
 }
@@ -1566,14 +1564,10 @@ function handlePseudoExpand(
   }
 
   // Collect imports: shared + per-condition
-  for (const impSpec of result.imports) {
-    resolverImports.set(JSON.stringify(impSpec), impSpec);
-  }
+  registerImports(result.imports, resolverImports);
   for (const expansion of result.expansions) {
     if (expansion.condition) {
-      for (const impSpec of expansion.condition.imports) {
-        resolverImports.set(JSON.stringify(impSpec), impSpec);
-      }
+      registerImports(expansion.condition.imports, resolverImports);
     }
   }
 }
