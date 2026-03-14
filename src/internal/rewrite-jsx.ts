@@ -131,12 +131,23 @@ export function postProcessTransformedAst(args: {
       return undefined;
     };
 
-    const isStyleKeyRef = (node: any, key: string): boolean =>
-      node?.type === "MemberExpression" &&
-      node.object?.type === "Identifier" &&
-      node.object.name === stylesIdentifier &&
-      node.property?.type === "Identifier" &&
-      node.property.name === key;
+    const isStyleKeyRef = (node: any, key: string): boolean => {
+      // Match styles.key (identifier reference)
+      if (
+        node?.type === "MemberExpression" &&
+        node.object?.type === "Identifier" &&
+        node.object.name === stylesIdentifier &&
+        node.property?.type === "Identifier" &&
+        node.property.name === key
+      ) {
+        return true;
+      }
+      // Match styles.key(...) (function call, e.g. styleFn invocation)
+      if (node?.type === "CallExpression") {
+        return isStyleKeyRef(node.callee, key);
+      }
+      return false;
+    };
 
     const hasStyleKeyArg = (call: any, key: string): boolean => {
       return (call.arguments ?? []).some((a: any) => isStyleKeyRef(a, key));

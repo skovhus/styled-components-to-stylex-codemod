@@ -24,7 +24,12 @@ import {
   getArrowFnParamBindings,
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  literalToAst,
+  toStyleKey,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
@@ -2208,8 +2213,12 @@ function handleSiblingSelector(
  * Instead of bailing the entire component, emits dynamic styleFn entries that wrap
  * values in `stylex.when.ancestor()` pseudo maps.
  *
- * Handles both static declarations (already in the bucket from processDeclarationsIntoBucket)
- * and dynamic arrow-function interpolations (emitted as styleFn + styleFnFromProps entries).
+ * Handles both static declarations (emitted as ancestor-pseudo-wrapped AST nodes in the
+ * component's style object) and dynamic arrow-function interpolations (emitted as
+ * styleFn + styleFnFromProps entries). For shorthand declarations that expand to mixed
+ * static/interpolated longhands (e.g. `border: 2px solid ${color}`), static longhands
+ * become ancestor-wrapped AST entries while only interpolated longhands become dynamic
+ * styleFn entries.
  *
  * Returns `true` if all declarations were handled, `false` if any cannot be processed
  * (caller should bail as before).
@@ -2224,14 +2233,21 @@ function tryDynamicRelationOverrideFallback(args: {
   markerVarName?: string;
 }): boolean {
   const { rule, decl, ctx, j, overrideStyleKey, ancestorPseudos, markerVarName } = args;
-  const { styleFnDecls, styleFnFromProps } = ctx;
+  const { styleFnDecls, styleFnFromProps, styleObj } = ctx;
   const filePath = ctx.state.filePath;
   const avoidNames = new Set(ctx.state.importMap.keys());
 
   for (const d of rule.declarations) {
     if (d.value.kind === "static") {
-      // Static declarations were already processed by processDeclarationsIntoBucket
-      // before it encountered the unresolvable slot and bailed. Skip them here.
+      // Static declarations that processDeclarationsIntoBucket didn't reach
+      // (after the bail point): emit as ancestor-pseudo-wrapped AST nodes in
+      // the component's style object so they merge into the styleFn body.
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        if (out.value.kind === "static" && out.prop) {
+          const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
+          styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+        }
+      }
       continue;
     }
 
@@ -2266,25 +2282,42 @@ function tryDynamicRelationOverrideFallback(args: {
     }
 
     const { expr: inlineExpr, propsUsed } = unwrapped;
-    const { prefix, suffix } = extractStaticPartsForDecl(d);
-    const valueExpr: ExpressionKind =
-      prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
-
-    // Determine if the expression is a simple identity prop reference
-    const isSimpleIdentity =
-      propsUsed.size === 1 &&
-      !prefix &&
-      !suffix &&
-      inlineExpr.type === "Identifier" &&
-      propsUsed.has((inlineExpr as { name: string }).name);
 
     const stylexDecls = cssDeclarationToStylexDeclarations(d);
-    const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
 
     for (const out of stylexDecls) {
       if (!out.prop) {
         continue;
       }
+
+      // Shorthand expansion can produce mixed static/interpolated longhands
+      // (e.g. border: 2px solid ${color} → static borderWidth/borderStyle + interpolated borderColor).
+      // Only emit dynamic styleFn entries for interpolated longhands; static ones become
+      // ancestor-pseudo-wrapped AST nodes in the component's style object.
+      if (out.value.kind === "static") {
+        const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
+        styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+        continue;
+      }
+
+      // Extract prefix/suffix from the expanded output's parts (not the original declaration)
+      // so shorthand expansion is respected (e.g. borderColor gets no "2px solid" prefix).
+      const { prefix, suffix } = extractStaticPartsForDecl({
+        property: out.prop,
+        value: out.value,
+      });
+      const valueExpr: ExpressionKind =
+        prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
+
+      // Determine if the expression is a simple identity prop reference
+      const isSimpleIdentity =
+        propsUsed.size === 1 &&
+        !prefix &&
+        !suffix &&
+        inlineExpr.type === "Identifier" &&
+        propsUsed.has((inlineExpr as { name: string }).name);
+
+      const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
       const fnKey = styleKeyWithSuffix(overrideStyleKey, out.prop);
       if (!styleFnDecls.has(fnKey)) {
         const outParamName =
@@ -2342,6 +2375,26 @@ function tryDynamicRelationOverrideFallback(args: {
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+/**
+ * Builds an AST ObjectExpression representing `{ default: null, [stylex.when.ancestor(pseudo)]: value }`.
+ * Used to wrap static CSS values in ancestor pseudo maps for relation override fallback.
+ */
+function buildAncestorPseudoMap(
+  j: JSCodeshift,
+  valueNode: ExpressionKind,
+  ancestorPseudos: string[],
+  markerVarName?: string,
+): ExpressionKind {
+  const pseudoEntries = ancestorPseudos.map((pseudo) => {
+    const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
+    return Object.assign(j.property("init", ancestorKey, valueNode), { computed: true });
+  });
+  return j.objectExpression([
+    j.property("init", j.identifier("default"), j.literal(null)),
+    ...pseudoEntries,
+  ]);
 }
 
 /**
