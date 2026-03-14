@@ -2321,7 +2321,7 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
  * theme access); callers fall through to other handlers.
  */
 function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclarationContext): boolean {
-  const { ctx, d, pseudoElement } = args;
+  const { ctx, d, pseudoElement, pseudos, media } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
   const { j, filePath } = state;
   const avoidNames = new Set(state.importMap.keys());
@@ -2358,6 +2358,17 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 
+  // Determine if the expression is a simple identity prop reference (e.g., just `badgeColor`)
+  // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
+  // Simple identity: pass the prop directly as jsxProp.
+  // Computed: pass the full expression as callArg to preserve the computation.
+  const isSimpleIdentity =
+    propsUsed.size === 1 &&
+    !prefix &&
+    !suffix &&
+    inlineExpr.type === "Identifier" &&
+    propsUsed.has((inlineExpr as { name: string }).name);
+
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
 
@@ -2374,14 +2385,30 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
           j.tsStringKeyword(),
         );
       }
-      const innerProp = makeCssProperty(j, out.prop, outParamName);
+      const innerValue = buildPseudoMediaPropValue({
+        j,
+        valueExpr: j.identifier(outParamName),
+        pseudos,
+        media,
+      });
+      const innerPropKey = makeCssPropKey(j, out.prop);
+      const innerProp = j.property("init", innerPropKey, innerValue) as ReturnType<
+        typeof j.property
+      > & { shorthand?: boolean };
+      if (
+        innerPropKey.type === "Identifier" &&
+        innerValue.type === "Identifier" &&
+        innerPropKey.name === (innerValue as { name: string }).name
+      ) {
+        innerProp.shorthand = true;
+      }
       const innerObj = j.objectExpression([innerProp]);
       const outerProp = j.property("init", j.literal(pseudoElement), innerObj);
       const body = j.objectExpression([outerProp]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
-    if (propsUsed.size === 1) {
+    if (isSimpleIdentity) {
       const jsxProp = [...propsUsed][0]!;
       styleFnFromProps.push({ fnKey, jsxProp });
     } else {
