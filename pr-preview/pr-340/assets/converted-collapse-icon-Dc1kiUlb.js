@@ -1,0 +1,1 @@
+import{j as r}from"./index-M8P1SD-x.js";const s="sc2sx-CollapseArrowIcon-a1b2c3d4";function c({className:a,style:l,...e}){const o={className:"x1rg5ohu xvy4d1p xxk0z11 x13attxa x1h2kqdt"};return r.jsx("div",{...e,className:[s,o.className,a].filter(Boolean).join(" "),style:{...o.style,...l}})}const n=`.${s}`;export{c as C,n as a};

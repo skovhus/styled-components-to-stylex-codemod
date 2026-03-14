@@ -1,0 +1,9 @@
+import{j as e,c as p}from"./index-M8P1SD-x.js";const d=p.input`
+  padding: 12px;
+  border: 1px solid #ccc;
+  background: white;
+
+  &::placeholder {
+    color: ${o=>o.theme.color.labelMuted};
+  }
+`,l=()=>e.jsxs("div",{style:{display:"grid",gap:12,padding:16},children:[e.jsx(d,{placeholder:"Muted placeholder"}),e.jsx(d,{placeholder:"Second input"})]});export{l as App};
