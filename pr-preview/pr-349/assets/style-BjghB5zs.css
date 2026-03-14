@@ -1,16 +1,16 @@
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif}.cm-gutterElement{color:#bbb!important}:root{--color-primary: #bf4f74;--color-secondary: #4f74bf;--spacing-sm: 8px;--spacing-md: 16px;--spacing-lg: 24px;--border-radius: 4px;--text-color: #333;--font-size: 16px;--line-height: 1.5;--speed-slow: 1s;--speed-normal: .25s;--speed-fast: .1s}
 
+@property --x-scrollbarGutter {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-padding {
   syntax: "*";
   inherits: false
 }
 
 @property --x-height {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-scrollbarGutter {
   syntax: "*";
   inherits: false
 }
@@ -35,6 +35,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-top {
   syntax: "*";
   inherits: false
@@ -46,11 +51,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
   syntax: "*";
   inherits: false
 }
@@ -279,22 +279,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 @keyframes x18re5ia-B {
   from {
     opacity: 0;
   }
 
   to {
+    opacity: 1;
+  }
+}
+
+@keyframes xekv6nw-B {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
     opacity: 1;
   }
 }

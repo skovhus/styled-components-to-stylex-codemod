@@ -1,1 +1,0 @@
-import{j as x}from"./index-CWAMm2WC.js";const r=()=>x.jsxs("div",{style:{padding:"10px"},children:[x.jsx("div",{className:"x1kvmibo x19ypqd9 x1dtrvc8",children:"Bordered left"}),x.jsx("div",{className:"x1b4wo1g x1y0btm7 x9r1u3d",children:"Bordered box"}),x.jsx("div",{className:"x1b4wo1g x1y0btm7 x9r1u3d x1vvogim x1hr3lfm",children:"Thin border"})]});export{r as App};
