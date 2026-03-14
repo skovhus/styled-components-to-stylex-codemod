@@ -15,6 +15,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-backgroundColor {
   syntax: "*";
   inherits: false
@@ -31,26 +51,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-width {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
   syntax: "*";
   inherits: false
 }
@@ -170,12 +170,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-margin {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
 
-@property --x-color {
+@property --x-margin {
   syntax: "*";
   inherits: false
 }
@@ -241,6 +241,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-15iyedw {
+  syntax: "*";
+  inherits: true
+}
+
+@property --x-1lrm08k {
+  syntax: "*";
+  inherits: true
+}
+
+@property --x-stp4fj {
   syntax: "*";
   inherits: true
 }
@@ -1705,6 +1715,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1y5e3q9:not(#\#):not(#\#):not(#\#) {
   aspect-ratio: 1;
+}
+
+.x17obkc5:not(#\#):not(#\#):not(#\#) {
+  background-color: #333;
 }
 
 .x1efvng4:not(#\#):not(#\#):not(#\#) {
@@ -4597,6 +4611,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inset: 0 4px;
 }
 
+.xarstr8:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  inset: 0;
+}
+
 @media (hover: hover) {
   .xh13cts.xh13cts:hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     background-color: #e0e0e0;
@@ -4661,6 +4679,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: var(--x-15iyedw);
 }
 
+.xac9qvm:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+  background-color: var(--x-1lrm08k);
+}
+
 .x1lik0o9:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb {
   background-color: var(--x1xv87x1);
 }
@@ -4701,6 +4723,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-style: italic;
 }
 
+.xmf22ne:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  opacity: 0;
+}
+
 .x1j6awrg:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .x1hmns74:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   position: absolute;
 }
@@ -4713,8 +4739,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   z-index: 1;
 }
 
+.x1e0o1uy:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after:hover {
+  background-color: var(--x-stp4fj);
+}
+
 .x3ipgi3:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
   background-color: var(--x3iwu70);
+}
+
+.x1d9senm:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after:hover {
+  opacity: 1;
 }
 
 .x22q2bb:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#)::-webkit-slider-thumb:hover {
@@ -4737,12 +4771,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   left: 0;
 }
 
+.xgdch9p:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+  left: 50%;
+}
+
 .xnbfe2x:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   right: 0;
 }
 
 .xgwp28c:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   top: -12px;
+}
+
+.x1isgbki:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
+  top: -4px;
 }
 
 .x1m1drc7:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
