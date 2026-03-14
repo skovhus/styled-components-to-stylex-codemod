@@ -14,15 +14,12 @@ import {
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import {
-  collectBooleanPropNames,
-  sortVariantEntriesBySpecificity,
-  VOID_TAGS,
-} from "./type-helpers.js";
+import { collectBooleanPropNames, VOID_TAGS } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   appendAllPseudoStyleArgs,
+  buildVariantStyleExprs,
   mergeOrderedEntries,
   styleRef,
   type OrderedStyleEntry,
@@ -171,32 +168,18 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const orderedEntries: OrderedStyleEntry[] = [];
 
       // Add variant style arguments if this component has variants
-      if (d.variantStyleKeys) {
-        const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-        for (const [when, variantKey] of sortedEntries) {
-          // Skip keys handled by compound variants
-          if (compoundVariantKeys.has(when)) {
-            continue;
-          }
-          const { cond, isBoolean } = emitter.collectConditionProps({
-            when,
-            destructureProps,
-            booleanProps,
-          });
-          const styleExpr = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(variantKey),
-          );
-          // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
-          const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
-          const order = d.variantSourceOrder?.[when];
-          if (hasSourceOrder && order !== undefined) {
-            orderedEntries.push({ order, expr });
-          } else {
-            styleArgs.push(expr);
-          }
-        }
-      }
+      buildVariantStyleExprs({
+        d,
+        emitter,
+        j,
+        stylesIdentifier,
+        styleArgs,
+        orderedEntries,
+        hasSourceOrder,
+        destructureProps,
+        booleanProps,
+        compoundVariantKeys,
+      });
 
       // Add variant dimension lookups (StyleX variants recipe pattern)
       if (d.variantDimensions) {

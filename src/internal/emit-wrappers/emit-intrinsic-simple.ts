@@ -19,24 +19,19 @@ import {
   buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
   collectBooleanPropNames,
-  sortVariantEntriesBySpecificity,
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
-import {
-  areEquivalentWhen,
-  findComplementaryVariantEntry,
-  getPositiveWhen,
-  parseVariantWhenToAst,
-} from "./variant-condition.js";
+import { getPositiveWhen, parseVariantWhenToAst } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
+  buildVariantStyleExprs,
   mergeOrderedEntries,
   styleRef,
   type OrderedStyleEntry,
@@ -919,77 +914,19 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
     const orderedEntries: OrderedStyleEntry[] = [];
 
-    if (d.variantStyleKeys) {
-      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-      const consumedVariantIndices = new Set<number>();
-      for (let vi = 0; vi < sortedEntries.length; vi++) {
-        if (consumedVariantIndices.has(vi)) {
-          continue;
-        }
-        const [when, variantKey] = sortedEntries[vi]!;
-        // Skip keys handled by compound variants
-        if (compoundVariantKeys.has(when)) {
-          continue;
-        }
-
-        // Look for a complementary pair to merge into a ternary expression
-        const complementIdx = findComplementaryVariantEntry(
-          sortedEntries,
-          vi,
-          consumedVariantIndices,
-        );
-        if (complementIdx !== null) {
-          consumedVariantIndices.add(complementIdx);
-          const complementEntry = sortedEntries[complementIdx];
-          const otherWhen = complementEntry?.[0] ?? "";
-          const otherKey = complementEntry?.[1] ?? "";
-          const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
-          const { cond } = emitter.collectConditionProps({
-            when: positiveWhen,
-            destructureProps,
-            booleanProps,
-          });
-
-          const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
-          const trueKey = isCurrentPositive ? variantKey : otherKey;
-          const falseKey = isCurrentPositive ? otherKey : variantKey;
-          const trueExpr = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(trueKey),
-          );
-          const falseExpr = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(falseKey),
-          );
-          const expr = j.conditionalExpression(cond, trueExpr, falseExpr);
-          const order = d.variantSourceOrder?.[when];
-          if (hasSourceOrder && order !== undefined) {
-            orderedEntries.push({ order, expr });
-          } else {
-            styleArgs.push(expr);
-          }
-          continue;
-        }
-
-        const { cond, isBoolean } = emitter.collectConditionProps({
-          when,
-          destructureProps,
-          booleanProps,
-        });
-        const styleExpr = j.memberExpression(
-          j.identifier(stylesIdentifier),
-          j.identifier(variantKey),
-        );
-        // Wrap in `cond && styles.key` — stylex.props() ignores all falsy values.
-        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
-        const order = d.variantSourceOrder?.[when];
-        if (hasSourceOrder && order !== undefined) {
-          orderedEntries.push({ order, expr });
-        } else {
-          styleArgs.push(expr);
-        }
-      }
-    }
+    buildVariantStyleExprs({
+      d,
+      emitter,
+      j,
+      stylesIdentifier,
+      styleArgs,
+      orderedEntries,
+      hasSourceOrder,
+      destructureProps,
+      booleanProps,
+      compoundVariantKeys,
+      enableComplementaryMerging: true,
+    });
 
     // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
     // style conditional (e.g. tabIndex === 0 && styles.xxx), add a destructuring

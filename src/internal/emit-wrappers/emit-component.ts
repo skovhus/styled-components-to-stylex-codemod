@@ -25,7 +25,6 @@ import {
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
   injectStylePropsIntoTypeLiteralString,
-  sortVariantEntriesBySpecificity,
   TAG_TO_HTML_ELEMENT,
 } from "./type-helpers.js";
 import {
@@ -38,14 +37,10 @@ import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
+  buildVariantStyleExprs,
   mergeOrderedEntries,
   type OrderedStyleEntry,
 } from "./style-expr-builders.js";
-import {
-  areEquivalentWhen,
-  findComplementaryVariantEntry,
-  getPositiveWhen,
-} from "./variant-condition.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -422,77 +417,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const booleanProps = collectBooleanPropNames(d);
 
     // Add variant style arguments if this component has variants
-    if (d.variantStyleKeys) {
-      const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
-      const consumedVariantIndices = new Set<number>();
-      for (let vi = 0; vi < sortedEntries.length; vi++) {
-        if (consumedVariantIndices.has(vi)) {
-          continue;
-        }
-        const [when, variantKey] = sortedEntries[vi]!;
-        const prevLength = destructureProps.length;
-
-        // Look for a complementary pair to merge into a ternary expression
-        const complementIdx = findComplementaryVariantEntry(
-          sortedEntries,
-          vi,
-          consumedVariantIndices,
-        );
-        if (complementIdx !== null) {
-          consumedVariantIndices.add(complementIdx);
-          const [otherWhen, otherKey] = sortedEntries[complementIdx]!;
-          const positiveWhen = getPositiveWhen(when, otherWhen) ?? when;
-          const { cond } = emitter.collectConditionProps({
-            when: positiveWhen,
-            destructureProps,
-            booleanProps,
-          });
-          for (let i = prevLength; i < destructureProps.length; i++) {
-            styleOnlyConditionProps.add(destructureProps[i]!);
-          }
-          const isCurrentPositive = areEquivalentWhen(when, positiveWhen);
-          const trueKey = isCurrentPositive ? variantKey : otherKey;
-          const falseKey = isCurrentPositive ? otherKey : variantKey;
-          const trueExpr = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(trueKey),
-          );
-          const falseExpr = j.memberExpression(
-            j.identifier(stylesIdentifier),
-            j.identifier(falseKey),
-          );
-          const expr = j.conditionalExpression(cond, trueExpr, falseExpr);
-          const order = d.variantSourceOrder?.[when];
-          if (hasSourceOrder && order !== undefined) {
-            orderedEntries.push({ order, expr });
-          } else {
-            styleArgs.push(expr);
-          }
-          continue;
-        }
-
-        const { cond, isBoolean } = emitter.collectConditionProps({
-          when,
-          destructureProps,
-          booleanProps,
-        });
-        // Track newly added props as style-only (variant condition props)
-        for (let i = prevLength; i < destructureProps.length; i++) {
-          styleOnlyConditionProps.add(destructureProps[i]!);
-        }
-        const styleExpr = j.memberExpression(
-          j.identifier(stylesIdentifier),
-          j.identifier(variantKey),
-        );
-        const expr = emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean });
-        const order = d.variantSourceOrder?.[when];
-        if (hasSourceOrder && order !== undefined) {
-          orderedEntries.push({ order, expr });
-        } else {
-          styleArgs.push(expr);
-        }
-      }
-    }
+    buildVariantStyleExprs({
+      d,
+      emitter,
+      j,
+      stylesIdentifier,
+      styleArgs,
+      orderedEntries,
+      hasSourceOrder,
+      destructureProps,
+      booleanProps,
+      enableComplementaryMerging: true,
+      onNewDestructureProp: (prop) => styleOnlyConditionProps.add(prop),
+    });
 
     // Add variant dimension lookups (StyleX variants recipe pattern)
     if (d.variantDimensions) {
