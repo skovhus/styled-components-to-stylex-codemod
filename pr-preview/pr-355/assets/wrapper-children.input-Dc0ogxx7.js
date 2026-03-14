@@ -1,0 +1,3 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n,s as r}from"./index-BEHMEpNn.js";e(t(),1);var i=n();function a(e){let{text:t,children:n}=e;return(0,i.jsxs)(`div`,{children:[(0,i.jsx)(`span`,{children:t}),n]})}var o=r(a)`
+  padding-left: 20px;
+`,s=()=>(0,i.jsx)(o,{text:`Section`,children:(0,i.jsx)(`span`,{children:`Extra content`})});export{s as App,o as StyledDivider};

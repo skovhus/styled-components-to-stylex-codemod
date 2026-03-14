@@ -1,0 +1,1 @@
+import{t as e}from"./stylex-B9_aYcJU.js";import{f as t}from"./index-BEHMEpNn.js";import{t as n}from"./mixins.stylex-C1-IFwNs.js";var r=t();function i(){return(0,r.jsx)(`div`,{...e([n.flex,a.container]),children:`Mixin mode`})}var a={container:{kmVPX3:`xe8ttls`,kWkggS:`xpnvprw`,kMzoRj:`xmkeg23`,ksu8eU:`x1y0btm7`,kVAM5u:`xqu46wi`,$$css:!0}};export{i as App};

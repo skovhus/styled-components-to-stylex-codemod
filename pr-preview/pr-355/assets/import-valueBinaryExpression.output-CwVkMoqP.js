@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as n}from"./index-BEHMEpNn.js";e(t(),1);var r=n();function i(){return(0,r.jsx)(`div`,{className:`x1mmdlnr x1tamke2 x12peec7`,children:`Dialog Content`})}export{i as App};
