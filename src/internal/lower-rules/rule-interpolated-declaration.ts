@@ -319,22 +319,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) {
       continue;
     }
-    // Dynamic styles inside ::before/::after pseudo-elements are not natively supported
-    // by StyleX (see https://github.com/facebook/stylex/issues/1396).
-    // Workaround: use CSS custom properties set as inline styles on the parent element,
-    // referenced via var() in the pseudo-element's static StyleX styles.
     if (isPseudoElementSelector(pseudoElement)) {
-      if (tryHandleDynamicPseudoElementViaCustomProperty(args)) {
+      if (tryHandleDynamicPseudoElementStyleFunction(args)) {
         continue;
       }
-      warnings.push({
-        severity: "error",
-        type: "Dynamic styles inside pseudo elements (::before/::after) are not supported by StyleX. See https://github.com/facebook/stylex/issues/1396",
-        loc: decl.loc,
-        context: { pseudoElement },
-      });
-      bail = true;
-      break;
     }
     if (
       tryHandleInterpolatedBorder(
@@ -2318,31 +2306,33 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
 
 /**
  * Handles dynamic interpolations inside ::before/::after pseudo-elements by emitting
- * CSS custom properties on the parent element and referencing them with var() in the
- * pseudo-element's static StyleX styles.
+ * a StyleX dynamic style function whose body wraps the value in the pseudo-element
+ * selector.
  *
  * Example transform:
  *   Input:  `&::after { background-color: ${(props) => props.$badgeColor}; }`
- *   Output: StyleX  → `"::after": { backgroundColor: "var(--Badge-after-backgroundColor)" }`
- *           Inline  → `style={{ "--Badge-after-backgroundColor": $badgeColor }}`
+ *   Output: stylex.create →
+ *             badgeAfterBackgroundColor: (backgroundColor: string) => ({
+ *               "::after": { backgroundColor }
+ *             })
+ *           Usage → styles.badgeAfterBackgroundColor(badgeColor)
  *
- * Bails (returns false) for unsupported shapes: multi-slot interpolations or CSS shorthands.
+ * Returns false for shapes it cannot handle (multi-slot interpolations,
+ * theme access); callers fall through to other handlers.
  */
-function tryHandleDynamicPseudoElementViaCustomProperty(
-  args: InterpolatedDeclarationContext,
-): boolean {
-  const { ctx, d, pseudoElement, applyResolvedPropValue } = args;
-  const { state, decl, inlineStyleProps } = ctx;
-  const { j } = state;
+function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclarationContext): boolean {
+  const { ctx, d, pseudoElement, pseudos, media } = args;
+  const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
+  const { j, filePath } = state;
+  const avoidNames = new Set(state.importMap.keys());
 
-  if (!d.property || d.value.kind !== "interpolated") {
+  if (!d.property || d.value.kind !== "interpolated" || !pseudoElement) {
     return false;
   }
 
   const parts: Array<{ kind?: string }> = d.value.parts ?? [];
   const slotParts = parts.filter((p): p is { kind: "slot"; slotId: number } => p.kind === "slot");
 
-  // Bail on multi-slot values (e.g., gradients, template combos)
   if (slotParts.length !== 1) {
     return false;
   }
@@ -2353,12 +2343,10 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
     return false;
   }
 
-  // Theme-based dynamic values inside pseudo-elements cannot be handled this way
   if (hasThemeAccessInArrowFn(expr)) {
     return false;
   }
 
-  // Extract prop references and inline the arrow function body
   const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
   if (!unwrapped) {
     return false;
@@ -2366,40 +2354,73 @@ function tryHandleDynamicPseudoElementViaCustomProperty(
 
   const { expr: inlineExpr, propsUsed } = unwrapped;
 
-  // Handle static parts (prefix/suffix like `${value}px`)
   const { prefix, suffix } = extractStaticPartsForDecl(d);
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 
-  // Expand CSS declaration to StyleX longhand(s); bail on shorthands that can't
-  // be represented as a single var() value (e.g., border, margin, padding).
+  // Determine if the expression is a simple identity prop reference (e.g., just `badgeColor`)
+  // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
+  // Simple identity: pass the prop directly as jsxProp.
+  // Computed: pass the full expression as callArg to preserve the computation.
+  const isSimpleIdentity =
+    propsUsed.size === 1 &&
+    !prefix &&
+    !suffix &&
+    inlineExpr.type === "Identifier" &&
+    propsUsed.has((inlineExpr as { name: string }).name);
+
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
-  if (stylexDecls.some((out) => UNSUPPORTED_CUSTOM_PROP_SHORTHANDS.has(out.prop))) {
-    return false;
-  }
+  const pseudoLabel = pseudoElement.replace(/^:+/, "");
 
-  // Derive a pseudo-element label for the custom property name (e.g., "after", "before")
-  const pseudoLabel = pseudoElement ? pseudoElement.replace(/^:+/, "") : "";
-
-  // For each CSS output property, generate a custom property and var() reference.
-  // Bail if a custom property with the same name already exists (e.g., same property
-  // in base and @media contexts would produce duplicate keys, with last-one-wins semantics).
-  const existingPropNames = new Set(inlineStyleProps.map((p) => p.prop));
   for (const out of stylexDecls) {
     if (!out.prop) {
       continue;
     }
-    const customPropName = pseudoLabel
-      ? `--${decl.localName}-${pseudoLabel}-${out.prop}`
-      : `--${decl.localName}-${out.prop}`;
-    if (existingPropNames.has(customPropName)) {
-      return false;
+    const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
+    if (!styleFnDecls.has(fnKey)) {
+      const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+      const param = j.identifier(outParamName);
+      if (/\.(ts|tsx)$/.test(filePath)) {
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          j.tsStringKeyword(),
+        );
+      }
+      const innerValue = buildPseudoMediaPropValue({
+        j,
+        valueExpr: j.identifier(outParamName),
+        pseudos,
+        media,
+      });
+      const innerPropKey = makeCssPropKey(j, out.prop);
+      const innerProp = j.property("init", innerPropKey, innerValue) as ReturnType<
+        typeof j.property
+      > & { shorthand?: boolean };
+      if (
+        innerPropKey.type === "Identifier" &&
+        innerValue.type === "Identifier" &&
+        innerPropKey.name === (innerValue as { name: string }).name
+      ) {
+        innerProp.shorthand = true;
+      }
+      const innerObj = j.objectExpression([innerProp]);
+      const outerProp = j.property("init", j.literal(pseudoElement), innerObj);
+      const body = j.objectExpression([outerProp]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
-    applyResolvedPropValue(out.prop, `var(${customPropName})`, null);
-    inlineStyleProps.push({ prop: customPropName, expr: valueExpr });
+
+    if (isSimpleIdentity) {
+      const jsxProp = [...propsUsed][0]!;
+      styleFnFromProps.push({ fnKey, jsxProp });
+    } else {
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp: "__props" as const,
+        condition: "always" as const,
+        callArg: cloneAstNode(valueExpr) as ExpressionKind,
+      });
+    }
   }
 
-  // Mark props to not forward to DOM
   for (const propName of propsUsed) {
     ensureShouldForwardPropDrop(decl, propName);
   }
@@ -2857,18 +2878,3 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
 
   return true;
 }
-
-/** CSS shorthand properties that cannot be represented as a single var() custom property. */
-const UNSUPPORTED_CUSTOM_PROP_SHORTHANDS = new Set([
-  "border",
-  "margin",
-  "padding",
-  "background",
-  "flex",
-  "overflow",
-  "outline",
-  "borderTop",
-  "borderRight",
-  "borderBottom",
-  "borderLeft",
-]);

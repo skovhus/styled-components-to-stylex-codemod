@@ -7,35 +7,50 @@ type BadgeProps = React.PropsWithChildren<{
 
 /**
  * Test case for dynamic styles in pseudo elements (::before / ::after).
- * Uses CSS custom properties as a workaround for StyleX's limitation
- * with dynamic values inside pseudo elements.
- * See: https://github.com/facebook/stylex/issues/1396
+ * Emits a StyleX dynamic style function with pseudo-element nesting.
  */
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
 
-  const sx = stylex.props(styles.badge);
+  return <span sx={[styles.badge, styles.badgeAfterBackgroundColor(badgeColor)]}>{children}</span>;
+}
+
+type TooltipProps = React.PropsWithChildren<{
+  tipColor?: string;
+}>;
+
+// Computed interpolation inside pseudo-element: expression with fallback
+function Tooltip(props: TooltipProps) {
+  const { children, tipColor } = props;
 
   return (
-    <span
-      {...sx}
-      style={
-        {
-          ...sx.style,
-          "--Badge-after-backgroundColor": badgeColor,
-        } as React.CSSProperties
-      }
-    >
+    <div sx={[styles.tooltip, styles.tooltipBeforeBackgroundColor(tipColor || "black")]}>
       {children}
-    </span>
+    </div>
+  );
+}
+
+type ButtonProps = React.PropsWithChildren<{
+  glowColor: string;
+}>;
+
+// Dynamic pseudo-element style inside :hover context
+function Button(props: ButtonProps) {
+  const { children, glowColor } = props;
+
+  return (
+    <button sx={[styles.button, styles.buttonAfterBackgroundColor(glowColor)]}>{children}</button>
   );
 }
 
 export const App = () => (
-  <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560 }}>
     <Badge badgeColor="red">Notification</Badge>
     <Badge badgeColor="green">Online</Badge>
     <Badge badgeColor="blue">Info</Badge>
+    <Tooltip tipColor="navy">With color</Tooltip>
+    <Tooltip>Default</Tooltip>
+    <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
   </div>
 );
 
@@ -53,7 +68,49 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
-      backgroundColor: "var(--Badge-after-backgroundColor)",
     },
   },
+  badgeAfterBackgroundColor: (backgroundColor: string) => ({
+    "::after": {
+      backgroundColor,
+    },
+  }),
+  tooltip: {
+    position: "relative",
+    padding: 8,
+    "::before": {
+      content: '""',
+      position: "absolute",
+      top: -4,
+      left: "50%",
+    },
+  },
+  tooltipBeforeBackgroundColor: (backgroundColor: string) => ({
+    "::before": {
+      backgroundColor,
+    },
+  }),
+  button: {
+    paddingBlock: 8,
+    paddingInline: 16,
+    backgroundColor: "#333",
+    color: "white",
+    "::after": {
+      content: '""',
+      position: "absolute",
+      inset: 0,
+      opacity: {
+        default: 0,
+        ":hover": 1,
+      },
+    },
+  },
+  buttonAfterBackgroundColor: (backgroundColor: string) => ({
+    "::after": {
+      backgroundColor: {
+        default: null,
+        ":hover": backgroundColor,
+      },
+    },
+  }),
 });
