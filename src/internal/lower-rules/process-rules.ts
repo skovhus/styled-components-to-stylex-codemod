@@ -505,14 +505,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // For same-file no-pseudo reverse, set markerVarName on the override so
         // finalizeRelationOverrides emits stylex.when.ancestor(":is(*)", Marker).
-        const lastOverride = relationOverrides.at(-1);
-        if (
-          isNoPseudoReversePattern &&
-          !crossFileParent &&
-          lastOverride &&
-          relationOverrides.length > overrideCountBeforeReverse
-        ) {
-          lastOverride.markerVarName = reverseMarkerVarName;
+        // This must also handle pre-existing overrides (e.g., when ${Parent}:hover &
+        // created the override earlier and ${Parent} & now targets the same key).
+        if (isNoPseudoReversePattern && !crossFileParent && reverseMarkerVarName) {
+          const matchingOverride = relationOverrides.find(
+            (o) => o.overrideStyleKey === overrideStyleKey,
+          );
+          if (matchingOverride) {
+            matchingOverride.markerVarName = reverseMarkerVarName;
+          }
         }
 
         const result = processDeclarationsIntoBucket(
@@ -666,10 +667,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const combinator = crossComponentSiblingMatch[2] as "+" | "~";
 
         const referencedDecl = declByLocalName.get(otherLocal);
-        const crossFileRef = !referencedDecl
-          ? state.crossFileSelectorsByLocal.get(otherLocal)
-          : undefined;
-        if (!referencedDecl && !crossFileRef) {
+        if (!referencedDecl) {
+          // Cross-file cross-component sibling selectors are not yet supported:
+          // the marker infrastructure for imported components requires relation-override
+          // metadata that rewrite-jsx uses to patch JSX by element name. Without this,
+          // the marker would never be injected into the imported component's JSX.
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -689,9 +691,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         // Register marker for the referenced component
-        const jsxRefName = crossFileRef?.bridgeComponentLocalName ?? otherLocal;
-        const refStyleKey = referencedDecl ? referencedDecl.styleKey : toStyleKey(jsxRefName);
-        const refMarkerVarName = state.siblingMarkerNames.get(refStyleKey) ?? `${jsxRefName}Marker`;
+        const refStyleKey = referencedDecl.styleKey;
+        const refMarkerVarName = state.siblingMarkerNames.get(refStyleKey) ?? `${otherLocal}Marker`;
         state.siblingMarkerNames.set(refStyleKey, refMarkerVarName);
         state.siblingMarkerParents.add(refStyleKey);
         ancestorSelectorParents.add(refStyleKey);
@@ -727,9 +728,40 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             [j.literal(siblingPseudo), j.identifier(refMarkerVarName)],
           );
 
+        // Wrap values in media/container condition objects when inside @media/@container
+        let media = findSupportedAtRule(rule.atRuleStack);
+        if (media) {
+          const resolved = resolveMediaAtRulePlaceholders(
+            media,
+            (slotId) => decl.templateExpressions[slotId],
+            {
+              lookupImport: state.resolveImportInScope,
+              resolveValue: state.resolveValue,
+              resolveSelector: state.resolveSelector,
+              parseExpr: state.parseExpr,
+              filePath: state.filePath,
+              resolverImports: state.resolverImports,
+            },
+          );
+          if (resolved === null) {
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+          if (resolved.kind === "static") {
+            media = resolved.value;
+          } else {
+            media = undefined;
+          }
+        }
+
         for (const [prop, value] of Object.entries(sibBucket)) {
+          const siblingValue = media ? { default: null, [media]: value } : value;
           const entry = getOrCreateComputedMediaEntry(prop, ctx);
-          entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value });
+          entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
         }
         continue;
       }

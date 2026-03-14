@@ -6,7 +6,9 @@ export const App = () => (
     <a href="#" sx={[styles.link, LinkMarker]}>
       Link
     </a>
-    <span sx={styles.badge}>Badge (blue when Link is focused, adjacent sibling)</span>
+    <span sx={styles.badge}>
+      Badge (blue when Link is focused, lightyellow bg on hover at 768px+)
+    </span>
   </div>
 );
 
@@ -25,6 +27,14 @@ const styles = stylex.create({
     color: {
       default: "gray",
       [stylex.when.siblingBefore(":focus-visible", LinkMarker)]: "blue",
+    },
+    backgroundColor: {
+      default: null,
+
+      [stylex.when.siblingBefore(":hover", LinkMarker)]: {
+        default: null,
+        "@media (min-width: 768px)": "lightyellow",
+      },
     },
   },
 });

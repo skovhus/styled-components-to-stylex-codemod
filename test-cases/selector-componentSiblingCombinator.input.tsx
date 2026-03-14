@@ -17,11 +17,17 @@ const Badge = styled.span`
   ${Link}:focus-visible + & {
     color: blue;
   }
+
+  @media (min-width: 768px) {
+    ${Link}:hover + & {
+      background: lightyellow;
+    }
+  }
 `;
 
 export const App = () => (
   <div>
     <Link href="#">Link</Link>
-    <Badge>Badge (blue when Link is focused, adjacent sibling)</Badge>
+    <Badge>Badge (blue when Link is focused, lightyellow bg on hover at 768px+)</Badge>
   </div>
 );
