@@ -35,6 +35,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-top {
   syntax: "*";
   inherits: false
@@ -46,11 +51,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
   syntax: "*";
   inherits: false
 }
@@ -140,12 +140,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-flexShrink {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }

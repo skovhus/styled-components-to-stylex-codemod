@@ -1,0 +1,1 @@
+import{j as s}from"./index-K7uhVBRp.js";import{C as e}from"./cross-file-icon.styled-C0BqhMcm.js";function x(){return s.jsx("div",{style:{padding:16},children:s.jsxs("div",{className:"x1tamke2 xj4hn0o",children:[s.jsx(e,{className:"xvy4d1p xxk0z11"}),"Base only"]})})}export{x as App};
