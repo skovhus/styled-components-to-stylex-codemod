@@ -1,0 +1,1 @@
+import{j as d}from"./index-B2uPh2kr.js";const r=()=>d.jsxs("div",{style:{padding:"10px"},children:[d.jsx("div",{className:"x1kvmibo x19ypqd9 x1dtrvc8",children:"Bordered left"}),d.jsx("div",{className:"x1b4wo1g x1y0btm7 xd8ztd4",children:"Bordered box"}),d.jsx("div",{className:"x1b4wo1g x1y0btm7 x9r1u3d x1vvogim x1hr3lfm",children:"Thin border"})]});export{r as App};
