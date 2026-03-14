@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { helpers } from "./lib/helpers.stylex";
 
+// Theme-dependent mixin: theme.isDark controls the argument to the helper
 function ThemeText(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 

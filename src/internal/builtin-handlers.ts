@@ -344,9 +344,12 @@ function tryResolveArrowFnCallWithConditionalArgs(
       // Support destructured defaults when we can statically determine their truthiness.
       // Destructuring defaults only apply when the prop is `undefined`, so we must
       // preserve that distinction in the emitted condition.
+      // Skip for dotted prop names (e.g., "theme.isDark") since the default applies
+      // to the root binding, not the member access — truthiness would be semantically wrong.
       if (
         bindings.kind === "destructured" &&
         bindings.defaults &&
+        !propName.includes(".") &&
         bindings.defaults.has(propName)
       ) {
         const defaultValue = extractStaticLiteralValue(bindings.defaults.get(propName));
