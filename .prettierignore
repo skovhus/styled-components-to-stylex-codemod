@@ -1,4 +1,0 @@
-# oxfmt incorrectly adds spaces inside CSS selectors in template literals
-# (e.g. &:${expr} → &: ${expr}), which changes CSS semantics.
-test-cases/*.input.tsx
-src/__tests__/fixtures/
