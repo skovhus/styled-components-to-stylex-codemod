@@ -1,0 +1,1 @@
+import{j as x}from"./index-C5BAxBUb.js";const p=()=>x.jsx("div",{style:{padding:40},children:x.jsx("div",{className:"x1n2onr6 x1useyqa xlup9mm x1y3eh9s x1cum3z5 x1s928wv x1j6awrg x17cx49 xf8dsx9 xaaqaoq x41ep5t xitxdhh x1r5olde x1cpjm7i x1hmns74 x1wlytlt x1yd0sln xmp3d9r xcepk8r x12maryy xgwp28c",children:"Point"})});export{p as App};
