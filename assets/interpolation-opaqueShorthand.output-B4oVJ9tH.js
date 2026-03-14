@@ -1,0 +1,1 @@
+import{j as i}from"./index-By1W_MjV.js";const x=()=>i.jsx("div",{style:{display:"flex",flexDirection:"column",gap:8,padding:16},children:i.jsx("input",{placeholder:"With directional padding",className:"x1io4imo x1uhho1l x1bnciah x12peec7 xmkeg23 x1y0btm7 xtb30c9"})});export{x as App};
