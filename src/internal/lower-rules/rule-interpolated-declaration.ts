@@ -14,6 +14,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  isCssShorthandProperty,
   parseBorderShorthandParts,
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
@@ -63,6 +64,7 @@ import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { isMemberExpression } from "./utils.js";
+import { extractIndexedThemeLookupInfo } from "../builtin-handlers/resolver-utils.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
 type InterpolatedDeclarationContext = {
@@ -2283,13 +2285,105 @@ function resolveDerivedLocalVariable(
 }
 
 function isPseudoElementSelector(pseudoElement: string | null): boolean {
-  return pseudoElement === "::before" || pseudoElement === "::after";
+  return (
+    pseudoElement === "::before" || pseudoElement === "::after" || pseudoElement === "::placeholder"
+  );
 }
 
 /**
- * Handles dynamic interpolations inside ::before/::after pseudo-elements by emitting
- * a StyleX dynamic style function whose body wraps the value in the pseudo-element
- * selector.
+ * Attempts to resolve an indexed theme lookup from an arrow function expression.
+ * Pattern: `(props) => props.theme.color[props.$placeholderColor]`
+ * Returns the resolved value expression and metadata, or null if not applicable.
+ */
+function tryResolveIndexedThemeForPseudoElement(
+  expr: { type?: string },
+  state: DeclProcessingState["state"],
+): {
+  valueExpr: ExpressionKind;
+  indexPropName: string;
+  paramName: string;
+} | null {
+  const { resolveValue, resolverImports, parseExpr, api } = state;
+  const arrowExpr = expr as {
+    type?: string;
+    params?: Array<{ type?: string; name?: string }>;
+    body?: unknown;
+  };
+  if (arrowExpr.type !== "ArrowFunctionExpression") {
+    return null;
+  }
+  const paramName = arrowExpr.params?.[0]?.type === "Identifier" ? arrowExpr.params[0].name : null;
+  if (!paramName) {
+    return null;
+  }
+
+  const body = arrowExpr.body as { type?: string } | undefined;
+  if (!body || body.type !== "MemberExpression") {
+    return null;
+  }
+
+  const info = extractIndexedThemeLookupInfo(body, paramName);
+  if (!info) {
+    return null;
+  }
+
+  const resolved = resolveValue({
+    kind: "theme",
+    path: info.themeObjectPath,
+    filePath: state.filePath,
+    loc: getNodeLocStart(body as any) ?? undefined,
+  });
+  if (!resolved) {
+    return null;
+  }
+
+  // Register theme imports
+  if (resolved.imports) {
+    for (const imp of resolved.imports) {
+      resolverImports.set(
+        JSON.stringify(imp),
+        imp as typeof resolverImports extends Map<string, infer V> ? V : never,
+      );
+    }
+  }
+
+  // Build the indexed expression: resolvedExpr[paramName]
+  const resolvedExprAst = parseExpr(resolved.expr);
+  const safeParamName = buildSafeIndexedParamName(info.indexPropName, resolvedExprAst);
+  const exprSource = `(${resolved.expr})[${safeParamName}]`;
+  try {
+    const jParse = api.jscodeshift.withParser("tsx");
+    const program = jParse(`(${exprSource});`);
+    const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
+    let parsedExpr = stmt?.expression ?? null;
+    while (parsedExpr?.type === "ParenthesizedExpression") {
+      parsedExpr = (parsedExpr as { expression: ExpressionKind }).expression;
+    }
+    // Remove extra.parenthesized flag that causes recast to add parentheses
+    const exprWithExtra = parsedExpr as ExpressionKind & {
+      extra?: { parenthesized?: boolean; parenStart?: number };
+    };
+    if (exprWithExtra?.extra?.parenthesized) {
+      delete exprWithExtra.extra.parenthesized;
+      delete exprWithExtra.extra.parenStart;
+    }
+    if (!parsedExpr) {
+      return null;
+    }
+    return {
+      valueExpr: parsedExpr as ExpressionKind,
+      indexPropName: info.indexPropName,
+      paramName: safeParamName,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Handles dynamic interpolations inside pseudo-elements (::before / ::after / ::placeholder)
+ * by emitting a StyleX dynamic style function whose body wraps the value in the pseudo-element
+ * selector. Also handles indexed theme lookups (e.g., props.theme.color[props.$bg]).
  *
  * Example transform:
  *   Input:  `&::after { background-color: ${(props) => props.$badgeColor}; }`
@@ -2325,35 +2419,64 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     return false;
   }
 
-  if (hasThemeAccessInArrowFn(expr)) {
+  // For indexed theme lookups (e.g., props.theme.color[props.$bg]), resolve the theme
+  // reference and build the indexed expression so the function uses the resolved token.
+  const indexedTheme = hasThemeAccessInArrowFn(expr)
+    ? tryResolveIndexedThemeForPseudoElement(expr, state)
+    : null;
+
+  // Bail on non-indexed theme access (e.g., props.theme.color.primary) — handled elsewhere.
+  if (hasThemeAccessInArrowFn(expr) && !indexedTheme) {
     return false;
   }
 
-  const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
-  if (!unwrapped) {
+  // Bail on CSS shorthand properties for indexed theme lookups.
+  // The indexed expression produces a single value that can't be expanded to longhands.
+  if (indexedTheme && isCssShorthandProperty(d.property)) {
     return false;
   }
 
-  const { expr: inlineExpr, propsUsed } = unwrapped;
-
+  // Bail when the interpolation has surrounding static text and it's an indexed theme lookup.
+  // The indexed expression ($colors[param]) cannot be concatenated with a prefix.
   const { prefix, suffix } = extractStaticPartsForDecl(d);
+  if (indexedTheme && (prefix || suffix)) {
+    return false;
+  }
+
+  let inlineExpr: ExpressionKind;
+  let propsUsed: Set<string>;
+  let jsxProp: string;
+  let isSimpleIdentity: boolean;
+
+  if (indexedTheme) {
+    // Indexed theme: the value expression is the resolved indexed access (e.g., $colors[param]).
+    inlineExpr = indexedTheme.valueExpr;
+    propsUsed = new Set([indexedTheme.indexPropName]);
+    jsxProp = indexedTheme.indexPropName;
+    isSimpleIdentity = true;
+  } else {
+    const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+    if (!unwrapped) {
+      return false;
+    }
+    inlineExpr = unwrapped.expr;
+    propsUsed = unwrapped.propsUsed;
+    // Determine if the expression is a simple identity prop reference (e.g., just `badgeColor`)
+    // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
+    isSimpleIdentity =
+      propsUsed.size === 1 &&
+      !prefix &&
+      !suffix &&
+      inlineExpr.type === "Identifier" &&
+      propsUsed.has((inlineExpr as { name: string }).name);
+    jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
+  }
+
   const valueExpr: ExpressionKind =
     prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
 
-  // Determine if the expression is a simple identity prop reference (e.g., just `badgeColor`)
-  // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
-  // Simple identity: pass the prop directly as jsxProp.
-  // Computed: pass the full expression as callArg to preserve the computation.
-  const isSimpleIdentity =
-    propsUsed.size === 1 &&
-    !prefix &&
-    !suffix &&
-    inlineExpr.type === "Identifier" &&
-    propsUsed.has((inlineExpr as { name: string }).name);
-
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
-  const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
 
   for (const out of stylexDecls) {
     if (!out.prop) {
@@ -2361,24 +2484,39 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     }
     const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
     if (!styleFnDecls.has(fnKey)) {
-      // Use the prop name (without $) as parameter for cleaner call sites
-      // when possible: styles.badge({ badgeColor }) instead of
-      // styles.badge({ backgroundColor: badgeColor })
-      const outParamName =
-        isSimpleIdentity && jsxProp.startsWith("$")
+      // Build parameter name — for indexed theme use the resolved param name,
+      // for simple identity use the prop name (without $) for cleaner call sites.
+      const outParamName = indexedTheme
+        ? indexedTheme.paramName
+        : isSimpleIdentity && jsxProp.startsWith("$")
           ? jsxProp.slice(1)
           : cssPropertyToIdentifier(out.prop, avoidNames);
       const param = j.identifier(outParamName);
-      if (isSimpleIdentity && jsxProp !== "__props") {
+
+      if (indexedTheme) {
+        // Use the JSX prop's own type annotation (e.g., Color) when available.
+        const propTsType = ctx.findJsxPropTsType(jsxProp);
+        (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+          propTsType && typeof propTsType === "object" && (propTsType as { type?: string }).type
+            ? (propTsType as ReturnType<typeof j.tsStringKeyword>)
+            : j.tsStringKeyword(),
+        );
+      } else if (isSimpleIdentity && jsxProp !== "__props") {
         ctx.annotateParamFromJsxProp(param, jsxProp);
       } else if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
           j.tsStringKeyword(),
         );
       }
+
+      // For indexed theme, use the resolved indexed expression directly.
+      // For other cases, use the parameter name (potentially wrapped with pseudo/media).
+      const innerValueExpr = indexedTheme
+        ? (cloneAstNode(indexedTheme.valueExpr) as ExpressionKind)
+        : j.identifier(outParamName);
       const innerValue = buildPseudoMediaPropValue({
         j,
-        valueExpr: j.identifier(outParamName),
+        valueExpr: innerValueExpr,
         pseudos,
         media,
       });
@@ -2400,7 +2538,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     }
 
     if (isSimpleIdentity) {
-      const isOptional = ctx.isJsxPropOptional(jsxProp);
+      const isOptional = indexedTheme ? false : ctx.isJsxPropOptional(jsxProp);
       styleFnFromProps.push({
         fnKey,
         jsxProp,

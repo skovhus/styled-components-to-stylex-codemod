@@ -5210,3 +5210,51 @@ export const App = () => <Box $depth={2}>Content</Box>;
     expect(result.code).toContain("props.depth * 16 + 4");
   });
 });
+
+describe("indexed theme lookup shorthand safety", () => {
+  it("should not emit CSS shorthand properties in indexed theme style functions", () => {
+    const source = `
+import styled from "styled-components";
+
+type Spacing = "sm" | "md";
+
+const Pill = styled.span<{ $spacing: Spacing }>\`
+  display: inline-block;
+
+  &::after {
+    content: "";
+    display: block;
+    padding: \${(props) => props.theme.spacing[props.$spacing]};
+  }
+\`;
+
+export const App = () => <Pill $spacing="sm">Content</Pill>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    // The codemod should NOT emit "padding" as a shorthand in the style function.
+    // It should either expand to longhands or bail on the indexed theme path.
+    if (result.code) {
+      expect(result.code).not.toMatch(/\bpadding:/);
+    }
+  });
+
+  it("should not emit CSS shorthand properties in indexed theme style functions without pseudo-element", () => {
+    const source = `
+import styled from "styled-components";
+
+type Spacing = "sm" | "md";
+
+const Box = styled.div<{ $spacing: Spacing }>\`
+  padding: \${(props) => props.theme.spacing[props.$spacing]};
+\`;
+
+export const App = () => <Box $spacing="sm">Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    // The codemod should NOT emit "padding" as a shorthand in the style function.
+    // Bailing (code === null) is also acceptable — better than emitting invalid StyleX.
+    if (result.code) {
+      expect(result.code).not.toMatch(/\bpadding:/);
+    }
+  });
+});

@@ -73,6 +73,26 @@ function Button(props: ButtonProps) {
   );
 }
 
+// Indexed theme lookup in ::placeholder pseudo-element
+type PlaceholderColor = "labelBase" | "labelMuted";
+
+type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Pick<
+  React.ComponentProps<"input">,
+  "placeholder"
+>;
+
+function DynamicPlaceholder(props: DynamicPlaceholderProps) {
+  const { placeholderColor, ...rest } = props;
+  return (
+    <input
+      {...rest}
+      sx={styles.dynamicPlaceholder({
+        placeholderColor,
+      })}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
     <Badge badgeColor="red">Notification</Badge>
@@ -84,6 +104,8 @@ export const App = () => (
     <Tag>No color</Tag>
     <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
     <input placeholder="Muted placeholder" sx={styles.input} />
+    <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
+    <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
   </div>
 );
 
@@ -109,9 +131,8 @@ const styles = stylex.create({
     padding: 8,
     "::before": {
       content: '""',
-      position: "absolute",
-      top: -4,
-      left: "50%",
+      display: "block",
+      height: 3,
       backgroundColor: props.backgroundColor,
     },
   }),
@@ -132,14 +153,15 @@ const styles = stylex.create({
     },
   }),
   button: (props: { glowColor: string }) => ({
+    position: "relative",
     paddingBlock: 8,
     paddingInline: 16,
     backgroundColor: "#333",
     color: "white",
     "::after": {
       content: '""',
-      position: "absolute",
-      inset: 0,
+      display: "block",
+      height: 3,
       opacity: {
         default: 0,
         ":hover": 1,
@@ -161,4 +183,13 @@ const styles = stylex.create({
       color: $colors.labelMuted,
     },
   },
+  dynamicPlaceholder: (props: { placeholderColor: PlaceholderColor }) => ({
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
+    "::placeholder": {
+      color: $colors[props.placeholderColor],
+    },
+  }),
 });

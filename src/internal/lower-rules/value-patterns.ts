@@ -4,7 +4,7 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations, isCssShorthandProperty } from "../css-prop-mapping.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
@@ -572,11 +572,22 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (!d.property) {
       return false;
     }
-    // Skip media/attr buckets for now; these require more complex wiring.
-    // Also skip pseudo-elements: dynamic style functions inside pseudo-elements
-    // generate invalid @property rules in StyleX.
-    // See: https://github.com/facebook/stylex/issues/1396
+    // Bail on CSS shorthand properties (padding, margin, border, background).
+    // The indexed theme expression emits a single value which can't be expanded
+    // into longhand properties, and StyleX forbids shorthands.
+    if (isCssShorthandProperty(d.property)) {
+      return false;
+    }
+    // Skip media/attr/pseudo-element buckets — pseudo-elements are handled by
+    // tryHandleDynamicPseudoElementStyleFunction which produces merged output.
     if (opts.media || opts.attrTarget || opts.pseudoElement) {
+      return false;
+    }
+    // Bail when the interpolation has surrounding static text (e.g., "0 0 4px ${...}").
+    // The indexed theme expression ($colors[param]) cannot be concatenated with a prefix
+    // in a StyleX-compatible way, so let downstream handlers deal with it.
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
+    if (prefix || suffix) {
       return false;
     }
     const parts = d.value.parts ?? [];
@@ -677,17 +688,9 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
       if (!styleFnDecls.has(fnKey)) {
-        // Build expression: resolvedExpr[indexPropName]
-        // NOTE: This is TypeScript-only syntax (TSAsExpression + `keyof typeof`),
-        // so we parse it explicitly with a TSX parser here rather than relying on
-        // the generic `parseExpr` helper.
         const resolvedExprAst = parseExpr(resolved.expr);
         const paramName = buildSafeIndexedParamName(indexPropName, resolvedExprAst);
         const indexedExprAst = (() => {
-          // We intentionally do NOT add `as keyof typeof themeVars` fallbacks.
-          // If a fixture uses a `string` key to index theme colors, it should be fixed at the
-          // input/type level to use a proper key union (e.g. `Colors`), and the output should
-          // reflect that contract.
           const exprSource = `(${resolved.expr})[${paramName}]`;
           try {
             const jParse = api.jscodeshift.withParser("tsx");
@@ -697,7 +700,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
             while (expr?.type === "ParenthesizedExpression") {
               expr = expr.expression;
             }
-            // Remove extra.parenthesized flag that causes recast to add parentheses
             const exprWithExtra = expr as ExpressionKind & {
               extra?: { parenthesized?: boolean; parenStart?: number };
             };
@@ -722,31 +724,27 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         }
 
         const param = j.identifier(paramName);
-        // Prefer the prop's own type when available (e.g. `Color` / `Colors`) so we don't end up with
-        // `keyof typeof themeVars` in fixture outputs.
         const propTsType = findJsxPropTsType(indexPropName);
         (param as any).typeAnnotation = j.tsTypeAnnotation(
           (propTsType && typeof propTsType === "object" && (propTsType as any).type
             ? (propTsType as any)
             : j.tsStringKeyword()) as any,
         );
-        if (opts.pseudos?.length) {
-          const pseudoEntries = [
-            j.property("init", j.identifier("default"), j.literal(null)),
-            ...opts.pseudos.map((ps) => j.property("init", j.literal(ps), indexedExprAst as any)),
-          ];
-          const propValue = j.objectExpression(pseudoEntries);
-          styleFnDecls.set(
-            fnKey,
-            j.arrowFunctionExpression(
-              [param],
-              j.objectExpression([j.property("init", j.identifier(out.prop), propValue) as any]),
-            ),
-          );
-        } else {
-          const p = j.property("init", j.identifier(out.prop), indexedExprAst as any) as any;
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
-        }
+        // Build the inner property value, handling pseudo-class nesting
+        const innerValue = opts.pseudos?.length
+          ? j.objectExpression([
+              j.property("init", j.identifier("default"), j.literal(null)),
+              ...opts.pseudos.map((ps) => j.property("init", j.literal(ps), indexedExprAst as any)),
+            ])
+          : (indexedExprAst as any);
+
+        styleFnDecls.set(
+          fnKey,
+          j.arrowFunctionExpression(
+            [param],
+            j.objectExpression([j.property("init", j.identifier(out.prop), innerValue) as any]),
+          ),
+        );
       }
     }
 
