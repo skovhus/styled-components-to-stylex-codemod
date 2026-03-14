@@ -37,11 +37,12 @@ const styles = stylex.create({
     paddingInline: 8,
     color: {
       default: "gray",
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":focus-visible", LinkMarker)]: "blue",
     },
     backgroundColor: {
       default: null,
-
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":hover", LinkMarker)]: {
         default: null,
         "@media (min-width: 768px)": "lightyellow",

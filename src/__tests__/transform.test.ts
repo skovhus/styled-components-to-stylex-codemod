@@ -667,7 +667,7 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(7);
   });
 
-  it("should emit info warning for & + & (adjacent sibling broadens to general)", () => {
+  it("should emit NOTE comment for & + & (adjacent sibling broadens to general)", () => {
     const source = `
 import styled from "styled-components";
 
@@ -688,15 +688,18 @@ export const App = () => <Thing />;
     );
 
     expect(result.code).not.toBeNull();
-    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
-    expect(infoWarnings).toHaveLength(1);
-    expect(infoWarnings[0]).toMatchObject({
-      severity: "info",
-      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
-    });
+    // No info warning — the broadening note is emitted as a code comment instead
+    const infoWarnings = result.warnings.filter(
+      (w) => w.severity === "info" && w.type.includes("Sibling selector broadened"),
+    );
+    expect(infoWarnings).toHaveLength(0);
+    // The output should contain a NOTE comment about the broadening
+    expect(result.code).toContain(
+      "// NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+    );
   });
 
-  it("should NOT emit info warning for & ~ & (general sibling is exact match)", () => {
+  it("should NOT emit NOTE comment for & ~ & (general sibling is exact match)", () => {
     const source = `
 import styled from "styled-components";
 
@@ -717,8 +720,12 @@ export const App = () => <Thing />;
     );
 
     expect(result.code).not.toBeNull();
-    const infoWarnings = result.warnings.filter((w) => w.severity === "info");
+    const infoWarnings = result.warnings.filter(
+      (w) => w.severity === "info" && w.type.includes("Sibling selector broadened"),
+    );
     expect(infoWarnings).toHaveLength(0);
+    // No NOTE comment for general sibling — it's an exact match
+    expect(result.code).not.toContain("NOTE: CSS `+`");
   });
 
   it("should emit info warning when transient props are renamed on exported component", () => {

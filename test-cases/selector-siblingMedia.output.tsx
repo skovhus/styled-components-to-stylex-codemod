@@ -19,7 +19,7 @@ const styles = stylex.create({
     padding: 8,
     marginTop: {
       default: null,
-
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: {
         default: null,
         "@media (min-width: 768px)": 16,

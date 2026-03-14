@@ -84,6 +84,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       (merged as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
         keyExpr: e.keyExpr,
         value: e.value,
+        leadingComment: e.leadingComment,
       }));
     } else {
       // No existing map, create a new nested object with default and __computedKeys
@@ -91,6 +92,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       (nested as Record<string, unknown>).__computedKeys = entry.entries.map((e) => ({
         keyExpr: e.keyExpr,
         value: e.value,
+        leadingComment: e.leadingComment,
       }));
       styleObj[prop] = nested;
     }

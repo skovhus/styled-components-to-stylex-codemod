@@ -37,24 +37,28 @@ const styles = stylex.create({
   thing: {
     color: {
       default: "blue",
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "red",
     },
     paddingBlock: 8,
     paddingInline: 16,
     backgroundColor: {
       default: null,
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "lime",
     },
   },
   thingThemed: {
     color: {
       default: "blue",
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":is(*)", ThingThemedMarker)]: $colors.labelBase,
     },
   },
   row: {
     marginTop: {
       default: null,
+      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
       [stylex.when.siblingBefore(":is(*)", RowMarker)]: 16,
     },
   },

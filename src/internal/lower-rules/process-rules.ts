@@ -681,14 +681,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        // Emit info warning for `+` since adjacent becomes general sibling
-        if (combinator === "+") {
-          warnings.push({
-            severity: "info",
-            type: "Sibling selector broadened: + (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-          });
-        }
+        // Track adjacent combinator so we can annotate the emitted computed keys
+        const isAdjacentCombinator = combinator === "+";
 
         // Register marker for the referenced component
         const refStyleKey = referencedDecl.styleKey;
@@ -769,7 +763,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         for (const [prop, value] of Object.entries(sibBucket)) {
           const siblingValue = media ? { default: null, [media]: value } : value;
           const entry = getOrCreateComputedMediaEntry(prop, ctx);
-          entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+          entry.entries.push({
+            keyExpr: makeSiblingKeyExpr(),
+            value: siblingValue,
+            ...(isAdjacentCombinator && {
+              leadingComment:
+                "NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+            }),
+          });
         }
         continue;
       }
@@ -2078,15 +2079,8 @@ function handleSiblingSelector(
   const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
     state;
 
-  // Emit info warning for `& + &` since adjacent becomes general sibling
+  // Track adjacent combinator so we can annotate the emitted computed keys
   const isAdjacent = /\+/.test(selector);
-  if (isAdjacent) {
-    warnings.push({
-      severity: "info",
-      type: "Sibling selector broadened: & + & (adjacent) becomes general sibling (~) in StyleX — interleaved non-matching elements will no longer block the match",
-      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-    });
-  }
 
   // Add to ancestorSelectorParents so the marker is injected into stylex.props() calls.
   // Also add to siblingMarkerParents to distinguish from forward/reverse selectors —
@@ -2176,7 +2170,13 @@ function handleSiblingSelector(
   for (const [prop, value] of Object.entries(bucket)) {
     const siblingValue = media ? { default: null, [media]: value } : value;
     const entry = getOrCreateComputedMediaEntry(prop, ctx);
-    entry.entries.push({ keyExpr: makeSiblingKeyExpr(), value: siblingValue });
+    entry.entries.push({
+      keyExpr: makeSiblingKeyExpr(),
+      value: siblingValue,
+      ...(isAdjacent && {
+        leadingComment: "NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+      }),
+    });
   }
 }
 
