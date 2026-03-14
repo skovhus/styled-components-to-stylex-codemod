@@ -573,10 +573,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return false;
     }
     // Skip media/attr buckets for now; these require more complex wiring.
-    // Also skip pseudo-elements: dynamic style functions inside pseudo-elements
-    // generate invalid @property rules in StyleX.
-    // See: https://github.com/facebook/stylex/issues/1396
-    if (opts.media || opts.attrTarget || opts.pseudoElement) {
+    if (opts.media || opts.attrTarget) {
       return false;
     }
     const parts = d.value.parts ?? [];
@@ -670,10 +667,14 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       };
 
       const firstPseudo = opts.pseudos?.[0];
+      const pseudoElementLabel = opts.pseudoElement ? pseudoSuffix(opts.pseudoElement) : "";
+      const baseFnKey = opts.pseudoElement
+        ? styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoElementLabel), out.prop)
+        : styleKeyWithSuffix(decl.styleKey, out.prop);
       const fnKey =
         opts.pseudos?.length && firstPseudo
-          ? `${styleKeyWithSuffix(decl.styleKey, out.prop)}${pseudoSuffix(firstPseudo)}`
-          : styleKeyWithSuffix(decl.styleKey, out.prop);
+          ? `${baseFnKey}${pseudoSuffix(firstPseudo)}`
+          : baseFnKey;
       styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
       if (!styleFnDecls.has(fnKey)) {
@@ -730,23 +731,24 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
             ? (propTsType as any)
             : j.tsStringKeyword()) as any,
         );
-        if (opts.pseudos?.length) {
-          const pseudoEntries = [
-            j.property("init", j.identifier("default"), j.literal(null)),
-            ...opts.pseudos.map((ps) => j.property("init", j.literal(ps), indexedExprAst as any)),
-          ];
-          const propValue = j.objectExpression(pseudoEntries);
-          styleFnDecls.set(
-            fnKey,
-            j.arrowFunctionExpression(
-              [param],
-              j.objectExpression([j.property("init", j.identifier(out.prop), propValue) as any]),
-            ),
-          );
-        } else {
-          const p = j.property("init", j.identifier(out.prop), indexedExprAst as any) as any;
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
-        }
+        // Build the inner property value, handling pseudo-class nesting
+        const innerValue = opts.pseudos?.length
+          ? j.objectExpression([
+              j.property("init", j.identifier("default"), j.literal(null)),
+              ...opts.pseudos.map((ps) => j.property("init", j.literal(ps), indexedExprAst as any)),
+            ])
+          : (indexedExprAst as any);
+
+        const innerProp = j.property("init", j.identifier(out.prop), innerValue) as any;
+
+        // Wrap in pseudo-element nesting when needed (e.g., "::placeholder": { color: ... })
+        const body = opts.pseudoElement
+          ? j.objectExpression([
+              j.property("init", j.literal(opts.pseudoElement), j.objectExpression([innerProp])),
+            ])
+          : j.objectExpression([innerProp]);
+
+        styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
       }
     }
 

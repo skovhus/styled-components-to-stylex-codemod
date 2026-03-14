@@ -73,6 +73,24 @@ function Button(props: ButtonProps) {
   );
 }
 
+// Indexed theme lookup in ::placeholder pseudo-element
+type PlaceholderColor = "labelBase" | "labelMuted";
+
+type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Pick<
+  React.ComponentProps<"input">,
+  "placeholder"
+>;
+
+function DynamicPlaceholder(props: DynamicPlaceholderProps) {
+  const { placeholderColor, ...rest } = props;
+  return (
+    <input
+      {...rest}
+      sx={[styles.dynamicPlaceholder, styles.dynamicPlaceholderPlaceholderColor(placeholderColor)]}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
     <Badge badgeColor="red">Notification</Badge>
@@ -84,6 +102,8 @@ export const App = () => (
     <Tag>No color</Tag>
     <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
     <input placeholder="Muted placeholder" sx={styles.input} />
+    <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
+    <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
   </div>
 );
 
@@ -161,4 +181,15 @@ const styles = stylex.create({
       color: $colors.labelMuted,
     },
   },
+  dynamicPlaceholder: {
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
+  },
+  dynamicPlaceholderPlaceholderColor: (placeholderColor: PlaceholderColor) => ({
+    "::placeholder": {
+      color: $colors[placeholderColor],
+    },
+  }),
 });
