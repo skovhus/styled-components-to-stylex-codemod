@@ -17,7 +17,6 @@ export function StyledInput<C extends React.ElementType = "input">(
   },
 ) {
   const { as: Component = "input", className, children, style, sx, ...rest } = props;
-
   return (
     <Component {...rest} {...mergedSx([styles.input, sx], className, style)}>
       {children}

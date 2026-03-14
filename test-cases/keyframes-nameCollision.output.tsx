@@ -4,7 +4,6 @@ import * as stylex from "@stylexjs/stylex";
 
 export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;
-
   return (
     <div {...rest} sx={styles.move}>
       {children}

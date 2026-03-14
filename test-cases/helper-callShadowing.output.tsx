@@ -13,7 +13,6 @@ function createThemedComponents() {
   // The codemod should preserve the shadowed call via inline style fallback.
   function ThemedBox(props: React.ComponentProps<"div">) {
     const { className, children, style } = props;
-
     return (
       <div
         className={className}

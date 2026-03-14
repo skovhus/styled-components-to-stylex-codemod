@@ -8,7 +8,6 @@ type SpacedRowProps = {
 
 export function SpacedRow(props: SpacedRowProps) {
   const { children, align, justify, ...rest } = props;
-
   return (
     <div
       {...rest}

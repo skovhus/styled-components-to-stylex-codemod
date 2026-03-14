@@ -3,7 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 
 function StyleBox(props) {
   const { children, appearance } = props;
-
   return <div sx={[styles.styleBox, appearanceVariants[appearance]]}>{children}</div>;
 }
 

@@ -9,7 +9,6 @@ function ListRow(
   }>,
 ) {
   const { children, ...rest } = props;
-
   return (
     <div {...rest} sx={styles.listRow}>
       {children}

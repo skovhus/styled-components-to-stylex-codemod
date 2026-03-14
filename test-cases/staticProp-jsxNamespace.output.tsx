@@ -33,7 +33,6 @@ BaseMenu.Separator = () => (
 
 function StyledMenu(props: Omit<React.ComponentPropsWithRef<typeof BaseMenu>, "style">) {
   const { className, ...rest } = props;
-
   return <BaseMenu {...rest} {...mergedSx(styles.menu, className)} />;
 }
 

@@ -17,7 +17,6 @@ function Base<C extends React.ElementType = "div">(
     Omit<React.ComponentPropsWithRef<C>, keyof SharedProps> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
   const { as: Component = "div", className, children, style, sx, gap, column, ...rest } = props;
-
   return (
     <Component
       {...rest}
@@ -37,7 +36,6 @@ export function Wrapper(
   props: SharedProps & Omit<React.ComponentPropsWithRef<"div">, keyof SharedProps | "className">,
 ) {
   const { children, style, ...rest } = props;
-
   return (
     <Base {...rest} {...mergedSx(styles.wrapper, undefined, style)}>
       {children}
@@ -57,7 +55,6 @@ export function Button(
     Omit<React.ComponentProps<"button">, "className" | "style">,
 ) {
   const { children, size, variant, ...rest } = props;
-
   return (
     <button
       {...rest}

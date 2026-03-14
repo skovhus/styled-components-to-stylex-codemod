@@ -14,7 +14,6 @@ export function ColorBadge(
   props: Props & Omit<React.ComponentProps<"div">, "className" | "style">,
 ) {
   const { children, hollow, color, size = "normal", ...rest } = props;
-
   return (
     <div
       {...rest}

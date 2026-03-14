@@ -18,7 +18,6 @@ const Link = ({
 
 function StyledLink(props: Omit<React.ComponentPropsWithRef<typeof Link>, "style">) {
   const { className, children, ...rest } = props;
-
   return (
     <Link {...rest} {...mergedSx(styles.link, className)}>
       {children}

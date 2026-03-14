@@ -12,7 +12,6 @@ type StripProps = {
 
 export function Strip(props: StripProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, enabled, column, ...rest } = props;
-
   return (
     <div
       {...rest}

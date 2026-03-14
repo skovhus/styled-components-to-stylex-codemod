@@ -18,7 +18,6 @@ type FadeInContainerProps = React.PropsWithChildren<{
 
 function FadeInContainer(props: FadeInContainerProps) {
   const { children, fadeInDuration } = props;
-
   return (
     <span
       sx={[

@@ -8,7 +8,6 @@ type ContainerProps = {
 
 export function Container(props: ContainerProps) {
   const { children, size, padding, ...rest } = props;
-
   return (
     <div
       {...rest}

@@ -4,7 +4,6 @@ import { helpers } from "./lib/helpers.stylex";
 
 export function GradientText(props: Pick<React.ComponentProps<"span">, "ref" | "children">) {
   const { children, ...rest } = props;
-
   return (
     <span {...rest} sx={[helpers.gradient, styles.gradientText]}>
       {children}

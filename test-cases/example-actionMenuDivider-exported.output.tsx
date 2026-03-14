@@ -9,7 +9,6 @@ export function TextDividerContainer(
   props: Pick<React.ComponentProps<"div">, "className" | "style" | "ref" | "children">,
 ) {
   const { className, children, style, ...rest } = props;
-
   return (
     <div {...rest} {...mergedSx(styles.textDividerContainer, className, style)}>
       {children}

@@ -8,7 +8,6 @@ type DividerProps = {
 // Styled hr
 function Divider(props: DividerProps) {
   const { color } = props;
-
   return <hr sx={[styles.divider, color != null && styles.dividerBackgroundColor(color)]} />;
 }
 

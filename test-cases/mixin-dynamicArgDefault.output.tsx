@@ -10,7 +10,6 @@ type TitleTextProps = React.PropsWithChildren<{
 // omitted $oneLine uses the default true branch.
 function TitleText(props: TitleTextProps) {
   const { children, oneLine = true } = props;
-
   return (
     <div
       sx={[styles.titleText, oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2)]}
@@ -28,7 +27,6 @@ type ColorTitleTextProps = React.PropsWithChildren<{
 // must not be hoisted globally (it would change the second interpolation semantics).
 function ColorTitleText(props: ColorTitleTextProps) {
   const { children, oneLine } = props;
-
   return (
     <div
       sx={[

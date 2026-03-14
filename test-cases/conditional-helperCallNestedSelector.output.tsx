@@ -11,7 +11,6 @@ type TextProps = React.PropsWithChildren<{
 // and wrap them in the pseudo selector context.
 function Text(props: TextProps) {
   const { children, truncate } = props;
-
   return <p sx={[styles.text, truncate && styles.textTruncate]}>{children}</p>;
 }
 

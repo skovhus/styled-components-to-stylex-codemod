@@ -11,7 +11,6 @@ type DropZoneProps = React.PropsWithChildren<{
 
 export function DropZone(props: DropZoneProps) {
   const { children, isDraggingOver, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]}>
       {children}

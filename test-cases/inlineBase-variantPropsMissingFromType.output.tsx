@@ -10,7 +10,6 @@ type HeaderProps = React.PropsWithChildren<{
 
 function Header(props: HeaderProps) {
   const { children, align, gap, justify, isCompact } = props;
-
   return (
     <div
       sx={[

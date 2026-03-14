@@ -10,7 +10,6 @@ type BadgeProps = { size: BadgeSize } & Omit<React.ComponentProps<"span">, "clas
 
 export function Badge(props: BadgeProps) {
   const { children, size, ...rest } = props;
-
   return (
     <span {...rest} sx={[styles.badge, size === "micro" && styles.badgeSizeMicro]}>
       {children}

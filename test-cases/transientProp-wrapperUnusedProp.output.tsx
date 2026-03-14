@@ -10,7 +10,6 @@ type ScrollableProps<C extends React.ElementType = "div"> = Omit<
 
 export function Scrollable<C extends React.ElementType = "div">(props: ScrollableProps) {
   const { as: Component = "div", className, children, style, sx, applyBackground, ...rest } = props;
-
   return (
     <Component
       {...rest}
@@ -33,7 +32,6 @@ type ScrollableDivProps = Pick<React.ComponentProps<"div">, "ref" | "children"> 
 // Without explicit type param, it inherits the prop from the base component.
 export function ScrollableDiv(props: ScrollableDivProps) {
   const { children, applyBackground, ...rest } = props;
-
   return (
     <div
       {...rest}

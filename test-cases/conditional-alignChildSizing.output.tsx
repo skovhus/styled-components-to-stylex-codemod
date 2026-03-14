@@ -12,7 +12,6 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { children, style, align } = props;
-
   return (
     <div
       {...mergedSx(

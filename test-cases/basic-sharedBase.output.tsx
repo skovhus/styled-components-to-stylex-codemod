@@ -33,7 +33,6 @@ function PositionBase<C extends React.ElementType = "div">(
     left,
     ...rest
   } = props;
-
   return (
     <Component
       {...rest}

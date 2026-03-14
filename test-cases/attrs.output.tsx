@@ -17,7 +17,6 @@ type InputProps = {
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
   const { padding, small, ...rest } = props;
-
   return (
     <input
       size={small ? 5 : undefined}
@@ -39,7 +38,6 @@ export function TextInput(
   props: TextInputProps & Omit<React.ComponentProps<"input">, "className" | "style">,
 ) {
   const { allowPMAutofill, ...rest } = props;
-
   return <input data-1p-ignore={allowPMAutofill !== true} {...rest} sx={styles.textInput} />;
 }
 
@@ -54,7 +52,6 @@ interface BackgroundProps extends Omit<
 
 export function Background(props: BackgroundProps) {
   const { children, loaded, ...rest } = props;
-
   return (
     <Flex
       {...rest}
@@ -78,7 +75,6 @@ interface ScrollableProps extends Omit<
 
 export function Scrollable(props: ScrollableProps) {
   const { children, tabIndex, ...rest } = props;
-
   return (
     <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollable)}>
       {children}
@@ -97,7 +93,6 @@ type TypeAliasProps = {
 
 export function ScrollableWithType(props: TypeAliasProps) {
   const { children, $applyBackground, tabIndex, ...rest } = props;
-
   return (
     <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollableWithType)}>
       {children}
@@ -117,7 +112,6 @@ interface FocusableProps extends Omit<
 
 export function FocusableScroll(props: FocusableProps) {
   const { children, focusIndex, ...rest } = props;
-
   return (
     <Flex
       tabIndex={focusIndex ?? 0}
@@ -135,7 +129,6 @@ export function FocusableScroll(props: FocusableProps) {
 // that destructures the referenced prop and applies the default value
 function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, tabIndex, ...rest } = props;
-
   return (
     <div tabIndex={tabIndex ?? 0} {...rest} sx={styles.box}>
       {children}
@@ -149,7 +142,6 @@ type AlignedFlexProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "classNam
 // Verifies no duplication when attrName === jsxProp and prop is in baseExplicitProps
 export function AlignedFlex(props: AlignedFlexProps) {
   const { children, column, ...rest } = props;
-
   return (
     <Flex column={column ?? true} {...rest} {...stylex.props(styles.alignedFlex)}>
       {children}
@@ -165,7 +157,6 @@ type DynamicHeightBoxProps = React.PropsWithChildren<{
 // The dynamic inline styles should be preserved as inline style prop
 function DynamicHeightBox(props: DynamicHeightBoxProps) {
   const { children, height } = props;
-
   return (
     <div
       sx={[

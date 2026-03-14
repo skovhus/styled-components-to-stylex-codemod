@@ -12,7 +12,6 @@ import { $colors } from "./tokens.stylex";
 
 export function ContainerLink(props: Omit<React.ComponentProps<"a">, "className" | "style">) {
   const { children, ...rest } = props;
-
   return (
     <a {...rest} sx={stylex.defaultMarker()}>
       {children}
