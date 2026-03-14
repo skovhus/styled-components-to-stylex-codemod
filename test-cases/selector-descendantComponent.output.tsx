@@ -79,6 +79,7 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
+      // eslint-disable-next-line stylex/valid-styles -- numeric outlineOffset is valid
       [stylex.when.ancestor(":focus-visible")]: 5,
     },
   },

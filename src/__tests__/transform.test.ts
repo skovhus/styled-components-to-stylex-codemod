@@ -219,7 +219,13 @@ function runTransformWithDiagnostics(
  * Normalize code for comparison using oxfmt formatter
  */
 async function normalizeCode(code: string, filePath: string = "test.tsx"): Promise<string> {
-  const { code: formatted } = await format(filePath, code);
+  // Strip eslint-disable comments so .output.tsx files can annotate
+  // stylex plugin false positives without affecting codemod comparison
+  const stripped = code
+    .replace(/^\s*\/[/*] eslint-(?:disable|enable).*\n/gm, "")
+    .replace(/ \/\/ eslint-disable.*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
+  const { code: formatted } = await format(filePath, stripped);
   return formatted;
 }
 

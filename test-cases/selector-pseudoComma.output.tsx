@@ -41,7 +41,9 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
+      // eslint-disable-next-line stylex/valid-styles -- numeric outlineOffset is valid
       ":active": 2,
+      // eslint-disable-next-line stylex/valid-styles -- numeric outlineOffset is valid
       ":focus-visible": 2,
     },
   },

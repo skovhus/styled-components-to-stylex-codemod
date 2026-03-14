@@ -82,6 +82,7 @@ const styles = stylex.create({
     animationDuration: "2000ms",
     animationIterationCount: "infinite",
     animationTimingFunction: "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     animationDelay: props.animationDelay,
   }),
   styledLoaderCaret: {

@@ -30,6 +30,7 @@ const styles = stylex.create({
     width: 50,
   },
   boxBoxShadow: (boxShadow: string) => ({
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     boxShadow: shadow(boxShadow),
   }),
 });

@@ -60,6 +60,7 @@ export const App = () => (
 const styles = stylex.create({
   button: (props: { color: string | undefined }) => ({
     height: 100,
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     color: props.color,
   }),
   linkFontSize: (fontSize: string) => ({

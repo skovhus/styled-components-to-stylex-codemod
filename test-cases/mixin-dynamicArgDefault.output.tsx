@@ -60,6 +60,7 @@ const styles = stylex.create({
   },
   colorTitleText: (props: { color: string | undefined }) => ({
     lineHeight: "1rem",
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     color: props.color,
   }),
 });

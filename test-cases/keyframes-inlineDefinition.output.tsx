@@ -91,6 +91,7 @@ const styles = stylex.create({
     padding: 20,
   },
   circle: {
+    // eslint-disable-next-line stylex/valid-styles -- numeric strokeDasharray is valid
     strokeDasharray: 100,
     strokeDashoffset: 100,
   },

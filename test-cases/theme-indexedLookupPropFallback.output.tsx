@@ -32,6 +32,7 @@ const styles = stylex.create({
     fontWeight: 500,
   },
   viewBackgroundColor: (backgroundColor: Color) => ({
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     backgroundColor: $colors[backgroundColor] || `${backgroundColor}`,
   }),
 });

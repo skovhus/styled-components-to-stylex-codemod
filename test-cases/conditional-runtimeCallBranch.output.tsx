@@ -36,6 +36,7 @@ const styles = stylex.create({
   cardContainer: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 12,
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     backgroundColor: props.backgroundColor,
   }),
 });

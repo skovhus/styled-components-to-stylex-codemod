@@ -16,7 +16,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const testCasesDir = join(__dirname, "..", "..", "test-cases");
 
 async function normalizeCode(code: string): Promise<string> {
-  const { code: formatted } = await format("test.tsx", code);
+  // Strip eslint-disable comments so .output.tsx files can annotate
+  // stylex plugin false positives without affecting codemod comparison
+  const stripped = code
+    .replace(/^\s*\/[/*] eslint-(?:disable|enable).*\n/gm, "")
+    .replace(/ \/\/ eslint-disable.*$/gm, "");
+  const { code: formatted } = await format("test.tsx", stripped);
   return formatted.replace(/\n{3,}/g, "\n\n").trim();
 }
 

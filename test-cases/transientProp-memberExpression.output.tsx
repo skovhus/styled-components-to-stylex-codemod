@@ -65,6 +65,7 @@ const styles = stylex.create({
   },
   highlightedAvatar: (props: { boxShadow: string }) => ({
     borderRadius: "50%",
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     boxShadow: props.boxShadow,
   }),
 });

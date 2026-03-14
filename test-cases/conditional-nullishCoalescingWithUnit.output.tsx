@@ -32,6 +32,7 @@ const styles = stylex.create({
     transitionProperty: "opacity",
     transitionDuration: "200ms",
     transitionTimingFunction: "ease-out",
+    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     transitionDelay: props.transitionDelay,
   }),
 });

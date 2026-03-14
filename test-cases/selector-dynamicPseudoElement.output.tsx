@@ -86,6 +86,7 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
+      // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
       backgroundColor: props.badgeColor,
     },
   }),
@@ -97,6 +98,7 @@ const styles = stylex.create({
       position: "absolute",
       top: -4,
       left: "50%",
+      // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
       backgroundColor: props.backgroundColor,
     },
   }),
@@ -115,6 +117,7 @@ const styles = stylex.create({
       },
       backgroundColor: {
         default: null,
+        // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
         ":hover": props.glowColor,
       },
     },
