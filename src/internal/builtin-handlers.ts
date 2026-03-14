@@ -4,6 +4,7 @@
  */
 import { type CallResolveContext, type ImportSpec, isDirectionalResult } from "../adapter.js";
 import {
+  extractRootAndPath,
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -340,12 +341,6 @@ function tryResolveArrowFnCallWithConditionalArgs(
         return null;
       }
 
-      // Bail if the conditional test depends on `theme` — styled-components theme
-      // context is not a regular component prop and is unavailable after migration.
-      if (propName === "theme") {
-        return null;
-      }
-
       // Support destructured defaults when we can statically determine their truthiness.
       // Destructuring defaults only apply when the prop is `undefined`, so we must
       // preserve that distinction in the emitted condition.
@@ -513,6 +508,15 @@ function extractPropNameFromCondTest(
     const prop = getSinglePropFromMemberExpr(test, bindings.paramName);
     if (prop) {
       return prop;
+    }
+  }
+
+  // Handle member expressions on destructured bindings (e.g., theme.isDark from ({ theme }))
+  if (bindings.kind === "destructured") {
+    const info = extractRootAndPath(test);
+    if (info && info.path.length > 0 && bindings.bindings.has(info.rootName)) {
+      const propName = bindings.bindings.get(info.rootName)!;
+      return [propName, ...info.path].join(".");
     }
   }
 

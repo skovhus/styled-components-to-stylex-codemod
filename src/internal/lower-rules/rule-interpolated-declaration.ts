@@ -1253,6 +1253,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (bail) {
         break;
       }
+      // If any variant condition references theme, trigger useTheme() hook import/declaration
+      const referencesTheme = res.variants.some(
+        (v: { when: string }) =>
+          v.when === "theme" ||
+          v.when.startsWith("theme.") ||
+          v.when === "!theme" ||
+          v.when.startsWith("!theme."),
+      );
+      if (referencesTheme) {
+        markDeclNeedsUseThemeHook(decl);
+      }
       decl.needsWrapperComponent = true;
       continue;
     }
