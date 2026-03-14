@@ -32,6 +32,8 @@ export default function App() {
   const settingsMenuRef = useRef<HTMLDivElement | null>(null);
   const isUsingDefaultAdapter = adapterCode === DEFAULT_ADAPTER_CODE;
   const [renderState, setRenderState] = useState<RenderState>(initialRenderState);
+  const [renderPanelHeight, setRenderPanelHeight] = useState(280);
+  const dragStartRef = useRef<{ startY: number; startHeight: number } | null>(null);
   const shouldShowRendering = showRendering || hideCode;
 
   const selectTestCaseByName = useCallback((name: string) => {
@@ -89,6 +91,28 @@ export default function App() {
       hideCode,
     });
   }, [selectedTestCase, showRendering, showConfig, hideCode]);
+
+  const handleResizePointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      event.preventDefault();
+      dragStartRef.current = { startY: event.clientY, startHeight: renderPanelHeight };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [renderPanelHeight],
+  );
+
+  const handleResizePointerMove = useCallback((event: React.PointerEvent) => {
+    if (!dragStartRef.current) {
+      return;
+    }
+    const delta = dragStartRef.current.startY - event.clientY;
+    const newHeight = Math.max(100, Math.min(800, dragStartRef.current.startHeight + delta));
+    setRenderPanelHeight(newHeight);
+  }, []);
+
+  const handleResizePointerUp = useCallback(() => {
+    dragStartRef.current = null;
+  }, []);
 
   // Parse adapter whenever adapterCode changes
   useEffect(() => {
@@ -282,74 +306,75 @@ export default function App() {
             <div {...stylex.props(s.navButtons)}>
               <button
                 onClick={navigatePrev}
-                {...stylex.props(s.navButton)}
+                {...stylex.props(s.iconButton)}
                 title="Go to previous test case (K)"
                 disabled={testCases.findIndex((t) => t.name === selectedTestCase) === 0}
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.iconButtonIcon)}>
                   <path d="M8 4L3 9h10L8 4z" />
                 </svg>
               </button>
               <button
                 onClick={navigateNext}
-                {...stylex.props(s.navButton)}
+                {...stylex.props(s.iconButton)}
                 title="Go to next test case (J)"
                 disabled={
                   testCases.findIndex((t) => t.name === selectedTestCase) === testCases.length - 1
                 }
               >
-                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.navIcon)}>
+                <svg viewBox="0 0 16 16" fill="currentColor" {...stylex.props(s.iconButtonIcon)}>
                   <path d="M8 12L13 7H3l5 5z" />
                 </svg>
               </button>
-            </div>
-          </div>
-        </div>
-        <div {...stylex.props(s.headerRight)}>
-          <div {...stylex.props(s.settingsHost)} ref={settingsMenuRef}>
-            <button
-              onClick={() => setIsSettingsOpen((prev) => !prev)}
-              {...stylex.props(s.settingsButton)}
-              aria-haspopup="menu"
-              aria-expanded={isSettingsOpen}
-              aria-label="Settings"
-              title="Settings"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                {...stylex.props(s.settingsIcon)}
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-            {isSettingsOpen && (
-              <div {...stylex.props(s.settingsMenu)} role="menu" aria-label="Playground settings">
-                <label {...stylex.props(s.settingsItem)}>
-                  <input
-                    type="checkbox"
-                    checked={hideCode ? true : showRendering}
-                    disabled={hideCode}
-                    onChange={(event) => setShowRendering(event.target.checked)}
-                  />
-                  <span {...stylex.props(s.settingsLabel)}>Show rendering</span>
-                </label>
-
-                <label {...stylex.props(s.settingsItem)}>
-                  <input
-                    type="checkbox"
-                    checked={showConfig}
-                    onChange={(event) => setShowConfig(event.target.checked)}
-                  />
-                  <span {...stylex.props(s.settingsLabel)}>Show config</span>
-                </label>
+              <div {...stylex.props(s.settingsHost)} ref={settingsMenuRef}>
+                <button
+                  onClick={() => setIsSettingsOpen((prev) => !prev)}
+                  {...stylex.props(s.iconButton)}
+                  aria-haspopup="menu"
+                  aria-expanded={isSettingsOpen}
+                  aria-label="Settings"
+                  title="Settings"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    {...stylex.props(s.iconButtonIcon)}
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                </button>
+                {isSettingsOpen && (
+                  <div
+                    {...stylex.props(s.settingsMenu)}
+                    role="menu"
+                    aria-label="Playground settings"
+                  >
+                    <label {...stylex.props(s.settingsItem)}>
+                      <input
+                        type="checkbox"
+                        checked={hideCode ? true : showRendering}
+                        disabled={hideCode}
+                        onChange={(event) => setShowRendering(event.target.checked)}
+                      />
+                      <span {...stylex.props(s.settingsLabel)}>Show rendering</span>
+                    </label>
+                    <label {...stylex.props(s.settingsItem)}>
+                      <input
+                        type="checkbox"
+                        checked={showConfig}
+                        onChange={(event) => setShowConfig(event.target.checked)}
+                      />
+                      <span {...stylex.props(s.settingsLabel)}>Show config</span>
+                    </label>
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
@@ -444,8 +469,21 @@ export default function App() {
           </div>
         </div>
       )}
+      {shouldShowRendering && !hideCode && (
+        <div
+          {...stylex.props(s.resizeHandle)}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerUp}
+        >
+          <div {...stylex.props(s.resizeHandleBar)} />
+        </div>
+      )}
       {shouldShowRendering && (
-        <div {...stylex.props(s.renderPanel, hideCode && s.renderPanelFullHeight)}>
+        <div
+          {...stylex.props(s.renderPanel, hideCode && s.renderPanelFullHeight)}
+          {...(!hideCode && { style: { height: renderPanelHeight } })}
+        >
           <div {...stylex.props(s.renderPanelHeader)}>
             <span>Render</span>
             <span {...stylex.props(s.renderPanelNote)}>Editor changes are not rendered</span>
@@ -517,13 +555,13 @@ const testCaseSelectStyles: StylesConfig<TestCaseOption, false> = {
     borderRadius: 6,
     borderColor: "#ccc",
     boxShadow: "none",
-    fontSize: 13,
+    fontSize: FONT_MEDIUM,
   }),
   valueContainer: (base) => ({ ...base, padding: "0 8px" }),
   input: (base) => ({ ...base, margin: 0, padding: 0 }),
-  singleValue: (base) => ({ ...base, fontSize: 13 }),
-  placeholder: (base) => ({ ...base, fontSize: 13 }),
-  option: (base) => ({ ...base, fontSize: 13 }),
+  singleValue: (base) => ({ ...base, fontSize: FONT_MEDIUM }),
+  placeholder: (base) => ({ ...base, fontSize: FONT_MEDIUM }),
+  option: (base) => ({ ...base, fontSize: FONT_MEDIUM }),
   indicatorsContainer: (base) => ({ ...base, height: 30 }),
   dropdownIndicator: (base) => ({ ...base, padding: "0 4px" }),
   indicatorSeparator: () => ({ display: "none" }),
@@ -772,6 +810,16 @@ function PreviewPane({
 const MOBILE = "@media (max-width: 768px)";
 const PHONE = "@media (max-width: 480px)";
 
+// ── Font size scale ──
+const FONT_TINY = 10;
+const FONT_SMALL = 11;
+const FONT_MEDIUM = 12;
+const FONT_LARGE = 14;
+
+// ── Shared spacing ──
+const PANEL_HEADER_PADDING_BLOCK = 4;
+const PANEL_HEADER_PADDING_INLINE = 10;
+
 const s = stylex.create({
   // ── Layout ──
   container: {
@@ -780,10 +828,7 @@ const s = stylex.create({
     height: "100vh",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-    fontSize: {
-      default: null,
-      [MOBILE]: 13,
-    },
+    fontSize: FONT_MEDIUM,
   },
 
   // ── Header ──
@@ -791,16 +836,8 @@ const s = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBlock: {
-      default: 12,
-      [MOBILE]: 8,
-      [PHONE]: 6,
-    },
-    paddingInline: {
-      default: 16,
-      [MOBILE]: 10,
-      [PHONE]: 8,
-    },
+    paddingBlock: 6,
+    paddingInline: 10,
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: "#e0e0e0",
@@ -813,26 +850,10 @@ const s = stylex.create({
   headerLeft: {
     display: "flex",
     alignItems: "center",
-    gap: {
-      default: 12,
-      [MOBILE]: 6,
-    },
-    flex: 1,
-    minWidth: {
-      default: 0,
-      [MOBILE]: 0,
-    },
-  },
-  headerRight: {
-    display: "flex",
-    alignItems: "center",
     gap: 8,
-    flexShrink: {
-      default: null,
-      [MOBILE]: 0,
-    },
+    flex: 1,
+    minWidth: 0,
   },
-
   // ── GitHub link ──
   githubLink: {
     display: "flex",
@@ -842,23 +863,14 @@ const s = stylex.create({
   },
   githubIcon: {
     display: "block",
-    width: {
-      default: 24,
-      [MOBILE]: 20,
-    },
-    height: {
-      default: 24,
-      [MOBILE]: 20,
-    },
+    width: 20,
+    height: 20,
   },
 
   // ── Title ──
   title: {
     margin: 0,
-    fontSize: {
-      default: 16,
-      [MOBILE]: 12,
-    },
+    fontSize: FONT_LARGE,
     fontWeight: 600,
     color: "#333",
     whiteSpace: {
@@ -919,24 +931,12 @@ const s = stylex.create({
     },
   },
 
-  // ── Nav buttons ──
-  navButtons: {
-    display: "flex",
-    gap: {
-      default: 4,
-      [MOBILE]: 2,
-    },
-    flexShrink: {
-      default: null,
-      [MOBILE]: 0,
-    },
-  },
-  navButton: {
+  // ── Icon buttons (nav + settings) ──
+  iconButton: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: 6,
-    fontSize: 14,
+    padding: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderStyle: "solid",
@@ -945,42 +945,19 @@ const s = stylex.create({
     cursor: "pointer",
     color: "#333",
   },
-  navIcon: {
+  iconButtonIcon: {
     width: 16,
     height: 16,
   },
-
-  // ── Settings ──
+  navButtons: {
+    display: "flex",
+    gap: 4,
+    flexShrink: 0,
+  },
   settingsHost: {
     position: "relative",
     display: "flex",
     alignItems: "center",
-  },
-  settingsButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: {
-      default: 6,
-      [MOBILE]: 5,
-    },
-    borderRadius: 6,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#ccc",
-    backgroundColor: "white",
-    cursor: "pointer",
-    color: "#555",
-  },
-  settingsIcon: {
-    width: {
-      default: 18,
-      [MOBILE]: 16,
-    },
-    height: {
-      default: 18,
-      [MOBILE]: 16,
-    },
   },
   settingsMenu: {
     position: "absolute",
@@ -1004,16 +981,13 @@ const s = stylex.create({
     display: "flex",
     flexDirection: "column",
     gap: 8,
-    fontSize: {
-      default: null,
-      [MOBILE]: 12,
-    },
+    fontSize: FONT_MEDIUM,
   },
   settingsItem: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    fontSize: 13,
+    fontSize: FONT_MEDIUM,
     color: "#333",
     userSelect: "none",
     cursor: "pointer",
@@ -1041,11 +1015,8 @@ const s = stylex.create({
     backgroundColor: "#f8f9fa",
   },
   issueLink: {
-    fontSize: {
-      default: 12,
-      [MOBILE]: 11,
-    },
-    color: "#666",
+    fontSize: FONT_SMALL,
+    color: "#333",
     textDecoration: "none",
   },
 
@@ -1057,10 +1028,7 @@ const s = stylex.create({
     backgroundColor: "#fafafa",
   },
   adapterStatus: {
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    fontSize: FONT_SMALL,
     color: "#666",
     marginBlock: {
       default: 8,
@@ -1074,18 +1042,9 @@ const s = stylex.create({
 
   // ── Panel headers ──
   panelHeader: {
-    paddingBlock: {
-      default: 8,
-      [MOBILE]: 5,
-    },
-    paddingInline: {
-      default: 12,
-      [MOBILE]: 8,
-    },
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    paddingBlock: PANEL_HEADER_PADDING_BLOCK,
+    paddingInline: PANEL_HEADER_PADDING_INLINE,
+    fontSize: FONT_SMALL,
     fontWeight: 600,
     color: "#666",
     textTransform: "uppercase",
@@ -1153,11 +1112,7 @@ const s = stylex.create({
     minHeight: 0,
   },
   codeMirror: {
-    fontSize: {
-      default: 12,
-      [MOBILE]: 11,
-      [PHONE]: 10,
-    },
+    fontSize: FONT_TINY,
     fontFamily:
       "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
     lineHeight: 1.5,
@@ -1172,10 +1127,7 @@ const s = stylex.create({
     },
     margin: 0,
     fontFamily: "monospace",
-    fontSize: {
-      default: 12,
-      [MOBILE]: 11,
-    },
+    fontSize: FONT_SMALL,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
@@ -1201,10 +1153,7 @@ const s = stylex.create({
       default: 12,
       [MOBILE]: 8,
     },
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    fontSize: FONT_SMALL,
     fontWeight: 600,
     color: "#92400e",
     textTransform: "uppercase",
@@ -1231,10 +1180,7 @@ const s = stylex.create({
       [MOBILE]: 3,
     },
     paddingInline: 0,
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    fontSize: FONT_SMALL,
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: "#fde68a",
@@ -1251,10 +1197,30 @@ const s = stylex.create({
   warningLoc: {
     color: "#a16207",
     fontFamily: "monospace",
-    fontSize: 11,
+    fontSize: FONT_SMALL,
   },
 
   // ── Render panel ──
+  resizeHandle: {
+    height: 6,
+    cursor: "ns-resize",
+    backgroundColor: "#e0e0e0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    userSelect: "none",
+    touchAction: "none",
+    ":hover": {
+      backgroundColor: "#d0d0d0",
+    },
+  },
+  resizeHandleBar: {
+    width: 40,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#999",
+  },
   renderPanel: {
     borderTopWidth: 1,
     borderTopStyle: "solid",
@@ -1262,10 +1228,6 @@ const s = stylex.create({
     backgroundColor: "#fff",
     display: "flex",
     flexDirection: "column",
-    height: {
-      default: 280,
-      [MOBILE]: "auto",
-    },
     minHeight: {
       default: null,
       [MOBILE]: 200,
@@ -1280,18 +1242,9 @@ const s = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBlock: {
-      default: 8,
-      [MOBILE]: 5,
-    },
-    paddingInline: {
-      default: 12,
-      [MOBILE]: 8,
-    },
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    paddingBlock: PANEL_HEADER_PADDING_BLOCK,
+    paddingInline: PANEL_HEADER_PADDING_INLINE,
+    fontSize: FONT_SMALL,
     fontWeight: 600,
     color: "#666",
     textTransform: "uppercase",
@@ -1302,10 +1255,7 @@ const s = stylex.create({
     borderBottomColor: "#e0e0e0",
   },
   renderPanelNote: {
-    fontSize: {
-      default: 11,
-      [MOBILE]: 9,
-    },
+    fontSize: FONT_TINY,
     fontWeight: 400,
     color: "#888",
     textTransform: "none",
@@ -1315,7 +1265,7 @@ const s = stylex.create({
     display: "flex",
     flex: 1,
     minHeight: 0,
-    overflow: "hidden",
+    overflow: "auto",
     flexDirection: {
       default: "row",
       [MOBILE]: "column",
@@ -1363,18 +1313,12 @@ const s = stylex.create({
     borderRightStyle: "none",
   },
   renderPaneHeader: {
-    paddingBlock: {
-      default: 6,
-      [MOBILE]: 4,
-    },
-    paddingInline: {
-      default: 12,
-      [MOBILE]: 8,
-    },
-    fontSize: {
-      default: 11,
-      [MOBILE]: 10,
-    },
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+    paddingBlock: PANEL_HEADER_PADDING_BLOCK,
+    paddingInline: PANEL_HEADER_PADDING_INLINE,
+    fontSize: FONT_SMALL,
     fontWeight: 600,
     color: "#666",
     textTransform: "uppercase",
@@ -1390,11 +1334,10 @@ const s = stylex.create({
       default: 12,
       [MOBILE]: 8,
     },
-    overflow: "auto",
     backgroundColor: "#fafafa",
   },
   renderPlaceholder: {
-    fontSize: 11,
+    fontSize: FONT_SMALL,
     color: "#888",
   },
   renderError: {
@@ -1402,7 +1345,7 @@ const s = stylex.create({
     padding: 0,
     margin: 0,
     fontFamily: "monospace",
-    fontSize: 12,
+    fontSize: FONT_SMALL,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
   },
