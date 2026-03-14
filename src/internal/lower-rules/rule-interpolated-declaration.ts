@@ -1279,8 +1279,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bailUnsupported: bailUnsupportedLocal,
       })
     ) {
-      if (res && "variants" in res) {
-        markThemeHookForVariants(decl, res.variants as ReadonlyArray<{ when: string }>);
+      if (res?.type === "splitVariantsResolvedValue") {
+        markThemeHookForVariants(decl, res.variants);
       }
       continue;
     }
