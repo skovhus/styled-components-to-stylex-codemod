@@ -10,6 +10,7 @@ type DotProps = React.PropsWithChildren<{
 // Pattern 1: Simple logical OR
 function Dot(props: DotProps) {
   const { children, active, completed } = props;
+
   return (
     <div sx={[styles.dot, (active || completed) && styles.dotActiveOrCompleted]}>{children}</div>
   );
@@ -23,6 +24,7 @@ type StepProps = React.PropsWithChildren<{
 // Pattern 2: Negated logical OR
 function Step(props: StepProps) {
   const { children, active, completed } = props;
+
   return (
     <div sx={[styles.step, !(active || completed) && styles.stepNotActiveOrCompleted]}>
       {children}
@@ -39,6 +41,7 @@ type BadgeProps = React.PropsWithChildren<{
 // Pattern 3: AND wrapping OR on the right
 function Badge(props: BadgeProps) {
   const { children, visible, primary, accent } = props;
+
   return (
     <span sx={[styles.badge, visible && (primary || accent) && styles.badgeVisiblePrimaryOrAccent]}>
       {children}

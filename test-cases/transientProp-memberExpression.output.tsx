@@ -10,6 +10,7 @@ type ComponentWrapperProps = { isOpen: boolean } & Omit<
 
 function ComponentWrapper(props: ComponentWrapperProps) {
   const { children, isOpen, ...rest } = props;
+
   return (
     <motion.div
       {...rest}
@@ -27,6 +28,7 @@ type HighlightedAvatarProps = { highlightColor?: string } & Omit<
 
 function HighlightedAvatar(props: HighlightedAvatarProps) {
   const { highlightColor, ...rest } = props;
+
   return (
     <UserAvatar
       {...rest}

@@ -9,6 +9,7 @@ type BoxProps = React.PropsWithChildren<{
 // Block-level theme logical conditional: theme.isDark && props.enabled controls entire CSS block
 function Box(props: BoxProps) {
   const { children, enabled } = props;
+
   const theme = useTheme();
 
   return (

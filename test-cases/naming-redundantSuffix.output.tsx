@@ -8,6 +8,7 @@ type MyBorderProps = React.PropsWithChildren<{
 
 function MyBorder(props: MyBorderProps) {
   const { children, borderWidth } = props;
+
   return <div sx={[styles.myBorder, styles.myBorderBorderWidth(borderWidth)]}>{children}</div>;
 }
 

@@ -10,6 +10,7 @@ type TooltipProps = React.PropsWithChildren<{
 
 export function Tooltip(props: TooltipProps) {
   const { children, open, ...rest } = props;
+
   return (
     <div {...rest} sx={!open && styles.tooltipNotOpen}>
       {children}
@@ -24,6 +25,7 @@ type OverlayProps = React.PropsWithChildren<{
 // Pattern: !props.$prop ? "cssA;" : "cssB;" (both branches have styles)
 export function Overlay(props: OverlayProps) {
   const { children, visible, ...rest } = props;
+
   return (
     <div {...rest} sx={[styles.overlay, !visible && styles.overlayNotVisible]}>
       {children}

@@ -6,6 +6,7 @@ type LayerProps = React.PropsWithChildren<LayerTransientProps>;
 
 function Layer(props: LayerProps) {
   const { children, $zIndex, $layer } = props;
+
   return (
     <div sx={[styles.layer, $layer.isTop ? styles.layerZIndex($zIndex) : undefined]}>
       {children}

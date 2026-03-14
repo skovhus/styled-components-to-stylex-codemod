@@ -35,6 +35,7 @@ type LabelProps = {
  */
 export function Label(props: LabelProps) {
   const { className, children, style, sx, ...rest } = props;
+
   return (
     <Text {...rest} as="label" {...mergedSx([styles.label, sx], className, style)}>
       {children}

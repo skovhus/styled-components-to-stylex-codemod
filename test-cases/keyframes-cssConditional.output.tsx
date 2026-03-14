@@ -22,6 +22,7 @@ type BoxProps = React.PropsWithChildren<{
 // animation shorthand with keyframes reference in css`` conditional
 function Box(props: BoxProps) {
   const { children, isAnimating } = props;
+
   return <div sx={[styles.box, isAnimating && styles.boxAnimating]}>{children}</div>;
 }
 
@@ -32,6 +33,7 @@ type DotProps = React.PropsWithChildren<{
 // animation-name longhand with keyframes reference in css`` conditional
 function Dot(props: DotProps) {
   const { children, active } = props;
+
   return <span sx={[styles.dot, active && styles.dotActive]}>{children}</span>;
 }
 

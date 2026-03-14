@@ -22,6 +22,7 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
 
 export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCaretProps<C>) {
   const { as: Component = "div", className, children, style, sx, delay, ...rest } = props;
+
   return (
     <Component
       {...rest}
@@ -48,6 +49,7 @@ type StyledLoaderCaretProps = { noPadding?: boolean } & Omit<
 
 function StyledLoaderCaret(props: StyledLoaderCaretProps) {
   const { noPadding, ...rest } = props;
+
   return (
     <LoaderCaret
       {...rest}

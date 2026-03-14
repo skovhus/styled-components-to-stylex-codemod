@@ -9,6 +9,7 @@ type BoxProps = React.PropsWithChildren<{
 // Direct template literal body with string props (values used directly in CSS)
 function Box(props: BoxProps) {
   const { children, width, height } = props;
+
   return <div sx={[styles.boxWidth(width), styles.boxHeight(height)]}>{children}</div>;
 }
 
@@ -19,6 +20,7 @@ type MixedBoxProps = React.PropsWithChildren<{
 // Mixed static and dynamic styles
 function MixedBox(props: MixedBoxProps) {
   const { children, padding } = props;
+
   const sx = stylex.props(styles.mixedBox);
 
   return (
@@ -46,6 +48,7 @@ type MultiPropBoxProps = React.PropsWithChildren<{
 // Note: dynamic shorthand values should be preserved via inline styles.
 function MultiPropBox(props: MultiPropBoxProps) {
   const { children, margin, border, padding, background, scrollMargin } = props;
+
   return (
     <div
       style={{

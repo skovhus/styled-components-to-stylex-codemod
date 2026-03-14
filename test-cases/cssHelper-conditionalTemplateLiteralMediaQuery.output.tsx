@@ -14,6 +14,7 @@ type BannerProps = React.PropsWithChildren<{
  */
 function Banner(props: BannerProps) {
   const { children, prominent, ...rest } = props;
+
   return (
     <div
       {...rest}

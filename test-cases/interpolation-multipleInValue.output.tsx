@@ -13,6 +13,7 @@ type PopoverProps = React.PropsWithChildren<{
 // Should produce a single template literal preserving all transform functions
 function Popover(props: PopoverProps) {
   const { children, expanded } = props;
+
   return <div sx={[styles.popover, expanded && styles.popoverExpanded]}>{children}</div>;
 }
 

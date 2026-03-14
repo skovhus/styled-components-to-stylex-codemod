@@ -2,6 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export function Button(props) {
   const { children, ...rest } = props;
+
   return (
     <button {...rest} sx={styles.button}>
       {children}

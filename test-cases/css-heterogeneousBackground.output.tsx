@@ -10,6 +10,7 @@ type MixedBackgroundProps = React.PropsWithChildren<{
 // is emitted with its appropriate StyleX property.
 function MixedBackground(props: MixedBackgroundProps) {
   const { children, useGradient } = props;
+
   return (
     <div sx={[styles.mixedBackground, useGradient && styles.mixedBackgroundUseGradient]}>
       {children}
@@ -25,6 +26,7 @@ type NestedColorBackgroundProps = React.PropsWithChildren<{
 // Tests that "!(A || B)" condition parsing produces valid identifier suffixes
 function NestedColorBackground(props: NestedColorBackgroundProps) {
   const { children, color } = props;
+
   return (
     <div
       sx={[

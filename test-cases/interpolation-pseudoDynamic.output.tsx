@@ -8,6 +8,7 @@ type ButtonProps = React.PropsWithChildren<{
 
 function Button(props: ButtonProps) {
   const { children, active } = props;
+
   return (
     <button
       sx={[
@@ -35,6 +36,7 @@ type InvertedButtonProps = React.PropsWithChildren<{
  */
 function InvertedButton(props: InvertedButtonProps) {
   const { children, $disabled } = props;
+
   return (
     <button
       sx={[

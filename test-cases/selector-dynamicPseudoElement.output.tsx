@@ -11,6 +11,7 @@ type BadgeProps = React.PropsWithChildren<{
  */
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
+
   return (
     <span
       sx={styles.badge({
@@ -29,6 +30,7 @@ type TooltipProps = React.PropsWithChildren<{
 // Computed interpolation inside pseudo-element: expression with fallback
 function Tooltip(props: TooltipProps) {
   const { children, tipColor } = props;
+
   return (
     <div
       sx={styles.tooltip({
@@ -62,6 +64,7 @@ type ButtonProps = React.PropsWithChildren<{
 // Dynamic pseudo-element style inside :hover context
 function Button(props: ButtonProps) {
   const { children, glowColor } = props;
+
   return (
     <button
       sx={styles.button({

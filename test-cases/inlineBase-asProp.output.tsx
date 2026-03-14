@@ -14,6 +14,7 @@ type ContainerProps<C extends React.ElementType = typeof Flex> = React.Component
 
 function Container<C extends React.ElementType = typeof Flex>(props: ContainerProps<C>) {
   const { as: Component = Flex, ...rest } = props;
+
   return <Component {...rest} column={true} {...stylex.props(styles.container)} />;
 }
 

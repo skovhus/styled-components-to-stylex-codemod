@@ -14,6 +14,7 @@ type StackProps = {
 
 export function Stack(props: StackProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, gap, column, ...rest } = props;
+
   return (
     <div
       {...rest}

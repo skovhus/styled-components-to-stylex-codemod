@@ -14,6 +14,7 @@ interface Props {
 
 function Container(props: React.PropsWithChildren<Props>) {
   const { children, collapsed, enabled } = props;
+
   return (
     <div
       sx={[

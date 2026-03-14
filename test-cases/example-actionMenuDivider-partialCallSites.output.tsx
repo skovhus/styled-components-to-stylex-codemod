@@ -12,6 +12,7 @@ type TextDividerContainerProps = React.PropsWithChildren<{
 
 function TextDividerContainer(props: TextDividerContainerProps) {
   const { className, children, style, noMinWidth } = props;
+
   return (
     <div
       {...mergedSx(

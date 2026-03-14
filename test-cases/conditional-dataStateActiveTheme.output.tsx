@@ -15,6 +15,7 @@ function Container(props: React.PropsWithChildren<{}>) {
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const { children, ...rest } = props;
+
   return (
     <button {...rest} sx={styles.tab}>
       {children}

@@ -10,6 +10,7 @@ interface IconProps extends React.SVGProps<SVGSVGElement> {
 
 function IconBase(props: IconProps) {
   const { variant, selected, compact, className, ...rest } = props;
+
   const fill = variant === "active" ? "blue" : variant === "muted" ? "gray" : "black";
 
   return (
@@ -32,6 +33,7 @@ export function Icon(
   props: Omit<React.ComponentPropsWithRef<typeof IconBase>, "className" | "style">,
 ) {
   const { compact, selected, variant, ...rest } = props;
+
   return (
     <IconBase
       compact={compact}

@@ -34,6 +34,7 @@ type CardProps = {
 /** Styled wrapper that adds conditional transform based on props, but the base component also needs those props */
 export function Card(props: CardProps) {
   const { className, style, compact, highlighted, ...rest } = props;
+
   return (
     <BaseCard
       compact={compact}

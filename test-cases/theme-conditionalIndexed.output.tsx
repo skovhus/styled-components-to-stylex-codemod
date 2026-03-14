@@ -11,6 +11,7 @@ export function Badge(
   props: BadgeProps & Omit<React.ComponentProps<"div">, "className" | "style">,
 ) {
   const { children, textColor, ...rest } = props;
+
   return (
     <div {...rest} sx={[styles.badge, textColor ? styles.badgeColor(textColor) : undefined]}>
       {children}

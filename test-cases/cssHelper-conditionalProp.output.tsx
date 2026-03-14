@@ -29,6 +29,7 @@ type ContainerProps = { color?: string } & Omit<React.ComponentPropsWithRef<type
 
 export function Container(props: ContainerProps) {
   const { className, children, style, color, ...rest } = props;
+
   return (
     <Flex
       {...rest}

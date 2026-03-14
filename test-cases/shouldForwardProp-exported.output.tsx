@@ -11,6 +11,7 @@ type TransientButtonProps = { variant?: "primary" | "secondary" } & Omit<
 // so external callers can't accidentally forward $unknown to the DOM
 export function TransientButton(props: TransientButtonProps) {
   const { children, variant, ...rest } = props;
+
   const restRecord = rest as Record<string, unknown>;
 
   for (const k of Object.keys(rest)) {
@@ -35,6 +36,7 @@ type ExplicitFilterButtonProps = {
 // Exported component with explicit list-based shouldForwardProp
 export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
   const { children, customProp, anotherProp, ...rest } = props;
+
   return (
     <button
       {...rest}

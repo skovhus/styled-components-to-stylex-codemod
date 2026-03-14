@@ -16,6 +16,7 @@ type AvatarContainerProps = React.PropsWithChildren<{
 
 function AvatarContainer(props: AvatarContainerProps) {
   const { children, disabled, size } = props;
+
   return (
     <div
       sx={[

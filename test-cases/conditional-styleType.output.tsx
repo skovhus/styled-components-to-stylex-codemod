@@ -15,6 +15,7 @@ type IconWithTeamColorProps = { color?: string } & Omit<
 // Uses ternary: props.$color ? `fill: ${props.$color};` : ""
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
   const { children, color, ...rest } = props;
+
   const sx = stylex.props(color ? styles.iconWithTeamColorFill(color) : undefined);
 
   return (
@@ -37,6 +38,7 @@ export function IconWithTransform(
   props: Omit<React.ComponentPropsWithRef<typeof Icon_>, "className" | "style">,
 ) {
   const { noDate, selected, status, ...rest } = props;
+
   return (
     <Icon_
       noDate={noDate}

@@ -8,6 +8,7 @@ interface ButtonProps {
 // This styled component has props which will generate React.PropsWithChildren
 function Button(props: React.PropsWithChildren<ButtonProps>) {
   const { children, variant } = props;
+
   return (
     <button sx={[styles.button, variant === "primary" && styles.buttonVariantPrimary]}>
       {children}

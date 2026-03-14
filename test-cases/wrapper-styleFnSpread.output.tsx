@@ -10,6 +10,7 @@ type StyledExternalProps = { $color?: string } & React.ComponentPropsWithRef<
 // Spread props require wrapper - styleFn values can't be extracted at transform time
 function StyledExternal(props: StyledExternalProps) {
   const { className, style, $color, ...rest } = props;
+
   return (
     <ExternalComponent
       {...rest}

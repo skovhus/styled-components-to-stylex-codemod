@@ -14,6 +14,7 @@ interface BoxProps {
 // Component with props that affect styles
 export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, bordered, bg, ...rest } = props;
+
   return (
     <div
       {...rest}

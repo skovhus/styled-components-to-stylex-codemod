@@ -7,6 +7,7 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { children, gap } = props;
+
   return <div sx={[styles.container, gap != null && containerGapVariants[gap]]}>{children}</div>;
 }
 

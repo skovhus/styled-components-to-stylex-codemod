@@ -8,6 +8,7 @@ type ButtonProps = React.PropsWithChildren<{
 
 function Button(props: ButtonProps) {
   const { children, hollow, primary } = props;
+
   return (
     <button
       sx={[
@@ -32,6 +33,7 @@ type BadgeProps = React.PropsWithChildren<{
 // to prevent the "medium" background from leaking into size === "small"
 function Badge(props: BadgeProps) {
   const { children, size } = props;
+
   return (
     <span
       sx={[

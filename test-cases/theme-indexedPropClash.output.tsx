@@ -10,6 +10,7 @@ type DotProps = React.PropsWithChildren<{
 
 function Dot(props: DotProps) {
   const { children, $colors } = props;
+
   return <div sx={styles.dotBackgroundColor($colors)}>{children}</div>;
 }
 

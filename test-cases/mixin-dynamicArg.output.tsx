@@ -8,6 +8,7 @@ type TitleTextProps = React.PropsWithChildren<{
 
 function TitleText(props: TitleTextProps) {
   const { children, oneLine } = props;
+
   return (
     <div
       sx={[styles.titleText, oneLine ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2)]}

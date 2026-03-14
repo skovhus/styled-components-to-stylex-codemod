@@ -31,6 +31,7 @@ type BadgeProps = {
 
 function Badge(props: BadgeProps) {
   const { className, children, style, highlighted, ...rest } = props;
+
   return (
     <Badge_
       highlighted={highlighted}

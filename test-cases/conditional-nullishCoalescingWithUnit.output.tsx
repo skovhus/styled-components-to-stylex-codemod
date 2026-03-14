@@ -8,6 +8,7 @@ type BoxProps = {
 
 function Box(props: React.PropsWithChildren<BoxProps>) {
   const { children, delay } = props;
+
   return (
     <div
       sx={styles.box({

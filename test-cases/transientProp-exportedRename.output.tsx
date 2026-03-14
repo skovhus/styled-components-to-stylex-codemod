@@ -42,6 +42,7 @@ export function TreeToggle(
   > & { [K in "$isExpanded" as "isExpanded"]: React.ComponentPropsWithRef<typeof ExpandIcon>[K] },
 ) {
   const { children, isExpanded, ...rest } = props;
+
   return (
     <ExpandIcon
       $isExpanded={isExpanded}
@@ -62,6 +63,7 @@ type StatusBadgeProps = React.PropsWithChildren<{
 // All should be renamed for the same sc v6 forwarding reason.
 export function StatusBadge(props: StatusBadgeProps) {
   const { children, compact, variant, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -79,6 +81,7 @@ type PrivateLabelProps = React.PropsWithChildren<{
 // Non-exported component — $-prefix also stripped
 function PrivateLabel(props: PrivateLabelProps) {
   const { children, bold } = props;
+
   return <span sx={[styles.privateLabel, bold && styles.privateLabelBold]}>{children}</span>;
 }
 
@@ -90,6 +93,7 @@ type ColorChipProps = {
 // Collision: $color cannot be renamed because `color` already exists as a prop
 export function ColorChip(props: ColorChipProps) {
   const { children, $color, color, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -105,6 +109,7 @@ type SpecifierTagProps = { highlighted?: boolean } & React.ComponentProps<"div">
 // Specifier export (export { ... }) — should also be renamed
 function SpecifierTag(props: SpecifierTagProps) {
   const { className, children, style, highlighted, ...rest } = props;
+
   return (
     <div
       {...rest}

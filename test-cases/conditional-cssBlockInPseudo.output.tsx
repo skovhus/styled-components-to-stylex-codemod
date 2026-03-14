@@ -5,6 +5,7 @@ import { $colors } from "./tokens.stylex";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const { children, ...rest } = props;
+
   const theme = useTheme();
 
   return (

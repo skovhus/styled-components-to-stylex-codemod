@@ -9,6 +9,7 @@ type LineProps = React.PropsWithChildren<{
 
 function Line(props: LineProps) {
   const { children, isRemoval, deletionColor } = props;
+
   return (
     <div
       sx={[styles.line, isRemoval && styles.lineBackgroundColor(deletionColor ?? $colors.bgBase)]}

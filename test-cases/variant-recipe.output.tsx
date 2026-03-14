@@ -12,6 +12,7 @@ type Props = {
 
 function Button(props: React.PropsWithChildren<Props & { ref?: React.Ref<HTMLButtonElement> }>) {
   const { children, size = "small", color = "secondary", disabled, ...rest } = props;
+
   return (
     <button
       {...rest}
@@ -36,6 +37,7 @@ type LinkProps = {
 
 function Link(props: LinkProps & Pick<React.ComponentProps<"a">, "children" | "href">) {
   const { children, disabled, color = "secondary", ...rest } = props;
+
   return (
     <a
       {...rest}

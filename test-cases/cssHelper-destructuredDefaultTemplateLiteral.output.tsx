@@ -11,6 +11,7 @@ type TileProps = {
 
 export function Tile(props: TileProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, gap, ...rest } = props;
+
   return (
     <div
       {...rest}

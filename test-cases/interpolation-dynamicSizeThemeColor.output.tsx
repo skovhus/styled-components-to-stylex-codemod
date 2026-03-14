@@ -36,6 +36,7 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { className, children, style, size } = props;
+
   const theme = useTheme();
 
   return (

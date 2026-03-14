@@ -9,6 +9,7 @@ function Button<C extends React.ElementType = "button">(
   } & { forwardedAs?: React.ElementType },
 ) {
   const { as: Component = "button", forwardedAs, className, children, style, sx, ...rest } = props;
+
   return (
     <Component {...rest} as={forwardedAs} {...mergedSx([styles.button, sx], className, style)}>
       {children}

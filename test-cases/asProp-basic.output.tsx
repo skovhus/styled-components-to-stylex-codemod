@@ -7,6 +7,7 @@ function Button<C extends React.ElementType = "button">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
 ) {
   const { as: Component = "button", children, ...rest } = props;
+
   return (
     <Component {...rest} {...stylex.props(styles.button)}>
       {children}
@@ -28,6 +29,7 @@ type StyledTextProps<C extends React.ElementType = typeof Text> = React.Componen
 // When used with as="label", the component's props must be preserved
 function StyledText<C extends React.ElementType = typeof Text>(props: StyledTextProps<C>) {
   const { as: Component = Text, ...rest } = props;
+
   return <Component {...rest} {...stylex.props(styles.text)} />;
 }
 

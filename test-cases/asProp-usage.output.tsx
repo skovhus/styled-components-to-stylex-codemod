@@ -13,6 +13,7 @@ function FullWidthCopyText<C extends React.ElementType = "div">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
 ) {
   const { as: Component = "div", children, ...rest } = props;
+
   return (
     <Component {...rest} {...stylex.props(styles.fullWidthCopyText)}>
       {children}

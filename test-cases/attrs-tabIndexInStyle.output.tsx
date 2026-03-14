@@ -10,6 +10,7 @@ type Props = {
 // The default value should be preserved when destructuring
 export function Component(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, applyBackground, tabIndex = 0, ...rest } = props;
+
   return (
     <div
       tabIndex={tabIndex ?? 0}

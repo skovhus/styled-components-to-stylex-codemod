@@ -8,6 +8,7 @@ type SwatchProps = React.PropsWithChildren<{
 
 function Swatch(props: SwatchProps) {
   const { children, color } = props;
+
   return (
     <div sx={[styles.swatch, styles.swatchBackgroundColor(color), styles.swatchBoxShadow(props)]}>
       {children}

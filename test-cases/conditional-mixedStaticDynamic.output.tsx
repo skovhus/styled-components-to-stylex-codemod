@@ -19,6 +19,7 @@ function Wrapper(props: React.PropsWithChildren<{}>) {
 
 function Container(props: React.PropsWithChildren<ContainerProps>) {
   const { children, sidebarCollapsed, position } = props;
+
   return (
     <div
       sx={[

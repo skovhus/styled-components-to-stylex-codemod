@@ -23,6 +23,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, m } = props;
+
   const theme = useTheme();
 
   return (

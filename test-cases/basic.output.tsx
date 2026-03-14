@@ -3,6 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 export function Select(props: Omit<React.ComponentProps<"select">, "className" | "style">) {
   const { children, ...rest } = props;
+
   return (
     <select {...rest} sx={styles.select}>
       {children}

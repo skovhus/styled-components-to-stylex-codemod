@@ -4,6 +4,7 @@ import { pixelVars } from "./tokens.stylex";
 
 export function StyledHeader(props: Pick<React.ComponentProps<"header">, "ref" | "children">) {
   const { children, ...rest } = props;
+
   return (
     <header {...rest} sx={styles.header}>
       {children}

@@ -10,6 +10,7 @@ interface Props {
 
 export function CollapsingContainer(props: Props) {
   const { containerStyles, title = "default", children } = props;
+
   // Local variable named "styles" - common pattern in animation components
   const styles = containerStyles
     ? {

@@ -10,6 +10,7 @@ type StyledIconButtonProps = { useRoundStyle?: boolean } & Omit<
 
 function StyledIconButton(props: StyledIconButtonProps) {
   const { children, useRoundStyle, ...rest } = props;
+
   return (
     <IconButton
       {...rest}

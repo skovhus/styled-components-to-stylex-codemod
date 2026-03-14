@@ -12,6 +12,7 @@ type BoxProps = {
 
 export function Box(props: BoxProps) {
   const { children, isActive, size, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -29,6 +30,7 @@ type ImageProps = { isInactive?: boolean } & Omit<
 
 export function Image(props: ImageProps) {
   const { isInactive, ...rest } = props;
+
   return <img {...rest} sx={[styles.image, isInactive && styles.imageInactive]} />;
 }
 
@@ -38,6 +40,7 @@ type SliderProps = React.PropsWithChildren<{
 
 function Slider(props: SliderProps) {
   const { children, height } = props;
+
   return <div sx={[styles.slider, styles.sliderHeight(height)]}>{children}</div>;
 }
 

@@ -7,6 +7,7 @@ import { ExternalComponent } from "./lib/external-component";
 
 function StyledExternal(props: React.ComponentPropsWithRef<typeof ExternalComponent>) {
   const { className, style, ...rest } = props;
+
   return <ExternalComponent {...rest} {...mergedSx(styles.external, className, style)} />;
 }
 

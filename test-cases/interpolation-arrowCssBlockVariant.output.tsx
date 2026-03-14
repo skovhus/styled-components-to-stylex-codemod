@@ -5,6 +5,7 @@ type Props = { size: "tiny" | "small" | "medium" };
 
 function Indicator(props: React.PropsWithChildren<Props>) {
   const { children, size } = props;
+
   return <div sx={[styles.indicator, sizeVariants[size]]}>{children}</div>;
 }
 

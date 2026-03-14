@@ -21,6 +21,7 @@ type FadeInWithDelayProps = React.PropsWithChildren<{
 // So the interpolated value should be duration, and "0.5s" should be delay
 function FadeInWithDelay(props: FadeInWithDelayProps) {
   const { children, duration } = props;
+
   return (
     <span
       sx={[

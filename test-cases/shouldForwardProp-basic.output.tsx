@@ -9,6 +9,7 @@ type ButtonProps = React.PropsWithChildren<{
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
   const { children, color, size, ...rest } = props;
+
   return (
     <button
       {...rest}
@@ -28,6 +29,7 @@ type LinkProps = { isActive?: boolean } & Pick<React.ComponentProps<"a">, "child
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
   const { children, isActive, ...rest } = props;
+
   return (
     <a {...rest} sx={[styles.link, isActive && styles.linkActive]}>
       {children}
@@ -43,6 +45,7 @@ type BoxProps = React.PropsWithChildren<{
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
   const { children, background, padding, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -66,6 +69,7 @@ type CardProps = React.PropsWithChildren<{
 // Filter multiple custom props
 function Card(props: CardProps) {
   const { children, variant, elevation, rounded, ...rest } = props;
+
   return (
     <div
       {...rest}

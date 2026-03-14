@@ -9,6 +9,7 @@ type ContainerProps = {
 
 export function Container(props: ContainerProps) {
   const { className, children, style, sx, column, isCompact, ...rest } = props;
+
   return (
     <div
       {...rest}

@@ -11,6 +11,7 @@ type OptionLabelProps = { disabled?: boolean } & Pick<
 
 function OptionLabel(props: OptionLabelProps) {
   const { children, disabled, ...rest } = props;
+
   return (
     <label {...rest} sx={[styles.optionLabel, disabled && styles.optionLabelDisabled]}>
       {children}

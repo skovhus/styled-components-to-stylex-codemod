@@ -10,6 +10,7 @@ type FlexContainerProps = React.PropsWithChildren<{
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
   const { children, align } = props;
+
   return (
     <div sx={[styles.flexContainer, align === "left" && styles.flexContainerAlignLeft]}>
       {children}
@@ -23,6 +24,7 @@ type ColoredBoxProps = React.PropsWithChildren<{
 
 function ColoredBox(props: ColoredBoxProps) {
   const { children, color } = props;
+
   return (
     <div sx={[styles.coloredBox, color != null && styles.coloredBoxBackgroundColor(color)]}>
       {children}

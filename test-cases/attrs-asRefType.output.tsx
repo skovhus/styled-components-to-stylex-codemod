@@ -19,6 +19,7 @@ function Text<C extends React.ElementType = "span">(
     variant = "regular",
     ...rest
   } = props;
+
   return (
     <Component {...rest} {...mergedSx([styles.text, variants[variant], sx], className, style)}>
       {children}
@@ -36,6 +37,7 @@ type LabelProps = {
 // 2. ref with type RefObject<HTMLLabelElement>
 function Label(props: LabelProps) {
   const { children, ref, ...rest } = props;
+
   return (
     <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
       {children}

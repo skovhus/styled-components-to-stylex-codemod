@@ -10,6 +10,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, size } = props;
+
   return <div sx={[styles.box, styles.boxWidth(props), styles.boxHeight(props)]}>{children}</div>;
 }
 

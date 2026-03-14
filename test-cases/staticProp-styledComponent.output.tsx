@@ -17,6 +17,7 @@ BaseSelect.Separator = () => <hr />;
 // Styled version that extends BaseSelect - inherits static properties
 function StyledSelect(props: Omit<React.ComponentPropsWithRef<typeof BaseSelect>, "style">) {
   const { className, children, ...rest } = props;
+
   return (
     <BaseSelect {...rest} {...mergedSx(styles.select, className)}>
       {children}

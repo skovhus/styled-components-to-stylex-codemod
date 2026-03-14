@@ -10,6 +10,7 @@ type ButtonProps = React.PropsWithChildren<{
 // When color is falsy but defined (e.g., ""), should use "blue" (|| fallback)
 function Button(props: ButtonProps) {
   const { children, color } = props;
+
   return (
     <button
       sx={styles.button({
@@ -29,6 +30,7 @@ type CardProps = React.PropsWithChildren<{
 // When size is undefined, should use 16 (default), then check if it equals 16
 function Card(props: CardProps) {
   const { children, ...rest } = props;
+
   return (
     <div
       {...rest}
@@ -48,6 +50,7 @@ type BoxProps = React.PropsWithChildren<{
 // Renamed destructured prop with default AND fallback
 function Box(props: BoxProps) {
   const { children, ...rest } = props;
+
   return (
     <div
       {...rest}

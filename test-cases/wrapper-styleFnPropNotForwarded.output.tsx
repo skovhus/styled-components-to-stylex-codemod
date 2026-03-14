@@ -15,6 +15,7 @@ type ScrollableProps = {
  */
 export function Scrollable(props: ScrollableProps) {
   const { children, applyBackground, ...rest } = props;
+
   return (
     <Flex
       {...rest}

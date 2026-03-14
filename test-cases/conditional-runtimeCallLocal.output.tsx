@@ -12,6 +12,7 @@ type RowProps = React.PropsWithChildren<{
 
 function Row(props: RowProps) {
   const { children, isHighlighted } = props;
+
   const theme = useTheme();
 
   return (

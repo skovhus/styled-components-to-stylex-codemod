@@ -10,6 +10,7 @@ type EmojiContainerProps = { size: number } & Omit<
 /** A container for emojis that standardizes sizing across browsers */
 export function EmojiContainer(props: EmojiContainerProps) {
   const { children, size, ...rest } = props;
+
   return (
     <div
       {...rest}

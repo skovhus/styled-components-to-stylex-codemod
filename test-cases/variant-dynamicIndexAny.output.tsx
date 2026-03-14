@@ -10,6 +10,7 @@ type Props = {
 
 export function Badge(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, size = "normal", color, ...rest } = props;
+
   return (
     <div
       {...rest}

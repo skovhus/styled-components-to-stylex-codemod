@@ -10,6 +10,7 @@ export function TextColor(
   >,
 ) {
   const { className, children, sx, ...rest } = props;
+
   return (
     <span {...rest} {...mergedSx([styles.textColor, sx], className)}>
       {children}

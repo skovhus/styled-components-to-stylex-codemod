@@ -16,6 +16,7 @@ export function TextColor(
   props: TextColorProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
   const { className, children, style, sx, color, ...rest } = props;
+
   return (
     <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)}>
       {children}

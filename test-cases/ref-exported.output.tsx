@@ -4,11 +4,13 @@ import * as stylex from "@stylexjs/stylex";
 
 export function StyledInput(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
   const { ref, ...rest } = props;
+
   return <input ref={ref} {...rest} sx={styles.input} />;
 }
 
 export function StyledDiv(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
   const { children, ref, ...rest } = props;
+
   return (
     <div ref={ref} {...rest} sx={styles.div}>
       {children}
