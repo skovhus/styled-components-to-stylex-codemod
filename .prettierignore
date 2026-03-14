@@ -1,0 +1,5 @@
+# Test case input files contain styled-components CSS in template literals.
+# The formatter incorrectly adds spaces inside CSS selectors (e.g. &:${expr} → &: ${expr}),
+# which changes CSS semantics. Exclude them from formatting.
+test-cases/*.input.tsx
+src/__tests__/fixtures/

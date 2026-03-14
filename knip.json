@@ -1,27 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "entry": [
-    "src/run.ts",
-    "scripts/**/*.{mjs,mts}",
-    "playground/src/main.tsx",
-    "src/__tests__/**/*.test.ts"
-  ],
+  "entry": ["src/run.ts", "scripts/**/*.{mjs,mts}", "src/__tests__/**/*.test.ts"],
   "project": ["src/**/*.{ts,tsx}", "playground/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts}"],
-  "ignoreDependencies": [
-    "@emotion/is-prop-valid",
-    "@stylexjs/babel-plugin",
-    "assert",
-    "path-browserify"
-  ],
+  "ignoreDependencies": ["assert", "path-browserify"],
 
   "ignore": [
-    "dist/**",
-    "dist-playground/**",
-    "coverage/**",
-    "test-cases/**",
     "src/__tests__/fixtures/**",
     "playground/src/lib/fs-stub.ts",
-    "playground/src/vite-env.d.ts",
-    "node_modules/**"
+    "playground/src/vite-env.d.ts"
   ]
 }
