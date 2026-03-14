@@ -1,0 +1,1 @@
+import{j as t}from"./index-y0Fe_UBl.js";import{F as e}from"./inline-base-flex-Cbt-2hlN.js";function s({isCompact:r}){return t.jsx("div",{className:"x1tamke2 xln26u5",children:t.jsx(e,{column:!0,grow:1,align:r?"start":"center",gap:r?8:16,children:"Content"})})}export{s as App};
