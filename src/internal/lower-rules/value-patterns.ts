@@ -4,7 +4,7 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations, isCssShorthandProperty } from "../css-prop-mapping.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
@@ -570,6 +570,12 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return false;
     }
     if (!d.property) {
+      return false;
+    }
+    // Bail on CSS shorthand properties (padding, margin, border, background).
+    // The indexed theme expression emits a single value which can't be expanded
+    // into longhand properties, and StyleX forbids shorthands.
+    if (isCssShorthandProperty(d.property)) {
       return false;
     }
     // Skip media/attr buckets for now; these require more complex wiring.

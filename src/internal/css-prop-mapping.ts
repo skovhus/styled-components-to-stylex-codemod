@@ -6,6 +6,8 @@ import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
 
+export { isCssShorthandProperty };
+
 type StylexPropDecl = { prop: string; value: CssValue };
 
 type DirectionalProp = "padding" | "margin" | "scrollMargin" | "scrollPadding";
@@ -16,6 +18,19 @@ const DIRECTIONAL_SHORTHAND_MAP: Record<string, DirectionalProp> = {
   "scroll-margin": "scrollMargin",
   "scroll-padding": "scrollPadding",
 };
+
+/**
+ * Returns true if the CSS property is a shorthand that StyleX cannot express directly
+ * and requires expansion (e.g., `padding`, `margin`, `border`, `background`).
+ */
+function isCssShorthandProperty(cssProp: string): boolean {
+  return (
+    cssProp in DIRECTIONAL_SHORTHAND_MAP ||
+    cssProp === "border" ||
+    /^border-(top|right|bottom|left)$/.test(cssProp) ||
+    cssProp === "background"
+  );
+}
 
 /**
  * For a `background` CSS property, determine the appropriate StyleX property name.
