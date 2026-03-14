@@ -62,7 +62,7 @@ export default [
       "test-cases/interpolation-destructuredRename.output.tsx",
       "test-cases/keyframes-unionComplexity.output.tsx",
       "test-cases/mixin-dynamicArgDefault.output.tsx",
-      "test-cases/selector-componentUnresolvableInterpolation.output.tsx",
+      "test-cases/selector-componentDynamicProp.output.tsx",
       "test-cases/selector-dynamicPseudoElement.output.tsx",
       "test-cases/theme-indexedLookupPropFallback.output.tsx",
       "test-cases/transientProp-memberExpression.output.tsx",

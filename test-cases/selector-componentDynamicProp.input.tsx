@@ -1,4 +1,4 @@
-// Reverse component selector with prop-based interpolation (non-theme dynamic value)
+// Reverse component selector with dynamic prop-based interpolation
 import styled from "styled-components";
 
 const Link = styled.a`
