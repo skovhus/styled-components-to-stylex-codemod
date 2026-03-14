@@ -7,7 +7,6 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, depth } = props;
-
   return <div sx={[styles.box, styles.boxPaddingLeft(props)]}>{children}</div>;
 }
 

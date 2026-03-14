@@ -11,7 +11,6 @@ type TextProps = React.PropsWithChildren<{
 
 function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
   const { as: Component = "span", className, children, style, sx, ...rest } = props;
-
   return (
     <Component {...rest} {...mergedSx([styles.text, sx], className, style)}>
       {children}
@@ -30,7 +29,6 @@ type LabelProps = {
  */
 export function Label(props: LabelProps) {
   const { children, ref, ...rest } = props;
-
   return (
     <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
       {children}

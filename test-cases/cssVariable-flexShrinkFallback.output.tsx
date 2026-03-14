@@ -13,7 +13,6 @@ type ColumnContainerProps = {
  */
 export function ColumnContainer(props: ColumnContainerProps) {
   const { children, style, noGrowOrShrink, basis, ...rest } = props;
-
   return (
     <div
       {...rest}

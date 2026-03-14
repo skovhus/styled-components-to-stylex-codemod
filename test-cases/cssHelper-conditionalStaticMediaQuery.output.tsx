@@ -12,7 +12,6 @@ type CardProps = React.PropsWithChildren<{
  */
 function Card(props: CardProps) {
   const { children, compact } = props;
-
   return <div sx={[styles.card, compact && styles.cardCompact]}>{children}</div>;
 }
 

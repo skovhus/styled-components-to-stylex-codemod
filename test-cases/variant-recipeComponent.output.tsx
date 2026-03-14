@@ -22,7 +22,6 @@ type ButtonProps = {
 
 function Button(props: ButtonProps) {
   const { children, color = "secondary", disabled, ...rest } = props;
-
   return (
     <BaseButton
       disabled={disabled}

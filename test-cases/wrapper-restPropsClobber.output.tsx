@@ -6,7 +6,6 @@ import { mergedSx } from "./lib/mergedSx";
 
 function OptionsList(props: React.ComponentProps<"ul">) {
   const { className, children, style, ref, ...rest } = props;
-
   return (
     <ul ref={ref} {...rest} {...mergedSx(styles.optionsList, className, style)}>
       {children}

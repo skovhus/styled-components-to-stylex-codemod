@@ -6,7 +6,6 @@ export function ClickableBox(
   props: Omit<React.ComponentProps<"div">, "className" | "style"> & { sx?: stylex.StyleXStyles },
 ) {
   const { children, ...rest } = props;
-
   return (
     <div {...rest} sx={styles.clickableBox}>
       {children}

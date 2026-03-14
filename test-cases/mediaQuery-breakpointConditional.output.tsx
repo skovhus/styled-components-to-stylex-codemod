@@ -8,7 +8,6 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { children, isCompact } = props;
-
   return <div sx={[styles.container, isCompact && styles.containerCompact]}>{children}</div>;
 }
 

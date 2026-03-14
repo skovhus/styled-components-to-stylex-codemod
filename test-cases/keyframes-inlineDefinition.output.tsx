@@ -5,7 +5,6 @@ type CircleProps = { isAnimated?: boolean } & Pick<React.ComponentProps<"path">,
 
 function Circle(props: CircleProps) {
   const { children, isAnimated, ...rest } = props;
-
   return (
     <path {...rest} sx={[styles.circle, isAnimated && styles.circleAnimated]}>
       {children}

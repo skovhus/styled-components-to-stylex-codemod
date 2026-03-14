@@ -8,7 +8,6 @@ type OptionLabelProps = React.PropsWithChildren<{
 
 function OptionLabel(props: OptionLabelProps) {
   const { children, disabled } = props;
-
   return (
     <label sx={[styles.optionLabel, disabled && styles.optionLabelDisabled]}>{children}</label>
   );
@@ -21,7 +20,6 @@ type HighlightBoxProps = React.PropsWithChildren<{
 // Prop-based conditional with theme access in template literal (border shorthand)
 function HighlightBox(props: HighlightBoxProps) {
   const { children, isHighlighted } = props;
-
   return (
     <div sx={[styles.highlightBox, isHighlighted && styles.highlightBoxHighlighted]}>
       {children}

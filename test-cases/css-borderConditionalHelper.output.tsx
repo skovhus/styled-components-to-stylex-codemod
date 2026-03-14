@@ -8,7 +8,6 @@ type SimpleBoxProps = React.PropsWithChildren<{
 
 function SimpleBox(props: SimpleBoxProps) {
   const { children, bordered } = props;
-
   return <div sx={[styles.simpleBox, bordered && styles.simpleBoxBordered]}>{children}</div>;
 }
 
@@ -18,7 +17,6 @@ type EnumBoxProps = React.PropsWithChildren<{
 
 function EnumBox(props: EnumBoxProps) {
   const { children, position } = props;
-
   return (
     <div
       sx={[

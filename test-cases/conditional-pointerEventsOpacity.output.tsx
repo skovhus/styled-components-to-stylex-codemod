@@ -10,7 +10,6 @@ type ContainerProps = {
 
 function Container(props: ContainerProps) {
   const { children, duration, delay, open, ...rest } = props;
-
   return (
     <Flex
       {...rest}

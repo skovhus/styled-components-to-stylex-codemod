@@ -10,7 +10,6 @@ type TextProps = React.PropsWithChildren<{
 // Helper call in conditional - should apply truncation when truthy
 function Text(props: TextProps) {
   const { children, truncate } = props;
-
   return <p sx={[styles.text, truncate ? helpers.truncate : undefined]}>{children}</p>;
 }
 
@@ -21,7 +20,6 @@ type TextAltProps = React.PropsWithChildren<{
 // Helper call in alternate - should apply truncation when falsy
 function TextAlt(props: TextAltProps) {
   const { children, noTruncate } = props;
-
   return <p sx={[styles.textAlt, !noTruncate && helpers.truncate]}>{children}</p>;
 }
 
@@ -32,7 +30,6 @@ type TitleProps = React.PropsWithChildren<{
 
 function Title(props: TitleProps) {
   const { children, maxWidth, truncateTitle } = props;
-
   return (
     <div
       sx={[

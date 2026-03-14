@@ -9,7 +9,6 @@ type TopArrowStemProps = React.PropsWithChildren<{
 
 function TopArrowStem(props: TopArrowStemProps) {
   const { children, state } = props;
-
   return <g sx={[styles.topArrowStem, stateVariants[state]]}>{children}</g>;
 }
 

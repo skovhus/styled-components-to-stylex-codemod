@@ -8,7 +8,6 @@ type ButtonProps = React.PropsWithChildren<{
 // Simple renamed destructured prop with static base style
 function Button(props: ButtonProps) {
   const { children, color } = props;
-
   return (
     <button
       sx={styles.button({
@@ -27,7 +26,6 @@ type CardProps = React.PropsWithChildren<{
 // Destructured prop with default value
 function Card(props: CardProps) {
   const { children, padding } = props;
-
   return <div sx={[styles.card, padding != null && styles.cardPadding(padding)]}>{children}</div>;
 }
 
@@ -38,7 +36,6 @@ type BoxProps = React.PropsWithChildren<{
 // Renamed destructured prop with default value
 function Box(props: BoxProps) {
   const { children, margin } = props;
-
   return <div sx={[styles.box, margin != null && styles.boxMargin(margin)]}>{children}</div>;
 }
 

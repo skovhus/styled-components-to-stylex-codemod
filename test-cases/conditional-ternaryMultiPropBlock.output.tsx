@@ -8,7 +8,6 @@ type ErrorMessageProps = React.PropsWithChildren<{
 
 function ErrorMessage(props: ErrorMessageProps) {
   const { children, inline, ...rest } = props;
-
   return (
     <div
       {...rest}

@@ -36,7 +36,6 @@ type DynamicBoxProps = React.PropsWithChildren<{
 
 function DynamicBox(props: DynamicBoxProps) {
   const { variant, children } = props;
-
   const sx = stylex.props(
     styles.dynamicBoxBase,
     variant === "primary" && styles.dynamicBoxPrimary,

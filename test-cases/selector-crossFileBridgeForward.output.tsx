@@ -6,7 +6,6 @@ import { StyledCollapseButtonMarker } from "./selector-crossFileBridgeForward.in
 
 export function StyledCollapseButton(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.collapseButton, stylex.defaultMarker(), StyledCollapseButtonMarker]}>
       {children}

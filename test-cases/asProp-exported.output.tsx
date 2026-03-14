@@ -5,7 +5,6 @@ export function ContentViewContainer<C extends React.ElementType = "div">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
 ) {
   const { as: Component = "div", children, ...rest } = props;
-
   return (
     <Component {...rest} {...stylex.props(styles.contentViewContainer)}>
       {children}
@@ -38,7 +37,6 @@ export function StyledWrapper<C extends React.ElementType = typeof BaseComponent
   props: StyledWrapperProps<C>,
 ) {
   const { as: Component = BaseComponent, variant, ...rest } = props;
-
   return (
     <Component
       {...rest}

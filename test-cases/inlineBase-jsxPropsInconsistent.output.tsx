@@ -7,7 +7,6 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { children, align } = props;
-
   return (
     <div sx={[styles.container, align != null && containerAlignVariants[align]]}>{children}</div>
   );

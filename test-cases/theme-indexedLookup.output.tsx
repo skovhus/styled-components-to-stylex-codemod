@@ -11,7 +11,6 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, hoverColor, bg } = props;
-
   return (
     <div
       sx={[styles.box, styles.boxBackgroundColorHover(hoverColor), styles.boxBackgroundColor(bg)]}
@@ -41,7 +40,6 @@ export function TextColor(
   props: TextColorProps & Omit<React.ComponentProps<"span">, "className" | "style">,
 ) {
   const { children, color, ...rest } = props;
-
   return (
     <span {...rest} sx={styles.textColorColor(color)}>
       {children}

@@ -8,7 +8,6 @@ type CheckMarkProps = React.PropsWithChildren<{
 
 function CheckMark(props: CheckMarkProps) {
   const { children, opaque } = props;
-
   return <div sx={[styles.checkMark, opaque && styles.checkMarkOpaque]}>{children}</div>;
 }
 

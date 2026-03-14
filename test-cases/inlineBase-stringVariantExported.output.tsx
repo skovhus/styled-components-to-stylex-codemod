@@ -9,7 +9,6 @@ type CardProps = { direction?: "column" } & { sx?: stylex.StyleXStyles } & Pick<
 
 export function Card(props: CardProps) {
   const { className, children, style, sx, direction, ...rest } = props;
-
   return (
     <div
       {...rest}

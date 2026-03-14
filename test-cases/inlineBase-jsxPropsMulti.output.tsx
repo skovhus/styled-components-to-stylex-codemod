@@ -8,7 +8,6 @@ type ContainerProps = React.PropsWithChildren<{
 
 function Container(props: ContainerProps) {
   const { children, align, gap } = props;
-
   return (
     <div
       sx={[
