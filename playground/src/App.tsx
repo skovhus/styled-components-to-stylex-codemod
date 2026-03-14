@@ -102,7 +102,9 @@ export default function App() {
   );
 
   const handleResizePointerMove = useCallback((event: React.PointerEvent) => {
-    if (!dragStartRef.current) {return;}
+    if (!dragStartRef.current) {
+      return;
+    }
     const delta = dragStartRef.current.startY - event.clientY;
     const newHeight = Math.max(100, Math.min(800, dragStartRef.current.startHeight + delta));
     setRenderPanelHeight(newHeight);
