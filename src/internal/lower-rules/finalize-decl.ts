@@ -6,6 +6,7 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
   cssValueToJs,
   literalToAst,
+  objectToAst,
   toStyleKey,
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
@@ -739,27 +740,46 @@ function mergeBaseIntoSingleStyleFn(args: {
     }
   }
 
-  // Bail if any static property overlaps with the function body — avoids
-  // reasoning about override priority between static and dynamic values.
   const staticKeys = Object.keys(styleObj).filter((k) => !k.startsWith("__"));
-  if (staticKeys.some((k) => existingKeys.has(k))) {
-    return;
-  }
+  const overlappingKeys = new Set(staticKeys.filter((k) => existingKeys.has(k)));
 
-  // Prepend base static properties to the function body
-  const prependProps: unknown[] = [];
-  for (const [cssProp, cssValue] of Object.entries(styleObj)) {
-    // Skip internal metadata keys
-    if (cssProp.startsWith("__")) {
+  // Handle overlapping keys: scalar overlaps are dropped (the function body's
+  // value takes precedence since condition === "always"), nested objects
+  // (pseudo-elements, media queries) are deep-merged.
+  for (const key of overlappingKeys) {
+    const staticValue = styleObj[key];
+    if (
+      !staticValue ||
+      typeof staticValue !== "object" ||
+      isAstNode(staticValue) ||
+      Array.isArray(staticValue)
+    ) {
       continue;
     }
-    const valueAst = literalToAst(j, cssValue);
-    const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cssProp)
-      ? j.identifier(cssProp)
-      : j.literal(cssProp);
-    prependProps.push(j.property("init", key, valueAst));
+    // Nested object overlap — validate and deep-merge into function body
+    const fnProp = findBodyProperty(bodyObj.properties as ASTProperty[], key);
+    if (!fnProp?.value || (fnProp.value as { type?: string }).type !== "ObjectExpression") {
+      return;
+    }
+    const fnNestedObj = fnProp.value as { properties?: ASTProperty[] };
+    if (!Array.isArray(fnNestedObj.properties)) {
+      return;
+    }
+    const fnNestedKeys = new Set(
+      fnNestedObj.properties.map((p) => p.key?.name ?? p.key?.value ?? ""),
+    );
+    for (const nestedKey of Object.keys(staticValue as Record<string, unknown>)) {
+      if (fnNestedKeys.has(nestedKey)) {
+        return;
+      }
+    }
+    (fnNestedObj.properties as unknown[]).unshift(
+      ...styleObjToAstProperties(j, staticValue as Record<string, unknown>),
+    );
   }
-  bodyObj.properties.unshift(...prependProps);
+
+  // Prepend non-overlapping base static properties to the function body
+  bodyObj.properties.unshift(...styleObjToAstProperties(j, styleObj, overlappingKeys));
 
   // Rename the function key from fnKey to decl.styleKey
   if (fnKey !== decl.styleKey) {
@@ -853,6 +873,40 @@ function convertStyleFnsToPropsPattern(
       }
     }
   }
+}
+
+type ASTProperty = { key?: { name?: string; value?: string }; value?: unknown };
+
+function findBodyProperty(properties: ASTProperty[], key: string): ASTProperty | undefined {
+  return properties.find((p) => (p.key?.name ?? p.key?.value) === key);
+}
+
+/**
+ * Converts style object entries to AST property nodes for insertion into
+ * a function body's ObjectExpression. Used by mergeBaseIntoSingleStyleFn
+ * and mergeVariantBucketsIntoStyleFns to fold static properties into
+ * dynamic style functions.
+ */
+function styleObjToAstProperties(
+  j: Parameters<typeof literalToAst>[0],
+  obj: Record<string, unknown>,
+  skip?: ReadonlySet<string>,
+): unknown[] {
+  const props: unknown[] = [];
+  for (const [cssProp, cssValue] of Object.entries(obj)) {
+    if (cssProp.startsWith("__") || skip?.has(cssProp)) {
+      continue;
+    }
+    const valueAst =
+      cssValue && typeof cssValue === "object" && !isAstNode(cssValue) && !Array.isArray(cssValue)
+        ? objectToAst(j, cssValue as Record<string, unknown>)
+        : literalToAst(j, cssValue);
+    const key = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cssProp)
+      ? j.identifier(cssProp)
+      : j.literal(cssProp);
+    props.push(j.property("init", key, valueAst));
+  }
+  return props;
 }
 
 /**
@@ -1490,17 +1544,10 @@ function mergeVariantBucketsIntoStyleFns(args: {
     }
 
     // Merge variant properties that aren't already in the function body
-    let merged = false;
-    for (const [cssProp, cssValue] of Object.entries(variantObj)) {
-      if (existingKeys.has(cssProp)) {
-        continue;
-      }
-      const valueAst = literalToAst(j, cssValue);
-      bodyObj.properties.unshift(j.property("init", j.identifier(cssProp), valueAst));
-      merged = true;
-    }
+    const propsToMerge = styleObjToAstProperties(j, variantObj, existingKeys);
+    bodyObj.properties.unshift(...propsToMerge);
 
-    if (merged) {
+    if (propsToMerge.length > 0) {
       // Remove the variant from remainingBuckets/remainingStyleKeys so it
       // doesn't produce a duplicate bare reference in stylex.props()
       remainingBuckets.delete(when);

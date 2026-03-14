@@ -33,8 +33,9 @@ function HighlightedAvatar(props: HighlightedAvatarProps) {
     <UserAvatar
       {...rest}
       {...stylex.props(
-        styles.highlightedAvatar,
-        styles.highlightedAvatarBoxShadow(`0 0 0 2px ${highlightColor ?? "transparent"}`),
+        styles.highlightedAvatar({
+          boxShadow: `0 0 0 2px ${highlightColor ?? "transparent"}`,
+        }),
       )}
     />
   );
@@ -62,11 +63,8 @@ const styles = stylex.create({
   componentWrapperOpen: {
     borderRadius: "8px",
   },
-  highlightedAvatar: {
-    boxShadow: "0 0 0 2px transparent",
+  highlightedAvatar: (props: { boxShadow: string }) => ({
     borderRadius: "50%",
-  },
-  highlightedAvatarBoxShadow: (boxShadow: string) => ({
-    boxShadow,
+    boxShadow: props.boxShadow,
   }),
 });

@@ -74,9 +74,13 @@ export function wrapCallArgForPropsObject(
   if (!propsObjectKey) {
     return rawArg;
   }
-  return j.objectExpression([
-    j.property("init", j.identifier(propsObjectKey), rawArg),
-  ]) as unknown as ExpressionKind;
+  const prop = j.property("init", j.identifier(propsObjectKey), rawArg) as ReturnType<
+    typeof j.property
+  > & { shorthand?: boolean };
+  if (rawArg.type === "Identifier" && rawArg.name === propsObjectKey) {
+    prop.shorthand = true;
+  }
+  return j.objectExpression([prop]) as unknown as ExpressionKind;
 }
 
 // ---------------------------------------------------------------------------

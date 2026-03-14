@@ -2371,6 +2371,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
 
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
+  const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
 
   for (const out of stylexDecls) {
     if (!out.prop) {
@@ -2378,9 +2379,17 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     }
     const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
     if (!styleFnDecls.has(fnKey)) {
-      const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+      // Use the prop name (without $) as parameter for cleaner call sites
+      // when possible: styles.badge({ badgeColor }) instead of
+      // styles.badge({ backgroundColor: badgeColor })
+      const outParamName =
+        isSimpleIdentity && jsxProp.startsWith("$")
+          ? jsxProp.slice(1)
+          : cssPropertyToIdentifier(out.prop, avoidNames);
       const param = j.identifier(outParamName);
-      if (/\.(ts|tsx)$/.test(filePath)) {
+      if (isSimpleIdentity && jsxProp !== "__props") {
+        ctx.annotateParamFromJsxProp(param, jsxProp);
+      } else if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
           j.tsStringKeyword(),
         );
@@ -2408,17 +2417,12 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
-    if (isSimpleIdentity) {
-      const jsxProp = [...propsUsed][0]!;
-      styleFnFromProps.push({ fnKey, jsxProp });
-    } else {
-      styleFnFromProps.push({
-        fnKey,
-        jsxProp: "__props" as const,
-        condition: "always" as const,
-        callArg: cloneAstNode(valueExpr) as ExpressionKind,
-      });
-    }
+    styleFnFromProps.push({
+      fnKey,
+      jsxProp,
+      condition: "always" as const,
+      ...(isSimpleIdentity ? {} : { callArg: cloneAstNode(valueExpr) as ExpressionKind }),
+    });
   }
 
   for (const propName of propsUsed) {
