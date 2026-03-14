@@ -607,6 +607,66 @@ export const App = () => <Container />;
     expect(typeof warning.loc?.column).toBe("number");
   });
 
+  it("should warn with correct line number for sibling combinator selector", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: red;
+
+  & + span {
+    margin-left: 8px;
+  }
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    const warning = result.warnings.find(
+      (w) => w.type === "Unsupported selector: sibling combinator",
+    );
+    expect(warning).toBeDefined();
+    // Line 4 is template start, `& + span` is on line 7 (3 lines into template content)
+    expect(warning?.loc?.line).toBe(7);
+  });
+
+  it("should warn with correct line number for descendant/child/sibling selector", () => {
+    const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  color: red;
+
+  a {
+    text-decoration: none;
+  }
+\`;
+
+export const App = () => <Box><span /></Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    const warning = result.warnings.find(
+      (w) => w.type === "Unsupported selector: descendant/child/sibling selector",
+    );
+    expect(warning).toBeDefined();
+    // Line 4 is template start, `a {` is on line 7 (3 lines into template content)
+    expect(warning?.loc?.line).toBe(7);
+  });
+
   it("should emit info warning for & + & (adjacent sibling broadens to general)", () => {
     const source = `
 import styled from "styled-components";
