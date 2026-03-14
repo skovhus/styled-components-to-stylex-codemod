@@ -6,24 +6,14 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
-import {
-  collectInlineStylePropNames,
-  type ExpressionKind,
-  type WrapperPropDefaults,
-} from "./types.js";
+import { type ExpressionKind, type WrapperPropDefaults } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
-import { collectBooleanPropNames, VOID_TAGS } from "./type-helpers.js";
+import { VOID_TAGS } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import {
-  appendAllPseudoStyleArgs,
-  buildVariantStyleExprs,
-  mergeOrderedEntries,
-  styleRef,
-  type OrderedStyleEntry,
-} from "./style-expr-builders.js";
+import { buildAllVariantAndStyleExprs, styleRef } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -158,68 +148,17 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         ...extraStyleArgsAfterBase,
       ];
 
-      const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
-      const booleanProps = collectBooleanPropNames(d);
-
-      // Collect variant and styleFn expressions with source order for interleaving.
-      const hasSourceOrder = !!(
-        d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0
-      );
-      const orderedEntries: OrderedStyleEntry[] = [];
-
-      // Add variant style arguments if this component has variants
-      buildVariantStyleExprs({
+      buildAllVariantAndStyleExprs({
         d,
         emitter,
         j,
         stylesIdentifier,
         styleArgs,
-        orderedEntries,
-        hasSourceOrder,
         destructureProps,
-        booleanProps,
-        compoundVariantKeys,
+        propDefaults,
+        compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
+        buildCompoundVariantExpressions,
       });
-
-      // Add variant dimension lookups (StyleX variants recipe pattern)
-      if (d.variantDimensions) {
-        emitter.buildVariantDimensionLookups({
-          dimensions: d.variantDimensions,
-          styleArgs,
-          destructureProps,
-          propDefaults,
-          orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-        });
-      }
-
-      // Add compound variant expressions (multi-prop nested ternaries)
-      if (d.compoundVariants) {
-        buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
-      }
-
-      for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
-        if (!destructureProps.includes(gp)) {
-          destructureProps.push(gp);
-        }
-      }
-
-      for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
-        if (!destructureProps.includes(prop)) {
-          destructureProps.push(prop);
-        }
-      }
-
-      // Add style function calls for dynamic prop-based styles
-      emitter.buildStyleFnExpressions({
-        d,
-        styleArgs,
-        destructureProps,
-        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-      });
-      emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
-
-      // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
-      mergeOrderedEntries(orderedEntries, styleArgs);
 
       const isVoidTag = VOID_TAGS.has(tagName);
       // When allowAsProp is true, include children support even for void tags

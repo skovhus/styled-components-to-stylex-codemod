@@ -18,7 +18,6 @@ import { emitStyleMerging } from "./style-merger.js";
 import {
   buildStaticVariantPropTypes,
   buildVariantDimPropTypeMap,
-  collectBooleanPropNames,
   VOID_TAGS,
 } from "./type-helpers.js";
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
@@ -30,11 +29,9 @@ import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
+  buildAllVariantAndStyleExprs,
   buildUseThemeDeclaration,
-  buildVariantStyleExprs,
-  mergeOrderedEntries,
   styleRef,
-  type OrderedStyleEntry,
 } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
@@ -900,32 +897,18 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
-      if (!destructureProps.includes(gp)) {
-        destructureProps.push(gp);
-      }
-    }
-
-    const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
-    const booleanProps = collectBooleanPropNames(d);
-
-    // Collect variant and styleFn expressions with source order for interleaving.
-    // When source order is available, entries are sorted to preserve CSS cascade order.
-    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
-    const orderedEntries: OrderedStyleEntry[] = [];
-
-    buildVariantStyleExprs({
+    buildAllVariantAndStyleExprs({
       d,
       emitter,
       j,
       stylesIdentifier,
       styleArgs,
-      orderedEntries,
-      hasSourceOrder,
       destructureProps,
-      booleanProps,
-      compoundVariantKeys,
+      propDefaults,
+      compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
+      afterVariantStyleArgs,
       enableComplementaryMerging: true,
+      buildCompoundVariantExpressions,
     });
 
     // When a defaultAttr (e.g. tabIndex: props.tabIndex ?? 0) is also used in a
@@ -940,46 +923,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       ) {
         propDefaults.set(attr.jsxProp, attr.value);
       }
-    }
-
-    // Add variant dimension lookups (StyleX variants recipe pattern)
-    if (d.variantDimensions) {
-      emitter.buildVariantDimensionLookups({
-        dimensions: d.variantDimensions,
-        styleArgs,
-        destructureProps,
-        propDefaults,
-        orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-      });
-    }
-
-    // Add compound variant expressions (multi-prop nested ternaries)
-    if (d.compoundVariants) {
-      buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
-    }
-
-    for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
-      if (!destructureProps.includes(prop)) {
-        destructureProps.push(prop);
-      }
-    }
-
-    // Add style function calls for dynamic prop-based styles
-    emitter.buildStyleFnExpressions({
-      d,
-      styleArgs,
-      destructureProps,
-      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
-    });
-    emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
-
-    // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
-    mergeOrderedEntries(orderedEntries, styleArgs);
-
-    // Add adapter-resolved StyleX styles that should come after variant styles
-    // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
-    if (afterVariantStyleArgs.length > 0) {
-      styleArgs.push(...afterVariantStyleArgs);
     }
 
     if (d.attrsInfo?.conditionalAttrs?.length) {

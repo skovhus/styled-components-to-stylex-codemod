@@ -13,7 +13,11 @@ import {
   cloneAstNode,
   collectIdentifiers,
 } from "../utilities/jscodeshift-utils.js";
-import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
+import {
+  collectInlineStylePropNames,
+  type ExpressionKind,
+  type WrapperPropDefaults,
+} from "./types.js";
 import { collectBooleanPropNames, sortVariantEntriesBySpecificity } from "./type-helpers.js";
 import {
   areEquivalentWhen,
@@ -1000,6 +1004,103 @@ export function appendAllPseudoStyleArgs(
     }
   }
   return guardProps;
+}
+
+/**
+ * Builds all variant, dimension, compound variant, pseudo, inline-prop, and style-function
+ * expressions, collecting destructure props along the way. This is the common sequence
+ * shared across emit-intrinsic-simple, emit-intrinsic-polymorphic, emit-intrinsic-should-forward-prop,
+ * and emit-component.
+ */
+export function buildAllVariantAndStyleExprs(opts: {
+  d: StyledDecl;
+  emitter: WrapperEmitter;
+  j: JSCodeshift;
+  stylesIdentifier: string;
+  styleArgs: ExpressionKind[];
+  destructureProps: string[];
+  propDefaults: WrapperPropDefaults;
+  compoundVariantKeys: ReadonlySet<string>;
+  afterVariantStyleArgs?: ExpressionKind[];
+  enableComplementaryMerging?: boolean;
+  /** Custom compound variant builder from ctx.helpers */
+  buildCompoundVariantExpressions: (
+    compoundVariants: NonNullable<StyledDecl["compoundVariants"]>,
+    styleArgs: ExpressionKind[],
+    destructureProps: string[],
+  ) => void;
+}): void {
+  const {
+    d,
+    emitter,
+    j,
+    stylesIdentifier,
+    styleArgs,
+    destructureProps,
+    propDefaults,
+    compoundVariantKeys,
+    afterVariantStyleArgs,
+    enableComplementaryMerging,
+    buildCompoundVariantExpressions,
+  } = opts;
+
+  const booleanProps = collectBooleanPropNames(d);
+  const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+  const orderedEntries: OrderedStyleEntry[] = [];
+
+  buildVariantStyleExprs({
+    d,
+    emitter,
+    j,
+    stylesIdentifier,
+    styleArgs,
+    orderedEntries,
+    hasSourceOrder,
+    destructureProps,
+    booleanProps,
+    compoundVariantKeys,
+    enableComplementaryMerging,
+  });
+
+  if (d.variantDimensions) {
+    emitter.buildVariantDimensionLookups({
+      dimensions: d.variantDimensions,
+      styleArgs,
+      destructureProps,
+      propDefaults,
+      orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+    });
+  }
+
+  if (d.compoundVariants) {
+    buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
+  }
+
+  for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
+    if (!destructureProps.includes(gp)) {
+      destructureProps.push(gp);
+    }
+  }
+
+  for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+    if (!destructureProps.includes(prop)) {
+      destructureProps.push(prop);
+    }
+  }
+
+  emitter.buildStyleFnExpressions({
+    d,
+    styleArgs,
+    destructureProps,
+    orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+  });
+  emitter.collectDestructurePropsFromStyleFns({ d, styleArgs, destructureProps });
+
+  mergeOrderedEntries(orderedEntries, styleArgs);
+
+  if (afterVariantStyleArgs && afterVariantStyleArgs.length > 0) {
+    styleArgs.push(...afterVariantStyleArgs);
+  }
 }
 
 /** Builds a `const theme = useTheme();` variable declaration. */
