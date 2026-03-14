@@ -754,7 +754,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           if (resolved.kind === "static") {
             media = resolved.value;
           } else {
-            media = undefined;
+            // Computed media keys (e.g. imported breakpoint constants) cannot be nested
+            // inside a sibling computed key — bail instead of silently dropping the guard.
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: computed media query inside cross-component sibling selector",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
           }
         }
 
@@ -2152,7 +2160,15 @@ function handleSiblingSelector(
     if (resolved.kind === "static") {
       media = resolved.value;
     } else {
-      media = undefined;
+      // Computed media keys (e.g. imported breakpoint constants) cannot be nested
+      // inside a sibling computed key — bail instead of silently dropping the guard.
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: computed media query inside sibling selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
     }
   }
 
