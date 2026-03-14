@@ -11,7 +11,28 @@ function Box(props: React.PropsWithChildren<{}>) {
   );
 }
 
-export const App = () => <Box>Theme prop</Box>;
+// Block-level theme binary conditional: theme.mode === "dark" controls entire CSS block
+function ModeBox(props: React.PropsWithChildren<{}>) {
+  const theme = useTheme();
+
+  return (
+    <div
+      sx={[
+        styles.modeBox,
+        theme.mode === "dark" ? styles.modeBoxThemeModeDark : styles.modeBoxThemeModeNotDark,
+      ]}
+    >
+      {props.children}
+    </div>
+  );
+}
+
+export const App = () => (
+  <div>
+    <Box>Theme prop</Box>
+    <ModeBox>Theme mode</ModeBox>
+  </div>
+);
 
 const styles = stylex.create({
   box: {
@@ -23,5 +44,15 @@ const styles = stylex.create({
   },
   boxLight: {
     padding: 100,
+  },
+  modeBox: {
+    height: 100,
+    width: 100,
+  },
+  modeBoxThemeModeDark: {
+    color: "white",
+  },
+  modeBoxThemeModeNotDark: {
+    color: "black",
   },
 });

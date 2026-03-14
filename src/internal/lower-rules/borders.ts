@@ -598,7 +598,7 @@ export function tryHandleInterpolatedBorder(
         const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
         if (parsedTpl) {
           const fullProp = direction ? `border${direction}` : "border";
-          const extraKey = fullProp;
+          const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
           const bucket = extraStyleObjects.get(extraKey) ?? {};
           if (parsedTpl.width) {
             (bucket as any)[widthProp] = parsedTpl.width;

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
+import { $colors, pixelVars } from "./tokens.stylex";
 
 function Text(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
@@ -12,7 +12,18 @@ function Text(props: React.PropsWithChildren<{}>) {
   );
 }
 
-export const App = () => <Text>Label</Text>;
+// theme.isDark controlling an entire CSS block (empty string vs padding)
+function Box(props: React.PropsWithChildren<{}>) {
+  const theme = useTheme();
+  return <div sx={theme.isDark ? undefined : styles.boxLight}>{props.children}</div>;
+}
+
+export const App = () => (
+  <div>
+    <Text>Label</Text>
+    <Box>Box</Box>
+  </div>
+);
 
 const styles = stylex.create({
   text: {
@@ -25,5 +36,8 @@ const styles = stylex.create({
   textLight: {
     color: $colors.labelMuted,
     borderColor: $colors.bgBorderFaint,
+  },
+  boxLight: {
+    padding: pixelVars.thin,
   },
 });

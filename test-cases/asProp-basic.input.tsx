@@ -19,6 +19,11 @@ const StyledText = styled(Text)`
   margin-top: 4px;
 `;
 
+// Pattern 3: as prop on unexported intrinsic styled.div
+const FullWidthCopyText = styled.div`
+  width: 100%;
+`;
+
 export const App = () => (
   <div>
     <Button>Normal Button</Button>
@@ -29,9 +34,11 @@ export const App = () => (
     <StyledText variant="small" color="muted">
       Normal styled text
     </StyledText>
-    {/* Pattern 3: as="label" with label-specific props like htmlFor */}
+    {/* as="label" with label-specific props like htmlFor */}
     <StyledText variant="mini" as="label" htmlFor="my-input">
       Label using Text styles
     </StyledText>
+    {/* Pattern 3: as on intrinsic styled.div */}
+    <FullWidthCopyText as="label">Invite link</FullWidthCopyText>
   </div>
 );

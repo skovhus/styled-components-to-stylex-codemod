@@ -31,6 +31,18 @@ function StyledText<C extends React.ElementType = typeof Text>(props: StyledText
   return <Component {...rest} {...stylex.props(styles.text)} />;
 }
 
+// Pattern 3: as prop on unexported intrinsic styled.div
+function FullWidthCopyText<C extends React.ElementType = "div">(
+  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
+) {
+  const { as: Component = "div", children, ...rest } = props;
+  return (
+    <Component {...rest} {...stylex.props(styles.fullWidthCopyText)}>
+      {children}
+    </Component>
+  );
+}
+
 export const App = () => (
   <div>
     <Button>Normal Button</Button>
@@ -41,10 +53,12 @@ export const App = () => (
     <StyledText variant="small" color="muted">
       Normal styled text
     </StyledText>
-    {/* Pattern 3: as="label" with label-specific props like htmlFor */}
+    {/* as="label" with label-specific props like htmlFor */}
     <StyledText variant="mini" as="label" htmlFor="my-input">
       Label using Text styles
     </StyledText>
+    {/* Pattern 3: as on intrinsic styled.div */}
+    <FullWidthCopyText as="label">Invite link</FullWidthCopyText>
   </div>
 );
 
@@ -66,5 +80,10 @@ const styles = stylex.create({
   // When used with as="label", the component's props must be preserved
   text: {
     marginTop: 4,
+  },
+
+  // Pattern 3: as prop on unexported intrinsic styled.div
+  fullWidthCopyText: {
+    width: "100%",
   },
 });

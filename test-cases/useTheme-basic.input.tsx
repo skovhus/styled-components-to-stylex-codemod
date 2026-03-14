@@ -29,4 +29,14 @@ const ColorPickerWrapper = styled.div`
   padding: 12px;
 `;
 
-export const App = () => <Input />;
+// Nullish coalescing fallback on theme color
+const FallbackBox = styled.div`
+  color: ${(props) => props.theme.color.labelBase ?? "black"};
+`;
+
+export const App = () => (
+  <div>
+    <Input />
+    <FallbackBox>Fallback test</FallbackBox>
+  </div>
+);
