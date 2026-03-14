@@ -14,7 +14,6 @@ export function TransientButton(
   props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style">,
 ) {
   const { children, variant, size, ...rest } = props;
-
   const restRecord = rest as Record<string, unknown>;
 
   for (const k of Object.keys(rest)) {

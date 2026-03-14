@@ -29,7 +29,6 @@ type AnimatedCardProps = React.PropsWithChildren<{
 // Both animations share the same interpolated duration prop
 function AnimatedCard(props: AnimatedCardProps) {
   const { children, duration } = props;
-
   return (
     <div
       sx={[

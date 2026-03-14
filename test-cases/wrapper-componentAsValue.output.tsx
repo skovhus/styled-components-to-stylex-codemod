@@ -27,7 +27,6 @@ function VirtualList({
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: React.ComponentProps<"div">) {
   const { className, children, style, ...rest } = props;
-
   return (
     <div {...rest} {...mergedSx(styles.outerWrapper, className, style)}>
       {children}
@@ -37,7 +36,6 @@ function OuterWrapper(props: React.ComponentProps<"div">) {
 
 function InnerWrapper(props: React.ComponentProps<"div">) {
   const { className, children, style, ...rest } = props;
-
   return (
     <div {...rest} {...mergedSx(styles.innerWrapper, className, style)}>
       {children}

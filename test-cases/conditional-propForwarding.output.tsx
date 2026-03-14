@@ -9,7 +9,6 @@ type TooltipContainerProps = { position: "top" | "bottom" } & Omit<
 
 function TooltipContainer(props: TooltipContainerProps) {
   const { children, position, ...rest } = props;
-
   return (
     <Flex
       position={position}

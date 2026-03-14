@@ -9,7 +9,6 @@ type CardContainerProps = React.PropsWithChildren<{
 
 function CardContainer(props: CardContainerProps) {
   const { children, checked } = props;
-
   const theme = useTheme();
 
   return (

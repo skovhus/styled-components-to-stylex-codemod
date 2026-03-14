@@ -8,7 +8,6 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, position } = props;
-
   return (
     <div sx={[styles.box, position === "top" && styles.boxPositionTop, styles.borderBottom]}>
       {children}

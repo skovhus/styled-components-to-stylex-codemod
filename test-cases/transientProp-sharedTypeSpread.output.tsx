@@ -10,7 +10,6 @@ export function CardA(
   props: SharedProps & Omit<React.ComponentProps<"div">, "className" | "style">,
 ) {
   const { children, highlight, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.cardA, highlight ? styles.cardAHighlight : undefined]}>
       {children}
@@ -20,7 +19,6 @@ export function CardA(
 
 export function CardB(props: SharedProps & React.ComponentProps<"div">) {
   const { className, children, style, highlight, ...rest } = props;
-
   return (
     <div
       {...rest}

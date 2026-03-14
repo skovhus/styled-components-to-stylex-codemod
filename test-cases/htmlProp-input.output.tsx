@@ -11,7 +11,6 @@ import { mergedSx } from "./lib/mergedSx";
  */
 export function RangeInput(props: React.ComponentProps<"input"> & { sx?: stylex.StyleXStyles }) {
   const { className, style, sx, ...rest } = props;
-
   return <input {...rest} {...mergedSx([styles.rangeInput, sx], className, style)} />;
 }
 

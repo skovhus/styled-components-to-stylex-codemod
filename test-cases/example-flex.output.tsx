@@ -111,7 +111,6 @@ export function Flex<C extends React.ElementType = "div">(
     noMinHeight,
     ...rest
   } = props;
-
   return (
     <Component
       {...rest}
@@ -157,7 +156,6 @@ export function Flex<C extends React.ElementType = "div">(
 /** A flex spacer */
 export function FlexSpacer(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;
-
   return (
     <div {...rest} sx={styles.flexSpacer}>
       {children}

@@ -11,7 +11,6 @@ export function StyledLoading(
   } & React.ComponentPropsWithRef<typeof Loading>,
 ) {
   const { className, style, sx, ...rest } = props;
-
   return <Loading {...rest} {...mergedSx([styles.loading, sx], className, style)} />;
 }
 

@@ -9,7 +9,6 @@ type ImgProps = {
 
 function Img(props: ImgProps) {
   const { disabled, isInactive, ...rest } = props;
-
   return (
     <img
       {...rest}

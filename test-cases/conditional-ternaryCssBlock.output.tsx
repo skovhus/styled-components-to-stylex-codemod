@@ -10,7 +10,6 @@ type HighlightProps = React.PropsWithChildren<{
 
 export function Highlight(props: HighlightProps) {
   const { children, dim, ...rest } = props;
-
   return (
     <span {...rest} sx={[styles.highlight, dim && styles.highlightDim]}>
       {children}

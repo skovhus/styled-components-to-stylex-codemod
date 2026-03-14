@@ -8,7 +8,6 @@ type GradientBoxProps = React.PropsWithChildren<{
 // Arrow function in background (10 occurrences)
 function GradientBox(props: GradientBoxProps) {
   const { children, direction } = props;
-
   return (
     <div
       sx={[styles.gradientBox, direction === "horizontal" && styles.gradientBoxDirectionHorizontal]}
@@ -26,7 +25,6 @@ type TabItemProps = React.PropsWithChildren<{
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {
   const { children, isActive, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.tabItem, isActive ? styles.tabItemActive : styles.tabItemNotActive]}>
       {children}

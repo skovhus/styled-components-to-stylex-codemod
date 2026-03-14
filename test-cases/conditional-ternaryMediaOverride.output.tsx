@@ -9,7 +9,6 @@ type TitleProps = React.PropsWithChildren<{
 
 function Title(props: TitleProps) {
   const { children, size } = props;
-
   return <div sx={[styles.title, size === "large" && styles.titleSizeLarge]}>{children}</div>;
 }
 
@@ -20,7 +19,6 @@ type CardProps = React.PropsWithChildren<{
 
 function Card(props: CardProps) {
   const { children, checked, disabled } = props;
-
   return (
     <label
       sx={[

@@ -11,7 +11,6 @@ type Props = {
 
 export function ScrollableFlex(props: Props) {
   const { className, children, style, sx, applyBackground, tabIndex, ...rest } = props;
-
   return (
     <Flex
       tabIndex={tabIndex ?? 0}
@@ -36,7 +35,6 @@ export function ScrollableDiv(
   props: Props & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
 ) {
   const { className, children, style, sx, applyBackground, gutter, tabIndex, ...rest } = props;
-
   return (
     <div
       tabIndex={tabIndex ?? 0}

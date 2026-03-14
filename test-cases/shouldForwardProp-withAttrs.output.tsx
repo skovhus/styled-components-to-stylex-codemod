@@ -10,7 +10,6 @@ interface TextProps extends React.HTMLAttributes<HTMLSpanElement> {
 // The codemod produces no output and no warning.
 export function Text(props: TextProps & Omit<React.ComponentProps<"span">, "className" | "style">) {
   const { children, align, selectable, ...rest } = props;
-
   return (
     <span
       {...rest}

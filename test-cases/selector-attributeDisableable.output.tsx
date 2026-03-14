@@ -3,7 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 
 function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabled">) {
   const { children, ...rest } = props;
-
   return (
     <button {...rest} sx={styles.button}>
       {children}
@@ -13,7 +12,6 @@ function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabl
 
 function Select(props: Pick<React.ComponentProps<"select">, "children" | "disabled">) {
   const { children, ...rest } = props;
-
   return (
     <select {...rest} sx={styles.select}>
       {children}
@@ -25,7 +23,6 @@ function Textarea(
   props: Pick<React.ComponentProps<"textarea">, "children" | "defaultValue" | "disabled">,
 ) {
   const { children, ...rest } = props;
-
   return (
     <textarea {...rest} sx={styles.textarea}>
       {children}

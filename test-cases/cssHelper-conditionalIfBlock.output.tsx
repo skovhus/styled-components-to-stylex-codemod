@@ -6,7 +6,6 @@ type ContainerProps = { size: number } & Omit<React.ComponentProps<"div">, "clas
 
 export function Container(props: ContainerProps) {
   const { children, size, ...rest } = props;
-
   return (
     <div
       {...rest}

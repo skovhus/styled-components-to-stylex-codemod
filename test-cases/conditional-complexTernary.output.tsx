@@ -9,7 +9,6 @@ type CardContainerProps = React.PropsWithChildren<{
 
 function CardContainer(props: CardContainerProps) {
   const { children, disabled, checked } = props;
-
   return (
     <label
       sx={[

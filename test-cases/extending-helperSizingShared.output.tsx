@@ -13,7 +13,6 @@ type AvatarContainerProps = React.PropsWithChildren<{
 
 function AvatarContainer(props: AvatarContainerProps) {
   const { children, size } = props;
-
   return (
     <div
       sx={[

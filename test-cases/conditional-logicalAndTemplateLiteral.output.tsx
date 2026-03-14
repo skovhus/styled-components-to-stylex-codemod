@@ -9,7 +9,6 @@ type TitleProps = React.PropsWithChildren<{
 // Test logical AND with static template literal
 function Title(props: TitleProps) {
   const { children, upsideDown } = props;
-
   return <h1 sx={[styles.title, upsideDown && styles.titleUpsideDown]}>{children}</h1>;
 }
 
@@ -20,7 +19,6 @@ type DropZoneProps = React.PropsWithChildren<{
 // Test logical AND with template literal containing theme expression
 export function DropZone(props: DropZoneProps) {
   const { children, isDraggingOver, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]}>
       {children}
@@ -35,7 +33,6 @@ type CardProps = React.PropsWithChildren<{
 // Test logical AND with template literal containing multiple theme expressions
 export function Card(props: CardProps) {
   const { children, isHighlighted, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.card, isHighlighted && styles.cardHighlighted]}>
       {children}
@@ -51,7 +48,6 @@ type StatusBarProps = React.PropsWithChildren<{
 // This is semantically equivalent to the logical AND form above
 export function StatusBar(props: StatusBarProps) {
   const { children, isDisconnected, ...rest } = props;
-
   return (
     <div {...rest} sx={[styles.statusBar, isDisconnected && styles.statusBarDisconnected]}>
       {children}

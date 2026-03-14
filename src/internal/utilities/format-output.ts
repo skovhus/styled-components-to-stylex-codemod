@@ -158,6 +158,12 @@ export function formatOutput(code: string): string {
     return lines.join("\n");
   })();
 
+  // Remove blank line between props destructure and the next statement.
+  // recast inserts a blank line after `const { ... } = props;` inside function bodies.
+  // Anchored to statement-level lines (leading whitespace + `const`) to avoid
+  // matching inside string/template literals or comments.
+  out = out.replace(/(^\s+const\s+\{[^}]*\} = props;\n)\n(\s+)/gm, "$1$2");
+
   // Normalize EOF: trim all trailing whitespace, then ensure a single trailing newline.
   return out.trimEnd() + "\n";
 }

@@ -11,7 +11,6 @@ type AnimatedPathProps = { width: number } & Pick<
 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, width, ...rest } = props;
-
   return (
     <path
       {...rest}

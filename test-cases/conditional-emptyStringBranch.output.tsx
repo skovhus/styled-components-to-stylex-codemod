@@ -8,7 +8,6 @@ type BoxProps = React.PropsWithChildren<{
 // Empty string in conditional - should omit property when truthy
 function Box(props: BoxProps) {
   const { children, disableMinWidth } = props;
-
   return <div sx={[styles.box, !disableMinWidth && styles.boxNotDisableMinWidth]}>{children}</div>;
 }
 
@@ -19,7 +18,6 @@ type BoxAltProps = React.PropsWithChildren<{
 // Empty string alternate - should apply property when truthy
 function BoxAlt(props: BoxAltProps) {
   const { children, enableMinWidth } = props;
-
   return <div sx={[styles.boxAlt, enableMinWidth && styles.boxAltEnableMinWidth]}>{children}</div>;
 }
 
@@ -30,7 +28,6 @@ type ContainerProps = React.PropsWithChildren<{
 // Multiple CSS declarations in string
 function Container(props: ContainerProps) {
   const { children, compact } = props;
-
   return <div sx={[styles.container, !compact && styles.containerNotCompact]}>{children}</div>;
 }
 
@@ -41,7 +38,6 @@ type WrapperProps = React.PropsWithChildren<{
 // css`` tagged template with empty string consequent
 function Wrapper(props: WrapperProps) {
   const { children, fullWidth } = props;
-
   return <div sx={[styles.wrapper, !fullWidth && styles.wrapperNotFullWidth]}>{children}</div>;
 }
 
@@ -52,7 +48,6 @@ type WrapperAltProps = React.PropsWithChildren<{
 // css`` tagged template with empty string alternate
 function WrapperAlt(props: WrapperAltProps) {
   const { children, narrow } = props;
-
   return <div sx={[styles.wrapperAlt, narrow && styles.wrapperAltNarrow]}>{children}</div>;
 }
 

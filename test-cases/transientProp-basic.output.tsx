@@ -7,7 +7,6 @@ type CompProps = React.PropsWithChildren<{
 
 function Comp(props: CompProps) {
   const { children, draggable } = props;
-
   return <div sx={[styles.comp, draggable && styles.compDraggable]}>{children}</div>;
 }
 
@@ -21,7 +20,6 @@ type StyledLinkProps = { red?: boolean } & Omit<React.ComponentPropsWithRef<type
 
 function StyledLink(props: StyledLinkProps) {
   const { className, red, ...rest } = props;
-
   return <Link {...rest} {...mergedSx([styles.link, red && styles.linkRed], className)} />;
 }
 
@@ -55,7 +53,6 @@ export function CollapseArrowIcon(
   },
 ) {
   const { isOpen, ...rest } = props;
-
   return (
     <ArrowIcon
       $isOpen={isOpen}
@@ -96,7 +93,6 @@ function AnimatedContainer(props: AnimatedContainerProps) {
 
 function StyledAnimatedContainer(props: React.ComponentPropsWithRef<typeof AnimatedContainer>) {
   const { className, style, ...rest } = props;
-
   return <AnimatedContainer {...rest} {...mergedSx(styles.animatedContainer, className, style)} />;
 }
 
@@ -109,7 +105,6 @@ type FaderProps = {
 // explicitly passed should still be renamed even when spread is present
 function Fader(props: FaderProps) {
   const { className, children, style, $duration, $open, ...rest } = props;
-
   return (
     <div
       {...rest}
