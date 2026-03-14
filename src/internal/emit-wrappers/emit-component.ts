@@ -183,7 +183,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       // Check if the wrapper and wrapped component share the same props type name.
       // This would create a circular type reference, so we should not extend the type.
-      const wrappedPropsTypeName = emitter.resolveWrappedExplicitPropsTypeName(renderedComponent);
+      const wrappedPropsTypeName =
+        emitter.resolveWrappedExplicitPropsTypeRef(renderedComponent)?.name ?? null;
       const isSelfReferentialPropsType = !!(
         explicitTypeName &&
         wrappedPropsTypeName &&
