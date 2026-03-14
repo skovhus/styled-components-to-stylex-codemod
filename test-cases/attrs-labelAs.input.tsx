@@ -4,12 +4,14 @@ import styled from "styled-components";
 // Simplified Text component for test case
 type TextProps = React.PropsWithChildren<{
   as?: React.ElementType;
+  variant?: "small" | "regular" | "large";
   className?: string;
   style?: React.CSSProperties;
 }>;
 
 const Text = styled.span<TextProps>`
-  font-size: 14px;
+  font-size: ${(props) =>
+    props.variant === "large" ? "18px" : props.variant === "small" ? "12px" : "14px"};
   line-height: 1.5;
 `;
 
@@ -28,7 +30,7 @@ export function FormField() {
 
   return (
     <div>
-      <Label ref={labelRef} htmlFor="input-id">
+      <Label ref={labelRef} htmlFor="input-id" variant="regular">
         Username
       </Label>
       <input id="input-id" type="text" />

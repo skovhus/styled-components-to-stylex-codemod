@@ -11,10 +11,30 @@ function Divider(props: DividerProps) {
   return <hr sx={[styles.divider, color != null && styles.dividerBackgroundColor(color)]} />;
 }
 
+type FadeBoxProps = React.PropsWithChildren<{
+  delay?: number;
+}>;
+
+// Nullish coalescing with numeric fallback and unit suffix
+function FadeBox(props: FadeBoxProps) {
+  const { children, delay } = props;
+  return (
+    <div
+      sx={styles.fadeBox({
+        transitionDelay: `${delay ?? 0}ms`,
+      })}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <Divider />
     <Divider color="#bf4f74" />
+    <FadeBox>Default delay</FadeBox>
+    <FadeBox delay={100}>Custom delay</FadeBox>
   </div>
 );
 
@@ -30,5 +50,11 @@ const styles = stylex.create({
   },
   dividerBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  fadeBox: (props: { transitionDelay: string }) => ({
+    transitionProperty: "opacity",
+    transitionDuration: "200ms",
+    transitionTimingFunction: "ease-out",
+    transitionDelay: props.transitionDelay,
   }),
 });

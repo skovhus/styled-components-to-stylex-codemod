@@ -71,6 +71,8 @@ export function emitStyleMerging(args: {
     | "stylesIdentifier"
     | "emptyStyleKeys"
     | "ancestorSelectorParents"
+    | "crossFileMarkers"
+    | "siblingMarkerKeys"
     | "emitTypes"
     | "useSxProp"
   >;
@@ -100,8 +102,15 @@ export function emitStyleMerging(args: {
     isIntrinsicElement = true,
   } = args;
 
-  const { styleMerger, emptyStyleKeys, stylesIdentifier, ancestorSelectorParents, emitTypes } =
-    emitter;
+  const {
+    styleMerger,
+    emptyStyleKeys,
+    stylesIdentifier,
+    ancestorSelectorParents,
+    crossFileMarkers,
+    siblingMarkerKeys,
+    emitTypes,
+  } = emitter;
 
   const styleArgs = filterEmptyStyleArgs({
     styleArgs: rawStyleArgs,
@@ -110,13 +119,29 @@ export function emitStyleMerging(args: {
     ancestorSelectorParents,
   });
 
-  // Add stylex.defaultMarker() when any style arg references an ancestor selector parent.
-  // This is needed for merger/verbose paths that bypass the postProcessTransformedAst traversal.
+  // Add a marker when any style arg references an ancestor selector parent.
+  // Sibling markers (from crossFileMarkers) REPLACE defaultMarker() — they scope sibling
+  // matching to the component. Cross-file markers coexist with defaultMarker().
   if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
-    const needsMarker = styleArgs.some((arg) =>
-      hasStyleArgKey(arg, stylesIdentifier, ancestorSelectorParents),
-    );
-    if (needsMarker) {
+    let needsDefaultMarker = false;
+    const pendingMarkers: ExpressionKind[] = [];
+    for (const arg of styleArgs) {
+      const key = getStyleArgKey(arg, stylesIdentifier);
+      if (!key || !ancestorSelectorParents.has(key)) {
+        continue;
+      }
+      const markerVarName = crossFileMarkers.get(key);
+      if (markerVarName) {
+        pendingMarkers.push(j.identifier(markerVarName));
+      }
+      // Need defaultMarker() when there's no scoped marker, or when a cross-file
+      // marker coexists with an ancestor selector (defaultMarker serves the ancestor).
+      if (!markerVarName || !siblingMarkerKeys.has(key)) {
+        needsDefaultMarker = true;
+      }
+    }
+    styleArgs.push(...pendingMarkers);
+    if (needsDefaultMarker) {
       styleArgs.push(
         j.callExpression(
           j.memberExpression(j.identifier("stylex"), j.identifier("defaultMarker")),
@@ -553,16 +578,4 @@ function getStyleArgKey(node: ExpressionKind, stylesIdentifier: string): string 
     return n.property.name as string;
   }
   return null;
-}
-
-/**
- * Returns `true` when `node` is `<stylesIdentifier>.<key>` and the key is in the given set.
- */
-function hasStyleArgKey(
-  node: ExpressionKind,
-  stylesIdentifier: string,
-  keys: Set<string>,
-): boolean {
-  const key = getStyleArgKey(node, stylesIdentifier);
-  return !!(key && keys.has(key));
 }

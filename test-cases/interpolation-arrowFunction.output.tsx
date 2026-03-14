@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 type GradientBoxProps = React.PropsWithChildren<{
   direction?: "horizontal" | "vertical";
@@ -32,11 +33,30 @@ function TabItem(props: TabItemProps) {
   );
 }
 
+type BlockBodyBoxProps = React.PropsWithChildren<{
+  large?: boolean;
+  style?: React.CSSProperties;
+}>;
+
+// Arrow function with block body (contains comment)
+function BlockBodyBox(props: BlockBodyBoxProps) {
+  const { children, style, large } = props;
+  return (
+    <div {...mergedSx([styles.blockBodyBox, large && styles.blockBodyBoxLarge], undefined, style)}>
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <GradientBox direction="horizontal">Horizontal Gradient</GradientBox>
     <TabItem isActive>Active Tab</TabItem>
     <TabItem>Inactive Tab</TabItem>
+    <div style={{ position: "relative", height: "200px" }}>
+      <BlockBodyBox large>Large Box (bottom: 80px)</BlockBodyBox>
+      <BlockBodyBox style={{ left: 200 }}>Small Box (bottom: 20px)</BlockBodyBox>
+    </div>
   </div>
 );
 
@@ -62,5 +82,19 @@ const styles = stylex.create({
     borderBottomWidth: "2px",
     borderBottomStyle: "solid",
     borderBottomColor: "#bf4f74",
+  },
+  blockBodyBox: {
+    position: "absolute",
+    left: 10,
+    bottom: "20px",
+    paddingBlock: 12,
+    paddingInline: 16,
+    backgroundColor: "paleturquoise",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "teal",
+  },
+  blockBodyBoxLarge: {
+    bottom: "80px",
   },
 });

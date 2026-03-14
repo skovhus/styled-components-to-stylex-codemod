@@ -29,6 +29,8 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     themeHook: ctx.adapter.themeHook,
     emptyStyleKeys: ctx.emptyStyleKeys,
     ancestorSelectorParents: ctx.ancestorSelectorParents,
+    crossFileMarkers: ctx.crossFileMarkers,
+    siblingMarkerKeys: ctx.siblingMarkerKeys,
     useSxProp: ctx.adapter.useSxProp,
   });
 

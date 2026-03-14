@@ -24,6 +24,8 @@ export function emitWrappers(args: {
   themeHook?: ThemeHookConfig;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
+  crossFileMarkers?: Map<string, string>;
+  siblingMarkerKeys?: Set<string>;
   useSxProp: boolean;
 }): void {
   const {
@@ -39,6 +41,8 @@ export function emitWrappers(args: {
     themeHook,
     emptyStyleKeys,
     ancestorSelectorParents,
+    crossFileMarkers,
+    siblingMarkerKeys,
     useSxProp,
   } = args;
 
@@ -60,6 +64,8 @@ export function emitWrappers(args: {
     themeHook: themeHook ?? DEFAULT_THEME_HOOK,
     emptyStyleKeys,
     ancestorSelectorParents,
+    crossFileMarkers,
+    siblingMarkerKeys,
     useSxProp,
   });
 

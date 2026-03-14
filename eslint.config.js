@@ -53,10 +53,9 @@ export default [
     // Dynamic style function parameters: the rule cannot validate runtime
     // values passed as arrow-function params in stylex.create().
     files: [
-      "test-cases/conditional-nullishCoalescingWithUnit.output.tsx",
+      "test-cases/conditional-nullishCoalescing.output.tsx",
       "test-cases/conditional-runtimeCallBranch.output.tsx",
       "test-cases/conditional-runtimeCallLocal.output.tsx",
-      "test-cases/conditional-runtimeCallThemeBool.output.tsx",
       "test-cases/helper-callPropArg.output.tsx",
       "test-cases/helper-memberCalleeMultiArg.output.tsx",
       "test-cases/interpolation-destructuredDefaults.output.tsx",

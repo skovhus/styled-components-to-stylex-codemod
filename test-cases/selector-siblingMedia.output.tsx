@@ -1,8 +1,9 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { ThingMarker } from "./selector-siblingMedia.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thing, stylex.defaultMarker()]}>{props.children}</div>;
+  return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
 }
 
 export const App = () => (
@@ -19,7 +20,7 @@ const styles = stylex.create({
     marginTop: {
       default: null,
 
-      [stylex.when.siblingBefore(":is(*)")]: {
+      [stylex.when.siblingBefore(":is(*)", ThingMarker)]: {
         default: null,
         "@media (min-width: 768px)": 16,
       },

@@ -22,6 +22,7 @@ export function lowerRules(ctx: TransformContext): {
   ancestorSelectorParents: Set<string>;
   usedCssHelperFunctions: Set<string>;
   crossFileMarkers: Map<string, string>;
+  siblingMarkerKeys: Set<string>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
@@ -113,13 +114,17 @@ export function lowerRules(ctx: TransformContext): {
     }
   }
 
-  // Derive cross-file markers from relation overrides (single source of truth).
-  // Only include markers for parents that actually need them.
+  // Derive markers from relation overrides and sibling selectors.
+  // Cross-file overrides use markers for parents that need them;
+  // sibling selectors use per-component markers for scoped matching.
   const crossFileMarkers = new Map<string, string>();
   for (const o of state.relationOverrides) {
     if (o.crossFile && o.markerVarName && parentsNeedingMarker.has(o.parentStyleKey)) {
       crossFileMarkers.set(o.parentStyleKey, o.markerVarName);
     }
+  }
+  for (const [styleKey, markerName] of state.siblingMarkerNames) {
+    crossFileMarkers.set(styleKey, markerName);
   }
 
   // Filter ancestorSelectorParents to only parents needing markers.
@@ -140,6 +145,7 @@ export function lowerRules(ctx: TransformContext): {
     ancestorSelectorParents: filteredAncestorParents,
     usedCssHelperFunctions: state.usedCssHelperFunctions,
     crossFileMarkers,
+    siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     bail: state.bail,
   };
 }

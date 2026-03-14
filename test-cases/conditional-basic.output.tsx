@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { fontWeightVars } from "./tokens.stylex";
 
 type TitleProps = React.PropsWithChildren<{
   upsideDown?: boolean;
@@ -24,6 +25,20 @@ function Box(props: BoxProps) {
   );
 }
 
+type HighlightProps = React.PropsWithChildren<{
+  dim: boolean;
+}>;
+
+// Ternary CSS block returning declaration text or empty string
+export function Highlight(props: HighlightProps) {
+  const { children, dim, ...rest } = props;
+  return (
+    <span {...rest} sx={[styles.highlight, dim && styles.highlightDim]}>
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div>
     <Title>Normal Title</Title>
@@ -31,6 +46,8 @@ export const App = () => (
     <Box>Normal Box</Box>
     <Box isActive>Active Box</Box>
     <Box isDisabled>Disabled Box</Box>
+    <Highlight dim>Dim</Highlight>
+    <Highlight dim={false}>No dim</Highlight>
   </div>
 );
 
@@ -54,5 +71,11 @@ const styles = stylex.create({
   boxDisabled: {
     opacity: 0.5,
     cursor: "not-allowed",
+  },
+  highlight: {
+    fontWeight: fontWeightVars.medium,
+  },
+  highlightDim: {
+    opacity: 0.5,
   },
 });

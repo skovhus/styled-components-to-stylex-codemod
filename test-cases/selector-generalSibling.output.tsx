@@ -1,8 +1,9 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { ThingMarker } from "./selector-generalSibling.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thing, stylex.defaultMarker()]}>{props.children}</div>;
+  return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
 }
 
 export const App = () => (
@@ -20,15 +21,15 @@ const styles = stylex.create({
     paddingInline: 16,
     borderBottomWidth: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: 2,
+      [stylex.when.siblingBefore(":is(*)", ThingMarker)]: 2,
     },
     borderBottomStyle: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "solid",
+      [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "solid",
     },
     borderBottomColor: {
       default: null,
-      [stylex.when.siblingBefore(":is(*)")]: "gray",
+      [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "gray",
     },
   },
 });

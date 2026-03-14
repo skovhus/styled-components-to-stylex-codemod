@@ -96,8 +96,10 @@ export class TransformContext {
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className */
   bridgeComponentNames?: Set<string>;
-  /** Marker variable names generated for cross-file parent components (parentStyleKey → markerName) */
+  /** Marker variable names generated for cross-file parent components and sibling selectors (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
+  /** Style keys that use sibling markers (scoped marker replaces defaultMarker) */
+  siblingMarkerKeys?: Set<string>;
   /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
   sidecarStylexContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */

@@ -44,10 +44,32 @@ export const Scrollable = styled(Flex)<ScrollableProps>`
   background-color: ${(props) => (props.$applyBackground ? "gray" : "inherit")};
 `;
 
+// DOM elements: transient props must NOT leak to the underlying element
+export const Box = styled.div<{
+  $isActive?: boolean;
+  $size?: "small" | "large";
+}>`
+  padding: ${(props) => (props.$size === "large" ? "16px" : "8px")};
+  background: ${(props) => (props.$isActive ? "blue" : "gray")};
+  color: white;
+`;
+
+export const Image = styled.img<{ $isInactive?: boolean }>`
+  opacity: ${(props) => (props.$isInactive ? 0.5 : 1)};
+  border-radius: 50%;
+`;
+
 // Usage
 export const App = () => (
-  <Scrollable $applyBackground column gap={10}>
-    <div>Item 1</div>
-    <div>Item 2</div>
-  </Scrollable>
+  <div>
+    <Scrollable $applyBackground column gap={10}>
+      <div>Item 1</div>
+      <div>Item 2</div>
+    </Scrollable>
+    <Box $isActive $size="large">
+      Active large box
+    </Box>
+    <Box $size="small">Small inactive box</Box>
+    <Image $isInactive src="/avatar.png" alt="Avatar" />
+  </div>
 );

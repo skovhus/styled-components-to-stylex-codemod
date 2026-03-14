@@ -55,6 +55,33 @@ export function ScrollableDiv(
   );
 }
 
+type TabIndexInStyleProps = { applyBackground?: boolean } & React.ComponentProps<"div"> & {
+    sx?: stylex.StyleXStyles;
+  };
+
+// tabIndex used in BOTH attrs (with default) AND in styles
+export function TabIndexInStyle(props: TabIndexInStyleProps) {
+  const { className, children, style, sx, applyBackground, tabIndex = 0, ...rest } = props;
+  return (
+    <div
+      tabIndex={tabIndex ?? 0}
+      {...rest}
+      {...mergedSx(
+        [
+          styles.tabIndexInStyle,
+          applyBackground && styles.tabIndexInStyleApplyBackground,
+          tabIndex === 0 && styles.tabIndexInStyleTabIndex0,
+          sx,
+        ],
+        className,
+        style,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "200px" }}>
     <ScrollableFlex gutter="stable" applyBackground>
@@ -67,6 +94,7 @@ export const App = () => (
         Div: Tab me! (scrollable with stable gutter)
       </div>
     </ScrollableDiv>
+    <TabIndexInStyle>Tab index in style</TabIndexInStyle>
   </div>
 );
 
@@ -104,4 +132,17 @@ const styles = stylex.create({
   scrollableDivScrollbarGutter: (scrollbarGutter: string) => ({
     scrollbarGutter,
   }),
+  tabIndexInStyle: {
+    overflowY: "auto",
+    position: "relative",
+    flexGrow: 1,
+    backgroundColor: "inherit",
+    outline: "auto",
+  },
+  tabIndexInStyleApplyBackground: {
+    backgroundColor: $colors.bgBase,
+  },
+  tabIndexInStyleTabIndex0: {
+    outline: "none",
+  },
 });
