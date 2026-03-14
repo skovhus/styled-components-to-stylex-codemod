@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: sibling combinator
+// Cross-component sibling combinator: ${Link}:focus-visible + &
 import styled from "styled-components";
 
 const Link = styled.a`

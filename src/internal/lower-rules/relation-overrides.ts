@@ -36,7 +36,7 @@ export const finalizeRelationOverrides = (args: {
       o.childStyleKey,
       ...(o.childExtraStyleKeys ?? []),
     ]);
-    if (o.crossFile && o.markerVarName) {
+    if (o.markerVarName) {
       overrideToMarker.set(o.overrideStyleKey, o.markerVarName);
     }
   }
