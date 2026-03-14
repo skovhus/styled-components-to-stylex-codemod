@@ -83,7 +83,6 @@ const styles = stylex.create({
     animationDuration: "1s",
     animationTimingFunction: "steps(4, end)",
     animationDelay: "200ms",
-    // eslint-disable-next-line stylex/valid-styles -- multi-animation comma value
     animationIterationCount: "3",
     animationDirection: "alternate",
     animationFillMode: "both",
@@ -95,13 +94,9 @@ const styles = stylex.create({
     animationDuration: "500ms, 700ms",
     animationTimingFunction: "ease-in, ease-out",
     animationDelay: "0s, 100ms",
-    // eslint-disable-next-line stylex/valid-styles -- multi-animation comma value
     animationIterationCount: "1, infinite",
-    // eslint-disable-next-line stylex/valid-styles -- multi-animation comma value
     animationDirection: "normal, reverse",
-    // eslint-disable-next-line stylex/valid-styles -- multi-animation comma value
     animationFillMode: "both, forwards",
-    // eslint-disable-next-line stylex/valid-styles -- multi-animation comma value
     animationPlayState: "paused, paused",
   },
 });

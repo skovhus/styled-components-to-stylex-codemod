@@ -37,7 +37,6 @@ const styles = stylex.create({
   row: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 16,
-    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     backgroundColor: props.backgroundColor,
   }),
 });

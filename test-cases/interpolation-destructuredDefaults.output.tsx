@@ -79,7 +79,6 @@ export const App = () => (
 
 const styles = stylex.create({
   button: (props: { color: string | undefined }) => ({
-    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     color: props.color,
   }),
 });

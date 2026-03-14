@@ -49,7 +49,6 @@ const styles = stylex.create({
   toggle: (props: { backgroundColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 16,
-    // eslint-disable-next-line stylex/valid-styles -- dynamic style fn param
     backgroundColor: props.backgroundColor,
   }),
   boxBackgroundColor: (backgroundColor: string) => ({

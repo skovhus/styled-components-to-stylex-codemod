@@ -18,13 +18,11 @@ const styles = stylex.create({
     padding: 8,
     marginTop: {
       default: null,
-      /* eslint-disable stylex/valid-styles -- computed stylex.when.*() key */
 
       [stylex.when.siblingBefore(":is(*)")]: {
         default: null,
         "@media (min-width: 768px)": 16,
       },
-      /* eslint-enable stylex/valid-styles */
     },
   },
 });

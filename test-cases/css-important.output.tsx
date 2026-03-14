@@ -24,7 +24,6 @@ const styles = stylex.create({
     backgroundColor: "#bf4f74 !important",
     color: "white !important",
     borderWidth: "0 !important",
-    // eslint-disable-next-line stylex/valid-styles -- !important suffix not parsed by rule
     borderStyle: "none !important",
     borderColor: "initial !important",
     paddingBlock: 8,
