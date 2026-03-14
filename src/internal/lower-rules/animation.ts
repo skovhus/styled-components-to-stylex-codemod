@@ -434,6 +434,9 @@ function computeInterpolatedTimeFallback(
  *
  * For multi-animation shorthands, the callArg preserves the full comma-separated list
  * of durations/delays, with the interpolated segment being dynamic.
+ *
+ * When multiple segments share the same longhand and jsxProp, they are grouped into
+ * a single style function with a combined callArg that interpolates all segments.
  */
 function emitInterpolatedAnimTimeFunctions(
   j: any,
@@ -445,6 +448,13 @@ function emitInterpolatedAnimTimeFunctions(
   delays: Array<string | null>,
   avoidNames?: Set<string>,
 ): void {
+  // Pre-validate and collect metadata for each interpolated time entry
+  const validEntries: Array<{
+    interp: InterpolatedAnimTime;
+    jsxProp: string;
+    unwrappedExpr: any;
+  }> = [];
+
   for (const interp of interpolatedTimes) {
     const expr = (decl as any).templateExpressions[interp.slotId] as any;
     if (!expr || expr.type !== "ArrowFunctionExpression") {
@@ -463,32 +473,48 @@ function emitInterpolatedAnimTimeFunctions(
       continue;
     }
 
-    // Build the call argument: for multi-animation, include the full comma-separated list
-    const valuesList = interp.longhand === "animationDuration" ? durations : delays;
-    const defaultFallback = interp.longhand === "animationDuration" ? "0s" : "0s";
-    const callArg = buildMultiAnimationCallArg(
-      j,
-      unwrapped.expr,
-      interp.unit,
-      interp.segmentIndex,
-      valuesList,
-      defaultFallback,
-    );
+    const jsxProp = [...propsUsed][0];
+    if (jsxProp) {
+      validEntries.push({ interp, jsxProp, unwrappedExpr: unwrapped.expr });
+    }
+  }
 
-    const cssPropId = cssPropertyToIdentifier(interp.longhand, avoidNames);
-    const fnKey = styleKeyWithSuffix(decl.styleKey, interp.longhand);
+  // Group entries by (longhand, jsxProp) so that segments sharing the same
+  // CSS property and component prop produce a single style function.
+  const groups = new Map<string, typeof validEntries>();
+  for (const entry of validEntries) {
+    const groupKey = `${entry.interp.longhand}:${entry.jsxProp}`;
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = [];
+      groups.set(groupKey, group);
+    }
+    group.push(entry);
+  }
+
+  for (const group of groups.values()) {
+    const { longhand } = group[0]!.interp;
+    const { jsxProp } = group[0]!;
+    const valuesList = longhand === "animationDuration" ? durations : delays;
+
+    const interpSegments = group.map((entry) => ({
+      expr: entry.unwrappedExpr,
+      unit: entry.interp.unit,
+      segmentIndex: entry.interp.segmentIndex,
+    }));
+
+    const callArg = buildMultiAnimationCallArg(j, interpSegments, valuesList, "0s");
+
+    const cssPropId = cssPropertyToIdentifier(longhand, avoidNames);
+    const fnKey = styleKeyWithSuffix(decl.styleKey, longhand);
     if (!styleFnDecls.has(fnKey)) {
       const param = j.identifier(cssPropId);
       (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
-      const body = j.objectExpression([makeCssProperty(j, interp.longhand, cssPropId)]);
+      const body = j.objectExpression([makeCssProperty(j, longhand, cssPropId)]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
-    const jsxProp = [...propsUsed][0];
-    if (jsxProp) {
-      styleFnFromProps.push({ fnKey, jsxProp, callArg });
-    }
-
+    styleFnFromProps.push({ fnKey, jsxProp, callArg });
     decl.needsWrapperComponent = true;
   }
 }
@@ -497,19 +523,24 @@ function emitInterpolatedAnimTimeFunctions(
  * Builds a call argument for multi-animation shorthands.
  * For single animation, returns a simple template like `${$duration ?? 200}ms`.
  * For multi-animation, returns a template like `${$duration ?? 200}ms, 1s`
- * that preserves all animation durations/delays.
+ * that preserves all animation durations/delays, interpolating all dynamic segments.
  */
 function buildMultiAnimationCallArg(
   j: any,
-  interpExpr: any,
-  unit: string,
-  segmentIndex: number,
+  interpSegments: Array<{ expr: any; unit: string; segmentIndex: number }>,
   valuesList: Array<string | null>,
   defaultFallback: string,
 ): any {
-  // Single animation: use simple template
-  if (valuesList.length === 1) {
-    return buildTemplateWithStaticParts(j, interpExpr, "", unit);
+  // Single animation with single interpolation: use simple template
+  if (valuesList.length === 1 && interpSegments.length === 1) {
+    const seg = interpSegments[0]!;
+    return buildTemplateWithStaticParts(j, seg.expr, "", seg.unit);
+  }
+
+  // Build a map from segment index to its interpolated expression
+  const interpBySegment = new Map<number, { expr: any; unit: string }>();
+  for (const seg of interpSegments) {
+    interpBySegment.set(seg.segmentIndex, { expr: seg.expr, unit: seg.unit });
   }
 
   // Multi-animation: build template with full list
@@ -522,13 +553,12 @@ function buildMultiAnimationCallArg(
       prefix += ", ";
     }
 
-    if (i === segmentIndex) {
-      // This is the interpolated segment
+    const interp = interpBySegment.get(i);
+    if (interp) {
       quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
-      exprs.push(interpExpr);
-      prefix = unit;
+      exprs.push(interp.expr);
+      prefix = interp.unit;
     } else {
-      // Static segment
       prefix += valuesList[i] ?? defaultFallback;
     }
   }
