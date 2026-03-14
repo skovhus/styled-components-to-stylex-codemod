@@ -51,6 +51,7 @@ export default [
     // - Computed stylex.when.*() keys: rule reports "Keys must be strings"
     // - outlineOffset/strokeDasharray numeric values: rule rejects valid numbers
     files: [
+      "test-cases/conditional-nullishCoalescingWithUnit.output.tsx",
       "test-cases/conditional-runtimeCallBranch.output.tsx",
       "test-cases/conditional-runtimeCallLocal.output.tsx",
       "test-cases/conditional-runtimeCallThemeBool.output.tsx",
@@ -61,12 +62,15 @@ export default [
       "test-cases/interpolation-destructuredRename.output.tsx",
       "test-cases/keyframes-inlineDefinition.output.tsx",
       "test-cases/keyframes-multipleAnimations.output.tsx",
+      "test-cases/keyframes-unionComplexity.output.tsx",
       "test-cases/mixin-dynamicArgDefault.output.tsx",
       "test-cases/selector-descendantComponent.output.tsx",
+      "test-cases/selector-dynamicPseudoElement.output.tsx",
       "test-cases/selector-pseudoChained.output.tsx",
       "test-cases/selector-pseudoComma.output.tsx",
       "test-cases/selector-siblingMedia.output.tsx",
       "test-cases/theme-indexedLookupPropFallback.output.tsx",
+      "test-cases/transientProp-memberExpression.output.tsx",
     ],
     rules: {
       "stylex/valid-styles": "off",

@@ -12,7 +12,15 @@ type BadgeProps = React.PropsWithChildren<{
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
 
-  return <span sx={[styles.badge, styles.badgeAfterBackgroundColor(badgeColor)]}>{children}</span>;
+  return (
+    <span
+      sx={styles.badge({
+        badgeColor,
+      })}
+    >
+      {children}
+    </span>
+  );
 }
 
 type TooltipProps = React.PropsWithChildren<{
@@ -24,7 +32,11 @@ function Tooltip(props: TooltipProps) {
   const { children, tipColor } = props;
 
   return (
-    <div sx={[styles.tooltip, styles.tooltipBeforeBackgroundColor(tipColor || "black")]}>
+    <div
+      sx={styles.tooltip({
+        backgroundColor: tipColor || "black",
+      })}
+    >
       {children}
     </div>
   );
@@ -39,7 +51,13 @@ function Button(props: ButtonProps) {
   const { children, glowColor } = props;
 
   return (
-    <button sx={[styles.button, styles.buttonAfterBackgroundColor(glowColor)]}>{children}</button>
+    <button
+      sx={styles.button({
+        glowColor,
+      })}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -55,7 +73,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  badge: {
+  badge: (props: { badgeColor: string }) => ({
     position: "relative",
     paddingBlock: 8,
     paddingInline: 16,
@@ -68,14 +86,10 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
-    },
-  },
-  badgeAfterBackgroundColor: (backgroundColor: string) => ({
-    "::after": {
-      backgroundColor,
+      backgroundColor: props.badgeColor,
     },
   }),
-  tooltip: {
+  tooltip: (props: { backgroundColor: string }) => ({
     position: "relative",
     padding: 8,
     "::before": {
@@ -83,14 +97,10 @@ const styles = stylex.create({
       position: "absolute",
       top: -4,
       left: "50%",
-    },
-  },
-  tooltipBeforeBackgroundColor: (backgroundColor: string) => ({
-    "::before": {
-      backgroundColor,
+      backgroundColor: props.backgroundColor,
     },
   }),
-  button: {
+  button: (props: { glowColor: string }) => ({
     paddingBlock: 8,
     paddingInline: 16,
     backgroundColor: "#333",
@@ -103,13 +113,9 @@ const styles = stylex.create({
         default: 0,
         ":hover": 1,
       },
-    },
-  },
-  buttonAfterBackgroundColor: (backgroundColor: string) => ({
-    "::after": {
       backgroundColor: {
         default: null,
-        ":hover": backgroundColor,
+        ":hover": props.glowColor,
       },
     },
   }),
