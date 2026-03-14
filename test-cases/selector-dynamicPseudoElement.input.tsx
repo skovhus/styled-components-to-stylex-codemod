@@ -55,7 +55,7 @@ const Button = styled.button<{ $glowColor: string }>`
 `;
 
 export const App = () => (
-  <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+  <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560 }}>
     <Badge $badgeColor="red">Notification</Badge>
     <Badge $badgeColor="green">Online</Badge>
     <Badge $badgeColor="blue">Info</Badge>
