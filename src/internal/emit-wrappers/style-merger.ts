@@ -124,6 +124,7 @@ export function emitStyleMerging(args: {
   // matching to the component. Cross-file markers coexist with defaultMarker().
   if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
     let needsDefaultMarker = false;
+    const pendingMarkers: ExpressionKind[] = [];
     for (const arg of styleArgs) {
       const key = getStyleArgKey(arg, stylesIdentifier);
       if (!key || !ancestorSelectorParents.has(key)) {
@@ -131,7 +132,7 @@ export function emitStyleMerging(args: {
       }
       const markerVarName = crossFileMarkers.get(key);
       if (markerVarName) {
-        styleArgs.push(j.identifier(markerVarName));
+        pendingMarkers.push(j.identifier(markerVarName));
       }
       // Need defaultMarker() when there's no scoped marker, or when a cross-file
       // marker coexists with an ancestor selector (defaultMarker serves the ancestor).
@@ -139,6 +140,7 @@ export function emitStyleMerging(args: {
         needsDefaultMarker = true;
       }
     }
+    styleArgs.push(...pendingMarkers);
     if (needsDefaultMarker) {
       styleArgs.push(
         j.callExpression(
