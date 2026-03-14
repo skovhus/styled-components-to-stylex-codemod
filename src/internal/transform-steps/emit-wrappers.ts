@@ -31,6 +31,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     ancestorSelectorParents: ctx.ancestorSelectorParents,
     crossFileMarkers: ctx.crossFileMarkers,
     siblingMarkerKeys: ctx.siblingMarkerKeys,
+    parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
     useSxProp: ctx.adapter.useSxProp,
   });
 

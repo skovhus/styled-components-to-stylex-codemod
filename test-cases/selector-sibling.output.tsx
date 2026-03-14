@@ -4,19 +4,17 @@ import { $colors } from "./tokens.stylex";
 import { ThingMarker, ThingThemedMarker, RowMarker } from "./selector-sibling.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thing, ThingMarker, stylex.defaultMarker()]}>{props.children}</div>;
+  return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
 }
 
 // Adjacent sibling with theme interpolation
 function ThingThemed(props: React.PropsWithChildren<{}>) {
-  return (
-    <div sx={[styles.thingThemed, ThingThemedMarker, stylex.defaultMarker()]}>{props.children}</div>
-  );
+  return <div sx={[styles.thingThemed, ThingThemedMarker]}>{props.children}</div>;
 }
 
 // Minimal adjacent sibling (margin-top spacing pattern)
 function Row(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.row, RowMarker, stylex.defaultMarker()]}>{props.children}</div>;
+  return <div sx={[styles.row, RowMarker]}>{props.children}</div>;
 }
 
 // NOTE: StyleX siblingBefore() emits `~ *` (general sibling), not `+ *`

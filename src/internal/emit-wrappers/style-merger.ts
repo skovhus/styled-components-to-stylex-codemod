@@ -72,6 +72,7 @@ export function emitStyleMerging(args: {
     | "emptyStyleKeys"
     | "ancestorSelectorParents"
     | "crossFileMarkers"
+    | "parentsNeedingDefaultMarker"
     | "emitTypes"
     | "useSxProp"
   >;
@@ -107,6 +108,7 @@ export function emitStyleMerging(args: {
     stylesIdentifier,
     ancestorSelectorParents,
     crossFileMarkers,
+    parentsNeedingDefaultMarker,
     emitTypes,
   } = emitter;
 
@@ -133,7 +135,12 @@ export function emitStyleMerging(args: {
       if (markerVarName) {
         pendingMarkers.push(j.identifier(markerVarName));
       }
-      needsDefaultMarker = true;
+      // Only emit defaultMarker() when this parent has at least one override
+      // without a scoped marker. Pure sibling/no-pseudo cases only need
+      // their scoped marker.
+      if (!markerVarName || parentsNeedingDefaultMarker.has(key)) {
+        needsDefaultMarker = true;
+      }
     }
     styleArgs.push(...pendingMarkers);
     if (needsDefaultMarker) {

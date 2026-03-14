@@ -23,6 +23,7 @@ export function lowerRules(ctx: TransformContext): {
   usedCssHelperFunctions: Set<string>;
   crossFileMarkers: Map<string, string>;
   siblingMarkerKeys: Set<string>;
+  parentsNeedingDefaultMarker: Set<string>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
@@ -139,6 +140,17 @@ export function lowerRules(ctx: TransformContext): {
     }
   }
 
+  // Parents that have at least one override WITHOUT a scoped marker need
+  // defaultMarker() so that `stylex.when.ancestor(':pseudo')` (no marker arg) can match.
+  // Parents whose overrides ALL use scoped markers (e.g. pure sibling selectors)
+  // only need their scoped marker — defaultMarker() would be unnecessary overhead.
+  const parentsNeedingDefaultMarker = new Set<string>();
+  for (const o of state.relationOverrides) {
+    if (!o.markerVarName && parentsNeedingMarker.has(o.parentStyleKey)) {
+      parentsNeedingDefaultMarker.add(o.parentStyleKey);
+    }
+  }
+
   return {
     resolvedStyleObjects: state.resolvedStyleObjects,
     relationOverrides: state.relationOverrides,
@@ -146,6 +158,7 @@ export function lowerRules(ctx: TransformContext): {
     usedCssHelperFunctions: state.usedCssHelperFunctions,
     crossFileMarkers,
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
+    parentsNeedingDefaultMarker,
     bail: state.bail,
   };
 }

@@ -71,6 +71,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     newImportSourcesByLocal,
     stylesIdentifier: ctx.stylesIdentifier,
     crossFileMarkers: ctx.crossFileMarkers,
+    parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
   });
   if (post.changed) {
     ctx.markChanged();

@@ -26,6 +26,7 @@ export function emitWrappers(args: {
   ancestorSelectorParents?: Set<string>;
   crossFileMarkers?: Map<string, string>;
   siblingMarkerKeys?: Set<string>;
+  parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
 }): void {
   const {
@@ -43,6 +44,7 @@ export function emitWrappers(args: {
     ancestorSelectorParents,
     crossFileMarkers,
     siblingMarkerKeys,
+    parentsNeedingDefaultMarker,
     useSxProp,
   } = args;
 
@@ -66,6 +68,7 @@ export function emitWrappers(args: {
     ancestorSelectorParents,
     crossFileMarkers,
     siblingMarkerKeys,
+    parentsNeedingDefaultMarker,
     useSxProp,
   });
 
