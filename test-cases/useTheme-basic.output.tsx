@@ -18,7 +18,12 @@ export function Input(props: InputProps) {
   return <div sx={styles.colorPickerWrapper(someCustomColor)} />;
 }
 
-export const App = () => <Input />;
+export const App = () => (
+  <div>
+    <Input />
+    <div sx={styles.fallbackBox}>Fallback test</div>
+  </div>
+);
 
 const styles = stylex.create({
   colorPickerWrapper: (backgroundColor: string) => ({
@@ -34,4 +39,8 @@ const styles = stylex.create({
     padding: 12,
     backgroundColor,
   }),
+  // Nullish coalescing fallback on theme color
+  fallbackBox: {
+    color: $colors.labelBase,
+  },
 });

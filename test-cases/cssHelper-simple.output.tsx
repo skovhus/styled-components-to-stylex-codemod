@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { Browser } from "./lib/helpers";
 
 type ContainerProps = {
   size: number;
@@ -24,10 +25,36 @@ export function Container(props: ContainerProps) {
   );
 }
 
+type BranchedContainerProps = { size: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
+
+// css helper called from a function with if/else branches
+export function BranchedContainer(props: BranchedContainerProps) {
+  const { children, size, ...rest } = props;
+  return (
+    <div
+      {...rest}
+      sx={[
+        styles.branchedContainer,
+        Browser.isSafari
+          ? styles.branchedContainerBrowserIsSafari(size)
+          : styles.branchedContainerDefault(size),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
-  <Container size={16} padding={4}>
-    Hello World
-  </Container>
+  <div>
+    <Container size={16} padding={4}>
+      Hello World
+    </Container>
+    <BranchedContainer size={16}>Branched</BranchedContainer>
+  </div>
 );
 
 const styles = stylex.create({
@@ -38,4 +65,16 @@ const styles = stylex.create({
   container: {
     display: "inline-flex",
   },
+  // css helper called from a function with if/else branches
+  branchedContainer: {
+    display: "inline-flex",
+  },
+  branchedContainerBrowserIsSafari: (size: number) => ({
+    fontSize: `${size - 4}px`,
+    lineHeight: 1,
+  }),
+  branchedContainerDefault: (size: number) => ({
+    fontSize: `${size - 3}px`,
+    lineHeight: `${size}px`,
+  }),
 });
