@@ -37,12 +37,12 @@ const styles = stylex.create({
     paddingInline: 8,
     color: {
       default: "gray",
-      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":focus-visible", LinkMarker)]: "blue",
     },
     backgroundColor: {
       default: null,
-      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":hover", LinkMarker)]: {
         default: null,
         "@media (min-width: 768px)": "lightyellow",

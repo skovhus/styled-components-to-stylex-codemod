@@ -218,7 +218,7 @@ Skills are located in `.claude/skills/`.
 
 ## Pull Request Descriptions
 
-Keep PR descriptions concise: a brief summary of what the PR does and why. Do not add sections like "Test case", "Test plan", or checklists. Context that's obvious from the diff or commit message doesn't need repeating.
+Keep PR descriptions **very short** — 1-3 sentences max. Just say what changed and why. Do not add sections like "Summary", "Test case", "Test plan", "Changes", or checklists. Do not enumerate files changed or repeat what's obvious from the diff. Less is more.
 
 ## Post-Implementation Workflow
 

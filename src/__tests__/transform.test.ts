@@ -695,7 +695,7 @@ export const App = () => <Thing />;
     expect(infoWarnings).toHaveLength(0);
     // The output should contain a NOTE comment about the broadening
     expect(result.code).toContain(
-      "// NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+      "// TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
     );
   });
 

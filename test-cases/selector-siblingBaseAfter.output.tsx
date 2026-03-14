@@ -19,7 +19,7 @@ const styles = stylex.create({
   thing: {
     color: {
       default: "blue",
-      // NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "red",
     },
     paddingBlock: 8,

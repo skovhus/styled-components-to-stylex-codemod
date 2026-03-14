@@ -768,7 +768,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             value: siblingValue,
             ...(isAdjacentCombinator && {
               leadingComment:
-                "NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+                "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
             }),
           });
         }
@@ -2174,7 +2174,8 @@ function handleSiblingSelector(
       keyExpr: makeSiblingKeyExpr(),
       value: siblingValue,
       ...(isAdjacent && {
-        leadingComment: "NOTE: CSS `+` (adjacent sibling) becomes `~` (general sibling) in StyleX",
+        leadingComment:
+          "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
       }),
     });
   }
