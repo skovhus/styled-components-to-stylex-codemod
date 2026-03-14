@@ -24,14 +24,15 @@ import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { isMemberExpression } from "../lower-rules/utils.js";
 import { getPositiveWhen, parseVariantWhenToAst } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildAllVariantAndStyleExprs,
+  buildInitialStyleArgs,
   buildUseThemeDeclaration,
-  styleRef,
 } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
@@ -181,12 +182,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     }
     const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
       emitter.splitExtraStyleArgs(d);
-    const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-    ];
+    const styleArgs = buildInitialStyleArgs(
+      j,
+      stylesIdentifier,
+      d,
+      extraStyleArgs,
+      extraStyleArgsAfterBase,
+    );
 
     // Handle theme boolean conditionals for withConfig wrappers
     const needsUseThemeWithConfig = appendThemeBooleanStyleArgs(
@@ -881,12 +883,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-    const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-    ];
+    const styleArgs = buildInitialStyleArgs(
+      j,
+      stylesIdentifier,
+      d,
+      extraStyleArgs,
+      extraStyleArgsAfterBase,
+    );
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
@@ -1410,12 +1413,7 @@ function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string
       property?: unknown;
       computed?: boolean;
     };
-    if (
-      (typed.type === "MemberExpression" || typed.type === "OptionalMemberExpression") &&
-      typed.object &&
-      typed.property &&
-      typed.computed === false
-    ) {
+    if (isMemberExpression(typed) && typed.object && typed.property && typed.computed === false) {
       const object = typed.object as { type?: string; name?: string };
       const property = typed.property as { type?: string; name?: string };
       if (object.type === "Identifier" && object.name === "props") {

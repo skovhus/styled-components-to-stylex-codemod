@@ -39,6 +39,7 @@ import type { WarningLog } from "../logger.js";
 import {
   findSupportedAtRule,
   mergeMediaIntoStyles,
+  registerImports,
   resolveMediaAtRulePlaceholders,
 } from "./utils.js";
 import {
@@ -728,9 +729,7 @@ function resolveThemeFromPropsMember(args: {
   if (!resolved) {
     return null;
   }
-  for (const imp of resolved.imports ?? []) {
-    resolverImports.set(JSON.stringify(imp), imp);
-  }
+  registerImports(resolved.imports, resolverImports);
   const exprAst = parseExpr(resolved.expr);
   return exprAst ?? null;
 }
@@ -778,9 +777,7 @@ function resolveStaticTemplateExpressionAst(args: {
   );
 
   if (adapterRes && adapterRes.type === "resolvedValue") {
-    for (const imp of adapterRes.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(adapterRes.imports, resolverImports);
     const exprAst = parseExpr(adapterRes.expr);
     if (exprAst) {
       return exprAst;
@@ -799,9 +796,7 @@ function resolveStaticTemplateExpressionAst(args: {
         filePath,
       });
       if (res) {
-        for (const importSpec of res.imports ?? []) {
-          resolverImports.set(JSON.stringify(importSpec), importSpec);
-        }
+        registerImports(res.imports, resolverImports);
         const exprAst = parseExpr(res.expr);
         if (exprAst) {
           return exprAst;
@@ -839,9 +834,7 @@ function resolveStaticTemplateExpressionAst(args: {
             ...(callLoc ? { loc: { line: callLoc.line, column: callLoc.column } } : {}),
           });
           if (callRes && "expr" in callRes && callRes.usage !== "props") {
-            for (const callImp of callRes.imports ?? []) {
-              resolverImports.set(JSON.stringify(callImp), callImp);
-            }
+            registerImports(callRes.imports, resolverImports);
             const callExprAst = parseExpr(callRes.expr);
             if (callExprAst) {
               return callExprAst;

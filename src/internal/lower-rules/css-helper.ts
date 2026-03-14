@@ -31,6 +31,8 @@ import {
 import {
   findInAst,
   findSupportedAtRule,
+  isMemberExpression,
+  registerImports,
   resolveMediaAtRulePlaceholders,
   type ResolvedMedia,
 } from "./utils.js";
@@ -147,7 +149,7 @@ export function createCssHelperResolver(args: {
       return { ast: expr, exprString: JSON.stringify(expr.value) };
     }
     const path =
-      paramName && (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression")
+      paramName && isMemberExpression(expr)
         ? getMemberPathFromIdentifier(expr as any, paramName)
         : null;
     if (!path || path[0] !== "theme") {
@@ -163,9 +165,7 @@ export function createCssHelperResolver(args: {
     if (!res) {
       return null;
     }
-    for (const imp of res.imports ?? []) {
-      resolverImports.set(JSON.stringify(imp), imp);
-    }
+    registerImports(res.imports, resolverImports);
     const exprAst = parseExpr(res.expr);
     return exprAst ? { ast: exprAst, exprString: res.expr } : null;
   };
@@ -177,7 +177,7 @@ export function createCssHelperResolver(args: {
     return findInAst(
       expr,
       (node) =>
-        (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") &&
+        isMemberExpression(node) &&
         (node.object as any)?.type === "Identifier" &&
         (node.object as any)?.name === paramName &&
         (node.property as any)?.type === "Identifier" &&
@@ -235,9 +235,7 @@ export function createCssHelperResolver(args: {
         if (!res) {
           return null;
         }
-        for (const impSpec of res.imports ?? []) {
-          resolverImports.set(JSON.stringify(impSpec), impSpec);
-        }
+        registerImports(res.imports, resolverImports);
         const exprAst = parseExpr(res.expr);
         return exprAst ? { ast: exprAst, exprString: res.expr } : null;
       }

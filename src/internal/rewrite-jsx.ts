@@ -6,6 +6,7 @@ import type { Collection } from "jscodeshift";
 import type { RelationOverride } from "./lower-rules.js";
 import { toStyleKey } from "./transform/helpers.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
+import { isMemberExpression } from "./lower-rules/utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
@@ -613,7 +614,7 @@ export function postProcessTransformedAst(args: {
             // Ignore identifiers used as non-computed member property keys: `obj.foo`
             if (
               parent &&
-              (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+              isMemberExpression(parent) &&
               parent.property === idPath.node &&
               parent.computed === false
             ) {

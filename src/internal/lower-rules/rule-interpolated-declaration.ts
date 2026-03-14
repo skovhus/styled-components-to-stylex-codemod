@@ -62,6 +62,7 @@ import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
+import { isMemberExpression } from "./utils.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
 type InterpolatedDeclarationContext = {
@@ -2163,7 +2164,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           context: { identifier: expr.name },
         };
       }
-      if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+      if (isMemberExpression(expr)) {
         return {
           type: "Unsupported interpolation: member expression",
           context: { memberExpression: expr.type },

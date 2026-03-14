@@ -99,6 +99,29 @@ export function wrapCallArgForPropsObject(
 }
 
 // ---------------------------------------------------------------------------
+// Initial style args assembly
+// ---------------------------------------------------------------------------
+
+/**
+ * Assembles the initial `styleArgs` array from extends, extra before/after base,
+ * and the base style expression. This is the common pattern used by all emitters.
+ */
+export function buildInitialStyleArgs(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  d: StyledDecl,
+  extraStyleArgs: ExpressionKind[],
+  extraStyleArgsAfterBase: ExpressionKind[],
+): ExpressionKind[] {
+  return [
+    ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
+    ...extraStyleArgs,
+    ...baseStyleExpr(j, stylesIdentifier, d),
+    ...extraStyleArgsAfterBase,
+  ];
+}
+
+// ---------------------------------------------------------------------------
 // Extra style key splitting
 // ---------------------------------------------------------------------------
 

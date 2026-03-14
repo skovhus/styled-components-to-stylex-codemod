@@ -14,6 +14,7 @@ import {
 } from "../css-ir.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
+import { isMemberExpression } from "../lower-rules/utils.js";
 
 type Loc = { line: number; column: number } | null;
 
@@ -111,11 +112,7 @@ export function isIdentifierReference(p: any): boolean {
     return false;
   }
   // `foo.css` (non-computed) is a property name, not an identifier reference.
-  if (
-    (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
-    parent.property === p.node &&
-    parent.computed === false
-  ) {
+  if (isMemberExpression(parent) && parent.property === p.node && parent.computed === false) {
     return false;
   }
   // `{ css: 1 }` / `{ css }` key is not a reference when not computed.
@@ -179,7 +176,7 @@ export function isStyledTag(styledLocalNames: Set<string>, tag: any): boolean {
   if (tag.type === "Identifier") {
     return styledLocalNames.has(tag.name);
   }
-  if (tag.type === "MemberExpression" || tag.type === "OptionalMemberExpression") {
+  if (isMemberExpression(tag)) {
     return isStyledTag(styledLocalNames, tag.object);
   }
   if (tag.type === "CallExpression") {

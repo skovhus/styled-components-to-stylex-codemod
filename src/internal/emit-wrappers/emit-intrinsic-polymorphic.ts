@@ -6,14 +6,14 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
-import { type ExpressionKind, type WrapperPropDefaults } from "./types.js";
+import { type WrapperPropDefaults } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { VOID_TAGS } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { buildAllVariantAndStyleExprs, styleRef } from "./style-expr-builders.js";
+import { buildAllVariantAndStyleExprs, buildInitialStyleArgs } from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -141,12 +141,13 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       // Build interleaved before/after-base args using mixinOrder
       const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
         emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-      const styleArgs: ExpressionKind[] = [
-        ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
-        ...extraStyleArgs,
-        ...emitter.baseStyleExpr(d),
-        ...extraStyleArgsAfterBase,
-      ];
+      const styleArgs = buildInitialStyleArgs(
+        j,
+        stylesIdentifier,
+        d,
+        extraStyleArgs,
+        extraStyleArgsAfterBase,
+      );
 
       buildAllVariantAndStyleExprs({
         d,

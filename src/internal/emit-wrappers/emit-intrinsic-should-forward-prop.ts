@@ -22,6 +22,7 @@ import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
+  buildInitialStyleArgs,
   buildUseThemeDeclaration,
   buildVariantStyleExprs,
   mergeOrderedEntries,
@@ -388,12 +389,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
     } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
-    const styleArgs: ExpressionKind[] = [
-      ...(d.extendsStyleKey ? [styleRef(j, stylesIdentifier, d.extendsStyleKey)] : []),
-      ...extraStyleArgs,
-      ...emitter.baseStyleExpr(d),
-      ...extraStyleArgsAfterBase,
-    ];
+    const styleArgs = buildInitialStyleArgs(
+      j,
+      stylesIdentifier,
+      d,
+      extraStyleArgs,
+      extraStyleArgsAfterBase,
+    );
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(

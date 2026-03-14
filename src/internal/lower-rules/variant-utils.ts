@@ -9,7 +9,7 @@ import { literalToStaticValue } from "./types.js";
 import type { ExpressionKind, TestInfo } from "./decl-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
-import { mergeStyleObjects } from "./utils.js";
+import { isMemberExpression, mergeStyleObjects } from "./utils.js";
 import { styleKeyWithSuffix } from "../transform/helpers.js";
 
 /**
@@ -137,7 +137,7 @@ export const createPropTestHelpers = (
       const propAccess = readPropAccess(test);
       return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
     }
-    if (test.type === "MemberExpression" || test.type === "OptionalMemberExpression") {
+    if (isMemberExpression(test)) {
       const propAccess = readPropAccess(test);
       return propAccess ? { when: propAccess.whenName, propName: propAccess.propName } : null;
     }
@@ -173,7 +173,7 @@ export const createPropTestHelpers = (
           propName: propAccess.propName,
         };
       }
-      if (left.type === "MemberExpression" || left.type === "OptionalMemberExpression") {
+      if (isMemberExpression(left)) {
         const propAccess = readPropAccess(left as ExpressionKind);
         const rhsValue = getRhsValue();
         if (!propAccess || rhsValue === null) {

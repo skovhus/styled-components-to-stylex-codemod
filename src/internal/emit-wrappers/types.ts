@@ -3,6 +3,7 @@
  * Core concepts: export metadata and inline style prop collection.
  */
 import type { ASTNode, JSCodeshift } from "jscodeshift";
+import { isMemberExpression } from "../lower-rules/utils.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
 
@@ -46,11 +47,12 @@ export function collectInlineStylePropNames(inlineStyleProps: InlineStyleProp[])
       return;
     }
     if (node.type === "Identifier") {
+      const memberParent =
+        parent && isMemberExpression(parent)
+          ? (parent as { property: unknown; computed: boolean })
+          : undefined;
       const isMemberProp =
-        parent &&
-        (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
-        parent.property === node &&
-        parent.computed === false;
+        memberParent && memberParent.property === node && memberParent.computed === false;
       const isObjectKey =
         parent && parent.type === "Property" && parent.key === node && parent.shorthand !== true;
       if (!isMemberProp && !isObjectKey && node.name?.startsWith("$")) {
