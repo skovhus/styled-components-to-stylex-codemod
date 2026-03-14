@@ -618,17 +618,24 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
 // Post-processing helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Ensure emitted wrappers forward refs explicitly:
- *   Destructuring: `{ ..., ...rest }` -> `{ ..., ref, ...rest }`
- *   JSX: `<Tag {...rest} ...>` -> `<Tag ref={ref} {...rest} ...>`
- */
-function injectExplicitRefForwarding(j: JSCodeshift, fnDecl: unknown): void {
-  if (!fnDecl || typeof fnDecl !== "object") {
+// ---------------------------------------------------------------------------
+// Shared AST injection helpers
+// ---------------------------------------------------------------------------
+
+type AstRecord = Record<string, unknown>;
+
+/** BFS-walk an AST node, calling visitors for matching node types. */
+function walkAstBfs(
+  root: unknown,
+  visitors: {
+    ObjectPattern?: (properties: unknown[]) => boolean | void;
+    JSXOpeningElement?: (node: AstRecord, attrs: unknown[]) => void;
+  },
+): void {
+  if (!root || typeof root !== "object") {
     return;
   }
-
-  const queue: unknown[] = [fnDecl];
+  const queue: unknown[] = [root];
   while (queue.length > 0) {
     const node = queue.pop();
     if (!node || typeof node !== "object") {
@@ -640,59 +647,132 @@ function injectExplicitRefForwarding(j: JSCodeshift, fnDecl: unknown): void {
       }
       continue;
     }
-
-    const n = node as Record<string, unknown>;
-
-    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
-      const properties = n.properties as unknown[];
-      const hasRef = properties.some((p: unknown) => {
-        if (!p || typeof p !== "object") {
-          return false;
-        }
-        const prop = p as Record<string, unknown>;
-        if (prop.type !== "Property") {
-          return false;
-        }
-        const key = prop.key as Record<string, unknown> | undefined;
-        return key?.type === "Identifier" && key.name === "ref";
-      });
-      if (!hasRef) {
-        const restIdx = properties.findIndex(
-          (p: unknown) =>
-            !!p &&
-            typeof p === "object" &&
-            ((p as Record<string, unknown>).type === "RestElement" ||
-              (p as Record<string, unknown>).type === "RestProperty" ||
-              (p as Record<string, unknown>).type === "SpreadProperty"),
-        );
-        const insertIdx = restIdx >= 0 ? restIdx : properties.length;
-        const id = j.identifier("ref");
-        const prop = j.property("init", id, id);
-        (prop as unknown as Record<string, unknown>).shorthand = true;
-        properties.splice(insertIdx, 0, prop);
+    const n = node as AstRecord;
+    if (n.type === "ObjectPattern" && Array.isArray(n.properties) && visitors.ObjectPattern) {
+      if (visitors.ObjectPattern(n.properties as unknown[]) === true) {
+        return;
       }
     }
+    if (
+      n.type === "JSXOpeningElement" &&
+      Array.isArray(n.attributes) &&
+      visitors.JSXOpeningElement
+    ) {
+      visitors.JSXOpeningElement(n, n.attributes as unknown[]);
+    }
+    for (const key of Object.keys(n)) {
+      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
+        continue;
+      }
+      const child = n[key];
+      if (child && typeof child === "object") {
+        queue.push(child);
+      }
+    }
+  }
+}
 
-    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
-      const attrs = n.attributes as unknown[];
-      const hasRefAttr = attrs.some((a: unknown) => {
-        if (!a || typeof a !== "object") {
-          return false;
+/** Find the index of a rest/spread element in an ObjectPattern's properties. */
+function findRestIndex(properties: unknown[]): number {
+  return properties.findIndex(
+    (p: unknown) =>
+      !!p &&
+      typeof p === "object" &&
+      ((p as AstRecord).type === "RestElement" ||
+        (p as AstRecord).type === "RestProperty" ||
+        (p as AstRecord).type === "SpreadProperty"),
+  );
+}
+
+/** Check whether an ObjectPattern already has a property with the given name. */
+function hasPropertyNamed(properties: unknown[], name: string): boolean {
+  return properties.some((p: unknown) => {
+    if (!p || typeof p !== "object") {
+      return false;
+    }
+    const prop = p as AstRecord;
+    if (prop.type !== "Property") {
+      return false;
+    }
+    const key = prop.key as AstRecord | undefined;
+    return key?.type === "Identifier" && key.name === name;
+  });
+}
+
+/** Check whether a JSXOpeningElement already has an attribute with the given name. */
+function hasJsxAttributeNamed(attrs: unknown[], name: string): boolean {
+  return attrs.some((a: unknown) => {
+    if (!a || typeof a !== "object") {
+      return false;
+    }
+    const attr = a as AstRecord;
+    if (attr.type !== "JSXAttribute") {
+      return false;
+    }
+    const nameNode = attr.name as AstRecord | undefined;
+    return nameNode?.type === "JSXIdentifier" && nameNode.name === name;
+  });
+}
+
+/** Find the first JSXSpreadAttribute index (for insertion before spreads). */
+function findJsxSpreadIndex(attrs: unknown[]): number {
+  return attrs.findIndex(
+    (a: unknown) => !!a && typeof a === "object" && (a as AstRecord).type === "JSXSpreadAttribute",
+  );
+}
+
+/** Create shorthand destructure properties, optionally filtering out existing names. */
+function makeShorthandProps(
+  j: JSCodeshift,
+  names: string[],
+  existingNames?: Set<string>,
+): unknown[] {
+  const filtered = existingNames ? names.filter((n) => !existingNames.has(n)) : names;
+  return filtered.map((name) => {
+    const id = j.identifier(name);
+    const prop = j.property("init", id, id);
+    (prop as unknown as AstRecord).shorthand = true;
+    return prop;
+  });
+}
+
+/** Collect existing binding names from an ObjectPattern's properties. */
+function collectExistingNames(properties: unknown[]): Set<string> {
+  const names = new Set<string>();
+  for (const p of properties) {
+    if (p && typeof p === "object") {
+      const pr = p as AstRecord;
+      if (pr.type === "Property" && pr.key && typeof pr.key === "object") {
+        const key = pr.key as AstRecord;
+        if (key.type === "Identifier" && typeof key.name === "string") {
+          names.add(key.name);
         }
-        const attr = a as Record<string, unknown>;
-        if (attr.type !== "JSXAttribute") {
-          return false;
-        }
-        const nameNode = attr.name as Record<string, unknown> | undefined;
-        return nameNode?.type === "JSXIdentifier" && nameNode.name === "ref";
-      });
-      if (!hasRefAttr) {
-        const spreadIdx = attrs.findIndex(
-          (a: unknown) =>
-            !!a &&
-            typeof a === "object" &&
-            (a as Record<string, unknown>).type === "JSXSpreadAttribute",
-        );
+      }
+    }
+  }
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// Injection functions (thin wrappers over shared helpers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure emitted wrappers forward refs explicitly:
+ *   Destructuring: `{ ..., ...rest }` -> `{ ..., ref, ...rest }`
+ *   JSX: `<Tag {...rest} ...>` -> `<Tag ref={ref} {...rest} ...>`
+ */
+function injectExplicitRefForwarding(j: JSCodeshift, fnDecl: unknown): void {
+  walkAstBfs(fnDecl, {
+    ObjectPattern(properties) {
+      if (!hasPropertyNamed(properties, "ref")) {
+        const insertIdx = Math.max(findRestIndex(properties), 0) || properties.length;
+        properties.splice(insertIdx, 0, ...makeShorthandProps(j, ["ref"]));
+      }
+    },
+    JSXOpeningElement(_node, attrs) {
+      if (!hasJsxAttributeNamed(attrs, "ref")) {
+        const spreadIdx = findJsxSpreadIndex(attrs);
         const insertIdx = spreadIdx >= 0 ? spreadIdx : attrs.length;
         attrs.splice(
           insertIdx,
@@ -700,175 +780,50 @@ function injectExplicitRefForwarding(j: JSCodeshift, fnDecl: unknown): void {
           j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
         );
       }
-    }
-
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        queue.push(child);
-      }
-    }
-  }
+    },
+  });
 }
 
 /**
- * Inject extra destructured props (e.g., `disabled`, `readOnly`) into an
- * input wrapper function's parameter destructuring and JSX element.
- *
- * Modifies the AST in-place:
- *   Destructuring: `{ type, ...rest }` → `{ type, disabled, readOnly, ...rest }`
- *   JSX: `<input type={type} {...rest}>` → `<input type={type} disabled={disabled} readOnly={readOnly} {...rest}>`
+ * Inject extra destructured props and JSX attributes (e.g., `disabled`, `readOnly`).
  */
 function injectExtraInputProps(j: JSCodeshift, fnDecl: unknown, extraProps: string[]): void {
-  if (!fnDecl || typeof fnDecl !== "object") {
-    return;
-  }
-
-  const queue: unknown[] = [fnDecl];
-  while (queue.length > 0) {
-    const node = queue.pop();
-    if (!node || typeof node !== "object") {
-      continue;
-    }
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        queue.push(item);
-      }
-      continue;
-    }
-
-    const n = node as Record<string, unknown>;
-
-    // Inject into destructuring: { type, ...rest } → { type, disabled, readOnly, ...rest }
-    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
-      const properties = n.properties as unknown[];
-      const restIdx = properties.findIndex(
-        (p: unknown) =>
-          !!p &&
-          typeof p === "object" &&
-          ((p as Record<string, unknown>).type === "RestElement" ||
-            (p as Record<string, unknown>).type === "RestProperty" ||
-            (p as Record<string, unknown>).type === "SpreadProperty"),
-      );
+  walkAstBfs(fnDecl, {
+    ObjectPattern(properties) {
+      const restIdx = findRestIndex(properties);
       if (restIdx >= 0) {
-        const toInsert = extraProps.map((name) => {
-          const id = j.identifier(name);
-          const prop = j.property("init", id, id);
-          (prop as unknown as Record<string, unknown>).shorthand = true;
-          return prop;
-        });
-        properties.splice(restIdx, 0, ...toInsert);
+        properties.splice(restIdx, 0, ...makeShorthandProps(j, extraProps));
       }
-    }
-
-    // Inject JSX attributes: <input type={type} {...rest}> → <input type={type} disabled={disabled} readOnly={readOnly} {...rest}>
-    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
-      const nameNode = n.name as Record<string, unknown> | undefined;
+    },
+    JSXOpeningElement(node, attrs) {
+      const nameNode = node.name as AstRecord | undefined;
       const tagName = nameNode?.type === "JSXIdentifier" ? String(nameNode.name) : "";
       if (tagName === "input" || tagName === "Component") {
-        const attrs = n.attributes as unknown[];
-        // Find the first spread attribute position
-        const spreadIdx = attrs.findIndex(
-          (a: unknown) =>
-            !!a &&
-            typeof a === "object" &&
-            (a as Record<string, unknown>).type === "JSXSpreadAttribute",
-        );
+        const spreadIdx = findJsxSpreadIndex(attrs);
         const insertIdx = spreadIdx >= 0 ? spreadIdx : attrs.length;
         const toInsert = extraProps.map((name) =>
           j.jsxAttribute(j.jsxIdentifier(name), j.jsxExpressionContainer(j.identifier(name))),
         );
         attrs.splice(insertIdx, 0, ...toInsert);
       }
-    }
-
-    // Recurse
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        queue.push(child);
-      }
-    }
-  }
+    },
+  });
 }
 
 /**
- * Inject `forwardedAs` support into emitted intrinsic wrapper functions.
- *
- * - Adds `forwardedAs` to destructuring so it doesn't leak via `{...rest}` as `forwardedas`
- * - Adds `as={forwardedAs}` on rendered JSX elements/components to match styled-components
- *   semantics where `forwardedAs` lowers to an `as` attribute (not polymorphic outer `as`)
+ * Inject `forwardedAs` into destructuring and `as={forwardedAs}` on JSX elements.
  */
 function injectForwardedAsHandling(j: JSCodeshift, fnDecl: unknown): void {
-  if (!fnDecl || typeof fnDecl !== "object") {
-    return;
-  }
-
-  const queue: unknown[] = [fnDecl];
-  while (queue.length > 0) {
-    const node = queue.pop();
-    if (!node || typeof node !== "object") {
-      continue;
-    }
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        queue.push(item);
-      }
-      continue;
-    }
-
-    const n = node as Record<string, unknown>;
-
-    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
-      const properties = n.properties as unknown[];
-      const hasForwardedAs = properties.some((p: unknown) => {
-        if (!p || typeof p !== "object") {
-          return false;
-        }
-        const prop = p as Record<string, unknown>;
-        if (prop.type !== "Property") {
-          return false;
-        }
-        const key = prop.key as Record<string, unknown> | undefined;
-        return key?.type === "Identifier" && key.name === "forwardedAs";
-      });
-      if (!hasForwardedAs) {
-        const restIdx = properties.findIndex(
-          (p: unknown) =>
-            !!p &&
-            typeof p === "object" &&
-            ((p as Record<string, unknown>).type === "RestElement" ||
-              (p as Record<string, unknown>).type === "RestProperty" ||
-              (p as Record<string, unknown>).type === "SpreadProperty"),
-        );
+  walkAstBfs(fnDecl, {
+    ObjectPattern(properties) {
+      if (!hasPropertyNamed(properties, "forwardedAs")) {
+        const restIdx = findRestIndex(properties);
         const insertIdx = restIdx >= 0 ? restIdx : properties.length;
-        const id = j.identifier("forwardedAs");
-        const prop = j.property("init", id, id);
-        (prop as unknown as Record<string, unknown>).shorthand = true;
-        properties.splice(insertIdx, 0, prop);
+        properties.splice(insertIdx, 0, ...makeShorthandProps(j, ["forwardedAs"]));
       }
-    }
-
-    if (n.type === "JSXOpeningElement" && Array.isArray(n.attributes)) {
-      const attrs = n.attributes as unknown[];
-      const hasAsAttr = attrs.some((a: unknown) => {
-        if (!a || typeof a !== "object") {
-          return false;
-        }
-        const attr = a as Record<string, unknown>;
-        if (attr.type !== "JSXAttribute") {
-          return false;
-        }
-        const name = attr.name as Record<string, unknown> | undefined;
-        return name?.type === "JSXIdentifier" && name.name === "as";
-      });
-      if (!hasAsAttr) {
+    },
+    JSXOpeningElement(_node, attrs) {
+      if (!hasJsxAttributeNamed(attrs, "as")) {
         attrs.push(
           j.jsxAttribute(
             j.jsxIdentifier("as"),
@@ -876,92 +831,25 @@ function injectForwardedAsHandling(j: JSCodeshift, fnDecl: unknown): void {
           ),
         );
       }
-    }
-
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        queue.push(child);
-      }
-    }
-  }
+    },
+  });
 }
 
 /**
- * Inject extra props into an emitted function's destructuring pattern only
- * (unlike `injectExtraInputProps` which also adds JSX attributes).
- *
- * Used for pseudo-alias guard props that need to be in scope for style
- * expressions but should NOT be forwarded as JSX attributes.
+ * Inject extra props into destructuring only (not JSX).
+ * Used for pseudo-alias guard props that need to be in scope for style expressions.
  */
 function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]): void {
-  if (!fnDecl || typeof fnDecl !== "object" || props.length === 0) {
+  if (props.length === 0) {
     return;
   }
-
-  const queue: unknown[] = [fnDecl];
-  while (queue.length > 0) {
-    const node = queue.pop();
-    if (!node || typeof node !== "object") {
-      continue;
-    }
-    if (Array.isArray(node)) {
-      for (const item of node) {
-        queue.push(item);
-      }
-      continue;
-    }
-
-    const n = node as Record<string, unknown>;
-
-    if (n.type === "ObjectPattern" && Array.isArray(n.properties)) {
-      const properties = n.properties as unknown[];
-      const restIdx = properties.findIndex(
-        (p: unknown) =>
-          !!p &&
-          typeof p === "object" &&
-          ((p as Record<string, unknown>).type === "RestElement" ||
-            (p as Record<string, unknown>).type === "RestProperty" ||
-            (p as Record<string, unknown>).type === "SpreadProperty"),
-      );
-      // Collect existing binding names to avoid duplicates
-      const existingNames = new Set<string>();
-      for (const p of properties) {
-        if (p && typeof p === "object") {
-          const pr = p as Record<string, unknown>;
-          if (pr.type === "Property" && pr.key && typeof pr.key === "object") {
-            const key = pr.key as Record<string, unknown>;
-            if (key.type === "Identifier" && typeof key.name === "string") {
-              existingNames.add(key.name);
-            }
-          }
-        }
-      }
+  walkAstBfs(fnDecl, {
+    ObjectPattern(properties) {
+      const existingNames = collectExistingNames(properties);
+      const restIdx = findRestIndex(properties);
       const insertIdx = restIdx >= 0 ? restIdx : properties.length;
-      const toInsert = props
-        .filter((name) => !existingNames.has(name))
-        .map((name) => {
-          const id = j.identifier(name);
-          const prop = j.property("init", id, id);
-          (prop as unknown as Record<string, unknown>).shorthand = true;
-          return prop;
-        });
-      properties.splice(insertIdx, 0, ...toInsert);
-      // Only inject into the first ObjectPattern (the props destructuring)
-      return;
-    }
-
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "start" || key === "end" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        queue.push(child);
-      }
-    }
-  }
+      properties.splice(insertIdx, 0, ...makeShorthandProps(j, props, existingNames));
+      return true; // stop after first ObjectPattern
+    },
+  });
 }
