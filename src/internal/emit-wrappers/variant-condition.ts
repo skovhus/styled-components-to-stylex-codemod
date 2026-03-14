@@ -91,7 +91,9 @@ export function parseVariantWhenToAst(
       }
       return { propName: null, expr: j.identifier(trimmedRaw) };
     }
-    return { propName: trimmedRaw, expr: j.identifier(trimmedRaw) };
+    // Bare "theme" is resolved via useTheme(), not from component props — same
+    // treatment as dotted theme refs (line 90) to avoid dual-binding conflicts.
+    return { propName: trimmedRaw === "theme" ? null : trimmedRaw, expr: j.identifier(trimmedRaw) };
   };
 
   const trimmed = String(when ?? "").trim();
