@@ -2417,12 +2417,21 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
-    styleFnFromProps.push({
-      fnKey,
-      jsxProp,
-      condition: "always" as const,
-      ...(isSimpleIdentity ? {} : { callArg: cloneAstNode(valueExpr) as ExpressionKind }),
-    });
+    if (isSimpleIdentity) {
+      const isOptional = ctx.isJsxPropOptional(jsxProp);
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp,
+        ...(isOptional ? {} : { condition: "always" as const }),
+      });
+    } else {
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp: "__props" as const,
+        condition: "always" as const,
+        callArg: cloneAstNode(valueExpr) as ExpressionKind,
+      });
+    }
   }
 
   for (const propName of propsUsed) {
