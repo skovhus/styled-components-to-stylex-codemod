@@ -8,7 +8,14 @@ type InputProps = { placeholderColor: Color } & Pick<React.ComponentProps<"input
 
 function Input(props: InputProps) {
   const { placeholderColor, ...rest } = props;
-  return <input {...rest} sx={[styles.input, styles.inputPlaceholderColor(placeholderColor)]} />;
+  return (
+    <input
+      {...rest}
+      sx={styles.input({
+        placeholderColor,
+      })}
+    />
+  );
 }
 
 type BadgeProps = React.PropsWithChildren<{
@@ -19,7 +26,13 @@ type BadgeProps = React.PropsWithChildren<{
 function Badge(props: BadgeProps) {
   const { children, indicatorColor } = props;
   return (
-    <span sx={[styles.badge, styles.badgeAfterBackgroundColor(indicatorColor)]}>{children}</span>
+    <span
+      sx={styles.badge({
+        indicatorColor,
+      })}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -33,18 +46,16 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  input: {
+  input: (props: { placeholderColor: Color }) => ({
     padding: 12,
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
-  },
-  inputPlaceholderColor: (placeholderColor: Color) => ({
     "::placeholder": {
-      color: $colors[placeholderColor],
+      color: $colors[props.placeholderColor],
     },
   }),
-  badge: {
+  badge: (props: { indicatorColor: Color }) => ({
     position: "relative",
     paddingBlock: 4,
     paddingInline: 8,
@@ -53,11 +64,7 @@ const styles = stylex.create({
       content: '""',
       display: "block",
       height: 3,
-    },
-  },
-  badgeAfterBackgroundColor: (indicatorColor: Color) => ({
-    "::after": {
-      backgroundColor: $colors[indicatorColor],
+      backgroundColor: $colors[props.indicatorColor],
     },
   }),
 });

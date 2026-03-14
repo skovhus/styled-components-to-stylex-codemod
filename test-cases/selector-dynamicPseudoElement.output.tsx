@@ -86,7 +86,9 @@ function DynamicPlaceholder(props: DynamicPlaceholderProps) {
   return (
     <input
       {...rest}
-      sx={[styles.dynamicPlaceholder, styles.dynamicPlaceholderPlaceholderColor(placeholderColor)]}
+      sx={styles.dynamicPlaceholder({
+        placeholderColor,
+      })}
     />
   );
 }
@@ -129,9 +131,8 @@ const styles = stylex.create({
     padding: 8,
     "::before": {
       content: '""',
-      position: "absolute",
-      top: -4,
-      left: "50%",
+      display: "block",
+      height: 3,
       backgroundColor: props.backgroundColor,
     },
   }),
@@ -152,14 +153,15 @@ const styles = stylex.create({
     },
   }),
   button: (props: { glowColor: string }) => ({
+    position: "relative",
     paddingBlock: 8,
     paddingInline: 16,
     backgroundColor: "#333",
     color: "white",
     "::after": {
       content: '""',
-      position: "absolute",
-      inset: 0,
+      display: "block",
+      height: 3,
       opacity: {
         default: 0,
         ":hover": 1,
@@ -181,15 +183,13 @@ const styles = stylex.create({
       color: $colors.labelMuted,
     },
   },
-  dynamicPlaceholder: {
+  dynamicPlaceholder: (props: { placeholderColor: PlaceholderColor }) => ({
     padding: 12,
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
-  },
-  dynamicPlaceholderPlaceholderColor: (placeholderColor: PlaceholderColor) => ({
     "::placeholder": {
-      color: $colors[placeholderColor],
+      color: $colors[props.placeholderColor],
     },
   }),
 });

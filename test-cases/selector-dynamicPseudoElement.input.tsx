@@ -28,9 +28,8 @@ const Tooltip = styled.div<{ $tipColor?: string }>`
 
   &::before {
     content: "";
-    position: absolute;
-    top: -4px;
-    left: 50%;
+    display: block;
+    height: 3px;
     background-color: ${(props) => props.$tipColor || "black"};
   }
 `;
@@ -51,14 +50,15 @@ const Tag = styled.span<{ $tagColor?: string }>`
 
 // Dynamic pseudo-element style inside :hover context
 const Button = styled.button<{ $glowColor: string }>`
+  position: relative;
   padding: 8px 16px;
   background-color: #333;
   color: white;
 
   &::after {
     content: "";
-    position: absolute;
-    inset: 0;
+    display: block;
+    height: 3px;
     opacity: 0;
   }
 

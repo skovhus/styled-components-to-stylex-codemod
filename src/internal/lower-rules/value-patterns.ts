@@ -578,8 +578,9 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (isCssShorthandProperty(d.property)) {
       return false;
     }
-    // Skip media/attr buckets for now; these require more complex wiring.
-    if (opts.media || opts.attrTarget) {
+    // Skip media/attr/pseudo-element buckets — pseudo-elements are handled by
+    // tryHandleDynamicPseudoElementStyleFunction which produces merged output.
+    if (opts.media || opts.attrTarget || opts.pseudoElement) {
       return false;
     }
     // Bail when the interpolation has surrounding static text (e.g., "0 0 4px ${...}").
@@ -680,28 +681,16 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       };
 
       const firstPseudo = opts.pseudos?.[0];
-      const pseudoElementLabel = opts.pseudoElement ? pseudoSuffix(opts.pseudoElement) : "";
-      const baseFnKey = opts.pseudoElement
-        ? styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoElementLabel), out.prop)
-        : styleKeyWithSuffix(decl.styleKey, out.prop);
       const fnKey =
         opts.pseudos?.length && firstPseudo
-          ? `${baseFnKey}${pseudoSuffix(firstPseudo)}`
-          : baseFnKey;
+          ? `${styleKeyWithSuffix(decl.styleKey, out.prop)}${pseudoSuffix(firstPseudo)}`
+          : styleKeyWithSuffix(decl.styleKey, out.prop);
       styleFnFromProps.push({ fnKey, jsxProp: indexPropName });
 
       if (!styleFnDecls.has(fnKey)) {
-        // Build expression: resolvedExpr[indexPropName]
-        // NOTE: This is TypeScript-only syntax (TSAsExpression + `keyof typeof`),
-        // so we parse it explicitly with a TSX parser here rather than relying on
-        // the generic `parseExpr` helper.
         const resolvedExprAst = parseExpr(resolved.expr);
         const paramName = buildSafeIndexedParamName(indexPropName, resolvedExprAst);
         const indexedExprAst = (() => {
-          // We intentionally do NOT add `as keyof typeof themeVars` fallbacks.
-          // If a fixture uses a `string` key to index theme colors, it should be fixed at the
-          // input/type level to use a proper key union (e.g. `Colors`), and the output should
-          // reflect that contract.
           const exprSource = `(${resolved.expr})[${paramName}]`;
           try {
             const jParse = api.jscodeshift.withParser("tsx");
@@ -711,7 +700,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
             while (expr?.type === "ParenthesizedExpression") {
               expr = expr.expression;
             }
-            // Remove extra.parenthesized flag that causes recast to add parentheses
             const exprWithExtra = expr as ExpressionKind & {
               extra?: { parenthesized?: boolean; parenStart?: number };
             };
@@ -736,8 +724,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         }
 
         const param = j.identifier(paramName);
-        // Prefer the prop's own type when available (e.g. `Color` / `Colors`) so we don't end up with
-        // `keyof typeof themeVars` in fixture outputs.
         const propTsType = findJsxPropTsType(indexPropName);
         (param as any).typeAnnotation = j.tsTypeAnnotation(
           (propTsType && typeof propTsType === "object" && (propTsType as any).type
@@ -752,16 +738,13 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
             ])
           : (indexedExprAst as any);
 
-        const innerProp = j.property("init", j.identifier(out.prop), innerValue) as any;
-
-        // Wrap in pseudo-element nesting when needed (e.g., "::placeholder": { color: ... })
-        const body = opts.pseudoElement
-          ? j.objectExpression([
-              j.property("init", j.literal(opts.pseudoElement), j.objectExpression([innerProp])),
-            ])
-          : j.objectExpression([innerProp]);
-
-        styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+        styleFnDecls.set(
+          fnKey,
+          j.arrowFunctionExpression(
+            [param],
+            j.objectExpression([j.property("init", j.identifier(out.prop), innerValue) as any]),
+          ),
+        );
       }
     }
 
