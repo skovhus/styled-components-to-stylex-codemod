@@ -1,0 +1,1 @@
+import{j as s}from"./index-5aZ3BrvX.js";const o=()=>s.jsx("div",{className:"x1o403v5",children:"Fallback test"});export{o as App};
