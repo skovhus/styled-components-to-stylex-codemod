@@ -1255,6 +1255,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (bail) {
         break;
       }
+      markThemeHookForVariants(decl, res.variants);
       decl.needsWrapperComponent = true;
       continue;
     }
@@ -1280,6 +1281,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bailUnsupported: bailUnsupportedLocal,
       })
     ) {
+      if (res?.type === "splitVariantsResolvedValue") {
+        markThemeHookForVariants(decl, res.variants);
+      }
       continue;
     }
 
@@ -3010,4 +3014,28 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
   decl.needsWrapperComponent = true;
 
   return true;
+}
+
+/**
+ * If any variant `when` condition references the styled-components theme object,
+ * mark the declaration as needing the `useTheme()` hook so the emitted wrapper
+ * has `const theme = useTheme()` in scope.
+ */
+function markThemeHookForVariants(
+  decl: StyledDecl,
+  variants: ReadonlyArray<{ when: string }> | undefined,
+): void {
+  if (!variants) {
+    return;
+  }
+  const needsTheme = variants.some(
+    (v) =>
+      v.when === "theme" ||
+      v.when.startsWith("theme.") ||
+      v.when === "!theme" ||
+      v.when.startsWith("!theme."),
+  );
+  if (needsTheme) {
+    markDeclNeedsUseThemeHook(decl);
+  }
 }
