@@ -236,7 +236,11 @@ export function postProcessTransformedAst(args: {
                 call.arguments = [...(call.arguments ?? []), j.identifier(markerVarName)];
                 changed = true;
               }
-            } else if (!hasDefaultMarker(call)) {
+            }
+            // Always add defaultMarker() for ancestor selector parents — scoped markers
+            // and defaultMarker() coexist: scoped enables targeted matching while
+            // defaultMarker() enables regular pseudo-reverse selectors.
+            if (!hasDefaultMarker(call)) {
               call.arguments = [...(call.arguments ?? []), makeDefaultMarkerCall()];
               changed = true;
             }
@@ -253,7 +257,9 @@ export function postProcessTransformedAst(args: {
                 addArgsToSxAttr(sxAttr, [j.identifier(markerVarName)]);
                 changed = true;
               }
-            } else if (!hasDefaultMarkerInSxArgs(sxAttr)) {
+            }
+            // Always add defaultMarker() — see comment in stylex.props() branch above.
+            if (!hasDefaultMarkerInSxArgs(sxAttr)) {
               addArgsToSxAttr(sxAttr, [makeDefaultMarkerCall()]);
               changed = true;
             }

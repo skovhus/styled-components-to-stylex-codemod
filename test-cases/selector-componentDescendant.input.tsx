@@ -32,12 +32,24 @@ const Combined = styled.div`
   }
 `;
 
+// Regular pseudo reverse only — needs defaultMarker() on Wrapper alongside
+// the scoped WrapperMarker from the no-pseudo patterns above
+const PseudoOnly = styled.div`
+  color: gray;
+  padding: 8px;
+
+  ${Wrapper}:hover & {
+    color: green;
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Child>Outside Wrapper (gray)</Child>
     <Wrapper>
       <Child>Inside Wrapper (blue, lavender)</Child>
       <Combined>Inside Wrapper (hover=red, bg=lavender)</Combined>
+      <PseudoOnly>Inside Wrapper (hover=green)</PseudoOnly>
     </Wrapper>
   </div>
 );

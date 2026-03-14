@@ -1,14 +1,25 @@
+import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { LinkMarker } from "./selector-componentSiblingCombinator.input.stylex";
 
+function Link(props: Pick<React.ComponentProps<"a">, "children" | "href">) {
+  const { children, ...rest } = props;
+  return (
+    <a {...rest} sx={[styles.link, LinkMarker, stylex.defaultMarker()]}>
+      {children}
+    </a>
+  );
+}
+
 export const App = () => (
   <div>
-    <a href="#" sx={[styles.link, LinkMarker]}>
-      Link
-    </a>
+    <Link href="#">Link</Link>
     <span sx={styles.badge}>
       Badge (blue when Link is focused, lightyellow bg on hover at 768px+)
     </span>
+    <Link href="#">
+      <span sx={[styles.nested, styles.nestedInLink]}>Nested in Link (green on hover)</span>
+    </Link>
   </div>
 );
 
@@ -35,6 +46,19 @@ const styles = stylex.create({
         default: null,
         "@media (min-width: 768px)": "lightyellow",
       },
+    },
+  },
+  // Mixed: same Link used as both sibling target AND ancestor reverse.
+  // Link needs both LinkMarker (for sibling) and defaultMarker() (for ancestor).
+  nested: {
+    color: "gray",
+    paddingBlock: 4,
+    paddingInline: 8,
+  },
+  nestedInLink: {
+    color: {
+      default: "gray",
+      [stylex.when.ancestor(":hover")]: "green",
     },
   },
 });

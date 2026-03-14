@@ -72,7 +72,6 @@ export function emitStyleMerging(args: {
     | "emptyStyleKeys"
     | "ancestorSelectorParents"
     | "crossFileMarkers"
-    | "siblingMarkerKeys"
     | "emitTypes"
     | "useSxProp"
   >;
@@ -108,7 +107,6 @@ export function emitStyleMerging(args: {
     stylesIdentifier,
     ancestorSelectorParents,
     crossFileMarkers,
-    siblingMarkerKeys,
     emitTypes,
   } = emitter;
 
@@ -120,8 +118,9 @@ export function emitStyleMerging(args: {
   });
 
   // Add a marker when any style arg references an ancestor selector parent.
-  // Sibling markers (from crossFileMarkers) REPLACE defaultMarker() — they scope sibling
-  // matching to the component. Cross-file markers coexist with defaultMarker().
+  // Scoped markers (from defineMarker) and defaultMarker() coexist: the scoped marker
+  // enables targeted sibling/no-pseudo matching, while defaultMarker() enables regular
+  // pseudo-reverse selectors like `stylex.when.ancestor(':hover')` (no marker arg).
   if (ancestorSelectorParents && ancestorSelectorParents.size > 0) {
     let needsDefaultMarker = false;
     const pendingMarkers: ExpressionKind[] = [];
@@ -134,11 +133,7 @@ export function emitStyleMerging(args: {
       if (markerVarName) {
         pendingMarkers.push(j.identifier(markerVarName));
       }
-      // Need defaultMarker() when there's no scoped marker, or when a cross-file
-      // marker coexists with an ancestor selector (defaultMarker serves the ancestor).
-      if (!markerVarName || !siblingMarkerKeys.has(key)) {
-        needsDefaultMarker = true;
-      }
+      needsDefaultMarker = true;
     }
     styleArgs.push(...pendingMarkers);
     if (needsDefaultMarker) {

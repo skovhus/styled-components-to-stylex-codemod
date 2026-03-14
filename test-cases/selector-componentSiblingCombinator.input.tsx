@@ -25,9 +25,23 @@ const Badge = styled.span`
   }
 `;
 
+// Mixed: same Link used as both sibling target AND ancestor reverse.
+// Link needs both LinkMarker (for sibling) and defaultMarker() (for ancestor).
+const Nested = styled.span`
+  color: gray;
+  padding: 4px 8px;
+
+  ${Link}:hover & {
+    color: green;
+  }
+`;
+
 export const App = () => (
   <div>
     <Link href="#">Link</Link>
     <Badge>Badge (blue when Link is focused, lightyellow bg on hover at 768px+)</Badge>
+    <Link href="#">
+      <Nested>Nested in Link (green on hover)</Nested>
+    </Link>
   </div>
 );
