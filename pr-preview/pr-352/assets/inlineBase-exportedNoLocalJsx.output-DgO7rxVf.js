@@ -1,1 +1,0 @@
-import{j as t}from"./index-BYrzxWnm.js";function e(n){const{children:r,...o}=n;return t.jsx("div",{...o,className:"x78zum5 xdt5ytf xou54vl xfawy5m xwtm24k",children:r})}function i(){return t.jsx("div",{children:"Exported only"})}export{i as App,e as Container};
