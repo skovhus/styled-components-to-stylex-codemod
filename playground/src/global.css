@@ -6,3 +6,8 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
+
+/* Dim CodeMirror line numbers */
+.cm-gutterElement {
+  color: #bbb !important;
+}
