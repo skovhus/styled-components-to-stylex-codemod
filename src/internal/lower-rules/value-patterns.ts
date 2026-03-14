@@ -576,6 +576,13 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (opts.media || opts.attrTarget) {
       return false;
     }
+    // Bail when the interpolation has surrounding static text (e.g., "0 0 4px ${...}").
+    // The indexed theme expression ($colors[param]) cannot be concatenated with a prefix
+    // in a StyleX-compatible way, so let downstream handlers deal with it.
+    const { prefix, suffix } = extractStaticPartsForDecl(d);
+    if (prefix || suffix) {
+      return false;
+    }
     const parts = d.value.parts ?? [];
     const slotPart = parts.find((p: any) => p.kind === "slot");
     if (!slotPart || slotPart.kind !== "slot") {
