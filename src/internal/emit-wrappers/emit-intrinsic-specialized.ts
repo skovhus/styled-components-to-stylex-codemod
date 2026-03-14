@@ -10,8 +10,7 @@ import type { ExpressionKind } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import type { EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
-import { styleRef } from "./style-expr-builders.js";
+import { appendAllPseudoStyleArgs, styleRef } from "./style-expr-builders.js";
 
 export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, stylesIdentifier, emitted } = ctx;

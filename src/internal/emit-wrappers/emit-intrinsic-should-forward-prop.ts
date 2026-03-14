@@ -24,8 +24,6 @@ import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
-} from "./emit-intrinsic-simple.js";
-import {
   mergeOrderedEntries,
   styleRef,
   wrapCallArgForPropsObject,

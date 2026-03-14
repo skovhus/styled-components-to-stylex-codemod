@@ -25,16 +25,22 @@ import {
 import { withLeadingCommentsOnFirstFunction } from "./comments.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { cloneAstNode, collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import {
   areEquivalentWhen,
   findComplementaryVariantEntry,
   getPositiveWhen,
-  makeConditionalStyleExpr,
   parseVariantWhenToAst,
 } from "./variant-condition.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
-import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
+import {
+  appendAllPseudoStyleArgs,
+  appendThemeBooleanStyleArgs,
+  buildUseThemeDeclaration,
+  mergeOrderedEntries,
+  styleRef,
+  type OrderedStyleEntry,
+} from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;
@@ -1552,169 +1558,3 @@ function collectPropsFromPropsMemberAccess(node: ExpressionKind, out: Set<string
 }
 
 /** Appends theme boolean conditional style args (e.g., `theme.isDark ? styles.boxDark : styles.boxLight`) to `styleArgs`. */
-export function appendThemeBooleanStyleArgs(
-  hooks: StyledDecl["needsUseThemeHook"],
-  styleArgs: ExpressionKind[],
-  j: JSCodeshift,
-  stylesIdentifier: string,
-  markNeedsUseThemeImport: () => void,
-): boolean {
-  if (!hooks || hooks.length === 0) {
-    return false;
-  }
-  markNeedsUseThemeImport();
-  for (const entry of hooks) {
-    // Skip entries used only for triggering useTheme import/declaration
-    // (e.g., when the theme conditional uses inline styles instead of style buckets)
-    if (!entry.trueStyleKey && !entry.falseStyleKey) {
-      continue;
-    }
-    const trueExpr = entry.trueStyleKey
-      ? styleRef(j, stylesIdentifier, entry.trueStyleKey)
-      : (j.identifier("undefined") as ExpressionKind);
-    const falseExpr = entry.falseStyleKey
-      ? styleRef(j, stylesIdentifier, entry.falseStyleKey)
-      : (j.identifier("undefined") as ExpressionKind);
-    const condition = entry.conditionExpr
-      ? (cloneAstNode(entry.conditionExpr) as ExpressionKind)
-      : j.memberExpression(j.identifier("theme"), j.identifier(entry.themeProp));
-    styleArgs.push(j.conditionalExpression(condition, trueExpr, falseExpr));
-  }
-  return true;
-}
-
-/**
- * Appends pseudo-alias style args to `styleArgs`.
- *
- * Emits `selectorExpr({ active: styles.keyActive, hover: styles.keyHover })` as a single arg.
- * When the entry has a `guard`, the call is wrapped: `cond && selectorExpr(...)`.
- *
- * Returns the list of guard prop names that need destructuring.
- */
-function appendPseudoAliasStyleArgs(
-  entries: StyledDecl["pseudoAliasSelectors"],
-  styleArgs: ExpressionKind[],
-  j: JSCodeshift,
-  stylesIdentifier: string,
-): string[] {
-  if (!entries?.length) {
-    return [];
-  }
-  return appendGuardedStyleArgs(entries, styleArgs, j, (entry) => {
-    const properties = entry.pseudoNames.map((name, i) =>
-      j.property(
-        "init",
-        /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
-        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
-      ),
-    );
-    return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
-      j.objectExpression(properties),
-    ]) as ExpressionKind;
-  });
-}
-
-/**
- * Appends pseudo-expand style args as static `styles.key` references.
- * When the entry has a `guard`, the ref is wrapped: `cond && styles.key`.
- *
- * Returns the list of guard prop names that need destructuring.
- */
-function appendPseudoExpandStyleArgs(
-  entries: StyledDecl["pseudoExpandSelectors"],
-  styleArgs: ExpressionKind[],
-  j: JSCodeshift,
-  stylesIdentifier: string,
-): string[] {
-  if (!entries?.length) {
-    return [];
-  }
-  return appendGuardedStyleArgs(
-    entries,
-    styleArgs,
-    j,
-    (entry) =>
-      j.memberExpression(
-        j.identifier(stylesIdentifier),
-        j.identifier(entry.styleKey),
-      ) as ExpressionKind,
-  );
-}
-
-/**
- * Appends both pseudo-alias and pseudo-expand style args, deduplicating guard props.
- * Returns the combined list of guard prop names that need destructuring.
- */
-export function appendAllPseudoStyleArgs(
-  d: Pick<StyledDecl, "pseudoAliasSelectors" | "pseudoExpandSelectors">,
-  styleArgs: ExpressionKind[],
-  j: JSCodeshift,
-  stylesIdentifier: string,
-): string[] {
-  const guardProps = appendPseudoAliasStyleArgs(
-    d.pseudoAliasSelectors,
-    styleArgs,
-    j,
-    stylesIdentifier,
-  );
-  for (const gp of appendPseudoExpandStyleArgs(
-    d.pseudoExpandSelectors,
-    styleArgs,
-    j,
-    stylesIdentifier,
-  )) {
-    if (!guardProps.includes(gp)) {
-      guardProps.push(gp);
-    }
-  }
-  return guardProps;
-}
-
-/**
- * Shared logic for appending style args with optional guard wrapping.
- * Each entry is mapped to an expression via `buildExpr`, then optionally
- * wrapped in a conditional if the entry has a `guard`.
- */
-function appendGuardedStyleArgs<T extends { guard?: { when: string } }>(
-  entries: T[],
-  styleArgs: ExpressionKind[],
-  j: JSCodeshift,
-  buildExpr: (entry: T) => ExpressionKind,
-  booleanProps?: ReadonlySet<string>,
-): string[] {
-  const guardProps: string[] = [];
-  for (const entry of entries) {
-    const expr = buildExpr(entry);
-    if (entry.guard) {
-      const parsed = parseVariantWhenToAst(j, entry.guard.when, booleanProps);
-      for (const p of parsed.props) {
-        if (p && !guardProps.includes(p)) {
-          guardProps.push(p);
-        }
-      }
-      styleArgs.push(
-        makeConditionalStyleExpr(j, {
-          cond: parsed.cond,
-          expr,
-          isBoolean: parsed.isBoolean,
-        }),
-      );
-    } else {
-      styleArgs.push(expr);
-    }
-  }
-  return guardProps;
-}
-
-/** Builds a `const theme = useTheme();` variable declaration. */
-export function buildUseThemeDeclaration(
-  j: JSCodeshift,
-  themeHookFunctionName: string,
-): StatementKind {
-  return j.variableDeclaration("const", [
-    j.variableDeclarator(
-      j.identifier("theme"),
-      j.callExpression(j.identifier(themeHookFunctionName), []),
-    ),
-  ]);
-}

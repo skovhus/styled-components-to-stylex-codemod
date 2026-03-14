@@ -21,8 +21,12 @@ import {
 } from "./type-helpers.js";
 import { collectCompoundVariantKeys, type EmitIntrinsicContext } from "./emit-intrinsic-helpers.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { appendAllPseudoStyleArgs } from "./emit-intrinsic-simple.js";
-import { mergeOrderedEntries, styleRef, type OrderedStyleEntry } from "./style-expr-builders.js";
+import {
+  appendAllPseudoStyleArgs,
+  mergeOrderedEntries,
+  styleRef,
+  type OrderedStyleEntry,
+} from "./style-expr-builders.js";
 
 export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): void {
   const { emitter, j, emitTypes, wrapperDecls, wrapperNames, stylesIdentifier, emitted } = ctx;

@@ -21,11 +21,6 @@ import {
   type WrapperEmitter,
 } from "./wrapper-emitter.js";
 import {
-  appendAllPseudoStyleArgs,
-  appendThemeBooleanStyleArgs,
-  buildUseThemeDeclaration,
-} from "./emit-intrinsic-simple.js";
-import {
   collectBooleanPropNames,
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
@@ -39,7 +34,13 @@ import {
   isIdentifierNode,
 } from "../utilities/jscodeshift-utils.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
-import { mergeOrderedEntries, type OrderedStyleEntry } from "./style-expr-builders.js";
+import {
+  appendAllPseudoStyleArgs,
+  appendThemeBooleanStyleArgs,
+  buildUseThemeDeclaration,
+  mergeOrderedEntries,
+  type OrderedStyleEntry,
+} from "./style-expr-builders.js";
 import {
   areEquivalentWhen,
   findComplementaryVariantEntry,
