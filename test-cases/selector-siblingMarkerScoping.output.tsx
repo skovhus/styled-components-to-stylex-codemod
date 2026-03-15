@@ -28,14 +28,17 @@ const styles = stylex.create({
     padding: 8,
     borderTopWidth: {
       default: null,
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", RowMarker)]: 1,
     },
     borderTopStyle: {
       default: null,
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", RowMarker)]: "solid",
     },
     borderTopColor: {
       default: null,
+      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", RowMarker)]: "gray",
     },
   },

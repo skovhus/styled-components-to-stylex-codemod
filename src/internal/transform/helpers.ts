@@ -46,6 +46,8 @@ export type ComputedKeyEntry = {
   keyExpr: unknown;
   /** The value (can be nested object, string, number, etc.) */
   value: unknown;
+  /** Optional leading comment to attach to the emitted property */
+  leadingComment?: string;
 };
 
 export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
@@ -145,6 +147,16 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
         : literalToAst(j, entry.value);
     const prop = j.property("init", entry.keyExpr as any, valueAst);
     (prop as any).computed = true;
+    if (entry.leadingComment) {
+      (prop as any).comments = [
+        {
+          type: "CommentLine",
+          value: ` ${entry.leadingComment}`,
+          leading: true,
+          trailing: false,
+        },
+      ];
+    }
     props.push(prop);
   }
 
