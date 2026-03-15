@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-BFw42tS8.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8,padding:16},children:[(0,t.jsx)(`div`,{className:`xexx8yu x1a8lsjc xaope02 x18jlpol`,children:`Progress Bar`}),(0,t.jsx)(`div`,{className:`xexx8yu xwib8y2 x1hr3lfm x15neal0`,children:`Header`})]});export{n as App};

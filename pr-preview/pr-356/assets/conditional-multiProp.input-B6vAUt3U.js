@@ -1,4 +1,0 @@
-import"./react-D4cBbUL-.js";import{f as e,s as t}from"./index-DRa1uduC.js";var n=e(),r=e=>!e||typeof e==`number`?`${e}px`:e,i=e=>!!e||e===0,a=t.div`
-  ${e=>i(e.width)?`width: ${r(e.width)}`:``};
-  ${e=>i(e.height)?`height: ${r(e.height)}`:``};
-`,o=()=>(0,n.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8},children:[(0,n.jsx)(a,{width:100,height:50,style:{background:`#cce5ff`}}),(0,n.jsx)(a,{width:`2rem`,style:{background:`#d4edda`,height:20}}),(0,n.jsx)(a,{height:0,style:{background:`#fff3cd`,width:40}}),(0,n.jsx)(a,{style:{background:`#f8d7da`,width:20,height:20}})]});export{o as App,a as Spacer};

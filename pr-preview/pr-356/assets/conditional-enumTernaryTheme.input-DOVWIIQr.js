@@ -1,5 +1,0 @@
-import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n,s as r}from"./index-DRa1uduC.js";e(t(),1);var i=n(),a=function(e){return e.primary=`primary`,e.gradient=`gradient`,e.success=`success`,e.warning=`warning`,e.error=`error`,e}({}),o=r.div`
-  height: 40px;
-  padding: 8px 16px;
-  background: ${e=>e.$type===a.success?e.theme.color.greenBase:e.$type===a.error?e.theme.color.bgBase:e.$type===a.warning?e.theme.color.bgBaseHover:e.$type===a.primary?e.theme.color.controlPrimary:e.$type===a.gradient?`linear-gradient(to right, ${e.theme.color.bgBorderSolid}, ${e.theme.color.labelMuted})`:e.theme.color.labelBase};
-`,s=()=>(0,i.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8,padding:16},children:[(0,i.jsx)(o,{$type:a.success,children:`Success`}),(0,i.jsx)(o,{$type:a.error,children:`Error`}),(0,i.jsx)(o,{$type:a.warning,children:`Warning`}),(0,i.jsx)(o,{$type:a.primary,children:`Primary`}),(0,i.jsx)(o,{$type:a.gradient,children:`Gradient`}),(0,i.jsx)(o,{children:`Default`})]});export{s as App,a as ProgressType};

@@ -1,1 +1,0 @@
-import"./stylex-B9_aYcJU.js";import{f as e}from"./index-DRa1uduC.js";var t=e(),n=()=>(0,t.jsx)(`button`,{className:`x3nfvp2 x6s0dn4 xl56j7k xc342km xng3xce xhm8nzw x1ypdohk x1vvogim x1hr3lfm xif65rj x1y3eh9s x1awj2ng x12oqio5`,children:`Click me`});export{n as App};
