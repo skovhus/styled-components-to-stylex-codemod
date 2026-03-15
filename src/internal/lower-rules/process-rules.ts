@@ -6,7 +6,7 @@ import type { JSCodeshift } from "jscodeshift";
 import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { CssDeclarationIR } from "../css-ir.js";
+import type { CssDeclarationIR, CssValuePart } from "../css-ir.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
@@ -24,12 +24,19 @@ import {
   getArrowFnParamBindings,
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
-import { cssValueToJs, toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  literalToAst,
+  toStyleKey,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
   getOrCreateRelationOverrideBucket,
+  makeAncestorKeyExpr,
   makeCssProperty,
+  makeCssPropKey,
 } from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
@@ -37,6 +44,12 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
+import {
+  unwrapArrowFunctionToPropsExpr,
+  hasThemeAccessInArrowFn,
+  buildTemplateWithStaticParts,
+} from "./inline-styles.js";
+import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   findSupportedAtRule,
   isMemberExpression,
@@ -526,13 +539,38 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (result === "bail") {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: "Unsupported selector: unresolved interpolation in reverse component selector",
-            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          // Clear partially-processed entries from the firstBucket before
+          // attempting the dynamic fallback.  processDeclarationsIntoBucket may
+          // have written some static declarations before encountering the
+          // unresolvable interpolation that caused the bail.  The fallback
+          // re-processes ALL declarations itself, so stale entries in the
+          // bucket would create duplicate outputs in finalizeRelationOverrides.
+          for (const key of Object.keys(firstBucket)) {
+            delete firstBucket[key];
+          }
+
+          // Try dynamic style fallback before bailing: if the unresolved
+          // interpolations are prop-based arrow functions, we can emit styleFn
+          // entries with ancestor pseudo wrapping instead.
+          const dynamicHandled = tryDynamicRelationOverrideFallback({
+            rule,
+            decl,
+            ctx,
+            j,
+            overrideStyleKey,
+            ancestorPseudos,
+            markerVarName: reverseMarkerVarName,
           });
-          break;
+          if (!dynamicHandled) {
+            state.markBail();
+            warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: unresolved interpolation in reverse component selector",
+              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+            });
+            break;
+          }
+          continue;
         }
 
         // Copy only the declarations written by THIS rule into remaining pseudo buckets.
@@ -2179,6 +2217,192 @@ function handleSiblingSelector(
       }),
     });
   }
+}
+
+/**
+ * Fallback for component selector rules with unresolvable (prop-based) interpolations.
+ * Instead of bailing the entire component, emits dynamic styleFn entries that wrap
+ * values in `stylex.when.ancestor()` pseudo maps.
+ *
+ * Handles both static declarations (emitted as ancestor-pseudo-wrapped AST nodes in the
+ * component's style object) and dynamic arrow-function interpolations (emitted as
+ * styleFn + styleFnFromProps entries). For shorthand declarations that expand to mixed
+ * static/interpolated longhands (e.g. `border: 2px solid ${color}`), static longhands
+ * become ancestor-wrapped AST entries while only interpolated longhands become dynamic
+ * styleFn entries.
+ *
+ * Returns `true` if all declarations were handled, `false` if any cannot be processed
+ * (caller should bail as before).
+ */
+function tryDynamicRelationOverrideFallback(args: {
+  rule: { declarations: CssDeclarationIR[] };
+  decl: StyledDecl;
+  ctx: DeclProcessingState;
+  j: JSCodeshift;
+  overrideStyleKey: string;
+  ancestorPseudos: string[];
+  markerVarName?: string;
+}): boolean {
+  const { rule, decl, ctx, j, overrideStyleKey, ancestorPseudos, markerVarName } = args;
+  const { styleFnDecls, styleFnFromProps, styleObj } = ctx;
+  const filePath = ctx.state.filePath;
+  const avoidNames = new Set(ctx.state.importMap.keys());
+
+  for (const d of rule.declarations) {
+    if (d.value.kind === "static") {
+      // Static declarations that processDeclarationsIntoBucket didn't reach
+      // (after the bail point): emit as ancestor-pseudo-wrapped AST nodes in
+      // the component's style object so they merge into the styleFn body.
+      for (const out of cssDeclarationToStylexDeclarations(d)) {
+        if (out.value.kind === "static" && out.prop) {
+          const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
+          styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+        }
+      }
+      continue;
+    }
+
+    if (d.value.kind !== "interpolated" || !d.property) {
+      return false;
+    }
+
+    // Extract slots — only support single-slot interpolations for now.
+    // After the kind === "interpolated" check above, d.value is guaranteed to have parts.
+    const parts: CssValuePart[] = (d.value as { parts: CssValuePart[] }).parts;
+    const slotParts = parts.filter(
+      (p): p is CssValuePart & { kind: "slot"; slotId: number } => p.kind === "slot",
+    );
+    if (slotParts.length !== 1) {
+      return false;
+    }
+
+    const slotPart = slotParts[0]!;
+    const expr = decl.templateExpressions[slotPart.slotId] as { type?: string } | undefined;
+    if (!expr || (expr.type !== "ArrowFunctionExpression" && expr.type !== "FunctionExpression")) {
+      return false;
+    }
+
+    // Theme accesses should have been handled by processDeclarationsIntoBucket — if they
+    // weren't, something unexpected happened; bail.
+    if (hasThemeAccessInArrowFn(expr)) {
+      return false;
+    }
+
+    const unwrapped = unwrapArrowFunctionToPropsExpr(j, expr);
+    if (!unwrapped) {
+      return false;
+    }
+
+    const { expr: inlineExpr, propsUsed } = unwrapped;
+
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+
+    for (const out of stylexDecls) {
+      if (!out.prop) {
+        continue;
+      }
+
+      // Shorthand expansion can produce mixed static/interpolated longhands
+      // (e.g. border: 2px solid ${color} → static borderWidth/borderStyle + interpolated borderColor).
+      // Only emit dynamic styleFn entries for interpolated longhands; static ones become
+      // ancestor-pseudo-wrapped AST nodes in the component's style object.
+      if (out.value.kind === "static") {
+        const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
+        styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+        continue;
+      }
+
+      // Extract prefix/suffix from the expanded output's parts (not the original declaration)
+      // so shorthand expansion is respected (e.g. borderColor gets no "2px solid" prefix).
+      const { prefix, suffix } = extractStaticPartsForDecl({
+        property: out.prop,
+        value: out.value,
+      });
+      const valueExpr: ExpressionKind =
+        prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
+
+      // Determine if the expression is a simple identity prop reference
+      const isSimpleIdentity =
+        propsUsed.size === 1 &&
+        !prefix &&
+        !suffix &&
+        inlineExpr.type === "Identifier" &&
+        propsUsed.has((inlineExpr as { name: string }).name);
+
+      const jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
+      const fnKey = styleKeyWithSuffix(overrideStyleKey, out.prop);
+      if (!styleFnDecls.has(fnKey)) {
+        const outParamName =
+          isSimpleIdentity && jsxProp.startsWith("$")
+            ? jsxProp.slice(1)
+            : cssPropertyToIdentifier(out.prop, avoidNames);
+        const param = j.identifier(outParamName);
+        if (isSimpleIdentity && jsxProp !== "__props") {
+          ctx.annotateParamFromJsxProp(param, jsxProp);
+        } else if (/\.(ts|tsx)$/.test(filePath)) {
+          (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            j.tsStringKeyword(),
+          );
+        }
+
+        // Build { default: null, [stylex.when.ancestor(pseudo, marker?)]: paramExpr }
+        const conditionalMap = buildAncestorPseudoMap(
+          j,
+          j.identifier(outParamName),
+          ancestorPseudos,
+          markerVarName,
+        );
+
+        const cssPropKeyNode = makeCssPropKey(j, out.prop);
+        const bodyProp = j.property("init", cssPropKeyNode, conditionalMap);
+        const body = j.objectExpression([bodyProp]);
+        styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      }
+
+      if (isSimpleIdentity) {
+        const isOptional = ctx.isJsxPropOptional(jsxProp);
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp,
+          ...(isOptional ? {} : { condition: "always" as const }),
+        });
+      } else {
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp: "__props" as const,
+          condition: "always" as const,
+          callArg: cloneAstNode(valueExpr) as ExpressionKind,
+        });
+      }
+    }
+
+    for (const propName of propsUsed) {
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+  }
+
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+/**
+ * Builds an AST ObjectExpression representing `{ default: null, [stylex.when.ancestor(pseudo)]: value }`.
+ * Used to wrap static CSS values in ancestor pseudo maps for relation override fallback.
+ */
+function buildAncestorPseudoMap(
+  j: JSCodeshift,
+  valueNode: ExpressionKind,
+  ancestorPseudos: string[],
+  markerVarName?: string,
+): ExpressionKind {
+  const pseudoEntries = ancestorPseudos.map((pseudo) => {
+    const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
+    return Object.assign(j.property("init", ancestorKey, valueNode), { computed: true });
+  });
+  return j.objectExpression([
+    j.property("init", j.identifier("default"), j.literal(null)),
+    ...pseudoEntries,
+  ]);
 }
 
 /**
