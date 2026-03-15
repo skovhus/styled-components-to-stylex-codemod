@@ -63,6 +63,13 @@ const FLAKINESS_EXPECTED = new Set<string>([
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
 const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([["transientProp-memberExpression", 0.2]]);
 
+// Case-specific mismatch tolerance overrides (fraction of total pixels).
+// Dynamic StyleX style functions produce inline CSS variable attributes that
+// cause sub-pixel text anti-aliasing differences vs styled-components' class-only approach.
+const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
+  ["selector-componentDynamicProp", 0.03],
+]);
+
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
 
 // ---------------------------------------------------------------------------
@@ -256,6 +263,7 @@ const context = await browser.newContext({ viewport: { width: 1200, height: 800 
 async function compareRenderedPanels(
   p: Page,
   pixelmatchThreshold: number,
+  caseMismatchTolerance: number,
 ): Promise<{ message: string; diffPng: Buffer | null } | null> {
   // Locate the two RenderDebugFrame host divs via their distinctive background style.
   const debugFrames = p.locator('div[style*="repeating-linear-gradient"]');
@@ -291,7 +299,8 @@ async function compareRenderedPanels(
 
   const totalPixels = width * height;
 
-  if (mismatchCount === 0 || mismatchCount / totalPixels <= mismatchTolerance) {
+  const effectiveTolerance = Math.max(mismatchTolerance, caseMismatchTolerance);
+  if (mismatchCount === 0 || mismatchCount / totalPixels <= effectiveTolerance) {
     return null;
   }
 
@@ -452,7 +461,8 @@ async function processTestCase(p: Page, tc: string): Promise<TestResult> {
     // Pixel-level screenshot comparison of the rendered content areas
     if (status === "pass") {
       const caseThreshold = Math.max(threshold, CASE_THRESHOLD_OVERRIDES.get(tc) ?? 0);
-      const comparison = await compareRenderedPanels(p, caseThreshold);
+      const caseTolerance = CASE_MISMATCH_TOLERANCE_OVERRIDES.get(tc) ?? 0;
+      const comparison = await compareRenderedPanels(p, caseThreshold, caseTolerance);
       if (comparison) {
         status = "screenshot-mismatch";
         message = comparison.message;
