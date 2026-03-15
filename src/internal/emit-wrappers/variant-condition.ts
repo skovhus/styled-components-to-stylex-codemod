@@ -8,6 +8,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ExpressionKind } from "./types.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 
 export type LogicalExpressionOperand = Parameters<JSCodeshift["logicalExpression"]>[1];
 
@@ -16,8 +17,6 @@ type VariantConditionResult = {
   props: string[];
   isBoolean: boolean;
 };
-
-const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
 
 /**
  * Parse a variant "when" string into an AST condition expression.
@@ -43,7 +42,7 @@ export function parseVariantWhenToAst(
       .split(".")
       .map((part) => part.trim())
       .filter(Boolean);
-    if (parts.length < 2 || parts.some((part) => !isValidIdentifier(part))) {
+    if (parts.length < 2 || parts.some((part) => !isValidIdentifierName(part))) {
       return null;
     }
     return parts
@@ -65,13 +64,13 @@ export function parseVariantWhenToAst(
         .map((part) => part.trim())
         .filter(Boolean);
       const last = parts[parts.length - 1];
-      if (!last || !isValidIdentifier(last)) {
+      if (!last || !isValidIdentifierName(last)) {
         return { propName: null, expr: j.identifier(trimmedRaw) };
       }
       const root = parts[0];
       if (root === "props" || root === "p") {
         const propRoot = parts[1];
-        if (!propRoot || !isValidIdentifier(propRoot)) {
+        if (!propRoot || !isValidIdentifierName(propRoot)) {
           return { propName: null, expr: j.identifier(trimmedRaw) };
         }
         const expr = parts

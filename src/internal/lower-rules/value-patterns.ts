@@ -14,7 +14,9 @@ import {
   resolveStaticExpressionValue,
   setIdentifierTypeAnnotation,
 } from "../utilities/jscodeshift-utils.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
+import { resolveThemeFromPropsMember } from "./template-literals.js";
 import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
@@ -278,29 +280,14 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       if (hasLocalThemeBinding) {
         return null;
       }
-      const path = getMemberPathFromIdentifier(node as any, paramName);
-      if (!path || path[0] !== "theme") {
-        return null;
-      }
-      const themePath = path.slice(1).join(".");
-      if (!themePath) {
-        return null;
-      }
-      const resolved = resolveValue({
-        kind: "theme",
-        path: themePath,
+      return resolveThemeFromPropsMember({
+        expr: node,
+        paramName: paramName!,
         filePath,
-        loc: getNodeLocStart(node) ?? undefined,
+        parseExpr,
+        resolveValue,
+        resolverImports,
       });
-      if (!resolved) {
-        return null;
-      }
-      registerImports(resolved.imports, resolverImports);
-      const exprAst = parseExpr(resolved.expr);
-      if (!exprAst) {
-        return null;
-      }
-      return exprAst as ExpressionKind;
     };
 
     const readPropAccess = (node: any): string | null => {
@@ -334,7 +321,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     const altTheme = resolveThemeAst(body.alternate);
 
     const buildPropAccess = (prop: string): ExpressionKind => {
-      const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(prop);
+      const isIdent = isValidIdentifierName(prop);
       return isIdent
         ? j.memberExpression(j.identifier("props"), j.identifier(prop))
         : j.memberExpression(j.identifier("props"), j.literal(prop), true);
@@ -382,7 +369,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
       }
       if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-        const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(nullishPropName);
+        const isIdent = isValidIdentifierName(nullishPropName);
         const baseArg = isIdent ? j.identifier(nullishPropName) : buildPropAccess(nullishPropName);
         const callArg = j.logicalExpression("??", baseArg, fallbackTheme);
         styleFnFromProps.push({

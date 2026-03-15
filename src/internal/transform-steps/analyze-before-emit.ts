@@ -19,7 +19,7 @@ import {
   isFunctionNode,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
-import { escapeRegex } from "../utilities/string-utils.js";
+import { escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
@@ -2040,12 +2040,6 @@ type PromotedParamType = "number" | "string" | "numberOrString";
 
 const LENGTH_LIKE_CSS_PROP_RE =
   /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/;
-
-const IDENTIFIER_NAME_RE = /^[$A-Z_][0-9A-Z_$]*$/i;
-
-function isValidIdentifierName(name: string): boolean {
-  return IDENTIFIER_NAME_RE.test(name);
-}
 
 function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
   if (STYLEX_STRING_ONLY_CSS_PROPS.has(cssProp) && typeof value === "number") {

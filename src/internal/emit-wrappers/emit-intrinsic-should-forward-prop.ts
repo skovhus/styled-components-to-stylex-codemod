@@ -7,6 +7,7 @@
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
 import { emitStyleMerging } from "./style-merger.js";
@@ -150,10 +151,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       !!dropPrefixFromFilter &&
       (usedAttrs.has("*") ||
         [...usedAttrs].some((n) => n.startsWith(dropPrefixFromFilter) && !extraProps.has(n)));
-    const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
     const knownPrefixProps = dropPrefixFromFilter
       ? [...extraProps].filter(
-          (p: string) => p.startsWith(dropPrefixFromFilter) && isValidIdentifier(p),
+          (p: string) => p.startsWith(dropPrefixFromFilter) && isValidIdentifierName(p),
         )
       : [];
     const knownPrefixPropsSet = new Set(knownPrefixProps);
@@ -183,7 +183,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const staticVariantPropTypes = buildStaticVariantPropTypes(d);
       const lines: string[] = [];
       for (const p of extraProps) {
-        if (!isValidIdentifier(p)) {
+        if (!isValidIdentifierName(p)) {
           continue;
         }
         const variantType = variantDimByProp.get(p);
@@ -219,7 +219,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const staticVariantPropTypes = buildStaticVariantPropTypes(d);
       const lines: string[] = [];
       for (const p of extraProps) {
-        if (!isValidIdentifier(p) || explicitPropNames.has(p) || compoundWhenKeys.has(p)) {
+        if (!isValidIdentifierName(p) || explicitPropNames.has(p) || compoundWhenKeys.has(p)) {
           continue;
         }
         const variantType = variantDimByProp.get(p);
