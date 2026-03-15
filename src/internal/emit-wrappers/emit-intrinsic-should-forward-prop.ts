@@ -600,7 +600,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const refId = j.identifier("ref");
     const restId = j.identifier("rest");
     const forwardedAsId = j.identifier("forwardedAs");
-    const isVoidTag = tagName === "input";
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
     const shouldIncludeRest = shouldIncludeRestForProps({
@@ -633,124 +632,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       (d.supportsExternalStyles ?? false) ||
       (!shouldOmitRestSpread && shouldIncludeRest);
 
-    if (!allowClassNameProp && !allowStyleProp) {
-      const isVoid = VOID_TAGS.has(tagName);
-      // When allowAsProp is true, include children support even for void tags
-      // because the user might use `as="textarea"` which requires children
-      const includeChildrenInner = allowAsProp || !isVoid;
-      const patternProps = emitter.buildDestructurePatternProps({
-        baseProps: [
-          ...(allowAsProp ? [asDestructureProp(tagName)] : []),
-          ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
-          ...(includeChildrenInner ? [ctx.patternProp("children", childrenId)] : []),
-          ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
-        ],
-        destructureProps: destructureParts,
-        propDefaults,
-        includeRest,
-        restId,
-      });
-      const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
-      ]);
-
-      // Generate cleanup loop for prefix props when:
-      // - There's a dropPrefix (like "$" for transient props)
-      // - Either: local usage of unknown prefix props, OR exported/extended component
-      //   (external callers or extending wrappers may pass unknown prefix props)
-      // - Rest spread is included
-      const needsCleanupLoop =
-        dropPrefix &&
-        (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
-        includeRest;
-      const cleanupPrefixStmt = needsCleanupLoop
-        ? buildPrefixCleanupStatements(j, restId, dropPrefix)
-        : null;
-
-      const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
-        d.attrsInfo,
-        getBridgeClassVar(d),
-      );
-      const { attrsInfo: attrsInfoRaw, forwardedAsStaticFallback } = splitForwardedAsStaticAttrs({
-        attrsInfo,
-        includeForwardedAs: includesForwardedAs,
-      });
-      const attrsInfoWithoutForwardedAsStatic = filterAttrsForShouldForwardProp(
-        attrsInfoRaw,
-        d.shouldForwardProp,
-      );
-      const merging = emitStyleMerging({
-        j,
-        emitter,
-        styleArgs,
-        classNameId,
-        styleId,
-        allowClassNameProp,
-        allowStyleProp,
-        inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
-        staticClassNameExpr,
-        isIntrinsicElement: !allowAsProp,
-      });
-
-      const openingAttrs: JsxAttr[] = [
-        ...emitter.buildAttrsFromAttrsInfo({
-          attrsInfo: attrsInfoWithoutForwardedAsStatic,
-          propExprFor: (prop) => j.identifier(prop),
-        }),
-        ...((d.supportsRefProp ?? false)
-          ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
-          : []),
-        ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
-        ...(includesForwardedAs
-          ? [
-              j.jsxAttribute(
-                j.jsxIdentifier("as"),
-                j.jsxExpressionContainer(
-                  buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
-                ),
-              ),
-            ]
-          : []),
-      ];
-      emitter.appendMergingAttrs(openingAttrs, merging);
-
-      const jsx = emitter.buildJsxElement({
-        tagName: allowAsProp ? "Component" : tagName,
-        attrs: openingAttrs,
-        includeChildren: includeChildrenInner,
-        childrenExpr: childrenId,
-      });
-
-      const fnBodyStmts: StatementKind[] = [declStmt];
-      if (cleanupPrefixStmt) {
-        fnBodyStmts.push(...cleanupPrefixStmt);
-      }
-      if (needsUseTheme) {
-        fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
-      }
-      if (merging.sxDecl) {
-        fnBodyStmts.push(merging.sxDecl);
-      }
-      fnBodyStmts.push(j.returnStatement(jsx as any));
-
-      emitted.push(
-        withLeadingComments(
-          emitter.buildWrapperFunction({
-            localName: d.localName,
-            params: [propsParamId],
-            bodyStmts: fnBodyStmts,
-            typeParameters:
-              allowAsProp && emitTypes ? buildPolymorphicTypeParams(j, tagName) : undefined,
-          }),
-          d,
-        ),
-      );
-      continue;
-    }
-
     // When allowAsProp is true, include children support even for void tags
     // because the user might use `as="textarea"` which requires children
-    const includeChildrenOuter = allowAsProp || !isVoidTag;
+    const isVoid = VOID_TAGS.has(tagName);
+    const includeChildren = allowAsProp || !isVoid;
     const sxId = j.identifier("sx");
     if (allowSxProp) {
       styleArgs.push(sxId);
@@ -761,7 +646,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-        ...(includeChildrenOuter ? [ctx.patternProp("children", childrenId)] : []),
+        ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
         ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
@@ -781,18 +666,32 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     // - Either: local usage of unknown prefix props, OR exported/extended component
     //   (external callers or extending wrappers may pass unknown prefix props)
     // - Rest spread is included
-    const needsCleanupLoopOuter =
+    const needsCleanupLoop =
       dropPrefix &&
       (isExportedComponent || (d.supportsExternalStyles ?? false) || shouldAllowAnyPrefixProps) &&
       includeRest;
-    const cleanupPrefixStmt = needsCleanupLoopOuter
+    const cleanupPrefixStmt = needsCleanupLoop
       ? buildPrefixCleanupStatements(j, restId, dropPrefix)
       : null;
 
-    // Extract static className and bridge class for the style merger
-    const { staticClassNameExpr } = emitter.splitAttrsInfo(d.attrsInfo, getBridgeClassVar(d));
+    const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
+      d.attrsInfo,
+      getBridgeClassVar(d),
+    );
 
-    // Use the style merger helper
+    // When no className/style props, process attrs for JSX rendering and extract forwardedAs fallback
+    let attrsInfoForJsx: StyledDecl["attrsInfo"] | undefined;
+    let forwardedAsStaticFallback: unknown;
+    if (!allowClassNameProp && !allowStyleProp) {
+      const { attrsInfo: attrsInfoRaw, forwardedAsStaticFallback: fallback } =
+        splitForwardedAsStaticAttrs({
+          attrsInfo,
+          includeForwardedAs: includesForwardedAs,
+        });
+      attrsInfoForJsx = filterAttrsForShouldForwardProp(attrsInfoRaw, d.shouldForwardProp);
+      forwardedAsStaticFallback = fallback;
+    }
+
     const merging = emitStyleMerging({
       j,
       emitter,
@@ -807,28 +706,34 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       isIntrinsicElement: !allowAsProp,
     });
 
-    // Build attrs: {...rest} then {...mergedStylexProps(...)} so stylex styles override
-    const openingAttrs: JsxAttr[] = [];
-    if (d.supportsRefProp ?? false) {
-      openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
-    }
-    if (includeRest) {
-      openingAttrs.push(j.jsxSpreadAttribute(restId));
-    }
-    if (includesForwardedAs) {
-      openingAttrs.push(
-        j.jsxAttribute(
-          j.jsxIdentifier("as"),
-          j.jsxExpressionContainer(buildForwardedAsValueExpr(forwardedAsId)),
-        ),
-      );
-    }
+    const openingAttrs: JsxAttr[] = [
+      ...(attrsInfoForJsx
+        ? emitter.buildAttrsFromAttrsInfo({
+            attrsInfo: attrsInfoForJsx,
+            propExprFor: (prop) => j.identifier(prop),
+          })
+        : []),
+      ...((d.supportsRefProp ?? false)
+        ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
+        : []),
+      ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+      ...(includesForwardedAs
+        ? [
+            j.jsxAttribute(
+              j.jsxIdentifier("as"),
+              j.jsxExpressionContainer(
+                buildForwardedAsValueExpr(forwardedAsId, forwardedAsStaticFallback),
+              ),
+            ),
+          ]
+        : []),
+    ];
     emitter.appendMergingAttrs(openingAttrs, merging);
 
     const jsx = emitter.buildJsxElement({
       tagName: allowAsProp ? "Component" : tagName,
       attrs: openingAttrs,
-      includeChildren: includeChildrenOuter,
+      includeChildren,
       childrenExpr: childrenId,
     });
 
@@ -844,7 +749,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     }
     fnBodyStmts.push(j.returnStatement(jsx as any));
 
-    // Add type parameters when allowAsProp is true
     emitted.push(
       withLeadingComments(
         emitter.buildWrapperFunction({
