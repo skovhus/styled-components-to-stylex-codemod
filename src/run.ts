@@ -478,6 +478,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
+    silent: true,
   });
 
   // Write sidecar .stylex.ts files (defineMarker declarations)

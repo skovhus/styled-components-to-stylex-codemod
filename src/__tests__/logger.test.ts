@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
+vi.unmock("../internal/logger.js");
 import { Logger } from "../internal/logger.js";
 
 describe("Logger", () => {

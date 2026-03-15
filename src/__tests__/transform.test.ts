@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { applyTransform } from "jscodeshift/src/testUtils.js";
 import jscodeshift from "jscodeshift";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -22,15 +22,6 @@ const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"])
 function isBailOutFixture(filename: string): boolean {
   return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
 }
-
-// Suppress codemod logs in tests
-vi.mock("../internal/logger.js", () => ({
-  Logger: {
-    warn: vi.fn(),
-    error: vi.fn(),
-    logWarnings: vi.fn(),
-  },
-}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
