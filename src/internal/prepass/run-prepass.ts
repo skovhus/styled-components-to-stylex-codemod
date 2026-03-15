@@ -528,7 +528,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const refProp = consumerAnalysis
       ? [...consumerAnalysis.values()].filter((v) => v.ref).length
       : 0;
-    process.stdout.write(
+    process.stderr.write(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
         ` — ${styledFileCount} with styled-components` +
         `, ${selectorUsages.size} cross-file selectors` +
