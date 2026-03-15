@@ -61,13 +61,15 @@ const FLAKINESS_EXPECTED = new Set<string>([
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
-const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([["transientProp-memberExpression", 0.2]]);
+const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
+  ["transientProp-memberExpression", 0.2], // TODO: investigate if this override can be removed
+]);
 
 // Case-specific mismatch tolerance overrides (fraction of total pixels).
 // Dynamic StyleX style functions produce inline CSS variable attributes that
 // cause sub-pixel text anti-aliasing differences vs styled-components' class-only approach.
 const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
-  ["selector-componentDynamicProp", 0.03],
+  ["selector-componentDynamicProp", 0.03], // TODO: investigate if this override can be removed
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
