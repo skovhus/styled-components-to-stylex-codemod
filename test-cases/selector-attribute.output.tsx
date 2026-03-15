@@ -2,6 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
+
 function Input(props: InputProps) {
   const { type, readOnly, ...rest } = props;
   const sx = stylex.props(
@@ -10,22 +11,27 @@ function Input(props: InputProps) {
     type === "radio" && styles.inputRadio,
     readOnly && styles.inputReadonly,
   );
+
   return <input type={type} readOnly={readOnly} {...rest} {...sx} />;
 }
+
 type LinkProps = React.PropsWithChildren<
   Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
 >;
+
 function Link(props: LinkProps) {
   const { href, target, children, ...rest } = props;
   const isHttps = href?.startsWith("https");
   const isPdf = href?.endsWith(".pdf");
   const isExternal = target === "_blank";
+
   const sx = stylex.props(
     styles.link,
     isExternal && styles.linkExternal,
     isHttps && styles.linkHttps,
     isPdf && styles.linkPdf,
   );
+
   return (
     <a href={href} target={target} {...rest} {...sx}>
       {children}

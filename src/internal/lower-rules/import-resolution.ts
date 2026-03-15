@@ -14,6 +14,7 @@ import {
   isFunctionNode,
   isIdentifierNode,
 } from "../utilities/jscodeshift-utils.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 
 export const buildSafeIndexedParamName = (
   preferred: string,
@@ -284,5 +285,3 @@ export const createImportResolver = (args: {
     resolveImportForExpr,
   };
 };
-
-const isValidIdentifierName = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);

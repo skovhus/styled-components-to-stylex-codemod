@@ -1636,16 +1636,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           continue;
         }
 
-        const consResolved = resolveTemplateLiteralBranch(tplCtx, {
-          node: split.consTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
-          paramName,
-          bindings,
-        });
-        const altResolved = resolveTemplateLiteralBranch(tplCtx, {
-          node: split.altTpl as Parameters<typeof resolveTemplateLiteralBranch>[1]["node"],
-          paramName,
-          bindings,
-        });
+        const consResolved = resolveTplBranch(split.consTpl as ExpressionKind);
+        const altResolved = resolveTplBranch(split.altTpl as ExpressionKind);
         if (!consResolved || !altResolved) {
           skipIndices.add(split.ternaryIdx);
           continue;
@@ -1703,15 +1695,34 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return false;
     };
 
+    // Helper to resolve a template literal branch and apply its entries
+    const resolveTplBranch = (
+      node: ExpressionKind,
+    ): ReturnType<typeof resolveTemplateLiteralBranch> =>
+      resolveTemplateLiteralBranch(tplCtx, { node: node as any, paramName, bindings });
+
+    // Helper to apply all entries (style, dynamic, inline) from a resolved branch
+    const applyResolvedEntries = (
+      resolved: NonNullable<ReturnType<typeof resolveTemplateLiteralBranch>>,
+      info: TestInfo,
+      when: string,
+    ): void => {
+      if (Object.keys(resolved.style).length > 0) {
+        applyVariant(info, resolved.style);
+      }
+      if (resolved.dynamicEntries.length > 0) {
+        applyDynamicEntries(resolved.dynamicEntries, when);
+      }
+      if (resolved.inlineEntries.length > 0) {
+        applyInlineEntries(resolved.inlineEntries, when);
+      }
+    };
+
     // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals
     // and the altIsEmpty case doesn't require invertWhen (which fails for compound conditions)
     if (consIsTpl && altIsEmpty) {
       dropAllTestInfoProps(testInfo);
-      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: cons as any,
-        paramName,
-        bindings,
-      });
+      const consResolved = resolveTplBranch(cons);
       if (!consResolved) {
         // Fallback: try splitting dynamic property name ternaries
         if (tryResolveDynamicPropertyNameTpl(cons)) {
@@ -1719,30 +1730,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         return false;
       }
-      if (Object.keys(consResolved.style).length > 0) {
-        applyVariant(testInfo, consResolved.style);
-      }
-      if (consResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
-      }
-      if (consResolved.inlineEntries.length > 0) {
-        applyInlineEntries(consResolved.inlineEntries, testInfo.when);
-      }
+      applyResolvedEntries(consResolved, testInfo, testInfo.when);
       return true;
     }
 
     if (consIsTpl && altIsTpl) {
       dropAllTestInfoProps(testInfo);
-      const consResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: cons as any,
-        paramName,
-        bindings,
-      });
-      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: alt as any,
-        paramName,
-        bindings,
-      });
+      const consResolved = resolveTplBranch(cons);
+      const altResolved = resolveTplBranch(alt);
       if (!consResolved || !altResolved) {
         return false;
       }
@@ -1750,34 +1745,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (!invertedWhen) {
         return false;
       }
-      if (Object.keys(consResolved.style).length > 0) {
-        applyVariant(testInfo, consResolved.style);
-      }
-      if (Object.keys(altResolved.style).length > 0) {
-        applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
-      }
-      if (consResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(consResolved.dynamicEntries, testInfo.when);
-      }
-      if (altResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
-      }
-      if (consResolved.inlineEntries.length > 0) {
-        applyInlineEntries(consResolved.inlineEntries, testInfo.when);
-      }
-      if (altResolved.inlineEntries.length > 0) {
-        applyInlineEntries(altResolved.inlineEntries, invertedWhen);
-      }
+      applyResolvedEntries(consResolved, testInfo, testInfo.when);
+      applyResolvedEntries(altResolved, { ...testInfo, when: invertedWhen }, invertedWhen);
       return true;
     }
 
     if (consIsEmpty && altIsTpl) {
       dropAllTestInfoProps(testInfo);
-      const altResolved = resolveTemplateLiteralBranch(tplCtx, {
-        node: alt as any,
-        paramName,
-        bindings,
-      });
+      const altResolved = resolveTplBranch(alt);
       if (!altResolved) {
         return false;
       }
@@ -1785,15 +1760,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (!invertedWhen) {
         return false;
       }
-      if (Object.keys(altResolved.style).length > 0) {
-        applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
-      }
-      if (altResolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(altResolved.dynamicEntries, invertedWhen);
-      }
-      if (altResolved.inlineEntries.length > 0) {
-        applyInlineEntries(altResolved.inlineEntries, invertedWhen);
-      }
+      applyResolvedEntries(altResolved, { ...testInfo, when: invertedWhen }, invertedWhen);
       return true;
     }
 

@@ -10,12 +10,14 @@ export function Link(props: LinkProps) {
   const isHttps = href?.startsWith("https");
   const isPdf = href?.endsWith(".pdf");
   const isExternal = target === "_blank";
+
   const sx = stylex.props(
     styles.link,
     isExternal && styles.linkExternal,
     isHttps && styles.linkHttps,
     isPdf && styles.linkPdf,
   );
+
   return (
     <a href={href} target={target} {...rest} {...sx}>
       {children}
