@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n}from"./index-GfnpIRuu.js";var r=e(t(),1),i=n(),a={div:r.forwardRef((e,t)=>(0,i.jsx)(`div`,{ref:t,...e}))};function o({className:e,style:t,size:n=`regular`,user:r}){return(0,i.jsx)(`div`,{className:e,style:t,children:(0,i.jsxs)(`span`,{children:[r,` (`,n,`)`]})})}export{a as n,o as t};

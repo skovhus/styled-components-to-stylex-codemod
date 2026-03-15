@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-GfnpIRuu.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{display:`flex`,gap:16,padding:16},children:(0,t.jsx)(`div`,{className:`x1e2nbdu xe8ttls`,children:`High specificity text (red, with padding)`})});export{n as App};

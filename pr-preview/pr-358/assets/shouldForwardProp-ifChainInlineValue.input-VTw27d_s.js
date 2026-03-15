@@ -1,0 +1,7 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n,s as r}from"./index-GfnpIRuu.js";e(t(),1);var i=n(),a=r.div.withConfig({shouldForwardProp:e=>![`column`,`reverse`].includes(e)})`
+  display: flex;
+  flex-direction: ${({column:e,reverse:t})=>e?t?`column-reverse`:`column`:t?`row-reverse`:`row`};
+  gap: 8px;
+  padding: 16px;
+  background-color: #f0f0f0;
+`,o=()=>(0,i.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:16,padding:16},children:[(0,i.jsxs)(a,{children:[(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Row`}),(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Default`})]}),(0,i.jsxs)(a,{column:!0,children:[(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Column`}),(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Down`})]}),(0,i.jsxs)(a,{reverse:!0,children:[(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Row`}),(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Reverse`})]}),(0,i.jsxs)(a,{column:!0,reverse:!0,children:[(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#bf4f74`,color:`white`},children:`Column`}),(0,i.jsx)(`div`,{style:{padding:8,backgroundColor:`#4f74bf`,color:`white`},children:`Reverse`})]})]});export{o as App};
