@@ -1,0 +1,1 @@
+import"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as e}from"./index-CyUUxAP6.js";import{n as t,t as n}from"./react-spring-BR7oI6Gp.js";var r=e();function i(){let[e,i]=t(()=>({d:`M2 3L11 5L20 3`,y:0}));return(0,r.jsx)(`svg`,{width:`22`,height:`6`,children:(0,r.jsx)(n.path,{d:e.d,className:`x73je2i xvlca1e x1owpc8m`})})}var a=()=>(0,r.jsx)(i,{});export{a as App};

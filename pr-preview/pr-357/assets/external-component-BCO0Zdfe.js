@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n}from"./index-CyUUxAP6.js";e(t(),1);var r=n();function i(e){let{className:t,children:n,isOpen:i,...a}=e;return(0,r.jsx)(`div`,{className:t,...a,children:n??`ExternalComponent`})}export{i as t};

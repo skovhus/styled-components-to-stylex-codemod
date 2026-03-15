@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-CyUUxAP6.js";import"./breakpoints.stylex-ZovQSR-z.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`div`,{className:`xh8yej3 x1uz70x1 xfcx1n5 x1i7j8g4`,children:`Responsive container`}),(0,t.jsx)(`div`,{className:`xexx8yu x1sdy3oo xsag5q8 xyhzg9w x4l9tsp x1xdgjpz`,children:`Details column`})]});export{n as App};

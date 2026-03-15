@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n}from"./index-CyUUxAP6.js";var r=e(t(),1),i=n(),a={div:r.forwardRef((e,t)=>(0,i.jsx)(`div`,{ref:t,...e})),path:r.forwardRef((e,t)=>(0,i.jsx)(`path`,{ref:t,...e}))};function o(e){return[e(),{start:()=>{}}]}export{o as n,a as t};

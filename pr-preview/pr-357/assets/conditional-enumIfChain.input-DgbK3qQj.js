@@ -1,0 +1,6 @@
+import"./react-D4cBbUL-.js";import{f as e,s as t}from"./index-CyUUxAP6.js";var n=e(),r=t.g`
+  opacity: ${e=>e.$state===`down`?0:1};
+  transform-origin: 8px 4.5px; /* Top of stem - where it connects to arrow head */
+  transition: opacity 150ms ease, transform 150ms ease;
+  transform: ${e=>e.$state===`up`?`scaleY(3.27)`:e.$state===`down`?`scaleY(0)`:`scaleY(1)`};
+`,i=()=>(0,n.jsxs)(`svg`,{width:`160`,height:`60`,viewBox:`0 0 160 60`,children:[(0,n.jsx)(r,{$state:`up`,children:(0,n.jsx)(`rect`,{x:`20`,y:`10`,width:`6`,height:`40`,fill:`black`,rx:`2`})}),(0,n.jsx)(r,{$state:`down`,children:(0,n.jsx)(`rect`,{x:`77`,y:`10`,width:`6`,height:`40`,fill:`black`,rx:`2`})}),(0,n.jsx)(r,{$state:`both`,children:(0,n.jsx)(`rect`,{x:`134`,y:`10`,width:`6`,height:`40`,fill:`black`,rx:`2`})})]});export{i as App};
