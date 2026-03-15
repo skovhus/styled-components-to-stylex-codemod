@@ -3,6 +3,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Suppress codemod logs in tests
+vi.mock("../internal/logger.js", () => ({
+  Logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    logWarnings: vi.fn(),
+  },
+}));
+
 interface FixturePaths {
   root: string;
   componentFile: string;

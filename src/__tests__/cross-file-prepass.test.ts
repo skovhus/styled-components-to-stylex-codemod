@@ -28,6 +28,7 @@ import {
 // Suppress codemod logs in tests
 vi.mock("../internal/logger.js", () => ({
   Logger: {
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     logWarnings: vi.fn(),
