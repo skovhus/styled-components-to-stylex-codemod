@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";var n=e(t(),1);function r(e){let{variant:t,color:r,...i}=e;return n.createElement(`span`,i)}export{r as t};

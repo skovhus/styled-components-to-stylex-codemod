@@ -1,0 +1,4 @@
+import"./react-D4cBbUL-.js";import{f as e,s as t}from"./index-DRa1uduC.js";var n=e(),r=t.div`
+  ${e=>e.$noGrowOrShrink?`flex-grow:0;`:`flex-grow:1;`}
+  flex-shrink: ${e=>`var(--flex-shrink, ${e.$noGrowOrShrink?0:e.$basis?1:2})`};
+`,i=()=>(0,n.jsxs)(r,{$noGrowOrShrink:!0,$basis:1,style:{display:`flex`,gap:8,width:260,border:`1px solid #ccc`,padding:8,background:`#f8f8f8`},children:[(0,n.jsx)(`div`,{style:{width:40,height:24,background:`#BF4F74`}}),(0,n.jsx)(`div`,{style:{width:120,height:24,background:`#4F74BF`}}),(0,n.jsx)(`div`,{style:{width:80,height:24,background:`#74BF4F`}})]});export{i as App,r as ColumnContainer};
