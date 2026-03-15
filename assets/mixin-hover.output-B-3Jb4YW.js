@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-Dda2rlA_.js";var t=e(),n=()=>(0,t.jsx)(`button`,{className:`x1e2nbdu x17z2mba`,children:`Hover me`});export{n as App};
