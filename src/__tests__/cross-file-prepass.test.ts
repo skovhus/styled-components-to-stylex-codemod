@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
@@ -24,16 +24,6 @@ import {
   buildConsumerReplacements,
   patchConsumerFile,
 } from "../internal/bridge-consumer-patcher.js";
-
-// Suppress codemod logs in tests
-vi.mock("../internal/logger.js", () => ({
-  Logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    logWarnings: vi.fn(),
-  },
-}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "fixtures", "cross-file");

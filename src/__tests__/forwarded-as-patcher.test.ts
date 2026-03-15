@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
@@ -9,16 +9,6 @@ import {
   buildForwardedAsReplacements,
   patchConsumerForwardedAs,
 } from "../internal/forwarded-as-consumer-patcher.js";
-
-// Suppress codemod logs in tests
-vi.mock("../internal/logger.js", () => ({
-  Logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    logWarnings: vi.fn(),
-  },
-}));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "fixtures", "cross-file");

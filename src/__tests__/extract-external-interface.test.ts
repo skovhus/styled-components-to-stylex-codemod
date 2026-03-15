@@ -9,21 +9,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import type { ExternalInterfaceResult } from "../adapter.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
-
-// Suppress codemod logs in tests
-vi.mock("../internal/logger.js", () => ({
-  Logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    logWarnings: vi.fn(),
-  },
-}));
 
 /** Recursively collect all .tsx/.ts/.jsx files in a directory. */
 function collectFiles(dir: string): string[] {

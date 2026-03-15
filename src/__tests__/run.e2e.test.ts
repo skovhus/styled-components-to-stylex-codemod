@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { mkdtemp, copyFile, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -6,27 +6,6 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { format } from "oxfmt";
 import { runTransform } from "../run.js";
-
-// Suppress codemod logs in tests
-vi.mock("../internal/logger.js", () => ({
-  Logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    logError: vi.fn(),
-    logWarnings: vi.fn(),
-    createReport: vi.fn(() => ({
-      toString: () => "",
-      print: vi.fn(),
-      getWarnings: vi.fn(() => []),
-    })),
-    setFileCount: vi.fn(),
-    setMaxExamples: vi.fn(),
-    markErrorAsLogged: vi.fn(),
-    isErrorLogged: vi.fn(() => false),
-    _clearCollected: vi.fn(),
-  },
-}));
 import {
   runTransform as runTransformFromIndex,
   defineAdapter as defineAdapterFromIndex,

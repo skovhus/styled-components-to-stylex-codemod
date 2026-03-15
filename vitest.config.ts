@@ -8,6 +8,7 @@ export default defineConfig({
     testTimeout: 20000,
     hookTimeout: 10000,
     reporters: ["agent"],
+    setupFiles: ["src/__tests__/vitest-setup.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
