@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-DVlcDaUT.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{padding:16,background:`#111`},children:(0,t.jsx)(`div`,{className:`x1xv9y83 x1awj2ng xc7ga6q`,children:`Gradient Card`})});export{n as App};
