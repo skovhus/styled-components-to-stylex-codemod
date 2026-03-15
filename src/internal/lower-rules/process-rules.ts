@@ -48,6 +48,8 @@ import {
   unwrapArrowFunctionToPropsExpr,
   hasThemeAccessInArrowFn,
   buildTemplateWithStaticParts,
+  inlineArrowFunctionBody,
+  collectPropsFromArrowFn,
 } from "./inline-styles.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
@@ -70,6 +72,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
+    inlineStyleProps,
   } = ctx;
   const {
     j,
@@ -681,6 +684,23 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           { bailOnUnresolved: true },
         );
         if (forwardResult === "bail") {
+          // Try CSS variable bridge: forward prop-based interpolations via CSS custom
+          // properties set on the parent component's inline style.
+          if (!crossFileUsage) {
+            const bridgeResult = tryForwardCssVarBridge(
+              rule,
+              bucket,
+              j,
+              decl,
+              overrideStyleKey,
+              resolveThemeValue,
+              resolveThemeValueFromFn,
+              inlineStyleProps,
+            );
+            if (bridgeResult !== "bail") {
+              continue;
+            }
+          }
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -1220,6 +1240,102 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 // --- Non-exported helpers ---
 
 /**
+ * Attempts to resolve unresolvable interpolations in a forward descendant selector
+ * by bridging them via CSS custom properties. The parent component sets the CSS
+ * variable as an inline style, and the child's override style references it via `var()`.
+ *
+ * Only handles single-slot interpolations that are arrow function prop accesses.
+ * Returns "bail" if the bridge can't be applied.
+ */
+function tryForwardCssVarBridge(
+  rule: { declarations: CssDeclarationIR[] },
+  bucket: Record<string, unknown>,
+  j: DeclProcessingState["state"]["j"],
+  decl: StyledDecl,
+  overrideStyleKey: string,
+  resolveThemeValue: (expr: unknown) => unknown,
+  resolveThemeValueFromFn: (expr: unknown) => unknown,
+  parentInlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>,
+): Set<string> | "bail" {
+  const writtenProps = new Set<string>();
+
+  for (const d of rule.declarations) {
+    // Static and theme-resolvable declarations use the shared helper
+    const sharedResult = writeResolvedDeclaration(
+      d,
+      bucket,
+      j,
+      decl,
+      resolveThemeValue,
+      resolveThemeValueFromFn,
+      writtenProps,
+    );
+    if (sharedResult === "written" || sharedResult === "skip") {
+      continue;
+    }
+
+    // sharedResult === "unresolved" — try CSS variable bridge for prop-based expressions
+    if (d.value.kind !== "interpolated" || !d.property) {
+      return "bail";
+    }
+    const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
+    if (!parts) {
+      return "bail";
+    }
+    const slotParts = parts.filter((p) => p.kind === "slot" && p.slotId !== undefined);
+    // Only handle single-slot interpolations for now
+    if (slotParts.length !== 1 || slotParts[0]!.slotId === undefined) {
+      return "bail";
+    }
+    const slotId = slotParts[0]!.slotId;
+    const expr = decl.templateExpressions[slotId];
+    if (
+      !expr ||
+      typeof expr !== "object" ||
+      ((expr as { type?: string }).type !== "ArrowFunctionExpression" &&
+        (expr as { type?: string }).type !== "FunctionExpression")
+    ) {
+      return "bail";
+    }
+
+    // Reject theme accesses — they should be handled by resolveThemeValueFromFn
+    if (hasThemeAccessInArrowFn(expr)) {
+      return "bail";
+    }
+
+    // Inline the arrow function body to get a wrapper-scope expression
+    const inlinedExpr = inlineArrowFunctionBody(j, expr);
+    if (!inlinedExpr) {
+      return "bail";
+    }
+
+    // Collect and register used props so the wrapper destructures them
+    for (const propName of collectPropsFromArrowFn(expr)) {
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+
+    // Generate a CSS variable name from the override style key and CSS property
+    const varName = `--${overrideStyleKey}-${kebabToCamelCase(d.property)}`;
+
+    // Set bucket value(s) to var(--name) — shorthand expansion produces the right outputs
+    for (const out of cssDeclarationToStylexDeclarations(d)) {
+      if (out.value.kind === "static") {
+        bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+      } else {
+        bucket[out.prop] = `var(${varName})`;
+      }
+      writtenProps.add(out.prop);
+    }
+
+    // Add CSS variable assignment to the parent's inline style props
+    parentInlineStyleProps.push({ prop: varName, expr: inlinedExpr });
+    decl.needsWrapperComponent = true;
+  }
+
+  return writtenProps;
+}
+
+/**
  * Processes rule declarations into a relation override bucket, handling both static
  * and interpolated (theme-resolved) values. Returns "bail" if any interpolated
  * declaration can't be resolved; returns the set of property names written otherwise.
@@ -1235,40 +1351,70 @@ function processDeclarationsIntoBucket(
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
   for (const d of rule.declarations) {
-    if (d.value.kind === "static") {
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
-        if (out.value.kind !== "static") {
-          continue;
-        }
-        const v = cssValueToJs(out.value, d.important, out.prop);
-        bucket[out.prop] = v;
-        writtenProps.add(out.prop);
-      }
-    } else if (d.value.kind === "interpolated" && d.property) {
-      const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
-      if (resolveResult === "bail") {
-        if (options?.bailOnUnresolved) {
-          return "bail";
-        }
-        continue;
-      }
-      if (resolveResult) {
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
-          if (out.value.kind === "static") {
-            // Shorthand expansion produced a static component (e.g., borderWidth from border)
-            const v = cssValueToJs(out.value, d.important, out.prop);
-            bucket[out.prop] = v;
-          } else {
-            // Build interpolated value using the output's parts (may differ from original d
-            // when shorthand expansion strips the static prefix, e.g., border → borderColor)
-            bucket[out.prop] = buildInterpolatedValue(j, { value: out.value }, resolveResult);
-          }
-          writtenProps.add(out.prop);
-        }
-      }
+    const result = writeResolvedDeclaration(
+      d,
+      bucket,
+      j,
+      decl,
+      resolveThemeValue,
+      resolveThemeValueFromFn,
+      writtenProps,
+    );
+    if (result === "written" || result === "skip") {
+      continue;
+    }
+    // result === "unresolved"
+    if (options?.bailOnUnresolved) {
+      return "bail";
     }
   }
   return writtenProps;
+}
+
+/**
+ * Shared logic for processing a single declaration into a bucket.
+ * Handles static values and theme-resolvable interpolations.
+ * Returns "written" if handled, "skip" for non-interpolated non-static,
+ * or "unresolved" if the interpolation couldn't be resolved.
+ */
+function writeResolvedDeclaration(
+  d: CssDeclarationIR,
+  bucket: Record<string, unknown>,
+  j: DeclProcessingState["state"]["j"],
+  decl: { templateExpressions: unknown[] },
+  resolveThemeValue: (expr: unknown) => unknown,
+  resolveThemeValueFromFn: (expr: unknown) => unknown,
+  writtenProps: Set<string>,
+): "written" | "skip" | "unresolved" {
+  if (d.value.kind === "static") {
+    for (const out of cssDeclarationToStylexDeclarations(d)) {
+      if (out.value.kind !== "static") {
+        continue;
+      }
+      bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+      writtenProps.add(out.prop);
+    }
+    return "written";
+  }
+
+  if (d.value.kind !== "interpolated" || !d.property) {
+    return "skip";
+  }
+
+  const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
+  if (!resolveResult || resolveResult === "bail") {
+    return "unresolved";
+  }
+
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    if (out.value.kind === "static") {
+      bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+    } else {
+      bucket[out.prop] = buildInterpolatedValue(j, { value: out.value }, resolveResult);
+    }
+    writtenProps.add(out.prop);
+  }
+  return "written";
 }
 
 /**

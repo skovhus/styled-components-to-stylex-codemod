@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: unresolved interpolation in descendant component selector
+// Forward descendant component selector with dynamic prop-based interpolation
 import styled from "styled-components";
 
 const Icon = styled.span`
@@ -6,8 +6,8 @@ const Icon = styled.span`
   height: 16px;
 `;
 
-// Forward descendant selector with unresolvable prop-based interpolation.
-// The interpolation can't be resolved to a theme value, so should bail.
+// Forward descendant selector with prop-based interpolation.
+// The prop value is bridged to the child via a CSS custom property.
 const Button = styled.button<{ $color?: string }>`
   padding: 8px;
 
