@@ -1278,16 +1278,15 @@ function tryForwardCssVarBridge(
     if (d.value.kind !== "interpolated" || !d.property) {
       return "bail";
     }
-    const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
-    if (!parts) {
-      return "bail";
-    }
-    const slotParts = parts.filter((p) => p.kind === "slot" && p.slotId !== undefined);
+    const slotParts = d.value.parts.filter(
+      (p): p is CssValuePart & { kind: "slot" } => p.kind === "slot",
+    );
     // Only handle single-slot interpolations for now
-    if (slotParts.length !== 1 || slotParts[0]!.slotId === undefined) {
+    const singleSlot = slotParts.length === 1 ? slotParts[0] : undefined;
+    if (!singleSlot) {
       return "bail";
     }
-    const slotId = slotParts[0]!.slotId;
+    const slotId = singleSlot.slotId;
     const expr = decl.templateExpressions[slotId];
     if (
       !expr ||
@@ -1317,12 +1316,14 @@ function tryForwardCssVarBridge(
     // Generate a CSS variable name from the override style key and CSS property
     const varName = `--${overrideStyleKey}-${kebabToCamelCase(d.property)}`;
 
-    // Set bucket value(s) to var(--name) — shorthand expansion produces the right outputs
+    // Set bucket value(s) — shorthand expansion may produce multiple outputs.
+    // Compose static parts with the var() reference to preserve prefixes/suffixes
+    // (e.g., `box-shadow: 0 4px 8px ${color}` → `"0 4px 8px var(--name)"`).
     for (const out of cssDeclarationToStylexDeclarations(d)) {
       if (out.value.kind === "static") {
         bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
       } else {
-        bucket[out.prop] = `var(${varName})`;
+        bucket[out.prop] = composeVarReference(out.value.parts, varName);
       }
       writtenProps.add(out.prop);
     }
@@ -1333,6 +1334,14 @@ function tryForwardCssVarBridge(
   }
 
   return writtenProps;
+}
+
+/**
+ * Builds a CSS value string from parts, replacing slot references with `var(--name)`.
+ * Preserves static prefixes/suffixes around the interpolation slot.
+ */
+function composeVarReference(parts: CssValuePart[], varName: string): string {
+  return parts.map((p) => (p.kind === "static" ? p.value : `var(${varName})`)).join("");
 }
 
 /**
