@@ -1,0 +1,1 @@
+import"./stylex-B9_aYcJU.js";import{f as e}from"./index-CvfJmPeC.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{display:`flex`,gap:16,padding:16},children:(0,t.jsx)(`div`,{className:`xso031l x1q0q8m5 x1f3p4rf x1vvogim x1hr3lfm`,children:`Box with border`})});export{n as App};

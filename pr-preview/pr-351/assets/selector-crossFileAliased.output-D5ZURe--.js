@@ -1,0 +1,1 @@
+import"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as e}from"./index-CvfJmPeC.js";import{t}from"./cross-file-icon.styled-ntqIrK87.js";var n=e();function r(){return(0,n.jsx)(`div`,{style:{padding:16},children:(0,n.jsxs)(`div`,{className:`x1tamke2 xj4hn0o`,children:[(0,n.jsx)(t,{className:`xf0lols x1y0btm7 x1118g2m`}),`Aliased import`]})})}export{r as App};

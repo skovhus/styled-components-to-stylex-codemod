@@ -1,0 +1,4 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import{f as n,s as r}from"./index-CvfJmPeC.js";e(t(),1);var i=n(),a=r.div`
+  display: inline-flex;
+  ${({gap:e=8})=>`gap: ${e}px;`}
+`,o=()=>(0,i.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:12,padding:12},children:[(0,i.jsxs)(a,{style:{background:`#e2f0ff`,padding:8},children:[(0,i.jsx)(`span`,{style:{background:`#4f83cc`,color:`white`,padding:8},children:`Default gap`}),(0,i.jsx)(`span`,{style:{background:`#4f83cc`,color:`white`,padding:8},children:`Default gap`})]}),(0,i.jsxs)(a,{gap:14,style:{background:`#ffeecf`,padding:8},children:[(0,i.jsx)(`span`,{style:{background:`#f9a825`,color:`white`,padding:8},children:`Gap 14`}),(0,i.jsx)(`span`,{style:{background:`#f9a825`,color:`white`,padding:8},children:`Gap 14`})]})]});export{o as App,a as Tile};

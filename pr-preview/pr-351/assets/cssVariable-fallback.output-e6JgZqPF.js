@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as n}from"./index-CvfJmPeC.js";e(t(),1);var r=n();function i({children:e}){return(0,r.jsx)(`div`,{className:`xh8yej3 x17apdc0 x1odjw0f`,children:e})}var a=()=>(0,r.jsx)(i,{children:(0,r.jsx)(`div`,{children:`Scrollable content`})});export{a as App,i as ScrollableArea};
