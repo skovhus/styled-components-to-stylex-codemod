@@ -55,6 +55,7 @@ describe("runTransform (e2e)", () => {
       dryRun: false,
       print: false,
       parser: "tsx",
+      silent: true,
     });
 
     expect(result.errors).toBe(0);

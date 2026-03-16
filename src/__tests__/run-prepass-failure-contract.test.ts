@@ -144,6 +144,7 @@ describe("runTransform prepass failure contract", () => {
       consumerPaths: SAMPLE_FILE,
       adapter,
       dryRun: true,
+      silent: true,
     });
     await expect(execution).rejects.toThrowError(
       /prepass failed while using externalInterface: "auto"/i,
@@ -188,6 +189,7 @@ describe("runTransform prepass failure contract", () => {
       consumerPaths: SAMPLE_FILE,
       adapter,
       dryRun: true,
+      silent: true,
     });
 
     expect(result.errors).toBe(0);
