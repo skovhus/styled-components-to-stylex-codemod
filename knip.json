@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": ["src/run.ts", "scripts/**/*.{mjs,mts}", "src/__tests__/**/*.test.ts"],
   "project": ["src/**/*.{ts,tsx}", "playground/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts}"],
-  "ignoreDependencies": ["assert", "path-browserify"],
+  "ignoreDependencies": ["agent", "assert", "path-browserify"],
 
   "ignore": [
     "src/__tests__/fixtures/**",

@@ -28,12 +28,19 @@ const [
   { fixtureAdapter, appLikeAdapter },
   { scanCrossFileSelectors },
   { createModuleResolver },
+  { Logger },
 ] = await Promise.all([
   import("../src/transform.ts"),
   import("../src/__tests__/fixture-adapters.ts"),
   import("../src/internal/prepass/scan-cross-file-selectors.ts"),
   import("../src/internal/prepass/resolve-imports.ts"),
+  import("../src/internal/logger.ts"),
 ]);
+
+// Suppress diagnostic output during regeneration
+Logger.info = () => {};
+Logger.warn = () => {};
+Logger.logWarnings = () => {};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");

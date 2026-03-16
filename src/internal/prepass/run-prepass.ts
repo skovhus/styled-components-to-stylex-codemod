@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve as pathResolve } from "node:path";
 import type { ExternalInterfaceResult } from "../../adapter.js";
+import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 import {
@@ -528,7 +529,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const refProp = consumerAnalysis
       ? [...consumerAnalysis.values()].filter((v) => v.ref).length
       : 0;
-    process.stdout.write(
+    Logger.info(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
         ` — ${styledFileCount} with styled-components` +
         `, ${selectorUsages.size} cross-file selectors` +

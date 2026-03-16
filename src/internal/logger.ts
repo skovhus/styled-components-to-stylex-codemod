@@ -146,6 +146,14 @@ export class Logger {
   }
 
   /**
+   * Log an informational message to stderr (e.g. prepass summary).
+   * Routed through Logger so tests can mock it.
+   */
+  public static info(message: string): void {
+    process.stderr.write(message);
+  }
+
+  /**
    * Log a warning message to stdout.
    * All codemod warnings go through this so tests can mock it.
    */
