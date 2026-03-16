@@ -313,7 +313,21 @@ export function buildDestructurePatternProps(
   const { baseProps, destructureProps, propDefaults, includeRest = false, restId } = args;
   const patternProps: Array<Property | RestElement> = [...baseProps];
 
-  for (const name of destructureProps.filter((n): n is string => Boolean(n))) {
+  // Collect names already present in baseProps to avoid duplicate bindings
+  // (e.g. pseudo guard props overlapping with intrinsic props like href/type)
+  const existingNames = new Set<string>();
+  for (const prop of baseProps) {
+    if (prop.type !== "RestElement") {
+      const key = (prop as { key?: { type?: string; name?: string } }).key;
+      if (key?.type === "Identifier" && key.name) {
+        existingNames.add(key.name);
+      }
+    }
+  }
+
+  for (const name of destructureProps.filter(
+    (n): n is string => typeof n === "string" && n.length > 0 && !existingNames.has(n),
+  )) {
     const defaultVal = propDefaults?.get(name);
     if (defaultVal !== undefined) {
       patternProps.push(buildShorthandDefaultPatternProp(j, name, defaultVal));

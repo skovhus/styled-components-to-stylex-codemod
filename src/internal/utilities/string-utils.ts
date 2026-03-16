@@ -6,6 +6,16 @@
  * Capitalizes the first character of a string.
  * @example capitalize("hello") => "Hello"
  */
+/**
+ * Checks whether a string is a valid JavaScript identifier name.
+ * @example isValidIdentifierName("foo") => true
+ * @example isValidIdentifierName("$bar") => true
+ * @example isValidIdentifierName("some-prop") => false
+ */
+export function isValidIdentifierName(name: string): boolean {
+  return /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
+}
+
 export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

@@ -29,6 +29,7 @@ import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
 } from "../utilities/jscodeshift-utils.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { parseCssTemplateToRules } from "./css-helper.js";
 import { extractStaticParts } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
@@ -703,7 +704,7 @@ function resolveDynamicTemplateExpr(args: {
   return null;
 }
 
-function resolveThemeFromPropsMember(args: {
+export function resolveThemeFromPropsMember(args: {
   expr: Expression;
   paramName: string;
   filePath: string;
@@ -853,7 +854,7 @@ function buildPropAccessExpr(
   propName: string,
   defaultValue?: unknown,
 ): ExpressionKind {
-  const isIdent = /^[$A-Z_][0-9A-Z_$]*$/i.test(propName);
+  const isIdent = isValidIdentifierName(propName);
   const baseExpr = isIdent
     ? (j.identifier(propName) as ExpressionKind)
     : (j.memberExpression(j.identifier("props"), j.literal(propName), true) as ExpressionKind);

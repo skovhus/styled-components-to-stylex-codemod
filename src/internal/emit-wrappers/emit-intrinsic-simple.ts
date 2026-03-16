@@ -7,6 +7,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
+import { isValidIdentifierName } from "../utilities/string-utils.js";
 import {
   collectInlineStylePropNames,
   type ExpressionKind,
@@ -650,11 +651,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         for (const k of compoundVariantWhenKeys) {
           keys.delete(k);
         }
-        const isValidIdentifier = (name: string): boolean => /^[$A-Z_][0-9A-Z_$]*$/i.test(name);
         const filtered = [...keys].filter(
           (k) =>
             k &&
-            isValidIdentifier(k) &&
+            isValidIdentifierName(k) &&
             k !== "children" &&
             k !== "className" &&
             k !== "style" &&
