@@ -49,7 +49,7 @@ import {
   hasThemeAccessInArrowFn,
   buildTemplateWithStaticParts,
   inlineArrowFunctionBody,
-  collectPropsFromArrowFn,
+  collectPropsFromArrowFnDestructured,
 } from "./inline-styles.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
@@ -696,6 +696,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               resolveThemeValue,
               resolveThemeValueFromFn,
               inlineStyleProps,
+              ancestorPseudo,
             );
             if (bridgeResult !== "bail") {
               continue;
@@ -1256,6 +1257,7 @@ function tryForwardCssVarBridge(
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   parentInlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>,
+  ancestorPseudo: string | null,
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
 
@@ -1308,13 +1310,20 @@ function tryForwardCssVarBridge(
       return "bail";
     }
 
-    // Collect and register used props so the wrapper destructures them
-    for (const propName of collectPropsFromArrowFn(expr)) {
+    // Collect and register used props so the wrapper destructures them.
+    // Uses the destructured-aware variant so `({ $color }) => $color` patterns
+    // also register shouldForwardProp drops for the bridged props.
+    for (const propName of collectPropsFromArrowFnDestructured(expr)) {
       ensureShouldForwardPropDrop(decl, propName);
     }
 
-    // Generate a CSS variable name from the override style key and CSS property
-    const varName = `--${overrideStyleKey}-${kebabToCamelCase(d.property)}`;
+    // Generate a CSS variable name from the override style key, ancestor pseudo (if any),
+    // and CSS property. Including the pseudo ensures unique var names when multiple pseudos
+    // target the same child with the same property (e.g., &:hover ${C} and &:focus ${C}).
+    const pseudoSegment = ancestorPseudo
+      ? `-${kebabToCamelCase(ancestorPseudo.replace(/^:/, ""))}`
+      : "";
+    const varName = `--${overrideStyleKey}${pseudoSegment}-${kebabToCamelCase(d.property)}`;
 
     // Set bucket value(s) — shorthand expansion may produce multiple outputs.
     // Compose static parts with the var() reference to preserve prefixes/suffixes

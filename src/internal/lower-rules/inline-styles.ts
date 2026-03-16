@@ -140,6 +140,38 @@ export function collectPropsFromArrowFn(expr: any): Set<string> {
   return props;
 }
 
+/**
+ * Collects prop names referenced in a destructured arrow function body.
+ * Unlike collectPropsFromArrowFn, this handles both identifier and destructured params.
+ * Used specifically for CSS variable bridge contexts where destructured arrow forms
+ * like `({ $color }) => $color` must also register shouldForwardProp drops.
+ */
+export function collectPropsFromArrowFnDestructured(expr: any): Set<string> {
+  // First try the standard identifier-param path
+  const fromIdentifier = collectPropsFromArrowFn(expr);
+  if (fromIdentifier.size > 0) {
+    return fromIdentifier;
+  }
+
+  const props = new Set<string>();
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return props;
+  }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings || bindings.kind !== "destructured") {
+    return props;
+  }
+
+  // Walk body for identifiers matching destructured local names
+  const localToOriginal = bindings.bindings;
+  walkAst(getFunctionBodyExpr(expr), (node) => {
+    if (node.type === "Identifier" && localToOriginal.has(node.name as string)) {
+      props.add(localToOriginal.get(node.name as string)!);
+    }
+  });
+  return props;
+}
+
 export function countConditionalExpressions(node: any): number {
   let count = 0;
   walkAst(node, (n) => {

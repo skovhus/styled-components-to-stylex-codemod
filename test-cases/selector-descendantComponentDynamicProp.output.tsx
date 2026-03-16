@@ -17,7 +17,7 @@ function Button(props: ButtonProps) {
       style={
         {
           ...sx.style,
-          "--iconInButton-color": props.color ?? "red",
+          "--iconInButton-hover-color": props.color ?? "red",
         } as React.CSSProperties
       }
     >
@@ -40,7 +40,7 @@ function Card(props: CardProps) {
       style={
         {
           ...sx.style,
-          "--badgeInCard-boxShadow": props.shadow ?? "rgba(0,0,0,0.2)",
+          "--badgeInCard-hover-boxShadow": props.shadow ?? "rgba(0,0,0,0.2)",
         } as React.CSSProperties
       }
     >
@@ -63,7 +63,55 @@ function Toolbar(props: ToolbarProps) {
       style={
         {
           ...sx.style,
-          "--tagInToolbar-border": props.accent ?? "gray",
+          "--tagInToolbar-hover-border": props.accent ?? "gray",
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+type ToggleProps = React.PropsWithChildren<{
+  hoverColor?: string;
+  focusColor?: string;
+}>;
+
+function Toggle(props: ToggleProps) {
+  const { children, hoverColor, focusColor } = props;
+  const sx = stylex.props(styles.toggle, stylex.defaultMarker());
+
+  return (
+    <div
+      {...sx}
+      style={
+        {
+          ...sx.style,
+          "--dotInToggle-hover-color": props.hoverColor ?? "blue",
+          "--dotInToggle-focus-color": props.focusColor ?? "green",
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+type ChipGroupProps = React.PropsWithChildren<{
+  chipColor?: string;
+}>;
+
+function ChipGroup(props: ChipGroupProps) {
+  const { children, chipColor } = props;
+  const sx = stylex.props(styles.chipGroup, stylex.defaultMarker());
+
+  return (
+    <div
+      {...sx}
+      style={
+        {
+          ...sx.style,
+          "--chipInChipGroup-hover-color": props.chipColor ?? "purple",
         } as React.CSSProperties
       }
     >
@@ -84,6 +132,12 @@ export const App = () => (
     <Toolbar accent="red">
       <span sx={[styles.tag, styles.tagInToolbar]}>Toolbar hover → Tag border</span>
     </Toolbar>
+    <Toggle hoverColor="red" focusColor="orange">
+      <span sx={[styles.dot, styles.dotInToggle]}>Hover vs Focus</span>
+    </Toggle>
+    <ChipGroup chipColor="teal">
+      <span sx={[styles.chip, styles.chipInChipGroup]}>Destructured prop</span>
+    </ChipGroup>
   </div>
 );
 
@@ -113,16 +167,35 @@ const styles = stylex.create({
     display: "flex",
     gap: 8,
   },
+  // Multiple pseudo selectors targeting the same child with the same CSS property
+  // must produce unique CSS variable names per pseudo to avoid collisions.
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: "50%",
+    backgroundColor: "gray",
+  },
+  toggle: {
+    padding: 8,
+  },
+  // Destructured arrow params must also register shouldForwardProp drops
+  chip: {
+    fontSize: 14,
+  },
+  chipGroup: {
+    display: "flex",
+    gap: 4,
+  },
   iconInButton: {
     color: {
       default: null,
-      [stylex.when.ancestor(":hover")]: "var(--iconInButton-color)",
+      [stylex.when.ancestor(":hover")]: "var(--iconInButton-hover-color)",
     },
   },
   badgeInCard: {
     boxShadow: {
       default: null,
-      [stylex.when.ancestor(":hover")]: "0 4px 8px var(--badgeInCard-boxShadow)",
+      [stylex.when.ancestor(":hover")]: "0 4px 8px var(--badgeInCard-hover-boxShadow)",
     },
   },
   tagInToolbar: {
@@ -136,7 +209,20 @@ const styles = stylex.create({
     },
     borderColor: {
       default: null,
-      [stylex.when.ancestor(":hover")]: "var(--tagInToolbar-border)",
+      [stylex.when.ancestor(":hover")]: "var(--tagInToolbar-hover-border)",
+    },
+  },
+  dotInToggle: {
+    color: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "var(--dotInToggle-hover-color)",
+      [stylex.when.ancestor(":focus")]: "var(--dotInToggle-focus-color)",
+    },
+  },
+  chipInChipGroup: {
+    color: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "var(--chipInChipGroup-hover-color)",
     },
   },
 });

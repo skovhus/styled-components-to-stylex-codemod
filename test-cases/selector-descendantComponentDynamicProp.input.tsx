@@ -46,6 +46,41 @@ const Toolbar = styled.div<{ $accent?: string }>`
   }
 `;
 
+// Multiple pseudo selectors targeting the same child with the same CSS property
+// must produce unique CSS variable names per pseudo to avoid collisions.
+const Dot = styled.span`
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: gray;
+`;
+
+const Toggle = styled.div<{ $hoverColor?: string; $focusColor?: string }>`
+  padding: 8px;
+
+  &:hover ${Dot} {
+    color: ${(props) => props.$hoverColor ?? "blue"};
+  }
+
+  &:focus ${Dot} {
+    color: ${(props) => props.$focusColor ?? "green"};
+  }
+`;
+
+// Destructured arrow params must also register shouldForwardProp drops
+const Chip = styled.span`
+  font-size: 14px;
+`;
+
+const ChipGroup = styled.div<{ $chipColor?: string }>`
+  display: flex;
+  gap: 4px;
+
+  &:hover ${Chip} {
+    color: ${({ $chipColor }) => $chipColor ?? "purple"};
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Button $color="blue">
@@ -58,5 +93,11 @@ export const App = () => (
     <Toolbar $accent="red">
       <Tag>Toolbar hover → Tag border</Tag>
     </Toolbar>
+    <Toggle $hoverColor="red" $focusColor="orange">
+      <Dot>Hover vs Focus</Dot>
+    </Toggle>
+    <ChipGroup $chipColor="teal">
+      <Chip>Destructured prop</Chip>
+    </ChipGroup>
   </div>
 );
