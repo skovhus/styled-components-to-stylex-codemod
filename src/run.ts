@@ -90,6 +90,12 @@ export interface RunTransformOptions {
    * @default 3
    */
   maxExamples?: number;
+
+  /**
+   * Suppress jscodeshift runner output.
+   * @default false
+   */
+  silent?: boolean;
 }
 
 export interface RunTransformResult {
@@ -478,7 +484,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
-    silent: true,
+    silent: options.silent ?? false,
   });
 
   // Write sidecar .stylex.ts files (defineMarker declarations)
