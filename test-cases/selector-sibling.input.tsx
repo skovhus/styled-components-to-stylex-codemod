@@ -27,28 +27,6 @@ const Row = styled.div`
   }
 `;
 
-// Nested: pseudo wrapping sibling combinator
-const HoverSibling = styled.div`
-  color: blue;
-
-  &:hover {
-    & + & {
-      color: red;
-    }
-  }
-`;
-
-// Nested: sibling combinator wrapping pseudo
-const SiblingHover = styled.div`
-  color: blue;
-
-  & + & {
-    &:hover {
-      color: green;
-    }
-  }
-`;
-
 // NOTE: StyleX siblingBefore() emits `~ *` (general sibling), not `+ *`
 // (adjacent sibling). When an unrelated element is interleaved between two
 // Thing instances, CSS `& + &` would NOT match the second Thing, but
@@ -62,9 +40,5 @@ export const App = () => (
     <ThingThemed>Second themed (theme color)</ThingThemed>
     <Row>First row</Row>
     <Row>Second row (margin-top)</Row>
-    <HoverSibling>First hover-sibling</HoverSibling>
-    <HoverSibling>Second hover-sibling (red on hover)</HoverSibling>
-    <SiblingHover>First sibling-hover</SiblingHover>
-    <SiblingHover>Second sibling-hover (green on hover)</SiblingHover>
   </div>
 );

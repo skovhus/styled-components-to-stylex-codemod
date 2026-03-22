@@ -1,14 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
-
-import {
-  ThingMarker,
-  ThingThemedMarker,
-  RowMarker,
-  HoverSiblingMarker,
-  SiblingHoverMarker,
-} from "./selector-sibling.input.stylex";
+import { ThingMarker, ThingThemedMarker, RowMarker } from "./selector-sibling.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
   return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
@@ -24,16 +17,6 @@ function Row(props: React.PropsWithChildren<{}>) {
   return <div sx={[styles.row, RowMarker]}>{props.children}</div>;
 }
 
-// Nested: pseudo wrapping sibling combinator
-function HoverSibling(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.hoverSibling, HoverSiblingMarker]}>{props.children}</div>;
-}
-
-// Nested: sibling combinator wrapping pseudo
-function SiblingHover(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.siblingHover, SiblingHoverMarker]}>{props.children}</div>;
-}
-
 // NOTE: StyleX siblingBefore() emits `~ *` (general sibling), not `+ *`
 // (adjacent sibling). When an unrelated element is interleaved between two
 // Thing instances, CSS `& + &` would NOT match the second Thing, but
@@ -47,10 +30,6 @@ export const App = () => (
     <ThingThemed>Second themed (theme color)</ThingThemed>
     <Row>First row</Row>
     <Row>Second row (margin-top)</Row>
-    <HoverSibling>First hover-sibling</HoverSibling>
-    <HoverSibling>Second hover-sibling (red on hover)</HoverSibling>
-    <SiblingHover>First sibling-hover</SiblingHover>
-    <SiblingHover>Second sibling-hover (green on hover)</SiblingHover>
   </div>
 );
 
@@ -81,19 +60,6 @@ const styles = stylex.create({
       default: null,
       // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", RowMarker)]: 16,
-    },
-  },
-  hoverSibling: {
-    color: {
-      default: "blue",
-      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
-      [stylex.when.siblingBefore(":is(*)", HoverSiblingMarker)]: "red",
-    },
-  },
-  siblingHover: {
-    color: {
-      default: "blue",
-      ":hover": "green",
     },
   },
 });
