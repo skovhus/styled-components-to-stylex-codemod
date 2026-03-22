@@ -193,10 +193,27 @@ export function normalizeStylisAstToIR(
         if (!stripFormFeedInSelectors || !selectorValue.includes("\f") || !propsArr?.length) {
           return selectorRaw;
         }
+        // Stylis resolves nested selectors into `props` (e.g., &:focus { &[data-x] {} }
+        // becomes props: [":focus[data-x]"]). The raw `value` only has the innermost
+        // selector with form-feed separators, so stripping \f loses parent context.
+        // Use `props` when the resolved selectors carry MORE context than selectorRaw
+        // (i.e., parent pseudo/attribute context was folded in during nesting resolution).
+        // Avoid using props when they carry LESS info (e.g., `& + &` → props: ["+"]
+        // loses the trailing `&`).
         const stringProps = propsArr.filter((p): p is string => typeof p === "string");
-        const hasPseudoElement = stringProps.some((p) => p.includes("::"));
-        if (hasPseudoElement && !selectorRaw.includes("::")) {
-          return stringProps.map((p) => `&${p}`).join(",");
+        const resolved = stringProps.map((p) => `&${p}`).join(",");
+        // When either the raw or resolved selector contains a sibling combinator (`+`/`~`),
+        // always preserve the raw form — the downstream sibling handler requires the exact
+        // `& + &` / `& ~ &` pattern. Stylis resolves these into forms like `:hover+:hover`
+        // that lose the `&` anchors, and can also inject combinators into child selectors
+        // (e.g., `&:hover` resolved to `&+:hover` inside a `& + &` parent).
+        // Strip `[...]` to avoid false positives from attribute selectors like `[attr~=val]`.
+        const hasSiblingCombinator = (s: string) => /[+~]/.test(s.replace(/\[[^\]]*\]/g, ""));
+        if (hasSiblingCombinator(selectorRaw) || hasSiblingCombinator(resolved)) {
+          return selectorRaw;
+        }
+        if (resolved.length > selectorRaw.length) {
+          return resolved;
         }
         return selectorRaw;
       })();
