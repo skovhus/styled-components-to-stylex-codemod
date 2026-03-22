@@ -18,10 +18,22 @@ function Box(props: React.PropsWithChildren<{}>) {
   return <div sx={theme.isDark ? undefined : styles.boxLight}>{props.children}</div>;
 }
 
+// theme.isDark setting a CSS custom property value
+function DayPicker(props: React.PropsWithChildren<{}>) {
+  const theme = useTheme();
+
+  return (
+    <div sx={[styles.dayPicker, theme.isDark ? styles.dayPickerDark : styles.dayPickerLight]}>
+      {props.children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <Text>Label</Text>
     <Box>Box</Box>
+    <DayPicker>DayPicker</DayPicker>
   </div>
 );
 
@@ -39,5 +51,15 @@ const styles = stylex.create({
   },
   boxLight: {
     padding: pixelVars.thin,
+  },
+  dayPicker: {
+    backgroundColor: "var(--highlighted-color)",
+    padding: 16,
+  },
+  dayPickerDark: {
+    "--highlighted-color": $colors.bgBorderSolid,
+  },
+  dayPickerLight: {
+    "--highlighted-color": $colors.bgBorderFaint,
   },
 });

@@ -15,9 +15,18 @@ const Box = styled.div`
   ${(props) => (props.theme.isDark ? "" : `padding: ${thinPixel()};`)}
 `;
 
+// theme.isDark setting a CSS custom property value
+const DayPicker = styled.div`
+  --highlighted-color: ${(p) =>
+    p.theme.isDark ? p.theme.color.bgBorderSolid : p.theme.color.bgBorderFaint};
+  background-color: var(--highlighted-color);
+  padding: 16px;
+`;
+
 export const App = () => (
   <div>
     <Text>Label</Text>
     <Box>Box</Box>
+    <DayPicker>DayPicker</DayPicker>
   </div>
 );
