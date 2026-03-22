@@ -193,10 +193,17 @@ export function normalizeStylisAstToIR(
         if (!stripFormFeedInSelectors || !selectorValue.includes("\f") || !propsArr?.length) {
           return selectorRaw;
         }
+        // Stylis resolves nested selectors into `props` (e.g., &:focus { &[data-x] {} }
+        // becomes props: [":focus[data-x]"]). The raw `value` only has the innermost
+        // selector with form-feed separators, so stripping \f loses parent context.
+        // Use `props` when the resolved selectors carry MORE context than selectorRaw
+        // (i.e., parent pseudo/attribute context was folded in during nesting resolution).
+        // Avoid using props when they carry LESS info (e.g., `& + &` → props: ["+"]
+        // loses the trailing `&`).
         const stringProps = propsArr.filter((p): p is string => typeof p === "string");
-        const hasPseudoElement = stringProps.some((p) => p.includes("::"));
-        if (hasPseudoElement && !selectorRaw.includes("::")) {
-          return stringProps.map((p) => `&${p}`).join(",");
+        const resolved = stringProps.map((p) => `&${p}`).join(",");
+        if (resolved.length > selectorRaw.length) {
+          return resolved;
         }
         return selectorRaw;
       })();

@@ -187,10 +187,16 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
     if (!hasNesting || hasCombinator || hasClass || hasId || hasTag || hasUniversal) {
       return { kind: "unsupported", reason: "attribute selector" };
     }
-    if (pseudoClasses.length > 0 || pseudoElements.length > 0) {
-      return { kind: "unsupported", reason: "attribute selector with pseudo" };
+    if (pseudoElements.length > 0) {
+      return { kind: "unsupported", reason: "attribute selector with pseudo-element" };
     }
     const attrStr = attributes.map((a) => a.toString()).join("");
+    // Combine pseudo-classes with attribute selectors:
+    // &:focus[data-x="y"] → ":focus:is([data-x="y"])"
+    if (pseudoClasses.length > 0) {
+      const pseudoString = buildPseudoString(pseudoClasses);
+      return { kind: "pseudo", pseudos: [`${pseudoString}:is(${attrStr})`] };
+    }
     return { kind: "pseudo", pseudos: [`:is(${attrStr})`] };
   }
 
