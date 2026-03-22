@@ -1049,7 +1049,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
 
-    // Handle theme boolean conditional with one unresolvable call expression branch.
+    // Handle theme boolean conditional with one unresolvable branch (call or member expression).
     // The resolved branch becomes the base StyleX style; the unresolvable branch
     // is emitted as a conditional inline style using the useTheme() hook.
     if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {

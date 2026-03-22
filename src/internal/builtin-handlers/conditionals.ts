@@ -7,6 +7,7 @@ import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
   cloneAstNode,
+  collectIdentifiers,
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -1646,14 +1647,15 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   const resolvedBranchIsTrue = trueValue !== null;
   const unresolvableBranch = resolvedBranchIsTrue ? falseBranch : trueBranch;
 
-  // The unresolvable branch must contain a call expression (theme helper call)
-  if (!hasCallExpression(unresolvableBranch)) {
-    return null;
-  }
-
   // Transform the unresolvable branch: replace props.theme.* / <param>.theme.* with theme.*
   const transformed = replaceThemeRefsWithHookVar(unresolvableBranch, paramName, info);
   if (!transformed) {
+    return null;
+  }
+
+  // Verify the transformation replaced all param/theme binding references.
+  // Dangling references (e.g. non-theme prop accesses) would produce undefined variables at runtime.
+  if (!isFullyTransformedThemeExpr(transformed, paramName, info)) {
     return null;
   }
 
@@ -1669,25 +1671,28 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   };
 }
 
-/** Check if an expression tree contains any call expressions. */
-function hasCallExpression(node: unknown): boolean {
-  if (!node || typeof node !== "object") {
+/**
+ * Validates that a transformed expression has no dangling references to
+ * the original arrow function parameter or theme binding name.
+ * After `replaceThemeRefsWithHookVar`, all `<paramName>.theme.*` should
+ * have been rewritten to `theme.*`. If the param name still appears,
+ * the expression accesses non-theme props and can't be safely used
+ * with `useTheme()` alone.
+ */
+function isFullyTransformedThemeExpr(
+  transformed: unknown,
+  paramName: string | null,
+  info: ThemeParamInfo | null,
+): boolean {
+  const ids = new Set<string>();
+  collectIdentifiers(transformed, ids);
+  if (paramName && ids.has(paramName)) {
     return false;
   }
-  const n = node as { type?: string };
-  if (n.type === "CallExpression") {
-    return true;
+  if (info?.kind === "themeBinding" && info.themeName !== "theme" && ids.has(info.themeName)) {
+    return false;
   }
-  for (const key of Object.keys(n)) {
-    if (key === "loc" || key === "comments") {
-      continue;
-    }
-    const child = (n as Record<string, unknown>)[key];
-    if (child && typeof child === "object" && hasCallExpression(child)) {
-      return true;
-    }
-  }
-  return false;
+  return true;
 }
 
 /**

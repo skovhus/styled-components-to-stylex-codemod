@@ -180,6 +180,12 @@ export const fixtureAdapter = defineAdapter({
         } satisfies ResolveValueDirectionalResult;
       }
 
+      // Nested theme objects (e.g. theme.baseTheme?.color.X) are not resolvable
+      // to static tokens — return undefined so the codemod falls back to runtime.
+      if (ctx.path.startsWith("baseTheme.")) {
+        return undefined;
+      }
+
       // Test fixtures use a small ThemeProvider theme shape:
       //   props.theme.color.labelBase  -> $colors.labelBase
       //   props.theme.color[bg]        -> $colors[bg]
