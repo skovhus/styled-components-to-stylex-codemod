@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as n}from"./index-Dr5zEFRd.js";import{C as r}from"./helpers-BUdcbXGO.js";e(t(),1);var i=n(),a=r(`fast`),o=()=>(0,i.jsxs)(`div`,{children:[(0,i.jsx)(`div`,{children:a}),(0,i.jsx)(`div`,{className:`x4lopbt`})]});export{o as App};
