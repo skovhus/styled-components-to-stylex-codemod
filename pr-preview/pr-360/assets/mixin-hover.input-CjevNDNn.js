@@ -1,8 +1,0 @@
-import"./react-D4cBbUL-.js";import{f as e,s as t,u as n}from"./index-G0x5O1o0.js";var r=e(),i=n`
-  &:hover {
-    color: blue;
-  }
-`,a=t.button`
-  color: red;
-  ${i}
-`,o=()=>(0,r.jsx)(a,{children:`Hover me`});export{o as App};

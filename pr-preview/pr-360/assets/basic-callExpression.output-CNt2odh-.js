@@ -1,1 +1,0 @@
-import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as n}from"./index-G0x5O1o0.js";import{T as r}from"./helpers-CU10KaI-.js";e(t(),1);var i=n(),a=r(e=>(0,i.jsx)(`div`,{...e})),o=()=>(0,i.jsx)(a,{className:`x1e2nbdu`,children:`Hello`});export{o as App};
