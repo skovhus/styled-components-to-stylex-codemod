@@ -17,6 +17,12 @@ declare module "styled-components" {
   export function useTheme(): TestCaseTheme;
 }
 
+// CSS module type declarations for test fixtures.
+declare module "*.module.css" {
+  const classes: Record<string, string>;
+  export default classes;
+}
+
 // Augment React JSX to accept the `sx` prop on intrinsic elements.
 // The StyleX babel plugin (≥0.18, sxPropName option) transforms
 // `<div sx={styles.base} />` to `<div {...stylex.props(styles.base)} />`

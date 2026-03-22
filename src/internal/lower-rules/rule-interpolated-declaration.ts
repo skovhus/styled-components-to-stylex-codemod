@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
-import type { CallResolveResult, ResolveValueContext } from "../../adapter.js";
+import type { CallResolveResult, ExprWithImports, ResolveValueContext } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
@@ -167,6 +167,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         JSON.stringify(imp),
         imp as typeof resolverImports extends Map<string, infer V> ? V : never,
       );
+    }
+  };
+
+  /** Parse and store extra className expressions (from CSS modules) on the decl. */
+  const collectExtraClassNames = (entries: ExprWithImports[]) => {
+    decl.extraClassNames ??= [];
+    for (const cn of entries) {
+      addResolverImports(cn.imports);
+      const cnExpr = parseExpr(cn.expr);
+      if (cnExpr) {
+        decl.extraClassNames.push({ expr: cnExpr as any });
+      }
     }
   };
 
@@ -904,14 +916,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       });
       // Store any extra className expressions (from CSS modules) on the decl
       if (res.extraClassNames) {
-        decl.extraClassNames ??= [];
-        for (const cn of res.extraClassNames) {
-          addResolverImports(cn.imports);
-          const cnExpr = parseExpr(cn.expr);
-          if (cnExpr) {
-            decl.extraClassNames.push({ expr: cnExpr as any });
-          }
-        }
+        collectExtraClassNames(res.extraClassNames);
       }
       // Create an after-base segment so subsequent static properties
       // are placed after this helper in the stylex.props() call
@@ -923,14 +928,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (res && res.type === "resolvedClassNames") {
       // Adapter returned className-only result (no StyleX expr).
       // Store the className expressions on the decl for the emitter to merge.
-      decl.extraClassNames ??= [];
-      for (const cn of res.extraClassNames) {
-        addResolverImports(cn.imports);
-        const cnExpr = parseExpr(cn.expr);
-        if (cnExpr) {
-          decl.extraClassNames.push({ expr: cnExpr as any });
-        }
-      }
+      collectExtraClassNames(res.extraClassNames);
       decl.needsWrapperComponent = true;
       continue;
     }

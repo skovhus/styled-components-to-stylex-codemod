@@ -283,10 +283,7 @@ export type CallResolveResultWithExpr = {
    * When present, the codemod merges these expressions into the rendered element's
    * className alongside any existing static className from `.attrs()` or bridge classes.
    */
-  extraClassNames?: Array<{
-    expr: string;
-    imports: ImportSpec[];
-  }>;
+  extraClassNames?: ExprWithImports[];
 };
 
 export type CallResolveRuntimeOnlyResult = {
@@ -312,10 +309,7 @@ export type CallResolveClassNamesResult = {
   /**
    * className expressions to merge into the component's className attribute.
    */
-  extraClassNames: Array<{
-    expr: string;
-    imports: ImportSpec[];
-  }>;
+  extraClassNames: ExprWithImports[];
 };
 
 export type CallResolveResult =
@@ -333,6 +327,9 @@ export type ImportSource =
   | { kind: "specifier"; value: string };
 
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
+
+/** An expression string with its required imports, used for className emission. */
+export type ExprWithImports = { expr: string; imports: ImportSpec[] };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Base Component Resolution
