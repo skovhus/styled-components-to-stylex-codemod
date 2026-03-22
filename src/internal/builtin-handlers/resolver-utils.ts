@@ -107,21 +107,12 @@ export function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
     if (!key || key.type !== "Identifier") {
       continue;
     }
+    const value = prop.value;
+    const binding = extractBindingName(value) ?? key.name;
     if (key.name === "theme") {
-      const value = prop.value;
-      if (value?.type === "Identifier" && typeof value.name === "string") {
-        themeName = value.name;
-      } else if (
-        value?.type === "AssignmentPattern" &&
-        value.left?.type === "Identifier" &&
-        typeof value.left.name === "string"
-      ) {
-        themeName = value.left.name;
-      }
+      themeName = binding;
     } else {
-      const value = prop.value;
-      const bindingName = extractBindingName(value) ?? key.name;
-      siblingBindings.push(bindingName);
+      siblingBindings.push(binding);
     }
   }
   if (themeName) {
@@ -465,16 +456,20 @@ function callArgFromNode(
  * Extracts the actual binding name from a destructured property value.
  * Handles: `{ x }` → "x", `{ x: alias }` → "alias", `{ x: alias = def }` → "alias"
  */
-function extractBindingName(value: any): string | null {
-  if (value?.type === "Identifier" && typeof value.name === "string") {
-    return value.name;
+function extractBindingName(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const v = value as { type?: string; name?: string; left?: { type?: string; name?: string } };
+  if (v.type === "Identifier" && typeof v.name === "string") {
+    return v.name;
   }
   if (
-    value?.type === "AssignmentPattern" &&
-    value.left?.type === "Identifier" &&
-    typeof value.left.name === "string"
+    v.type === "AssignmentPattern" &&
+    v.left?.type === "Identifier" &&
+    typeof v.left.name === "string"
   ) {
-    return value.left.name;
+    return v.left.name;
   }
   return null;
 }
