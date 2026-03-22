@@ -354,6 +354,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
       d.attrsInfo,
       getBridgeClassVar(d),
+      d.extraClassNames,
     );
     const merging = emitStyleMerging({
       j,
@@ -1097,6 +1098,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
         d.attrsInfo,
         getBridgeClassVar(d),
+        d.extraClassNames,
       );
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({

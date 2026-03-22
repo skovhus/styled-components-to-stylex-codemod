@@ -765,9 +765,32 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                     [...styleArgs],
                   ),
             );
+        // Emit extraClassNames as a className attribute (CSS module classes)
+        const extraClassNameAttrs: typeof keptRestAfterVariants = [];
+        if (decl.extraClassNames && decl.extraClassNames.length > 0) {
+          const classNameExprs = decl.extraClassNames.map((cn) => cn.expr);
+          const classNameExpr =
+            classNameExprs.length === 1 && classNameExprs[0]
+              ? classNameExprs[0]
+              : (() => {
+                  // Multiple: join with template literal `${a} ${b}`
+                  const qs: ReturnType<typeof j.templateElement>[] = [];
+                  for (let i = 0; i <= classNameExprs.length; i++) {
+                    const isLast = i === classNameExprs.length;
+                    const raw = i === 0 || isLast ? "" : " ";
+                    qs.push(j.templateElement({ raw, cooked: raw }, isLast));
+                  }
+                  return j.templateLiteral(qs, classNameExprs);
+                })();
+          extraClassNameAttrs.push(
+            j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(classNameExpr)),
+          );
+        }
+
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
           stylexAttr,
+          ...extraClassNameAttrs,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 

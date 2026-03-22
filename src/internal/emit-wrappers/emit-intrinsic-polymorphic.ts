@@ -220,6 +220,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
         d.attrsInfo,
         getBridgeClassVar(d),
+        d.extraClassNames,
       );
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({

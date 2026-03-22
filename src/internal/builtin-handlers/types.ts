@@ -91,6 +91,18 @@ export type HandlerResult =
       resolveCallResult?: CallResolveResult;
       /** Raw CSS text from the adapter, enabling pseudo-selector wrapping of individual properties. */
       cssText?: string;
+      /** Extra className expressions from CSS modules to merge into the rendered element. */
+      extraClassNames?: Array<{ expr: string; imports: ImportSpec[] }>;
+    }
+  | {
+      /**
+       * The node was resolved to className expressions only (no StyleX style object).
+       * Used for CSS modules or other class-based styles that StyleX cannot express.
+       */
+      type: "resolvedClassNames";
+      extraClassNames: Array<{ expr: string; imports: ImportSpec[] }>;
+      resolveCallContext?: CallResolveContext;
+      resolveCallResult?: CallResolveResult;
     }
   | {
       /**

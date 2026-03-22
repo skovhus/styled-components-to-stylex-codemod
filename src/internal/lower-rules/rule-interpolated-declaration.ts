@@ -207,7 +207,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     loc: { line: number; column: number } | null | undefined;
   }): "not-requested" | "emitted" | "failed" => {
     const { resolveCallResult, originalExpr, loc } = args;
-    if (!resolveCallResult?.preserveRuntimeCall) {
+    if (
+      !resolveCallResult ||
+      !("preserveRuntimeCall" in resolveCallResult) ||
+      !resolveCallResult.preserveRuntimeCall
+    ) {
       return "not-requested";
     }
     if (!d.property) {
@@ -898,9 +902,35 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         expr: exprAst as any,
         afterBase: hasStaticPropsBefore,
       });
+      // Store any extra className expressions (from CSS modules) on the decl
+      if (res.extraClassNames) {
+        decl.extraClassNames ??= [];
+        for (const cn of res.extraClassNames) {
+          addResolverImports(cn.imports);
+          const cnExpr = parseExpr(cn.expr);
+          if (cnExpr) {
+            decl.extraClassNames.push({ expr: cnExpr as any });
+          }
+        }
+      }
       // Create an after-base segment so subsequent static properties
       // are placed after this helper in the stylex.props() call
       notifyResolvedStylesArg();
+      decl.needsWrapperComponent = true;
+      continue;
+    }
+
+    if (res && res.type === "resolvedClassNames") {
+      // Adapter returned className-only result (no StyleX expr).
+      // Store the className expressions on the decl for the emitter to merge.
+      decl.extraClassNames ??= [];
+      for (const cn of res.extraClassNames) {
+        addResolverImports(cn.imports);
+        const cnExpr = parseExpr(cn.expr);
+        if (cnExpr) {
+          decl.extraClassNames.push({ expr: cnExpr as any });
+        }
+      }
       decl.needsWrapperComponent = true;
       continue;
     }

@@ -321,6 +321,23 @@ export const fixtureAdapter = defineAdapter({
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
+    // extraClassNames test: draggableRegion returns a CSS module className
+    if (ctx.calleeImportedName === "draggableRegion") {
+      return {
+        extraClassNames: [
+          {
+            expr: "electronStyles.draggableRegionDisableChildren",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./lib/electronMixins.module.css" },
+                names: [{ imported: "default", local: "electronStyles" }],
+              },
+            ],
+          },
+        ],
+      };
+    }
+
     if (ctx.calleeImportedName === "truncateMultiline") {
       return resolveParameterizedHelperCall(ctx, "helpers.truncateMultiline", "helpers");
     }

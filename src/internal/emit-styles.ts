@@ -412,6 +412,10 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       } as any);
 
       const toImportSpecifier = (imported: string, local?: string) => {
+        // Handle default imports: { imported: "default", local: "foo" } -> import foo from "..."
+        if (imported === "default") {
+          return j.importDefaultSpecifier(j.identifier(local ?? "default"));
+        }
         const impId = j.identifier(imported);
         if (local && local !== imported) {
           return j.importSpecifier(impId, j.identifier(local));

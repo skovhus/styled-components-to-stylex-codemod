@@ -677,6 +677,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
       d.attrsInfo,
       getBridgeClassVar(d),
+      d.extraClassNames,
     );
 
     // When no className/style props, process attrs for JSX rendering and extract forwardedAs fallback

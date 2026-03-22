@@ -242,9 +242,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       // Conditional extraStylexPropsArgs (with `when` guards) are filtered out by the
       // inline path, so they need the wrapper to emit the conditional logic.
       !(decl.extraStylexPropsArgs ?? []).some((arg) => arg.when) &&
-      // Must actually have extraStylexPropsArgs or extraStyleKeys — otherwise the wrapper
-      // was set for some other untracked reason and it's not safe to unset.
-      ((decl.extraStylexPropsArgs ?? []).length > 0 || (decl.extraStyleKeys ?? []).length > 0)
+      // Must actually have extraStylexPropsArgs, extraStyleKeys, or extraClassNames —
+      // otherwise the wrapper was set for some other untracked reason and it's not safe to unset.
+      ((decl.extraStylexPropsArgs ?? []).length > 0 ||
+        (decl.extraStyleKeys ?? []).length > 0 ||
+        (decl.extraClassNames ?? []).length > 0)
     ) {
       decl.needsWrapperComponent = false;
     }
