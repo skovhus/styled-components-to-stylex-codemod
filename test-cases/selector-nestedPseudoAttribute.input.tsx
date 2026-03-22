@@ -8,9 +8,10 @@ const MenuDiv = styled.div`
 
   &:focus,
   &:focus-visible {
-    outline: none;
-    &[data-disable-focus-ring="true"] {
-      box-shadow: none;
+    background-color: #bf4f74;
+    color: white;
+    &[data-highlighted="true"] {
+      background-color: #2e86c1;
     }
   }
 `;
@@ -40,8 +41,8 @@ export function App() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
       <MenuDiv tabIndex={0}>Menu (focus me)</MenuDiv>
-      <MenuDiv tabIndex={0} data-disable-focus-ring="true">
-        Menu (focus ring disabled)
+      <MenuDiv tabIndex={0} data-highlighted="true">
+        Menu (highlighted on focus)
       </MenuDiv>
       <InteractiveBox tabIndex={0}>Interactive Box</InteractiveBox>
       <InteractiveBox tabIndex={0} data-muted="true">
