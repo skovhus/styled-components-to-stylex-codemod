@@ -100,11 +100,7 @@ export function tryResolveConditionalValue(
     test: unknown,
   ): { isNegated: boolean; themeProp: string } | null => {
     const check = (node: unknown): string | null => {
-      if (
-        !node ||
-        typeof node !== "object" ||
-        (node as { type?: string }).type !== "MemberExpression"
-      ) {
+      if (!node || typeof node !== "object" || !isMemberExpression(node as { type?: string })) {
         return null;
       }
       // Check props.theme.<prop> pattern
@@ -147,11 +143,7 @@ export function tryResolveConditionalValue(
 
   // Helper to resolve a MemberExpression as a theme path
   const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
-    if (
-      !node ||
-      typeof node !== "object" ||
-      (node as { type?: string }).type !== "MemberExpression"
-    ) {
+    if (!node || typeof node !== "object" || !isMemberExpression(node as { type?: string })) {
       return null;
     }
     if (info?.kind === "propsParam" && paramName) {
@@ -185,7 +177,8 @@ export function tryResolveConditionalValue(
     if (!themeInfo) {
       return null;
     }
-    const res = ctx.resolveValue({
+    const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
+    const res = resolveTheme({
       kind: "theme",
       path: themeInfo.path,
       filePath: ctx.filePath,
@@ -1646,14 +1639,15 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   const resolvedBranchIsTrue = trueValue !== null;
   const unresolvableBranch = resolvedBranchIsTrue ? falseBranch : trueBranch;
 
-  // The unresolvable branch must contain a call expression (theme helper call)
-  if (!hasCallExpression(unresolvableBranch)) {
-    return null;
-  }
-
   // Transform the unresolvable branch: replace props.theme.* / <param>.theme.* with theme.*
   const transformed = replaceThemeRefsWithHookVar(unresolvableBranch, paramName, info);
   if (!transformed) {
+    return null;
+  }
+
+  // Verify the transformation replaced all param/theme binding references.
+  // Dangling references (e.g. non-theme prop accesses) would produce undefined variables at runtime.
+  if (!isFullyTransformedThemeExpr(transformed, paramName, info)) {
     return null;
   }
 
@@ -1669,25 +1663,80 @@ function tryBuildThemeBooleanInlineStyleFallback(args: {
   };
 }
 
-/** Check if an expression tree contains any call expressions. */
-function hasCallExpression(node: unknown): boolean {
-  if (!node || typeof node !== "object") {
+/**
+ * Validates that a transformed expression has no dangling references to
+ * the original arrow function parameter or theme binding name.
+ * After `replaceThemeRefsWithHookVar`, all `<paramName>.theme.*` should
+ * have been rewritten to `theme.*`. If the param name still appears,
+ * the expression accesses non-theme props and can't be safely used
+ * with `useTheme()` alone.
+ */
+function isFullyTransformedThemeExpr(
+  transformed: unknown,
+  paramName: string | null,
+  info: ThemeParamInfo | null,
+): boolean {
+  const ids = new Set<string>();
+  collectFreeIdentifiers(transformed, ids);
+  if (paramName && ids.has(paramName)) {
     return false;
   }
-  const n = node as { type?: string };
-  if (n.type === "CallExpression") {
-    return true;
+  if (info?.kind === "themeBinding") {
+    if (info.themeName !== "theme" && ids.has(info.themeName)) {
+      return false;
+    }
+    // Reject expressions that reference destructured sibling bindings
+    // (e.g., `enabled` from `({ theme, enabled }) => ...`) since only
+    // `theme` is available via useTheme() in the generated wrapper.
+    if (info.siblingBindings.some((b) => ids.has(b))) {
+      return false;
+    }
   }
-  for (const key of Object.keys(n)) {
-    if (key === "loc" || key === "comments") {
+  return true;
+}
+
+/**
+ * Collects free variable identifiers from an AST node, excluding
+ * non-computed property names in member expressions (e.g., in
+ * `theme.color.bgSub`, only `theme` is a free variable; `color`
+ * and `bgSub` are property accesses, not variable references).
+ */
+function collectFreeIdentifiers(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectFreeIdentifiers(child, out);
+    }
+    return;
+  }
+  const typed = node as Record<string, unknown>;
+  const nodeType = typed.type as string | undefined;
+
+  // For member expressions, only recurse into the object (left side).
+  // Skip the property name unless it's computed (bracket notation).
+  if (nodeType === "MemberExpression" || nodeType === "OptionalMemberExpression") {
+    collectFreeIdentifiers(typed.object, out);
+    if (typed.computed) {
+      collectFreeIdentifiers(typed.property, out);
+    }
+    return;
+  }
+
+  if (nodeType === "Identifier" && typeof typed.name === "string") {
+    out.add(typed.name);
+  }
+
+  for (const key of Object.keys(typed)) {
+    if (key === "loc" || key === "comments" || key === "type") {
       continue;
     }
-    const child = (n as Record<string, unknown>)[key];
-    if (child && typeof child === "object" && hasCallExpression(child)) {
-      return true;
+    const child = typed[key];
+    if (child && typeof child === "object") {
+      collectFreeIdentifiers(child, out);
     }
   }
-  return false;
 }
 
 /**

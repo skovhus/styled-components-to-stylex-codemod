@@ -105,25 +105,26 @@ export function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
   if (p?.type !== "ObjectPattern" || !Array.isArray(p.properties)) {
     return null;
   }
+  let themeName: string | null = null;
+  const siblingBindings: string[] = [];
   for (const prop of p.properties) {
     if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
       continue;
     }
     const key = prop.key;
-    if (!key || key.type !== "Identifier" || key.name !== "theme") {
+    if (!key || key.type !== "Identifier") {
       continue;
     }
     const value = prop.value;
-    if (value?.type === "Identifier" && typeof value.name === "string") {
-      return { kind: "themeBinding", themeName: value.name };
+    const binding = extractBindingName(value) ?? key.name;
+    if (key.name === "theme") {
+      themeName = binding;
+    } else {
+      siblingBindings.push(binding);
     }
-    if (
-      value?.type === "AssignmentPattern" &&
-      value.left?.type === "Identifier" &&
-      typeof value.left.name === "string"
-    ) {
-      return { kind: "themeBinding", themeName: value.left.name };
-    }
+  }
+  if (themeName) {
+    return { kind: "themeBinding", themeName, siblingBindings };
   }
   return null;
 }
@@ -457,6 +458,28 @@ function callArgFromNode(
     }
   }
   return { kind: "unknown" };
+}
+
+/**
+ * Extracts the actual binding name from a destructured property value.
+ * Handles: `{ x }` → "x", `{ x: alias }` → "alias", `{ x: alias = def }` → "alias"
+ */
+function extractBindingName(value: unknown): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const v = value as { type?: string; name?: string; left?: { type?: string; name?: string } };
+  if (v.type === "Identifier" && typeof v.name === "string") {
+    return v.name;
+  }
+  if (
+    v.type === "AssignmentPattern" &&
+    v.left?.type === "Identifier" &&
+    typeof v.left.name === "string"
+  ) {
+    return v.left.name;
+  }
+  return null;
 }
 
 function callArgsFromNode(

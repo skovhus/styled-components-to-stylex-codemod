@@ -3655,6 +3655,162 @@ export const App = () => <Box isActive>Hello</Box>;
     expect(result.code).toContain("theme.isDark");
   });
 
+  it("should bail when destructured sibling props would be out of scope in useTheme wrapper", () => {
+    // When the arrow function destructures both theme and other props like `enabled`,
+    // the inline style fallback must NOT accept the expression because `enabled`
+    // would reference an undefined variable in the generated wrapper (only `theme`
+    // is available via useTheme()).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, enabled }) =>
+    theme.isDark
+      ? (enabled ? theme.baseTheme?.color.bgSub : theme.baseTheme?.color.bgBase)
+      : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box enabled>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-destructured-sibling.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail rather than produce output referencing `enabled` out of scope
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when inline style fallback is inside pseudo/media context", () => {
+    // The inline style fallback writes to base styleObj/inlineStyleProps,
+    // which don't preserve pseudo/media selectors. Must bail to avoid
+    // silently losing the :hover/:focus/@media condition.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  &:hover {
+    color: \${(p) =>
+      p.theme.isDark ? p.theme.baseTheme?.color.bgSub : p.theme.color.bgFocus};
+  }
+\`;
+
+export const App = () => <Box>Hover me</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-pseudo-inline-fallback.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when inline style fallback targets a CSS shorthand property", () => {
+    // When cssProp is a shorthand like `padding`, cssDeclarationToStylexDeclarations
+    // expands it to longhands (paddingBlock, paddingInline). The inline style would
+    // assign the same opaque expression to each longhand, which is wrong for
+    // multi-value shorthand tokens like "6px 12px".
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: \${(p) =>
+    p.theme.isDark ? p.theme.baseTheme?.color.bgSub : "8px"};
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-shorthand-inline-fallback.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when destructured sibling has aliased binding with default value", () => {
+    // ({ theme, enabled: isEnabled = false }) => ... should track `isEnabled`
+    // (the actual binding), not `enabled` (the key name).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, enabled: isEnabled = false }) =>
+    theme.isDark
+      ? (isEnabled ? theme.baseTheme?.color.bgSub : theme.baseTheme?.color.bgBase)
+      : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box enabled>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-aliased-destructured.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when both theme boolean branches are unresolvable", () => {
+    // When resolveValueOptional returns undefined for both branches of a
+    // theme.isDark ternary, the codemod must bail rather than fall through
+    // to generic handlers that would emit the arrow function as a string.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(p) =>
+    p.theme.isDark ? p.theme.baseTheme?.color.bgSub : p.theme.baseTheme?.color.bgBase};
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-both-unresolved.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should not reject sibling binding when name collides with theme property path segment", () => {
+    // collectIdentifiers picks up member property names like `color` from
+    // `theme.color.bgFocus`. A destructured sibling named `color` must not
+    // cause a false positive rejection — only actual free variable references
+    // should be checked.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, color }) =>
+    theme.isDark ? theme.baseTheme?.color.bgSub : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box color="red">Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-color-sibling.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // The `color` destructured param is never referenced in the expression
+    // (only theme.color is used), so the transform should succeed
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("useTheme");
+  });
+
   it("should bail on theme access inside pseudo/media context (module-scoped style fn)", () => {
     // Theme-rewritten expressions can't be placed in module-scoped stylex.create functions.
     // The `theme` variable from useTheme() is only available in the wrapper component body.

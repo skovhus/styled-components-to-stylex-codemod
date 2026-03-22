@@ -54,6 +54,11 @@ export const testCaseTheme = {
     textSecondary: "#6B7280",
     primaryColor: "#BF4F74",
   },
+  baseTheme: {
+    color: {
+      bgBorderSolid: "#94A3B8",
+    },
+  },
   highlightVariant,
   primary: "#BF4F74",
   secondary: "#4F74BF",
