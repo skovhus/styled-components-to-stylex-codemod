@@ -3655,6 +3655,34 @@ export const App = () => <Box isActive>Hello</Box>;
     expect(result.code).toContain("theme.isDark");
   });
 
+  it("should bail when destructured sibling props would be out of scope in useTheme wrapper", () => {
+    // When the arrow function destructures both theme and other props like `enabled`,
+    // the inline style fallback must NOT accept the expression because `enabled`
+    // would reference an undefined variable in the generated wrapper (only `theme`
+    // is available via useTheme()).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, enabled }) =>
+    theme.isDark
+      ? (enabled ? theme.baseTheme?.color.bgSub : theme.baseTheme?.color.bgBase)
+      : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box enabled>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-destructured-sibling.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail rather than produce output referencing `enabled` out of scope
+    expect(result.code).toBeNull();
+  });
+
   it("should bail on theme access inside pseudo/media context (module-scoped style fn)", () => {
     // Theme-rewritten expressions can't be placed in module-scoped stylex.create functions.
     // The `theme` variable from useTheme() is only available in the wrapper component body.

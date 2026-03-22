@@ -437,7 +437,7 @@ export type InternalHandlerContext = {
 
 export type ThemeParamInfo =
   | { kind: "propsParam"; propsName: string }
-  | { kind: "themeBinding"; themeName: string };
+  | { kind: "themeBinding"; themeName: string; siblingBindings: string[] };
 
 /**
  * Narrow type for extracted function body when checking for conditional expressions.

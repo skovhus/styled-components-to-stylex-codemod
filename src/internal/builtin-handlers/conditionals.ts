@@ -1682,8 +1682,16 @@ function isFullyTransformedThemeExpr(
   if (paramName && ids.has(paramName)) {
     return false;
   }
-  if (info?.kind === "themeBinding" && info.themeName !== "theme" && ids.has(info.themeName)) {
-    return false;
+  if (info?.kind === "themeBinding") {
+    if (info.themeName !== "theme" && ids.has(info.themeName)) {
+      return false;
+    }
+    // Reject expressions that reference destructured sibling bindings
+    // (e.g., `enabled` from `({ theme, enabled }) => ...`) since only
+    // `theme` is available via useTheme() in the generated wrapper.
+    if (info.siblingBindings.some((b) => ids.has(b))) {
+      return false;
+    }
   }
   return true;
 }

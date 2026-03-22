@@ -97,25 +97,36 @@ export function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
   if (p?.type !== "ObjectPattern" || !Array.isArray(p.properties)) {
     return null;
   }
+  let themeName: string | null = null;
+  const siblingBindings: string[] = [];
   for (const prop of p.properties) {
     if (!prop || (prop.type !== "Property" && prop.type !== "ObjectProperty")) {
       continue;
     }
     const key = prop.key;
-    if (!key || key.type !== "Identifier" || key.name !== "theme") {
+    if (!key || key.type !== "Identifier") {
       continue;
     }
-    const value = prop.value;
-    if (value?.type === "Identifier" && typeof value.name === "string") {
-      return { kind: "themeBinding", themeName: value.name };
+    if (key.name === "theme") {
+      const value = prop.value;
+      if (value?.type === "Identifier" && typeof value.name === "string") {
+        themeName = value.name;
+      } else if (
+        value?.type === "AssignmentPattern" &&
+        value.left?.type === "Identifier" &&
+        typeof value.left.name === "string"
+      ) {
+        themeName = value.left.name;
+      }
+    } else {
+      const value = prop.value;
+      const bindingName =
+        value?.type === "Identifier" && typeof value.name === "string" ? value.name : key.name;
+      siblingBindings.push(bindingName);
     }
-    if (
-      value?.type === "AssignmentPattern" &&
-      value.left?.type === "Identifier" &&
-      typeof value.left.name === "string"
-    ) {
-      return { kind: "themeBinding", themeName: value.left.name };
-    }
+  }
+  if (themeName) {
+    return { kind: "themeBinding", themeName, siblingBindings };
   }
   return null;
 }
