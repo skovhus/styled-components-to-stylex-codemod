@@ -533,6 +533,14 @@ export type StyledDecl = {
   }>;
 
   /**
+   * Extra className expressions from CSS modules to merge into the rendered element's className.
+   * These are combined with any static className from `.attrs()` and bridge classes.
+   */
+  extraClassNames?: Array<{
+    expr: ExpressionKind;
+  }>;
+
+  /**
    * Tracks the interleaved order of extra mixins. Each entry indicates which array
    * to take the next item from: 'styleKey' for extraStyleKeys, 'propsArg' for extraStylexPropsArgs.
    * Used to preserve correct style precedence when combining local and imported mixins.

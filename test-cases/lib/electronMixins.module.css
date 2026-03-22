@@ -1,0 +1,7 @@
+.draggableRegionDisableChildren {
+  -webkit-app-region: drag;
+}
+
+.draggableRegionDisableChildren > * {
+  -webkit-app-region: no-drag;
+}

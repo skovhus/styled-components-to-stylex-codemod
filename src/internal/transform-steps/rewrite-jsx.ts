@@ -737,11 +737,32 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           styleAttr = null;
         }
 
+        // Build extra className expression from CSS module classes (if any).
+        const extraClassNameExpr =
+          decl.extraClassNames && decl.extraClassNames.length > 0
+            ? buildExtraClassNameExpr(j, decl.extraClassNames)
+            : undefined;
+
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).
-        const needsMerge = classNameAttr !== null || styleAttr !== null;
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
+
+        // When NOT using sx prop, CSS module classNames must be merged into
+        // the stylex.props spread (via classNameAttr) to avoid a duplicate
+        // className attribute that would override the spread's className.
+        // When using sx prop, sx and className are independent attributes.
+        let effectiveClassNameAttr = classNameAttr;
+        if (extraClassNameExpr && !ctx.adapter.useSxProp) {
+          // Synthesize a JSX className attribute so buildInlineMergeCall
+          // folds the CSS module class into the spread merge.
+          effectiveClassNameAttr = j.jsxAttribute(
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(extraClassNameExpr),
+          );
+        }
+
+        const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
         const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
         const stylexAttr = useSxProp
           ? (() => {
@@ -756,7 +777,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 ? buildInlineMergeCall(
                     j,
                     styleArgs,
-                    classNameAttr,
+                    effectiveClassNameAttr,
                     styleAttr,
                     ctx.adapter.styleMerger?.functionName,
                   )
@@ -765,9 +786,23 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                     [...styleArgs],
                   ),
             );
+
+        // For sx prop mode, emit extraClassNames as a separate className attribute
+        // (sx and className are independent and don't conflict).
+        const extraClassNameAttrs: typeof keptRestAfterVariants = [];
+        if (extraClassNameExpr && useSxProp) {
+          extraClassNameAttrs.push(
+            j.jsxAttribute(
+              j.jsxIdentifier("className"),
+              j.jsxExpressionContainer(extraClassNameExpr),
+            ),
+          );
+        }
+
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
           stylexAttr,
+          ...extraClassNameAttrs,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 
@@ -910,6 +945,28 @@ function extractJsxAttrValueExpr(
     return a.value.expression as ExpressionKind;
   }
   return undefined;
+}
+
+/**
+ * Builds a single expression from extra className entries (CSS module classes).
+ * Single entry: returns the expression directly.
+ * Multiple entries: joins with a template literal `${a} ${b}`.
+ */
+function buildExtraClassNameExpr(
+  j: TransformContext["j"]["jscodeshift"],
+  extraClassNames: NonNullable<StyledDecl["extraClassNames"]>,
+): ExpressionKind {
+  const exprs = extraClassNames.map((cn) => cn.expr);
+  if (exprs.length === 1 && exprs[0]) {
+    return exprs[0];
+  }
+  const qs: ReturnType<typeof j.templateElement>[] = [];
+  for (let i = 0; i <= exprs.length; i++) {
+    const isLast = i === exprs.length;
+    const raw = i === 0 || isLast ? "" : " ";
+    qs.push(j.templateElement({ raw, cooked: raw }, isLast));
+  }
+  return j.templateLiteral(qs, exprs);
 }
 
 /**

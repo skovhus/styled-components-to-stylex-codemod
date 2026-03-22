@@ -5256,3 +5256,74 @@ export const App = () => <Box $spacing="sm">Content</Box>;
     }
   });
 });
+
+describe("extraClassNames with useSxProp: false", () => {
+  it("should merge CSS module className into stylex.props spread instead of adding duplicate className", () => {
+    const source = `
+import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
+
+const DraggableBar = styled.div\`
+  pointer-events: all;
+  \${draggableRegion(true)};
+\`;
+
+export function App() {
+  return <DraggableBar>Draggable</DraggableBar>;
+}
+`;
+
+    const adapterWithNoSxProp = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: Parameters<NonNullable<Adapter["resolveCall"]>>[0]) {
+        if (ctx.calleeImportedName === "draggableRegion") {
+          return {
+            extraClassNames: [
+              {
+                expr: "electronStyles.draggableRegionDisableChildren",
+                imports: [
+                  {
+                    from: { kind: "specifier" as const, value: "./lib/electronMixins.module.css" },
+                    names: [{ imported: "default", local: "electronStyles" }],
+                  },
+                ],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "mixin-extraClassNames.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoSxProp },
+    );
+
+    expect(result.code).not.toBeNull();
+    // With useSxProp: false, the output uses {...stylex.props(...)}.
+    // The CSS module className must be folded into the merge, not added as a
+    // separate className attribute that would override the spread's className.
+    // A duplicate className= after {...stylex.props(...)} causes the element to
+    // lose its StyleX classes entirely.
+    expect(result.code).toContain("stylex.props");
+    expect(result.code).toContain("electronStyles");
+    // The className from CSS module should NOT be a standalone JSX attribute
+    // following the spread — it must be merged.
+    expect(result.code).not.toMatch(/\{\.\.\.stylex\.props\([^)]+\)\}\s*className=/);
+  });
+});

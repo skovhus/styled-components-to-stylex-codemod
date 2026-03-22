@@ -45,6 +45,13 @@ export function buildResolvedHandlerResult(
   cssProperty: string | undefined,
   payload: { resolveCallContext: CallResolveContext; resolveCallResult: CallResolveResult },
 ): HandlerResult {
+  if ("extraClassNames" in result && !("expr" in result)) {
+    return {
+      type: "resolvedClassNames",
+      extraClassNames: result.extraClassNames,
+      ...payload,
+    };
+  }
   if (!("expr" in result)) {
     return {
       type: "runtimeCallOnly",
@@ -64,6 +71,7 @@ export function buildResolvedHandlerResult(
         expr: result.expr,
         imports: result.imports,
         ...(result.cssText ? { cssText: result.cssText } : {}),
+        ...(result.extraClassNames ? { extraClassNames: result.extraClassNames } : {}),
         ...payload,
       };
 }

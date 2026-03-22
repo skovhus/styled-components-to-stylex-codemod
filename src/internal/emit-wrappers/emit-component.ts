@@ -749,6 +749,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
       d.attrsInfo,
       getBridgeClassVar(d),
+      d.extraClassNames,
     );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
     const staticAttrs = attrsInfo?.staticAttrs ?? {};

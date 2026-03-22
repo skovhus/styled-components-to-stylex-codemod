@@ -6,6 +6,7 @@ import type { API, JSCodeshift } from "jscodeshift";
 import type {
   CallResolveContext,
   CallResolveResult,
+  ExprWithImports,
   ImportSource,
   ImportSpec,
   ResolveValueContext,
@@ -91,6 +92,18 @@ export type HandlerResult =
       resolveCallResult?: CallResolveResult;
       /** Raw CSS text from the adapter, enabling pseudo-selector wrapping of individual properties. */
       cssText?: string;
+      /** Extra className expressions from CSS modules to merge into the rendered element. */
+      extraClassNames?: ExprWithImports[];
+    }
+  | {
+      /**
+       * The node was resolved to className expressions only (no StyleX style object).
+       * Used for CSS modules or other class-based styles that StyleX cannot express.
+       */
+      type: "resolvedClassNames";
+      extraClassNames: ExprWithImports[];
+      resolveCallContext?: CallResolveContext;
+      resolveCallResult?: CallResolveResult;
     }
   | {
       /**

@@ -355,7 +355,7 @@ export function tryResolveConditionalValue(
         if ("expr" in res.result) {
           return res.result;
         }
-        if (res.result.preserveRuntimeCall) {
+        if ("preserveRuntimeCall" in res.result && res.result.preserveRuntimeCall) {
           runtimeCallState.info = {
             resolveCallContext: res.resolveCallContext,
             resolveCallResult: res.resolveCallResult,
@@ -379,7 +379,7 @@ export function tryResolveConditionalValue(
             if ("expr" in innerRes.result) {
               return innerRes.result;
             }
-            if (innerRes.result.preserveRuntimeCall) {
+            if ("preserveRuntimeCall" in innerRes.result && innerRes.result.preserveRuntimeCall) {
               runtimeCallState.info = {
                 resolveCallContext: innerRes.resolveCallContext,
                 resolveCallResult: innerRes.resolveCallResult,

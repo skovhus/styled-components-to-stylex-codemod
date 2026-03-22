@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
-import type { CallResolveResult, ResolveValueContext } from "../../adapter.js";
+import type { CallResolveResult, ExprWithImports, ResolveValueContext } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
@@ -170,6 +170,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
   };
 
+  /** Parse and store extra className expressions (from CSS modules) on the decl. */
+  const collectExtraClassNames = (entries: ExprWithImports[]) => {
+    decl.extraClassNames ??= [];
+    for (const cn of entries) {
+      addResolverImports(cn.imports);
+      const cnExpr = parseExpr(cn.expr);
+      if (cnExpr) {
+        decl.extraClassNames.push({ expr: cnExpr as any });
+      }
+    }
+  };
+
   /**
    * Try to convert an identity prop with a finite string union type into static variant
    * buckets. Returns true if the optimization applied and the caller should `continue`.
@@ -207,7 +219,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     loc: { line: number; column: number } | null | undefined;
   }): "not-requested" | "emitted" | "failed" => {
     const { resolveCallResult, originalExpr, loc } = args;
-    if (!resolveCallResult?.preserveRuntimeCall) {
+    if (
+      !resolveCallResult ||
+      !("preserveRuntimeCall" in resolveCallResult) ||
+      !resolveCallResult.preserveRuntimeCall
+    ) {
       return "not-requested";
     }
     if (!d.property) {
@@ -898,9 +914,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         expr: exprAst as any,
         afterBase: hasStaticPropsBefore,
       });
+      // Store any extra className expressions (from CSS modules) on the decl
+      if (res.extraClassNames) {
+        collectExtraClassNames(res.extraClassNames);
+      }
       // Create an after-base segment so subsequent static properties
       // are placed after this helper in the stylex.props() call
       notifyResolvedStylesArg();
+      decl.needsWrapperComponent = true;
+      continue;
+    }
+
+    if (res && res.type === "resolvedClassNames") {
+      // Adapter returned className-only result (no StyleX expr).
+      // Store the className expressions on the decl for the emitter to merge.
+      collectExtraClassNames(res.extraClassNames);
       decl.needsWrapperComponent = true;
       continue;
     }

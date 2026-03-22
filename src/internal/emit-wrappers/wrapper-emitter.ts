@@ -1827,8 +1827,12 @@ export class WrapperEmitter {
     return seb.buildInterleavedExtraStyleArgs(this.j, this.stylesIdentifier, d, propsArgExprs);
   }
 
-  splitAttrsInfo(attrsInfo: StyledDecl["attrsInfo"], bridgeClassVar?: string) {
-    return seb.splitAttrsInfo(this.j, attrsInfo, bridgeClassVar);
+  splitAttrsInfo(
+    attrsInfo: StyledDecl["attrsInfo"],
+    bridgeClassVar?: string,
+    extraClassNames?: StyledDecl["extraClassNames"],
+  ) {
+    return seb.splitAttrsInfo(this.j, attrsInfo, bridgeClassVar, extraClassNames);
   }
 
   buildVariantDimensionLookups(args: {

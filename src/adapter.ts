@@ -270,6 +270,20 @@ export type CallResolveResultWithExpr = {
    * - Theme access in the original call is rewritten to use the wrapper `useTheme()` value.
    */
   preserveRuntimeCall?: boolean;
+
+  /**
+   * Additional className expressions to merge into the component's className attribute.
+   *
+   * Used for CSS modules or other class-based styles that StyleX cannot express
+   * (child selectors like `& > *`, ancestor selectors like `html:not(.class) &`, etc.).
+   *
+   * Each entry provides an expression string (e.g., `cssModuleStyles.myClass`)
+   * and its required imports.
+   *
+   * When present, the codemod merges these expressions into the rendered element's
+   * className alongside any existing static className from `.attrs()` or bridge classes.
+   */
+  extraClassNames?: ExprWithImports[];
 };
 
 export type CallResolveRuntimeOnlyResult = {
@@ -287,7 +301,21 @@ export type CallResolveRuntimeOnlyResult = {
   usage?: "create";
 };
 
-export type CallResolveResult = CallResolveResultWithExpr | CallResolveRuntimeOnlyResult;
+/**
+ * Resolved result containing only className expressions (no StyleX style object).
+ * Used for CSS modules or other class-based styles that StyleX cannot express.
+ */
+export type CallResolveClassNamesResult = {
+  /**
+   * className expressions to merge into the component's className attribute.
+   */
+  extraClassNames: ExprWithImports[];
+};
+
+export type CallResolveResult =
+  | CallResolveResultWithExpr
+  | CallResolveRuntimeOnlyResult
+  | CallResolveClassNamesResult;
 
 // Note: we intentionally do NOT expose “unified” ResolveContext/ResolveResult types anymore.
 // Consumers should use the specific contexts/results:
@@ -299,6 +327,9 @@ export type ImportSource =
   | { kind: "specifier"; value: string };
 
 export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
+
+/** An expression string with its required imports, used for className emission. */
+export type ExprWithImports = { expr: string; imports: ImportSpec[] };
 
 // ────────────────────────────────────────────────────────────────────────────
 // Base Component Resolution
