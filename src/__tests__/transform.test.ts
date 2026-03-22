@@ -3759,6 +3759,58 @@ export const App = () => <Box enabled>Test</Box>;
     expect(result.code).toBeNull();
   });
 
+  it("should bail when both theme boolean branches are unresolvable", () => {
+    // When resolveValueOptional returns undefined for both branches of a
+    // theme.isDark ternary, the codemod must bail rather than fall through
+    // to generic handlers that would emit the arrow function as a string.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  color: \${(p) =>
+    p.theme.isDark ? p.theme.baseTheme?.color.bgSub : p.theme.baseTheme?.color.bgBase};
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-both-unresolved.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should not reject sibling binding when name collides with theme property path segment", () => {
+    // collectIdentifiers picks up member property names like `color` from
+    // `theme.color.bgFocus`. A destructured sibling named `color` must not
+    // cause a false positive rejection — only actual free variable references
+    // should be checked.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, color }) =>
+    theme.isDark ? theme.baseTheme?.color.bgSub : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box color="red">Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-color-sibling.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // The `color` destructured param is never referenced in the expression
+    // (only theme.color is used), so the transform should succeed
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("useTheme");
+  });
+
   it("should bail on theme access inside pseudo/media context (module-scoped style fn)", () => {
     // Theme-rewritten expressions can't be placed in module-scoped stylex.create functions.
     // The `theme` variable from useTheme() is only available in the wrapper component body.

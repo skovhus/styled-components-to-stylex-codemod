@@ -7,7 +7,6 @@ import {
   type ArrowFnParamBindings,
   type CallExpressionNode,
   cloneAstNode,
-  collectIdentifiers,
   getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -1678,7 +1677,7 @@ function isFullyTransformedThemeExpr(
   info: ThemeParamInfo | null,
 ): boolean {
   const ids = new Set<string>();
-  collectIdentifiers(transformed, ids);
+  collectFreeIdentifiers(transformed, ids);
   if (paramName && ids.has(paramName)) {
     return false;
   }
@@ -1694,6 +1693,50 @@ function isFullyTransformedThemeExpr(
     }
   }
   return true;
+}
+
+/**
+ * Collects free variable identifiers from an AST node, excluding
+ * non-computed property names in member expressions (e.g., in
+ * `theme.color.bgSub`, only `theme` is a free variable; `color`
+ * and `bgSub` are property accesses, not variable references).
+ */
+function collectFreeIdentifiers(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectFreeIdentifiers(child, out);
+    }
+    return;
+  }
+  const typed = node as Record<string, unknown>;
+  const nodeType = typed.type as string | undefined;
+
+  // For member expressions, only recurse into the object (left side).
+  // Skip the property name unless it's computed (bracket notation).
+  if (nodeType === "MemberExpression" || nodeType === "OptionalMemberExpression") {
+    collectFreeIdentifiers(typed.object, out);
+    if (typed.computed) {
+      collectFreeIdentifiers(typed.property, out);
+    }
+    return;
+  }
+
+  if (nodeType === "Identifier" && typeof typed.name === "string") {
+    out.add(typed.name);
+  }
+
+  for (const key of Object.keys(typed)) {
+    if (key === "loc" || key === "comments" || key === "type") {
+      continue;
+    }
+    const child = typed[key];
+    if (child && typeof child === "object") {
+      collectFreeIdentifiers(child, out);
+    }
+  }
 }
 
 /**
