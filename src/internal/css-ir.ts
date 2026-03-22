@@ -202,6 +202,16 @@ export function normalizeStylisAstToIR(
         // loses the trailing `&`).
         const stringProps = propsArr.filter((p): p is string => typeof p === "string");
         const resolved = stringProps.map((p) => `&${p}`).join(",");
+        // When either the raw or resolved selector contains a sibling combinator (`+`/`~`),
+        // always preserve the raw form — the downstream sibling handler requires the exact
+        // `& + &` / `& ~ &` pattern. Stylis resolves these into forms like `:hover+:hover`
+        // that lose the `&` anchors, and can also inject combinators into child selectors
+        // (e.g., `&:hover` resolved to `&+:hover` inside a `& + &` parent).
+        // Strip `[...]` to avoid false positives from attribute selectors like `[attr~=val]`.
+        const hasSiblingCombinator = (s: string) => /[+~]/.test(s.replace(/\[[^\]]*\]/g, ""));
+        if (hasSiblingCombinator(selectorRaw) || hasSiblingCombinator(resolved)) {
+          return selectorRaw;
+        }
         if (resolved.length > selectorRaw.length) {
           return resolved;
         }
