@@ -101,11 +101,7 @@ export function tryResolveConditionalValue(
     test: unknown,
   ): { isNegated: boolean; themeProp: string } | null => {
     const check = (node: unknown): string | null => {
-      if (
-        !node ||
-        typeof node !== "object" ||
-        (node as { type?: string }).type !== "MemberExpression"
-      ) {
+      if (!node || typeof node !== "object" || !isMemberExpression(node as { type?: string })) {
         return null;
       }
       // Check props.theme.<prop> pattern
@@ -148,11 +144,7 @@ export function tryResolveConditionalValue(
 
   // Helper to resolve a MemberExpression as a theme path
   const resolveThemeFromMemberExpr = (node: unknown): { path: string } | null => {
-    if (
-      !node ||
-      typeof node !== "object" ||
-      (node as { type?: string }).type !== "MemberExpression"
-    ) {
+    if (!node || typeof node !== "object" || !isMemberExpression(node as { type?: string })) {
       return null;
     }
     if (info?.kind === "propsParam" && paramName) {
@@ -186,7 +178,8 @@ export function tryResolveConditionalValue(
     if (!themeInfo) {
       return null;
     }
-    const res = ctx.resolveValue({
+    const resolveTheme = ctx.resolveValueOptional ?? ctx.resolveValue;
+    const res = resolveTheme({
       kind: "theme",
       path: themeInfo.path,
       filePath: ctx.filePath,

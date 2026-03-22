@@ -411,6 +411,12 @@ export type InternalHandlerContext = {
   ) => ResolveValueResult | ResolveValueDirectionalResult | undefined;
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
   /**
+   * Like `resolveValue` but does NOT trigger the global bail flag when the adapter
+   * returns `undefined`. Use this for speculative resolution where a missing result
+   * should fall back to other handlers instead of bailing the file.
+   */
+  resolveValueOptional?: (context: ResolveValueContext) => ResolveValueResult | undefined;
+  /**
    * Like `resolveCall` but does NOT trigger the global bail flag when the adapter
    * returns `undefined`. Use this for optional/speculative resolution where a
    * missing adapter result should fall back to preserving the original code.

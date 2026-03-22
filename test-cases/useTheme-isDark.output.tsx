@@ -18,7 +18,7 @@ function Box(props: React.PropsWithChildren<{}>) {
   return <div sx={theme.isDark ? undefined : styles.boxLight}>{props.children}</div>;
 }
 
-// theme.isDark setting a CSS custom property value
+// theme.isDark setting a CSS custom property value (with optional chaining)
 function DayPicker(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 

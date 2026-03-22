@@ -2,7 +2,8 @@
  * Builds shared state for the lower-rules pipeline.
  * Core concepts: resolver wiring, precomputed mixin values, and shared tracking maps.
  */
-import type { ImportSource } from "../../adapter.js";
+import { type ImportSource, isDirectionalResult } from "../../adapter.js";
+import type { InternalHandlerContext } from "../builtin-handlers/types.js";
 import type { TransformContext } from "../transform-context.js";
 import type { CrossFileSelectorUsage, StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
@@ -49,8 +50,15 @@ export function createLowerRulesState(ctx: TransformContext) {
   const resolveValue = ctx.resolveValueSafe;
   const resolveValueDirectional = ctx.resolveValueDirectionalSafe;
   const resolveCall = ctx.resolveCallSafe;
-  // Non-bailing version: calls the adapter directly without triggering the global bail flag.
-  // Used for speculative/optional resolution (e.g., prop-arg helper remapping).
+  // Non-bailing versions: call the adapter directly without triggering the global bail flag.
+  // Used for speculative/optional resolution (e.g., prop-arg helper remapping, theme branch probing).
+  const resolveValueOptional: InternalHandlerContext["resolveValueOptional"] = (rvCtx) => {
+    const res = ctx.adapter.resolveValue(rvCtx);
+    if (res && isDirectionalResult(res)) {
+      return undefined;
+    }
+    return res;
+  };
   const resolveCallOptional = ctx.adapter.resolveCall.bind(ctx.adapter);
   const resolveSelector = ctx.resolveSelectorSafe;
   const importMap =
@@ -250,6 +258,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     parseExpr,
     rewriteCssVarsInStyleObject,
     resolveValue,
+    resolveValueOptional,
     resolveValueDirectional,
     resolveCall,
     resolveCallOptional,
