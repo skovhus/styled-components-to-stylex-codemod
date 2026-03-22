@@ -3683,6 +3683,82 @@ export const App = () => <Box enabled>Test</Box>;
     expect(result.code).toBeNull();
   });
 
+  it("should bail when inline style fallback is inside pseudo/media context", () => {
+    // The inline style fallback writes to base styleObj/inlineStyleProps,
+    // which don't preserve pseudo/media selectors. Must bail to avoid
+    // silently losing the :hover/:focus/@media condition.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  &:hover {
+    color: \${(p) =>
+      p.theme.isDark ? p.theme.baseTheme?.color.bgSub : p.theme.color.bgFocus};
+  }
+\`;
+
+export const App = () => <Box>Hover me</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-pseudo-inline-fallback.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when inline style fallback targets a CSS shorthand property", () => {
+    // When cssProp is a shorthand like `padding`, cssDeclarationToStylexDeclarations
+    // expands it to longhands (paddingBlock, paddingInline). The inline style would
+    // assign the same opaque expression to each longhand, which is wrong for
+    // multi-value shorthand tokens like "6px 12px".
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: \${(p) =>
+    p.theme.isDark ? p.theme.baseTheme?.color.bgSub : "8px"};
+\`;
+
+export const App = () => <Box>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-shorthand-inline-fallback.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("should bail when destructured sibling has aliased binding with default value", () => {
+    // ({ theme, enabled: isEnabled = false }) => ... should track `isEnabled`
+    // (the actual binding), not `enabled` (the key name).
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  background-color: \${({ theme, enabled: isEnabled = false }) =>
+    theme.isDark
+      ? (isEnabled ? theme.baseTheme?.color.bgSub : theme.baseTheme?.color.bgBase)
+      : theme.color.bgFocus};
+\`;
+
+export const App = () => <Box enabled>Test</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "theme-aliased-destructured.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
   it("should bail on theme access inside pseudo/media context (module-scoped style fn)", () => {
     // Theme-rewritten expressions can't be placed in module-scoped stylex.create functions.
     // The `theme` variable from useTheme() is only available in the wrapper component body.

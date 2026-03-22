@@ -1053,6 +1053,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // The resolved branch becomes the base StyleX style; the unresolvable branch
     // is emitted as a conditional inline style using the useTheme() hook.
     if (res && res.type === "splitThemeBooleanWithInlineStyleFallback") {
+      // Inline style fallback cannot preserve pseudo/media context — bail
+      if (pseudos?.length || media || pseudoElement) {
+        bail = true;
+        continue;
+      }
+      // Shorthand CSS properties expand to multiple longhands; the unresolvable
+      // branch expression can't be correctly split across them — bail
+      if (isCssShorthandProperty(res.cssProp)) {
+        bail = true;
+        continue;
+      }
+
       // Add imports for the resolved value
       addResolverImports(res.resolvedImports);
 

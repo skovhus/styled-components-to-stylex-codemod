@@ -120,8 +120,7 @@ export function getArrowFnThemeParamInfo(fn: any): ThemeParamInfo | null {
       }
     } else {
       const value = prop.value;
-      const bindingName =
-        value?.type === "Identifier" && typeof value.name === "string" ? value.name : key.name;
+      const bindingName = extractBindingName(value) ?? key.name;
       siblingBindings.push(bindingName);
     }
   }
@@ -460,6 +459,24 @@ function callArgFromNode(
     }
   }
   return { kind: "unknown" };
+}
+
+/**
+ * Extracts the actual binding name from a destructured property value.
+ * Handles: `{ x }` → "x", `{ x: alias }` → "alias", `{ x: alias = def }` → "alias"
+ */
+function extractBindingName(value: any): string | null {
+  if (value?.type === "Identifier" && typeof value.name === "string") {
+    return value.name;
+  }
+  if (
+    value?.type === "AssignmentPattern" &&
+    value.left?.type === "Identifier" &&
+    typeof value.left.name === "string"
+  ) {
+    return value.left.name;
+  }
+  return null;
 }
 
 function callArgsFromNode(
