@@ -1137,7 +1137,13 @@ function liftFlatVariantsToPseudoMaps(variantBuckets: Map<string, Record<string,
         folded = true;
       }
       if (folded) {
-        delete simpleBucket[cssProp];
+        // Convert the flat value to a default-only pseudo-map instead of deleting.
+        // In StyleX, each condition key (default, :hover, @media) compiles to an
+        // independent atomic CSS class, so { default: flatValue } only overrides the
+        // default slot and preserves :hover/:focus/media values from other styles.
+        // This is critical when the simple bucket is applied alongside a compound
+        // bucket from a different condition axis (e.g., "disabled" vs "checked").
+        simpleBucket[cssProp] = { default: flatValue };
       }
     }
   }
