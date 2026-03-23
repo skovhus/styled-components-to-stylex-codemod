@@ -566,6 +566,13 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
 
   // Generate style keys for each branch
   const outerKey = `${decl.styleKey}${capitalize(res.outerProp)}`;
+
+  // Always suffix inner when-keys with True/False to guarantee they never
+  // collide with simple boolean variant keys that use the same prop name.
+  // The collision can happen regardless of declaration order — the compound
+  // or the boolean variant may be processed first.
+  const innerTruthyWhen = `${res.innerProp}True`;
+  const innerFalsyWhen = `${res.innerProp}False`;
   const innerTruthyKey = `${decl.styleKey}${capitalize(res.innerProp)}True`;
   const innerFalsyKey = `${decl.styleKey}${capitalize(res.innerProp)}False`;
 
@@ -575,13 +582,11 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   variantBuckets.set(res.outerProp, outerBucket);
   variantStyleKeys[res.outerProp] ??= outerKey;
 
-  const innerTruthyWhen = `${res.innerProp}True`;
   const innerTruthyBucket = { ...variantBuckets.get(innerTruthyWhen) } as Record<string, unknown>;
   applyParsed(innerTruthyBucket, innerTruthyParsed);
   variantBuckets.set(innerTruthyWhen, innerTruthyBucket);
   variantStyleKeys[innerTruthyWhen] ??= innerTruthyKey;
 
-  const innerFalsyWhen = `${res.innerProp}False`;
   const innerFalsyBucket = { ...variantBuckets.get(innerFalsyWhen) } as Record<string, unknown>;
   applyParsed(innerFalsyBucket, innerFalsyParsed);
   variantBuckets.set(innerFalsyWhen, innerFalsyBucket);
@@ -596,6 +601,8 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
     innerProp: res.innerProp,
     innerTruthyKey,
     innerFalsyKey,
+    innerTruthyWhen,
+    innerFalsyWhen,
   });
 
   decl.needsWrapperComponent = true;

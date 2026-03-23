@@ -10,15 +10,7 @@ type ButtonProps = React.PropsWithChildren<{
 // When color is falsy but defined (e.g., ""), should use "blue" (|| fallback)
 function Button(props: ButtonProps) {
   const { children, color } = props;
-  return (
-    <button
-      sx={styles.button({
-        color: (props.color ?? "hotpink") || "blue",
-      })}
-    >
-      {children}
-    </button>
-  );
+  return <button sx={styles.button((props.color ?? "hotpink") || "blue")}>{children}</button>;
 }
 
 type CardProps = React.PropsWithChildren<{
@@ -75,7 +67,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  button: (props: { color: string | undefined }) => ({
-    color: props.color,
+  button: (color: string | undefined) => ({
+    color,
   }),
 });

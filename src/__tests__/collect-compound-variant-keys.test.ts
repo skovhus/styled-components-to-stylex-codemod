@@ -7,8 +7,10 @@ describe("collectCompoundVariantKeys", () => {
     outerProp: "disabled",
     outerTruthyKey: "cardContainerDisabled",
     innerProp: "checked",
-    innerTruthyKey: "cardContainerCheckedTrue",
-    innerFalsyKey: "cardContainerCheckedFalse",
+    innerTruthyKey: "cardContainerChecked",
+    innerFalsyKey: "cardContainerNotChecked",
+    innerTruthyWhen: "checkedTrue",
+    innerFalsyWhen: "checkedFalse",
   };
 
   const fourBranch = {

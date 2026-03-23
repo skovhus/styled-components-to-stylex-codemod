@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CircleProps = { isAnimated?: boolean } & Pick<React.ComponentProps<"path">, "children" | "d">;
+type CircleProps = { isAnimated?: boolean } & React.ComponentProps<"path">;
 
 function Circle(props: CircleProps) {
   const { children, isAnimated, ...rest } = props;

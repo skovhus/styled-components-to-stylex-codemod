@@ -539,9 +539,11 @@ function getCompoundVariantWhenKeys(
     ];
   }
   // For 3-branch, outerProp is a real prop name (e.g. "disabled"), while
-  // "innerPropTrue"/"innerPropFalse" are synthetic when-keys.
+  // the inner when-keys are synthetic.  Use the stored when-keys which
+  // may be suffixed (e.g. "checkedTrue") to avoid collisions with simple
+  // boolean variant keys.
   if (syntheticOnly) {
-    return [`${cv.innerProp}True`, `${cv.innerProp}False`];
+    return [cv.innerTruthyWhen, cv.innerFalsyWhen];
   }
-  return [cv.outerProp, `${cv.innerProp}True`, `${cv.innerProp}False`];
+  return [cv.outerProp, cv.innerTruthyWhen, cv.innerFalsyWhen];
 }

@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabled">) {
+function Button(props: React.ComponentProps<"button">) {
   const { children, ...rest } = props;
   return (
     <button {...rest} sx={styles.button}>
@@ -10,7 +10,7 @@ function Button(props: Pick<React.ComponentProps<"button">, "children" | "disabl
   );
 }
 
-function Select(props: Pick<React.ComponentProps<"select">, "children" | "disabled">) {
+function Select(props: React.ComponentProps<"select">) {
   const { children, ...rest } = props;
   return (
     <select {...rest} sx={styles.select}>
@@ -19,9 +19,7 @@ function Select(props: Pick<React.ComponentProps<"select">, "children" | "disabl
   );
 }
 
-function Textarea(
-  props: Pick<React.ComponentProps<"textarea">, "children" | "defaultValue" | "disabled">,
-) {
+function Textarea(props: React.ComponentProps<"textarea">) {
   const { children, ...rest } = props;
   return (
     <textarea {...rest} sx={styles.textarea}>

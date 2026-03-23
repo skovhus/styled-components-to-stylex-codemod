@@ -520,7 +520,6 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj,
     styleFnFromProps,
     styleFnDecls,
-    remainingStyleKeys,
     extraStyleObjects,
     styledDecls: state.styledDecls,
   });
@@ -650,7 +649,8 @@ function insertStyleFnDeclsAfterComponent(
  * Preconditions:
  * - Exactly one unconditional styleFn entry (no conditionWhen)
  * - Base styleObj has at least one property
- * - No variant style keys, extra style objects, or enum variants
+ * - No extra style objects (css`` helpers interleave with base)
+ * - No enum variants
  * - The component is not extended by other styled components
  */
 function mergeBaseIntoSingleStyleFn(args: {
@@ -659,20 +659,11 @@ function mergeBaseIntoSingleStyleFn(args: {
   styleObj: Record<string, unknown>;
   styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
   styleFnDecls: Map<string, unknown>;
-  remainingStyleKeys: Record<string, string>;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   styledDecls: StyledDecl[];
 }): void {
-  const {
-    j,
-    decl,
-    styleObj,
-    styleFnFromProps,
-    styleFnDecls,
-    remainingStyleKeys,
-    extraStyleObjects,
-    styledDecls,
-  } = args;
+  const { j, decl, styleObj, styleFnFromProps, styleFnDecls, extraStyleObjects, styledDecls } =
+    args;
 
   // Must have base properties to merge
   if (Object.keys(styleObj).length === 0) {
@@ -681,11 +672,6 @@ function mergeBaseIntoSingleStyleFn(args: {
 
   // Must have styleFn entries
   if (styleFnFromProps.length === 0) {
-    return;
-  }
-
-  // Must have no variant style keys (variants reference base independently)
-  if (Object.keys(remainingStyleKeys).length > 0) {
     return;
   }
 
@@ -790,6 +776,15 @@ function mergeBaseIntoSingleStyleFn(args: {
     entry.fnKey = decl.styleKey;
   }
 
+  // The merged function now contains base properties that must come before
+  // any variant overrides in the sx array.  Set sourceOrder to -1 so it
+  // sorts before all variant entries (which start at 0).
+  //
+  // Safety: this won't jump ahead of other ordered entries incorrectly
+  // because the guards above ensure no extraStyleObjects (css`` helpers)
+  // exist, and only one unconditional styleFn entry is present.
+  entry.sourceOrder = -1;
+
   // Clear the base styleObj so it becomes empty in resolvedStyleObjects
   for (const key of Object.keys(styleObj)) {
     delete styleObj[key];
@@ -844,6 +839,19 @@ function convertStyleFnsToPropsPattern(
     // Extract the function body
     const body = getFunctionBodyExpr(fn);
     if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+      continue;
+    }
+    const bodyObj = body as { properties?: ASTProperty[] };
+
+    // Skip conversion when the parameter name is itself a CSS property key
+    // in the function body (e.g. `(backgroundColor) => ({ ..., backgroundColor })`).
+    // The positional form keeps a bare Identifier that the StyleX ESLint plugin
+    // recognises as an intentionally dynamic value; converting to `props.X`
+    // (a MemberExpression) would trigger a false-positive validation error.
+    if (
+      Array.isArray(bodyObj.properties) &&
+      bodyObj.properties.some((p) => (p.key?.name ?? p.key?.value) === paramName)
+    ) {
       continue;
     }
 

@@ -14,8 +14,7 @@ function Container(props: ContainerProps) {
     <Flex
       {...rest}
       {...stylex.props(
-        styles.container,
-        styles.containerTransition(props.duration),
+        styles.container(props.duration),
         open &&
           styles.containerOpen({
             delay,
@@ -39,17 +38,15 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  container: {
+  container: (transition: number) => ({
     opacity: 0,
     transitionDelay: "0ms",
     pointerEvents: "none",
-  },
+    transition: `opacity ${transition}ms`,
+  }),
   containerOpen: (props) => ({
     pointerEvents: "inherit",
     opacity: 1,
     transitionDelay: `${props.delay}ms`,
-  }),
-  containerTransition: (transition: number) => ({
-    transition: `opacity ${transition}ms`,
   }),
 });

@@ -8,15 +8,7 @@ type ButtonProps = React.PropsWithChildren<{
 // Simple renamed destructured prop with static base style
 function Button(props: ButtonProps) {
   const { children, color } = props;
-  return (
-    <button
-      sx={styles.button({
-        color: props.color || "hotpink",
-      })}
-    >
-      {children}
-    </button>
-  );
+  return <button sx={styles.button(props.color || "hotpink")}>{children}</button>;
 }
 
 type CardProps = React.PropsWithChildren<{
@@ -55,9 +47,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  button: (props: { color: string | undefined }) => ({
+  button: (color: string | undefined) => ({
     height: 100,
-    color: props.color,
+    color,
   }),
   linkFontSize: (fontSize: string) => ({
     fontSize,

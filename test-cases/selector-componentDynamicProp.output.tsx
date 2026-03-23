@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Link(props: Pick<React.ComponentProps<"a">, "children" | "href">) {
+function Link(props: React.ComponentProps<"a">) {
   const { children, ...rest } = props;
   return (
     <a {...rest} sx={[styles.link, stylex.defaultMarker()]}>
@@ -16,15 +16,7 @@ type BadgeProps = React.PropsWithChildren<{
 
 function Badge(props: BadgeProps) {
   const { children, active } = props;
-  return (
-    <span
-      sx={styles.badge({
-        color: active ? "green" : "gray",
-      })}
-    >
-      {children}
-    </span>
-  );
+  return <span sx={styles.badge(active ? "green" : "gray")}>{children}</span>;
 }
 
 type TagProps = React.PropsWithChildren<{
@@ -34,15 +26,7 @@ type TagProps = React.PropsWithChildren<{
 // Static declarations after an unresolvable interpolation must be preserved
 function Tag(props: TagProps) {
   const { children, highlighted } = props;
-  return (
-    <span
-      sx={styles.tag({
-        color: highlighted ? "blue" : "inherit",
-      })}
-    >
-      {children}
-    </span>
-  );
+  return <span sx={styles.tag(highlighted ? "blue" : "inherit")}>{children}</span>;
 }
 
 type CardProps = React.PropsWithChildren<{
@@ -52,15 +36,7 @@ type CardProps = React.PropsWithChildren<{
 // Shorthand border with interpolation: static longhands (width, style) must stay static
 function Card(props: CardProps) {
   const { children, accent } = props;
-  return (
-    <div
-      sx={styles.card({
-        borderColor: accent ? "red" : "transparent",
-      })}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={styles.card(accent ? "red" : "transparent")}>{children}</div>;
 }
 
 export const App = () => (
@@ -92,15 +68,15 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "papayawhip",
   },
-  badge: (props: { color: string }) => ({
+  badge: (color: string) => ({
     paddingBlock: 4,
     paddingInline: 8,
     color: {
       default: null,
-      [stylex.when.ancestor(":hover")]: props.color,
+      [stylex.when.ancestor(":hover")]: color,
     },
   }),
-  tag: (props: { color: string }) => ({
+  tag: (color: string) => ({
     fontSize: 12,
     fontWeight: {
       default: null,
@@ -108,10 +84,10 @@ const styles = stylex.create({
     },
     color: {
       default: null,
-      [stylex.when.ancestor(":hover")]: props.color,
+      [stylex.when.ancestor(":hover")]: color,
     },
   }),
-  card: (props: { borderColor: string }) => ({
+  card: (borderColor: string) => ({
     padding: 8,
     borderWidth: {
       default: null,
@@ -123,7 +99,7 @@ const styles = stylex.create({
     },
     borderColor: {
       default: null,
-      [stylex.when.ancestor(":hover")]: props.borderColor,
+      [stylex.when.ancestor(":hover")]: borderColor,
     },
   }),
 });

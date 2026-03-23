@@ -76,10 +76,9 @@ function Button(props: ButtonProps) {
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
-type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Pick<
-  React.ComponentProps<"input">,
-  "placeholder"
->;
+type DynamicPlaceholderProps = {
+  placeholderColor: PlaceholderColor;
+} & React.ComponentProps<"input">;
 
 function DynamicPlaceholder(props: DynamicPlaceholderProps) {
   const { placeholderColor, ...rest } = props;

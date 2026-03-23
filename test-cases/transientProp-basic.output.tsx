@@ -108,11 +108,7 @@ function Fader(props: FaderProps) {
   return (
     <div
       {...rest}
-      {...mergedSx(
-        [styles.fader, $open && styles.faderOpen, styles.faderTransition($duration)],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.fader($duration), $open && styles.faderOpen], className, style)}
     >
       {children}
     </div>
@@ -172,15 +168,13 @@ const styles = stylex.create({
   animatedContainer: {
     maxWidth: "90vw",
   },
-  fader: {
+  fader: (transition: number) => ({
     opacity: 0,
     pointerEvents: "none",
-  },
+    transition: `opacity ${transition}ms`,
+  }),
   faderOpen: {
     opacity: 1,
     pointerEvents: "inherit",
   },
-  faderTransition: (transition: number) => ({
-    transition: `opacity ${transition}ms`,
-  }),
 });

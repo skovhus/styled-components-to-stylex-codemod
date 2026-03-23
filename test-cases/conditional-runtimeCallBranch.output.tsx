@@ -13,11 +13,9 @@ function CardContainer(props: CardContainerProps) {
 
   return (
     <label
-      sx={styles.cardContainer({
-        backgroundColor: props.checked
-          ? ColorConverter.cssWithAlpha(theme.color.bgSelected, 0.8)
-          : "transparent",
-      })}
+      sx={styles.cardContainer(
+        props.checked ? ColorConverter.cssWithAlpha(theme.color.bgSelected, 0.8) : "transparent",
+      )}
     >
       {children}
     </label>
@@ -34,11 +32,7 @@ function Row(props: RowProps) {
   const theme = useTheme();
 
   return (
-    <div
-      sx={styles.row({
-        backgroundColor: props.isHighlighted ? getRowHighlightColor(theme.isDark) : "transparent",
-      })}
-    >
+    <div sx={styles.row(props.isHighlighted ? getRowHighlightColor(theme.isDark) : "transparent")}>
       {children}
     </div>
   );
@@ -54,14 +48,14 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  cardContainer: (props: { backgroundColor: string }) => ({
+  cardContainer: (backgroundColor: string) => ({
     paddingBlock: 8,
     paddingInline: 12,
-    backgroundColor: props.backgroundColor,
+    backgroundColor,
   }),
-  row: (props: { backgroundColor: string }) => ({
+  row: (backgroundColor: string) => ({
     paddingBlock: 8,
     paddingInline: 16,
-    backgroundColor: props.backgroundColor,
+    backgroundColor,
   }),
 });

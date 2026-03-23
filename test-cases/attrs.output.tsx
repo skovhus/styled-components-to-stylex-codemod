@@ -12,7 +12,7 @@ const Flex = (
 type InputProps = {
   padding?: string;
   small?: boolean;
-} & Pick<React.ComponentProps<"input">, "placeholder">;
+} & React.ComponentProps<"input">;
 
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {

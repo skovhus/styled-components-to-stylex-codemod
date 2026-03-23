@@ -1866,7 +1866,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
-          styleFnFromProps.push({ fnKey, jsxProp });
+          // Only mark as "always" (no null guard) when we can prove the prop
+          // is required via an explicit type annotation.  Without propsType,
+          // isJsxPropOptional returns false by default, but the prop may still
+          // be optional at runtime (untyped / JS components).
+          const hasExplicitType = !!decl.propsType;
+          const isOptional = ctx.isJsxPropOptional(jsxProp);
+          styleFnFromProps.push({
+            fnKey,
+            jsxProp,
+            ...(hasExplicitType && !isOptional ? { condition: "always" as const } : {}),
+          });
 
           if (!styleFnDecls.has(fnKey)) {
             // IMPORTANT: don't reuse the same Identifier node for both the function param and

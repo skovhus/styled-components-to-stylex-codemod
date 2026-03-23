@@ -241,6 +241,10 @@ export type StyledDecl = {
         innerProp: string;
         innerTruthyKey: string;
         innerFalsyKey: string;
+        /** Actual when-key used in variantBuckets for the inner truthy branch. */
+        innerTruthyWhen: string;
+        /** Actual when-key used in variantBuckets for the inner falsy branch. */
+        innerFalsyWhen: string;
       }
     | {
         kind: "4branch";
