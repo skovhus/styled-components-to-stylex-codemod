@@ -42,10 +42,9 @@ function Container(props: ContainerProps) {
     <div
       {...mergedSx(
         [
+          styles.container,
           theme.isDark ? styles.containerDark : styles.containerLight,
-          styles.container({
-            size,
-          }),
+          styles.containerSize(size),
         ],
         className,
         style,
@@ -57,21 +56,23 @@ function Container(props: ContainerProps) {
 }
 
 const styles = stylex.create({
-  container: (props: { size: number }) => ({
+  container: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: $colors.labelMuted,
     textAlign: "center",
-    width: `${props.size}px`,
-    height: `${props.size}px`,
-    fontSize: `${Math.round(props.size * (2 / 3))}px`,
-    lineHeight: `${props.size}px`,
-  }),
+  },
   containerDark: {
     color: $colors.bgSub,
   },
   containerLight: {
     color: $colors.bgBase,
   },
+  containerSize: (size: number) => ({
+    width: `${size}px`,
+    height: `${size}px`,
+    fontSize: `${Math.round(size * (2 / 3))}px`,
+    lineHeight: `${size}px`,
+  }),
 });

@@ -520,6 +520,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj,
     styleFnFromProps,
     styleFnDecls,
+    extraStyleObjects,
     styledDecls: state.styledDecls,
   });
 
@@ -648,6 +649,7 @@ function insertStyleFnDeclsAfterComponent(
  * Preconditions:
  * - Exactly one unconditional styleFn entry (no conditionWhen)
  * - Base styleObj has at least one property
+ * - No extra style objects (css`` helpers interleave with base)
  * - No enum variants
  * - The component is not extended by other styled components
  */
@@ -657,9 +659,11 @@ function mergeBaseIntoSingleStyleFn(args: {
   styleObj: Record<string, unknown>;
   styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
   styleFnDecls: Map<string, unknown>;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
   styledDecls: StyledDecl[];
 }): void {
-  const { j, decl, styleObj, styleFnFromProps, styleFnDecls, styledDecls } = args;
+  const { j, decl, styleObj, styleFnFromProps, styleFnDecls, extraStyleObjects, styledDecls } =
+    args;
 
   // Must have base properties to merge
   if (Object.keys(styleObj).length === 0) {
@@ -671,9 +675,10 @@ function mergeBaseIntoSingleStyleFn(args: {
     return;
   }
 
-  // Variant style keys and extra style objects (css`` helpers, mixins) are
-  // independent of the base and don't prevent merging static properties
-  // into the style function.
+  // Must have no extra style objects (css`` helpers interleave with base)
+  if (extraStyleObjects.size > 0) {
+    return;
+  }
 
   // Must have no enum variant
   if (decl.enumVariant) {

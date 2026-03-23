@@ -567,18 +567,14 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   // Generate style keys for each branch
   const outerKey = `${decl.styleKey}${capitalize(res.outerProp)}`;
 
-  // Detect collision: if the inner prop is already used as a variant key
-  // (e.g. from a simple boolean variant), suffix with True/False to avoid
-  // merging unrelated conditionals into the same bucket.
-  const hasInnerCollision = variantStyleKeys[res.innerProp] !== undefined;
-  const innerTruthyWhen = hasInnerCollision ? `${res.innerProp}True` : res.innerProp;
-  const innerFalsyWhen = hasInnerCollision ? `${res.innerProp}False` : `!${res.innerProp}`;
-  const innerTruthyKey = hasInnerCollision
-    ? `${decl.styleKey}${capitalize(res.innerProp)}True`
-    : `${decl.styleKey}${capitalize(res.innerProp)}`;
-  const innerFalsyKey = hasInnerCollision
-    ? `${decl.styleKey}${capitalize(res.innerProp)}False`
-    : `${decl.styleKey}Not${capitalize(res.innerProp)}`;
+  // Always suffix inner when-keys with True/False to guarantee they never
+  // collide with simple boolean variant keys that use the same prop name.
+  // The collision can happen regardless of declaration order — the compound
+  // or the boolean variant may be processed first.
+  const innerTruthyWhen = `${res.innerProp}True`;
+  const innerFalsyWhen = `${res.innerProp}False`;
+  const innerTruthyKey = `${decl.styleKey}${capitalize(res.innerProp)}True`;
+  const innerFalsyKey = `${decl.styleKey}${capitalize(res.innerProp)}False`;
 
   // Create variant buckets for each branch
   const outerBucket = { ...variantBuckets.get(res.outerProp) } as Record<string, unknown>;
