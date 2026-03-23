@@ -734,6 +734,27 @@ function mergeBaseIntoSingleStyleFn(args: {
     }
   }
 
+  // Conditional objects (pseudo/media maps like `{ default: "none", ":hover": "solid" }`)
+  // are not type-compatible inside dynamic style functions in StyleX.  If the static
+  // styleObj contains any such values, bail — keep static and dynamic styles separate
+  // so the conditional properties are emitted in a static style key.
+  const hasConditionalValue = Object.keys(styleObj).some((k) => {
+    if (k.startsWith("__")) {
+      return false;
+    }
+    const v = styleObj[k];
+    return (
+      v !== null &&
+      typeof v === "object" &&
+      !isAstNode(v) &&
+      !Array.isArray(v) &&
+      "default" in (v as Record<string, unknown>)
+    );
+  });
+  if (hasConditionalValue) {
+    return;
+  }
+
   const staticKeys = Object.keys(styleObj).filter((k) => !k.startsWith("__"));
   const overlappingKeys = new Set(staticKeys.filter((k) => existingKeys.has(k)));
 
