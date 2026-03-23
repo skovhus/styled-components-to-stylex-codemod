@@ -1109,10 +1109,13 @@ function liftFlatVariantsToPseudoMaps(variantBuckets: Map<string, Record<string,
         continue;
       }
 
-      // Find a matching compound bucket that has a pseudo/media map for the same property.
+      // Find ALL matching compound buckets that have a pseudo/media map for the same property.
       // Matching means the compound key implies the simple condition is true:
       //   - "checkedTrue" implies "checked" (3-branch synthetic suffix)
       //   - "!disabled && checked" implies "checked" (compound && condition)
+      // We must fold the flat value into every matching compound (not just the first)
+      // because multiple compound branches can reference the same simple condition.
+      let folded = false;
       for (const [compoundKey, compoundBucket] of variantBuckets.entries()) {
         if (compoundKey === simpleKey) {
           continue;
@@ -1126,13 +1129,15 @@ function liftFlatVariantsToPseudoMaps(variantBuckets: Map<string, Record<string,
         }
         // The compound bucket already carries the correct pseudo/media values
         // (e.g., ":hover": bgSelectedBorderHover). Fold the flat value into the
-        // compound bucket's default so it has the full picture, then remove the
-        // property from the simple bucket. If we instead lifted the flat value
-        // into a pseudo-map on the simple bucket, it would override the compound
-        // bucket's pseudo values when both styles are applied in the sx array.
+        // compound bucket's default so it has the full picture. If we instead
+        // lifted the flat value into a pseudo-map on the simple bucket, it would
+        // override the compound bucket's pseudo values when both styles are
+        // applied in the sx array.
         (compoundValue as Record<string, unknown>).default = flatValue;
+        folded = true;
+      }
+      if (folded) {
         delete simpleBucket[cssProp];
-        break; // one match is enough to resolve the property
       }
     }
   }
@@ -1203,10 +1208,17 @@ function cleanupEmptySimpleBucketsAndRenameVariants(
     }
 
     // Rename falsy: "checkedFalse" → "!checked"
+    // If a `!prop` bucket already exists (from another interpolation), merge into it
+    // rather than overwriting, so existing declarations are preserved.
     const negatedWhen = `!${key}`;
     const falsyBucket = variantBuckets.get(falsyWhen)!;
     variantBuckets.delete(falsyWhen);
-    variantBuckets.set(negatedWhen, falsyBucket);
+    const existingNegatedBucket = variantBuckets.get(negatedWhen);
+    if (existingNegatedBucket) {
+      Object.assign(existingNegatedBucket, falsyBucket);
+    } else {
+      variantBuckets.set(negatedWhen, falsyBucket);
+    }
     const falsyStyleKey = variantStyleKeys[falsyWhen];
     if (falsyStyleKey) {
       delete variantStyleKeys[falsyWhen];
