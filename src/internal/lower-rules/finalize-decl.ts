@@ -779,6 +779,10 @@ function mergeBaseIntoSingleStyleFn(args: {
   // The merged function now contains base properties that must come before
   // any variant overrides in the sx array.  Set sourceOrder to -1 so it
   // sorts before all variant entries (which start at 0).
+  //
+  // Safety: this won't jump ahead of other ordered entries incorrectly
+  // because the guards above ensure no extraStyleObjects (css`` helpers)
+  // exist, and only one unconditional styleFn entry is present.
   entry.sourceOrder = -1;
 
   // Clear the base styleObj so it becomes empty in resolvedStyleObjects
