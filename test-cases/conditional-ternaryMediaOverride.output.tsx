@@ -15,16 +15,17 @@ function Title(props: TitleProps) {
 type CardProps = React.PropsWithChildren<{
   checked: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLLabelElement>;
 }>;
 
 function Card(props: CardProps) {
-  const { children, checked, disabled } = props;
+  const { children, disabled, checked, ...rest } = props;
   return (
     <label
+      {...rest}
       sx={[
         styles.card,
-        disabled ? styles.cardDisabled : checked ? styles.cardCheckedTrue : styles.cardCheckedFalse,
-        checked && styles.cardChecked,
+        disabled ? styles.cardDisabled : checked ? styles.cardChecked : styles.cardNotChecked,
       ]}
     >
       {children}
@@ -78,12 +79,6 @@ const styles = stylex.create({
     borderRadius: 6,
     cursor: "pointer",
   },
-  cardChecked: {
-    borderColor: {
-      default: "#0066cc",
-      ":hover": "#0066cc",
-    },
-  },
   cardDisabled: {
     cursor: "not-allowed",
     borderColor: {
@@ -91,13 +86,13 @@ const styles = stylex.create({
       ":hover": "#ddd",
     },
   },
-  cardCheckedTrue: {
+  cardChecked: {
     borderColor: {
       default: "#0066cc",
       ":hover": "#0044aa",
     },
   },
-  cardCheckedFalse: {
+  cardNotChecked: {
     borderColor: {
       default: "#ccc",
       ":hover": "#999",

@@ -412,6 +412,12 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // Promotes flat values to pseudo-maps so StyleX merges them correctly.
   liftFlatVariantsToPseudoMaps(variantBuckets);
 
+  // When liftFlatVariantsToPseudoMaps empties a simple bucket (all its properties
+  // were subsumed by compound buckets), the True/False-suffixed variant keys can
+  // be renamed to cleaner names: "checkedTrue" → "checked", "checkedFalse" → "!checked".
+  // This also avoids emitting an empty style object for the now-vacant simple key.
+  cleanupEmptySimpleBucketsAndRenameVariants(variantBuckets, variantStyleKeys, decl);
+
   // Group enum-like variant conditions into dimensions for StyleX variants recipe pattern
   const { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip } =
     groupVariantBucketsIntoDimensions(
@@ -1097,23 +1103,15 @@ function liftFlatVariantsToPseudoMaps(variantBuckets: Map<string, Record<string,
         if (!isMediaOrPseudoMap(compoundValue)) {
           continue;
         }
-        // Promote the simple bucket's flat value to a pseudo-map by copying the
-        // condition keys (e.g., ":hover") from the compound map. The flat value
-        // becomes the "default" and each condition key gets the flat value too
-        // (the simple bucket asserts the same value across all pseudo states).
-        const liftedMap: Record<string, unknown> = { default: flatValue };
-        for (const condKey of Object.keys(compoundValue)) {
-          if (condKey !== "default" && isStyleConditionKey(condKey)) {
-            liftedMap[condKey] = flatValue;
-          }
-        }
-        simpleBucket[cssProp] = liftedMap;
-
-        // Also update the compound bucket's default to the flat value so that
-        // when only the compound bucket is applied (without the simple bucket),
-        // the correct base value is used.
-        compoundValue.default = flatValue;
-        break; // one match is enough to lift the value
+        // The compound bucket already carries the correct pseudo/media values
+        // (e.g., ":hover": bgSelectedBorderHover). Fold the flat value into the
+        // compound bucket's default so it has the full picture, then remove the
+        // property from the simple bucket. If we instead lifted the flat value
+        // into a pseudo-map on the simple bucket, it would override the compound
+        // bucket's pseudo values when both styles are applied in the sx array.
+        (compoundValue as Record<string, unknown>).default = flatValue;
+        delete simpleBucket[cssProp];
+        break; // one match is enough to resolve the property
       }
     }
   }
@@ -1138,6 +1136,79 @@ function variantKeyImpliesCondition(candidateKey: string, simpleKey: string): bo
     return true;
   }
   return false;
+}
+
+/**
+ * After `liftFlatVariantsToPseudoMaps`, some simple variant buckets may be empty
+ * (all their properties were folded into compound buckets). When this happens:
+ * 1. Delete the empty simple bucket to avoid emitting an empty style object.
+ * 2. Rename `{prop}True` → `{prop}` and `{prop}False` → `!{prop}` for cleaner
+ *    output (e.g., `cardContainerChecked` / `cardContainerNotChecked`).
+ */
+function cleanupEmptySimpleBucketsAndRenameVariants(
+  variantBuckets: Map<string, Record<string, unknown>>,
+  variantStyleKeys: Record<string, string>,
+  decl: StyledDecl,
+): void {
+  // Find simple keys whose buckets are now empty
+  for (const [key, bucket] of variantBuckets) {
+    if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(key)) {
+      continue; // not a simple key
+    }
+    if (Object.keys(bucket).length > 0) {
+      continue; // bucket still has properties
+    }
+
+    // Delete the empty bucket and its style key
+    variantBuckets.delete(key);
+    delete variantStyleKeys[key];
+
+    // Check for True/False suffixed variants to rename
+    const truthyWhen = `${key}True`;
+    const falsyWhen = `${key}False`;
+    if (!variantBuckets.has(truthyWhen) || !variantBuckets.has(falsyWhen)) {
+      continue;
+    }
+
+    // Rename truthy: "checkedTrue" → "checked"
+    const truthyBucket = variantBuckets.get(truthyWhen)!;
+    variantBuckets.delete(truthyWhen);
+    variantBuckets.set(key, truthyBucket);
+    const truthyStyleKey = variantStyleKeys[truthyWhen];
+    if (truthyStyleKey) {
+      delete variantStyleKeys[truthyWhen];
+      // Drop the "True" suffix from the style key
+      variantStyleKeys[key] = truthyStyleKey.replace(/True$/, "");
+    }
+
+    // Rename falsy: "checkedFalse" → "!checked"
+    const negatedWhen = `!${key}`;
+    const falsyBucket = variantBuckets.get(falsyWhen)!;
+    variantBuckets.delete(falsyWhen);
+    variantBuckets.set(negatedWhen, falsyBucket);
+    const falsyStyleKey = variantStyleKeys[falsyWhen];
+    if (falsyStyleKey) {
+      delete variantStyleKeys[falsyWhen];
+      // Replace "CheckedFalse" suffix with "NotChecked"
+      variantStyleKeys[negatedWhen] = styleKeyWithSuffix(decl.styleKey, negatedWhen);
+    }
+
+    // Update compoundVariants references
+    if (decl.compoundVariants) {
+      for (const cv of decl.compoundVariants) {
+        if (cv.kind === "3branch") {
+          if (cv.innerTruthyWhen === truthyWhen) {
+            cv.innerTruthyWhen = key;
+            cv.innerTruthyKey = variantStyleKeys[key] ?? cv.innerTruthyKey;
+          }
+          if (cv.innerFalsyWhen === falsyWhen) {
+            cv.innerFalsyWhen = negatedWhen;
+            cv.innerFalsyKey = variantStyleKeys[negatedWhen] ?? cv.innerFalsyKey;
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
