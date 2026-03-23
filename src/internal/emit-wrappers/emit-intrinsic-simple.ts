@@ -509,10 +509,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       isExportedComponent ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
-    // Non-exported components use slim literal types listing only actually-used
-    // props instead of the broad React.ComponentProps<"tag">.
-    // Disable when defaultAttrs reference element props (e.g. tabIndex: props.tabIndex ?? 0)
-    // because those props need to be in the type even if no callsite passes them.
+    // Non-exported components use PropsWithChildren for simple cases, but
+    // fall back to React.ComponentProps<"tag"> when many element-specific
+    // props are used (avoiding verbose Pick<> types).
     const useSlimType =
       !isExportedComponent &&
       !(d.supportsExternalStyles ?? false) &&
@@ -642,8 +641,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         for (const sbv of d.staticBooleanVariants ?? []) {
           keys.add(sbv.propName);
         }
-        // Remove synthetic compound variant when-keys (e.g. "checkedTrue",
-        // "checkedFalse") that are variantStyleKeys entries but not actual
+        // Remove synthetic compound variant when-keys (e.g. "checked",
+        // "!checked") that are variantStyleKeys entries but not actual
         // prop names.  Use syntheticOnly to preserve real prop names like the
         // outerProp of 3-branch compounds (e.g. "disabled").
         const compoundVariantWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {

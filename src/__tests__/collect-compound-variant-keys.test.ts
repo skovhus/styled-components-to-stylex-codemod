@@ -7,8 +7,10 @@ describe("collectCompoundVariantKeys", () => {
     outerProp: "disabled",
     outerTruthyKey: "cardContainerDisabled",
     innerProp: "checked",
-    innerTruthyKey: "cardContainerCheckedTrue",
-    innerFalsyKey: "cardContainerCheckedFalse",
+    innerTruthyKey: "cardContainerChecked",
+    innerFalsyKey: "cardContainerNotChecked",
+    innerTruthyWhen: "checked",
+    innerFalsyWhen: "!checked",
   };
 
   const fourBranch = {
@@ -23,13 +25,13 @@ describe("collectCompoundVariantKeys", () => {
 
   it("returns all when-keys by default", () => {
     const keys = collectCompoundVariantKeys([threeBranch]);
-    expect(keys).toEqual(new Set(["disabled", "checkedTrue", "checkedFalse"]));
+    expect(keys).toEqual(new Set(["disabled", "checked", "!checked"]));
   });
 
   it("returns only synthetic when-keys with syntheticOnly for 3-branch", () => {
     const keys = collectCompoundVariantKeys([threeBranch], { syntheticOnly: true });
     // "disabled" is a real prop name and must NOT be included
-    expect(keys).toEqual(new Set(["checkedTrue", "checkedFalse"]));
+    expect(keys).toEqual(new Set(["checked", "!checked"]));
     expect(keys.has("disabled")).toBe(false);
   });
 
@@ -51,7 +53,7 @@ describe("collectCompoundVariantKeys", () => {
     const keys = collectCompoundVariantKeys([threeBranch, fourBranch], { syntheticOnly: true });
     // "disabled" must not be present (it's a real prop from 3-branch)
     expect(keys.has("disabled")).toBe(false);
-    expect(keys.has("checkedTrue")).toBe(true);
+    expect(keys.has("checked")).toBe(true);
     expect(keys.has("active_highlighted")).toBe(true);
   });
 });

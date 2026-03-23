@@ -53,19 +53,9 @@ export default [
     // Dynamic style function parameters: the rule cannot validate runtime
     // values passed as arrow-function params in stylex.create().
     files: [
-      "test-cases/conditional-nullishCoalescing.output.tsx",
-      "test-cases/conditional-runtimeCallBranch.output.tsx",
-      "test-cases/conditional-runtimeCallLocal.output.tsx",
       "test-cases/helper-callPropArg.output.tsx",
-      "test-cases/helper-memberCalleeMultiArg.output.tsx",
-      "test-cases/interpolation-destructuredDefaults.output.tsx",
-      "test-cases/interpolation-destructuredRename.output.tsx",
-      "test-cases/keyframes-unionComplexity.output.tsx",
-      "test-cases/mixin-dynamicArgDefault.output.tsx",
-      "test-cases/selector-componentDynamicProp.output.tsx",
       "test-cases/selector-dynamicPseudoElement.output.tsx",
       "test-cases/theme-indexedLookupPropFallback.output.tsx",
-      "test-cases/transientProp-memberExpression.output.tsx",
     ],
     rules: { "stylex/valid-styles": "off" },
   },

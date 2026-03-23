@@ -8,11 +8,7 @@ type SwatchProps = React.PropsWithChildren<{
 
 function Swatch(props: SwatchProps) {
   const { children, color } = props;
-  return (
-    <div sx={[styles.swatch, styles.swatchBackgroundColor(color), styles.swatchBoxShadow(props)]}>
-      {children}
-    </div>
-  );
+  return <div sx={[styles.swatch(color), styles.swatchBoxShadow(props)]}>{children}</div>;
 }
 
 export function App() {
@@ -26,14 +22,12 @@ export function App() {
 }
 
 const styles = stylex.create({
-  swatch: {
+  swatch: (backgroundColor: string) => ({
     width: 60,
     height: 60,
     borderRadius: 8,
     cursor: "pointer",
     transition: "box-shadow 0.2s",
-  },
-  swatchBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
   swatchBoxShadow: (props: SwatchProps) => ({

@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { LinkMarker } from "./selector-componentSiblingCombinator.input.stylex";
 
-function Link(props: Pick<React.ComponentProps<"a">, "children" | "href">) {
+function Link(props: React.ComponentProps<"a">) {
   const { children, ...rest } = props;
   return (
     <a {...rest} sx={[styles.link, LinkMarker, stylex.defaultMarker()]}>

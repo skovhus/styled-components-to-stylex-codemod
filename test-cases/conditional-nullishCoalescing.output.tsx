@@ -18,15 +18,7 @@ type FadeBoxProps = React.PropsWithChildren<{
 // Nullish coalescing with numeric fallback and unit suffix
 function FadeBox(props: FadeBoxProps) {
   const { children, delay } = props;
-  return (
-    <div
-      sx={styles.fadeBox({
-        transitionDelay: `${delay ?? 0}ms`,
-      })}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={styles.fadeBox(`${delay ?? 0}ms`)}>{children}</div>;
 }
 
 export const App = () => (
@@ -51,10 +43,10 @@ const styles = stylex.create({
   dividerBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-  fadeBox: (props: { transitionDelay: string }) => ({
+  fadeBox: (transitionDelay: string) => ({
     transitionProperty: "opacity",
     transitionDuration: "200ms",
     transitionTimingFunction: "ease-out",
-    transitionDelay: props.transitionDelay,
+    transitionDelay,
   }),
 });

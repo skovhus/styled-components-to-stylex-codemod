@@ -5,19 +5,21 @@ import { $colors } from "./tokens.stylex";
 type CardContainerProps = React.PropsWithChildren<{
   checked: boolean;
   disabled?: boolean;
+  ref?: React.Ref<HTMLLabelElement>;
 }>;
 
 function CardContainer(props: CardContainerProps) {
-  const { children, disabled, checked } = props;
+  const { children, disabled, checked, ...rest } = props;
   return (
     <label
+      {...rest}
       sx={[
         styles.cardContainer,
         disabled
           ? styles.cardContainerDisabled
           : checked
-            ? styles.cardContainerCheckedTrue
-            : styles.cardContainerCheckedFalse,
+            ? styles.cardContainerChecked
+            : styles.cardContainerNotChecked,
       ]}
     >
       {children}
@@ -66,13 +68,13 @@ const styles = stylex.create({
       ":hover": $colors.bgBase,
     },
   },
-  cardContainerCheckedTrue: {
+  cardContainerChecked: {
     borderColor: {
       default: $colors.bgSub,
       ":hover": $colors.bgSub,
     },
   },
-  cardContainerCheckedFalse: {
+  cardContainerNotChecked: {
     borderColor: {
       default: $colors.bgSub,
       ":hover": $colors.bgBase,

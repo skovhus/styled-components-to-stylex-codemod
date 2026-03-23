@@ -15,11 +15,7 @@ function Row(props: RowProps) {
   const theme = useTheme();
 
   return (
-    <div
-      sx={styles.row({
-        backgroundColor: props.isHighlighted ? getRowHighlightColor(theme.isDark) : "transparent",
-      })}
-    >
+    <div sx={styles.row(props.isHighlighted ? getRowHighlightColor(theme.isDark) : "transparent")}>
       {children}
     </div>
   );
@@ -33,9 +29,9 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  row: (props: { backgroundColor: string }) => ({
+  row: (backgroundColor: string) => ({
     paddingBlock: 8,
     paddingInline: 16,
-    backgroundColor: props.backgroundColor,
+    backgroundColor,
   }),
 });

@@ -1,12 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function MenuDiv(
-  props: { "data-highlighted"?: boolean | string } & Pick<
-    React.ComponentProps<"div">,
-    "children" | "tabIndex"
-  >,
-) {
+function MenuDiv(props: React.ComponentProps<"div">) {
   const { children, ...rest } = props;
   return (
     <div {...rest} sx={styles.menuDiv}>
@@ -15,12 +10,7 @@ function MenuDiv(
   );
 }
 
-function InteractiveBox(
-  props: {
-    "data-muted"?: boolean | string;
-    "data-no-outline"?: boolean | string;
-  } & Pick<React.ComponentProps<"div">, "children" | "tabIndex">,
-) {
+function InteractiveBox(props: React.ComponentProps<"div">) {
   const { children, ...rest } = props;
   return (
     <div {...rest} sx={styles.interactiveBox}>

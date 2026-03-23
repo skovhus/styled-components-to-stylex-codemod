@@ -15,7 +15,7 @@ type BoxProps = React.PropsWithChildren<{
 export function Box(props: BoxProps) {
   const { children, shadow, ...rest } = props;
   return (
-    <div {...rest} sx={[styles.box, styles.boxBoxShadow(shadow)]}>
+    <div {...rest} sx={styles.box(shadow)}>
       {children}
     </div>
   );
@@ -24,11 +24,9 @@ export function Box(props: BoxProps) {
 export const App = () => <Box shadow="rgba(0,0,0,0.2)" />;
 
 const styles = stylex.create({
-  box: {
+  box: (boxShadow: string) => ({
     height: 50,
     width: 50,
-  },
-  boxBoxShadow: (boxShadow: string) => ({
     boxShadow: shadow(boxShadow),
   }),
 });

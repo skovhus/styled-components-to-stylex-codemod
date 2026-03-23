@@ -4,18 +4,12 @@ import { mergedSx } from "./lib/mergedSx";
 import { transitionSpeed } from "./tokens.stylex";
 import "./cssVariable-basic.css";
 
-type AnimatedPathProps = { width: number } & Pick<
-  React.ComponentProps<"path">,
-  "style" | "children" | "d"
->;
+type AnimatedPathProps = { width: number } & React.ComponentProps<"path">;
 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, width, ...rest } = props;
   return (
-    <path
-      {...rest}
-      {...mergedSx([styles.animatedPath, styles.animatedPathStrokeWidth(width)], undefined, style)}
-    >
+    <path {...rest} {...mergedSx(styles.animatedPath(width), undefined, style)}>
       {children}
     </path>
   );
@@ -48,13 +42,11 @@ export const App = () => {
 };
 
 const styles = stylex.create({
-  animatedPath: {
+  animatedPath: (strokeWidth: number) => ({
     transitionProperty: "opacity",
     transitionDuration: transitionSpeed.slow,
     stroke: "#bf4f74",
     fill: "none",
-  },
-  animatedPathStrokeWidth: (strokeWidth: number) => ({
     strokeWidth: `${strokeWidth}px`,
   }),
 });

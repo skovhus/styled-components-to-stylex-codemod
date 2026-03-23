@@ -923,6 +923,7 @@ export class WrapperEmitter {
       includeRef,
       forceNarrow,
     } = args;
+
     const used = this.getUsedAttrs(d.localName);
     const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
 
@@ -1018,7 +1019,13 @@ export class WrapperEmitter {
       const narrowResult = this.joinIntersection(literal, pickExpr);
       // When forceNarrow is set, return without children — the caller wraps
       // with PropsWithChildren after merging all type parts.
+      // However, when the Pick would list many element-specific attrs
+      // (onClick, onKeyDown, etc.), use the broad ComponentProps instead
+      // to avoid verbose, brittle types.
       if (forceNarrow) {
+        if (hasElementSpecificPicks) {
+          return intrinsicBase;
+        }
         return narrowResult;
       }
       if (VOID_TAGS.has(tagName)) {

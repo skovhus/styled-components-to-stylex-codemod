@@ -5,13 +5,8 @@ import { ColorConverter } from "./lib/helpers";
 
 function Toggle(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
-
   return (
-    <div
-      sx={styles.toggle({
-        backgroundColor: ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4),
-      })}
-    >
+    <div sx={styles.toggle(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4))}>
       {props.children}
     </div>
   );
@@ -45,10 +40,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  toggle: (props: { backgroundColor: string }) => ({
+  toggle: (backgroundColor: string) => ({
     paddingBlock: 8,
     paddingInline: 16,
-    backgroundColor: props.backgroundColor,
+    backgroundColor,
   }),
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
