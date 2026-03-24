@@ -12,6 +12,7 @@ import type {
   ResolveValueDirectionalResult,
   ResolveValueResult,
 } from "../adapter.js";
+import { setUseLogicalProperties } from "./css-prop-mapping.js";
 import { assertValidAdapter } from "./public-api-validation.js";
 import type { WarningLog } from "./logger.js";
 import { parseExpr as parseExprImpl } from "./transform-parse-expr.js";
@@ -123,6 +124,8 @@ export class TransformContext {
       adapter,
       "transform(options) - missing `adapter` (if you run the jscodeshift transform directly, pass options.adapter)",
     );
+
+    setUseLogicalProperties(adapter.useLogicalProperties ?? false);
 
     const resolverImports = new Map<string, ImportSpec>();
     const {

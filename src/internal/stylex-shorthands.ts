@@ -110,8 +110,16 @@ export function splitDirectionalProperty(args: {
   important?: boolean;
   preferInline?: boolean;
   alwaysExpand?: boolean;
+  useLogical?: boolean;
 }): DirectionalEntry[] {
-  const { prop, rawValue, important = false, preferInline = false, alwaysExpand = false } = args;
+  const {
+    prop,
+    rawValue,
+    important = false,
+    preferInline = false,
+    alwaysExpand = false,
+    useLogical = false,
+  } = args;
   const values = splitDirectionalShorthands(rawValue, false);
   const top = values[0] ?? "";
   const right = values[1] ?? top;
@@ -135,6 +143,12 @@ export function splitDirectionalProperty(args: {
   }
 
   if (values.length === 2) {
+    if (useLogical) {
+      return [
+        { prop: `${prop}Block`, value: withImportant(top) },
+        { prop: `${prop}Inline`, value: withImportant(right) },
+      ];
+    }
     return [
       { prop: `${prop}Top`, value: withImportant(top) },
       { prop: `${prop}Right`, value: withImportant(right) },

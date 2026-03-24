@@ -6,9 +6,20 @@ import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
 
-export { isCssShorthandProperty };
+export { isCssShorthandProperty, setUseLogicalProperties, getUseLogicalProperties };
 
 type StylexPropDecl = { prop: string; value: CssValue };
+
+/** Module-level flag controlling whether 2-value shorthand expansion uses logical properties. */
+let useLogicalProperties = false;
+
+function setUseLogicalProperties(value: boolean): void {
+  useLogicalProperties = value;
+}
+
+function getUseLogicalProperties(): boolean {
+  return useLogicalProperties;
+}
 
 type DirectionalProp = "padding" | "margin" | "scrollMargin" | "scrollPadding";
 
@@ -136,6 +147,7 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
       prop: directionalProp,
       rawValue: decl.valueRaw.trim(),
       important: decl.important,
+      useLogical: useLogicalProperties,
     });
     if (entries.length > 0) {
       return entries.map((entry) => ({

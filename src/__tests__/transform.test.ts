@@ -4069,6 +4069,54 @@ export const App = () => <Input />;
   });
 });
 
+describe("useLogicalProperties adapter option", () => {
+  it("should expand 2-value padding to logical properties when enabled", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px 8px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: { ...fixtureAdapter, useLogicalProperties: true } },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    expect(result.code).not.toContain("paddingTop");
+    expect(result.code).not.toContain("paddingRight");
+  });
+
+  it("should expand 2-value padding to physical properties when disabled (default)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px 8px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+    expect(result.code).not.toContain("paddingBlock");
+    expect(result.code).not.toContain("paddingInline");
+  });
+});
+
 describe("forwardedAs prop handling", () => {
   it("should preserve forwardedAs on wrapper callsites for styled(styled.tag) chains", () => {
     // In styled-components wrapper chains, `forwardedAs` does not behave like a direct `as`

@@ -723,6 +723,18 @@ export interface Adapter {
    *
    */
   useSxProp: boolean;
+
+  /**
+   * Use CSS logical properties (`paddingBlock`/`paddingInline`) instead of physical
+   * properties (`paddingTop`/`paddingRight`/`paddingBottom`/`paddingLeft`) when expanding
+   * 2-value CSS shorthands like `padding: 4px 8px`.
+   *
+   * Enable this for codebases that support RTL (right-to-left) layouts, where logical
+   * properties automatically adapt to the writing direction.
+   *
+   * @default false
+   */
+  useLogicalProperties?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -756,6 +768,7 @@ export interface AdapterInput {
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
+  useLogicalProperties?: Adapter["useLogicalProperties"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -823,6 +836,9 @@ export interface AdapterInput {
  *
  *     // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
  *     useSxProp: false,
+ *
+ *     // Use logical properties (paddingBlock/paddingInline) for 2-value shorthands (RTL support)
+ *     useLogicalProperties: false,
  *
  *     // Optional: customize runtime theme hook import/call used by emitted wrappers
  *     themeHook: {
