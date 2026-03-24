@@ -564,21 +564,9 @@ export const fixtureAdapter = defineAdapter({
     return undefined;
   },
   resolveThemeCall(ctx) {
-    // Resolve theme.highlightVariant(theme.color.X) → $colors.X
+    // Preserve theme.highlightVariant() calls at runtime — the highlight variant
+    // computes a color adjustment that can't be expressed statically.
     if (ctx.methodName === "highlightVariant") {
-      const arg0 = ctx.args[0];
-      if (arg0?.kind === "theme" && arg0.path.startsWith("color.")) {
-        const key = arg0.path.slice("color.".length);
-        return {
-          expr: `$colors.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "$colors" }],
-            },
-          ],
-        };
-      }
       return { preserveRuntimeCall: true };
     }
     return undefined;

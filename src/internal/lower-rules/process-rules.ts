@@ -42,6 +42,7 @@ import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
+import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -1380,7 +1381,10 @@ function processDeclarationsIntoBucket(
   decl: { templateExpressions: unknown[] },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
-  options?: { bailOnUnresolved?: boolean },
+  options?: {
+    bailOnUnresolved?: boolean;
+    callResolver?: Parameters<typeof resolveAllSlots>[4];
+  },
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
   for (const d of rule.declarations) {
@@ -1392,6 +1396,7 @@ function processDeclarationsIntoBucket(
       resolveThemeValue,
       resolveThemeValueFromFn,
       writtenProps,
+      options?.callResolver,
     );
     if (result === "written" || result === "skip") {
       continue;
@@ -1418,6 +1423,7 @@ function writeResolvedDeclaration(
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   writtenProps: Set<string>,
+  callResolver?: Parameters<typeof resolveAllSlots>[4],
 ): "written" | "skip" | "unresolved" {
   if (d.value.kind === "static") {
     for (const out of cssDeclarationToStylexDeclarations(d)) {
@@ -1434,7 +1440,13 @@ function writeResolvedDeclaration(
     return "skip";
   }
 
-  const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
+  const resolveResult = resolveAllSlots(
+    d,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    callResolver,
+  );
   if (!resolveResult || resolveResult === "bail") {
     return "unresolved";
   }
@@ -1454,14 +1466,25 @@ function writeResolvedDeclaration(
  * Resolves all interpolation slots in a declaration to theme AST nodes.
  * Returns a resolver function `(slotId) => astNode`, or `"bail"` if any
  * slot can't be resolved, or `null` if no slots are found.
+ *
+ * When `callResolver` is provided, imported function calls like `colorCSS("labelMuted")`
+ * are resolved via the adapter's `resolveCall` before falling back to theme resolution.
  */
 function resolveAllSlots(
   d: {
     value: { kind: string; parts?: Array<{ kind: string; slotId?: number }> };
+    property?: string;
   },
   decl: { templateExpressions: unknown[] },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
+  callResolver?: {
+    resolveCall: DeclProcessingState["state"]["resolveCall"];
+    resolveImportInScope: DeclProcessingState["state"]["resolveImportInScope"];
+    parseExpr: DeclProcessingState["state"]["parseExpr"];
+    resolverImports: DeclProcessingState["state"]["resolverImports"];
+    filePath: string;
+  },
 ): ((slotId: number) => unknown) | "bail" | null {
   const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
   if (!parts) {
@@ -1478,19 +1501,77 @@ function resolveAllSlots(
       continue;
     }
     const expr = decl.templateExpressions[slotId] as unknown;
-    const resolved =
+    let resolved: unknown = null;
+
+    if (
       expr &&
       typeof expr === "object" &&
       ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
         (expr as { type?: string }).type === "FunctionExpression")
-        ? resolveThemeValueFromFn(expr)
-        : resolveThemeValue(expr);
+    ) {
+      resolved = resolveThemeValueFromFn(expr);
+    } else if (
+      callResolver &&
+      expr &&
+      typeof expr === "object" &&
+      (expr as { type?: string }).type === "CallExpression"
+    ) {
+      // Try resolving imported function calls (e.g., colorCSS("labelMuted"), transitionSpeed("fast"))
+      resolved = tryResolveCallExprInSlot(expr, d.property, callResolver);
+      if (!resolved) {
+        resolved = resolveThemeValue(expr);
+      }
+    } else {
+      resolved = resolveThemeValue(expr);
+    }
+
     if (!resolved) {
       return "bail";
     }
     resolvedBySlotId.set(slotId, resolved);
   }
   return (slotId: number) => resolvedBySlotId.get(slotId);
+}
+
+/**
+ * Tries to resolve a CallExpression in a slot via the adapter's resolveCall.
+ * Returns a parsed AST node if successful, null otherwise.
+ */
+function tryResolveCallExprInSlot(
+  expr: unknown,
+  cssProperty: string | undefined,
+  resolver: NonNullable<Parameters<typeof resolveAllSlots>[4]>,
+): unknown {
+  const callExpr = expr as { callee?: unknown; arguments?: unknown[] };
+  if (!callExpr.callee) {
+    return null;
+  }
+  const calleeInfo = extractRootAndPath(callExpr.callee);
+  if (!calleeInfo) {
+    return null;
+  }
+  const imp = resolver.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
+  if (!imp) {
+    return null;
+  }
+  const args = callArgsFromNode(callExpr.arguments);
+  const loc = (callExpr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
+  const result = resolver.resolveCall({
+    callSiteFilePath: resolver.filePath,
+    calleeImportedName: imp.importedName,
+    calleeSource: imp.source,
+    args,
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
+    ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+    ...(cssProperty ? { cssProperty } : {}),
+  });
+  if (!result || !("expr" in result) || !isAdapterResultCssValue(result, cssProperty)) {
+    return null;
+  }
+  if (result.imports) {
+    registerImports(result.imports, resolver.resolverImports);
+  }
+  return resolver.parseExpr(result.expr);
 }
 
 /**
@@ -1878,7 +1959,13 @@ function handlePseudoExpand(
   ctx: DeclProcessingState,
   prefixPseudo?: string | null,
 ): "bail" | void {
-  const prepared = preparePseudoBucket(rule, ctx);
+  // Try strict resolution first. If it fails, retry with partial resolution
+  // to allow unresolvable declarations (e.g., prop conditionals with theme method calls)
+  // to be silently dropped while resolvable ones proceed.
+  let prepared = preparePseudoBucket(rule, ctx);
+  if (prepared === "bail") {
+    prepared = preparePseudoBucket(rule, ctx, { allowPartial: true });
+  }
   if (prepared === "bail") {
     return "bail";
   }
@@ -1981,13 +2068,31 @@ function handlePseudoExpand(
 function preparePseudoBucket(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
+  options?: { allowPartial?: boolean },
 ): { flatBucket: Record<string, unknown>; guard?: { when: string } } | "bail" {
   if (rule.atRuleStack.length > 0) {
     return "bail";
   }
 
   const { state, decl } = ctx;
-  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+  const {
+    j,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    resolveCall,
+    resolveImportInScope,
+    parseExpr,
+    resolverImports,
+    filePath,
+  } = state;
+
+  const callResolver: Parameters<typeof resolveAllSlots>[4] = {
+    resolveCall,
+    resolveImportInScope,
+    parseExpr,
+    resolverImports,
+    filePath,
+  };
 
   const flatBucket: Record<string, unknown> = {};
   const writeResult = processDeclarationsIntoBucket(
@@ -1997,7 +2102,7 @@ function preparePseudoBucket(
     decl,
     resolveThemeValue,
     resolveThemeValueFromFn,
-    { bailOnUnresolved: true },
+    { bailOnUnresolved: !options?.allowPartial, callResolver },
   );
   if (writeResult === "bail") {
     return "bail";

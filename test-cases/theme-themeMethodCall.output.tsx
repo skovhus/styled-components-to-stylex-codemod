@@ -1,20 +1,30 @@
 // Theme method call resolution via adapter resolveThemeCall
 import * as React from "react";
+import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
+
+function HighlightBox(props: React.PropsWithChildren<{}>) {
+  const theme = useTheme();
+
+  return (
+    <div sx={styles.highlightBox(theme.highlightVariant(theme.color.bgBorderSolid))}>
+      {props.children}
+    </div>
+  );
+}
 
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
-      <div sx={styles.highlightBox}>Highlight box</div>
+      <HighlightBox>Highlight box</HighlightBox>
     </div>
   );
 }
 
 const styles = stylex.create({
-  highlightBox: {
+  highlightBox: (backgroundColor: string) => ({
     padding: 16,
-    backgroundColor: $colors.bgBorderSolid,
     color: "#333",
-  },
+    backgroundColor,
+  }),
 });

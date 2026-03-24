@@ -219,22 +219,24 @@ export function createLowerRulesState(ctx: TransformContext) {
     },
   );
 
+  const { resolveImportInScope, resolveImportForExpr } = createImportResolver({
+    root,
+    j,
+    importMap,
+  });
+
   const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
     importMap,
     filePath,
     resolveValue,
+    resolveCall,
+    resolveImportInScope,
     resolveSelector,
     parseExpr,
     resolverImports,
     warnings,
     keyframesNames,
     j,
-  });
-
-  const { resolveImportInScope, resolveImportForExpr } = createImportResolver({
-    root,
-    j,
-    importMap,
   });
 
   const enumValueMap = buildEnumValueMap(root, j);
