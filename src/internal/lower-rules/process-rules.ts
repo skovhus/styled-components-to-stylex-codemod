@@ -1911,13 +1911,7 @@ function handlePseudoExpand(
   ctx: DeclProcessingState,
   prefixPseudo?: string | null,
 ): "bail" | void {
-  // Try strict resolution first. If it fails, retry with partial resolution
-  // to allow unresolvable declarations (e.g., prop conditionals with theme method calls)
-  // to be silently dropped while resolvable ones proceed.
-  let prepared = preparePseudoBucket(rule, ctx);
-  if (prepared === "bail") {
-    prepared = preparePseudoBucket(rule, ctx, { allowPartial: true });
-  }
+  const prepared = preparePseudoBucket(rule, ctx);
   if (prepared === "bail") {
     return "bail";
   }
@@ -2020,7 +2014,6 @@ function handlePseudoExpand(
 function preparePseudoBucket(
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
-  options?: { allowPartial?: boolean },
 ): { flatBucket: Record<string, unknown>; guard?: { when: string } } | "bail" {
   if (rule.atRuleStack.length > 0) {
     return "bail";
@@ -2054,7 +2047,7 @@ function preparePseudoBucket(
     decl,
     resolveThemeValue,
     resolveThemeValueFromFn,
-    { bailOnUnresolved: !options?.allowPartial, callResolver },
+    { bailOnUnresolved: true, callResolver },
   );
   if (writeResult === "bail") {
     return "bail";
