@@ -9,7 +9,6 @@ import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
-import { splitDirectionalProperty } from "./stylex-shorthands.js";
 
 /**
  * CSS shorthands that must NEVER appear as property names in stylex.create() output.
@@ -1006,26 +1005,18 @@ function expandShorthandInStyle(
   // Build the replacement entries
   let replacements: Array<{ prop: string; value: unknown }>;
   if (useLogical) {
-    // Use splitDirectionalProperty to correctly parse multi-value shorthands
-    // into block/inline components (e.g., "8px 12px" → block: "8px", inline: "12px")
-    const prop = shorthand as "margin" | "padding" | "scrollMargin" | "scrollPadding";
-    const entries = splitDirectionalProperty({
-      prop,
-      rawValue: typeof value === "number" ? String(value) : value,
-    });
-    if (entries.length === 1 && entries[0]!.prop === shorthand) {
-      // Single value — expand to both block and inline with same value
-      replacements = [
-        { prop: `${shorthand}Block`, value },
-        { prop: `${shorthand}Inline`, value },
-      ];
-    } else {
-      // splitDirectionalProperty already split into logical (block/inline) or physical
-      replacements = entries.map((entry) => ({
-        prop: entry.prop,
-        value: typeof value === "number" ? value : entry.value,
-      }));
-    }
+    // Expand to logical longhands (block/inline) to match existing logical properties
+    // in other style objects. Parse multi-value shorthands directly rather than using
+    // splitDirectionalProperty (which returns physical longhands).
+    const rawStr = typeof value === "number" ? String(value) : value;
+    const tokens = rawStr.trim().split(/\s+/);
+    const block = tokens[0] ?? rawStr;
+    const inline = tokens[1] ?? block;
+    const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
+    replacements = [
+      { prop: `${shorthand}Block`, value: numOrStr(block) },
+      { prop: `${shorthand}Inline`, value: numOrStr(inline) },
+    ];
   } else {
     // Physical conflict: always expand to 4 physical longhands (top/right/bottom/left).
     // Parse the value to extract quad values (CSS shorthand notation: 1→all, 2→TB/LR,
