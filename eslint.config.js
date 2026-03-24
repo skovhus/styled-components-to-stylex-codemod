@@ -80,6 +80,12 @@ export default [
     rules: { "stylex/valid-styles": "off" },
   },
   {
+    // Compound pseudo selectors: the rule doesn't recognize compound pseudos
+    // like ":not(:disabled):active" as valid conditional style keys.
+    files: ["test-cases/selector-pseudoExpand.output.tsx"],
+    rules: { "stylex/valid-styles": "off" },
+  },
+  {
     // Numeric outlineOffset/strokeDasharray: rule rejects bare numbers
     // (e.g. outlineOffset: 2) that are valid CSS unitless values.
     files: [

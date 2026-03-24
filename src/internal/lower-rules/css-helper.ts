@@ -34,6 +34,8 @@ import {
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  tryResolveAdapterCall,
+  type AdapterCallResolver,
   type ResolvedMedia,
 } from "./utils.js";
 
@@ -96,6 +98,8 @@ export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
+  resolveCall?: AdapterCallResolver["resolveCall"];
+  resolveImportInScope?: AdapterCallResolver["resolveImportInScope"];
   resolveSelector?: Adapter["resolveSelector"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
@@ -116,6 +120,17 @@ export function createCssHelperResolver(args: {
   } | null;
 } {
   const { importMap, filePath, resolveValue, parseExpr, resolverImports, warnings } = args;
+
+  const adapterCallResolver: AdapterCallResolver | null =
+    args.resolveCall && args.resolveImportInScope
+      ? {
+          resolveCall: args.resolveCall,
+          resolveImportInScope: args.resolveImportInScope,
+          parseExpr,
+          resolverImports,
+          filePath,
+        }
+      : null;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
     if (!expr || expr.type !== "TaggedTemplateExpression") {
@@ -520,6 +535,37 @@ export function createCssHelperResolver(args: {
         }
         const exprLoc = (expr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
         if (hasCallExpressionInExpr(expr)) {
+          // Try resolving imported function calls via the adapter before bailing.
+          // This handles patterns like colorCSS("labelMuted") inside conditional css blocks.
+          const callResolved =
+            adapterCallResolver && tryResolveAdapterCall(expr, d.property, adapterCallResolver);
+          if (callResolved) {
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              if (hasStaticParts) {
+                const { prefix, suffix } = extractPrefixSuffix(parts);
+                const wrappedExpr = wrapExprWithStaticParts(
+                  callResolved.exprString,
+                  prefix,
+                  suffix,
+                );
+                const templateAst = parseExpr(wrappedExpr);
+                if (templateAst) {
+                  (target as any)[mapped.prop] = mergeIntoContext(
+                    templateAst,
+                    mapped.prop,
+                    target as any,
+                  ) as any;
+                }
+              } else {
+                (target as any)[mapped.prop] = mergeIntoContext(
+                  callResolved.ast,
+                  mapped.prop,
+                  target as any,
+                ) as any;
+              }
+            }
+            continue;
+          }
           return bail(
             "Conditional `css` block: failed to parse expression",
             { property: d.property },

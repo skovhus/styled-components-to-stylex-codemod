@@ -58,6 +58,8 @@ import {
   isSupportedAtRule,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  tryResolveAdapterCall,
+  type AdapterCallResolver,
 } from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
@@ -244,11 +246,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo) {
-        // Only handle the simple case: selector is exactly `&:__SC_EXPR_N__`
-        // (the entire pseudo-class is a single interpolation).
+        // Handle interpolated pseudo selectors like `&:${highlight}`.
+        // Also supports prefix pseudo-classes before the interpolation,
+        // e.g., `&:not(:disabled):${highlight}` → prefixPseudo = ":not(:disabled)".
+        // Limitation: the `\([^)]*\)` group does not handle nested parentheses,
+        // so patterns like `&:not(:nth-child(2n+1)):${expr}` won't match.
         // Uses `selectorForAnalysis` so that `&&:${expr}` (specificity hack) is accepted
         // after being normalized to `&:__SC_EXPR_N__`.
-        const pseudoSlotMatch = selectorForAnalysis.match(/^&:__SC_EXPR_(\d+)__\s*$/);
+        const pseudoSlotMatch = selectorForAnalysis.match(
+          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
+        );
         if (!pseudoSlotMatch) {
           state.markBail();
           warnings.push({
@@ -259,10 +266,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        const pseudoSlotId = Number(pseudoSlotMatch[1]);
+        const prefixPseudo = pseudoSlotMatch[1] || null; // e.g. ":not(:disabled)" or null
+        const pseudoSlotId = Number(pseudoSlotMatch[2]);
         const pseudoSlotExpr = decl.templateExpressions[pseudoSlotId];
 
-        const pseudoResolved = tryResolveInterpolatedPseudo(pseudoSlotExpr, rule, ctx);
+        const pseudoResolved = tryResolveInterpolatedPseudo(
+          pseudoSlotExpr,
+          rule,
+          ctx,
+          prefixPseudo,
+        );
 
         if (pseudoResolved === "bail") {
           state.markBail();
@@ -1256,7 +1269,11 @@ function tryForwardCssVarBridge(
   overrideStyleKey: string,
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
-  parentInlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>,
+  parentInlineStyleProps: Array<{
+    prop: string;
+    expr: ExpressionKind;
+    jsxProp?: string;
+  }>,
   ancestorPseudo: string | null,
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
@@ -1365,7 +1382,10 @@ function processDeclarationsIntoBucket(
   decl: { templateExpressions: unknown[] },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
-  options?: { bailOnUnresolved?: boolean },
+  options?: {
+    bailOnUnresolved?: boolean;
+    callResolver?: AdapterCallResolver;
+  },
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
   for (const d of rule.declarations) {
@@ -1377,6 +1397,7 @@ function processDeclarationsIntoBucket(
       resolveThemeValue,
       resolveThemeValueFromFn,
       writtenProps,
+      options?.callResolver,
     );
     if (result === "written" || result === "skip") {
       continue;
@@ -1403,6 +1424,7 @@ function writeResolvedDeclaration(
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   writtenProps: Set<string>,
+  callResolver?: AdapterCallResolver,
 ): "written" | "skip" | "unresolved" {
   if (d.value.kind === "static") {
     for (const out of cssDeclarationToStylexDeclarations(d)) {
@@ -1419,7 +1441,13 @@ function writeResolvedDeclaration(
     return "skip";
   }
 
-  const resolveResult = resolveAllSlots(d, decl, resolveThemeValue, resolveThemeValueFromFn);
+  const resolveResult = resolveAllSlots(
+    d,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    callResolver,
+  );
   if (!resolveResult || resolveResult === "bail") {
     return "unresolved";
   }
@@ -1439,14 +1467,19 @@ function writeResolvedDeclaration(
  * Resolves all interpolation slots in a declaration to theme AST nodes.
  * Returns a resolver function `(slotId) => astNode`, or `"bail"` if any
  * slot can't be resolved, or `null` if no slots are found.
+ *
+ * When `callResolver` is provided, imported function calls like `colorCSS("labelMuted")`
+ * are resolved via the adapter's `resolveCall` before falling back to theme resolution.
  */
 function resolveAllSlots(
   d: {
     value: { kind: string; parts?: Array<{ kind: string; slotId?: number }> };
+    property?: string;
   },
   decl: { templateExpressions: unknown[] },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
+  callResolver?: AdapterCallResolver,
 ): ((slotId: number) => unknown) | "bail" | null {
   const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
   if (!parts) {
@@ -1463,13 +1496,28 @@ function resolveAllSlots(
       continue;
     }
     const expr = decl.templateExpressions[slotId] as unknown;
-    const resolved =
+    let resolved: unknown = null;
+
+    if (
       expr &&
       typeof expr === "object" &&
       ((expr as { type?: string }).type === "ArrowFunctionExpression" ||
         (expr as { type?: string }).type === "FunctionExpression")
-        ? resolveThemeValueFromFn(expr)
-        : resolveThemeValue(expr);
+    ) {
+      resolved = resolveThemeValueFromFn(expr);
+    } else if (
+      callResolver &&
+      expr &&
+      typeof expr === "object" &&
+      (expr as { type?: string }).type === "CallExpression"
+    ) {
+      // Try resolving imported function calls (e.g., colorCSS("labelMuted"), transitionSpeed("fast"))
+      const callResult = tryResolveAdapterCall(expr, d.property, callResolver);
+      resolved = callResult?.ast ?? resolveThemeValue(expr);
+    } else {
+      resolved = resolveThemeValue(expr);
+    }
+
     if (!resolved) {
       return "bail";
     }
@@ -1736,6 +1784,7 @@ function tryResolveInterpolatedPseudo(
   slotExpr: unknown,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
+  prefixPseudo?: string | null,
 ): "bail" | void {
   const { state } = ctx;
   const { resolveSelector, resolveImportInScope } = state;
@@ -1769,11 +1818,16 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoAlias") {
+    // pseudoAlias emits separate style objects per pseudo value — prefix pseudo
+    // composition (e.g. `:not(:disabled):${highlight}`) is not supported here.
+    if (prefixPseudo) {
+      return "bail";
+    }
     return handlePseudoAlias(selectorResult, rule, ctx);
   }
 
   if (selectorResult.kind === "pseudoExpand") {
-    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx);
+    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
@@ -1855,6 +1909,7 @@ function handlePseudoExpand(
   importedName: string,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
+  prefixPseudo?: string | null,
 ): "bail" | void {
   const prepared = preparePseudoBucket(rule, ctx);
   if (prepared === "bail") {
@@ -1883,7 +1938,9 @@ function handlePseudoExpand(
   const applyExpansionPseudos = (target: Record<string, unknown>, value: unknown): void => {
     for (let i = 0; i < result.expansions.length; i++) {
       const expansion = result.expansions[i]!;
-      const pseudo = `:${expansion.pseudo}`;
+      // When a prefix pseudo is present (e.g. ":not(:disabled)" from `&:not(:disabled):${highlight}`),
+      // prepend it to the expansion pseudo to produce `:not(:disabled):hover` etc.
+      const pseudo = prefixPseudo ? `${prefixPseudo}:${expansion.pseudo}` : `:${expansion.pseudo}`;
       if (expansion.condition) {
         const newEntry = {
           keyExpr: cloneAstNode(parsedConditions[i]!),
@@ -1963,7 +2020,24 @@ function preparePseudoBucket(
   }
 
   const { state, decl } = ctx;
-  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+  const {
+    j,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    resolveCall,
+    resolveImportInScope,
+    parseExpr,
+    resolverImports,
+    filePath,
+  } = state;
+
+  const callResolver: AdapterCallResolver = {
+    resolveCall,
+    resolveImportInScope,
+    parseExpr,
+    resolverImports,
+    filePath,
+  };
 
   const flatBucket: Record<string, unknown> = {};
   const writeResult = processDeclarationsIntoBucket(
@@ -1973,7 +2047,7 @@ function preparePseudoBucket(
     decl,
     resolveThemeValue,
     resolveThemeValueFromFn,
-    { bailOnUnresolved: true },
+    { bailOnUnresolved: true, callResolver },
   );
   if (writeResult === "bail") {
     return "bail";
@@ -2561,7 +2635,9 @@ function buildAncestorPseudoMap(
 ): ExpressionKind {
   const pseudoEntries = ancestorPseudos.map((pseudo) => {
     const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
-    return Object.assign(j.property("init", ancestorKey, valueNode), { computed: true });
+    return Object.assign(j.property("init", ancestorKey, valueNode), {
+      computed: true,
+    });
   });
   return j.objectExpression([
     j.property("init", j.identifier("default"), j.literal(null)),

@@ -60,6 +60,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     return res;
   };
   const resolveCallOptional = ctx.adapter.resolveCall.bind(ctx.adapter);
+  const resolveThemeCall = ctx.adapter.resolveThemeCall?.bind(ctx.adapter);
   const resolveSelector = ctx.resolveSelectorSafe;
   const importMap =
     ctx.importMap ?? new Map<string, { importedName: string; source: ImportSource }>();
@@ -218,22 +219,24 @@ export function createLowerRulesState(ctx: TransformContext) {
     },
   );
 
+  const { resolveImportInScope, resolveImportForExpr } = createImportResolver({
+    root,
+    j,
+    importMap,
+  });
+
   const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
     importMap,
     filePath,
     resolveValue,
+    resolveCall,
+    resolveImportInScope,
     resolveSelector,
     parseExpr,
     resolverImports,
     warnings,
     keyframesNames,
     j,
-  });
-
-  const { resolveImportInScope, resolveImportForExpr } = createImportResolver({
-    root,
-    j,
-    importMap,
   });
 
   const enumValueMap = buildEnumValueMap(root, j);
@@ -262,6 +265,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveValueDirectional,
     resolveCall,
     resolveCallOptional,
+    resolveThemeCall,
     resolveSelector,
     importMap,
     styledDecls,

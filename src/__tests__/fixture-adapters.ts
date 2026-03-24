@@ -563,6 +563,14 @@ export const fixtureAdapter = defineAdapter({
 
     return undefined;
   },
+  resolveThemeCall(ctx) {
+    // Preserve theme.highlightVariant() calls at runtime — the highlight variant
+    // computes a color adjustment that can't be expressed statically.
+    if (ctx.methodName === "highlightVariant") {
+      return { preserveRuntimeCall: true };
+    }
+    return undefined;
+  },
   resolveSelector(ctx) {
     const source = ctx.source.value;
     if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {

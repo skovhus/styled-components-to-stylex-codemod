@@ -446,6 +446,10 @@ export type InternalHandlerContext = {
   hasImportIgnoringShadowing?: (localName: string) => boolean;
   /** Pre-built map of TypeScript enum declarations for resolving enum member expressions. */
   enumValueMap?: EnumValueMap;
+  /** Optional resolver for theme method calls like `props.theme.highlightVariant(...)`. */
+  resolveThemeCall?: (
+    context: import("../../adapter.js").ThemeCallResolveContext,
+  ) => import("../../adapter.js").CallResolveResult | undefined;
 };
 
 export type ThemeParamInfo =
@@ -498,5 +502,9 @@ export type ResolveImportedHelperCallResult =
       resolveCallContext: CallResolveContext;
       resolveCallResult: CallResolveResult;
     }
-  | { kind: "unresolved"; resolveCallContext: CallResolveContext; resolveCallResult: undefined }
+  | {
+      kind: "unresolved";
+      resolveCallContext: CallResolveContext;
+      resolveCallResult: undefined;
+    }
   | { kind: "keepOriginal" };

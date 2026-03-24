@@ -267,6 +267,30 @@ function tryResolveArrowFnHelperCallWithThemeArg(
     return buildUnresolvedHelperResult(body.callee, ctx);
   }
 
+  // Local (non-imported) function call with theme args — preserve as runtime call.
+  // This handles patterns like `(props) => caret(props.theme.color.labelMuted)` where
+  // `caret` is a local function that can't be statically resolved.
+  if (simple.kind === "keepOriginal") {
+    const calleeName = (body.callee as { name?: string })?.name ?? "localFn";
+    const loc = body.loc?.start;
+    // Synthetic context for diagnostics only — args are omitted because
+    // callArgsFromNode is internal to resolver-utils and the runtimeCallOnly
+    // path does not inspect them.
+    const syntheticContext: CallResolveContext = {
+      callSiteFilePath: ctx.filePath,
+      calleeImportedName: calleeName,
+      calleeSource: { kind: "absolutePath", value: ctx.filePath },
+      args: [],
+      ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+      ...(node.css.property ? { cssProperty: node.css.property } : {}),
+    };
+    return {
+      type: "runtimeCallOnly",
+      resolveCallContext: syntheticContext,
+      resolveCallResult: { preserveRuntimeCall: true },
+    };
+  }
+
   return null;
 }
 
@@ -322,7 +346,12 @@ function tryResolveArrowFnCallWithConditionalArgs(
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] as
-      | { type?: string; test?: unknown; consequent?: unknown; alternate?: unknown }
+      | {
+          type?: string;
+          test?: unknown;
+          consequent?: unknown;
+          alternate?: unknown;
+        }
       | undefined;
     if (!arg) {
       continue;
@@ -445,7 +474,12 @@ function tryResolveArrowFnCallWithConditionalArgs(
   const falsyWhen = conditionalDefaultTruthy === true ? `!(${truthyWhen})` : `!${propName}`;
 
   const variants = [
-    { nameHint: "truthy", when: truthyWhen, expr: consResult.expr, imports: consResult.imports },
+    {
+      nameHint: "truthy",
+      when: truthyWhen,
+      expr: consResult.expr,
+      imports: consResult.imports,
+    },
     {
       nameHint: "falsy",
       when: falsyWhen,
@@ -742,7 +776,11 @@ function tryResolveThemeDependentTemplateLiteral(
   if (paramName) {
     const resolved = resolveTemplateLiteralWithTheme(body, paramName, ctx);
     if (resolved) {
-      return { type: "resolvedValue", expr: resolved.expr, imports: resolved.imports };
+      return {
+        type: "resolvedValue",
+        expr: resolved.expr,
+        imports: resolved.imports,
+      };
     }
   }
   // Adapter couldn't resolve — bail with a warning

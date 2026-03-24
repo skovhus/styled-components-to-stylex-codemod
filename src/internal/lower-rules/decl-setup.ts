@@ -101,7 +101,11 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   });
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
-  const inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }> = [];
+  const inlineStyleProps: Array<{
+    prop: string;
+    expr: ExpressionKind;
+    jsxProp?: string;
+  }> = [];
   const localVarValues = new Map<string, string>();
   // Track properties defined by composed css helpers along with their values
   // so we can set proper default values for pseudo selectors.
@@ -237,6 +241,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolveImport: resolveImportInScope,
     hasImportIgnoringShadowing: (localName: string) => importMap.has(localName),
     enumValueMap,
+    resolveThemeCall: state.resolveThemeCall,
   };
 
   // Build component info for resolveDynamicNode calls

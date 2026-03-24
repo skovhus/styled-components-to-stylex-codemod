@@ -7,11 +7,22 @@ function Button(props: React.PropsWithChildren<{}>) {
   return <button sx={styles.button}>{props.children}</button>;
 }
 
+function DisabledAwareButton(props: React.ComponentProps<"button">) {
+  const { children, ...rest } = props;
+  return (
+    <button {...rest} sx={styles.disabledAwareButton}>
+      {children}
+    </button>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
+      <DisabledAwareButton>Enabled</DisabledAwareButton>
+      <DisabledAwareButton disabled>Disabled</DisabledAwareButton>
     </div>
   );
 }
@@ -34,6 +45,26 @@ const styles = stylex.create({
       ":hover": {
         default: null,
         [$interaction.canHover]: "#111",
+      },
+    },
+  },
+  disabledAwareButton: {
+    paddingBlock: 8,
+    paddingInline: 16,
+    backgroundColor: {
+      default: "#f0f0f0",
+      ":not(:disabled):active": "#d0d0ff",
+      ":not(:disabled):hover": {
+        default: null,
+        [$interaction.canHover]: "#d0d0ff",
+      },
+    },
+    color: {
+      default: "#333",
+      ":not(:disabled):active": "#000",
+      ":not(:disabled):hover": {
+        default: null,
+        [$interaction.canHover]: "#000",
       },
     },
   },

@@ -43,7 +43,10 @@ export function isAdapterResultCssValue(result: CallResolveResult, cssProperty?:
 export function buildResolvedHandlerResult(
   result: CallResolveResult,
   cssProperty: string | undefined,
-  payload: { resolveCallContext: CallResolveContext; resolveCallResult: CallResolveResult },
+  payload: {
+    resolveCallContext: CallResolveContext;
+    resolveCallResult: CallResolveResult;
+  },
 ): HandlerResult {
   if ("extraClassNames" in result && !("expr" in result)) {
     return {
@@ -253,7 +256,12 @@ export function extractIndexedThemeLookupInfo(
   node: unknown,
   paramName: string,
 ): { themeObjectPath: string; indexPropName: string } | null {
-  const n = node as { type?: string; computed?: boolean; object?: unknown; property?: unknown };
+  const n = node as {
+    type?: string;
+    computed?: boolean;
+    object?: unknown;
+    property?: unknown;
+  };
   if (!n || n.type !== "MemberExpression" || n.computed !== true) {
     return null;
   }
@@ -312,18 +320,67 @@ export function resolveImportedHelperCall(
   const calleeImportedName = imp?.importedName;
   const calleeSource = imp?.source;
   if (!calleeImportedName || !calleeSource) {
+    // Check for theme method calls: props.theme.method(args) or theme.method(args)
+    // where the root is the props param or a theme binding variable.
+    const isPropsThemeCall =
+      calleeInfo.path.length >= 2 &&
+      calleeInfo.path[0] === "theme" &&
+      (propsParamName ? calleeInfo.rootName === propsParamName : calleeInfo.rootName === "props");
+    const isThemeBindingCall =
+      themeBindingName && calleeInfo.rootName === themeBindingName && calleeInfo.path.length >= 1;
+    if ((isPropsThemeCall || isThemeBindingCall) && ctx.resolveThemeCall) {
+      const methodName = isPropsThemeCall
+        ? calleeInfo.path.slice(1).join(".")
+        : calleeInfo.path.join(".");
+      const args = callArgsFromNode(callExpr.arguments, propsParamName, themeBindingName);
+      const optionalFields = buildOptionalContextFields(callExpr.loc?.start, cssProperty);
+      const themeCallResult = ctx.resolveThemeCall({
+        callSiteFilePath: ctx.filePath,
+        methodName,
+        args,
+        ...optionalFields,
+      });
+      if (themeCallResult) {
+        return {
+          kind: "resolved",
+          result: themeCallResult,
+          resolveCallContext: {
+            callSiteFilePath: ctx.filePath,
+            calleeImportedName: methodName,
+            // Synthetic source — theme method calls have no real import source.
+            calleeSource: { kind: "specifier", value: "__theme__" },
+            args,
+            ...optionalFields,
+          },
+          resolveCallResult: themeCallResult,
+        };
+      }
+      // Adapter returned undefined — the theme method is unsupported.
+      // Return "unresolved" so the caller bails instead of falling through
+      // to the local-fn auto-preserve path via "keepOriginal".
+      const syntheticContext: CallResolveContext = {
+        callSiteFilePath: ctx.filePath,
+        calleeImportedName: methodName,
+        calleeSource: { kind: "specifier", value: "__theme__" },
+        args,
+        ...optionalFields,
+      };
+      return {
+        kind: "unresolved",
+        resolveCallContext: syntheticContext,
+        resolveCallResult: undefined,
+      };
+    }
     return { kind: "keepOriginal" };
   }
   const args = callArgsFromNode(callExpr.arguments, propsParamName, themeBindingName);
-  const loc = callExpr.loc?.start;
   const resolveCallContext: CallResolveContext = {
     callSiteFilePath: ctx.filePath,
     calleeImportedName,
     calleeSource,
     args,
     ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
-    ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
-    ...(cssProperty ? { cssProperty } : {}),
+    ...buildOptionalContextFields(callExpr.loc?.start, cssProperty),
   };
   const res = ctx.resolveCall(resolveCallContext);
   return res
@@ -468,7 +525,11 @@ function extractBindingName(value: unknown): string | null {
   if (!value || typeof value !== "object") {
     return null;
   }
-  const v = value as { type?: string; name?: string; left?: { type?: string; name?: string } };
+  const v = value as {
+    type?: string;
+    name?: string;
+    left?: { type?: string; name?: string };
+  };
   if (v.type === "Identifier" && typeof v.name === "string") {
     return v.name;
   }
@@ -482,7 +543,18 @@ function extractBindingName(value: unknown): string | null {
   return null;
 }
 
-function callArgsFromNode(
+/** Builds the optional `loc` and `cssProperty` fields shared by resolve contexts. */
+function buildOptionalContextFields(
+  locStart: { line: number; column: number } | null | undefined,
+  cssProperty: string | undefined,
+): { loc?: { line: number; column: number }; cssProperty?: string } {
+  return {
+    ...(locStart ? { loc: { line: locStart.line, column: locStart.column } } : {}),
+    ...(cssProperty ? { cssProperty } : {}),
+  };
+}
+
+export function callArgsFromNode(
   args: unknown,
   propsParamName?: string,
   themeBindingName?: string,

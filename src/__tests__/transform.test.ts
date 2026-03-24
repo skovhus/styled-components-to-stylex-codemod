@@ -1435,6 +1435,28 @@ export const App = () => <Box>Box</Box>;
   });
 });
 
+describe("resolveThemeCall bail on undefined", () => {
+  it("should bail when resolveThemeCall returns undefined for an unknown theme method", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 16px;
+  background-color: \${(props) => props.theme.unknownMethod(props.theme.color.bgBorderSolid)};
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source, {}, "theme-call-bail.tsx");
+
+    // The transform should bail (return unchanged code) because the adapter
+    // returns undefined for the unknown theme method.
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+
 describe("import resolution scope", () => {
   it("should not resolve imported values when a local binding shadows the import", () => {
     const source = `

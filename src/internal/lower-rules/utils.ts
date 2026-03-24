@@ -4,11 +4,68 @@
  */
 import { extractRootAndPath, isAstNode } from "../utilities/jscodeshift-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
-import type { Adapter, ImportSource, ImportSpec } from "../../adapter.js";
+import type { Adapter, CallResolveContext, ImportSource, ImportSpec } from "../../adapter.js";
+import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
 import { literalToStaticValue } from "./types.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
+
+/** Context needed to resolve imported function calls via the adapter's `resolveCall`. */
+export type AdapterCallResolver = {
+  resolveCall: (
+    ctx: CallResolveContext,
+  ) => import("../../adapter.js").CallResolveResult | undefined;
+  resolveImportInScope: (localName: string, identNode?: unknown) => ImportMeta | null;
+  parseExpr: (exprSource: string) => unknown;
+  resolverImports: Map<string, ImportSpec>;
+  filePath: string;
+};
+
+/**
+ * Tries to resolve a CallExpression via the adapter's `resolveCall`.
+ * Shared by both css-helper and process-rules slot resolution.
+ *
+ * Returns `{ ast, exprString }` on success, `null` otherwise.
+ */
+export function tryResolveAdapterCall(
+  expr: unknown,
+  cssProperty: string | undefined,
+  resolver: AdapterCallResolver,
+): { ast: unknown; exprString: string } | null {
+  const callExpr = expr as { type?: string; callee?: unknown; arguments?: unknown[] };
+  if (callExpr.type !== "CallExpression" || !callExpr.callee) {
+    return null;
+  }
+  const calleeInfo = extractRootAndPath(callExpr.callee);
+  if (!calleeInfo) {
+    return null;
+  }
+  const imp = resolver.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
+  if (!imp) {
+    return null;
+  }
+  const args = callArgsFromNode(callExpr.arguments);
+  const loc = (callExpr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
+  const result = resolver.resolveCall({
+    callSiteFilePath: resolver.filePath,
+    calleeImportedName: imp.importedName,
+    calleeSource: imp.source,
+    args,
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
+    ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
+    ...(cssProperty ? { cssProperty } : {}),
+  });
+  if (!result || !("expr" in result) || !isAdapterResultCssValue(result, cssProperty)) {
+    return null;
+  }
+  registerImports(result.imports, resolver.resolverImports);
+  const ast = resolver.parseExpr(result.expr);
+  if (!ast) {
+    return null;
+  }
+  return { ast, exprString: result.expr };
+}
 
 /** Registers resolved imports into a deduplication map keyed by JSON.stringify. */
 export function registerImports(
