@@ -1,1 +1,0 @@
-import{o as e}from"./chunk-zsgVPwQN.js";import{t}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as n}from"./index-Ci-ITyDy.js";e(t(),1);var r=n();function i(){return(0,r.jsx)(`div`,{style:{display:`flex`,gap:16,padding:16},children:(0,r.jsx)(`div`,{className:`x1tamke2 x53q0e7 x1525slw`,children:`Highlight box`})})}export{i as App};
