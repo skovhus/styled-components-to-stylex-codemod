@@ -296,17 +296,24 @@ export function normalizeStylisAstToIR(
       if (mapped === undefined) {
         return;
       }
-      const targetRule = ensureRule(selector, recoveryAtRules);
-      const alreadyDeclared = targetRule.declarations.some((decl) => {
-        if (decl.property !== "" || decl.value.kind !== "interpolated") {
-          return false;
-        }
-        const parts = decl.value.parts;
-        return parts.length === 1 && parts[0]?.kind === "slot" && parts[0].slotId === mapped;
-      });
-      if (alreadyDeclared) {
+      // Check if this slot is already used in ANY declaration across all rules.
+      // Stylis correctly places placeholders that are part of multi-value properties
+      // (e.g. `background: linear-gradient(...), __SC_EXPR_1__`), so recovery would
+      // create a duplicate property-less declaration for slots that are already placed.
+      const alreadyUsed = rules.some((r) =>
+        r.declarations.some((decl) => {
+          if (decl.value.kind !== "interpolated") {
+            return false;
+          }
+          return (decl.value.parts as Array<{ kind: string; slotId?: number }>).some(
+            (p) => p.kind === "slot" && p.slotId === mapped,
+          );
+        }),
+      );
+      if (alreadyUsed) {
         return;
       }
+      const targetRule = ensureRule(selector, recoveryAtRules);
       const decl: CssDeclarationIR = {
         property: "",
         value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
