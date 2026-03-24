@@ -731,7 +731,7 @@ export interface Adapter {
    *
    * By default, the codemod uses logical properties which adapt to the writing direction
    * (RTL/LTR), matching StyleX's ESLint plugin recommendations. Enable this if your
-   * codebase does not need RTL support and you prefer physical properties.
+   * codebase needs RTL support and you prefer physical properties.
    *
    * @default false
    */
