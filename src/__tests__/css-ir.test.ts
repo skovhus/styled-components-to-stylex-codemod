@@ -308,6 +308,32 @@ describe("normalizeStylisAstToIR – placeholders inside CSS functions are not r
     expect(slotPart?.slotId).toBe(0);
   });
 
+  it("placeholder in multi-value shorthand (outside parens) is not double-recovered", () => {
+    // Simulates: background: linear-gradient(__SC_EXPR_0__, __SC_EXPR_0__), __SC_EXPR_1__;
+    // Stylis correctly places __SC_EXPR_1__ in the background declaration.
+    // The recovery pass must not create a duplicate property-less declaration for it.
+    const rawCss = `& {
+  background:
+    linear-gradient(
+      __SC_EXPR_0__,
+      __SC_EXPR_0__
+    ),
+    __SC_EXPR_1__;
+}`;
+    const slots = [makeSlot(0), makeSlot(1)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    // Neither slot should be recovered as standalone — both are part of the background value
+    expect(recovered).toHaveLength(0);
+    // Verify slot 1 IS present in the background declaration
+    const bgDecl = rules.flatMap((r) => r.declarations).find((d) => d.property === "background");
+    expect(bgDecl).toBeDefined();
+    const bgParts = (bgDecl!.value as { parts: Array<{ kind: string; slotId?: number }> }).parts;
+    expect(bgParts.some((p) => p.kind === "slot" && p.slotId === 1)).toBe(true);
+  });
+
   it("parentheses inside quoted strings do not affect parenDepth", () => {
     // content: "(" should not bump parenDepth, so the standalone placeholder is still recovered
     const rawCss = `& {
