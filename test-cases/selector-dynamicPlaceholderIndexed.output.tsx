@@ -57,10 +57,8 @@ const styles = stylex.create({
   }),
   badge: (props: { indicatorColor: Color }) => ({
     position: "relative",
-    paddingTop: 4,
-    paddingRight: 8,
-    paddingBottom: 4,
-    paddingLeft: 8,
+    paddingBlock: 4,
+    paddingInline: 8,
     backgroundColor: "#eee",
     "::after": {
       content: '""',

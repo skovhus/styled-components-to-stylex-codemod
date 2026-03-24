@@ -37,10 +37,8 @@ const styles = stylex.create({
     color: "red",
   },
   boxInline: {
-    paddingTop: 0,
-    paddingRight: 6,
-    paddingBottom: 0,
-    paddingLeft: 6,
+    paddingBlock: 0,
+    paddingInline: 6,
     borderRadius: 4,
     position: "absolute",
   },

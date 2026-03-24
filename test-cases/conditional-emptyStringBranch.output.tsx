@@ -103,10 +103,8 @@ const styles = stylex.create({
   },
   wrapperNotFullWidth: {
     maxWidth: 400,
-    paddingTop: 0,
-    paddingRight: 16,
-    paddingBottom: 0,
-    paddingLeft: 16,
+    paddingBlock: 0,
+    paddingInline: 16,
   },
   wrapperAlt: {
     backgroundColor: "#f0e0f0",
@@ -114,9 +112,7 @@ const styles = stylex.create({
   },
   wrapperAltNarrow: {
     maxWidth: 400,
-    paddingTop: 0,
-    paddingRight: 16,
-    paddingBottom: 0,
-    paddingLeft: 16,
+    paddingBlock: 0,
+    paddingInline: 16,
   },
 });

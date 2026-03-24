@@ -62,10 +62,8 @@ const styles = stylex.create({
   transientButton: {
     backgroundColor: "#4F74BF",
     color: "white",
-    paddingTop: 8,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 16,
+    paddingBlock: 8,
+    paddingInline: 16,
   },
   transientButtonVariantPrimary: {
     backgroundColor: "#BF4F74",

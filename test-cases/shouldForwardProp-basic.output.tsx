@@ -108,10 +108,8 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: "#BF4F74",
-    paddingTop: "8px",
-    paddingRight: "16px",
-    paddingBottom: "8px",
-    paddingLeft: "16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     fontSize: "14px",
     color: "white",
     borderWidth: 0,
@@ -120,10 +118,8 @@ const styles = stylex.create({
     borderRadius: 4,
   },
   buttonSizeLarge: {
-    paddingTop: "12px",
-    paddingRight: "24px",
-    paddingBottom: "12px",
-    paddingLeft: "24px",
+    paddingBlock: "12px",
+    paddingInline: "24px",
     fontSize: "18px",
   },
   buttonBackgroundColor: (backgroundColor: string) => ({

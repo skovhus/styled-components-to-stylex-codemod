@@ -118,7 +118,7 @@ export function splitDirectionalProperty(args: {
     important = false,
     preferInline = false,
     alwaysExpand = false,
-    useLogical = false,
+    useLogical = true,
   } = args;
   const values = splitDirectionalShorthands(rawValue, false);
   const top = values[0] ?? "";

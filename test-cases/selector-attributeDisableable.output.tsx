@@ -45,10 +45,8 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    paddingTop: 8,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 16,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor: {
       default: "#bf4f74",
       ":is([disabled])": "#ccc",

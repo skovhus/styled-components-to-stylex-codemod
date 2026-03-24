@@ -55,10 +55,8 @@ export const App = () => (
 
 const styles = stylex.create({
   badge: {
-    paddingTop: 8,
-    paddingRight: 12,
-    paddingBottom: 8,
-    paddingLeft: 12,
+    paddingBlock: 8,
+    paddingInline: 12,
     borderRadius: 4,
     backgroundColor: "#f0f0f0",
   },

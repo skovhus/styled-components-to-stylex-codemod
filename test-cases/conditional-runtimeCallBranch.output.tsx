@@ -49,17 +49,13 @@ export const App = () => (
 
 const styles = stylex.create({
   cardContainer: (backgroundColor: string) => ({
-    paddingTop: 8,
-    paddingRight: 12,
-    paddingBottom: 8,
-    paddingLeft: 12,
+    paddingBlock: 8,
+    paddingInline: 12,
     backgroundColor,
   }),
   row: (backgroundColor: string) => ({
-    paddingTop: 8,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 16,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor,
   }),
 });

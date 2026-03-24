@@ -75,10 +75,8 @@ const styles = stylex.create({
     borderWidth: 0,
     color: "white",
     fontSize: "1rem",
-    paddingTop: "4px",
-    paddingRight: "8px",
-    paddingBottom: "4px",
-    paddingLeft: "8px",
+    paddingBlock: "4px",
+    paddingInline: "8px",
   },
   link: {
     textDecoration: {
@@ -125,17 +123,13 @@ const buttonColorDisabledVariants = stylex.create({
 const sizeVariants = stylex.create({
   medium: {
     fontSize: "1.2rem",
-    paddingTop: "8px",
-    paddingRight: "16px",
-    paddingBottom: "8px",
-    paddingLeft: "16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
   },
   small: {
     fontSize: "1rem",
-    paddingTop: "4px",
-    paddingRight: "8px",
-    paddingBottom: "4px",
-    paddingLeft: "8px",
+    paddingBlock: "4px",
+    paddingInline: "8px",
   },
 });
 

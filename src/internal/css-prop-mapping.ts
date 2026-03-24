@@ -11,7 +11,7 @@ export { isCssShorthandProperty, setUseLogicalProperties, getUseLogicalPropertie
 type StylexPropDecl = { prop: string; value: CssValue };
 
 /** Module-level flag controlling whether 2-value shorthand expansion uses logical properties. */
-let useLogicalProperties = false;
+let useLogicalProperties = true;
 
 function setUseLogicalProperties(value: boolean): void {
   useLogicalProperties = value;

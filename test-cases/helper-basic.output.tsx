@@ -19,10 +19,8 @@ export const App = () => (
 const styles = stylex.create({
   // Using theme accessor helper
   button: {
-    paddingTop: "0.5em",
-    paddingRight: "1em",
-    paddingBottom: "0.5em",
-    paddingLeft: "1em",
+    paddingBlock: "0.5em",
+    paddingInline: "1em",
     backgroundColor: {
       default: $colors.primaryColor,
       ":hover": $colors.bgSub,

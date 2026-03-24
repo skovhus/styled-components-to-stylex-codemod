@@ -17,10 +17,8 @@ export function App() {
 
 const styles = stylex.create({
   dividerContainer: {
-    paddingTop: 5,
-    paddingRight: 0,
-    paddingBottom: 5,
-    paddingLeft: 0,
+    paddingBlock: 5,
+    paddingInline: 0,
     /* NOTE: Inlined Divider.HEIGHT as StyleX requires it to be statically evaluable */
     height: "10px",
     /* NOTE: Inlined Divider.WIDTH as StyleX requires it to be statically evaluable */

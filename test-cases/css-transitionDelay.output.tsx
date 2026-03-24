@@ -70,10 +70,8 @@ const styles = stylex.create({
     transitionDelay: "0ms",
     backgroundColor: "#3b82f6",
     color: "white",
-    paddingTop: 16,
-    paddingRight: 20,
-    paddingBottom: 16,
-    paddingLeft: 20,
+    paddingBlock: 16,
+    paddingInline: 20,
     borderRadius: 8,
   },
   containerOpen: (props) => ({

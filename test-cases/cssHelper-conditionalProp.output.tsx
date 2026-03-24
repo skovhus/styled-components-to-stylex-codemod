@@ -51,10 +51,8 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    paddingTop: 2,
-    paddingRight: 6,
-    paddingBottom: 2,
-    paddingLeft: 6,
+    paddingBlock: 2,
+    paddingInline: 6,
     borderRadius: 3,
   },
   containerBackgroundColor: (backgroundColor: string) => ({

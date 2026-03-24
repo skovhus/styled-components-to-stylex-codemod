@@ -41,10 +41,8 @@ export const App = () => (
 
 const styles = stylex.create({
   toggle: (backgroundColor: string) => ({
-    paddingTop: 8,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 16,
+    paddingBlock: 8,
+    paddingInline: 16,
     backgroundColor,
   }),
   boxBackgroundColor: (backgroundColor: string) => ({

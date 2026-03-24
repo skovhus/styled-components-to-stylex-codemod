@@ -15,10 +15,8 @@ const styles = stylex.create({
   // Grouped reverse selectors: ${Link}:focus-visible &, ${Link}:active &
   // Multiple pseudo branches in a single selector.
   badge: {
-    paddingTop: 4,
-    paddingRight: 8,
-    paddingBottom: 4,
-    paddingLeft: 8,
+    paddingBlock: 4,
+    paddingInline: 8,
     color: "gray",
   },
   badgeInLink: {

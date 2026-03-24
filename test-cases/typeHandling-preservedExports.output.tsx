@@ -50,18 +50,14 @@ export function App() {
 
 const styles = stylex.create({
   button: {
-    paddingTop: "8px",
-    paddingRight: "16px",
-    paddingBottom: "8px",
-    paddingLeft: "16px",
+    paddingBlock: "8px",
+    paddingInline: "16px",
     backgroundColor: "gray",
     color: "white",
   },
   buttonSizeLarge: {
-    paddingTop: "12px",
-    paddingRight: "24px",
-    paddingBottom: "12px",
-    paddingLeft: "24px",
+    paddingBlock: "12px",
+    paddingInline: "24px",
   },
   buttonVariantPrimary: {
     backgroundColor: "blue",

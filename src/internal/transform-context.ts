@@ -125,7 +125,7 @@ export class TransformContext {
       "transform(options) - missing `adapter` (if you run the jscodeshift transform directly, pass options.adapter)",
     );
 
-    setUseLogicalProperties(adapter.useLogicalProperties ?? false);
+    setUseLogicalProperties(!(adapter.usePhysicalProperties ?? false));
 
     const resolverImports = new Map<string, ImportSpec>();
     const {

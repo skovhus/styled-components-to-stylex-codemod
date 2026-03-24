@@ -31,10 +31,8 @@ export const App = () => (
 
 const styles = stylex.create({
   input: {
-    paddingTop: 8,
-    paddingRight: 12,
-    paddingBottom: 8,
-    paddingLeft: 12,
+    paddingBlock: 8,
+    paddingInline: 12,
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: {

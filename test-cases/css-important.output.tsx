@@ -26,20 +26,16 @@ const styles = stylex.create({
     borderWidth: "0 !important",
     borderStyle: "none !important",
     borderColor: "initial !important",
-    paddingTop: 8,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 16,
+    paddingBlock: 8,
+    paddingInline: 16,
     borderRadius: 4,
   },
   // Overriding specific properties
   forceWidth: {
     width: "100% !important",
     maxWidth: "500px !important",
-    marginTop: 0,
-    marginRight: "auto",
-    marginBottom: 0,
-    marginLeft: "auto",
+    marginBlock: 0,
+    marginInline: "auto",
   },
   // Mixed important and normal
   mixedStyles: {

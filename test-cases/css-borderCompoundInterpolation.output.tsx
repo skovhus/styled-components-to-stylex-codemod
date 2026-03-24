@@ -13,10 +13,8 @@ const styles = stylex.create({
    */
   container: {
     borderRadius: 2,
-    paddingTop: 2,
-    paddingRight: 6,
-    paddingBottom: 2,
-    paddingLeft: 6,
+    paddingBlock: 2,
+    paddingInline: 6,
     borderWidth: pixelVars.thin,
     borderStyle: "solid",
     borderColor: $colors.bgBorderFaint,

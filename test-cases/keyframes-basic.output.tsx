@@ -19,10 +19,8 @@ const styles = stylex.create({
     animationDuration: "2s",
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
-    paddingTop: "2rem",
-    paddingRight: "1rem",
-    paddingBottom: "2rem",
-    paddingLeft: "1rem",
+    paddingBlock: "2rem",
+    paddingInline: "1rem",
     fontSize: "1.2rem",
   },
 });

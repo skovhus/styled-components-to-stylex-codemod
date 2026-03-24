@@ -39,10 +39,8 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
-    paddingTop: 12,
-    paddingRight: 16,
-    paddingBottom: 12,
-    paddingLeft: 16,
+    paddingBlock: 12,
+    paddingInline: 16,
     backgroundColor: $colors.primaryColor,
     color: "white",
     borderRadius: 4,

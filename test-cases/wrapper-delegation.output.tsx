@@ -18,10 +18,8 @@ const styles = stylex.create({
     marginBottom: 32,
   },
   paddedSentence: {
-    paddingTop: 0,
-    paddingRight: 32,
-    paddingBottom: 0,
-    paddingLeft: 32,
+    paddingBlock: 0,
+    paddingInline: 32,
   },
   paddedMutedSentence: {
     color: $colors.labelMuted,

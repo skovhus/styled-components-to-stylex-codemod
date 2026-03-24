@@ -36,10 +36,8 @@ const styles = stylex.create({
   listRow: {
     display: "flex",
     alignItems: "center",
-    paddingTop: 8,
-    paddingRight: 12,
-    paddingBottom: 8,
-    paddingLeft: 12,
+    paddingBlock: 8,
+    paddingInline: 12,
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: "#eee",

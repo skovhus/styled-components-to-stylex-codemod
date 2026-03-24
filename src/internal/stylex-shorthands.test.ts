@@ -27,12 +27,10 @@ describe("splitDirectionalProperty", () => {
     ]);
   });
 
-  it("uses physical longhands for two-value shorthand", () => {
+  it("uses logical longhands for two-value shorthand (default)", () => {
     expect(splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px" })).toEqual([
-      { prop: "paddingTop", value: "4px" },
-      { prop: "paddingRight", value: "8px" },
-      { prop: "paddingBottom", value: "4px" },
-      { prop: "paddingLeft", value: "8px" },
+      { prop: "paddingBlock", value: "4px" },
+      { prop: "paddingInline", value: "8px" },
     ]);
   });
 
@@ -85,26 +83,14 @@ describe("splitDirectionalProperty", () => {
     expect(result[3]!.prop).toBe("paddingInlineStart");
   });
 
-  it("uses logical longhands for two-value shorthand when useLogical is true", () => {
+  it("uses physical longhands for two-value shorthand when useLogical is false", () => {
     expect(
-      splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px", useLogical: true }),
+      splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px", useLogical: false }),
     ).toEqual([
-      { prop: "paddingBlock", value: "4px" },
-      { prop: "paddingInline", value: "8px" },
-    ]);
-  });
-
-  it("uses physical longhands for three-value shorthand even when useLogical is true", () => {
-    const result = splitDirectionalProperty({
-      prop: "margin",
-      rawValue: "4px 8px 12px",
-      useLogical: true,
-    });
-    expect(result).toEqual([
-      { prop: "marginTop", value: "4px" },
-      { prop: "marginRight", value: "8px" },
-      { prop: "marginBottom", value: "12px" },
-      { prop: "marginLeft", value: "8px" },
+      { prop: "paddingTop", value: "4px" },
+      { prop: "paddingRight", value: "8px" },
+      { prop: "paddingBottom", value: "4px" },
+      { prop: "paddingLeft", value: "8px" },
     ]);
   });
 
@@ -122,10 +108,8 @@ describe("splitDirectionalProperty", () => {
       rawValue: "calc(100% - 20px) 10px",
     });
     expect(result).toEqual([
-      { prop: "marginTop", value: "calc(100% - 20px)" },
-      { prop: "marginRight", value: "10px" },
-      { prop: "marginBottom", value: "calc(100% - 20px)" },
-      { prop: "marginLeft", value: "10px" },
+      { prop: "marginBlock", value: "calc(100% - 20px)" },
+      { prop: "marginInline", value: "10px" },
     ]);
   });
 
