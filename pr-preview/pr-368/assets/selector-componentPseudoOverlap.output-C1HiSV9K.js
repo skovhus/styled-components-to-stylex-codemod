@@ -1,1 +1,0 @@
-import"./stylex-B9_aYcJU.js";import{f as e}from"./index-DF0gStDF.js";var t=e(),n=()=>(0,t.jsx)(`a`,{href:`#`,className:`x78zum5 xe8ttls xd10qfp x-default-marker`,children:(0,t.jsx)(`span`,{className:`x1iorvi4 xy13l1i xjkvuk6 x163pfp xkn7p67 xobp4yc`,children:`Label (gray, orange on focus, blue on Link hover)`})});export{n as App};
