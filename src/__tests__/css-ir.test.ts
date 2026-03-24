@@ -321,6 +321,20 @@ describe("normalizeStylisAstToIR – placeholders inside CSS functions are not r
     );
     expect(recovered).toHaveLength(1);
   });
+
+  it("parentheses inside CSS comments do not affect parenDepth", () => {
+    // /* TODO: use min( */ should not bump parenDepth
+    const rawCss = `& {
+  /* TODO: use min( */
+  __SC_EXPR_0__;
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(1);
+  });
 });
 
 describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {

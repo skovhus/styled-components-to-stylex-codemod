@@ -345,9 +345,23 @@ export function normalizeStylisAstToIR(
     // a CSS value, not standalone mixin interpolations. Skip recovery for those.
     let parenDepth = 0;
     let inString: false | '"' | "'" = false;
+    let inComment = false;
 
     for (let i = 0; i < rawCss.length; i++) {
       const ch = rawCss[i]!;
+      // Track CSS comments so their content doesn't affect parenDepth or string tracking
+      if (!inString && !inComment && ch === "/" && rawCss[i + 1] === "*") {
+        inComment = true;
+        i++; // skip the '*'
+        continue;
+      }
+      if (inComment) {
+        if (ch === "*" && rawCss[i + 1] === "/") {
+          inComment = false;
+          i++; // skip the '/'
+        }
+        continue;
+      }
       // Track quoted strings so parentheses inside them don't affect parenDepth
       if ((ch === '"' || ch === "'") && rawCss[i - 1] !== "\\") {
         if (!inString) {
