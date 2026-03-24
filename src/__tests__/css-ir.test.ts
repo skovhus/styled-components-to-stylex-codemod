@@ -307,6 +307,20 @@ describe("normalizeStylisAstToIR – placeholders inside CSS functions are not r
     const slotPart = (decl.value as { parts: Array<{ kind: string; slotId?: number }> }).parts[0];
     expect(slotPart?.slotId).toBe(0);
   });
+
+  it("parentheses inside quoted strings do not affect parenDepth", () => {
+    // content: "(" should not bump parenDepth, so the standalone placeholder is still recovered
+    const rawCss = `& {
+  content: "(";
+  __SC_EXPR_0__;
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(1);
+  });
 });
 
 describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {

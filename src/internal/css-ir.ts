@@ -344,13 +344,24 @@ export function normalizeStylisAstToIR(
     // Track parenthesis depth — placeholders inside parens (e.g. `min()`, `calc()`) are part of
     // a CSS value, not standalone mixin interpolations. Skip recovery for those.
     let parenDepth = 0;
+    let inString: false | '"' | "'" = false;
 
     for (let i = 0; i < rawCss.length; i++) {
       const ch = rawCss[i]!;
-      if (ch === "(") {
-        parenDepth++;
-      } else if (ch === ")") {
-        parenDepth = Math.max(0, parenDepth - 1);
+      // Track quoted strings so parentheses inside them don't affect parenDepth
+      if ((ch === '"' || ch === "'") && rawCss[i - 1] !== "\\") {
+        if (!inString) {
+          inString = ch;
+        } else if (inString === ch) {
+          inString = false;
+        }
+      }
+      if (!inString) {
+        if (ch === "(") {
+          parenDepth++;
+        } else if (ch === ")") {
+          parenDepth = Math.max(0, parenDepth - 1);
+        }
       }
       if (ch === "{") {
         const blockHeader = line.trim();
