@@ -242,6 +242,101 @@ function makeSlot(index: number): StyledInterpolationSlot {
   };
 }
 
+describe("normalizeStylisAstToIR – placeholders inside CSS functions are not recovered as standalone", () => {
+  it("placeholder inside min() is not recovered as a property-less declaration", () => {
+    // Simulates: max-width: min(calc(50cqw - __SC_EXPR_0__), __SC_EXPR_1__);
+    const rawCss = `& {
+  display: flex;
+  max-width: min(
+    calc(50cqw - __SC_EXPR_0__),
+    __SC_EXPR_1__
+  );
+}`;
+    const slots = [makeSlot(0), makeSlot(1)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    // There should be NO property-less recovered declarations — both placeholders
+    // are part of the max-width value, not standalone mixin interpolations.
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(0);
+  });
+
+  it("placeholder inside calc() is not recovered as a property-less declaration", () => {
+    const rawCss = `& {
+  width: calc(100% - __SC_EXPR_0__);
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(0);
+  });
+
+  it("placeholder inside linear-gradient() is not recovered as a property-less declaration", () => {
+    const rawCss = `& {
+  background: linear-gradient(
+    __SC_EXPR_0__,
+    __SC_EXPR_1__
+  );
+}`;
+    const slots = [makeSlot(0), makeSlot(1)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(0);
+  });
+
+  it("standalone placeholder outside parens is still recovered", () => {
+    const rawCss = `& {
+  __SC_EXPR_0__;
+  max-width: min(100px, __SC_EXPR_1__);
+}`;
+    const slots = [makeSlot(0), makeSlot(1)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    // Only slot 0 should be recovered as standalone; slot 1 is inside min()
+    expect(recovered).toHaveLength(1);
+    const decl = recovered[0]!.declarations.find(
+      (d) => d.property === "" && d.value.kind === "interpolated",
+    )!;
+    const slotPart = (decl.value as { parts: Array<{ kind: string; slotId?: number }> }).parts[0];
+    expect(slotPart?.slotId).toBe(0);
+  });
+
+  it("parentheses inside quoted strings do not affect parenDepth", () => {
+    // content: "(" should not bump parenDepth, so the standalone placeholder is still recovered
+    const rawCss = `& {
+  content: "(";
+  __SC_EXPR_0__;
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(1);
+  });
+
+  it("parentheses inside CSS comments do not affect parenDepth", () => {
+    // /* TODO: use min( */ should not bump parenDepth
+    const rawCss = `& {
+  /* TODO: use min( */
+  __SC_EXPR_0__;
+}`;
+    const slots = [makeSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const recovered = rules.filter((r) =>
+      r.declarations.some((d) => d.property === "" && d.value.kind === "interpolated"),
+    );
+    expect(recovered).toHaveLength(1);
+  });
+});
+
 describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {
   it("placeholder inside @media + selector gets the @media at-rule", () => {
     const rawCss = `& {

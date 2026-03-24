@@ -38,6 +38,15 @@ const WithVariables = styled.div`
   padding: calc(var(--base-size) / 2);
 `;
 
+// Interpolated expressions inside CSS math functions
+const WithCssFunctions = styled.div<{
+  $dynamicHeight: string;
+}>`
+  height: max(100px, ${(props) => props.$dynamicHeight});
+  padding: 8px;
+  background-color: lightblue;
+`;
+
 export const App = () => (
   <Container>
     <Grid>
@@ -47,5 +56,6 @@ export const App = () => (
     <Sidebar>Sidebar content</Sidebar>
     <ComplexCalc>Complex calc</ComplexCalc>
     <WithVariables>With variables</WithVariables>
+    <WithCssFunctions $dynamicHeight="300px">CSS functions</WithCssFunctions>
   </Container>
 );
