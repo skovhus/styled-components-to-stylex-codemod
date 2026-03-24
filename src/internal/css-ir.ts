@@ -319,6 +319,12 @@ export function normalizeStylisAstToIR(
 
     const flushLine = () => {
       const trimmed = line.trim();
+      // Skip recovery when inside parenthesized CSS functions (min(), calc(), linear-gradient(), etc.)
+      // — the placeholder is part of a CSS value, not a standalone mixin interpolation.
+      if (parenDepth > 0) {
+        line = "";
+        return;
+      }
       if (depth === 0) {
         recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       } else if (selectorStack.length > 0) {
@@ -335,9 +341,17 @@ export function normalizeStylisAstToIR(
 
     // Track whether each depth level is an at-rule or a selector so we pop the right stack on `}`
     const blockKindStack: ("at-rule" | "selector")[] = [];
+    // Track parenthesis depth — placeholders inside parens (e.g. `min()`, `calc()`) are part of
+    // a CSS value, not standalone mixin interpolations. Skip recovery for those.
+    let parenDepth = 0;
 
     for (let i = 0; i < rawCss.length; i++) {
       const ch = rawCss[i]!;
+      if (ch === "(") {
+        parenDepth++;
+      } else if (ch === ")") {
+        parenDepth = Math.max(0, parenDepth - 1);
+      }
       if (ch === "{") {
         const blockHeader = line.trim();
         if (blockHeader.startsWith("@")) {
