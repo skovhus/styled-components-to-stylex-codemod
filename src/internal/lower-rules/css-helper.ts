@@ -22,7 +22,6 @@ import {
 import type { WarningLog, WarningType } from "../logger.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
-import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import {
@@ -35,6 +34,8 @@ import {
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  tryResolveAdapterCall,
+  type AdapterCallResolver,
   type ResolvedMedia,
 } from "./utils.js";
 
@@ -97,13 +98,8 @@ export function createCssHelperResolver(args: {
   importMap: Map<string, ImportMapEntry>;
   filePath: string;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
-  resolveCall?: (
-    ctx: import("../../adapter.js").CallResolveContext,
-  ) => import("../../adapter.js").CallResolveResult | undefined;
-  resolveImportInScope?: (
-    localName: string,
-    identNode?: unknown,
-  ) => { importedName: string; source: import("../../adapter.js").ImportSource } | null;
+  resolveCall?: AdapterCallResolver["resolveCall"];
+  resolveImportInScope?: AdapterCallResolver["resolveImportInScope"];
   resolveSelector?: Adapter["resolveSelector"];
   parseExpr: (exprSource: string) => any;
   resolverImports: Map<string, ImportSpec>;
@@ -124,6 +120,17 @@ export function createCssHelperResolver(args: {
   } | null;
 } {
   const { importMap, filePath, resolveValue, parseExpr, resolverImports, warnings } = args;
+
+  const adapterCallResolver: AdapterCallResolver | null =
+    args.resolveCall && args.resolveImportInScope
+      ? {
+          resolveCall: args.resolveCall,
+          resolveImportInScope: args.resolveImportInScope,
+          parseExpr,
+          resolverImports,
+          filePath,
+        }
+      : null;
 
   const isCssHelperTaggedTemplate = (expr: any): expr is { quasi: any } => {
     if (!expr || expr.type !== "TaggedTemplateExpression") {
@@ -530,7 +537,8 @@ export function createCssHelperResolver(args: {
         if (hasCallExpressionInExpr(expr)) {
           // Try resolving imported function calls via the adapter before bailing.
           // This handles patterns like colorCSS("labelMuted") inside conditional css blocks.
-          const callResolved = tryResolveCallExprInCssHelper(expr, d.property, args);
+          const callResolved =
+            adapterCallResolver && tryResolveAdapterCall(expr, d.property, adapterCallResolver);
           if (callResolved) {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               if (hasStaticParts) {
@@ -720,59 +728,6 @@ export function createCssHelperResolver(args: {
     }
 
     return { style: out, dynamicProps, conditionalVariants };
-  };
-
-  /**
-   * Tries to resolve a call expression inside a css helper template via the adapter.
-   * Handles imported function calls like colorCSS("labelMuted") that return CSS values.
-   */
-  const tryResolveCallExprInCssHelper = (
-    expr: unknown,
-    cssProperty: string | undefined,
-    helperArgs: Parameters<typeof createCssHelperResolver>[0],
-  ): { ast: unknown; exprString: string } | null => {
-    const { resolveCall, resolveImportInScope } = helperArgs;
-    if (!resolveCall || !resolveImportInScope) {
-      return null;
-    }
-    const callExpr = expr as { type?: string; callee?: unknown; arguments?: unknown[] };
-    if (callExpr.type !== "CallExpression" || !callExpr.callee) {
-      return null;
-    }
-    const calleeInfo = extractRootAndPath(callExpr.callee);
-    if (!calleeInfo) {
-      return null;
-    }
-    const imp = resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
-    if (!imp) {
-      return null;
-    }
-    const callArgs = callArgsFromNode(callExpr.arguments);
-    const loc = (callExpr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
-    const result = resolveCall({
-      callSiteFilePath: filePath,
-      calleeImportedName: imp.importedName,
-      calleeSource: imp.source,
-      args: callArgs,
-      ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
-      ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
-      ...(cssProperty ? { cssProperty } : {}),
-    });
-    if (!result || !("expr" in result) || !isAdapterResultCssValue(result, cssProperty)) {
-      return null;
-    }
-    if (result.imports) {
-      for (const imp of result.imports) {
-        for (const name of imp.names) {
-          resolverImports.set(name.local ?? name.imported, { from: imp.from, names: [name] });
-        }
-      }
-    }
-    const ast = parseExpr(result.expr);
-    if (!ast) {
-      return null;
-    }
-    return { ast, exprString: result.expr };
   };
 
   return { isCssHelperTaggedTemplate, resolveCssHelperTemplate };

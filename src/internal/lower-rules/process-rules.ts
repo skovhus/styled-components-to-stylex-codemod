@@ -42,7 +42,6 @@ import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
-import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -59,6 +58,8 @@ import {
   isSupportedAtRule,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  tryResolveAdapterCall,
+  type AdapterCallResolver,
 } from "./utils.js";
 
 export function processDeclRules(ctx: DeclProcessingState): void {
@@ -1383,7 +1384,7 @@ function processDeclarationsIntoBucket(
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   options?: {
     bailOnUnresolved?: boolean;
-    callResolver?: Parameters<typeof resolveAllSlots>[4];
+    callResolver?: AdapterCallResolver;
   },
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
@@ -1423,7 +1424,7 @@ function writeResolvedDeclaration(
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   writtenProps: Set<string>,
-  callResolver?: Parameters<typeof resolveAllSlots>[4],
+  callResolver?: AdapterCallResolver,
 ): "written" | "skip" | "unresolved" {
   if (d.value.kind === "static") {
     for (const out of cssDeclarationToStylexDeclarations(d)) {
@@ -1478,13 +1479,7 @@ function resolveAllSlots(
   decl: { templateExpressions: unknown[] },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
-  callResolver?: {
-    resolveCall: DeclProcessingState["state"]["resolveCall"];
-    resolveImportInScope: DeclProcessingState["state"]["resolveImportInScope"];
-    parseExpr: DeclProcessingState["state"]["parseExpr"];
-    resolverImports: DeclProcessingState["state"]["resolverImports"];
-    filePath: string;
-  },
+  callResolver?: AdapterCallResolver,
 ): ((slotId: number) => unknown) | "bail" | null {
   const parts = (d.value as { parts?: Array<{ kind: string; slotId?: number }> }).parts;
   if (!parts) {
@@ -1517,10 +1512,8 @@ function resolveAllSlots(
       (expr as { type?: string }).type === "CallExpression"
     ) {
       // Try resolving imported function calls (e.g., colorCSS("labelMuted"), transitionSpeed("fast"))
-      resolved = tryResolveCallExprInSlot(expr, d.property, callResolver);
-      if (!resolved) {
-        resolved = resolveThemeValue(expr);
-      }
+      const callResult = tryResolveAdapterCall(expr, d.property, callResolver);
+      resolved = callResult?.ast ?? resolveThemeValue(expr);
     } else {
       resolved = resolveThemeValue(expr);
     }
@@ -1531,47 +1524,6 @@ function resolveAllSlots(
     resolvedBySlotId.set(slotId, resolved);
   }
   return (slotId: number) => resolvedBySlotId.get(slotId);
-}
-
-/**
- * Tries to resolve a CallExpression in a slot via the adapter's resolveCall.
- * Returns a parsed AST node if successful, null otherwise.
- */
-function tryResolveCallExprInSlot(
-  expr: unknown,
-  cssProperty: string | undefined,
-  resolver: NonNullable<Parameters<typeof resolveAllSlots>[4]>,
-): unknown {
-  const callExpr = expr as { callee?: unknown; arguments?: unknown[] };
-  if (!callExpr.callee) {
-    return null;
-  }
-  const calleeInfo = extractRootAndPath(callExpr.callee);
-  if (!calleeInfo) {
-    return null;
-  }
-  const imp = resolver.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
-  if (!imp) {
-    return null;
-  }
-  const args = callArgsFromNode(callExpr.arguments);
-  const loc = (callExpr as { loc?: { start?: { line: number; column: number } } }).loc?.start;
-  const result = resolver.resolveCall({
-    callSiteFilePath: resolver.filePath,
-    calleeImportedName: imp.importedName,
-    calleeSource: imp.source,
-    args,
-    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
-    ...(loc ? { loc: { line: loc.line, column: loc.column } } : {}),
-    ...(cssProperty ? { cssProperty } : {}),
-  });
-  if (!result || !("expr" in result) || !isAdapterResultCssValue(result, cssProperty)) {
-    return null;
-  }
-  if (result.imports) {
-    registerImports(result.imports, resolver.resolverImports);
-  }
-  return resolver.parseExpr(result.expr);
 }
 
 /**
@@ -2086,7 +2038,7 @@ function preparePseudoBucket(
     filePath,
   } = state;
 
-  const callResolver: Parameters<typeof resolveAllSlots>[4] = {
+  const callResolver: AdapterCallResolver = {
     resolveCall,
     resolveImportInScope,
     parseExpr,
