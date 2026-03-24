@@ -355,6 +355,21 @@ export function resolveImportedHelperCall(
           resolveCallResult: themeCallResult,
         };
       }
+      // Adapter returned undefined — the theme method is unsupported.
+      // Return "unresolved" so the caller bails instead of falling through
+      // to the local-fn auto-preserve path via "keepOriginal".
+      const syntheticContext: CallResolveContext = {
+        callSiteFilePath: ctx.filePath,
+        calleeImportedName: methodName,
+        calleeSource: { kind: "specifier", value: "__theme__" },
+        args,
+        ...optionalFields,
+      };
+      return {
+        kind: "unresolved",
+        resolveCallContext: syntheticContext,
+        resolveCallResult: undefined,
+      };
     }
     return { kind: "keepOriginal" };
   }
@@ -539,7 +554,7 @@ function buildOptionalContextFields(
   };
 }
 
-function callArgsFromNode(
+export function callArgsFromNode(
   args: unknown,
   propsParamName?: string,
   themeBindingName?: string,
