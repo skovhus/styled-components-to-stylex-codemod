@@ -60,6 +60,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     return res;
   };
   const resolveCallOptional = ctx.adapter.resolveCall.bind(ctx.adapter);
+  const resolveThemeCall = ctx.adapter.resolveThemeCall?.bind(ctx.adapter);
   const resolveSelector = ctx.resolveSelectorSafe;
   const importMap =
     ctx.importMap ?? new Map<string, { importedName: string; source: ImportSource }>();
@@ -262,6 +263,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveValueDirectional,
     resolveCall,
     resolveCallOptional,
+    resolveThemeCall,
     resolveSelector,
     importMap,
     styledDecls,

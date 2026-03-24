@@ -244,11 +244,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo) {
-        // Only handle the simple case: selector is exactly `&:__SC_EXPR_N__`
-        // (the entire pseudo-class is a single interpolation).
+        // Handle interpolated pseudo selectors like `&:${highlight}`.
+        // Also supports prefix pseudo-classes before the interpolation,
+        // e.g., `&:not(:disabled):${highlight}` → prefixPseudo = ":not(:disabled)".
+        // Limitation: the `\([^)]*\)` group does not handle nested parentheses,
+        // so patterns like `&:not(:nth-child(2n+1)):${expr}` won't match.
         // Uses `selectorForAnalysis` so that `&&:${expr}` (specificity hack) is accepted
         // after being normalized to `&:__SC_EXPR_N__`.
-        const pseudoSlotMatch = selectorForAnalysis.match(/^&:__SC_EXPR_(\d+)__\s*$/);
+        const pseudoSlotMatch = selectorForAnalysis.match(
+          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
+        );
         if (!pseudoSlotMatch) {
           state.markBail();
           warnings.push({
@@ -259,10 +264,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           break;
         }
 
-        const pseudoSlotId = Number(pseudoSlotMatch[1]);
+        const prefixPseudo = pseudoSlotMatch[1] || null; // e.g. ":not(:disabled)" or null
+        const pseudoSlotId = Number(pseudoSlotMatch[2]);
         const pseudoSlotExpr = decl.templateExpressions[pseudoSlotId];
 
-        const pseudoResolved = tryResolveInterpolatedPseudo(pseudoSlotExpr, rule, ctx);
+        const pseudoResolved = tryResolveInterpolatedPseudo(
+          pseudoSlotExpr,
+          rule,
+          ctx,
+          prefixPseudo,
+        );
 
         if (pseudoResolved === "bail") {
           state.markBail();
@@ -1256,7 +1267,11 @@ function tryForwardCssVarBridge(
   overrideStyleKey: string,
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
-  parentInlineStyleProps: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>,
+  parentInlineStyleProps: Array<{
+    prop: string;
+    expr: ExpressionKind;
+    jsxProp?: string;
+  }>,
   ancestorPseudo: string | null,
 ): Set<string> | "bail" {
   const writtenProps = new Set<string>();
@@ -1736,6 +1751,7 @@ function tryResolveInterpolatedPseudo(
   slotExpr: unknown,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
+  prefixPseudo?: string | null,
 ): "bail" | void {
   const { state } = ctx;
   const { resolveSelector, resolveImportInScope } = state;
@@ -1769,11 +1785,16 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoAlias") {
+    // pseudoAlias emits separate style objects per pseudo value — prefix pseudo
+    // composition (e.g. `:not(:disabled):${highlight}`) is not supported here.
+    if (prefixPseudo) {
+      return "bail";
+    }
     return handlePseudoAlias(selectorResult, rule, ctx);
   }
 
   if (selectorResult.kind === "pseudoExpand") {
-    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx);
+    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
@@ -1855,6 +1876,7 @@ function handlePseudoExpand(
   importedName: string,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
+  prefixPseudo?: string | null,
 ): "bail" | void {
   const prepared = preparePseudoBucket(rule, ctx);
   if (prepared === "bail") {
@@ -1883,7 +1905,9 @@ function handlePseudoExpand(
   const applyExpansionPseudos = (target: Record<string, unknown>, value: unknown): void => {
     for (let i = 0; i < result.expansions.length; i++) {
       const expansion = result.expansions[i]!;
-      const pseudo = `:${expansion.pseudo}`;
+      // When a prefix pseudo is present (e.g. ":not(:disabled)" from `&:not(:disabled):${highlight}`),
+      // prepend it to the expansion pseudo to produce `:not(:disabled):hover` etc.
+      const pseudo = prefixPseudo ? `${prefixPseudo}:${expansion.pseudo}` : `:${expansion.pseudo}`;
       if (expansion.condition) {
         const newEntry = {
           keyExpr: cloneAstNode(parsedConditions[i]!),
@@ -2561,7 +2585,9 @@ function buildAncestorPseudoMap(
 ): ExpressionKind {
   const pseudoEntries = ancestorPseudos.map((pseudo) => {
     const ancestorKey = makeAncestorKeyExpr(j, pseudo, markerVarName);
-    return Object.assign(j.property("init", ancestorKey, valueNode), { computed: true });
+    return Object.assign(j.property("init", ancestorKey, valueNode), {
+      computed: true,
+    });
   });
   return j.objectExpression([
     j.property("init", j.identifier("default"), j.literal(null)),

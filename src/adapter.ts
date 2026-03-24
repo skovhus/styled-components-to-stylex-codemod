@@ -128,6 +128,25 @@ export type CallResolveContext = {
 };
 
 /**
+ * Context for `adapter.resolveThemeCall(...)`.
+ *
+ * This handles patterns like `props.theme.highlightVariant(props.theme.color.bgBorderSolid)`
+ * where a method on the theme object is called with theme-dependent arguments.
+ */
+export type ThemeCallResolveContext = {
+  /** Absolute path of the file being transformed. */
+  callSiteFilePath: string;
+  /** The method name on the theme object (e.g., "highlightVariant"). */
+  methodName: string;
+  /** Call arguments (same format as CallResolveContext.args). */
+  args: CallResolveContext["args"];
+  /** Source location of the call. */
+  loc?: { line: number; column: number };
+  /** CSS property being set (when available). */
+  cssProperty?: string;
+};
+
+/**
  * Context for `adapter.resolveValue(...)` (theme + css variables + imported values).
  *
  * Helper calls are handled separately via `adapter.resolveCall(...)`.
@@ -326,7 +345,10 @@ export type ImportSource =
   | { kind: "absolutePath"; value: string }
   | { kind: "specifier"; value: string };
 
-export type ImportSpec = { from: ImportSource; names: Array<{ imported: string; local?: string }> };
+export type ImportSpec = {
+  from: ImportSource;
+  names: Array<{ imported: string; local?: string }>;
+};
 
 /** An expression string with its required imports, used for className emission. */
 export type ExprWithImports = { expr: string; imports: ImportSpec[] };
@@ -669,6 +691,19 @@ export interface Adapter {
   styleMerger: StyleMergerConfig | null;
 
   /**
+   * Optional resolver for theme method calls like `props.theme.highlightVariant(...)`.
+   *
+   * Called when the codemod encounters a call expression on the theme object that
+   * cannot be resolved via simple theme property access.
+   *
+   * Return:
+   * - `{ preserveRuntimeCall: true }` to preserve the call at runtime
+   * - `{ expr, imports }` to resolve to a static StyleX value
+   * - `undefined` to bail (theme method call is not supported)
+   */
+  resolveThemeCall?: (context: ThemeCallResolveContext) => CallResolveResult | undefined;
+
+  /**
    * Optional theme hook import/call customization for wrapper code that needs runtime theme access.
    *
    * When omitted, defaults to:
@@ -717,6 +752,7 @@ export interface AdapterInput {
    */
   externalInterface: "auto" | Adapter["externalInterface"];
 
+  resolveThemeCall?: Adapter["resolveThemeCall"];
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
