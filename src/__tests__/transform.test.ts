@@ -4063,6 +4063,86 @@ export const App = () => <Input />;
     // Should NOT have the unsplit value
     expect(result.code).not.toContain('"8px 12px"');
   });
+
+  it("should expand 3-value shorthand to physical longhands even with logical conflict", () => {
+    // Logical properties can only express block/inline (2 values).
+    // A 3-value shorthand (top/LR/bottom) must fall back to physical longhands.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $compact?: boolean }>\`
+  padding-block: 4px;
+  \${(p) => p.$compact && "padding: 4px 8px 12px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // 3-value shorthand cannot use logical expansion, must use physical
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+    // The 3-value pattern: top=4px, left/right=8px, bottom=12px
+    // Values may be emitted as numbers when unit-less or parseable
+    expect(result.code).toMatch(/paddingTop:\s*(4|"4px")/);
+    expect(result.code).toMatch(/paddingRight:\s*(8|"8px")/);
+    expect(result.code).toMatch(/paddingBottom:\s*(12|"12px")/);
+    expect(result.code).toMatch(/paddingLeft:\s*(8|"8px")/);
+  });
+
+  it("should handle 4-value shorthand expansion correctly", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $custom?: boolean }>\`
+  padding-block: 2px;
+  \${(p) => p.$custom && "padding: 1px 2px 3px 4px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // 4-value shorthand maps to: top=1px, right=2px, bottom=3px, left=4px
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+  });
+
+  it("should tokenize calc() values correctly without splitting on spaces", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $fluid?: boolean }>\`
+  padding-bottom: 4px;
+  \${(p) => p.$fluid && "padding: calc(100% - 20px) 8px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should treat "calc(100% - 20px)" as a single value, not split on spaces
+    expect(result.code).toContain("calc(100% - 20px)");
+    // Should expand to 4 physical longhands (physical conflict from paddingBottom)
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingBottom");
+  });
 });
 
 describe("usePhysicalProperties adapter option", () => {

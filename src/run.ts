@@ -417,6 +417,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     styleMerger: resolvedAdapter.styleMerger,
     themeHook: resolvedAdapter.themeHook,
     useSxProp: resolvedAdapter.useSxProp,
+    usePhysicalProperties: resolvedAdapter.usePhysicalProperties,
     externalInterface(ctx) {
       return resolvedAdapter.externalInterface(ctx);
     },

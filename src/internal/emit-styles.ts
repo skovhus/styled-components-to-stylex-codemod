@@ -1004,30 +1004,33 @@ function expandShorthandInStyle(
 ): void {
   // Build the replacement entries
   let replacements: Array<{ prop: string; value: unknown }>;
-  if (useLogical) {
+
+  // Parse the value to extract quad values (CSS shorthand notation: 1→all, 2→TB/LR,
+  // 3→T/LR/B, 4→T/R/B/L).
+  const rawStr = typeof value === "number" ? String(value) : value;
+  const tokens = tokenizeShorthandValue(rawStr);
+  const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
+
+  // Logical properties can only express block (top+bottom) and inline (left+right).
+  // Only 1-value (all same) and 2-value (block/inline) patterns can map to logical.
+  // For 3/4-value patterns, we must use physical longhands.
+  const canUseLogical = tokens.length <= 2;
+
+  if (useLogical && canUseLogical) {
     // Expand to logical longhands (block/inline) to match existing logical properties
-    // in other style objects. Parse multi-value shorthands directly rather than using
-    // splitDirectionalProperty (which returns physical longhands).
-    const rawStr = typeof value === "number" ? String(value) : value;
-    const tokens = rawStr.trim().split(/\s+/);
+    // in other style objects.
     const block = tokens[0] ?? rawStr;
     const inline = tokens[1] ?? block;
-    const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
     replacements = [
       { prop: `${shorthand}Block`, value: numOrStr(block) },
       { prop: `${shorthand}Inline`, value: numOrStr(inline) },
     ];
   } else {
-    // Physical conflict: always expand to 4 physical longhands (top/right/bottom/left).
-    // Parse the value to extract quad values (CSS shorthand notation: 1→all, 2→TB/LR,
-    // 3→T/LR/B, 4→T/R/B/L) and map to physical property names.
-    const rawStr = typeof value === "number" ? String(value) : value;
-    const tokens = rawStr.trim().split(/\s+/);
+    // Physical expansion: always expand to 4 physical longhands (top/right/bottom/left).
     const top = tokens[0] ?? rawStr;
     const right = tokens[1] ?? top;
     const bottom = tokens[2] ?? top;
     const left = tokens[3] ?? right;
-    const numOrStr = (v: string): string | number => (typeof value === "number" ? value : v);
     replacements = [
       { prop: `${shorthand}Top`, value: numOrStr(top) },
       { prop: `${shorthand}Right`, value: numOrStr(right) },
@@ -1037,4 +1040,38 @@ function expandShorthandInStyle(
   }
 
   replacePropsInPlace(style, new Map([[shorthand, replacements]]));
+}
+
+/**
+ * Tokenize a CSS shorthand value into individual values, respecting CSS function
+ * parentheses so that `calc(1px + 2px)` is treated as a single token.
+ */
+function tokenizeShorthandValue(value: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i]!;
+    if (char === "(") {
+      parenDepth++;
+      current += char;
+    } else if (char === ")") {
+      parenDepth--;
+      current += char;
+    } else if (/\s/.test(char) && parenDepth === 0) {
+      if (current.trim()) {
+        tokens.push(current.trim());
+        current = "";
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) {
+    tokens.push(current.trim());
+  }
+
+  return tokens;
 }
