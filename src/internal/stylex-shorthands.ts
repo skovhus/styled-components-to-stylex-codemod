@@ -136,8 +136,10 @@ export function splitDirectionalProperty(args: {
 
   if (values.length === 2) {
     return [
-      { prop: `${prop}Block`, value: withImportant(top) },
-      { prop: `${prop}Inline`, value: withImportant(right) },
+      { prop: `${prop}Top`, value: withImportant(top) },
+      { prop: `${prop}Right`, value: withImportant(right) },
+      { prop: `${prop}Bottom`, value: withImportant(top) },
+      { prop: `${prop}Left`, value: withImportant(right) },
     ];
   }
 

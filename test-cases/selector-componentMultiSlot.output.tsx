@@ -18,8 +18,10 @@ const styles = stylex.create({
   // Two interpolation slots in a single declaration value.
   // Both must resolve independently to their respective theme tokens.
   badge: {
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
   },
   badgeInLink: {
     boxShadow: {

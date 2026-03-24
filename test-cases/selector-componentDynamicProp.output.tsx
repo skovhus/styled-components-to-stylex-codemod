@@ -69,8 +69,10 @@ const styles = stylex.create({
     backgroundColor: "papayawhip",
   },
   badge: (color: string) => ({
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
     color: {
       default: null,
       [stylex.when.ancestor(":hover")]: color,

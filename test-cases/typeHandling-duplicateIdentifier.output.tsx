@@ -86,8 +86,10 @@ const styles = stylex.create({
     borderColor: "blue",
   },
   iconButton: {
-    paddingBlock: 0,
-    paddingInline: 2,
+    paddingTop: 0,
+    paddingRight: 2,
+    paddingBottom: 0,
+    paddingLeft: 2,
     boxShadow: "none",
   },
 });

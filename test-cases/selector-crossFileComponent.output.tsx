@@ -19,8 +19,10 @@ const styles = stylex.create({
   button: {
     display: "inline-flex",
     alignItems: "center",
-    paddingBlock: 8,
-    paddingInline: 12,
+    paddingTop: 8,
+    paddingRight: 12,
+    paddingBottom: 8,
+    paddingLeft: 12,
     backgroundColor: "#f0f0f0",
     cursor: "pointer",
   },

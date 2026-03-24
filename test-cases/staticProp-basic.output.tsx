@@ -73,14 +73,18 @@ export function App() {
 
 const styles = stylex.create({
   listItem: {
-    paddingBlock: 8,
-    paddingInline: 12,
+    paddingTop: 8,
+    paddingRight: 12,
+    paddingBottom: 8,
+    paddingLeft: 12,
     display: "flex",
     alignItems: "center",
   },
   baseButton: {
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     backgroundColor: "gray",
   },
   extendedButton: {

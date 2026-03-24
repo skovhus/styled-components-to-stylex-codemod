@@ -39,12 +39,17 @@ const styles = stylex.create({
       [breakpoints.phone]: 0,
     },
 
+    paddingRight: {
+      default: 24,
+      [breakpoints.phone]: 16,
+    },
+
     paddingBottom: {
       default: 12,
       [breakpoints.phone]: 0,
     },
 
-    paddingInline: {
+    paddingLeft: {
       default: 24,
       [breakpoints.phone]: 16,
     },

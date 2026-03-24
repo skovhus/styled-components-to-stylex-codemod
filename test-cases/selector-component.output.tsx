@@ -13,8 +13,10 @@ const styles = stylex.create({
   link: {
     display: "flex",
     alignItems: "center",
-    paddingBlock: 5,
-    paddingInline: 10,
+    paddingTop: 5,
+    paddingRight: 10,
+    paddingBottom: 5,
+    paddingLeft: 10,
     backgroundColor: "papayawhip",
     color: "#bf4f74",
   },

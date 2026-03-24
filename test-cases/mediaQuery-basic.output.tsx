@@ -53,11 +53,19 @@ const styles = stylex.create({
     },
     borderRadius: 12,
     boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-    marginBlock: {
+    marginTop: {
       default: null,
       "@media (min-width: 768px)": 0,
     },
-    marginInline: {
+    marginRight: {
+      default: null,
+      "@media (min-width: 768px)": "auto",
+    },
+    marginBottom: {
+      default: null,
+      "@media (min-width: 768px)": 0,
+    },
+    marginLeft: {
       default: null,
       "@media (min-width: 768px)": "auto",
     },
@@ -128,8 +136,10 @@ const styles = stylex.create({
       "@media (min-width: 768px)": "auto",
     },
     marginTop: "1.5rem",
-    paddingBlock: 12,
-    paddingInline: 24,
+    paddingTop: 12,
+    paddingRight: 24,
+    paddingBottom: 12,
+    paddingLeft: 24,
     backgroundImage: "linear-gradient(135deg, #4169e1 0%, #6495ed 100%)",
     borderWidth: 0,
     borderRadius: 8,

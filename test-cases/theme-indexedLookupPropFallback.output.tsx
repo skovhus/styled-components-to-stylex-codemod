@@ -24,8 +24,10 @@ export const App = () => (
 const styles = stylex.create({
   view: {
     color: "white",
-    paddingBlock: 12,
-    paddingInline: 16,
+    paddingTop: 12,
+    paddingRight: 16,
+    paddingBottom: 12,
+    paddingLeft: 16,
     borderRadius: 6,
     fontSize: 14,
     fontWeight: 500,

@@ -111,8 +111,10 @@ export const App = () => (
 const styles = stylex.create({
   badge: (props: { badgeColor: string }) => ({
     position: "relative",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     backgroundColor: "#f0f0f0",
     "::after": {
       content: '""',
@@ -137,8 +139,10 @@ const styles = stylex.create({
   }),
   tag: {
     position: "relative",
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
     backgroundColor: "#e0e0e0",
     "::after": {
       content: '""',
@@ -153,8 +157,10 @@ const styles = stylex.create({
   }),
   button: (props: { glowColor: string }) => ({
     position: "relative",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     backgroundColor: "#333",
     color: "white",
     "::after": {

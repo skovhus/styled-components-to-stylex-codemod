@@ -20,8 +20,10 @@ const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
     color: "white",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",

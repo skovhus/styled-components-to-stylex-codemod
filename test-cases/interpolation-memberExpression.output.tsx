@@ -22,8 +22,10 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   buttonStylesSizeCss: {
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     fontSize: 14,
   },
 });

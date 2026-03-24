@@ -24,8 +24,10 @@ const styles = stylex.create({
   },
   // Border shorthand from helper function call returning full border value
   thinBorderContainer: {
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
   },
   thinBorderContainerBorder: {
     borderWidth: pixelVars.thin,

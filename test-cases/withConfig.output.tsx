@@ -33,8 +33,10 @@ const styles = stylex.create({
   button: {
     backgroundColor: "#bf4f74",
     color: "white",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",
@@ -47,8 +49,10 @@ const styles = stylex.create({
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
   input: {
-    paddingBlock: 8,
-    paddingInline: 12,
+    paddingTop: 8,
+    paddingRight: 12,
+    paddingBottom: 8,
+    paddingLeft: 12,
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: {
@@ -76,8 +80,10 @@ const styles = stylex.create({
   extendedButton: {
     backgroundColor: "#4f74bf",
     color: "white",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "initial",

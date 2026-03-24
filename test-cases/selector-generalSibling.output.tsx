@@ -17,8 +17,10 @@ export const App = () => (
 const styles = stylex.create({
   thing: {
     color: "blue",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     borderBottomWidth: {
       default: null,
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: 2,

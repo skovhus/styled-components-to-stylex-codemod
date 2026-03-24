@@ -32,14 +32,18 @@ const styles = stylex.create({
   // StyledButton must NOT strip to "button" since Button already has that key.
   button: {
     backgroundColor: "coral",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     color: "white",
   },
   styledButton: {
     backgroundColor: "teal",
-    paddingBlock: 12,
-    paddingInline: 24,
+    paddingTop: 12,
+    paddingRight: 24,
+    paddingBottom: 12,
+    paddingLeft: 24,
     color: "white",
   },
 });

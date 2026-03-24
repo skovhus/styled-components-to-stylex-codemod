@@ -22,7 +22,9 @@ const styles = stylex.create({
       // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":is(*)", ThingMarker)]: "red",
     },
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
   },
 });

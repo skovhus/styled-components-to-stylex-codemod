@@ -33,8 +33,10 @@ const styles = stylex.create({
   // component and self. This is NOT an ancestor relationship, so
   // stylex.when.ancestor() would produce incorrect semantics.
   badge: {
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
     color: {
       default: "gray",
       // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
@@ -53,8 +55,10 @@ const styles = stylex.create({
   // Link needs both LinkMarker (for sibling) and defaultMarker() (for ancestor).
   nested: {
     color: "gray",
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
   },
   nestedInLink: {
     color: {

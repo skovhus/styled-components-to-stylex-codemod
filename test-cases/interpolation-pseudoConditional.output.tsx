@@ -58,8 +58,10 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     color: "blue",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
   },
   buttonPseudoActive: {
     color: {
@@ -83,8 +85,10 @@ const styles = stylex.create({
   },
   specificButton: {
     color: "green",
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
   },
   specificButtonPseudoActive: {
     color: {

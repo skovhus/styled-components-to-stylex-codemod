@@ -27,10 +27,12 @@ describe("splitDirectionalProperty", () => {
     ]);
   });
 
-  it("uses block/inline for two-value shorthand", () => {
+  it("uses physical longhands for two-value shorthand", () => {
     expect(splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px" })).toEqual([
-      { prop: "paddingBlock", value: "4px" },
-      { prop: "paddingInline", value: "8px" },
+      { prop: "paddingTop", value: "4px" },
+      { prop: "paddingRight", value: "8px" },
+      { prop: "paddingBottom", value: "4px" },
+      { prop: "paddingLeft", value: "8px" },
     ]);
   });
 
@@ -97,8 +99,10 @@ describe("splitDirectionalProperty", () => {
       rawValue: "calc(100% - 20px) 10px",
     });
     expect(result).toEqual([
-      { prop: "marginBlock", value: "calc(100% - 20px)" },
-      { prop: "marginInline", value: "10px" },
+      { prop: "marginTop", value: "calc(100% - 20px)" },
+      { prop: "marginRight", value: "10px" },
+      { prop: "marginBottom", value: "calc(100% - 20px)" },
+      { prop: "marginLeft", value: "10px" },
     ]);
   });
 

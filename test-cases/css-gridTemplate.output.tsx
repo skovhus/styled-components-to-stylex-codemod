@@ -40,8 +40,10 @@ const styles = stylex.create({
     backgroundColor: "#f3f3f3",
     color: "#666",
     textAlign: "right",
-    paddingBlock: 4,
-    paddingInline: 6,
+    paddingTop: 4,
+    paddingRight: 6,
+    paddingBottom: 4,
+    paddingLeft: 6,
     fontFamily:
       'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace',
     fontSize: 12,
@@ -49,8 +51,10 @@ const styles = stylex.create({
   code: {
     backgroundColor: "#e7f3ff",
     color: "#0b4f6c",
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
     fontFamily:
       'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace',
     fontSize: 12,

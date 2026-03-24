@@ -29,8 +29,10 @@ export function App() {
 
 const styles = stylex.create({
   button: {
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     backgroundColor: {
       default: "#f0f0f0",
       ":active": "#e0e0e0",
@@ -49,8 +51,10 @@ const styles = stylex.create({
     },
   },
   disabledAwareButton: {
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     backgroundColor: {
       default: "#f0f0f0",
       ":not(:disabled):active": "#d0d0ff",

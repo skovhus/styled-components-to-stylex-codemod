@@ -37,8 +37,10 @@ const styles = stylex.create({
     borderColor: "initial",
     height: 1,
     backgroundColor: "#e0e0e0",
-    marginBlock: 16,
-    marginInline: 0,
+    marginTop: 16,
+    marginRight: 0,
+    marginBottom: 16,
+    marginLeft: 0,
   },
   dividerBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,

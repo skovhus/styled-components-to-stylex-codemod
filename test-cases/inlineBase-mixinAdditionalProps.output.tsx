@@ -9,8 +9,10 @@ const styles = stylex.create({
   button: {
     alignItems: "center",
     gap: 12,
-    paddingBlock: 8,
-    paddingInline: 12,
+    paddingTop: 8,
+    paddingRight: 12,
+    paddingBottom: 8,
+    paddingLeft: 12,
     backgroundColor: "#ecf2ff",
     borderWidth: 1,
     borderStyle: "solid",

@@ -3733,7 +3733,7 @@ export const App = () => <Box>Hover me</Box>;
 
   it("should bail when inline style fallback targets a CSS shorthand property", () => {
     // When cssProp is a shorthand like `padding`, cssDeclarationToStylexDeclarations
-    // expands it to longhands (paddingBlock, paddingInline). The inline style would
+    // expands it to longhands (paddingTop, paddingRight, etc.). The inline style would
     // assign the same opaque expression to each longhand, which is wrong for
     // multi-value shorthand tokens like "6px 12px".
     const source = `
@@ -3987,19 +3987,21 @@ export const App = () => <Input readOnly value="test" />;
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The base has physical longhands (from "8px 12px").
     // The readonly block has padding: 0 which should be expanded to match.
-    expect(result.code).toContain("paddingBlock");
-    expect(result.code).toContain("paddingInline");
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
     // The readonly style should NOT have the shorthand "padding" since it conflicts
-    // with the base's paddingBlock/paddingInline longhands.
+    // with the base's physical longhands.
     const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
     expect(readonlyMatch).toBeTruthy();
     const readonlyBlock = readonlyMatch![1]!;
     // Should have expanded longhands, not shorthand
-    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Block|Inline)/);
-    expect(readonlyBlock).toContain("paddingBlock");
-    expect(readonlyBlock).toContain("paddingInline");
+    expect(readonlyBlock).not.toMatch(/\bpadding\b(?!Top|Right|Bottom|Left)/);
+    expect(readonlyBlock).toContain("paddingTop");
+    expect(readonlyBlock).toContain("paddingLeft");
   });
 });
 
@@ -4057,9 +4059,11 @@ export const App = () => <Input />;
     );
     expect(result.code).not.toBeNull();
     // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
-    // The expansion should split: paddingBlock: 8, paddingInline: 12
-    expect(result.code).toContain("paddingBlock: 8");
-    expect(result.code).toContain("paddingInline: 12");
+    // The expansion should produce physical longhands: paddingTop: 8, paddingRight: 12, etc.
+    expect(result.code).toContain("paddingTop: 8");
+    expect(result.code).toContain("paddingRight: 12");
+    expect(result.code).toContain("paddingBottom: 8");
+    expect(result.code).toContain("paddingLeft: 12");
     // Should NOT have the unsplit value
     expect(result.code).not.toContain('"8px 12px"');
   });

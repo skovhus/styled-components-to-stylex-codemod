@@ -17,8 +17,10 @@ const styles = stylex.create({
   // The child has a base :focus pseudo on color, AND a reverse ancestor override on color.
   // The default in the override must be the scalar base value, not the pseudo map object.
   badge: {
-    paddingBlock: 4,
-    paddingInline: 8,
+    paddingTop: 4,
+    paddingRight: 8,
+    paddingBottom: 4,
+    paddingLeft: 8,
     color: {
       default: "gray",
       ":focus": "orange",

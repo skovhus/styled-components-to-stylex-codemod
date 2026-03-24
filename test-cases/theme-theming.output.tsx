@@ -22,8 +22,10 @@ const styles = stylex.create({
   button: {
     fontSize: 14,
     margin: 0,
-    paddingBlock: 8,
-    paddingInline: 16,
+    paddingTop: 8,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 16,
     borderRadius: 6,
     backgroundColor: "white",
     color: $colors.primaryColor,
