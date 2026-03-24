@@ -14,11 +14,24 @@ const Button = styled.button`
   }
 `;
 
+const DisabledAwareButton = styled.button`
+  padding: 8px 16px;
+  background-color: #f0f0f0;
+  color: #333;
+
+  &:not(:disabled):${highlightExpand} {
+    background-color: #d0d0ff;
+    color: #000;
+  }
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
+      <DisabledAwareButton>Enabled</DisabledAwareButton>
+      <DisabledAwareButton disabled>Disabled</DisabledAwareButton>
     </div>
   );
 }
