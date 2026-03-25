@@ -9,6 +9,7 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import { normalizeWhitespace } from "../utilities/string-utils.js";
+import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
 import { isDirectionalThemeResult } from "./theme.js";
@@ -148,6 +149,7 @@ export function tryHandleInterpolatedStringValue(args: {
         prop: "margin",
         rawValue: d.valueRaw.trim(),
         important: d.important,
+        useLogical: getUseLogicalProperties(),
       });
       if (!entries.length) {
         return false;

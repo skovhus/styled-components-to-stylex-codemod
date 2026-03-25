@@ -15,6 +15,7 @@ import {
   resolveBackgroundStylexPropForVariants,
 } from "../css-prop-mapping.js";
 import { extractStaticPartsForDecl, wrapExprWithStaticParts } from "./interpolations.js";
+import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { toSuffixFromProp } from "../transform/helpers.js";
@@ -246,6 +247,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       prop: propName,
       rawValue,
       important: d.important,
+      useLogical: getUseLogicalProperties(),
     });
     if (!entries.length) {
       return false;

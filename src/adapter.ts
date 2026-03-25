@@ -723,6 +723,19 @@ export interface Adapter {
    *
    */
   useSxProp: boolean;
+
+  /**
+   * Use physical CSS properties (`paddingTop`/`paddingRight`/`paddingBottom`/`paddingLeft`)
+   * instead of logical properties (`paddingBlock`/`paddingInline`) when expanding
+   * 2-value CSS shorthands like `padding: 4px 8px`.
+   *
+   * By default, the codemod uses logical properties which adapt to the writing direction
+   * (RTL/LTR), matching StyleX's ESLint plugin recommendations. Enable this if your
+   * codebase needs RTL support or prefer physical properties.
+   *
+   * @default false
+   */
+  usePhysicalProperties?: boolean;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -756,6 +769,7 @@ export interface AdapterInput {
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
+  usePhysicalProperties?: Adapter["usePhysicalProperties"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -823,6 +837,9 @@ export interface AdapterInput {
  *
  *     // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
  *     useSxProp: false,
+ *
+ *     // Opt out of logical properties — use paddingTop/Right/Bottom/Left instead of Block/Inline
+ *     // usePhysicalProperties: true,
  *
  *     // Optional: customize runtime theme hook import/call used by emitted wrappers
  *     themeHook: {

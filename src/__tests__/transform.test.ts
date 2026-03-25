@@ -3733,7 +3733,7 @@ export const App = () => <Box>Hover me</Box>;
 
   it("should bail when inline style fallback targets a CSS shorthand property", () => {
     // When cssProp is a shorthand like `padding`, cssDeclarationToStylexDeclarations
-    // expands it to longhands (paddingBlock, paddingInline). The inline style would
+    // expands it to longhands (paddingTop, paddingRight, etc.). The inline style would
     // assign the same opaque expression to each longhand, which is wrong for
     // multi-value shorthand tokens like "6px 12px".
     const source = `
@@ -3987,12 +3987,12 @@ export const App = () => <Input readOnly value="test" />;
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // The base has paddingBlock/paddingInline (from "8px 12px").
+    // The base has logical longhands (from "8px 12px" → paddingBlock/paddingInline).
     // The readonly block has padding: 0 which should be expanded to match.
     expect(result.code).toContain("paddingBlock");
     expect(result.code).toContain("paddingInline");
     // The readonly style should NOT have the shorthand "padding" since it conflicts
-    // with the base's paddingBlock/paddingInline longhands.
+    // with the base's logical longhands.
     const readonlyMatch = result.code!.match(/inputReadonly:\s*\{([^}]+)\}/);
     expect(readonlyMatch).toBeTruthy();
     const readonlyBlock = readonlyMatch![1]!;
@@ -4057,11 +4057,139 @@ export const App = () => <Input />;
     );
     expect(result.code).not.toBeNull();
     // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
-    // The expansion should split: paddingBlock: 8, paddingInline: 12
+    // Both expand to logical longhands (default), so no conflict normalization needed.
     expect(result.code).toContain("paddingBlock: 8");
     expect(result.code).toContain("paddingInline: 12");
     // Should NOT have the unsplit value
     expect(result.code).not.toContain('"8px 12px"');
+  });
+
+  it("should expand 3-value shorthand to physical longhands even with logical conflict", () => {
+    // Logical properties can only express block/inline (2 values).
+    // A 3-value shorthand (top/LR/bottom) must fall back to physical longhands.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $compact?: boolean }>\`
+  padding-block: 4px;
+  \${(p) => p.$compact && "padding: 4px 8px 12px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // 3-value shorthand cannot use logical expansion, must use physical
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+    // The 3-value pattern: top=4px, left/right=8px, bottom=12px
+    // Values may be emitted as numbers when unit-less or parseable
+    expect(result.code).toMatch(/paddingTop:\s*(4|"4px")/);
+    expect(result.code).toMatch(/paddingRight:\s*(8|"8px")/);
+    expect(result.code).toMatch(/paddingBottom:\s*(12|"12px")/);
+    expect(result.code).toMatch(/paddingLeft:\s*(8|"8px")/);
+  });
+
+  it("should handle 4-value shorthand expansion correctly", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $custom?: boolean }>\`
+  padding-block: 2px;
+  \${(p) => p.$custom && "padding: 1px 2px 3px 4px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // 4-value shorthand maps to: top=1px, right=2px, bottom=3px, left=4px
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+  });
+
+  it("should tokenize calc() values correctly without splitting on spaces", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $fluid?: boolean }>\`
+  padding-bottom: 4px;
+  \${(p) => p.$fluid && "padding: calc(100% - 20px) 8px;"}
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    // Should treat "calc(100% - 20px)" as a single value, not split on spaces
+    expect(result.code).toContain("calc(100% - 20px)");
+    // Should expand to 4 physical longhands (physical conflict from paddingBottom)
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingBottom");
+  });
+});
+
+describe("usePhysicalProperties adapter option", () => {
+  it("should expand 2-value padding to logical properties by default", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px 8px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    expect(result.code).not.toContain("paddingTop");
+    expect(result.code).not.toContain("paddingRight");
+  });
+
+  it("should expand 2-value padding to physical properties when usePhysicalProperties is true", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px 8px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: { ...fixtureAdapter, usePhysicalProperties: true } },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingTop");
+    expect(result.code).toContain("paddingRight");
+    expect(result.code).toContain("paddingBottom");
+    expect(result.code).toContain("paddingLeft");
+    expect(result.code).not.toContain("paddingBlock");
+    expect(result.code).not.toContain("paddingInline");
   });
 });
 

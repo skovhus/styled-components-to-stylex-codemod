@@ -27,7 +27,7 @@ describe("splitDirectionalProperty", () => {
     ]);
   });
 
-  it("uses block/inline for two-value shorthand", () => {
+  it("uses logical longhands for two-value shorthand (default)", () => {
     expect(splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px" })).toEqual([
       { prop: "paddingBlock", value: "4px" },
       { prop: "paddingInline", value: "8px" },
@@ -81,6 +81,17 @@ describe("splitDirectionalProperty", () => {
     });
     expect(result[1]!.prop).toBe("paddingInlineEnd");
     expect(result[3]!.prop).toBe("paddingInlineStart");
+  });
+
+  it("uses physical longhands for two-value shorthand when useLogical is false", () => {
+    expect(
+      splitDirectionalProperty({ prop: "padding", rawValue: "4px 8px", useLogical: false }),
+    ).toEqual([
+      { prop: "paddingTop", value: "4px" },
+      { prop: "paddingRight", value: "8px" },
+      { prop: "paddingBottom", value: "4px" },
+      { prop: "paddingLeft", value: "8px" },
+    ]);
   });
 
   it("handles CSS functions like calc() as single values", () => {
