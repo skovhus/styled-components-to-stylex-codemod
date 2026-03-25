@@ -75,6 +75,7 @@ export default [
     // for valid computed property keys like [stylex.when.siblingBefore(...)].
     files: [
       "test-cases/selector-componentSiblingCombinator.output.tsx",
+      "test-cases/selector-has.output.tsx",
       "test-cases/selector-siblingMedia.output.tsx",
     ],
     rules: { "stylex/valid-styles": "off" },
@@ -95,6 +96,13 @@ export default [
       "test-cases/selector-pseudoComma.output.tsx",
     ],
     rules: { "stylex/valid-styles": "off" },
+  },
+
+  {
+    // stylex.when.descendant(): `:has()` selectors have limited browser support
+    // but are valid and intentionally emitted by the codemod for same-file component selectors.
+    files: ["test-cases/selector-has.output.tsx"],
+    rules: { "stylex/no-lookahead-selectors": "off" },
   },
 
   ...storybook.configs["flat/recommended"],

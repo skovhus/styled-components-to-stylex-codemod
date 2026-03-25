@@ -35,6 +35,7 @@ import {
   cssPropertyToIdentifier,
   getOrCreateRelationOverrideBucket,
   makeAncestorKeyExpr,
+  makeDescendantKeyExpr,
   makeCssProperty,
   makeCssPropKey,
 } from "./shared.js";
@@ -244,8 +245,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
+      // &:has(${Component}) has a placeholder inside :has() — not an interpolated pseudo.
+      // Skip the interpolated-pseudo handler so it reaches the component selector path.
+      const isHasComponentSelector = HAS_COMPONENT_SELECTOR_RE.test(selectorForAnalysis);
 
-      if (hasInterpolatedPseudo) {
+      if (hasInterpolatedPseudo && !isHasComponentSelector) {
         // Handle interpolated pseudo selectors like `&:${highlight}`.
         // Also supports prefix pseudo-classes before the interpolation,
         // e.g., `&:not(:disabled):${highlight}` → prefixPseudo = ":not(:disabled)".
@@ -312,7 +316,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           // Pattern 3: standalone component selector `${Child} { ... }`
           /^__SC_EXPR_\d+__\s*\{/.test(selectorTrimmed) ||
           // Pattern 4: cross-component sibling: `${Link}:pseudo + &` or `~ &`
-          /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s*[+~]\s*&\s*$/.test(selectorTrimmed));
+          /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s*[+~]\s*&\s*$/.test(selectorTrimmed) ||
+          // Pattern 5: descendant-has: `&:has(${Component})`
+          HAS_COMPONENT_SELECTOR_STRICT_RE.test(selectorTrimmed));
 
       // Use heuristic-based bail checks. We need to allow:
       // - Component selectors that have special handling
@@ -406,6 +412,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isCssHelperPlaceholder = !!otherLocal && cssHelperNames.has(otherLocal);
 
       const selTrim2 = rule.selector.trim();
+      const isHasPattern = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selTrim2);
 
       // `${Other}:pseudo &` (Icon reacting to ancestor hover/focus/etc.)
       // This is the inverse of `&:pseudo ${Child}` — the declaring component is the child,
@@ -617,7 +624,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // produces when the component selector is used without `&` in the template.
       const isComponentSelectorPattern =
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
-      if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern) {
+      if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern && !isHasPattern) {
         const childDecl = declByLocalName.get(otherLocal);
         const crossFileUsage = !childDecl
           ? state.crossFileSelectorsByLocal.get(otherLocal)
@@ -757,11 +764,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const isAdjacentCombinator = combinator === "+";
 
         // Register marker for the referenced component
-        const refStyleKey = referencedDecl.styleKey;
-        const refMarkerVarName = state.siblingMarkerNames.get(refStyleKey) ?? `${otherLocal}Marker`;
-        state.siblingMarkerNames.set(refStyleKey, refMarkerVarName);
-        state.siblingMarkerParents.add(refStyleKey);
-        ancestorSelectorParents.add(refStyleKey);
+        const refMarkerVarName = registerReferencedMarker(
+          referencedDecl.styleKey,
+          otherLocal,
+          state,
+          ancestorSelectorParents,
+        );
 
         // Process declarations into a temporary bucket
         const sibBucket: Record<string, unknown> = {};
@@ -794,55 +802,77 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             [j.literal(siblingPseudo), j.identifier(refMarkerVarName)],
           );
 
-        // Wrap values in media/container condition objects when inside @media/@container
-        let media = findSupportedAtRule(rule.atRuleStack);
-        if (media) {
-          const resolved = resolveMediaAtRulePlaceholders(
-            media,
-            (slotId) => decl.templateExpressions[slotId],
-            {
-              lookupImport: state.resolveImportInScope,
-              resolveValue: state.resolveValue,
-              resolveSelector: state.resolveSelector,
-              parseExpr: state.parseExpr,
-              filePath: state.filePath,
-              resolverImports: state.resolverImports,
-            },
-          );
-          if (resolved === null) {
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
-          if (resolved.kind === "static") {
-            media = resolved.value;
-          } else {
-            // Computed media keys (e.g. imported breakpoint constants) cannot be nested
-            // inside a sibling computed key — bail instead of silently dropping the guard.
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: computed media query inside cross-component sibling selector",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        const emitResult = resolveMediaAndEmitComputedKeys(
+          sibBucket,
+          makeSiblingKeyExpr,
+          rule,
+          ctx,
+          "Unsupported selector: computed media query inside cross-component sibling selector",
+          isAdjacentCombinator
+            ? {
+                leadingComment:
+                  "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
+              }
+            : undefined,
+        );
+        if (emitResult === "break") {
+          break;
+        }
+        continue;
+      }
+
+      // Descendant-has: `&:has(${Component})` — style self when containing a specific descendant.
+      // Uses stylex.when.descendant(ComponentMarker).
+      if (otherLocal && !isCssHelperPlaceholder && isHasPattern) {
+        const referencedDecl = declByLocalName.get(otherLocal);
+        if (!referencedDecl) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: cross-file :has() component selector not yet supported",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
 
-        for (const [prop, value] of Object.entries(sibBucket)) {
-          const siblingValue = media ? { default: null, [media]: value } : value;
-          const entry = getOrCreateComputedMediaEntry(prop, ctx);
-          entry.entries.push({
-            keyExpr: makeSiblingKeyExpr(),
-            value: siblingValue,
-            ...(isAdjacentCombinator && {
-              leadingComment:
-                "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-            }),
+        // Register marker for the referenced (child) component
+        const refMarkerVarName = registerReferencedMarker(
+          referencedDecl.styleKey,
+          otherLocal,
+          state,
+          ancestorSelectorParents,
+        );
+
+        // Process declarations into a temporary bucket
+        const hasBucket: Record<string, unknown> = {};
+        const hasResult = processDeclarationsIntoBucket(
+          rule,
+          hasBucket,
+          j,
+          decl,
+          resolveThemeValue,
+          resolveThemeValueFromFn,
+          { bailOnUnresolved: true },
+        );
+        if (hasResult === "bail") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: unresolved interpolation in :has() component selector",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
+          break;
+        }
+
+        const hasEmitResult = resolveMediaAndEmitComputedKeys(
+          hasBucket,
+          () => makeDescendantKeyExpr(j, refMarkerVarName),
+          rule,
+          ctx,
+          "Unsupported selector: computed media query inside :has() component selector",
+        );
+        if (hasEmitResult === "break") {
+          break;
         }
         continue;
       }
@@ -2252,6 +2282,11 @@ function extractCssTextFromNode(node: unknown): string | null {
   return null;
 }
 
+/** Descendant-has pattern (substring match): `&:has(__SC_EXPR_N__)` anywhere in selector */
+const HAS_COMPONENT_SELECTOR_RE = /&:has\(__SC_EXPR_\d+__\)/;
+/** Descendant-has pattern (full selector match): exactly `&:has(__SC_EXPR_N__)` */
+const HAS_COMPONENT_SELECTOR_STRICT_RE = /^&:has\(__SC_EXPR_\d+__\)\s*$/;
+
 /** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
 const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
 
@@ -2320,6 +2355,87 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
     perPropComputedMedia.set(prop, entry);
   }
   return entry;
+}
+
+/**
+ * Registers a marker for a referenced component used in cross-component
+ * sibling or descendant-has selectors. Returns the marker variable name.
+ */
+function registerReferencedMarker(
+  styleKey: string,
+  localName: string,
+  state: DeclProcessingState["state"],
+  ancestorSelectorParents: Set<string>,
+): string {
+  const markerVarName = state.siblingMarkerNames.get(styleKey) ?? `${localName}Marker`;
+  state.siblingMarkerNames.set(styleKey, markerVarName);
+  state.siblingMarkerParents.add(styleKey);
+  ancestorSelectorParents.add(styleKey);
+  return markerVarName;
+}
+
+/**
+ * Resolves @media at-rules and emits computed-key entries for a set of
+ * CSS declarations. Shared by sibling, cross-component sibling, and
+ * descendant-has (:has()) handlers.
+ *
+ * Returns "break" on error (caller should bail), undefined on success.
+ */
+function resolveMediaAndEmitComputedKeys(
+  bucket: Record<string, unknown>,
+  makeKeyExpr: () => ExpressionKind,
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+  computedMediaWarningType: import("../logger.js").WarningType,
+  entryExtra?: { leadingComment: string },
+): "break" | void {
+  const { state, decl } = ctx;
+  const { warnings } = state;
+
+  let media = findSupportedAtRule(rule.atRuleStack);
+  if (media) {
+    const resolved = resolveMediaAtRulePlaceholders(
+      media,
+      (slotId) => decl.templateExpressions[slotId],
+      {
+        lookupImport: state.resolveImportInScope,
+        resolveValue: state.resolveValue,
+        resolveSelector: state.resolveSelector,
+        parseExpr: state.parseExpr,
+        filePath: state.filePath,
+        resolverImports: state.resolverImports,
+      },
+    );
+    if (resolved === null) {
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (resolved.kind === "static") {
+      media = resolved.value;
+    } else {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: computedMediaWarningType,
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+  }
+
+  for (const [prop, value] of Object.entries(bucket)) {
+    const wrappedValue = media ? { default: null, [media]: value } : value;
+    const entry = getOrCreateComputedMediaEntry(prop, ctx);
+    entry.entries.push({
+      keyExpr: makeKeyExpr(),
+      value: wrappedValue,
+      ...entryExtra,
+    });
+  }
 }
 
 /**
@@ -2402,59 +2518,19 @@ function handleSiblingSelector(
       [j.literal(":is(*)"), j.identifier(markerVarName)],
     );
 
-  // Wrap values in media/container condition objects when inside an @media or @container at-rule
-  let media = findSupportedAtRule(rule.atRuleStack);
-
-  // Resolve __SC_EXPR_N__ placeholders inside the media query
-  if (media) {
-    const resolved = resolveMediaAtRulePlaceholders(
-      media,
-      (slotId) => decl.templateExpressions[slotId],
-      {
-        lookupImport: state.resolveImportInScope,
-        resolveValue: state.resolveValue,
-        resolveSelector: state.resolveSelector,
-        parseExpr: state.parseExpr,
-        filePath: state.filePath,
-        resolverImports: state.resolverImports,
-      },
-    );
-    if (resolved === null) {
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-      return "break";
-    }
-    if (resolved.kind === "static") {
-      media = resolved.value;
-    } else {
-      // Computed media keys (e.g. imported breakpoint constants) cannot be nested
-      // inside a sibling computed key — bail instead of silently dropping the guard.
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: computed media query inside sibling selector",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-      return "break";
-    }
-  }
-
-  // Add each property to perPropComputedMedia with the sibling computed key
-  for (const [prop, value] of Object.entries(bucket)) {
-    const siblingValue = media ? { default: null, [media]: value } : value;
-    const entry = getOrCreateComputedMediaEntry(prop, ctx);
-    entry.entries.push({
-      keyExpr: makeSiblingKeyExpr(),
-      value: siblingValue,
-      ...(isAdjacent && {
-        leadingComment:
-          "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-      }),
-    });
-  }
+  return resolveMediaAndEmitComputedKeys(
+    bucket,
+    makeSiblingKeyExpr,
+    rule,
+    ctx,
+    "Unsupported selector: computed media query inside sibling selector",
+    isAdjacent
+      ? {
+          leadingComment:
+            "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
+        }
+      : undefined,
+  );
 }
 
 /**

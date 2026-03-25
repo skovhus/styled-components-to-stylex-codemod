@@ -80,7 +80,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   const relationOverrides: RelationOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
   const siblingMarkerParents = new Set<string>();
-  /** Maps styleKey → marker variable name for sibling selectors (e.g. "thing" → "ThingMarker") */
+  /** Maps styleKey → marker variable name for sibling and descendant-has selectors (e.g. "thing" → "ThingMarker") */
   const siblingMarkerNames = new Map<string, string>();
   // Map<overrideStyleKey, Map<pseudo|null, Record<prop, value>>>
   // null key = base styles, string key = pseudo styles (e.g., ":hover", ":focus-visible")
