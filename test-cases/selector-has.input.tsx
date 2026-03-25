@@ -9,11 +9,10 @@ const Icon = styled.span`
 const Button = styled.button`
   padding: 8px 16px;
   background: lightgray;
-  color: #333;
 
   &:has(${Icon}) {
+    padding-right: 32px;
     background: lightyellow;
-    color: darkblue;
   }
 `;
 

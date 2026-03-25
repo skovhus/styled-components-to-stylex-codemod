@@ -42,6 +42,7 @@ import {
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
+import { SHORTHAND_LONGHANDS } from "../emit-styles.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -2336,6 +2337,21 @@ function extractReverseSelectorPseudos(selector: string): string[] {
 }
 
 /**
+ * Reverse mapping from physical longhand → logical shorthand that contains it.
+ * E.g. `paddingRight` → `paddingInline`, `marginTop` → `marginBlock`.
+ * Built once from SHORTHAND_LONGHANDS; used to resolve base values when the
+ * style object uses logical shorthands but a computed-key targets a physical longhand.
+ */
+const PHYSICAL_TO_LOGICAL: Record<string, string> = Object.fromEntries(
+  Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
+    [physical[0]!, logical[0]!], // Top → Block
+    [physical[2]!, logical[0]!], // Bottom → Block
+    [physical[1]!, logical[1]!], // Right → Inline
+    [physical[3]!, logical[1]!], // Left → Inline
+  ]),
+);
+
+/**
  * Returns the computed-media entry for `prop`, creating it on first access.
  * Centralises the get-or-create + default-value logic that both
  * resolvedSelectorMedia handling and sibling-selector handling need.
@@ -2344,7 +2360,10 @@ function getOrCreateComputedMediaEntry(prop: string, ctx: DeclProcessingState) {
   const { perPropComputedMedia, styleObj, cssHelperPropValues, getComposedDefaultValue } = ctx;
   let entry = perPropComputedMedia.get(prop);
   if (!entry) {
-    const existingVal = (styleObj as Record<string, unknown>)[prop];
+    const style = styleObj as Record<string, unknown>;
+    // Check direct match first, then fall back to the logical shorthand
+    // that covers this physical longhand (e.g. paddingRight → paddingInline).
+    const existingVal = style[prop] ?? style[PHYSICAL_TO_LOGICAL[prop]!];
     const defaultValue =
       existingVal !== undefined
         ? existingVal

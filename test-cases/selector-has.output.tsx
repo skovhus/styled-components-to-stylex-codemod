@@ -22,14 +22,14 @@ const styles = stylex.create({
   },
   button: {
     paddingBlock: 8,
-    paddingInline: 16,
+    paddingLeft: 16,
+    paddingRight: {
+      default: 16,
+      [stylex.when.descendant(":is(*)", IconMarker)]: 32,
+    },
     backgroundColor: {
       default: "lightgray",
       [stylex.when.descendant(":is(*)", IconMarker)]: "lightyellow",
-    },
-    color: {
-      default: "#333",
-      [stylex.when.descendant(":is(*)", IconMarker)]: "darkblue",
     },
   },
 });
