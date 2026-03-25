@@ -29,6 +29,22 @@ export function makeAncestorKeyExpr(
 }
 
 /**
+ * Builds a `stylex.when.descendant(":is(*)", marker)` AST call expression.
+ * Used for `&:has(${Component})` selectors where styles apply to self
+ * when a descendant matching the marker is present.
+ * Uses `:is(*)` as a required pseudo argument (StyleX API mandates a pseudo string).
+ */
+export function makeDescendantKeyExpr(j: JSCodeshift, markerVarName: string): ExpressionKind {
+  return j.callExpression(
+    j.memberExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("when")),
+      j.identifier("descendant"),
+    ),
+    [j.literal(":is(*)"), j.identifier(markerVarName)],
+  );
+}
+
+/**
  * Creates an AST key node for a CSS property name.
  * For CSS variables (e.g., --component-width), returns a string literal.
  * For regular property names (e.g., backgroundColor), returns an identifier.
