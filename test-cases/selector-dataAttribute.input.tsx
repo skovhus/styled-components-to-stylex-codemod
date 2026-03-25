@@ -30,6 +30,15 @@ const Indicator = styled.div`
   }
 `;
 
+// Compound ancestor attributes (AND — both must be on the same ancestor)
+const CompoundItem = styled.div`
+  opacity: 0;
+
+  [data-state="active"][data-size="lg"] & {
+    opacity: 1;
+  }
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
@@ -45,6 +54,9 @@ export function App() {
       </div>
       <div data-active="true">
         <Indicator style={{ backgroundColor: "lightcyan", padding: 10 }}>Active</Indicator>
+      </div>
+      <div data-state="active" data-size="lg">
+        <CompoundItem style={{ backgroundColor: "thistle", padding: 10 }}>Compound</CompoundItem>
       </div>
     </div>
   );

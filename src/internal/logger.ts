@@ -96,6 +96,7 @@ export type WarningType =
   | "Unsupported selector: unresolved interpolation in reverse component selector"
   | "Unsupported selector: unresolved interpolation in cross-component sibling selector"
   | "Unsupported selector: grouped reverse selector references different components"
+  | "Unsupported selector: computed media query inside ancestor attribute selector"
   | "Unsupported selector: computed media query inside cross-component sibling selector"
   | "Unsupported selector: computed media query inside sibling selector"
   | "Unsupported selector: unknown component selector"

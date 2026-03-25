@@ -1149,6 +1149,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Must run before the plain `media` branch so @media inside [attr] & wraps correctly.
       // Uses ancestorAttrEntryByKey to merge base and media values for the same prop+attr
       // across separate rules (e.g., base `display: block` and `@media { display: flex }`).
+      // Computed media keys (e.g., imported breakpoint constants like `breakpoints.phone`)
+      // cannot be nested inside an ancestor computed key — bail to avoid silently dropping
+      // the breakpoint condition.
+      if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length && resolvedSelectorMedia) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: computed media query inside ancestor attribute selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        return;
+      }
       if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length) {
         for (let i = 0; i < ancestorAttrs.length; i++) {
           const attr = ancestorAttrs[i]!;

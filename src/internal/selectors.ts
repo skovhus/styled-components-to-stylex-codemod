@@ -188,9 +188,12 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
   ) {
     // Verify node order: [attr]+ combinator(space) nesting — nothing else
     if (isAncestorAttributePattern(nodes)) {
+      // Concatenate all attributes into a single string to preserve AND semantics.
+      // `[data-state="active"][data-size="lg"] &` → one entry requiring both on the same ancestor.
+      // Comma-separated branches (OR) produce separate entries via parseSelector's loop.
       return {
         kind: "ancestorAttribute",
-        ancestorAttrs: attributes.map((a) => a.toString()),
+        ancestorAttrs: [attributes.map((a) => a.toString()).join("")],
       };
     }
   }

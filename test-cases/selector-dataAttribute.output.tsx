@@ -16,6 +16,9 @@ export function App() {
       <div data-active="true">
         <div sx={styles.indicator}>Active</div>
       </div>
+      <div data-state="active" data-size="lg">
+        <div sx={styles.compoundItem}>Compound</div>
+      </div>
     </div>
   );
 }
@@ -47,6 +50,15 @@ const styles = stylex.create({
       [stylex.when.ancestor(':is([data-active="true"])')]: 1,
     },
     backgroundColor: "lightcyan",
+    padding: 10,
+  },
+  // Compound ancestor attributes (AND — both must be on the same ancestor)
+  compoundItem: {
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(':is([data-state="active"][data-size="lg"])')]: 1,
+    },
+    backgroundColor: "thistle",
     padding: 10,
   },
   boxVisible: {
