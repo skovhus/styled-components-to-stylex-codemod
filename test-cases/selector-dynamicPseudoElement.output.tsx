@@ -2,27 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-type BadgeProps = React.PropsWithChildren<{
-  badgeColor: string;
-}>;
-
-/**
- * Test case for dynamic styles in pseudo elements (::before / ::after).
- * Emits a StyleX dynamic style function with pseudo-element nesting.
- */
-function Badge(props: BadgeProps) {
-  const { children, badgeColor } = props;
-  return (
-    <span
-      sx={styles.badge({
-        badgeColor,
-      })}
-    >
-      {children}
-    </span>
-  );
-}
-
 type TooltipProps = React.PropsWithChildren<{
   tipColor?: string;
 }>;
@@ -55,56 +34,56 @@ function Tag(props: TagProps) {
   );
 }
 
-type ButtonProps = React.PropsWithChildren<{
-  glowColor: string;
-}>;
-
-// Dynamic pseudo-element style inside :hover context
-function Button(props: ButtonProps) {
-  const { children, glowColor } = props;
-  return (
-    <button
-      sx={styles.button({
-        glowColor,
-      })}
-    >
-      {children}
-    </button>
-  );
-}
-
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
-type DynamicPlaceholderProps = {
-  placeholderColor: PlaceholderColor;
-} & React.ComponentProps<"input">;
-
-function DynamicPlaceholder(props: DynamicPlaceholderProps) {
-  const { placeholderColor, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      sx={styles.dynamicPlaceholder({
-        placeholderColor,
-      })}
-    />
-  );
-}
-
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
-    <Badge badgeColor="red">Notification</Badge>
-    <Badge badgeColor="green">Online</Badge>
-    <Badge badgeColor="blue">Info</Badge>
+    <span
+      sx={styles.badge({
+        badgeColor: "red",
+      })}
+    >
+      Notification
+    </span>
+    <span
+      sx={styles.badge({
+        badgeColor: "green",
+      })}
+    >
+      Online
+    </span>
+    <span
+      sx={styles.badge({
+        badgeColor: "blue",
+      })}
+    >
+      Info
+    </span>
     <Tooltip tipColor="navy">With color</Tooltip>
     <Tooltip>Default</Tooltip>
     <Tag tagColor="tomato">With color</Tag>
     <Tag>No color</Tag>
-    <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
+    <button
+      sx={styles.button({
+        glowColor: "rgba(0,128,255,0.3)",
+      })}
+    >
+      Hover me
+    </button>
     <input placeholder="Muted placeholder" sx={styles.input} />
-    <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
-    <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
+    <input
+      placeholder="Base"
+      sx={styles.dynamicPlaceholder({
+        placeholderColor: "labelBase",
+      })}
+    />
+    <input
+      placeholder="Muted"
+      sx={styles.dynamicPlaceholder({
+        placeholderColor: "labelMuted",
+      })}
+    />
   </div>
 );
 
@@ -151,6 +130,7 @@ const styles = stylex.create({
       backgroundColor: tagColor,
     },
   }),
+  // Dynamic pseudo-element style inside :hover context
   button: (props: { glowColor: string }) => ({
     position: "relative",
     paddingBlock: 8,

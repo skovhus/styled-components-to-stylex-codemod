@@ -252,6 +252,19 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Downgrade needsWrapperComponent for intrinsic elements where the wrapper was set
+  // only for styleFnFromProps with transient ($-prefixed) props.
+  // The inline JSX rewrite path already handles:
+  //   1. Consuming styleFnFromProps values from JSX attributes (processAttr)
+  //   2. Stripping $-prefixed props on intrinsic elements (transient prop stripping)
+  // So the wrapper function is unnecessary — the component can be inlined.
+  for (const decl of styledDecls) {
+    if (!canDowngradeStyleFnOnlyWrapper(decl, wrapperForcedByPrepass)) {
+      continue;
+    }
+    decl.needsWrapperComponent = false;
+  }
+
   // Helper to check if a component is used in JSX
   const jsxUsageCountCache = new Map<string, number>();
   const relationChildStyleKeys = new Set((ctx.relationOverrides ?? []).map((o) => o.childStyleKey));
@@ -2609,4 +2622,77 @@ function baseStyleHasImportant(base: unknown): boolean {
   return Object.values(base as Record<string, unknown>).some(
     (v) => typeof v === "string" && v.includes("!important"),
   );
+}
+
+/**
+ * Returns true if an intrinsic styled component's wrapper was set only for
+ * styleFnFromProps with transient ($-prefixed) props, and the inline JSX
+ * rewrite path can handle the style function calls and prop stripping.
+ */
+function canDowngradeStyleFnOnlyWrapper(
+  decl: StyledDecl,
+  wrapperForcedByPrepass: Set<string>,
+): boolean {
+  if (!decl.needsWrapperComponent) {
+    return false;
+  }
+  if (wrapperForcedByPrepass.has(decl.localName)) {
+    return false;
+  }
+  if (decl.isCssHelper || decl.isDirectJsxResolution) {
+    return false;
+  }
+  if (decl.base.kind !== "intrinsic") {
+    return false;
+  }
+  if (decl.bridgeClassName || decl.attrWrapper) {
+    return false;
+  }
+  const styleFnEntries = decl.styleFnFromProps ?? [];
+  if (styleFnEntries.length === 0) {
+    return false;
+  }
+  // __props-type entries need the wrapper to access the entire props object
+  if (styleFnEntries.some((sf) => sf.jsxProp === "__props")) {
+    return false;
+  }
+  // Only "always" condition entries can be inlined — the inline path calls the
+  // style function unconditionally with the JSX attribute value. Conditional
+  // entries (truthy/undefined) need wrapper destructuring + guard logic.
+  if (styleFnEntries.some((sf) => sf.condition !== "always")) {
+    return false;
+  }
+  // Entries with callArg transform the prop value (e.g., template literals,
+  // nullish coalescing). The inline path passes raw JSX values and can't
+  // replicate these transformations.
+  if (styleFnEntries.some((sf) => sf.callArg)) {
+    return false;
+  }
+  // shouldForwardProp must be auto-inferred (not from withConfig)
+  if (decl.shouldForwardPropFromWithConfig) {
+    return false;
+  }
+  // No other dynamic features that need wrapper prop destructuring
+  if (decl.needsUseThemeHook?.length) {
+    return false;
+  }
+  if (Object.keys(decl.variantStyleKeys ?? {}).length > 0) {
+    return false;
+  }
+  if (decl.enumVariant) {
+    return false;
+  }
+  if (decl.inlineStyleProps?.length) {
+    return false;
+  }
+  if ((decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  return true;
 }

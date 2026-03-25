@@ -1,47 +1,36 @@
-import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type InputProps = { placeholderColor: Color } & React.ComponentProps<"input">;
-
-function Input(props: InputProps) {
-  const { placeholderColor, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      sx={styles.input({
-        placeholderColor,
-      })}
-    />
-  );
-}
-
-type BadgeProps = React.PropsWithChildren<{
-  indicatorColor: Color;
-}>;
-
-// Indexed theme lookup in ::after pseudo-element
-function Badge(props: BadgeProps) {
-  const { children, indicatorColor } = props;
-  return (
-    <span
-      sx={styles.badge({
-        indicatorColor,
-      })}
-    >
-      {children}
-    </span>
-  );
-}
-
 export const App = () => (
   <div style={{ display: "grid", gap: 12, padding: 16 }}>
-    <Input placeholderColor="labelBase" placeholder="Base color" />
-    <Input placeholderColor="labelMuted" placeholder="Muted color" />
-    <Badge indicatorColor="labelBase">Base</Badge>
-    <Badge indicatorColor="labelMuted">Muted</Badge>
+    <input
+      placeholder="Base color"
+      sx={styles.input({
+        placeholderColor: "labelBase",
+      })}
+    />
+    <input
+      placeholder="Muted color"
+      sx={styles.input({
+        placeholderColor: "labelMuted",
+      })}
+    />
+    <span
+      sx={styles.badge({
+        indicatorColor: "labelBase",
+      })}
+    >
+      Base
+    </span>
+    <span
+      sx={styles.badge({
+        indicatorColor: "labelMuted",
+      })}
+    >
+      Muted
+    </span>
   </div>
 );
 

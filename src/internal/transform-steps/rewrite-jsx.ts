@@ -204,6 +204,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           closing.name = createJsxName(finalTag);
         }
 
+        const styleFnPairs = decl.styleFnFromProps ?? [];
+        const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
+
         const keptAttrs = (opening.attributes ?? []).filter((attr) => {
           if (attr.type !== "JSXAttribute") {
             return true;
@@ -222,6 +225,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 return true;
               }
               if (staticBooleanVariantProps.has(n)) {
+                return true;
+              }
+              // Keep props consumed by styleFnFromProps — processAttr will
+              // consume the value and emit a style function call, stripping
+              // the attribute in the process.
+              if (styleFnProps.has(n)) {
                 return true;
               }
               return false;
@@ -462,6 +471,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ? j.callExpression(baseMember, mergeArgs)
           : baseMember;
 
+        // When skipBaseStyleRef is set, the base style key IS a dynamic function
+        // (static properties were merged into it). Don't include the bare reference —
+        // processAttr will emit the function call when it consumes the prop.
         const styleArgs: ExpressionKind[] = [
           ...(decl.extendsStyleKey
             ? [
@@ -472,7 +484,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               ]
             : []),
           ...extraMixinArgs,
-          baseExpr,
+          ...(decl.skipBaseStyleRef ? [] : [baseExpr]),
           ...extraAfterBaseArgs,
         ];
 
@@ -502,8 +514,6 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
         const keptLeadingAfterVariants: typeof leading = [];
         const keptRestAfterVariants: typeof rest = [];
-        const styleFnPairs = decl.styleFnFromProps ?? [];
-        const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
 
         // Rename $-prefixed JSX attributes for inlined components whose transient
         // props were stripped of the $ prefix — ensures styleFn/variant lookups match.
@@ -546,15 +556,25 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             if (valueExpr) {
               for (const p of pairs) {
                 const callArg = wrapCallArgForPropsObject(j, valueExpr, p.propsObjectKey);
-                styleArgs.push(
-                  j.callExpression(
-                    j.memberExpression(
-                      j.identifier(ctx.stylesIdentifier ?? "styles"),
-                      j.identifier(p.fnKey),
-                    ),
-                    [callArg],
+                const fnCallExpr = j.callExpression(
+                  j.memberExpression(
+                    j.identifier(ctx.stylesIdentifier ?? "styles"),
+                    j.identifier(p.fnKey),
                   ),
+                  [callArg],
                 );
+                // When the styleFn was merged into the base key, replace the
+                // base reference with the function call to avoid duplication.
+                if (p.fnKey === baseStyleKey) {
+                  const baseIdx = styleArgs.indexOf(baseExpr);
+                  if (baseIdx >= 0) {
+                    styleArgs[baseIdx] = fnCallExpr;
+                  } else {
+                    styleArgs.push(fnCallExpr);
+                  }
+                } else {
+                  styleArgs.push(fnCallExpr);
+                }
               }
             }
             return;

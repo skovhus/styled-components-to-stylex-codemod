@@ -74,6 +74,7 @@ export const App = () => (
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
     <FaderConsumer>Visible</FaderConsumer>
     <FaderConsumerReversed>Reversed</FaderConsumerReversed>
+    <Overlay />
   </div>
 );
 
@@ -135,6 +136,16 @@ function FaderConsumerReversed(props: { children: React.ReactNode; style?: React
   );
 }
 
+function Overlay() {
+  const zIndexContainer = 1;
+  const close = () => {};
+  return (
+    <div onClick={close} sx={styles.overlayContainer(zIndexContainer)}>
+      hello
+    </div>
+  );
+}
+
 const styles = stylex.create({
   comp: {
     color: "red",
@@ -177,4 +188,13 @@ const styles = stylex.create({
     opacity: 1,
     pointerEvents: "inherit",
   },
+  // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
+  overlayContainer: (zIndex: number) => ({
+    position: "fixed",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex,
+  }),
 });

@@ -359,6 +359,18 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Final downgrade: intrinsic elements where the wrapper was set only for
+  // styleFnFromProps with auto-inferred prop drops (not from withConfig).
+  // The inline JSX rewrite path handles: consuming styleFn values from JSX
+  // attributes (processAttr) and stripping transient/$-prefixed props.
+  // This runs AFTER all wrapper decisions so it can safely clear the flag.
+  for (const decl of styledDecls) {
+    if (!canDowngradeStyleFnIntrinsicWrapper(decl, exportedComponents, extendedBy)) {
+      continue;
+    }
+    decl.needsWrapperComponent = false;
+  }
+
   ctx.wrapperNames = wrapperNames;
 
   return CONTINUE;
@@ -374,4 +386,109 @@ function hasAttrsAsOverride(attrsInfo: StyledDecl["attrsInfo"]): boolean {
     attrsInfo?.attrsAsTag ||
     (attrsInfo?.staticAttrs?.as && typeof attrsInfo.staticAttrs.as === "string")
   );
+}
+
+/**
+ * Returns true if an intrinsic styled component's wrapper can be removed
+ * because the only reason it was set is for styleFnFromProps with auto-inferred
+ * prop drops. The inline JSX rewrite handles both consuming the style function
+ * values from JSX attributes and stripping transient props.
+ */
+function canDowngradeStyleFnIntrinsicWrapper(
+  decl: StyledDecl,
+  exportedComponents: Map<string, unknown>,
+  extendedBy: Map<string, string[]>,
+): boolean {
+  if (!decl.needsWrapperComponent) {
+    return false;
+  }
+  if (decl.isCssHelper || decl.isDirectJsxResolution) {
+    return false;
+  }
+  if (decl.base.kind !== "intrinsic") {
+    return false;
+  }
+  // Exported components need wrappers to preserve the module's public API
+  if (exportedComponents.has(decl.localName)) {
+    return false;
+  }
+  // Components extended by others need wrappers for delegation
+  if (extendedBy.has(decl.localName)) {
+    return false;
+  }
+  if (decl.bridgeClassName || decl.attrWrapper) {
+    return false;
+  }
+  if ((decl as { usedAsValue?: boolean }).usedAsValue) {
+    return false;
+  }
+  const styleFnEntries = decl.styleFnFromProps ?? [];
+  if (styleFnEntries.length === 0) {
+    return false;
+  }
+  // __props-type entries need the wrapper to access the entire props object
+  if (styleFnEntries.some((sf) => sf.jsxProp === "__props")) {
+    return false;
+  }
+  // Only "always" condition entries can be inlined — the inline path calls the
+  // style function unconditionally with the JSX attribute value. Conditional
+  // entries (truthy/undefined) need wrapper destructuring + guard logic.
+  if (styleFnEntries.some((sf) => sf.condition !== "always")) {
+    return false;
+  }
+  // Entries with callArg transform the prop value (e.g., template literals,
+  // nullish coalescing). The inline path passes raw JSX values and can't
+  // replicate these transformations.
+  if (styleFnEntries.some((sf) => sf.callArg)) {
+    return false;
+  }
+
+  // shouldForwardProp must be auto-inferred (not from withConfig)
+  if (decl.shouldForwardPropFromWithConfig) {
+    return false;
+  }
+  // No features that require wrapper prop destructuring
+  if (decl.needsUseThemeHook?.length) {
+    return false;
+  }
+  if (Object.keys(decl.variantStyleKeys ?? {}).length > 0) {
+    return false;
+  }
+  if (decl.enumVariant) {
+    return false;
+  }
+  if (decl.inlineStyleProps?.length) {
+    return false;
+  }
+  if ((decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if (decl.supportsExternalStyles || decl.supportsAsProp) {
+    return false;
+  }
+  if ((decl as { isPolymorphicIntrinsicWrapper?: boolean }).isPolymorphicIntrinsicWrapper) {
+    return false;
+  }
+  if (decl.compoundVariants?.length) {
+    return false;
+  }
+  if (decl.pseudoAliasSelectors?.length) {
+    return false;
+  }
+  if ((decl as { pseudoExpandSelectors?: unknown[] }).pseudoExpandSelectors?.length) {
+    return false;
+  }
+  if (decl.withConfig?.componentId) {
+    return false;
+  }
+  if ((decl as { receivesClassNameOrStyleInJsx?: boolean }).receivesClassNameOrStyleInJsx) {
+    return false;
+  }
+  return true;
 }
