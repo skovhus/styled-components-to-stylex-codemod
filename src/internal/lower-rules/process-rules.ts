@@ -413,7 +413,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isCssHelperPlaceholder = !!otherLocal && cssHelperNames.has(otherLocal);
 
       const selTrim2 = rule.selector.trim();
-      const isHasPattern = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selTrim2);
+      // Use specificity-normalized selector for :has() detection (e.g. &&:has → &:has)
+      const normalizedSel2 = normalizeSpecificityHacks(selTrim2).normalized;
+      const isHasPattern = HAS_COMPONENT_SELECTOR_STRICT_RE.test(normalizedSel2);
 
       // `${Other}:pseudo &` (Icon reacting to ancestor hover/focus/etc.)
       // This is the inverse of `&:pseudo ${Child}` — the declaring component is the child,
@@ -2424,6 +2426,7 @@ function resolveMediaAndEmitComputedKeys(
       },
     );
     if (resolved === null) {
+      state.markBail();
       warnings.push({
         severity: "warning",
         type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",

@@ -5668,4 +5668,39 @@ export const App = () => (
     // Should bail — compound :has + pseudo is not supported
     expect(result.code).toBeNull();
   });
+
+  it("should handle &:has(${Component}) with specificity hack (&&:has)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.span\`
+  color: blue;
+\`;
+
+const Button = styled.button\`
+  background: lightgray;
+
+  &&:has(\${Icon}) {
+    background: lightyellow;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Button>No icon</Button>
+    <Button>With icon <Icon>★</Icon></Button>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should transform (not bail) — && is a specificity hack normalized to &
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.when.descendant");
+  });
 });
