@@ -584,8 +584,12 @@ export function rewriteInheritedUniversalRules(rules: CssRuleIR[]): {
       continue;
     }
 
-    // Check if ALL declarations use inherited properties
-    const allInherited = rule.declarations.every((d) => isCssInheritedProperty(d.property));
+    // Check if ALL declarations use inherited properties and none are !important.
+    // !important on descendants is semantically different from !important on the parent
+    // (inherited values lose to any explicit declaration, even without !important).
+    const allInherited = rule.declarations.every(
+      (d) => isCssInheritedProperty(d.property) && !d.important,
+    );
 
     if (!allInherited) {
       hasRemainingUniversal = true;
@@ -593,9 +597,19 @@ export function rewriteInheritedUniversalRules(rules: CssRuleIR[]): {
       continue;
     }
 
-    // Rewrite: merge declarations into the base `&` rule
+    // Bail if the base `&` rule already declares any of the same properties.
+    // This means the developer intentionally set different values for the parent
+    // vs descendants (e.g., `color: blue; & * { color: red; }`), and lifting
+    // would overwrite the parent's value.
     const baseRule = result.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
     if (baseRule) {
+      const baseProps = new Set(baseRule.declarations.map((d) => d.property));
+      const hasConflict = rule.declarations.some((d) => baseProps.has(d.property));
+      if (hasConflict) {
+        hasRemainingUniversal = true;
+        result.push(rule);
+        continue;
+      }
       baseRule.declarations.push(...rule.declarations);
     } else {
       result.push({ selector: "&", atRuleStack: [], declarations: [...rule.declarations] });
