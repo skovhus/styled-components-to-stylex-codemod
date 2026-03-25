@@ -24,6 +24,8 @@ export function lowerRules(ctx: TransformContext): {
   crossFileMarkers: Map<string, string>;
   siblingMarkerKeys: Set<string>;
   parentsNeedingDefaultMarker: Set<string>;
+  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
+  ancestorAttrsByStyleKey: Map<string, Set<string>>;
   bail: boolean;
 } {
   const state = createLowerRulesState(ctx);
@@ -159,6 +161,7 @@ export function lowerRules(ctx: TransformContext): {
     crossFileMarkers,
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     parentsNeedingDefaultMarker,
+    ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
     bail: state.bail,
   };
 }

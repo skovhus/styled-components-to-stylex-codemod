@@ -15,6 +15,7 @@ type ParsedSelector =
   | { kind: "pseudoElementWithPseudo"; element: string; pseudos: string[] } // "::-webkit-slider-thumb:hover"
   | { kind: "pseudoElements"; elements: string[] } // comma-separated: "::before", "::after"
   | { kind: "attribute"; attr: ParsedAttributeSelector }
+  | { kind: "ancestorAttribute"; ancestorAttrs: string[] } // [aria-checked="true"] &
   | { kind: "unsupported"; reason: string };
 
 /**
@@ -63,16 +64,20 @@ export function parseSelector(selector: string): ParsedSelector {
       return { kind: "base" };
     }
 
-    // For comma-separated selectors, each must be a valid pseudo-class or pseudo-element on &
+    // For comma-separated selectors, each must be a valid pseudo-class, pseudo-element,
+    // or ancestor attribute selector on &
     if (selectors.length > 1) {
       const pseudos: string[] = [];
       const pseudoElementValues: string[] = [];
+      const ancestorAttrs: string[] = [];
       for (const sel of selectors) {
         const result = parseSingleSelector(sel);
         if (result.kind === "pseudo" && result.pseudos.length === 1 && result.pseudos[0]) {
           pseudos.push(result.pseudos[0]);
         } else if (result.kind === "pseudoElement") {
           pseudoElementValues.push(result.element);
+        } else if (result.kind === "ancestorAttribute") {
+          ancestorAttrs.push(...result.ancestorAttrs);
         } else {
           return {
             kind: "unsupported",
@@ -80,11 +85,18 @@ export function parseSelector(selector: string): ParsedSelector {
           };
         }
       }
-      if (pseudos.length > 0 && pseudoElementValues.length > 0) {
+      const kindCount =
+        (pseudos.length > 0 ? 1 : 0) +
+        (pseudoElementValues.length > 0 ? 1 : 0) +
+        (ancestorAttrs.length > 0 ? 1 : 0);
+      if (kindCount > 1) {
         return {
           kind: "unsupported",
           reason: "mixed pseudo-classes and pseudo-elements in comma-separated selector",
         };
+      }
+      if (ancestorAttrs.length > 0) {
+        return { kind: "ancestorAttribute", ancestorAttrs };
       }
       if (pseudoElementValues.length > 0) {
         // Sort to produce deterministic output regardless of source order
@@ -158,6 +170,31 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
       case "attribute":
         attributes.push(node);
         break;
+    }
+  }
+
+  // Check for ancestor attribute selectors: [attr] & (attribute on ancestor, styles on current element)
+  // Must check before the generic combinator bail so `[aria-checked="true"] &` is recognized.
+  if (
+    hasCombinator &&
+    hasNesting &&
+    attributes.length > 0 &&
+    !hasClass &&
+    !hasId &&
+    !hasTag &&
+    !hasUniversal &&
+    pseudoClasses.length === 0 &&
+    pseudoElements.length === 0
+  ) {
+    // Verify node order: [attr]+ combinator(space) nesting — nothing else
+    if (isAncestorAttributePattern(nodes)) {
+      // Concatenate all attributes into a single string to preserve AND semantics.
+      // `[data-state="active"][data-size="lg"] &` → one entry requiring both on the same ancestor.
+      // Comma-separated branches (OR) produce separate entries via parseSelector's loop.
+      return {
+        kind: "ancestorAttribute",
+        ancestorAttrs: [attributes.map((a) => a.toString()).join("")],
+      };
     }
   }
 
@@ -470,6 +507,38 @@ function resolveChildPseudoWithAttr(
   }
   // Combine: if both exist, concatenate (e.g., ":disabled:focus")
   return pseudo ? `${attrPseudo}${pseudo}` : attrPseudo;
+}
+
+/**
+ * Checks whether postcss-selector-parser nodes form an ancestor attribute pattern:
+ * one or more attribute nodes, then a space combinator, then the nesting selector (&).
+ * e.g., `[aria-checked="true"] &`, `[data-state="active"][data-size="lg"] &`
+ */
+function isAncestorAttributePattern(nodes: selectorParser.Node[]): boolean {
+  let phase: "attrs" | "combinator" | "nesting" = "attrs";
+  for (const node of nodes) {
+    switch (phase) {
+      case "attrs":
+        if (node.type === "attribute") {
+          continue;
+        }
+        if (node.type === "combinator" && node.value === " ") {
+          phase = "combinator";
+          continue;
+        }
+        return false;
+      case "combinator":
+        if (node.type === "nesting") {
+          phase = "nesting";
+          continue;
+        }
+        return false;
+      case "nesting":
+        // Nothing should follow the nesting selector
+        return false;
+    }
+  }
+  return phase === "nesting";
 }
 
 /**
