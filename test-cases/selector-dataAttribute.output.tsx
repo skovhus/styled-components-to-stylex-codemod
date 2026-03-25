@@ -7,16 +7,16 @@ export function App() {
         Visible
       </div>
       <div sx={[styles.box, styles.boxHidden]}>Hidden</div>
-      <div aria-checked="true">
+      <div aria-checked="true" sx={stylex.defaultMarker()}>
         <div sx={[styles.menuItem, styles.menuItemChecked]}>Checked</div>
       </div>
       <div>
         <div sx={[styles.menuItem, styles.menuItemDefault]}>Default</div>
       </div>
-      <div data-active="true">
+      <div data-active="true" sx={stylex.defaultMarker()}>
         <div sx={styles.indicator}>Active</div>
       </div>
-      <div data-state="active" data-size="lg">
+      <div data-state="active" data-size="lg" sx={stylex.defaultMarker()}>
         <div sx={styles.compoundItem}>Compound</div>
       </div>
     </div>

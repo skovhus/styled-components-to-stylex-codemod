@@ -1005,6 +1005,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       ? ancestorAttrs.map((attr) => makeAncestorKeyExpr(j, `:is(${attr})`))
       : null;
 
+    // Track ancestor attribute selectors per style key for JSX marker injection
+    if (ancestorAttrs) {
+      let attrSet = state.ancestorAttrsByStyleKey.get(decl.styleKey);
+      if (!attrSet) {
+        attrSet = new Set();
+        state.ancestorAttrsByStyleKey.set(decl.styleKey, attrSet);
+      }
+      for (const attr of ancestorAttrs) {
+        attrSet.add(attr);
+      }
+    }
+
     const pseudos =
       parsedSelector.kind === "pseudo"
         ? parsedSelector.pseudos

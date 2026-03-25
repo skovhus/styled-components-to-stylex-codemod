@@ -23,6 +23,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   ctx.crossFileMarkers = lowered.crossFileMarkers;
   ctx.siblingMarkerKeys = lowered.siblingMarkerKeys;
   ctx.parentsNeedingDefaultMarker = lowered.parentsNeedingDefaultMarker;
+  ctx.ancestorAttrsByStyleKey = lowered.ancestorAttrsByStyleKey;
 
   if (lowered.bail || ctx.resolveValueBailRef.value) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");

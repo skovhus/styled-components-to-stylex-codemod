@@ -102,6 +102,8 @@ export class TransformContext {
   siblingMarkerKeys?: Set<string>;
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
   parentsNeedingDefaultMarker?: Set<string>;
+  /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
+  ancestorAttrsByStyleKey?: Map<string, Set<string>>;
   /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
   sidecarStylexContent?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
