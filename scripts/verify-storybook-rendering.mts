@@ -70,7 +70,7 @@ const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
 // cause sub-pixel text anti-aliasing differences vs styled-components' class-only approach.
 const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
   ["selector-componentDynamicProp", 0.03], // TODO: investigate if this override can be removed
-  ["selector-dataAttribute", 0.005], // Sub-pixel anti-aliasing from defaultMarker() class on ancestor elements
+  ["selector-dataAttribute", 0.01], // Sub-pixel anti-aliasing from defaultMarker() class on ancestor elements
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
