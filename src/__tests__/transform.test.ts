@@ -5633,3 +5633,39 @@ export function App() {
     expect(result.code).not.toMatch(/\{\.\.\.stylex\.props\([^)]+\)\}\s*className=/);
   });
 });
+
+describe("compound :has() component selectors", () => {
+  it("should bail on &:has(${Component}):hover (compound pseudo + has)", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.span\`
+  color: blue;
+\`;
+
+const Button = styled.button\`
+  background: lightgray;
+
+  &:has(\${Icon}):hover {
+    background: lightyellow;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Button>No icon</Button>
+    <Button>With icon <Icon>★</Icon></Button>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    // Should bail — compound :has + pseudo is not supported
+    expect(result.code).toBeNull();
+  });
+});

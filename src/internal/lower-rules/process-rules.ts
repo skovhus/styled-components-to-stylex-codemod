@@ -248,7 +248,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
       // &:has(${Component}) has a placeholder inside :has() — not an interpolated pseudo.
       // Skip the interpolated-pseudo handler so it reaches the component selector path.
-      const isHasComponentSelector = HAS_COMPONENT_SELECTOR_RE.test(selectorForAnalysis);
+      const isHasComponentSelector = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo && !isHasComponentSelector) {
         // Handle interpolated pseudo selectors like `&:${highlight}`.
@@ -2283,8 +2283,6 @@ function extractCssTextFromNode(node: unknown): string | null {
   return null;
 }
 
-/** Descendant-has pattern (substring match): `&:has(__SC_EXPR_N__)` anywhere in selector */
-const HAS_COMPONENT_SELECTOR_RE = /&:has\(__SC_EXPR_\d+__\)/;
 /** Descendant-has pattern (full selector match): exactly `&:has(__SC_EXPR_N__)` */
 const HAS_COMPONENT_SELECTOR_STRICT_RE = /^&:has\(__SC_EXPR_\d+__\)\s*$/;
 
