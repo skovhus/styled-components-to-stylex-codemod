@@ -55,24 +55,6 @@ function Tag(props: TagProps) {
   );
 }
 
-type ButtonProps = React.PropsWithChildren<{
-  glowColor: string;
-}>;
-
-// Dynamic pseudo-element style inside :hover context
-function Button(props: ButtonProps) {
-  const { children, glowColor } = props;
-  return (
-    <button
-      sx={styles.button({
-        glowColor,
-      })}
-    >
-      {children}
-    </button>
-  );
-}
-
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
@@ -101,7 +83,13 @@ export const App = () => (
     <Tooltip>Default</Tooltip>
     <Tag tagColor="tomato">With color</Tag>
     <Tag>No color</Tag>
-    <Button glowColor="rgba(0,128,255,0.3)">Hover me</Button>
+    <button
+      sx={styles.button({
+        glowColor: "rgba(0,128,255,0.3)",
+      })}
+    >
+      Hover me
+    </button>
     <input placeholder="Muted placeholder" sx={styles.input} />
     <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
     <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
@@ -151,6 +139,7 @@ const styles = stylex.create({
       backgroundColor: tagColor,
     },
   }),
+  // Dynamic pseudo-element style inside :hover context
   button: (props: { glowColor: string }) => ({
     position: "relative",
     paddingBlock: 8,

@@ -2,13 +2,15 @@
  * Step: analyze declarations before emitting styles and wrappers.
  * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
  */
-import type { JSCodeshift, JSXAttribute, JSXSpreadAttribute } from "jscodeshift";
+import type { JSCodeshift } from "jscodeshift";
 import { resolve as pathResolve } from "node:path";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
   countComponentJsxUsages,
+  hasInlineableStyleFnOnly,
+  hasSpreadInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
@@ -25,7 +27,6 @@ import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
-type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 const INLINE_USAGE_THRESHOLD = 1;
 
 /**
@@ -250,6 +251,19 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     ) {
       decl.needsWrapperComponent = false;
     }
+  }
+
+  // Downgrade needsWrapperComponent for intrinsic elements where the wrapper was set
+  // only for styleFnFromProps with transient ($-prefixed) props.
+  // The inline JSX rewrite path already handles:
+  //   1. Consuming styleFnFromProps values from JSX attributes (processAttr)
+  //   2. Stripping $-prefixed props on intrinsic elements (transient prop stripping)
+  // So the wrapper function is unnecessary — the component can be inlined.
+  for (const decl of styledDecls) {
+    if (!canDowngradeStyleFnOnlyWrapper(decl, wrapperForcedByPrepass)) {
+      continue;
+    }
+    decl.needsWrapperComponent = false;
   }
 
   // Helper to check if a component is used in JSX
@@ -490,35 +504,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
-  // Helper to check if any JSX usage of a component has spread attributes.
-  // Used to detect cases where styleFnFromProps values might come via spread.
-  const hasSpreadInJsx = (name: string): boolean => {
-    let found = false;
-    const checkOpening = (opening: { attributes?: JsxAttr[] }) => {
-      if (found) {
-        return;
-      }
-      for (const attr of opening.attributes ?? []) {
-        if (attr.type === "JSXSpreadAttribute") {
-          found = true;
-          return;
-        }
-      }
-    };
-    // Note: jscodeshift's filter types don't match runtime behavior well,
-    // so we cast the filter objects (same pattern used throughout codebase).
-    root
-      .find(j.JSXElement, {
-        openingElement: { name: { type: "JSXIdentifier", name } },
-      } as object)
-      .forEach((p) => checkOpening(p.node.openingElement as { attributes?: JsxAttr[] }));
-    root
-      .find(j.JSXSelfClosingElement, {
-        name: { type: "JSXIdentifier", name },
-      } as object)
-      .forEach((p) => checkOpening(p.node as { attributes?: JsxAttr[] }));
-    return found;
-  };
+  const hasSpreadInJsxLocal = (name: string): boolean => hasSpreadInJsx(root, j, name);
 
   // Components with styleFnFromProps that have spread attributes in JSX need wrappers.
   // The JSX rewriter can only extract styleFn prop values from explicit attributes,
@@ -528,7 +514,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       continue;
     }
     if (decl.styleFnFromProps && decl.styleFnFromProps.length > 0) {
-      if (hasSpreadInJsx(decl.localName)) {
+      if (hasSpreadInJsxLocal(decl.localName)) {
         decl.needsWrapperComponent = true;
       }
     }
@@ -544,7 +530,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.isDirectJsxResolution) {
       continue;
     }
-    if (hasSpreadInJsx(decl.localName)) {
+    if (hasSpreadInJsxLocal(decl.localName)) {
       decl.needsWrapperComponent = true;
     }
   }
@@ -2609,4 +2595,31 @@ function baseStyleHasImportant(base: unknown): boolean {
   return Object.values(base as Record<string, unknown>).some(
     (v) => typeof v === "string" && v.includes("!important"),
   );
+}
+
+/**
+ * Returns true if an intrinsic styled component's wrapper was set only for
+ * styleFnFromProps with transient ($-prefixed) props, and the inline JSX
+ * rewrite path can handle the style function calls and prop stripping.
+ */
+function canDowngradeStyleFnOnlyWrapper(
+  decl: StyledDecl,
+  wrapperForcedByPrepass: Set<string>,
+): boolean {
+  if (!decl.needsWrapperComponent) {
+    return false;
+  }
+  if (wrapperForcedByPrepass.has(decl.localName)) {
+    return false;
+  }
+  if (decl.isCssHelper || decl.isDirectJsxResolution) {
+    return false;
+  }
+  if (decl.base.kind !== "intrinsic") {
+    return false;
+  }
+  if (decl.bridgeClassName || decl.attrWrapper) {
+    return false;
+  }
+  return hasInlineableStyleFnOnly(decl);
 }

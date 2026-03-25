@@ -2,11 +2,19 @@
  * Step: analyze post-emit wrappers and delegation needs.
  * Core concepts: wrapper decisions and polymorphic-as handling.
  */
+import type { JSCodeshift } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { propagateDelegationWrapperRequirements } from "../utilities/delegation-utils.js";
+import {
+  countComponentJsxUsages,
+  hasInlineableStyleFnOnly,
+  hasSpreadInJsx,
+  propagateDelegationWrapperRequirements,
+} from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+
+const INLINE_USAGE_THRESHOLD = 1;
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -359,6 +367,18 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Final downgrade: intrinsic elements where the wrapper was set only for
+  // styleFnFromProps with auto-inferred prop drops (not from withConfig).
+  // The inline JSX rewrite path handles: consuming styleFn values from JSX
+  // attributes (processAttr) and stripping transient/$-prefixed props.
+  // This runs AFTER all wrapper decisions so it can safely clear the flag.
+  for (const decl of styledDecls) {
+    if (!canDowngradeStyleFnIntrinsicWrapper(decl, exportedComponents, extendedBy, root, j)) {
+      continue;
+    }
+    decl.needsWrapperComponent = false;
+  }
+
   ctx.wrapperNames = wrapperNames;
 
   return CONTINUE;
@@ -374,4 +394,74 @@ function hasAttrsAsOverride(attrsInfo: StyledDecl["attrsInfo"]): boolean {
     attrsInfo?.attrsAsTag ||
     (attrsInfo?.staticAttrs?.as && typeof attrsInfo.staticAttrs.as === "string")
   );
+}
+
+/**
+ * Returns true if an intrinsic styled component's wrapper can be removed
+ * because the only reason it was set is for styleFnFromProps with auto-inferred
+ * prop drops. The inline JSX rewrite handles both consuming the style function
+ * values from JSX attributes and stripping transient props.
+ */
+function canDowngradeStyleFnIntrinsicWrapper(
+  decl: StyledDecl,
+  exportedComponents: Map<string, unknown>,
+  extendedBy: Map<string, string[]>,
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+): boolean {
+  if (!decl.needsWrapperComponent) {
+    return false;
+  }
+  if (decl.isCssHelper || decl.isDirectJsxResolution) {
+    return false;
+  }
+  if (decl.base.kind !== "intrinsic") {
+    return false;
+  }
+  if (exportedComponents.has(decl.localName)) {
+    return false;
+  }
+  if (extendedBy.has(decl.localName)) {
+    return false;
+  }
+  if (decl.bridgeClassName || decl.attrWrapper) {
+    return false;
+  }
+  if ((decl as { usedAsValue?: boolean }).usedAsValue) {
+    return false;
+  }
+  if (!hasInlineableStyleFnOnly(decl)) {
+    return false;
+  }
+  // Multi-use components keep wrappers for readability and code reuse
+  if (countComponentJsxUsages(root, j, decl.localName) > INLINE_USAGE_THRESHOLD) {
+    return false;
+  }
+  // Spreads may contain the styleFn prop at runtime; the inline path can only
+  // consume explicit JSX attributes, so keep the wrapper for spread call sites.
+  if (hasSpreadInJsx(root, j, decl.localName)) {
+    return false;
+  }
+  if (decl.supportsExternalStyles || decl.supportsAsProp) {
+    return false;
+  }
+  if ((decl as { isPolymorphicIntrinsicWrapper?: boolean }).isPolymorphicIntrinsicWrapper) {
+    return false;
+  }
+  if (decl.compoundVariants?.length) {
+    return false;
+  }
+  if (decl.pseudoAliasSelectors?.length) {
+    return false;
+  }
+  if ((decl as { pseudoExpandSelectors?: unknown[] }).pseudoExpandSelectors?.length) {
+    return false;
+  }
+  if (decl.withConfig?.componentId) {
+    return false;
+  }
+  if ((decl as { receivesClassNameOrStyleInJsx?: boolean }).receivesClassNameOrStyleInJsx) {
+    return false;
+  }
+  return true;
 }

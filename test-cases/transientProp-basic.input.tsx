@@ -65,6 +65,8 @@ export const App = () => (
     <StyledAnimatedContainer $direction="up" $delay={0.4} />
     <FaderConsumer>Visible</FaderConsumer>
     <FaderConsumerReversed>Reversed</FaderConsumerReversed>
+    <Overlay />
+    <SpreadOverlayConsumer />
   </div>
 );
 
@@ -111,5 +113,44 @@ function FaderConsumerReversed(props: { children: React.ReactNode; style?: React
     <Fader $open={!!children} $duration={350} {...rest}>
       {children}
     </Fader>
+  );
+}
+
+// Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
+const OverlayContainer = styled.div<{ $zIndex: number }>`
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: ${(props) => props.$zIndex};
+`;
+
+function Overlay() {
+  const zIndexContainer = 1;
+  const close = () => {};
+  return (
+    <OverlayContainer $zIndex={zIndexContainer} onClick={close}>
+      hello
+    </OverlayContainer>
+  );
+}
+
+// Pattern 9: Same as Pattern 8 but with JSX spread — must keep wrapper
+// because the inline path can't extract styleFn props from spreads
+const SpreadOverlay = styled.div<{ $zIndex: number }>`
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: ${(props) => props.$zIndex};
+`;
+
+function SpreadOverlayConsumer(props: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <SpreadOverlay {...props} $zIndex={10}>
+      hello
+    </SpreadOverlay>
   );
 }

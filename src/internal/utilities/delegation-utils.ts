@@ -7,6 +7,86 @@ import type { StyledDecl } from "../transform-types.js";
 import { getRootJsxIdentifierName } from "./jscodeshift-utils.js";
 
 /**
+ * Returns true if a StyledDecl's styleFnFromProps entries can be handled by the
+ * inline JSX rewrite path without a wrapper function. Checks that entries use
+ * simple identity prop access (no callArg transforms), are always-condition,
+ * and no other dynamic features require wrapper prop destructuring.
+ */
+export function hasInlineableStyleFnOnly(decl: StyledDecl): boolean {
+  const styleFnEntries = decl.styleFnFromProps ?? [];
+  if (styleFnEntries.length === 0) {
+    return false;
+  }
+  if (styleFnEntries.some((sf) => sf.jsxProp === "__props")) {
+    return false;
+  }
+  if (styleFnEntries.some((sf) => sf.condition !== "always")) {
+    return false;
+  }
+  if (styleFnEntries.some((sf) => sf.callArg)) {
+    return false;
+  }
+  if (decl.shouldForwardPropFromWithConfig) {
+    return false;
+  }
+  if (decl.needsUseThemeHook?.length) {
+    return false;
+  }
+  if (Object.keys(decl.variantStyleKeys ?? {}).length > 0) {
+    return false;
+  }
+  if (decl.enumVariant) {
+    return false;
+  }
+  if (decl.inlineStyleProps?.length) {
+    return false;
+  }
+  if ((decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  if ((decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Returns true if any JSX usage of a component has spread attributes
+ * (e.g., `<Comp {...props} />`). The inline path can only consume explicit
+ * JSX attributes, so spreads require a wrapper for prop extraction.
+ */
+export function hasSpreadInJsx(root: Collection<ASTNode>, j: JSCodeshift, name: string): boolean {
+  let found = false;
+  const checkOpening = (opening: { attributes?: Array<{ type?: string }> }) => {
+    if (found) {
+      return;
+    }
+    for (const attr of opening.attributes ?? []) {
+      if (attr.type === "JSXSpreadAttribute") {
+        found = true;
+        return;
+      }
+    }
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name } },
+    } as object)
+    .forEach((p) =>
+      checkOpening(p.node.openingElement as { attributes?: Array<{ type?: string }> }),
+    );
+  root
+    .find(j.JSXSelfClosingElement, {
+      name: { type: "JSXIdentifier", name },
+    } as object)
+    .forEach((p) => checkOpening(p.node as { attributes?: Array<{ type?: string }> }));
+  return found;
+}
+
+/**
  * Checks if a component name is used in JSX within the given AST root.
  */
 function isComponentUsedInJsx(root: Collection<ASTNode>, j: JSCodeshift, name: string): boolean {
