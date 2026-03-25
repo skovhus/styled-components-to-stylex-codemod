@@ -5,7 +5,10 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { propagateDelegationWrapperRequirements } from "../utilities/delegation-utils.js";
+import {
+  hasInlineableStyleFnOnly,
+  propagateDelegationWrapperRequirements,
+} from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 
 /**
@@ -408,11 +411,9 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.base.kind !== "intrinsic") {
     return false;
   }
-  // Exported components need wrappers to preserve the module's public API
   if (exportedComponents.has(decl.localName)) {
     return false;
   }
-  // Components extended by others need wrappers for delegation
   if (extendedBy.has(decl.localName)) {
     return false;
   }
@@ -422,51 +423,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if ((decl as { usedAsValue?: boolean }).usedAsValue) {
     return false;
   }
-  const styleFnEntries = decl.styleFnFromProps ?? [];
-  if (styleFnEntries.length === 0) {
-    return false;
-  }
-  // __props-type entries need the wrapper to access the entire props object
-  if (styleFnEntries.some((sf) => sf.jsxProp === "__props")) {
-    return false;
-  }
-  // Only "always" condition entries can be inlined — the inline path calls the
-  // style function unconditionally with the JSX attribute value. Conditional
-  // entries (truthy/undefined) need wrapper destructuring + guard logic.
-  if (styleFnEntries.some((sf) => sf.condition !== "always")) {
-    return false;
-  }
-  // Entries with callArg transform the prop value (e.g., template literals,
-  // nullish coalescing). The inline path passes raw JSX values and can't
-  // replicate these transformations.
-  if (styleFnEntries.some((sf) => sf.callArg)) {
-    return false;
-  }
-
-  // shouldForwardProp must be auto-inferred (not from withConfig)
-  if (decl.shouldForwardPropFromWithConfig) {
-    return false;
-  }
-  // No features that require wrapper prop destructuring
-  if (decl.needsUseThemeHook?.length) {
-    return false;
-  }
-  if (Object.keys(decl.variantStyleKeys ?? {}).length > 0) {
-    return false;
-  }
-  if (decl.enumVariant) {
-    return false;
-  }
-  if (decl.inlineStyleProps?.length) {
-    return false;
-  }
-  if ((decl.attrsInfo?.conditionalAttrs?.length ?? 0) > 0) {
-    return false;
-  }
-  if ((decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
-    return false;
-  }
-  if ((decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0) {
+  if (!hasInlineableStyleFnOnly(decl)) {
     return false;
   }
   if (decl.supportsExternalStyles || decl.supportsAsProp) {
