@@ -2,14 +2,18 @@
  * Step: analyze post-emit wrappers and delegation needs.
  * Core concepts: wrapper decisions and polymorphic-as handling.
  */
+import type { JSCodeshift } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import {
+  countComponentJsxUsages,
   hasInlineableStyleFnOnly,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+
+const INLINE_USAGE_THRESHOLD = 1;
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -368,7 +372,7 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   // attributes (processAttr) and stripping transient/$-prefixed props.
   // This runs AFTER all wrapper decisions so it can safely clear the flag.
   for (const decl of styledDecls) {
-    if (!canDowngradeStyleFnIntrinsicWrapper(decl, exportedComponents, extendedBy)) {
+    if (!canDowngradeStyleFnIntrinsicWrapper(decl, exportedComponents, extendedBy, root, j)) {
       continue;
     }
     decl.needsWrapperComponent = false;
@@ -401,6 +405,8 @@ function canDowngradeStyleFnIntrinsicWrapper(
   decl: StyledDecl,
   exportedComponents: Map<string, unknown>,
   extendedBy: Map<string, string[]>,
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
 ): boolean {
   if (!decl.needsWrapperComponent) {
     return false;
@@ -424,6 +430,10 @@ function canDowngradeStyleFnIntrinsicWrapper(
     return false;
   }
   if (!hasInlineableStyleFnOnly(decl)) {
+    return false;
+  }
+  // Multi-use components keep wrappers for readability and code reuse
+  if (countComponentJsxUsages(root, j, decl.localName) > INLINE_USAGE_THRESHOLD) {
     return false;
   }
   if (decl.supportsExternalStyles || decl.supportsAsProp) {

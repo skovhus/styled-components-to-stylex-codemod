@@ -2,6 +2,27 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
+type BadgeProps = React.PropsWithChildren<{
+  badgeColor: string;
+}>;
+
+/**
+ * Test case for dynamic styles in pseudo elements (::before / ::after).
+ * Emits a StyleX dynamic style function with pseudo-element nesting.
+ */
+function Badge(props: BadgeProps) {
+  const { children, badgeColor } = props;
+  return (
+    <span
+      sx={styles.badge({
+        badgeColor,
+      })}
+    >
+      {children}
+    </span>
+  );
+}
+
 type TooltipProps = React.PropsWithChildren<{
   tipColor?: string;
 }>;
@@ -37,29 +58,27 @@ function Tag(props: TagProps) {
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
+type DynamicPlaceholderProps = {
+  placeholderColor: PlaceholderColor;
+} & React.ComponentProps<"input">;
+
+function DynamicPlaceholder(props: DynamicPlaceholderProps) {
+  const { placeholderColor, ...rest } = props;
+  return (
+    <input
+      {...rest}
+      sx={styles.dynamicPlaceholder({
+        placeholderColor,
+      })}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px", width: 560, flexWrap: "wrap" }}>
-    <span
-      sx={styles.badge({
-        badgeColor: "red",
-      })}
-    >
-      Notification
-    </span>
-    <span
-      sx={styles.badge({
-        badgeColor: "green",
-      })}
-    >
-      Online
-    </span>
-    <span
-      sx={styles.badge({
-        badgeColor: "blue",
-      })}
-    >
-      Info
-    </span>
+    <Badge badgeColor="red">Notification</Badge>
+    <Badge badgeColor="green">Online</Badge>
+    <Badge badgeColor="blue">Info</Badge>
     <Tooltip tipColor="navy">With color</Tooltip>
     <Tooltip>Default</Tooltip>
     <Tag tagColor="tomato">With color</Tag>
@@ -72,18 +91,8 @@ export const App = () => (
       Hover me
     </button>
     <input placeholder="Muted placeholder" sx={styles.input} />
-    <input
-      placeholder="Base"
-      sx={styles.dynamicPlaceholder({
-        placeholderColor: "labelBase",
-      })}
-    />
-    <input
-      placeholder="Muted"
-      sx={styles.dynamicPlaceholder({
-        placeholderColor: "labelMuted",
-      })}
-    />
+    <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
+    <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
   </div>
 );
 
