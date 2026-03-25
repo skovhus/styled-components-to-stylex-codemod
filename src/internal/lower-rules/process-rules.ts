@@ -194,6 +194,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     return "continue";
   };
 
+  // Track ancestor attribute computed key entries across rules so that base values and
+  // media-wrapped values for the same prop+attr are merged into a single entry.
+  // Key: "prop\0attrStr", Value: the entry pushed to perPropComputedMedia.
+  const ancestorAttrEntryByKey = new Map<string, { keyExpr: unknown; value: unknown }>();
+
   for (const rule of decl.rules) {
     if (state.bail) {
       break;
@@ -334,9 +339,14 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (s.includes(",") && !isHandledComponentPattern) {
-        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors or pseudo-elements
+        // Comma-separated selectors: bail unless ALL parts are valid pseudo-selectors,
+        // pseudo-elements, or ancestor attribute selectors
         const parsed = parseSelector(s);
-        if (parsed.kind !== "pseudo" && parsed.kind !== "pseudoElements") {
+        if (
+          parsed.kind !== "pseudo" &&
+          parsed.kind !== "pseudoElements" &&
+          parsed.kind !== "ancestorAttribute"
+        ) {
           state.markBail();
           warnings.push({
             severity: "warning",
@@ -988,6 +998,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       break;
     }
 
+    // Ancestor attribute selectors: [attr] & → stylex.when.ancestor(':is([attr])')
+    const ancestorAttrs =
+      parsedSelector.kind === "ancestorAttribute" ? parsedSelector.ancestorAttrs : null;
+    const ancestorAttrKeyExprs = ancestorAttrs
+      ? ancestorAttrs.map((attr) => makeAncestorKeyExpr(j, `:is(${attr})`))
+      : null;
+
     const pseudos =
       parsedSelector.kind === "pseudo"
         ? parsedSelector.pseudos
@@ -1124,6 +1141,41 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             (current as Record<string, unknown>).default = fallbackDefault;
           }
           (existing[ps] as Record<string, unknown>)[media] = value;
+        }
+        return;
+      }
+
+      // Handle ancestor attribute selectors: [attr] & → stylex.when.ancestor(':is([attr])')
+      // Must run before the plain `media` branch so @media inside [attr] & wraps correctly.
+      // Uses ancestorAttrEntryByKey to merge base and media values for the same prop+attr
+      // across separate rules (e.g., base `display: block` and `@media { display: flex }`).
+      if (ancestorAttrKeyExprs?.length && ancestorAttrs?.length) {
+        for (let i = 0; i < ancestorAttrs.length; i++) {
+          const attr = ancestorAttrs[i]!;
+          const mapKey = `${prop}\0${attr}`;
+          const existing = ancestorAttrEntryByKey.get(mapKey);
+
+          if (!existing) {
+            // First occurrence: push a new computed key entry
+            const entryValue = media ? { default: null, [media]: value } : value;
+            const computedEntry = { keyExpr: ancestorAttrKeyExprs[i]!, value: entryValue };
+            getOrCreateComputedMediaEntry(prop, ctx).entries.push(computedEntry);
+            ancestorAttrEntryByKey.set(mapKey, computedEntry);
+          } else if (media) {
+            // Media query for an already-seen attr: merge into existing value
+            if (typeof existing.value === "object" && existing.value !== null) {
+              (existing.value as Record<string, unknown>)[media] = value;
+            } else {
+              existing.value = { default: existing.value, [media]: value };
+            }
+          } else {
+            // Base value arriving after media: update the default
+            if (typeof existing.value === "object" && existing.value !== null) {
+              (existing.value as Record<string, unknown>).default = value;
+            } else {
+              existing.value = value;
+            }
+          }
         }
         return;
       }

@@ -7,6 +7,15 @@ export function App() {
         Visible
       </div>
       <div sx={[styles.box, styles.boxHidden]}>Hidden</div>
+      <div aria-checked="true">
+        <div sx={[styles.menuItem, styles.menuItemChecked]}>Checked</div>
+      </div>
+      <div>
+        <div sx={[styles.menuItem, styles.menuItemDefault]}>Default</div>
+      </div>
+      <div data-active="true">
+        <div sx={styles.indicator}>Active</div>
+      </div>
     </div>
   );
 }
@@ -19,6 +28,27 @@ const styles = stylex.create({
     },
     transition: "opacity 0.2s",
   },
+  // Comma-separated ancestor attribute selectors
+  menuItem: {
+    opacity: {
+      default: 0.5,
+      [stylex.when.ancestor(':is([aria-checked="true"])')]: 1,
+      [stylex.when.ancestor(':is([data-focused="true"])')]: 1,
+      [stylex.when.ancestor(':is([aria-selected="true"])')]: 1,
+      [stylex.when.ancestor(':is([aria-checked="mixed"])')]: 1,
+    },
+    paddingBlock: 8,
+    paddingInline: 12,
+  },
+  // Single ancestor attribute selector (no comma)
+  indicator: {
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(':is([data-active="true"])')]: 1,
+    },
+    backgroundColor: "lightcyan",
+    padding: 10,
+  },
   boxVisible: {
     backgroundColor: "lightblue",
     padding: 20,
@@ -26,5 +56,11 @@ const styles = stylex.create({
   boxHidden: {
     backgroundColor: "lightcoral",
     padding: 20,
+  },
+  menuItemChecked: {
+    backgroundColor: "lightgreen",
+  },
+  menuItemDefault: {
+    backgroundColor: "lightyellow",
   },
 });
