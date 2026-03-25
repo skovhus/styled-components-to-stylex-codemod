@@ -66,6 +66,7 @@ export const App = () => (
     <FaderConsumer>Visible</FaderConsumer>
     <FaderConsumerReversed>Reversed</FaderConsumerReversed>
     <Overlay />
+    <SpreadOverlayConsumer />
   </div>
 );
 
@@ -132,5 +133,24 @@ function Overlay() {
     <OverlayContainer $zIndex={zIndexContainer} onClick={close}>
       hello
     </OverlayContainer>
+  );
+}
+
+// Pattern 9: Same as Pattern 8 but with JSX spread — must keep wrapper
+// because the inline path can't extract styleFn props from spreads
+const SpreadOverlay = styled.div<{ $zIndex: number }>`
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: ${(props) => props.$zIndex};
+`;
+
+function SpreadOverlayConsumer(props: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <SpreadOverlay {...props} $zIndex={10}>
+      hello
+    </SpreadOverlay>
   );
 }

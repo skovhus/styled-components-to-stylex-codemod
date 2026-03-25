@@ -75,6 +75,7 @@ export const App = () => (
     <FaderConsumer>Visible</FaderConsumer>
     <FaderConsumerReversed>Reversed</FaderConsumerReversed>
     <Overlay />
+    <SpreadOverlayConsumer />
   </div>
 );
 
@@ -146,6 +147,27 @@ function Overlay() {
   );
 }
 
+type SpreadOverlayProps = { zIndex: number } & React.ComponentProps<"div">;
+
+// Pattern 9: Same as Pattern 8 but with JSX spread — must keep wrapper
+// because the inline path can't extract styleFn props from spreads
+function SpreadOverlay(props: SpreadOverlayProps) {
+  const { className, children, style, zIndex, ...rest } = props;
+  return (
+    <div {...rest} {...mergedSx(styles.spreadOverlay(zIndex), className, style)}>
+      {children}
+    </div>
+  );
+}
+
+function SpreadOverlayConsumer(props: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <SpreadOverlay {...props} zIndex={10}>
+      hello
+    </SpreadOverlay>
+  );
+}
+
 const styles = stylex.create({
   comp: {
     color: "red",
@@ -190,6 +212,14 @@ const styles = stylex.create({
   },
   // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
   overlayContainer: (zIndex: number) => ({
+    position: "fixed",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex,
+  }),
+  spreadOverlay: (zIndex: number) => ({
     position: "fixed",
     top: 0,
     right: 0,

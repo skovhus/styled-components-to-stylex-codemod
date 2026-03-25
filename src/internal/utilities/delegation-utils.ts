@@ -54,6 +54,39 @@ export function hasInlineableStyleFnOnly(decl: StyledDecl): boolean {
 }
 
 /**
+ * Returns true if any JSX usage of a component has spread attributes
+ * (e.g., `<Comp {...props} />`). The inline path can only consume explicit
+ * JSX attributes, so spreads require a wrapper for prop extraction.
+ */
+export function hasSpreadInJsx(root: Collection<ASTNode>, j: JSCodeshift, name: string): boolean {
+  let found = false;
+  const checkOpening = (opening: { attributes?: Array<{ type?: string }> }) => {
+    if (found) {
+      return;
+    }
+    for (const attr of opening.attributes ?? []) {
+      if (attr.type === "JSXSpreadAttribute") {
+        found = true;
+        return;
+      }
+    }
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name } },
+    } as object)
+    .forEach((p) =>
+      checkOpening(p.node.openingElement as { attributes?: Array<{ type?: string }> }),
+    );
+  root
+    .find(j.JSXSelfClosingElement, {
+      name: { type: "JSXIdentifier", name },
+    } as object)
+    .forEach((p) => checkOpening(p.node as { attributes?: Array<{ type?: string }> }));
+  return found;
+}
+
+/**
  * Checks if a component name is used in JSX within the given AST root.
  */
 function isComponentUsedInJsx(root: Collection<ASTNode>, j: JSCodeshift, name: string): boolean {

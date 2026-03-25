@@ -9,6 +9,7 @@ import { TransformContext } from "../transform-context.js";
 import {
   countComponentJsxUsages,
   hasInlineableStyleFnOnly,
+  hasSpreadInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -434,6 +435,11 @@ function canDowngradeStyleFnIntrinsicWrapper(
   }
   // Multi-use components keep wrappers for readability and code reuse
   if (countComponentJsxUsages(root, j, decl.localName) > INLINE_USAGE_THRESHOLD) {
+    return false;
+  }
+  // Spreads may contain the styleFn prop at runtime; the inline path can only
+  // consume explicit JSX attributes, so keep the wrapper for spread call sites.
+  if (hasSpreadInJsx(root, j, decl.localName)) {
     return false;
   }
   if (decl.supportsExternalStyles || decl.supportsAsProp) {
