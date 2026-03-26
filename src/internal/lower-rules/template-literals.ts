@@ -11,6 +11,7 @@ import type {
   ResolveValueResult,
 } from "../../adapter.js";
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
+import { extractIndexedThemeLookupInfo } from "../builtin-handlers/resolver-utils.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
@@ -490,6 +491,18 @@ export function resolveTemplateLiteralBranch(
         });
         continue;
       }
+      // Handle `background: ${expr}` shorthand → backgroundColor dynamic entry
+      // Only apply when the expression is a theme-based resolution (condition: "always"),
+      // not for simple prop passthroughs (e.g. background: ${props.background}).
+      if (propName === "background" && !prefix && !suffix && resolved.condition === "always") {
+        dynamicEntries.push({
+          jsxProp: resolved.jsxProp,
+          stylexProp: "backgroundColor",
+          callArg: resolved.callArg,
+          condition: resolved.condition,
+        });
+        continue;
+      }
       const isLonghandOnlyShorthand = isStylexLonghandOnlyShorthand(propName);
       const callArg =
         prefix || suffix
@@ -699,6 +712,60 @@ function resolveDynamicTemplateExpr(args: {
         jsxProp,
         callArg: j.conditionalExpression(baseArg, consTheme, baseArg),
       };
+    }
+    // Handle computed theme lookup in either branch:
+    // props.X ? props.theme.color[props.X] : props.theme.color.Y  (or reverse)
+    const tryResolveIndexedThemeBranch = (
+      indexedNode: ExpressionKind,
+      staticTheme: ExpressionKind,
+      indexedIsConsequent: boolean,
+    ): { jsxProp: string; callArg: ExpressionKind; condition?: "always" } | null => {
+      const indexed = extractIndexedThemeLookupInfo(indexedNode, paramName);
+      if (!indexed || indexed.indexPropName !== jsxProp) {
+        return null;
+      }
+      const themeBase = resolveValue({
+        kind: "theme",
+        path: indexed.themeObjectPath,
+        filePath,
+        loc: getNodeLocStart(indexedNode) ?? undefined,
+      });
+      if (!themeBase) {
+        return null;
+      }
+      registerImports(themeBase.imports, resolverImports);
+      const themeBaseAst = parseExpr(themeBase.expr);
+      if (!themeBaseAst) {
+        return null;
+      }
+      const indexedAccess = j.memberExpression(themeBaseAst, baseArg, true);
+      return {
+        jsxProp,
+        callArg: indexedIsConsequent
+          ? j.conditionalExpression(baseArg, indexedAccess, staticTheme)
+          : j.conditionalExpression(baseArg, staticTheme, indexedAccess),
+        condition: "always",
+      };
+    };
+    if (altTheme) {
+      const result = tryResolveIndexedThemeBranch(
+        expr.consequent as ExpressionKind,
+        altTheme,
+        true,
+      );
+      if (result) {
+        return result;
+      }
+    }
+    if (consTheme) {
+      const result = tryResolveIndexedThemeBranch(
+        expr.alternate as ExpressionKind,
+        consTheme,
+        false,
+      );
+      if (result) {
+        return result;
+      }
     }
   }
   return null;

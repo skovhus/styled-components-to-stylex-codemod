@@ -763,8 +763,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }>,
       conditionWhen?: string,
     ): void => {
-      const inferParamTypeFromCallArg = (callArg: ExpressionKind): ASTNode | null => {
+      const inferParamTypeFromCallArg = (
+        callArg: ExpressionKind,
+        condition?: "always",
+      ): ASTNode | null => {
         if (callArg.type === "TemplateLiteral") {
+          return j.tsStringKeyword();
+        }
+        // ConditionalExpression with theme-resolved branches (condition: "always")
+        // produces string values (StyleXVar<string>), not the original prop type.
+        if (callArg.type === "ConditionalExpression" && condition === "always") {
           return j.tsStringKeyword();
         }
         const staticValue = literalToStaticValue(callArg);
@@ -785,7 +793,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (!styleFnDecls.has(fnKey)) {
           const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
           const param = j.identifier(entryParamName);
-          const inferredParamType = inferParamTypeFromCallArg(entry.callArg);
+          const inferredParamType = inferParamTypeFromCallArg(entry.callArg, entry.condition);
           if (inferredParamType) {
             (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
               inferredParamType as any,
@@ -1555,23 +1563,84 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
     };
 
+    // Helper to resolve a template literal branch and apply its entries
+    const resolveTplBranch = (
+      node: ExpressionKind,
+    ): ReturnType<typeof resolveTemplateLiteralBranch> =>
+      resolveTemplateLiteralBranch(tplCtx, { node: node as any, paramName, bindings });
+
+    // Helper to apply all entries (style, dynamic, inline) from a resolved branch
+    const applyResolvedEntries = (
+      resolved: NonNullable<ReturnType<typeof resolveTemplateLiteralBranch>>,
+      info: TestInfo,
+      when: string,
+    ): void => {
+      if (Object.keys(resolved.style).length > 0) {
+        applyVariant(info, resolved.style);
+      }
+      if (resolved.dynamicEntries.length > 0) {
+        applyDynamicEntries(resolved.dynamicEntries, when);
+      }
+      if (resolved.inlineEntries.length > 0) {
+        applyInlineEntries(resolved.inlineEntries, when);
+      }
+    };
+
     if (consIsCss && altIsCss) {
       const consResolved = resolveCssBranch(cons);
       const altResolved = resolveCssBranch(alt);
-      if (!consResolved || !altResolved) {
-        markBail();
-        return true;
-      }
-      if (consResolved.dynamicProps.length > 0 || altResolved.dynamicProps.length > 0) {
+      const hasDynamicProps =
+        (consResolved?.dynamicProps.length ?? 0) > 0 || (altResolved?.dynamicProps.length ?? 0) > 0;
+      if (!consResolved || !altResolved || hasDynamicProps) {
+        // Fallback: extract quasi from css tagged templates and resolve as template literals.
+        // This handles inner ternaries with theme access (e.g. props.color ? $colors[props.color] : $colors.default)
+        // that css-helper can't resolve to static values.
+        const consQuasi = (cons as { quasi?: unknown }).quasi as ExpressionKind | undefined;
+        const altQuasi = (alt as { quasi?: unknown }).quasi as ExpressionKind | undefined;
+        if (consQuasi && altQuasi) {
+          const consTplResolved = resolveTplBranch(consQuasi);
+          const altTplResolved = resolveTplBranch(altQuasi);
+          if (consTplResolved && altTplResolved) {
+            dropAllTestInfoProps(testInfo);
+            const invertedWhen = invertWhen(testInfo.when);
+            if (!invertedWhen) {
+              markBail();
+              return true;
+            }
+            applyResolvedEntries(consTplResolved, testInfo, testInfo.when);
+            applyResolvedEntries(altTplResolved, { ...testInfo, when: invertedWhen }, invertedWhen);
+            return true;
+          }
+        }
+        if (!consResolved || !altResolved) {
+          markBail();
+          return true;
+        }
         return false;
       }
-      mergeStyleObjects(styleObj, altResolved.style);
-      applyVariant(testInfo, consResolved.style);
+      // When the cons variant overrides all alt properties, merge alt to base (cons will
+      // override). When alt has properties NOT in cons (e.g. outline vs background), both
+      // must be conditional variants to avoid leaking styles into the wrong branch.
+      const altKeys = Object.keys(altResolved.style);
+      const altSubsetOfCons = altKeys.every((k) => k in consResolved.style);
+
+      if (altSubsetOfCons) {
+        mergeStyleObjects(styleObj, altResolved.style);
+        applyVariant(testInfo, consResolved.style);
+      } else {
+        const invertedWhen = invertWhen(testInfo.when);
+        if (!invertedWhen) {
+          markBail();
+          return true;
+        }
+        applyVariant(testInfo, consResolved.style);
+        applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
+      }
       // Apply conditional variants from both branches
       applyConditionalVariants(consResolved.conditionalVariants, testInfo.when);
-      const invertedWhen = invertWhen(testInfo.when);
-      if (invertedWhen && altResolved.conditionalVariants.length > 0) {
-        applyConditionalVariants(altResolved.conditionalVariants, invertedWhen);
+      const invertedWhenForVariants = invertWhen(testInfo.when);
+      if (invertedWhenForVariants && altResolved.conditionalVariants.length > 0) {
+        applyConditionalVariants(altResolved.conditionalVariants, invertedWhenForVariants);
       }
       return true;
     }
@@ -1693,29 +1762,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return true;
       }
       return false;
-    };
-
-    // Helper to resolve a template literal branch and apply its entries
-    const resolveTplBranch = (
-      node: ExpressionKind,
-    ): ReturnType<typeof resolveTemplateLiteralBranch> =>
-      resolveTemplateLiteralBranch(tplCtx, { node: node as any, paramName, bindings });
-
-    // Helper to apply all entries (style, dynamic, inline) from a resolved branch
-    const applyResolvedEntries = (
-      resolved: NonNullable<ReturnType<typeof resolveTemplateLiteralBranch>>,
-      info: TestInfo,
-      when: string,
-    ): void => {
-      if (Object.keys(resolved.style).length > 0) {
-        applyVariant(info, resolved.style);
-      }
-      if (resolved.dynamicEntries.length > 0) {
-        applyDynamicEntries(resolved.dynamicEntries, when);
-      }
-      if (resolved.inlineEntries.length > 0) {
-        applyInlineEntries(resolved.inlineEntries, when);
-      }
     };
 
     // Check altIsEmpty BEFORE altIsTpl since empty templates are also template literals
