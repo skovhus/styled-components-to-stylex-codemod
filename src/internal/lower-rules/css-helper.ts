@@ -283,6 +283,18 @@ export function createCssHelperResolver(args: {
     return null;
   };
 
+  /**
+   * Extracts the theme path from a ternary test that accesses `props.theme.*`.
+   * e.g., `props.theme.isDark` → "isDark", `props.theme.mode` → "mode"
+   */
+  const extractThemePathFromCondTest = (test: any, paramName: string | null): string | null => {
+    if (!test || !paramName) {
+      return null;
+    }
+    const path = getMemberPathFromIdentifier(test, paramName);
+    return path && path[0] === "theme" && path.length > 1 ? path.slice(1).join(".") : null;
+  };
+
   const resolveCssHelperTemplate = (
     template: any,
     paramName: string | null,
@@ -573,6 +585,61 @@ export function createCssHelperResolver(args: {
           );
         }
         const resolved = resolveHelperExprToAst(expr as any, paramName);
+        // Handle ConditionalExpression with theme test: ${props.theme.isDark ? "a" : "b"}
+        if (!resolved && (expr as any).type === "ConditionalExpression") {
+          const ternaryExpr = expr as {
+            test: any;
+            consequent: any;
+            alternate: any;
+          };
+          const themePath = extractThemePathFromCondTest(ternaryExpr.test, paramName);
+          if (themePath) {
+            const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
+            const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
+            if (consResolved && altResolved) {
+              const buildVariantStyle = (branchResolved: {
+                ast: any;
+                exprString: string;
+              }): Record<string, unknown> => {
+                const variantStyle: Record<string, unknown> = {};
+                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                  if (hasStaticParts) {
+                    const { prefix, suffix } = extractPrefixSuffix(parts);
+                    const wrappedExpr = wrapExprWithStaticParts(
+                      branchResolved.exprString,
+                      prefix,
+                      suffix,
+                    );
+                    const ast = parseExpr(wrappedExpr);
+                    if (ast) {
+                      variantStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
+                    }
+                  } else {
+                    variantStyle[mapped.prop] = mergeIntoContext(
+                      branchResolved.ast,
+                      mapped.prop,
+                      target as any,
+                    );
+                  }
+                }
+                return variantStyle;
+              };
+              const consStyle = buildVariantStyle(consResolved);
+              const altStyle = buildVariantStyle(altResolved);
+              conditionalVariants.push({
+                when: `theme.${themePath}`,
+                propName: "",
+                style: consStyle,
+              });
+              conditionalVariants.push({
+                when: `!theme.${themePath}`,
+                propName: "",
+                style: altStyle,
+              });
+              continue;
+            }
+          }
+        }
         if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
           return bail(
             "Conditional `css` block: failed to parse expression",

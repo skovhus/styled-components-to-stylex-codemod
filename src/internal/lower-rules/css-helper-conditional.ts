@@ -357,6 +357,35 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return replace(cloned, undefined) as ExpressionKind;
     };
 
+    /** Apply conditional variants, composing with an outer condition, and inject useTheme() for theme refs. */
+    const applyConditionalVariantsInline = (
+      conditionalVariants: ConditionalVariant[],
+      outerCondition: string,
+    ): void => {
+      for (const cv of conditionalVariants) {
+        const composedWhen = `${outerCondition} && ${cv.when}`;
+        applyVariant({ when: composedWhen, propName: cv.propName }, cv.style);
+        if (cv.propName) {
+          ensureShouldForwardPropDrop(decl, cv.propName);
+        }
+        // Theme-based conditional variants need useTheme() to be injected
+        if (cv.when.startsWith("theme.") || cv.when.startsWith("!theme.")) {
+          if (!decl.needsUseThemeHook) {
+            decl.needsUseThemeHook = [];
+          }
+          if (
+            !decl.needsUseThemeHook.some((e) => e.trueStyleKey === null && e.falseStyleKey === null)
+          ) {
+            decl.needsUseThemeHook.push({
+              themeProp: "__variantCondition",
+              trueStyleKey: null,
+              falseStyleKey: null,
+            });
+          }
+        }
+      }
+    };
+
     const resolveCssBranchToInlineMap = (
       node: ExpressionKind,
     ): Map<string, ExpressionKind> | null => {
@@ -631,12 +660,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
 
         // Apply conditional variants from nested ternaries within the css block
-        for (const cv of conditionalVariants) {
-          // Compose the outer condition with the inner condition
-          const composedWhen = `${testInfo.when} && ${cv.when}`;
-          applyVariant({ when: composedWhen, propName: cv.propName }, cv.style);
-          ensureShouldForwardPropDrop(decl, cv.propName);
-        }
+        applyConditionalVariantsInline(conditionalVariants, testInfo.when);
 
         return true;
       }
@@ -1543,17 +1567,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
     };
 
-    // Helper to apply conditional variants from a resolved branch
-    const applyConditionalVariants = (
-      conditionalVariants: ConditionalVariant[],
-      outerCondition: string,
-    ): void => {
-      for (const cv of conditionalVariants) {
-        const composedWhen = `${outerCondition} && ${cv.when}`;
-        applyVariant({ when: composedWhen, propName: cv.propName }, cv.style);
-        ensureShouldForwardPropDrop(decl, cv.propName);
-      }
-    };
+    // Reuse the shared helper for the ternary handler path
+    const applyConditionalVariants = applyConditionalVariantsInline;
 
     if (consIsCss && altIsCss) {
       const consResolved = resolveCssBranch(cons);
