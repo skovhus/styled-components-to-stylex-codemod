@@ -6,6 +6,7 @@ import type { API, FileInfo, Options } from "jscodeshift";
 import { basename, dirname, join, resolve as pathResolve } from "node:path";
 import { realpathSync } from "node:fs";
 
+import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
@@ -66,9 +67,18 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         | Map<string, string>
         | undefined;
       if (sidecarFiles) {
-        const dir = dirname(file.path);
-        const fileBase = basename(file.path).replace(/\.\w+$/, "");
-        sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+        // Use adapter-provided path if set, otherwise compute from basename
+        const sidecarPath =
+          result.sidecarFilePath ??
+          join(dirname(file.path), `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`);
+        // Merge with existing content when multiple files write to the same sidecar path
+        const existing = sidecarFiles.get(sidecarPath);
+        sidecarFiles.set(
+          sidecarPath,
+          existing
+            ? mergeMarkerDeclarations(existing, result.sidecarContent)
+            : result.sidecarContent,
+        );
       }
     }
 

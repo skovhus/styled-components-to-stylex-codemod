@@ -29,12 +29,14 @@ const [
   { scanCrossFileSelectors },
   { createModuleResolver },
   { Logger },
+  { mergeMarkerDeclarations },
 ] = await Promise.all([
   import("../src/transform.ts"),
   import("../src/__tests__/fixture-adapters.ts"),
   import("../src/internal/prepass/scan-cross-file-selectors.ts"),
   import("../src/internal/prepass/resolve-imports.ts"),
   import("../src/internal/logger.ts"),
+  import("../src/run.ts"),
 ]);
 
 // Suppress diagnostic output during regeneration
@@ -81,6 +83,9 @@ async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>>
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Accumulate all sidecar files across fixtures for merging (shared marker files)
+const allSidecarFiles = new Map<string, string>();
+
 async function updateFixture(name: string, ext: string) {
   const inputPath = join(testCasesDir, `${name}.input.${ext}`);
   const outputPath = join(testCasesDir, `${name}.output.${ext}`);
@@ -107,9 +112,13 @@ async function updateFixture(name: string, ext: string) {
   const out = result || input;
   await writeFile(outputPath, await normalizeCode(out, ext), "utf-8");
 
-  // Write sidecar .stylex.ts files (defineMarker declarations)
+  // Accumulate sidecar files for merging after all fixtures are processed
   for (const [sidecarPath, content] of sidecarFiles) {
-    await writeFile(sidecarPath, content, "utf-8");
+    const existing = allSidecarFiles.get(sidecarPath);
+    allSidecarFiles.set(
+      sidecarPath,
+      existing ? mergeMarkerDeclarations(existing, content) : content,
+    );
   }
 
   return outputPath;
@@ -139,4 +148,19 @@ const targetFixtures = (() => {
 
 for (const { name, ext } of targetFixtures) {
   await updateFixture(name, ext);
+}
+
+// Write accumulated sidecar files (merged across all fixtures).
+// When running --only, seed from existing sidecar files so markers from untouched fixtures are preserved.
+for (const [sidecarPath, content] of allSidecarFiles) {
+  let merged = content;
+  if (only) {
+    try {
+      const existing = await readFile(sidecarPath, "utf-8");
+      merged = mergeMarkerDeclarations(content, existing);
+    } catch {
+      // File doesn't exist yet, write fresh content
+    }
+  }
+  await writeFile(sidecarPath, merged, "utf-8");
 }

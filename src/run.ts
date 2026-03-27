@@ -24,6 +24,9 @@ import type {
 } from "./adapter.js";
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
+import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
+
+export { mergeMarkerDeclarations };
 
 export interface RunTransformOptions {
   /**
@@ -428,6 +431,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ? resolveBaseComponentWithLogging
       : undefined,
     resolveThemeCall: resolvedAdapter.resolveThemeCall,
+    markerFile: resolvedAdapter.markerFile,
   };
 
   // Path to the transform module.
@@ -608,10 +612,6 @@ function createAutoPrepassFailureError(
 /**
  * Merge new sidecar marker content into an existing .stylex.ts file, preserving
  * user-owned exports (e.g. defineVars). If the file doesn't exist, returns content as-is.
- *
- * New marker declarations (`export const XMarker = stylex.defineMarker()`) are
- * appended only if they don't already exist in the file. The stylex import is
- * ensured at the top.
  */
 export function mergeSidecarContent(sidecarPath: string, newContent: string): string {
   let existing: string;
@@ -621,37 +621,7 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
     // File doesn't exist yet — use new content as-is
     return newContent;
   }
-
-  // Extract marker export lines from the new content
-  const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
-  const newMarkers: string[] = [];
-  for (const m of newContent.matchAll(markerLineRe)) {
-    newMarkers.push(m[0]);
-  }
-
-  if (newMarkers.length === 0) {
-    return newContent;
-  }
-
-  // Filter out markers already present in the existing file
-  const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
-
-  if (markersToAdd.length === 0) {
-    // All markers already exist — no changes needed
-    return existing;
-  }
-
-  // Ensure the stylex import exists
-  let merged = existing;
-  if (!merged.includes("@stylexjs/stylex")) {
-    merged = `import * as stylex from "@stylexjs/stylex";\n\n${merged}`;
-  }
-
-  // Append new marker declarations at end
-  const trailingNewline = merged.endsWith("\n") ? "" : "\n";
-  merged = merged + trailingNewline + markersToAdd.join("\n") + "\n";
-
-  return merged;
+  return mergeMarkerDeclarations(existing, newContent);
 }
 
 /** Run formatter commands on a list of files, logging warnings on failure. */

@@ -212,6 +212,20 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     });
   }
 
+  // Validate markerFile (optional function)
+  const markerFile = obj?.markerFile;
+  if (markerFile !== undefined && markerFile !== null && typeof markerFile !== "function") {
+    throw new Error(
+      [
+        `${where}: adapter.markerFile must be a function when provided.`,
+        `Received: markerFile=${describeValue(markerFile)}`,
+        "",
+        "Expected signature:",
+        '  markerFile(ctx: { filePath: string }) => { kind: "specifier" | "absolutePath", value: string }',
+      ].join("\n"),
+    );
+  }
+
   // Validate themeHook config (null/undefined or object with functionName/importSource)
   const themeHook = obj?.themeHook;
   if (themeHook !== null && themeHook !== undefined) {

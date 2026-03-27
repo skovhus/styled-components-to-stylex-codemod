@@ -20,6 +20,8 @@ export interface TransformResult {
   warnings: WarningLog[];
   /** Content for the sidecar .stylex.ts file (defineMarker declarations). Undefined when no markers needed. */
   sidecarContent?: string;
+  /** Absolute file path for the sidecar file, when adapter.markerFile provides a custom location. */
+  sidecarFilePath?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */

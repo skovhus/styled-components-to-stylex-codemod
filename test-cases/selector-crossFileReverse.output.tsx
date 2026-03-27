@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileLink } from "./lib/cross-file-icon.styled";
 
-import { CrossFileLinkMarker } from "./selector-crossFileReverse.input.stylex";
+import { CrossFileLinkMarker } from "./markers.stylex";
 
 export function App() {
   return (

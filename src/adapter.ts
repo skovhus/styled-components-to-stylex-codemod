@@ -548,6 +548,15 @@ export type ExternalInterfaceResult = {
 };
 
 // ────────────────────────────────────────────────────────────────────────────
+// Marker File Configuration
+// ────────────────────────────────────────────────────────────────────────────
+
+export interface MarkerFileContext {
+  /** Absolute path of the file being transformed */
+  filePath: string;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -736,6 +745,23 @@ export interface Adapter {
    * @default false
    */
   usePhysicalProperties?: boolean;
+
+  /**
+   * Optional function to customize where marker sidecar files (`stylex.defineMarker()`)
+   * are written. By default, markers are placed in a `.stylex.ts` file next to the source.
+   *
+   * When provided, the function receives the source file path and returns an `ImportSource`
+   * that determines both the import path in the transformed file and the file path where
+   * markers are written.
+   *
+   * Example:
+   * ```typescript
+   * markerFile(ctx) {
+   *   return { kind: "absolutePath", value: "/path/to/shared/markers.stylex.ts" };
+   * }
+   * ```
+   */
+  markerFile?: (context: MarkerFileContext) => ImportSource;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -770,6 +796,7 @@ export interface AdapterInput {
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
   usePhysicalProperties?: Adapter["usePhysicalProperties"];
+  markerFile?: Adapter["markerFile"];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

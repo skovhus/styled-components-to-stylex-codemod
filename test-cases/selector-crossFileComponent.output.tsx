@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon } from "./lib/cross-file-icon.styled";
 
-import { IconButtonMarker } from "./selector-crossFileComponent.input.stylex";
+import { IconButtonMarker } from "./markers.stylex";
 
 export function App() {
   return (

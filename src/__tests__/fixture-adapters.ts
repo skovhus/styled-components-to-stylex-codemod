@@ -34,6 +34,9 @@ export const fixtureAdapter = defineAdapter({
   // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (StyleX ≥0.18)
   useSxProp: true,
 
+  // Write all defineMarker() declarations to a single shared sidecar file
+  markerFile: () => ({ kind: "specifier", value: "./markers.stylex" }),
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both
