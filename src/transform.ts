@@ -6,6 +6,7 @@ import type { API, FileInfo, Options } from "jscodeshift";
 import { basename, dirname, join, resolve as pathResolve } from "node:path";
 import { realpathSync } from "node:fs";
 
+import { mergeMarkerDeclarations } from "./run.js";
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
@@ -72,20 +73,12 @@ export default function transform(file: FileInfo, api: API, options: Options): s
           join(dirname(file.path), `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`);
         // Merge with existing content when multiple files write to the same sidecar path
         const existing = sidecarFiles.get(sidecarPath);
-        if (existing) {
-          const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
-          const newMarkers = [...result.sidecarContent.matchAll(markerLineRe)].map((m) => m[0]);
-          const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
-          if (markersToAdd.length > 0) {
-            const trailingNewline = existing.endsWith("\n") ? "" : "\n";
-            sidecarFiles.set(
-              sidecarPath,
-              existing + trailingNewline + markersToAdd.join("\n") + "\n",
-            );
-          }
-        } else {
-          sidecarFiles.set(sidecarPath, result.sidecarContent);
-        }
+        sidecarFiles.set(
+          sidecarPath,
+          existing
+            ? mergeMarkerDeclarations(existing, result.sidecarContent)
+            : result.sidecarContent,
+        );
       }
     }
 
