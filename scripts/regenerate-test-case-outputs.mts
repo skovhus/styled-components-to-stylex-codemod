@@ -81,6 +81,18 @@ async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>>
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/** Merge marker declarations from `incoming` into `base`, appending only new exports. */
+function mergeMarkerContent(base: string, incoming: string): string {
+  const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+  const newMarkers = [...incoming.matchAll(markerLineRe)].map((m) => m[0]);
+  const markersToAdd = newMarkers.filter((line) => !base.includes(line));
+  if (markersToAdd.length === 0) {
+    return base;
+  }
+  const trailingNewline = base.endsWith("\n") ? "" : "\n";
+  return base + trailingNewline + markersToAdd.join("\n") + "\n";
+}
+
 // Accumulate all sidecar files across fixtures for merging (shared marker files)
 const allSidecarFiles = new Map<string, string>();
 
@@ -113,21 +125,7 @@ async function updateFixture(name: string, ext: string) {
   // Accumulate sidecar files for merging after all fixtures are processed
   for (const [sidecarPath, content] of sidecarFiles) {
     const existing = allSidecarFiles.get(sidecarPath);
-    if (existing) {
-      // Merge: extract new marker lines and append any that don't already exist
-      const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
-      const newMarkers = [...content.matchAll(markerLineRe)].map((m) => m[0]);
-      const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
-      if (markersToAdd.length > 0) {
-        const trailingNewline = existing.endsWith("\n") ? "" : "\n";
-        allSidecarFiles.set(
-          sidecarPath,
-          existing + trailingNewline + markersToAdd.join("\n") + "\n",
-        );
-      }
-    } else {
-      allSidecarFiles.set(sidecarPath, content);
-    }
+    allSidecarFiles.set(sidecarPath, existing ? mergeMarkerContent(existing, content) : content);
   }
 
   return outputPath;
@@ -159,7 +157,17 @@ for (const { name, ext } of targetFixtures) {
   await updateFixture(name, ext);
 }
 
-// Write accumulated sidecar files (merged across all fixtures)
+// Write accumulated sidecar files (merged across all fixtures).
+// When running --only, seed from existing sidecar files so markers from untouched fixtures are preserved.
 for (const [sidecarPath, content] of allSidecarFiles) {
-  await writeFile(sidecarPath, content, "utf-8");
+  let merged = content;
+  if (only) {
+    try {
+      const existing = await readFile(sidecarPath, "utf-8");
+      merged = mergeMarkerContent(content, existing);
+    } catch {
+      // File doesn't exist yet, write fresh content
+    }
+  }
+  await writeFile(sidecarPath, merged, "utf-8");
 }

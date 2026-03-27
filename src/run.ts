@@ -428,6 +428,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ? resolveBaseComponentWithLogging
       : undefined,
     resolveThemeCall: resolvedAdapter.resolveThemeCall,
+    markerFile: resolvedAdapter.markerFile,
   };
 
   // Path to the transform module.

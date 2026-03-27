@@ -70,7 +70,22 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         const sidecarPath =
           result.sidecarFilePath ??
           join(dirname(file.path), `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`);
-        sidecarFiles.set(sidecarPath, result.sidecarContent);
+        // Merge with existing content when multiple files write to the same sidecar path
+        const existing = sidecarFiles.get(sidecarPath);
+        if (existing) {
+          const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+          const newMarkers = [...result.sidecarContent.matchAll(markerLineRe)].map((m) => m[0]);
+          const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
+          if (markersToAdd.length > 0) {
+            const trailingNewline = existing.endsWith("\n") ? "" : "\n";
+            sidecarFiles.set(
+              sidecarPath,
+              existing + trailingNewline + markersToAdd.join("\n") + "\n",
+            );
+          }
+        } else {
+          sidecarFiles.set(sidecarPath, result.sidecarContent);
+        }
       }
     }
 
