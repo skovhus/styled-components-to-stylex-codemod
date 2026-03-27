@@ -8,6 +8,7 @@ import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { classifyAnimationTokens } from "./lower-rules/animation.js";
+import { cloneAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -21,15 +22,26 @@ export function convertStyledKeyframes(args: {
 
 function parseKeyframesTemplate(args: {
   template: ASTNode | null | undefined;
+  j: JSCodeshift;
 }): Record<string, Record<string, unknown>> | null {
-  const { template } = args;
+  const { template, j } = args;
   if (!template || template.type !== "TemplateLiteral") {
     return null;
   }
-  if ((template.expressions?.length ?? 0) > 0) {
-    return null;
+  const slotExprById = new Map<number, ExpressionKind>();
+  for (let i = 0; i < (template.expressions?.length ?? 0); i++) {
+    const expr = template.expressions[i];
+    if (!expr) {
+      return null;
+    }
+    slotExprById.set(i, expr as ExpressionKind);
   }
-  const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
+  const rawCss = (template.quasis ?? [])
+    .map((q: any, i: number) => {
+      const raw = q.value?.raw ?? "";
+      return i < (template.expressions?.length ?? 0) ? `${raw}__SC_EXPR_${i}__` : raw;
+    })
+    .join("");
   const wrapped = `@keyframes __SC_KEYFRAMES__ { ${rawCss} }`;
   const ast = compile(wrapped) as any[];
 
@@ -81,7 +93,7 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        applyStaticDeclsToStyleObj(styleObj, raw, valueRaw);
+        applyStaticDeclsToStyleObj(styleObj, raw, valueRaw, { j, slotExprById });
       }
 
       frames[frameKey] = styleObj;
@@ -124,7 +136,7 @@ function convertStyledKeyframesImpl(args: {
       }
       const localName = p.node.id.name;
       const template = init?.quasi;
-      const frames = parseKeyframesTemplate({ template });
+      const frames = parseKeyframesTemplate({ template, j });
       if (!frames) {
         return;
       }
@@ -229,6 +241,10 @@ function applyStaticDeclsToStyleObj(
   styleObj: Record<string, unknown>,
   property: string,
   valueRaw: string,
+  options?: {
+    j?: JSCodeshift;
+    slotExprById?: Map<number, ExpressionKind>;
+  },
 ): void {
   for (const out of cssDeclarationToStylexDeclarations({
     property,
@@ -238,9 +254,61 @@ function applyStaticDeclsToStyleObj(
   })) {
     if (out.value.kind === "static") {
       const v = out.value.value.trim();
+      const exprValue = resolvePlaceholderValueToAst(v, options);
+      if (exprValue) {
+        styleObj[out.prop] = exprValue;
+        continue;
+      }
       styleObj[out.prop] = /^-?\d*\.?\d+$/.test(v) ? Number(v) : v;
     }
   }
+}
+
+function resolvePlaceholderValueToAst(
+  value: string,
+  options:
+    | {
+        j?: JSCodeshift;
+        slotExprById?: Map<number, ExpressionKind>;
+      }
+    | null
+    | undefined,
+): ExpressionKind | null {
+  const j = options?.j;
+  const slotExprById = options?.slotExprById;
+  if (!j || !slotExprById || !/__SC_EXPR_\d+__/.test(value)) {
+    return null;
+  }
+
+  const placeholderRe = /__SC_EXPR_(\d+)__/g;
+  const quasis: any[] = [];
+  const exprs: ExpressionKind[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = placeholderRe.exec(value))) {
+    const expr = slotExprById.get(Number(match[1]));
+    if (!expr) {
+      return null;
+    }
+    const prefix = value.slice(lastIndex, match.index);
+    quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
+    exprs.push(cloneAstNode(expr));
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (exprs.length === 0) {
+    return null;
+  }
+
+  const suffix = value.slice(lastIndex);
+  quasis.push(j.templateElement({ raw: suffix, cooked: suffix }, true));
+
+  if (quasis.length === 2 && quasis[0].value.raw === "" && quasis[1].value.raw === "") {
+    return exprs[0]!;
+  }
+
+  return j.templateLiteral(quasis, exprs);
 }
 
 /**

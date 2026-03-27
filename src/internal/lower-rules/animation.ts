@@ -4,9 +4,13 @@
  */
 import valueParser from "postcss-value-parser";
 import type { StyledDecl } from "../transform-types.js";
-import type { StyleFnFromPropsEntry } from "./decl-types.js";
+import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
-import { getFunctionBodyExpr, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import {
+  cloneAstNode,
+  getFunctionBodyExpr,
+  literalToStaticValue,
+} from "../utilities/jscodeshift-utils.js";
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
@@ -192,9 +196,9 @@ export function tryHandleAnimation(args: {
     }
 
     const animNames: Array<{ kind: "ident"; name: string } | { kind: "text"; value: string }> = [];
-    const durations: Array<string | null> = [];
+    const durations: AnimLonghandValue[] = [];
     const timings: Array<string | null> = [];
-    const delays: Array<string | null> = [];
+    const delays: AnimLonghandValue[] = [];
     const iterations: Array<string | null> = [];
     const directions: Array<string | null> = [];
     const fillModes: Array<string | null> = [];
@@ -257,9 +261,9 @@ export function tryHandleAnimation(args: {
       // Classify remaining (non-interpolated) tokens into animation longhand categories
       const classified = classifyAnimationTokens(tokens);
 
-      // Reset duration/delay from classified — we'll reassign based on original order
-      classified.duration = null;
-      classified.delay = null;
+      // Reset duration/delay from classified — we'll reassign based on original order.
+      let durationValue: AnimLonghandValue = null;
+      let delayValue: AnimLonghandValue = null;
 
       // Assign time tokens to duration/delay based on original CSS shorthand order
       for (let i = 0; i < timeSlots.length && i < 2; i++) {
@@ -269,31 +273,36 @@ export function tryHandleAnimation(args: {
 
         if (slot.kind === "static") {
           if (longhand === "animationDuration") {
-            classified.duration = slot.value;
+            durationValue = slot.value;
           } else {
-            classified.delay = slot.value;
+            delayValue = slot.value;
           }
         } else {
+          const expr = (decl as any).templateExpressions[slot.slotId] as any;
           const fallbackValue = computeInterpolatedTimeFallback(decl, slot.slotId, slot.unit);
+          const maybeStaticExpr = buildInterpolatedTimeExpression(j, decl, slot.slotId, slot.unit);
+          const timeValue = maybeStaticExpr ?? fallbackValue ?? `0${slot.unit}`;
 
           if (longhand === "animationDuration") {
-            classified.duration = fallbackValue ?? `0${slot.unit}`;
+            durationValue = timeValue;
           } else {
-            classified.delay = fallbackValue ?? `0${slot.unit}`;
+            delayValue = timeValue;
           }
 
-          interpolatedAnimTimes.push({
-            slotId: slot.slotId,
-            unit: slot.unit,
-            longhand,
-            fallbackValue,
-            segmentIndex,
-          });
+          if (expr?.type === "ArrowFunctionExpression") {
+            interpolatedAnimTimes.push({
+              slotId: slot.slotId,
+              unit: slot.unit,
+              longhand,
+              fallbackValue,
+              segmentIndex,
+            });
+          }
         }
       }
 
-      durations.push(classified.duration);
-      delays.push(classified.delay);
+      durations.push(durationValue);
+      delays.push(delayValue);
       timings.push(classified.timing);
       directions.push(classified.direction);
       fillModes.push(classified.fillMode);
@@ -338,10 +347,12 @@ export function tryHandleAnimation(args: {
     } else {
       applyProp("animationName", buildCommaTemplate(animNames), null);
     }
-    const anyValues = (values: Array<string | null>): boolean =>
+    const anyValues = (values: Array<string | ExpressionKind | null>): boolean =>
       values.some((value) => value !== null);
-    const joinWithDefaults = (values: Array<string | null>, fallback: string): string =>
-      values.map((value) => value ?? fallback).join(", ");
+    const joinWithDefaults = (
+      values: Array<string | ExpressionKind | null>,
+      fallback: string,
+    ): string | ExpressionKind => buildCommaSeparatedValues(j, values, fallback);
 
     if (anyValues(durations)) {
       applyProp("animationDuration", joinWithDefaults(durations, "0s"), null);
@@ -386,6 +397,41 @@ export function tryHandleAnimation(args: {
   return false;
 }
 
+function buildCommaSeparatedValues(
+  j: any,
+  values: Array<string | ExpressionKind | null>,
+  fallback: string,
+): string | ExpressionKind {
+  const parts = values.map((value) => value ?? fallback);
+  if (parts.length === 1) {
+    const first = parts[0]!;
+    return typeof first === "string" ? first : cloneAstNode(first);
+  }
+  const quasis: any[] = [];
+  const exprs: ExpressionKind[] = [];
+  let text = "";
+
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) {
+      text += ", ";
+    }
+    const part = parts[i]!;
+    if (typeof part === "string") {
+      text += part;
+      continue;
+    }
+    quasis.push(j.templateElement({ raw: text, cooked: text }, false));
+    exprs.push(cloneAstNode(part));
+    text = "";
+  }
+
+  if (exprs.length === 0) {
+    return text;
+  }
+  quasis.push(j.templateElement({ raw: text, cooked: text }, true));
+  return j.templateLiteral(quasis, exprs);
+}
+
 // --- Interpolated animation time helpers ---
 
 /** Matches placeholder tokens with optional time unit suffix (e.g., `__SC_EXPR_1__ms`). */
@@ -393,6 +439,8 @@ const INTERPOLATED_TIME_RE = /^__SC_EXPR_(\d+)__(ms|s)$/;
 
 /** Matches any placeholder token (with or without suffix) to exclude from timeline detection. */
 const PLACEHOLDER_TOKEN_RE = /__SC_EXPR_\d+__/;
+
+type AnimLonghandValue = string | ExpressionKind | null;
 
 type InterpolatedAnimTime = {
   slotId: number;
@@ -425,6 +473,23 @@ function computeInterpolatedTimeFallback(
   return null;
 }
 
+function buildInterpolatedTimeExpression(
+  j: any,
+  decl: StyledDecl,
+  slotId: number,
+  unit: string,
+): ExpressionKind | null {
+  const expr = (decl as any).templateExpressions[slotId] as any;
+  if (!expr || expr.type === "ArrowFunctionExpression") {
+    return null;
+  }
+  const staticVal = literalToStaticValue(expr);
+  if (staticVal !== null) {
+    return j.stringLiteral(`${staticVal}${unit}`);
+  }
+  return buildTemplateWithStaticParts(j, cloneAstNode(expr), "", unit);
+}
+
 /**
  * Emits dynamic style functions for interpolated animation time tokens.
  * For each interpolated token, creates a style function like:
@@ -444,8 +509,8 @@ function emitInterpolatedAnimTimeFunctions(
   interpolatedTimes: InterpolatedAnimTime[],
   styleFnDecls: Map<string, unknown>,
   styleFnFromProps: StyleFnFromPropsEntry[],
-  durations: Array<string | null>,
-  delays: Array<string | null>,
+  durations: AnimLonghandValue[],
+  delays: AnimLonghandValue[],
   avoidNames?: Set<string>,
 ): void {
   // Pre-validate and collect metadata for each interpolated time entry
@@ -528,7 +593,7 @@ function emitInterpolatedAnimTimeFunctions(
 function buildMultiAnimationCallArg(
   j: any,
   interpSegments: Array<{ expr: any; unit: string; segmentIndex: number }>,
-  valuesList: Array<string | null>,
+  valuesList: AnimLonghandValue[],
   defaultFallback: string,
 ): any {
   // Single animation with single interpolation: use simple template
@@ -559,10 +624,20 @@ function buildMultiAnimationCallArg(
       exprs.push(interp.expr);
       prefix = interp.unit;
     } else {
-      prefix += valuesList[i] ?? defaultFallback;
+      const value = valuesList[i] ?? defaultFallback;
+      if (typeof value === "string") {
+        prefix += value;
+      } else {
+        quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
+        exprs.push(cloneAstNode(value));
+        prefix = "";
+      }
     }
   }
 
+  if (exprs.length === 0) {
+    return prefix;
+  }
   quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, true));
   return j.templateLiteral(quasis, exprs);
 }
