@@ -11,18 +11,13 @@ type ThingProps = React.PropsWithChildren<{
 
 function Thing(props: ThingProps) {
   const { children, outlined, color } = props;
-  const sx = stylex.props(
-    styles.thing,
-    outlined && styles.thingOutline(`1px solid ${color ? $colors[color] : $colors.labelMuted}`),
-  );
-
   return (
     <div
-      {...sx}
-      style={{
-        ...sx.style,
-        background: !outlined ? (color ? $colors[color] : $colors.labelMuted) : undefined,
-      }}
+      sx={[
+        styles.thing,
+        outlined && styles.thingOutline(`1px solid ${color ? $colors[color] : $colors.labelMuted}`),
+        !outlined && styles.thingBackgroundColor(color ? $colors[color] : $colors.labelMuted),
+      ]}
     >
       {children}
     </div>
@@ -48,5 +43,8 @@ const styles = stylex.create({
   },
   thingOutline: (outline: string) => ({
     outline,
+  }),
+  thingBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
 });
