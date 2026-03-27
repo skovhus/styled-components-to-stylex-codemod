@@ -402,11 +402,7 @@ function isStaticSafeKeyframesSlotExpression(
 }
 
 function isFunctionLikeExpression(expr: ExpressionKind): boolean {
-  return (
-    expr.type === "ArrowFunctionExpression" ||
-    expr.type === "FunctionExpression" ||
-    expr.type === "FunctionDeclaration"
-  );
+  return expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression";
 }
 
 function isStaticSafeIdentifierBinding(
