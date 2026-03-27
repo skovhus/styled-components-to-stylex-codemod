@@ -81,6 +81,9 @@ async function listFixtureNames(): Promise<Array<{ name: string; ext: string }>>
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Accumulate all sidecar files across fixtures for merging (shared marker files)
+const allSidecarFiles = new Map<string, string>();
+
 async function updateFixture(name: string, ext: string) {
   const inputPath = join(testCasesDir, `${name}.input.${ext}`);
   const outputPath = join(testCasesDir, `${name}.output.${ext}`);
@@ -107,9 +110,24 @@ async function updateFixture(name: string, ext: string) {
   const out = result || input;
   await writeFile(outputPath, await normalizeCode(out, ext), "utf-8");
 
-  // Write sidecar .stylex.ts files (defineMarker declarations)
+  // Accumulate sidecar files for merging after all fixtures are processed
   for (const [sidecarPath, content] of sidecarFiles) {
-    await writeFile(sidecarPath, content, "utf-8");
+    const existing = allSidecarFiles.get(sidecarPath);
+    if (existing) {
+      // Merge: extract new marker lines and append any that don't already exist
+      const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+      const newMarkers = [...content.matchAll(markerLineRe)].map((m) => m[0]);
+      const markersToAdd = newMarkers.filter((line) => !existing.includes(line));
+      if (markersToAdd.length > 0) {
+        const trailingNewline = existing.endsWith("\n") ? "" : "\n";
+        allSidecarFiles.set(
+          sidecarPath,
+          existing + trailingNewline + markersToAdd.join("\n") + "\n",
+        );
+      }
+    } else {
+      allSidecarFiles.set(sidecarPath, content);
+    }
   }
 
   return outputPath;
@@ -139,4 +157,9 @@ const targetFixtures = (() => {
 
 for (const { name, ext } of targetFixtures) {
   await updateFixture(name, ext);
+}
+
+// Write accumulated sidecar files (merged across all fixtures)
+for (const [sidecarPath, content] of allSidecarFiles) {
+  await writeFile(sidecarPath, content, "utf-8");
 }

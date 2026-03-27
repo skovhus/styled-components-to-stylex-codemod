@@ -66,9 +66,11 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         | Map<string, string>
         | undefined;
       if (sidecarFiles) {
-        const dir = dirname(file.path);
-        const fileBase = basename(file.path).replace(/\.\w+$/, "");
-        sidecarFiles.set(join(dir, `${fileBase}.stylex.ts`), result.sidecarContent);
+        // Use adapter-provided path if set, otherwise compute from basename
+        const sidecarPath =
+          result.sidecarFilePath ??
+          join(dirname(file.path), `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`);
+        sidecarFiles.set(sidecarPath, result.sidecarContent);
       }
     }
 

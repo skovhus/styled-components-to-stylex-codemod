@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { WrapperMarker } from "./selector-componentDescendant.input.stylex";
+import { WrapperMarker } from "./markers.stylex";
 
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>

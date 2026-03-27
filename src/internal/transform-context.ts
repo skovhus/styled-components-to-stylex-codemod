@@ -107,6 +107,8 @@ export class TransformContext {
   ancestorAttrsByStyleKey?: Map<string, Set<string>>;
   /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
   sidecarStylexContent?: string;
+  /** Absolute file path for the sidecar file, when adapter.markerFile provides a custom location */
+  sidecarFilePath?: string;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
   /** Transient prop renames for exported components (for consumer patching). */

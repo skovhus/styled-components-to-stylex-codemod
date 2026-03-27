@@ -2,7 +2,8 @@
  * Step: emit stylex.create objects and resolver imports.
  * Core concepts: style emission and import aliasing.
  */
-import { basename } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
+import type { ImportSource } from "../../adapter.js";
 import { emitStylesAndImports } from "../emit-styles.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
@@ -112,9 +113,17 @@ function emitDefineMarkerDeclarations(
     .join("\n");
   ctx.sidecarStylexContent = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
 
-  // Derive sidecar import path from file basename
-  const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
-  const sidecarImportPath = `./${fileBase}.stylex`;
+  // Determine sidecar import path — use adapter.markerFile if provided, otherwise derive from basename
+  let sidecarImportPath: string;
+  const adapterMarkerFile = ctx.adapter.markerFile;
+  if (adapterMarkerFile) {
+    const importSource = adapterMarkerFile({ filePath: ctx.file.path });
+    sidecarImportPath = importSourceToModuleSpecifier(importSource, ctx.file.path);
+    ctx.sidecarFilePath = importSourceToAbsolutePath(importSource, ctx.file.path);
+  } else {
+    const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
+    sidecarImportPath = `./${fileBase}.stylex`;
+  }
 
   // Insert `import { XMarker, ... } from "./file.stylex"` after existing imports
   const importDecl = j.importDeclaration(
@@ -130,4 +139,34 @@ function emitDefineMarkerDeclarations(
   );
   const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
   programBody.splice(insertAt, 0, importDecl as unknown as { type?: string });
+}
+
+/** Convert an ImportSource to a module specifier string for use in import declarations. */
+function importSourceToModuleSpecifier(source: ImportSource, filePath: string): string {
+  if (source.kind === "specifier") {
+    return source.value;
+  }
+  // absolutePath → relative module specifier from current file
+  const baseDir = dirname(filePath);
+  let rel = relative(baseDir, source.value).split(sep).join("/");
+  // Strip .ts/.tsx extension for module specifier
+  rel = rel.replace(/\.tsx?$/, "");
+  if (!rel.startsWith(".")) {
+    rel = `./${rel}`;
+  }
+  return rel;
+}
+
+/** Resolve an ImportSource to an absolute file path for writing the sidecar file. */
+function importSourceToAbsolutePath(source: ImportSource, filePath: string): string {
+  if (source.kind === "absolutePath") {
+    return source.value;
+  }
+  // specifier → resolve relative to source file directory, append .ts if no real file extension
+  const baseDir = dirname(filePath);
+  let resolved = join(baseDir, source.value);
+  if (!/\.[jt]sx?$/.test(resolved)) {
+    resolved += ".ts";
+  }
+  return resolved;
 }

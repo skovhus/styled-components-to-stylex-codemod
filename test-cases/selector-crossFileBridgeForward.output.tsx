@@ -2,7 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { CollapseArrowIcon } from "./lib/converted-collapse-icon";
 
-import { StyledCollapseButtonMarker } from "./selector-crossFileBridgeForward.input.stylex";
+import { StyledCollapseButtonMarker } from "./markers.stylex";
 
 export function StyledCollapseButton(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;

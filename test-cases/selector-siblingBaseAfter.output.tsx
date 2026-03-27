@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { ThingMarker } from "./selector-siblingBaseAfter.input.stylex";
+import { ThingMarker } from "./markers.stylex";
 
 // The adjacent sibling rule appears BEFORE the base color declaration.
 // The base value must still be preserved as the default.
