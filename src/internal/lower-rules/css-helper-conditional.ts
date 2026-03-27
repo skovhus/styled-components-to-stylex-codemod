@@ -662,6 +662,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         // Apply conditional variants from nested ternaries within the css block
         applyConditionalVariantsInline(conditionalVariants, testInfo.when);
 
+        // Ensure the outer condition's props are dropped from DOM forwarding.
+        // This covers the case where all styles ended up as conditional variants
+        // (e.g., theme ternary) and consStyle is empty, so applyVariant was never called.
+        dropAllTestInfoProps(testInfo);
+
         return true;
       }
 
