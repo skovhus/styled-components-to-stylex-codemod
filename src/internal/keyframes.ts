@@ -2,12 +2,13 @@
  * Converts styled-components keyframes into StyleX keyframes objects.
  * Core concepts: Stylis parsing and keyframes extraction.
  */
-import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
+import type { ASTNode, ASTPath, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { classifyAnimationTokens } from "./lower-rules/animation.js";
+import { cloneAstNode, literalToStaticValue } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -21,15 +22,30 @@ export function convertStyledKeyframes(args: {
 
 function parseKeyframesTemplate(args: {
   template: ASTNode | null | undefined;
+  j: JSCodeshift;
+  scopePath: ASTPath<ASTNode>;
 }): Record<string, Record<string, unknown>> | null {
-  const { template } = args;
+  const { template, j, scopePath } = args;
   if (!template || template.type !== "TemplateLiteral") {
     return null;
   }
-  if ((template.expressions?.length ?? 0) > 0) {
-    return null;
+  const slotExprById = new Map<number, ExpressionKind>();
+  for (let i = 0; i < (template.expressions?.length ?? 0); i++) {
+    const expr = template.expressions[i];
+    if (!expr) {
+      return null;
+    }
+    if (!isStaticSafeKeyframesSlotExpression(expr as ExpressionKind, scopePath)) {
+      return null;
+    }
+    slotExprById.set(i, expr as ExpressionKind);
   }
-  const rawCss = (template.quasis ?? []).map((q: any) => q.value?.raw ?? "").join("");
+  const rawCss = (template.quasis ?? [])
+    .map((q: any, i: number) => {
+      const raw = q.value?.raw ?? "";
+      return i < (template.expressions?.length ?? 0) ? `${raw}__SC_EXPR_${i}__` : raw;
+    })
+    .join("");
   const wrapped = `@keyframes __SC_KEYFRAMES__ { ${rawCss} }`;
   const ast = compile(wrapped) as any[];
 
@@ -81,7 +97,7 @@ function parseKeyframesTemplate(args: {
           continue;
         }
         const raw = propRaw.trim();
-        applyStaticDeclsToStyleObj(styleObj, raw, valueRaw);
+        applyStaticDeclsToStyleObj(styleObj, raw, valueRaw, { j, slotExprById });
       }
 
       frames[frameKey] = styleObj;
@@ -124,7 +140,7 @@ function convertStyledKeyframesImpl(args: {
       }
       const localName = p.node.id.name;
       const template = init?.quasi;
-      const frames = parseKeyframesTemplate({ template });
+      const frames = parseKeyframesTemplate({ template, j, scopePath: p as ASTPath<ASTNode> });
       if (!frames) {
         return;
       }
@@ -229,6 +245,10 @@ function applyStaticDeclsToStyleObj(
   styleObj: Record<string, unknown>,
   property: string,
   valueRaw: string,
+  options?: {
+    j?: JSCodeshift;
+    slotExprById?: Map<number, ExpressionKind>;
+  },
 ): void {
   for (const out of cssDeclarationToStylexDeclarations({
     property,
@@ -238,9 +258,201 @@ function applyStaticDeclsToStyleObj(
   })) {
     if (out.value.kind === "static") {
       const v = out.value.value.trim();
+      const exprValue = resolvePlaceholderValueToAst(v, options);
+      if (exprValue) {
+        styleObj[out.prop] = exprValue;
+        continue;
+      }
       styleObj[out.prop] = /^-?\d*\.?\d+$/.test(v) ? Number(v) : v;
     }
   }
+}
+
+function resolvePlaceholderValueToAst(
+  value: string,
+  options:
+    | {
+        j?: JSCodeshift;
+        slotExprById?: Map<number, ExpressionKind>;
+      }
+    | null
+    | undefined,
+): ExpressionKind | null {
+  const j = options?.j;
+  const slotExprById = options?.slotExprById;
+  if (!j || !slotExprById || !/__SC_EXPR_\d+__/.test(value)) {
+    return null;
+  }
+
+  const placeholderRe = /__SC_EXPR_(\d+)__/g;
+  const quasis: any[] = [];
+  const exprs: ExpressionKind[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = placeholderRe.exec(value))) {
+    const expr = slotExprById.get(Number(match[1]));
+    if (!expr) {
+      return null;
+    }
+    const prefix = value.slice(lastIndex, match.index);
+    quasis.push(j.templateElement({ raw: prefix, cooked: prefix }, false));
+    exprs.push(cloneAstNode(expr));
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (exprs.length === 0) {
+    return null;
+  }
+
+  const suffix = value.slice(lastIndex);
+  quasis.push(j.templateElement({ raw: suffix, cooked: suffix }, true));
+
+  if (quasis.length === 2 && quasis[0].value.raw === "" && quasis[1].value.raw === "") {
+    return exprs[0]!;
+  }
+
+  return j.templateLiteral(quasis, exprs);
+}
+
+function isStaticSafeKeyframesSlotExpression(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string> = new Set(),
+): boolean {
+  if (isFunctionLikeExpression(expr)) {
+    return false;
+  }
+
+  const staticValue = literalToStaticValue(expr);
+  if (staticValue !== null) {
+    return typeof staticValue === "string" || typeof staticValue === "number";
+  }
+
+  if (expr.type === "Identifier") {
+    return isStaticSafeIdentifierBinding(expr.name, scopePath, seenIdentifiers);
+  }
+
+  if (expr.type === "UnaryExpression") {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.argument as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (expr.type === "BinaryExpression" || expr.type === "LogicalExpression") {
+    return (
+      isStaticSafeKeyframesSlotExpression(
+        expr.left as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(expr.right as ExpressionKind, scopePath, seenIdentifiers)
+    );
+  }
+
+  if (expr.type === "ConditionalExpression") {
+    return (
+      isStaticSafeKeyframesSlotExpression(
+        expr.test as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(
+        expr.consequent as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(
+        expr.alternate as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      )
+    );
+  }
+
+  if (expr.type === "TemplateLiteral") {
+    return expr.expressions.every((slotExpr) =>
+      isStaticSafeKeyframesSlotExpression(slotExpr as ExpressionKind, scopePath, seenIdentifiers),
+    );
+  }
+
+  if (expr.type === "ParenthesizedExpression") {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (
+    expr.type === "TSAsExpression" ||
+    expr.type === "TSTypeAssertion" ||
+    expr.type === "TSSatisfiesExpression"
+  ) {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  return false;
+}
+
+function isFunctionLikeExpression(expr: ExpressionKind): boolean {
+  return expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression";
+}
+
+function isStaticSafeIdentifierBinding(
+  name: string,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): boolean {
+  if (seenIdentifiers.has(name)) {
+    return false;
+  }
+  seenIdentifiers.add(name);
+
+  const scope = (scopePath as any).scope?.lookup?.(name);
+  if (!scope || typeof scope.getBindings !== "function") {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const bindings = scope.getBindings();
+  const refs = bindings?.[name];
+  if (!Array.isArray(refs) || refs.length !== 1) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const idPath = refs[0];
+  const declarator = idPath?.parent?.value;
+  if (!declarator || declarator.type !== "VariableDeclarator" || declarator.id !== idPath.value) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const declaration = idPath?.parent?.parent?.value;
+  if (!declaration || declaration.type !== "VariableDeclaration" || declaration.kind !== "const") {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  if (!declarator.init) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const isStatic = isStaticSafeKeyframesSlotExpression(
+    declarator.init as ExpressionKind,
+    scopePath,
+    seenIdentifiers,
+  );
+  seenIdentifiers.delete(name);
+  return isStatic;
 }
 
 /**

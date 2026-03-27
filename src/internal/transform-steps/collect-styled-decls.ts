@@ -21,10 +21,20 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   // We can have styled-components usage without a default import (e.g. only `keyframes` or `css`).
   // Don't early-return; instead apply what we can.
   const styledDefaultSpecifier = styledImports.find(j.ImportDefaultSpecifier).nodes()[0];
+  const namedStyledSpecifier = !styledDefaultSpecifier
+    ? styledImports
+        .find(j.ImportSpecifier)
+        .filter(
+          (p: any) => p.node.imported?.type === "Identifier" && p.node.imported.name === "styled",
+        )
+        .nodes()[0]
+    : undefined;
   const styledDefaultImport =
     styledDefaultSpecifier?.local?.type === "Identifier"
       ? styledDefaultSpecifier.local.name
-      : undefined;
+      : namedStyledSpecifier?.local?.type === "Identifier"
+        ? namedStyledSpecifier.local.name
+        : undefined;
   ctx.styledDefaultImport = styledDefaultImport;
 
   // Pre-process: extract CallExpression arguments from styled() calls into separate variables.
