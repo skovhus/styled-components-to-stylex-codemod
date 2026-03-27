@@ -6,7 +6,7 @@ import type { API, FileInfo, Options } from "jscodeshift";
 import { basename, dirname, join, resolve as pathResolve } from "node:path";
 import { realpathSync } from "node:fs";
 
-import { mergeMarkerDeclarations } from "./run.js";
+import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
