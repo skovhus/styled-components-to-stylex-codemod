@@ -163,6 +163,15 @@ function collectStyledDefaultImportLocalNames(styledImports: Collection<any>): S
     for (const spec of specs) {
       if (spec.type === "ImportDefaultSpecifier" && spec.local?.type === "Identifier") {
         styledLocalNames.add(spec.local.name);
+        continue;
+      }
+      if (
+        spec.type === "ImportSpecifier" &&
+        spec.imported?.type === "Identifier" &&
+        spec.imported.name === "styled" &&
+        spec.local?.type === "Identifier"
+      ) {
+        styledLocalNames.add(spec.local.name);
       }
     }
   });
