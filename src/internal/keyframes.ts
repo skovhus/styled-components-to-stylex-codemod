@@ -2,13 +2,13 @@
  * Converts styled-components keyframes into StyleX keyframes objects.
  * Core concepts: Stylis parsing and keyframes extraction.
  */
-import type { ASTNode, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
+import type { ASTNode, ASTPath, Collection, ImportDeclaration, JSCodeshift } from "jscodeshift";
 import valueParser from "postcss-value-parser";
 import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { classifyAnimationTokens } from "./lower-rules/animation.js";
-import { cloneAstNode } from "./utilities/jscodeshift-utils.js";
+import { cloneAstNode, literalToStaticValue } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
   root: Collection<ASTNode>;
@@ -23,8 +23,9 @@ export function convertStyledKeyframes(args: {
 function parseKeyframesTemplate(args: {
   template: ASTNode | null | undefined;
   j: JSCodeshift;
+  scopePath: ASTPath<ASTNode>;
 }): Record<string, Record<string, unknown>> | null {
-  const { template, j } = args;
+  const { template, j, scopePath } = args;
   if (!template || template.type !== "TemplateLiteral") {
     return null;
   }
@@ -32,6 +33,9 @@ function parseKeyframesTemplate(args: {
   for (let i = 0; i < (template.expressions?.length ?? 0); i++) {
     const expr = template.expressions[i];
     if (!expr) {
+      return null;
+    }
+    if (!isStaticSafeKeyframesSlotExpression(expr as ExpressionKind, scopePath)) {
       return null;
     }
     slotExprById.set(i, expr as ExpressionKind);
@@ -136,7 +140,7 @@ function convertStyledKeyframesImpl(args: {
       }
       const localName = p.node.id.name;
       const template = init?.quasi;
-      const frames = parseKeyframesTemplate({ template, j });
+      const frames = parseKeyframesTemplate({ template, j, scopePath: p as ASTPath<ASTNode> });
       if (!frames) {
         return;
       }
@@ -309,6 +313,150 @@ function resolvePlaceholderValueToAst(
   }
 
   return j.templateLiteral(quasis, exprs);
+}
+
+function isStaticSafeKeyframesSlotExpression(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string> = new Set(),
+): boolean {
+  if (isFunctionLikeExpression(expr)) {
+    return false;
+  }
+
+  const staticValue = literalToStaticValue(expr);
+  if (staticValue !== null) {
+    return typeof staticValue === "string" || typeof staticValue === "number";
+  }
+
+  if (expr.type === "Identifier") {
+    return isStaticSafeIdentifierBinding(expr.name, scopePath, seenIdentifiers);
+  }
+
+  if (expr.type === "UnaryExpression") {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.argument as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (expr.type === "BinaryExpression" || expr.type === "LogicalExpression") {
+    return (
+      isStaticSafeKeyframesSlotExpression(
+        expr.left as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(expr.right as ExpressionKind, scopePath, seenIdentifiers)
+    );
+  }
+
+  if (expr.type === "ConditionalExpression") {
+    return (
+      isStaticSafeKeyframesSlotExpression(
+        expr.test as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(
+        expr.consequent as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      ) &&
+      isStaticSafeKeyframesSlotExpression(
+        expr.alternate as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      )
+    );
+  }
+
+  if (expr.type === "TemplateLiteral") {
+    return expr.expressions.every((slotExpr) =>
+      isStaticSafeKeyframesSlotExpression(slotExpr as ExpressionKind, scopePath, seenIdentifiers),
+    );
+  }
+
+  if (expr.type === "ParenthesizedExpression") {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (
+    expr.type === "TSAsExpression" ||
+    expr.type === "TSTypeAssertion" ||
+    expr.type === "TSSatisfiesExpression"
+  ) {
+    return isStaticSafeKeyframesSlotExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  return false;
+}
+
+function isFunctionLikeExpression(expr: ExpressionKind): boolean {
+  return (
+    expr.type === "ArrowFunctionExpression" ||
+    expr.type === "FunctionExpression" ||
+    expr.type === "FunctionDeclaration"
+  );
+}
+
+function isStaticSafeIdentifierBinding(
+  name: string,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): boolean {
+  if (seenIdentifiers.has(name)) {
+    return false;
+  }
+  seenIdentifiers.add(name);
+
+  const scope = (scopePath as any).scope?.lookup?.(name);
+  if (!scope || typeof scope.getBindings !== "function") {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const bindings = scope.getBindings();
+  const refs = bindings?.[name];
+  if (!Array.isArray(refs) || refs.length !== 1) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const idPath = refs[0];
+  const declarator = idPath?.parent?.value;
+  if (!declarator || declarator.type !== "VariableDeclarator" || declarator.id !== idPath.value) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const declaration = idPath?.parent?.parent?.value;
+  if (!declaration || declaration.type !== "VariableDeclaration" || declaration.kind !== "const") {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  if (!declarator.init) {
+    seenIdentifiers.delete(name);
+    return false;
+  }
+
+  const isStatic = isStaticSafeKeyframesSlotExpression(
+    declarator.init as ExpressionKind,
+    scopePath,
+    seenIdentifiers,
+  );
+  seenIdentifiers.delete(name);
+  return isStatic;
 }
 
 /**

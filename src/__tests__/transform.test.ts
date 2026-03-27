@@ -5454,6 +5454,36 @@ export const App = () => <Box $animate>Multi</Box>;
   });
 });
 
+describe("keyframes interpolation safety", () => {
+  it("should not convert keyframes when a slot expression resolves to a non-static binding", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const dynamicOpacity = () => 0.5;
+
+const fade = keyframes\`
+  from {
+    opacity: \${dynamicOpacity};
+  }
+  to {
+    opacity: 1;
+  }
+\`;
+
+const Box = styled.div\`
+  animation: \${fade} 1s linear;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const fade = keyframes`");
+    expect(result.code).not.toContain("const fade = stylex.keyframes(");
+  });
+});
+
 describe("binary expression with bare props param usage", () => {
   it("should bail when the arrow function body passes props as a bare argument", () => {
     const source = `
