@@ -3,19 +3,34 @@
  * Core concepts: deduplication of defineMarker declarations across files.
  */
 
+/** Regex matching a marker block: optional JSDoc comment followed by the export line. */
+const MARKER_BLOCK_RE = /(?:\/\*\*[^]*?\*\/\n)?export const \w+ = stylex\.defineMarker\(\);/gm;
+
+/** Regex matching just the export line (used for dedup checks). */
+const MARKER_EXPORT_RE = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
+
 /**
  * Merge marker declarations from `incoming` into `base`, appending only new
- * `export const XMarker = stylex.defineMarker()` lines. Returns `base` unchanged
- * if all markers already exist.
+ * marker blocks (JSDoc + export). Returns `base` unchanged if all markers already exist.
  */
 export function mergeMarkerDeclarations(base: string, incoming: string): string {
-  const markerLineRe = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
-  const newMarkers = [...incoming.matchAll(markerLineRe)].map((m) => m[0]);
-  if (newMarkers.length === 0) {
+  // Extract export lines from incoming to check which are new
+  const incomingExports = [...incoming.matchAll(MARKER_EXPORT_RE)].map((m) => m[0]);
+  if (incomingExports.length === 0) {
     return base;
   }
-  const markersToAdd = newMarkers.filter((line) => !base.includes(line));
-  if (markersToAdd.length === 0) {
+  const newExportLines = incomingExports.filter((line) => !base.includes(line));
+  if (newExportLines.length === 0) {
+    return base;
+  }
+  // Extract full blocks (JSDoc + export) for the new markers
+  const newExportSet = new Set(newExportLines);
+  const incomingBlocks = [...incoming.matchAll(MARKER_BLOCK_RE)].map((m) => m[0]);
+  const blocksToAdd = incomingBlocks.filter((block) => {
+    const exportLine = block.match(MARKER_EXPORT_RE);
+    return exportLine && newExportSet.has(exportLine[0]);
+  });
+  if (blocksToAdd.length === 0) {
     return base;
   }
   // Ensure the stylex import exists
@@ -23,6 +38,7 @@ export function mergeMarkerDeclarations(base: string, incoming: string): string 
   if (!merged.includes("@stylexjs/stylex")) {
     merged = `import * as stylex from "@stylexjs/stylex";\n\n${merged}`;
   }
-  const trailingNewline = merged.endsWith("\n") ? "" : "\n";
-  return merged + trailingNewline + markersToAdd.join("\n") + "\n";
+  // Ensure a blank line separates existing content from new blocks
+  const trimmed = merged.trimEnd();
+  return trimmed + "\n\n" + blocksToAdd.join("\n\n") + "\n";
 }

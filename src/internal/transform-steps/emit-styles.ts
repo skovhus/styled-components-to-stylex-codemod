@@ -107,10 +107,13 @@ function emitDefineMarkerDeclarations(
   const j = ctx.j;
   const markerNames = [...crossFileMarkers.values()];
 
-  // Build sidecar file content
+  // Build sidecar file content with JSDoc comments for each marker
   const markerDecls = markerNames
-    .map((name) => `export const ${name} = stylex.defineMarker();`)
-    .join("\n");
+    .map((name) => {
+      const componentName = name.replace(/Marker$/, "");
+      return `/** Custom marker for ${componentName} */\nexport const ${name} = stylex.defineMarker();`;
+    })
+    .join("\n\n");
   ctx.sidecarStylexContent = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
 
   // Determine sidecar import path — use adapter.markerFile if provided, otherwise derive from basename
