@@ -636,6 +636,43 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       return false;
     }
 
+    // Adapter-driven props-map pattern: when there are no pseudo selectors,
+    // try resolving with indexedLookup hint so the adapter can return a prebuilt
+    // mixin map for stylex.props() instead of a CSS value for stylex.create().
+    if (!opts.pseudos?.length) {
+      const propsMapResolved = resolveValue({
+        kind: "theme",
+        path: themeObjectPath,
+        filePath,
+        cssProperty: d.property,
+        indexedLookup: true,
+        loc: getNodeLocStart(body.object) ?? undefined,
+      });
+      if (
+        propsMapResolved &&
+        propsMapResolved.usage === "props" &&
+        propsMapResolved.dynamicArgUsage === "memberAccess"
+      ) {
+        const resolvedExprAst = parseExpr(propsMapResolved.expr);
+        if (resolvedExprAst) {
+          registerImports(propsMapResolved.imports, resolverImports);
+          ensureShouldForwardPropDrop(decl, indexPropName);
+          const paramName = buildSafeIndexedParamName(indexPropName, resolvedExprAst);
+          const indexedExpr = j.memberExpression(
+            resolvedExprAst,
+            j.identifier(paramName),
+            true,
+          ) as ExpressionKind;
+
+          decl.extraStylexPropsArgs ??= [];
+          decl.extraStylexPropsArgs.push({ expr: indexedExpr, afterBase: true });
+
+          return true;
+        }
+      }
+    }
+
+    // Fallback: resolve as a CSS value for use in a dynamic stylex.create() style function.
     const resolved = resolveValue({
       kind: "theme",
       path: themeObjectPath,

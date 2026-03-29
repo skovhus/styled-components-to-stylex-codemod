@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $colorMixins } from "./lib/colorMixins.stylex";
 import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
@@ -13,7 +14,11 @@ function Box(props: BoxProps) {
   const { children, hoverColor, bg } = props;
   return (
     <div
-      sx={[styles.box, styles.boxBackgroundColorHover(hoverColor), styles.boxBackgroundColor(bg)]}
+      sx={[
+        styles.box,
+        $colorMixins.backgroundColor[bg],
+        styles.boxBackgroundColorHover(hoverColor),
+      ]}
     >
       {children}
     </div>
@@ -41,7 +46,7 @@ export function TextColor(
 ) {
   const { children, color, ...rest } = props;
   return (
-    <span {...rest} sx={styles.textColorColor(color)}>
+    <span {...rest} sx={$colorMixins.color[color]}>
       {children}
     </span>
   );
@@ -58,11 +63,5 @@ const styles = stylex.create({
       default: null,
       ":hover": $colors[hoverColor],
     },
-  }),
-  boxBackgroundColor: (bg: Color) => ({
-    backgroundColor: $colors[bg],
-  }),
-  textColorColor: (color: Colors) => ({
-    color: $colors[color],
   }),
 });
