@@ -1,22 +1,15 @@
 import * as React from "react";
-import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
+import { $colorMixins } from "./lib/colorMixins.stylex";
 
 type Colors = "labelBase" | "labelMuted";
 
 type DotProps = React.PropsWithChildren<{
-  $colors: Colors;
+  colors: Colors;
 }>;
 
 function Dot(props: DotProps) {
-  const { children, $colors } = props;
-  return <div sx={styles.dotBackgroundColor($colors)}>{children}</div>;
+  const { children, colors } = props;
+  return <div sx={$colorMixins.backgroundColor[colors]}>{children}</div>;
 }
 
-export const App = () => <Dot $colors="labelBase">Hello</Dot>;
-
-const styles = stylex.create({
-  dotBackgroundColor: ($colorsValue: Colors) => ({
-    backgroundColor: $colors[$colorsValue],
-  }),
-});
+export const App = () => <Dot colors="labelBase">Hello</Dot>;

@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
+import { $colorMixins } from "./lib/colorMixins.stylex";
 
 // This component uses JSX but has no explicit React import
 // (modern JSX transform doesn't require it for styled-components)
@@ -34,7 +34,7 @@ export function ThemeSpan(
 ) {
   const { children, variant, ...rest } = props;
   return (
-    <span {...rest} sx={styles.themeSpanColor(variant)}>
+    <span {...rest} sx={$colorMixins.color[variant]}>
       {children}
     </span>
   );
@@ -55,7 +55,4 @@ const styles = stylex.create({
     backgroundColor: "blue",
     color: "white",
   },
-  themeSpanColor: (variant: "labelBase" | "labelMuted" | "labelTitle") => ({
-    color: $colors[variant],
-  }),
 });
