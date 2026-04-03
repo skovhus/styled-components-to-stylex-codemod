@@ -11,8 +11,10 @@ describe("init against test-cases", () => {
     .filter((f) => f.endsWith(".input.tsx"))
     .map((f) => resolve(TEST_CASES_DIR, f));
 
+  // Scan once, snapshot all three outputs
+  const patterns = scanPatterns(inputFiles);
+
   it("scanned patterns snapshot", () => {
-    const patterns = scanPatterns(inputFiles);
     expect({
       filesScanned: patterns.filesScanned,
       filesWithStyledComponents: patterns.filesWithStyledComponents,
@@ -34,14 +36,10 @@ describe("init against test-cases", () => {
   });
 
   it("generated adapter stub snapshot", () => {
-    const patterns = scanPatterns(inputFiles);
-    const stub = generateAdapterStub(patterns);
-    expect(stub).toMatchSnapshot();
+    expect(generateAdapterStub(patterns)).toMatchSnapshot();
   });
 
   it("generated summary snapshot", () => {
-    const patterns = scanPatterns(inputFiles);
-    const summary = generateSummary(patterns);
-    expect(summary).toMatchSnapshot();
+    expect(generateSummary(patterns)).toMatchSnapshot();
   });
 });

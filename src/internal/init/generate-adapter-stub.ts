@@ -60,27 +60,30 @@ export function generateSummary(patterns: ScannedPatterns): string {
     parts.push("");
   }
 
-  for (const [label, map, fmt] of [
+  const summaryMaps: Array<
+    [string, Map<string, ImportEntry>, (n: string, e: ImportEntry) => string]
+  > = [
     [
       "Helper functions called in interpolations",
       patterns.helperCalls,
-      (n: string, e: ImportEntry) => `  - ${n} (from "${e.source}")`,
+      (n, e) => `  - ${n} (from "${e.source}")`,
     ],
     [
       "Selector interpolations",
       patterns.selectorInterpolations,
-      (n: string, e: ImportEntry) => `  - \${${n}} (from "${e.source}")`,
+      (n, e) => `  - \${${n}} (from "${e.source}")`,
     ],
     [
       "styled() wrappers around imported components",
       patterns.styledWrappers,
-      (n: string, e: ImportEntry) => `  - styled(${n}) (from "${e.source}")`,
+      (n, e) => `  - styled(${n}) (from "${e.source}")`,
     ],
-  ] as const) {
+  ];
+  for (const [label, map, fmt] of summaryMaps) {
     if (map.size > 0) {
       parts.push(`${label} (${map.size}):`);
       for (const [name, entry] of sortedEntries(map)) {
-        parts.push((fmt as (n: string, e: ImportEntry) => string)(name, entry));
+        parts.push(fmt(name, entry));
       }
       parts.push("");
     }

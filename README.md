@@ -128,6 +128,40 @@ Troubleshooting prepass failures with `"auto"`:
 - check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
 - if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
 
+#### Base component resolution (`resolveBaseComponent`)
+
+When your codebase has layout primitives like `<Flex>` whose behavior is purely CSS, `resolveBaseComponent` lets the codemod eliminate the runtime import and render a plain element instead:
+
+```tsx
+// Input
+const Container = styled(Flex).attrs({ column: true, gap: 16 })`padding: 8px;`;
+
+// Adapter
+resolveBaseComponent(ctx) {
+  if (ctx.importedName !== "Flex") return undefined;
+  const sx: Record<string, string> = { display: "flex" };
+  if (ctx.staticProps.column === true) sx.flexDirection = "column";
+  if (typeof ctx.staticProps.gap === "number") sx.gap = `${ctx.staticProps.gap}px`;
+  return { tagName: "div", consumedProps: ["column", "gap", "align"], sx };
+},
+
+// Output — Flex is gone, styles merged into stylex.create()
+const styles = stylex.create({
+  container: { display: "flex", flexDirection: "column", gap: "16px", padding: "8px" },
+});
+```
+
+Return `mixins` instead of `sx` to reference an existing `stylex.create()` object:
+
+```ts
+return {
+  tagName: "div",
+  consumedProps: ["column", "gap"],
+  mixins: [{ importSource: "./lib/mixins.stylex", importName: "mixins", styleKey: "flex" }],
+};
+// Output: <div {...stylex.props(mixins.flex, styles.container)} />
+```
+
 ### Limitations
 
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
