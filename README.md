@@ -54,157 +54,28 @@ await runTransform({
 });
 ```
 
-<details>
-<summary>Full adapter example</summary>
-
-```ts
-import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
-
-const adapter = defineAdapter({
-  /**
-   * Resolve dynamic values in styled template literals to StyleX expressions.
-   * Called for theme access (`props.theme.x`), CSS variables (`var(--x)`),
-   * and imported values. Return `{ expr, imports }` or `null` to skip.
-   */
-  resolveValue(ctx) {
-    if (ctx.kind === "theme") {
-      const varName = ctx.path.replace(/\./g, "_");
-      return {
-        expr: `tokens.${varName}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./design-system.stylex" },
-            names: [{ imported: "tokens" }],
-          },
-        ],
-      };
-    }
-
-    if (ctx.kind === "cssVariable") {
-      const toCamelCase = (s: string) =>
-        s.replace(/^--/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-
-      return {
-        expr: `vars.${toCamelCase(ctx.name)}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      };
-    }
-
-    return null;
-  },
-
-  /**
-   * Resolve helper function calls in template interpolations.
-   * e.g. `${transitionSpeed("slow")}` → `transitionSpeedVars.slow`
-   * Return `{ expr, imports }` or `null` to bail the file with a warning.
-   */
-  resolveCall(ctx) {
-    const arg0 = ctx.args[0];
-    const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
-    if (ctx.calleeImportedName !== "transitionSpeed" || !key) {
-      return null;
-    }
-
-    return {
-      expr: `transitionSpeedVars.${key}`,
-      imports: [
-        {
-          from: { kind: "specifier", value: "./lib/helpers.stylex" },
-          names: [{ imported: "transitionSpeed", local: "transitionSpeedVars" }],
-        },
-      ],
-    };
-  },
-
-  /**
-   * Optional: inline styled(ImportedComponent) into an intrinsic element.
-   * When the base component can be resolved statically, return the target
-   * element, consumed props, and base StyleX declarations. Return undefined
-   * to keep normal styled(Component) behavior.
-   */
-  resolveBaseComponent(ctx) {
-    if (ctx.importSource !== "@company/ui" || ctx.importedName !== "Flex") {
-      return undefined;
-    }
-
-    const sx: Record<string, string> = { display: "flex" };
-    const consumedProps = ["column", "gap", "align"];
-
-    if (ctx.staticProps.column === true) {
-      sx.flexDirection = "column";
-    }
-    if (typeof ctx.staticProps.gap === "number") {
-      sx.gap = `${ctx.staticProps.gap}px`;
-    }
-
-    return { tagName: "div", consumedProps, sx };
-  },
-
-  /**
-   * Control which exported components accept external className/style
-   * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
-   */
-  externalInterface(ctx) {
-    if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true, as: true };
-    }
-    return { styles: false, as: false };
-  },
-
-  /**
-   * When `externalInterface` enables styles, use a helper to merge
-   * StyleX styles with external className/style props.
-   * See test-cases/lib/mergedSx.ts for a reference implementation.
-   */
-  styleMerger: {
-    functionName: "mergedSx",
-    importSource: { kind: "specifier", value: "./lib/mergedSx" },
-  },
-
-  /**
-   * Emit sx={} JSX attributes instead of {...stylex.props()} spreads.
-   * Requires @stylexjs/babel-plugin ≥0.18 with sxPropName enabled.
-   */
-  useSxProp: false,
-
-  /**
-   * Optional: customize the runtime theme hook used when wrappers need theme booleans.
-   * Defaults to useTheme from styled-components.
-   */
-  themeHook: {
-    functionName: "useDesignTheme",
-    importSource: { kind: "specifier", value: "@company/theme-hooks" },
-  },
-});
-
-await runTransform({
-  files: "src/**/*.tsx",
-  consumerPaths: null,
-  adapter,
-  dryRun: false,
-  parser: "tsx",
-  formatterCommands: ["pnpm prettier --write"],
-});
-```
-
-</details>
-
 ### Adapter
 
-Adapters are the main extension point, see full example above. They let you control:
+Adapters map your project's theme tokens, helper functions, and component patterns to StyleX equivalents. Use `runInit` to scan your codebase and generate a starter adapter with TODO placeholders:
 
-- how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
-- what extra imports to inject into transformed files (returned from `resolveValue`)
-- how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`, or `{ preserveRuntimeCall: true }` to keep only the original helper runtime call; `null`/`undefined` bails the file)
-- which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
-- how className/style merging is handled for components accepting external styling (`styleMerger`)
-- which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
-- how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
+```ts
+import { runInit } from "styled-components-to-stylex-codemod";
+
+const { adapterSource, summary } = await runInit({ files: "src/**/*.tsx" });
+console.log(summary); // what was detected
+// adapterSource contains a ready-to-edit adapter file
+```
+
+The generated adapter includes inline docs for every hook. Key hooks:
+
+- `themeMapping` — declarative theme path → StyleX token mapping (first match wins)
+- `resolveValue` — fallback for theme paths, CSS variables, imported values
+- `resolveCall` — map helper function calls to StyleX expressions
+- `resolveSelector` — map interpolated selectors
+- `resolveBaseComponent` — inline `styled(Component)` into intrinsic elements
+- `externalInterface` — control className/style/as prop support
+- `styleMerger` — custom className/style merging helper
+- `themeHook` — runtime theme hook configuration
 
 #### Cross-file selectors (`consumerPaths`)
 
@@ -257,72 +128,6 @@ Troubleshooting prepass failures with `"auto"`:
 - check resolver inputs (import paths, tsconfig path aliases, and related module resolution config)
 - if needed, switch to a manual `externalInterface(ctx)` function to continue migration while you fix prepass inputs
 
-#### Base component resolution (`resolveBaseComponent`)
-
-Use this when you want to **replace a base component entirely** by inlining its styles. If your codebase has a layout primitive like `<Flex>` whose behavior is purely CSS, the codemod can eliminate the runtime import and render a plain `<div>` instead.
-
-The resolver receives `ctx.importSource`, `ctx.importedName`, and `ctx.staticProps` (from `.attrs()` and JSX call sites). Return `{ tagName, consumedProps, sx }` to inline, or `undefined` to skip.
-
-```tsx
-// Input
-const Container = styled(Flex).attrs({ column: true, gap: 16 })`
-  padding: 8px;
-`;
-```
-
-```ts
-// Adapter
-resolveBaseComponent(ctx) {
-  if (ctx.importedName !== "Flex") return undefined;
-  const sx: Record<string, string> = { display: "flex" };
-  if (ctx.staticProps.column === true) sx.flexDirection = "column";
-  if (typeof ctx.staticProps.gap === "number") sx.gap = `${ctx.staticProps.gap}px`;
-  return { tagName: "div", consumedProps: ["column", "gap", "align"], sx };
-},
-```
-
-```tsx
-// Output — Flex is gone, its styles are merged into stylex.create()
-const styles = stylex.create({
-  container: { display: "flex", flexDirection: "column", gap: "16px", padding: "8px" },
-});
-```
-
-If the base component's styles already exist as a `stylex.create()` object, return `mixins` instead of (or alongside) `sx`. The codemod imports the mixin and includes it in `stylex.props(...)`:
-
-```ts
-resolveBaseComponent(ctx) {
-  return {
-    tagName: "div",
-    consumedProps: ["column", "gap"],
-    mixins: [{ importSource: "./lib/mixins.stylex", importName: "mixins", styleKey: "flex" }],
-  };
-},
-// Output: <div {...stylex.props(mixins.flex, styles.container)} />
-```
-
-#### Dynamic interpolations
-
-When the codemod encounters an interpolation inside a styled template literal, it runs an internal dynamic resolution pipeline which covers common cases like:
-
-- theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
-- imported value access (`import { zIndex } ...; ${zIndex.popover}`) via `resolveValue({ kind: "importedValue", importedName, source, path })`
-- prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
-- helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` — the codemod infers usage from context:
-  - With `ctx.cssProperty` (e.g., `color: ${helper()}`) → result used as CSS value in `stylex.create()`
-  - Without `ctx.cssProperty` (e.g., `${helper()}`) → result used as StyleX styles in `stylex.props()`
-  - Use the optional `usage: "create" | "props"` field to override the default inference
-  - Use `preserveRuntimeCall: true` to keep the original helper call as a runtime style-function
-    override (with or without a static fallback from `expr`)
-- if `resolveCall` returns `null` or `undefined`, the transform **bails the file** and logs a warning
-- helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
-- conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
-
-If the pipeline can't resolve an interpolation:
-
-- for some dynamic value cases, the transform preserves the value as a wrapper inline style so output keeps visual parity (at the cost of using `style={...}` for that prop)
-- otherwise, the declaration containing that interpolation is **dropped** and a warning is produced (manual follow-up required)
-
 ### Limitations
 
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
@@ -354,9 +159,9 @@ export const truncate = stylex.create({
 });
 ```
 
-### 2. Write an adapter and run the codemod
+### 2. Generate and fill in an adapter
 
-The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
+Run `runInit` to scan your codebase and generate a starter adapter with TODO placeholders. Fill in the mappings to connect your theme tokens, helpers, and selectors to the StyleX equivalents from step 1.
 
 ### 3. Convert bottom-up (leaf components first)
 

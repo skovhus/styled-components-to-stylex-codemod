@@ -2,121 +2,159 @@
  * Adapter stub generator for the `runInit` command.
  *
  * Takes scanned patterns and produces a TypeScript adapter file
- * with inline docs (from adapter JSDoc + README) and TODO placeholders.
+ * with inline docs and TODO placeholders.
  */
 import type { ScannedPatterns } from "./scan-patterns.js";
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 export function generateAdapterStub(patterns: ScannedPatterns): string {
-  const sections: string[] = [];
-
-  sections.push(header(patterns));
-  sections.push(imports());
-  sections.push("export const adapter = defineAdapter({");
-  sections.push(styleMergerSection());
-  if (patterns.themeRoots.size > 0) {
-    sections.push(themeMappingSection(patterns));
-  }
-  sections.push(resolveValueSection(patterns));
-  sections.push(resolveCallSection(patterns));
-  sections.push(resolveSelectorSection(patterns));
-  if (patterns.styledWrappers.size > 0) {
-    sections.push(resolveBaseComponentSection(patterns));
-  }
-  sections.push(externalInterfaceSection());
-  sections.push(useSxPropSection());
-  if (patterns.hasUseTheme) {
-    sections.push(themeHookSection());
-  }
-  sections.push("});\n");
-
-  return sections.join("\n");
+  const sections = [
+    header(patterns),
+    'import { defineAdapter, runTransform } from "styled-components-to-stylex-codemod";\n',
+    "export const adapter = defineAdapter({",
+    STYLE_MERGER,
+    patterns.themeRoots.size > 0 ? themeMappingSection(patterns) : "",
+    resolveValueSection(patterns),
+    resolveCallSection(patterns),
+    resolveSelectorSection(patterns),
+    patterns.styledWrappers.size > 0 ? resolveBaseComponentSection(patterns) : "",
+    EXTERNAL_INTERFACE,
+    USE_SX_PROP,
+    patterns.hasUseTheme ? THEME_HOOK : "",
+    "});\n",
+  ];
+  return sections.filter(Boolean).join("\n");
 }
 
 export function generateSummary(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
+  const parts: string[] = [];
 
-  lines.push(
-    `Scanned ${patterns.filesScanned} files, found styled-components in ${patterns.filesWithStyledComponents} files.`,
+  parts.push(
+    `Scanned ${patterns.filesScanned} files, found styled-components in ${patterns.filesWithStyledComponents} files.\n`,
   );
-  lines.push("");
 
   if (patterns.themeRoots.size > 0) {
-    lines.push(`Theme roots: ${sorted(patterns.themeRoots).join(", ")}`);
-    lines.push(`  Unique theme paths (${patterns.themePaths.size}):`);
+    parts.push(`Theme roots: ${sorted(patterns.themeRoots).join(", ")}`);
+    parts.push(`  Unique theme paths (${patterns.themePaths.size}):`);
     for (const p of sorted(patterns.themePaths).slice(0, 20)) {
-      lines.push(`    - theme.${p}`);
+      parts.push(`    - theme.${p}`);
     }
     if (patterns.themePaths.size > 20) {
-      lines.push(`    ... and ${patterns.themePaths.size - 20} more`);
+      parts.push(`    ... and ${patterns.themePaths.size - 20} more`);
     }
     if (patterns.hasIndexedThemeLookup) {
-      lines.push("  Indexed lookups detected (e.g. theme.color[prop])");
+      parts.push("  Indexed lookups detected (e.g. theme.color[prop])");
     }
-    lines.push("");
+    parts.push("");
   }
 
   if (patterns.cssVariables.size > 0) {
-    lines.push(`CSS variables (${patterns.cssVariables.size}):`);
+    parts.push(`CSS variables (${patterns.cssVariables.size}):`);
     for (const v of sorted(patterns.cssVariables).slice(0, 15)) {
-      lines.push(`  - ${v}`);
+      parts.push(`  - ${v}`);
     }
     if (patterns.cssVariables.size > 15) {
-      lines.push(`  ... and ${patterns.cssVariables.size - 15} more`);
+      parts.push(`  ... and ${patterns.cssVariables.size - 15} more`);
     }
-    lines.push("");
+    parts.push("");
   }
 
-  if (patterns.helperCalls.size > 0) {
-    lines.push(`Helper functions called in interpolations (${patterns.helperCalls.size}):`);
-    for (const [name, entry] of sortedEntries(patterns.helperCalls)) {
-      lines.push(`  - ${name} (from "${entry.source}")`);
+  for (const [label, map, fmt] of [
+    [
+      "Helper functions called in interpolations",
+      patterns.helperCalls,
+      (n: string, e: ImportEntry) => `  - ${n} (from "${e.source}")`,
+    ],
+    [
+      "Selector interpolations",
+      patterns.selectorInterpolations,
+      (n: string, e: ImportEntry) => `  - \${${n}} (from "${e.source}")`,
+    ],
+    [
+      "styled() wrappers around imported components",
+      patterns.styledWrappers,
+      (n: string, e: ImportEntry) => `  - styled(${n}) (from "${e.source}")`,
+    ],
+  ] as const) {
+    if (map.size > 0) {
+      parts.push(`${label} (${map.size}):`);
+      for (const [name, entry] of sortedEntries(map)) {
+        parts.push((fmt as (n: string, e: ImportEntry) => string)(name, entry));
+      }
+      parts.push("");
     }
-    lines.push("");
-  }
-
-  if (patterns.selectorInterpolations.size > 0) {
-    lines.push(`Selector interpolations (${patterns.selectorInterpolations.size}):`);
-    for (const [name, entry] of sortedEntries(patterns.selectorInterpolations)) {
-      lines.push(`  - \${${name}} (from "${entry.source}")`);
-    }
-    lines.push("");
-  }
-
-  if (patterns.styledWrappers.size > 0) {
-    lines.push(`styled() wrappers around imported components (${patterns.styledWrappers.size}):`);
-    for (const [name, entry] of sortedEntries(patterns.styledWrappers)) {
-      lines.push(`  - styled(${name}) (from "${entry.source}")`);
-    }
-    lines.push("");
   }
 
   if (patterns.hasUseTheme) {
-    lines.push("useTheme() hook usage detected");
-    lines.push("");
+    parts.push("useTheme() hook usage detected\n");
   }
 
-  lines.push("Adapter hooks needed:");
-  lines.push(`  - resolveValue: ${describeResolveValueNeeds(patterns)}`);
-  lines.push(
+  parts.push("Adapter hooks needed:");
+  parts.push(`  - resolveValue: ${describeResolveValueNeeds(patterns)}`);
+  parts.push(
     `  - resolveCall: ${patterns.helperCalls.size > 0 ? `${patterns.helperCalls.size} helper(s)` : "none detected"}`,
   );
-  lines.push(
+  parts.push(
     `  - resolveSelector: ${patterns.selectorInterpolations.size > 0 ? `${patterns.selectorInterpolations.size} selector(s)` : "none detected"}`,
   );
-  lines.push("  - externalInterface: needs configuration");
+  parts.push("  - externalInterface: needs configuration");
   if (patterns.themeRoots.size > 0) {
-    lines.push(`  - themeMapping: ${patterns.themeRoots.size} theme root(s)`);
+    parts.push(`  - themeMapping: ${patterns.themeRoots.size} theme root(s)`);
   }
   if (patterns.hasUseTheme) {
-    lines.push("  - themeHook: useTheme detected");
+    parts.push("  - themeHook: useTheme detected");
   }
 
-  return lines.join("\n");
+  return parts.join("\n");
 }
 
-/* ── Section generators ───────────────────────────────────────────────── */
+/* ── Types ────────────────────────────────────────────────────────────── */
+
+type ImportEntry = { source: string; importedName: string };
+
+/* ── Static sections (no dynamic content) ─────────────────────────────── */
+
+const STYLE_MERGER = `\
+  /**
+   * Custom merger for className/style combining.
+   * Provide a helper function for cleaner output, or null for verbose inline merging.
+   * Signature: merger(styles, className?, style?): { className?: string; style?: CSSProperties }
+   */
+  // TODO: Configure a styleMerger or set to null
+  styleMerger: null,
+`;
+
+const EXTERNAL_INTERFACE = `\
+  /**
+   * Control which exported components accept external className/style/as props.
+   * "auto" scans consumer files (requires consumerPaths). For manual control:
+   *   externalInterface(ctx) { return { styles: true, as: false, ref: false }; }
+   */
+  externalInterface: "auto",
+`;
+
+const USE_SX_PROP = `\
+  /**
+   * Emit sx={...} instead of {...stylex.props(...)} spreads.
+   * Requires @stylexjs/babel-plugin >=0.18 with sxPropName enabled.
+   */
+  useSxProp: false,
+`;
+
+const THEME_HOOK = `\
+  /**
+   * Theme hook for wrappers needing runtime theme access.
+   * Update if your project uses a custom hook instead of useTheme from styled-components.
+   */
+  // TODO: Update if your theme hook has a different name or import source.
+  themeHook: {
+    functionName: "useTheme",
+    importSource: { kind: "specifier", value: "styled-components" },
+  },
+`;
+
+/* ── Dynamic sections ─────────────────────────────────────────────────── */
 
 function header(patterns: ScannedPatterns): string {
   return `\
@@ -136,308 +174,131 @@ function header(patterns: ScannedPatterns): string {
  */`;
 }
 
-function imports(): string {
-  return `\
-import { defineAdapter, runTransform } from "styled-components-to-stylex-codemod";
-`;
-}
-
-function styleMergerSection(): string {
-  return `\
-  /**
-   * Custom merger function for className/style combining.
-   * When a component accepts external className/style props, the codemod needs to merge
-   * StyleX styles with those external props. Provide a helper function for cleaner output,
-   * or set to null for the verbose inline merging pattern.
-   *
-   * Expected signature:
-   *   function merger(styles, className?, style?): { className?: string; style?: CSSProperties }
-   */
-  // TODO: Configure a styleMerger or set to null
-  styleMerger: null,
-`;
-}
-
 function themeMappingSection(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
-  lines.push(`  /**`);
-  lines.push(`   * Declarative theme path → StyleX token mapping.`);
-  lines.push(`   * Evaluated in order; first match wins.`);
-  lines.push(`   *`);
-  lines.push(`   * Pattern syntax (matched against the theme path, e.g. "color.labelBase"):`);
-  lines.push(`   *   - Exact:   "color"    matches only ctx.path === "color"`);
-  lines.push(
-    `   *   - Prefix:  "color.*"  matches paths starting with "color." (e.g. "color.labelBase")`,
-  );
-  lines.push(`   *   - Wildcard: "*"       matches any path (catch-all)`);
-  lines.push(`   *`);
-  lines.push(`   * Entry types:`);
-  lines.push(`   *   - { expr, imports }           → resolve to a StyleX expression`);
-  lines.push(`   *   - { bail: true }              → skip (bail the file with a warning)`);
-  lines.push(
-    `   *   - { directional: [...] }      → expand shorthand (e.g. padding → paddingBlock + paddingInline)`,
-  );
-  lines.push(`   *`);
-  lines.push(`   * Placeholders in \`expr\`:`);
-  lines.push(
-    `   *   - {property}    → remaining path after prefix (e.g. "labelBase" for "color.*" matching "color.labelBase")`,
-  );
-  lines.push(
-    `   *   - {cssProperty} → camelCase CSS property (e.g. "backgroundColor" for "background-color")`,
-  );
-  lines.push(`   */`);
-  lines.push(`  themeMapping: [`);
-
+  const entries: string[] = [];
   for (const root of sorted(patterns.themeRoots)) {
     const rootPaths = [...patterns.themePaths].filter(
       (p) => p.startsWith(root + ".") || p === root,
     );
-    lines.push(`    // theme.${root} — ${rootPaths.length} path(s) detected`);
-
+    entries.push(`    // theme.${root} — ${rootPaths.length} path(s) detected`);
     if (patterns.hasIndexedThemeLookup) {
-      lines.push(
-        `    // TODO: Uncomment if theme.${root}[dynamicProp] should use a prebuilt mixin map:`,
-      );
-      lines.push(`    // ["${root}", {`);
-      lines.push(`    //   indexed: true, usage: "props", dynamicArgUsage: "memberAccess",`);
-      lines.push(`    //   expr: "$${root}Mixins.{cssProperty}",`);
-      lines.push(
-        `    //   imports: [{ from: { kind: "specifier", value: "./${root}Mixins.stylex" }, names: [{ imported: "$${root}Mixins" }] }],`,
-      );
-      lines.push(`    // }],`);
-    }
-
-    if (rootPaths.length === 1 && rootPaths[0] === root) {
-      lines.push(`    // TODO: Map theme.${root} to a StyleX token`);
-      lines.push(
-        `    ["${root}", { expr: "$tokens.${root}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "$tokens" }] }] }],`,
-      );
-    } else {
-      lines.push(`    // TODO: Map theme.${root}.* paths to StyleX tokens`);
-      lines.push(
-        `    ["${root}.*", { expr: "$${root}.{property}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "$${root}" }] }] }],`,
+      entries.push(
+        `    // TODO: Uncomment if theme.${root}[dynamicProp] should use a prebuilt mixin map:\n` +
+          `    // ["${root}", { indexed: true, usage: "props", dynamicArgUsage: "memberAccess",\n` +
+          `    //   expr: "$${root}Mixins.{cssProperty}",\n` +
+          `    //   imports: [{ from: { kind: "specifier", value: "./${root}Mixins.stylex" }, names: [{ imported: "$${root}Mixins" }] }] }],`,
       );
     }
-    lines.push("");
+    const isExact = rootPaths.length === 1 && rootPaths[0] === root;
+    const pattern = isExact ? root : `${root}.*`;
+    const expr = isExact ? `$tokens.${root}` : `$${root}.{property}`;
+    const imported = isExact ? "$tokens" : `$${root}`;
+    entries.push(
+      `    // TODO: Map theme.${isExact ? root : `${root}.*`} to StyleX tokens\n` +
+        `    ["${pattern}", { expr: "${expr}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "${imported}" }] }] }],\n`,
+    );
   }
-
-  lines.push("  ],");
-  lines.push("");
-  return lines.join("\n");
+  return `\
+  /**
+   * Declarative theme path → StyleX token mapping. First match wins.
+   * Patterns: exact ("color"), prefix ("color.*"), wildcard ("*")
+   * Entries: { expr, imports } | { bail: true } | { directional: [...] }
+   * Placeholders: {property} (remaining path), {cssProperty} (camelCase CSS prop)
+   */
+  themeMapping: [
+${entries.join("\n")}  ],
+`;
 }
 
 function resolveValueSection(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
-  lines.push(`  /**`);
-  lines.push(`   * Resolve dynamic values in styled template literals to StyleX expressions.`);
-  lines.push(`   * Called for:`);
-  lines.push(
-    `   *   - kind: "theme"         — props.theme.X.Y access (handled by themeMapping above if set)`,
-  );
-  lines.push(`   *   - kind: "cssVariable"   — var(--x) usage`);
-  lines.push(`   *   - kind: "importedValue" — imported values used in interpolations`);
-  lines.push(`   *`);
-  lines.push(`   * Return { expr, imports } to provide a StyleX expression, or undefined to bail.`);
-  lines.push(
-    `   * For shorthand CSS properties, return { directional: [{ prop, expr, imports }] }.`,
-  );
-  lines.push(`   */`);
-  lines.push("  resolveValue(ctx) {");
-
+  let body = "";
   if (patterns.themeRoots.size > 0) {
-    lines.push("    // Theme lookups are handled by themeMapping above.");
-    lines.push("    // Add fallback logic here if themeMapping doesn't cover all paths.");
+    body += "    // Theme lookups handled by themeMapping above.\n";
   }
-
   if (patterns.cssVariables.size > 0) {
     const sample = sorted(patterns.cssVariables).slice(0, 5).join(", ");
     const ellipsis = patterns.cssVariables.size > 5 ? ", ..." : "";
-    lines.push("");
-    lines.push('    if (ctx.kind === "cssVariable") {');
-    lines.push(`      // TODO: Map CSS variable names to StyleX variable tokens.`);
-    lines.push(`      // Found ${patterns.cssVariables.size} variable(s): ${sample}${ellipsis}`);
-    lines.push("      //");
-    lines.push("      // Example: convert var(--primary-color) → $vars.primaryColor");
-    lines.push(
-      "      //   const camel = ctx.name.replace(/^--/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());",
-    );
-    lines.push(
-      `      //   return { expr: \`$vars.\${camel}\`, imports: [{ from: { kind: "specifier", value: "./vars.stylex" }, names: [{ imported: "$vars" }] }] };`,
-    );
-    lines.push("      return undefined;");
-    lines.push("    }");
+    body +=
+      `\n    if (ctx.kind === "cssVariable") {\n` +
+      `      // TODO: Map CSS variables to StyleX tokens. Found: ${sample}${ellipsis}\n` +
+      `      // Example: return { expr: \`$vars.\${camel}\`, imports: [...] };\n` +
+      `      return undefined;\n    }\n`;
   }
-
   if (patterns.styledWrappers.size > 0) {
-    lines.push("");
-    lines.push('    if (ctx.kind === "importedValue") {');
-    lines.push("      // TODO: Map imported styled-component values to StyleX equivalents.");
-    lines.push("      return undefined;");
-    lines.push("    }");
+    body +=
+      `\n    if (ctx.kind === "importedValue") {\n` +
+      `      // TODO: Map imported styled-component values to StyleX equivalents.\n` +
+      `      return undefined;\n    }\n`;
   }
-
-  lines.push("");
-  lines.push("    return undefined;");
-  lines.push("  },");
-  lines.push("");
-  return lines.join("\n");
+  return `\
+  /**
+   * Resolve dynamic values: theme access, CSS variables, imported values.
+   * Return { expr, imports } or undefined to bail.
+   */
+  resolveValue(ctx) {
+${body}
+    return undefined;
+  },
+`;
 }
 
 function resolveCallSection(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
-  lines.push(`  /**`);
-  lines.push(`   * Resolve helper function calls found inside template interpolations.`);
-  lines.push(`   * e.g. \${transitionSpeed("slow")} → transitionSpeedVars.slow`);
-  lines.push(`   *`);
-  lines.push(`   * The codemod infers how to use the result from context:`);
-  lines.push(
-    `   *   - With ctx.cssProperty (e.g. "color: \${helper()}") → CSS value in stylex.create()`,
-  );
-  lines.push(
-    `   *   - Without ctx.cssProperty (e.g. "\${helper()}")     → StyleX style in stylex.props()`,
-  );
-  lines.push(`   *   - Override with usage: "create" | "props" if needed`);
-  lines.push(`   *`);
-  lines.push(`   * Return:`);
-  lines.push(`   *   - { expr, imports }              → resolved expression`);
-  lines.push(`   *   - { preserveRuntimeCall: true }  → keep original helper at runtime`);
-  lines.push(`   *   - undefined                      → bail the file with a warning`);
-  lines.push(`   */`);
-  lines.push("  resolveCall(ctx) {");
-
+  let body: string;
   if (patterns.helperCalls.size > 0) {
-    lines.push("    // Detected helpers:");
-    for (const [name, entry] of sortedEntries(patterns.helperCalls)) {
-      lines.push(`    //   ${name} (from "${entry.source}")`);
-    }
-    lines.push("    //");
-    lines.push("    // TODO: Map each helper to a StyleX expression. Example:");
-    lines.push('    // if (ctx.calleeImportedName === "transitionSpeed") {');
-    lines.push('    //   const key = ctx.args[0]?.kind === "literal" ? ctx.args[0].value : null;');
-    lines.push(
-      '    //   return { expr: `$transitions.${key}`, imports: [{ from: { kind: "specifier", value: "./transitions.stylex" }, names: [{ imported: "$transitions" }] }] };',
-    );
-    lines.push("    // }");
+    const list = sortedEntries(patterns.helperCalls)
+      .map(([n, e]) => `    //   ${n} (from "${e.source}")`)
+      .join("\n");
+    body = `    // Detected helpers:\n${list}\n    // TODO: Map each helper. Return { expr, imports } or { preserveRuntimeCall: true }.`;
   } else {
-    lines.push("    // No helper function calls detected in template interpolations.");
+    body = "    // No helper calls detected.";
   }
-
-  lines.push("    return undefined;");
-  lines.push("  },");
-  lines.push("");
-  return lines.join("\n");
+  return `\
+  /**
+   * Resolve helper function calls in interpolations.
+   * With ctx.cssProperty → CSS value; without → StyleX style object.
+   */
+  resolveCall(ctx) {
+${body}
+    return undefined;
+  },
+`;
 }
 
 function resolveSelectorSection(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
-  lines.push(`  /**`);
-  lines.push(`   * Resolve interpolations used in CSS selector position.`);
-  lines.push(`   * e.g. \${screenSize.phone} { ... } or &:\${highlight}`);
-  lines.push(`   *`);
-  lines.push(`   * Return:`);
-  lines.push(`   *   - { kind: "media", expr, imports }              → media query`);
-  lines.push(
-    `   *   - { kind: "pseudoAlias", values, imports }      → pseudo-class (e.g. :hover, :active)`,
-  );
-  lines.push(
-    `   *   - { kind: "pseudoExpand", expansions, imports } → pseudo-class with conditions`,
-  );
-  lines.push(`   *   - undefined                                     → bail the file`);
-  lines.push(`   */`);
-  lines.push("  resolveSelector(ctx) {");
-
+  let body: string;
   if (patterns.selectorInterpolations.size > 0) {
-    lines.push("    // Detected selectors:");
-    for (const [name, entry] of sortedEntries(patterns.selectorInterpolations)) {
-      lines.push(`    //   \${${name}} (from "${entry.source}")`);
-    }
-    lines.push("    //");
-    lines.push("    // TODO: Map selectors. Example for a media query helper:");
-    lines.push('    // if (ctx.importedName === "screenSize" && ctx.path === "phone") {');
-    lines.push('    //   return { kind: "media", expr: "(max-width: 768px)", imports: [] };');
-    lines.push("    // }");
+    const list = sortedEntries(patterns.selectorInterpolations)
+      .map(([n, e]) => `    //   \${${n}} (from "${e.source}")`)
+      .join("\n");
+    body = `    // Detected selectors:\n${list}\n    // TODO: Return { kind: "media", expr, imports } or { kind: "pseudoAlias", values, imports }.`;
   } else {
-    lines.push("    // No selector interpolations detected.");
+    body = "    // No selector interpolations detected.";
   }
-
-  lines.push("    return undefined;");
-  lines.push("  },");
-  lines.push("");
-  return lines.join("\n");
+  return `\
+  /**
+   * Resolve interpolations in CSS selector position.
+   */
+  resolveSelector(ctx) {
+${body}
+    return undefined;
+  },
+`;
 }
 
 function resolveBaseComponentSection(patterns: ScannedPatterns): string {
-  const lines: string[] = [];
-  lines.push(`  /**`);
-  lines.push(`   * Optional: inline styled(ImportedComponent) into an intrinsic element.`);
-  lines.push(`   * When a base component's behavior is purely CSS (e.g. <Flex>), the codemod can`);
-  lines.push(
-    `   * eliminate the runtime import and render a plain <div> with static StyleX styles.`,
-  );
-  lines.push(`   *`);
-  lines.push(`   * ctx provides: importSource, importedName, staticProps (from .attrs() and JSX).`);
-  lines.push(
-    `   * Return { tagName, consumedProps, sx } to inline, or undefined to keep normal behavior.`,
-  );
-  lines.push(`   */`);
-  lines.push("  resolveBaseComponent(ctx) {");
-  lines.push("    // Detected styled() wrappers:");
-  for (const [name, entry] of sortedEntries(patterns.styledWrappers)) {
-    lines.push(`    //   styled(${name}) (from "${entry.source}")`);
-  }
-  lines.push("    //");
-  lines.push("    // TODO: Inline base components whose behavior is purely CSS. Example:");
-  lines.push('    // if (ctx.importedName === "Flex") {');
-  lines.push('    //   const sx = { display: "flex" };');
-  lines.push('    //   if (ctx.staticProps.column === true) sx.flexDirection = "column";');
-  lines.push('    //   return { tagName: "div", consumedProps: ["column", "gap"], sx };');
-  lines.push("    // }");
-  lines.push("    return undefined;");
-  lines.push("  },");
-  lines.push("");
-  return lines.join("\n");
-}
-
-function externalInterfaceSection(): string {
+  const list = sortedEntries(patterns.styledWrappers)
+    .map(([n, e]) => `    //   styled(${n}) (from "${e.source}")`)
+    .join("\n");
   return `\
   /**
-   * Control which exported components accept external className/style/as props.
-   *
-   * "auto" scans consumer files (requires consumerPaths in runTransform) to detect
-   * which components are wrapped with styled() or use the "as" prop. If prepass fails,
-   * runTransform throws immediately — switch to a manual function to debug.
-   *
-   * For manual control, use a function:
-   *   externalInterface(ctx) {
-   *     // ctx: { filePath, componentName, exportName, isDefaultExport }
-   *     return { styles: true, as: false, ref: false };
-   *   }
+   * Inline styled(ImportedComponent) into an intrinsic element when behavior is purely CSS.
+   * Return { tagName, consumedProps, sx } to inline, or undefined to keep normal behavior.
    */
-  externalInterface: "auto",
-`;
-}
-
-function useSxPropSection(): string {
-  return `\
-  /**
-   * Emit sx={...} JSX attributes instead of {...stylex.props(...)} spreads.
-   * Requires @stylexjs/babel-plugin >=0.18 with sxPropName option enabled.
-   * Produces shorter output: <div sx={styles.base} /> instead of <div {...stylex.props(styles.base)} />
-   */
-  useSxProp: false,
-`;
-}
-
-function themeHookSection(): string {
-  return `\
-  /**
-   * Theme hook used when wrappers need runtime theme access (e.g. for conditionals).
-   * Update if your project uses a custom theme hook instead of styled-components' useTheme.
-   */
-  // TODO: Update if your theme hook has a different name or import source.
-  themeHook: {
-    functionName: "useTheme",
-    importSource: { kind: "specifier", value: "styled-components" },
+  resolveBaseComponent(ctx) {
+    // Detected wrappers:
+${list}
+    // TODO: Inline base components. Example: return { tagName: "div", consumedProps: [...], sx: {...} };
+    return undefined;
   },
 `;
 }
@@ -448,9 +309,7 @@ function sorted(set: Set<string>): string[] {
   return [...set].sort();
 }
 
-function sortedEntries(
-  map: Map<string, { source: string; importedName: string }>,
-): [string, { source: string; importedName: string }][] {
+function sortedEntries(map: Map<string, ImportEntry>): [string, ImportEntry][] {
   return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 

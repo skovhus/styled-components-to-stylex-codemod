@@ -222,30 +222,14 @@ function walkForThemePaths(node: AstNode, themeRef: string, result: ScannedPatte
   }
 
   if (node.type === "MemberExpression") {
-    const path = extractThemeMemberPath(node, themeRef);
+    // Try extracting from the full node first, then from .object for computed access
+    const path =
+      extractThemeMemberPath(node, themeRef) ??
+      (node.computed ? extractThemeMemberPath(node.object as AstNode, themeRef) : undefined);
     if (path) {
-      result.themePaths.add(path);
-      const root = path.split(".")[0];
-      if (root) {
-        result.themeRoots.add(root);
-      }
-      // Check for indexed lookup: theme.color[prop]
+      addThemePath(result, path);
       if (node.computed) {
         result.hasIndexedThemeLookup = true;
-      }
-      return;
-    }
-  }
-
-  // Check for indexed lookup in the middle of a chain
-  if (node.type === "MemberExpression" && node.computed) {
-    const objPath = extractThemeMemberPath(node.object as AstNode, themeRef);
-    if (objPath) {
-      result.hasIndexedThemeLookup = true;
-      result.themePaths.add(objPath);
-      const root = objPath.split(".")[0];
-      if (root) {
-        result.themeRoots.add(root);
       }
       return;
     }
@@ -367,36 +351,15 @@ function scanTemplateForInterpolations(
       }
     }
 
-    // Selector interpolations: bare ${Identifier} in selector context
-    if (expr.type === "Identifier") {
-      const name = expr.name as string;
-      if (name === styledName) {
-        continue;
-      }
-      const entry = importMap.get(name);
-      if (!entry || entry.source === "styled-components") {
-        continue;
-      }
-      // Check if it's in selector context using surrounding quasis
-      const before = getQuasiRaw(quasis[i]);
-      const after = getQuasiRaw(quasis[i + 1]);
-      if (before !== undefined && after !== undefined && isSelectorContext(before, after)) {
-        result.selectorInterpolations.set(name, entry);
-      }
-    }
-
-    // Member expression in interpolation: ${obj.prop} — might be a selector
-    if (expr.type === "MemberExpression" && !expr.computed) {
-      const obj = expr.object as AstNode | undefined;
-      if (obj?.type === "Identifier") {
-        const name = obj.name as string;
-        const entry = importMap.get(name);
-        if (entry && entry.source !== "styled-components") {
-          const before = getQuasiRaw(quasis[i]);
-          const after = getQuasiRaw(quasis[i + 1]);
-          if (before !== undefined && after !== undefined && isSelectorContext(before, after)) {
-            result.selectorInterpolations.set(name, entry);
-          }
+    // Selector interpolations: ${Identifier} or ${obj.prop} in selector context
+    const selectorName = getInterpolationImportName(expr, styledName);
+    if (selectorName) {
+      const entry = importMap.get(selectorName);
+      if (entry && entry.source !== "styled-components") {
+        const before = getQuasiRaw(quasis[i]);
+        const after = getQuasiRaw(quasis[i + 1]);
+        if (before !== undefined && after !== undefined && isSelectorContext(before, after)) {
+          result.selectorInterpolations.set(selectorName, entry);
         }
       }
     }
@@ -476,6 +439,29 @@ function getCalleeImportName(
     }
   }
   return undefined;
+}
+
+/** Get the import name from an interpolation expression (Identifier or MemberExpression). */
+function getInterpolationImportName(expr: AstNode, styledName: string): string | undefined {
+  if (expr.type === "Identifier") {
+    const name = expr.name as string;
+    return name !== styledName ? name : undefined;
+  }
+  if (expr.type === "MemberExpression" && !expr.computed) {
+    const obj = expr.object as AstNode | undefined;
+    if (obj?.type === "Identifier") {
+      return obj.name as string;
+    }
+  }
+  return undefined;
+}
+
+function addThemePath(result: ScannedPatterns, path: string): void {
+  result.themePaths.add(path);
+  const root = path.split(".")[0];
+  if (root) {
+    result.themeRoots.add(root);
+  }
 }
 
 function getQuasiRaw(quasi: AstNode | undefined): string | undefined {
