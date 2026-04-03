@@ -8,18 +8,19 @@ import type {
   ThemeMapping,
   ThemeMappingValue,
 } from "../adapter.js";
+import { interpolateExpr, MAPPING_NO_MATCH, matchPattern } from "./mapping-utils.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Exports
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Sentinel: no entry in the mapping matched — fall through to resolveValue. */
-export const THEME_MAPPING_NO_MATCH = Symbol("THEME_MAPPING_NO_MATCH");
+export const THEME_MAPPING_NO_MATCH: typeof MAPPING_NO_MATCH = MAPPING_NO_MATCH;
 
 type ThemeMappingResult =
   | ResolveValueResult
   | ResolveValueDirectionalResult
-  | typeof THEME_MAPPING_NO_MATCH
+  | typeof MAPPING_NO_MATCH
   | undefined; // undefined = bail
 
 /**
@@ -75,59 +76,12 @@ export function resolveThemeFromMapping(
     };
   }
 
-  return THEME_MAPPING_NO_MATCH;
+  return MAPPING_NO_MATCH;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
-
-type PatternMatch = { property: string };
-
-/** Match a pattern string against a theme path. */
-function matchPattern(pattern: string, path: string): PatternMatch | null {
-  // Catch-all wildcard
-  if (pattern === "*") {
-    // property = last segment of the path
-    const lastDot = path.lastIndexOf(".");
-    return { property: lastDot >= 0 ? path.slice(lastDot + 1) : path };
-  }
-  // Prefix match: "color.*" matches "color.labelBase" and "color" (object-level)
-  if (pattern.endsWith(".*")) {
-    const prefix = pattern.slice(0, -2);
-    if (path.startsWith(prefix + ".")) {
-      return { property: path.slice(prefix.length + 1) };
-    }
-    if (path === prefix) {
-      return { property: "" };
-    }
-    return null;
-  }
-  // Exact match only
-  if (path === pattern) {
-    return { property: "" };
-  }
-  return null;
-}
-
-/** Replace `{property}` and `{cssProperty}` placeholders in an expression. */
-function interpolateExpr(
-  template: string,
-  match: PatternMatch,
-  ctx: { cssProperty?: string },
-): string {
-  let result = template;
-  if (result.includes("{property}")) {
-    result = result.replace(/\{property\}/g, match.property);
-  }
-  if (result.includes("{cssProperty}")) {
-    const camelProp = ctx.cssProperty
-      ? ctx.cssProperty.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
-      : "";
-    result = result.replace(/\{cssProperty\}/g, camelProp);
-  }
-  return result;
-}
 
 function isResolveEntry(
   entry: ThemeMappingValue,

@@ -296,6 +296,143 @@ export type ThemeMappingValue =
  */
 export type ThemeMapping = Array<[pattern: string, value: ThemeMappingValue]>;
 
+// ────────────────────────────────────────────────────────────────────────────
+// CSS Variable Mapping
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A resolve entry for CSS variable mapping.
+ *
+ * Supports placeholders in `expr`:
+ * - `{name}`: camelCase variable name (e.g. `--color-primary` → `colorPrimary`)
+ * - `{raw}`: original variable name including `--` prefix
+ */
+export type CssVariableMappingResolveEntry = {
+  expr: string;
+  imports: ImportSpec[];
+  /**
+   * Drop the local CSS variable definition when it matches a specific value.
+   * - `true`: always drop the definition
+   * - `string`: only drop if `ctx.definedValue` equals this string
+   */
+  dropDefinition?: boolean | string;
+};
+
+/**
+ * Declarative CSS variable → StyleX token mapping.
+ *
+ * An ordered array of `[pattern, entry]` tuples. First match wins.
+ *
+ * Pattern syntax (matched against the variable name including `--` prefix):
+ * - Exact: `"--color-primary"` matches only that variable
+ * - Prefix: `"--color-*"` matches variables starting with `--color-`
+ * - Catch-all: `"*"` matches any variable
+ *
+ * Evaluated before `resolveValue` for `kind: "cssVariable"` lookups.
+ */
+export type CssVariableMapping = Array<[pattern: string, entry: CssVariableMappingResolveEntry]>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Call Mapping
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A resolve entry for call mapping that produces an expression + imports.
+ *
+ * Supports placeholders in `expr`:
+ * - `{arg0}`: first literal string argument value
+ */
+export type CallMappingResolveEntry = {
+  expr: string;
+  imports: ImportSpec[];
+  usage?: "create" | "props";
+  dynamicArgUsage?: "call" | "memberAccess";
+  cssText?: string;
+  preserveRuntimeCall?: boolean;
+  extraClassNames?: ExprWithImports[];
+};
+
+/** Keep the original helper call as a runtime override. */
+export type CallMappingRuntimeEntry = {
+  preserveRuntimeCall: true;
+};
+
+/** Inject CSS module className expressions. */
+export type CallMappingClassNamesEntry = {
+  extraClassNames: ExprWithImports[];
+};
+
+export type CallMappingValue =
+  | CallMappingResolveEntry
+  | CallMappingRuntimeEntry
+  | CallMappingClassNamesEntry;
+
+/**
+ * Declarative helper function → StyleX expression mapping.
+ *
+ * An ordered array of `[pattern, entry]` tuples. First match wins.
+ *
+ * Pattern syntax (matched against `calleeImportedName`, optionally with member path):
+ * - `"color"` — exact match on function name
+ * - `"ColorConverter.cssWithAlpha"` — match function + member path
+ *
+ * Evaluated before `resolveCall` for helper calls. If no entry matches,
+ * `resolveCall` is called as the fallback.
+ */
+export type CallMapping = Array<[pattern: string, entry: CallMappingValue]>;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Selector Mapping
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Declarative selector interpolation mapping.
+ *
+ * An ordered array of `[pattern, entry]` tuples. First match wins.
+ *
+ * Pattern syntax (matched against `importedName`, optionally with `.path`):
+ * - `"screenSize.*"` — prefix match (e.g. `screenSize.phone`)
+ * - `"highlight"` — exact match
+ *
+ * Entry types are the same as `SelectorResolveResult`, with `{property}` placeholder
+ * support in `expr` fields.
+ *
+ * Evaluated before `resolveSelector`. If no entry matches, `resolveSelector` is called.
+ */
+export type SelectorMapping = Array<[pattern: string, entry: SelectorMappingValue]>;
+
+export type SelectorMappingValue =
+  | SelectorMappingMedia
+  | SelectorMappingPseudoAlias
+  | SelectorMappingPseudoExpand;
+
+type SelectorMappingMedia = {
+  kind: "media";
+  /** Expression template. Supports `{property}` placeholder. */
+  expr: string;
+  imports: ImportSpec[];
+};
+
+type SelectorMappingPseudoAlias = {
+  kind: "pseudoAlias";
+  values: string[];
+  styleSelectorExpr: string;
+  imports: ImportSpec[];
+};
+
+type SelectorMappingPseudoExpand = {
+  kind: "pseudoExpand";
+  expansions: Array<{
+    pseudo: string;
+    condition?: { expr: string; imports: ImportSpec[] };
+  }>;
+  imports: ImportSpec[];
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Call Resolution (imperative hook types)
+// ────────────────────────────────────────────────────────────────────────────
+
 export type CallResolveResultWithExpr = {
   /**
    * JS expression string to inline into generated output.
@@ -702,6 +839,30 @@ export interface Adapter {
   themeMapping?: ThemeMapping;
 
   /**
+   * Optional declarative mapping for CSS variable resolution.
+   *
+   * When provided, the codemod checks this mapping before calling `resolveValue`
+   * for `kind: "cssVariable"` lookups. If no entry matches, `resolveValue` is called.
+   */
+  cssVariableMapping?: CssVariableMapping;
+
+  /**
+   * Optional declarative mapping for helper function calls.
+   *
+   * When provided, the codemod checks this mapping before calling `resolveCall`.
+   * If no entry matches, `resolveCall` is called as the fallback.
+   */
+  callMapping?: CallMapping;
+
+  /**
+   * Optional declarative mapping for selector interpolations.
+   *
+   * When provided, the codemod checks this mapping before calling `resolveSelector`.
+   * If no entry matches, `resolveSelector` is called as the fallback.
+   */
+  selectorMapping?: SelectorMapping;
+
+  /**
    * Resolver for theme paths + CSS variables + imported values.
    *
    * Return:
@@ -866,6 +1027,9 @@ export interface Adapter {
  */
 export interface AdapterInput {
   themeMapping?: Adapter["themeMapping"];
+  cssVariableMapping?: Adapter["cssVariableMapping"];
+  callMapping?: Adapter["callMapping"];
+  selectorMapping?: Adapter["selectorMapping"];
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
   resolveSelector: Adapter["resolveSelector"];

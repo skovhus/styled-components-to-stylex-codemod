@@ -418,6 +418,9 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   const adapterWithLogging: Adapter = {
     themeMapping: resolvedAdapter.themeMapping,
+    cssVariableMapping: resolvedAdapter.cssVariableMapping,
+    callMapping: resolvedAdapter.callMapping,
+    selectorMapping: resolvedAdapter.selectorMapping,
     styleMerger: resolvedAdapter.styleMerger,
     themeHook: resolvedAdapter.themeHook,
     useSxProp: resolvedAdapter.useSxProp,

@@ -3,6 +3,11 @@
  * Core concepts: resolver wiring, precomputed mixin values, and shared tracking maps.
  */
 import { type ImportSource, isDirectionalResult } from "../../adapter.js";
+import { resolveCallFromMapping, CALL_MAPPING_NO_MATCH } from "../call-mapping-resolver.js";
+import {
+  resolveCssVariableFromMapping,
+  CSS_VARIABLE_MAPPING_NO_MATCH,
+} from "../css-variable-mapping-resolver.js";
 import { resolveThemeFromMapping, THEME_MAPPING_NO_MATCH } from "../theme-mapping-resolver.js";
 import type { InternalHandlerContext } from "../builtin-handlers/types.js";
 import type { TransformContext } from "../transform-context.js";
@@ -64,13 +69,28 @@ export function createLowerRulesState(ctx: TransformContext) {
         return mapped ?? undefined;
       }
     }
+    // Check declarative cssVariableMapping
+    if (rvCtx.kind === "cssVariable" && ctx.adapter.cssVariableMapping) {
+      const mapped = resolveCssVariableFromMapping(ctx.adapter.cssVariableMapping, rvCtx);
+      if (mapped !== CSS_VARIABLE_MAPPING_NO_MATCH) {
+        return mapped;
+      }
+    }
     const res = ctx.adapter.resolveValue(rvCtx);
     if (res && isDirectionalResult(res)) {
       return undefined;
     }
     return res;
   };
-  const resolveCallOptional = ctx.adapter.resolveCall.bind(ctx.adapter);
+  const resolveCallOptional: InternalHandlerContext["resolveCallOptional"] = (callCtx) => {
+    if (ctx.adapter.callMapping) {
+      const mapped = resolveCallFromMapping(ctx.adapter.callMapping, callCtx);
+      if (mapped !== CALL_MAPPING_NO_MATCH) {
+        return mapped;
+      }
+    }
+    return ctx.adapter.resolveCall(callCtx);
+  };
   const resolveThemeCall = ctx.adapter.resolveThemeCall?.bind(ctx.adapter);
   const resolveSelector = ctx.resolveSelectorSafe;
   const importMap =

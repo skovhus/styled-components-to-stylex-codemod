@@ -15,6 +15,15 @@ import {
   type SelectorResolveResult,
 } from "../adapter.js";
 import type { WarningLog } from "./logger.js";
+import { resolveCallFromMapping, CALL_MAPPING_NO_MATCH } from "./call-mapping-resolver.js";
+import {
+  resolveCssVariableFromMapping,
+  CSS_VARIABLE_MAPPING_NO_MATCH,
+} from "./css-variable-mapping-resolver.js";
+import {
+  resolveSelectorFromMapping,
+  SELECTOR_MAPPING_NO_MATCH,
+} from "./selector-mapping-resolver.js";
 import { resolveThemeFromMapping, THEME_MAPPING_NO_MATCH } from "./theme-mapping-resolver.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
@@ -60,6 +69,14 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
       // No match — fall through to resolveValue
     }
 
+    // Declarative CSS variable mapping: try static mapping before calling resolveValue
+    if (ctx.kind === "cssVariable" && adapter.cssVariableMapping) {
+      const mapped = resolveCssVariableFromMapping(adapter.cssVariableMapping, ctx);
+      if (mapped !== CSS_VARIABLE_MAPPING_NO_MATCH) {
+        return mapped;
+      }
+    }
+
     const res = adapter.resolveValue(ctx);
     // `undefined` means bail/skip the file, except for cssVariable where it means "keep as-is"
     if (res === undefined && ctx.kind !== "cssVariable") {
@@ -96,6 +113,14 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
         ctx.calleeMemberPath?.join("."),
       );
     }
+    // Declarative call mapping: try static mapping before calling resolveCall
+    if (adapter.callMapping) {
+      const mapped = resolveCallFromMapping(adapter.callMapping, ctx);
+      if (mapped !== CALL_MAPPING_NO_MATCH) {
+        return mapped;
+      }
+    }
+
     const res = adapter.resolveCall(ctx);
     // `undefined` means bail/skip the file
     if (res === undefined) {
@@ -112,6 +137,14 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
         ...stylexImportPassthrough(ctx.importedName, ctx.source, ctx.path),
       };
     }
+    // Declarative selector mapping: try static mapping before calling resolveSelector
+    if (adapter.selectorMapping) {
+      const mapped = resolveSelectorFromMapping(adapter.selectorMapping, ctx);
+      if (mapped !== SELECTOR_MAPPING_NO_MATCH) {
+        return mapped;
+      }
+    }
+
     // Note: resolveSelector returning undefined does NOT bail the entire file.
     // It just means this specific selector interpolation couldn't be resolved,
     // and the calling code will handle the bail for that component.

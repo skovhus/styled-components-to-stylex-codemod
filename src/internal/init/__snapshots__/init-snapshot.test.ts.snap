@@ -99,17 +99,65 @@ export const adapter = defineAdapter({
   ],
 
   /**
-   * Resolve dynamic values: theme access, CSS variables, imported values.
+   * Declarative CSS variable → StyleX token mapping. First match wins.
+   * Patterns: exact ("--color-primary"), prefix ("--color-*"), catch-all ("*")
+   * Placeholders: {name} (camelCase), {raw} (original --name)
+   */
+  cssVariableMapping: [
+    // TODO: ["--base-size", { expr: "vars.baseSize", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--border-radius", { expr: "vars.borderRadius", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--color-primary", { expr: "vars.colorPrimary", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--color-secondary", { expr: "vars.colorSecondary", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--component-width", { expr: "vars.componentWidth", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--font-size", { expr: "vars.fontSize", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--font-weight-medium", { expr: "vars.fontWeightMedium", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--highlighted-color", { expr: "vars.highlightedColor", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--line-height", { expr: "vars.lineHeight", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // TODO: ["--scrollbar-width", { expr: "vars.scrollbarWidth", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],
+    // ... and 6 more
+  ],
+
+  /**
+   * Declarative helper function → StyleX expression mapping. First match wins.
+   * Patterns: exact ("color"), qualified ("Obj.method")
+   * Placeholders: {arg0} (first literal string argument)
+   * Entry types: { expr, imports } | { preserveRuntimeCall: true } | { extraClassNames: [...] }
+   */
+  callMapping: [
+    // TODO: ["color", { expr: "helpers.color", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["draggableRegion", { expr: "helpers.draggableRegion", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["flexCenter", { expr: "helpers.flexCenter", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["fontSize", { expr: "helpers.fontSize", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["fontWeight", { expr: "helpers.fontWeight", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["gradient", { expr: "helpers.gradient", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["scrollFadeMaskStyles", { expr: "helpers.scrollFadeMaskStyles", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["themedBorder", { expr: "helpers.themedBorder", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["thinBorder", { expr: "helpers.thinBorder", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["thinPixel", { expr: "helpers.thinPixel", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["transitionSpeed", { expr: "helpers.transitionSpeed", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["truncate", { expr: "helpers.truncate", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+  ],
+
+  /**
+   * Declarative selector interpolation mapping. First match wins.
+   * Patterns: exact ("highlight"), prefix ("screenSize.*")
+   * Entry types: { kind: "media", expr, imports } | { kind: "pseudoAlias", ... } | { kind: "pseudoExpand", ... }
+   */
+  selectorMapping: [
+    // TODO: ["Arrow.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["CollapseArrowIconGlobalSelector.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["CrossFileIcon.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["CrossFileLink.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["screenSize.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+  ],
+
+  /**
+   * Fallback resolver for values not handled by themeMapping/cssVariableMapping.
    * Return { expr, imports } or undefined to bail.
    */
   resolveValue(ctx) {
     // Theme lookups handled by themeMapping above.
-
-    if (ctx.kind === "cssVariable") {
-      // TODO: Map CSS variables to StyleX tokens. Found: --base-size, --border-radius, --color-primary, --color-secondary, --component-width, ...
-      // Example: return { expr: \`$vars.\${camel}\`, imports: [...] };
-      return undefined;
-    }
+    // CSS variables handled by cssVariableMapping above.
 
     if (ctx.kind === "importedValue") {
       // TODO: Map imported styled-component values to StyleX equivalents.
@@ -120,38 +168,18 @@ export const adapter = defineAdapter({
   },
 
   /**
-   * Resolve helper function calls in interpolations.
-   * With ctx.cssProperty → CSS value; without → StyleX style object.
+   * Fallback resolver for helpers not handled by callMapping.
    */
   resolveCall(ctx) {
-    // Detected helpers:
-    //   color (from "./lib/helpers")
-    //   draggableRegion (from "./lib/helpers")
-    //   flexCenter (from "./lib/helpers")
-    //   fontSize (from "./lib/helpers")
-    //   fontWeight (from "./lib/helpers")
-    //   gradient (from "./lib/helpers")
-    //   scrollFadeMaskStyles (from "./lib/helpers")
-    //   themedBorder (from "./lib/helpers")
-    //   thinBorder (from "./lib/helpers")
-    //   thinPixel (from "./lib/helpers")
-    //   transitionSpeed (from "./lib/helpers")
-    //   truncate (from "./lib/helpers")
-    // TODO: Map each helper. Return { expr, imports } or { preserveRuntimeCall: true }.
+    // Fallback for exotic helpers not covered by callMapping.
     return undefined;
   },
 
   /**
-   * Resolve interpolations in CSS selector position.
+   * Fallback resolver for selectors not handled by selectorMapping.
    */
   resolveSelector(ctx) {
-    // Detected selectors:
-    //   \${Arrow} (from "./lib/cross-file-icon.styled")
-    //   \${CollapseArrowIconGlobalSelector} (from "./lib/converted-collapse-icon")
-    //   \${CrossFileIcon} (from "./lib/cross-file-icon.styled")
-    //   \${CrossFileLink} (from "./lib/cross-file-icon.styled")
-    //   \${screenSize} (from "./lib/helpers")
-    // TODO: Return { kind: "media", expr, imports } or { kind: "pseudoAlias", values, imports }.
+    // Fallback for selectors not covered by selectorMapping.
     return undefined;
   },
 
@@ -281,12 +309,15 @@ styled() wrappers around imported components (9):
 
 useTheme() hook usage detected
 
-Adapter hooks needed:
-  - resolveValue: 8 theme root(s), 16 CSS variable(s), 9 imported value(s)
-  - resolveCall: 12 helper(s)
-  - resolveSelector: 5 selector(s)
-  - externalInterface: needs configuration
+Declarative mappings:
   - themeMapping: 8 theme root(s)
+  - cssVariableMapping: 16 variable(s)
+  - callMapping: 12 helper(s)
+  - selectorMapping: 5 selector(s)
+
+Imperative hooks (fallback):
+  - resolveValue: 8 theme root(s), 16 CSS variable(s), 9 imported value(s)
+  - externalInterface: needs configuration
   - themeHook: useTheme detected"
 `;
 

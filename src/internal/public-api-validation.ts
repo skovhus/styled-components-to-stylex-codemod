@@ -226,11 +226,14 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     );
   }
 
-  // Validate themeMapping (optional array of [pattern, entry] tuples)
+  // Validate declarative mappings (optional arrays of [pattern, entry] tuples)
   const themeMapping = obj?.themeMapping;
   if (themeMapping !== undefined && themeMapping !== null) {
     assertThemeMapping(themeMapping, where);
   }
+  assertOptionalTupleArray(obj?.cssVariableMapping, "cssVariableMapping", where);
+  assertOptionalTupleArray(obj?.callMapping, "callMapping", where);
+  assertOptionalTupleArray(obj?.selectorMapping, "selectorMapping", where);
 
   // Validate themeHook config (null/undefined or object with functionName/importSource)
   const themeHook = obj?.themeHook;
@@ -357,6 +360,32 @@ function assertThemeMapping(value: unknown, where: string): void {
     }
     if (hasExpr && typeof e.expr !== "string") {
       throw new Error(`${where}: adapter.themeMapping[${i}][1].expr must be a string.`);
+    }
+  }
+}
+
+/** Validate that an optional mapping field is an array of [string, object] tuples. */
+function assertOptionalTupleArray(value: unknown, fieldName: string, where: string): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `${where}: adapter.${fieldName} must be an array of [pattern, entry] tuples. Received: ${describeValue(value)}`,
+    );
+  }
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (!Array.isArray(item) || item.length < 2) {
+      throw new Error(`${where}: adapter.${fieldName}[${i}] must be a [pattern, entry] tuple.`);
+    }
+    if (typeof item[0] !== "string" || !item[0].trim()) {
+      throw new Error(
+        `${where}: adapter.${fieldName}[${i}][0] (pattern) must be a non-empty string.`,
+      );
+    }
+    if (!item[1] || typeof item[1] !== "object") {
+      throw new Error(`${where}: adapter.${fieldName}[${i}][1] (entry) must be an object.`);
     }
   }
 }

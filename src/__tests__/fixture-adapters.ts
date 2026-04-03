@@ -7,11 +7,21 @@ import {
   type CallResolveResult,
   defineAdapter,
   type ExternalInterfaceResult,
+  type ImportSpec,
   type ResolveValueContext,
   type ResolveValueResult,
   type SelectorResolveContext,
   type SelectorResolveResult,
 } from "../adapter.ts";
+
+/* ── Shared import specs ─────────────────────────────────────────────── */
+
+const TOKENS = (names: Array<{ imported: string; local?: string }>): ImportSpec[] => [
+  { from: { kind: "specifier", value: "./tokens.stylex" }, names },
+];
+const HELPERS_STYLEX = (names: Array<{ imported: string; local?: string }>): ImportSpec[] => [
+  { from: { kind: "specifier", value: "./lib/helpers.stylex" }, names },
+];
 
 /** Broad consumer props — shorthand for when all element-level flags are enabled. */
 const BROAD_CONSUMER_PROPS = {
@@ -228,65 +238,102 @@ export const fixtureAdapter = defineAdapter({
     ],
   ],
 
+  // Declarative CSS variable mapping — replaces the imperative resolveValue cssVariable branch.
+  cssVariableMapping: [
+    [
+      "--base-size",
+      {
+        expr: "calcVars.baseSize",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-calc.stylex" },
+            names: [{ imported: "calcVars" }],
+          },
+        ],
+        dropDefinition: "16px",
+      },
+    ],
+    [
+      "--color-primary",
+      {
+        expr: "vars.colorPrimary",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--color-secondary",
+      {
+        expr: "vars.colorSecondary",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--spacing-sm",
+      {
+        expr: "vars.spacingSm",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--spacing-md",
+      {
+        expr: "vars.spacingMd",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--spacing-lg",
+      {
+        expr: "vars.spacingLg",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--border-radius",
+      {
+        expr: "vars.borderRadius",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./css-variables.stylex" },
+            names: [{ imported: "vars" }],
+          },
+        ],
+      },
+    ],
+    [
+      "--font-weight-medium",
+      { expr: "fontWeightVars.medium", imports: TOKENS([{ imported: "fontWeightVars" }]) },
+    ],
+  ],
+
   resolveValue(ctx) {
-    // Theme lookups are handled by themeMapping above.
-    // resolveValue now only handles cssVariable and importedValue.
-
-    if (ctx.kind === "cssVariable") {
-      const { name, definedValue } = ctx;
-
-      // css-calc fixture: lift `var(--base-size)` to StyleX vars, and drop local definition when it matches.
-      if (name === "--base-size") {
-        return {
-          expr: "calcVars.baseSize",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./css-calc.stylex" },
-              names: [{ imported: "calcVars" }],
-            },
-          ],
-          ...(definedValue === "16px" ? { dropDefinition: true } : {}),
-        };
-      }
-
-      // css-variables fixture: map known vars to `vars.*` and `textVars.*`
-      const varsMap: Record<string, string> = {
-        "--color-primary": "colorPrimary",
-        "--color-secondary": "colorSecondary",
-        "--spacing-sm": "spacingSm",
-        "--spacing-md": "spacingMd",
-        "--spacing-lg": "spacingLg",
-        "--border-radius": "borderRadius",
-      };
-      const fontWeightVarsMap: Record<string, string> = {
-        "--font-weight-medium": "fontWeightVars.medium",
-      };
-
-      const v = varsMap[name];
-      if (v) {
-        return {
-          expr: `vars.${v}`,
-          imports: [
-            {
-              from: { kind: "specifier" as const, value: "./css-variables.stylex" },
-              names: [{ imported: "vars" }],
-            },
-          ],
-        };
-      }
-      const f = fontWeightVarsMap[name];
-      if (f) {
-        return {
-          expr: `${f}`,
-          imports: [
-            {
-              from: { kind: "specifier" as const, value: "./tokens.stylex" },
-              names: [{ imported: "fontWeightVars" }],
-            },
-          ],
-        };
-      }
-    }
+    // Theme lookups handled by themeMapping; CSS variables handled by cssVariableMapping.
+    // resolveValue now only handles importedValue.
 
     if (ctx.kind === "importedValue") {
       const source = ctx.source.value;
@@ -297,284 +344,137 @@ export const fixtureAdapter = defineAdapter({
         const path = ctx.path ?? "";
         return {
           expr: path ? `$zIndex.${path}` : "$zIndex",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "$zIndex" }],
-            },
-          ],
+          imports: TOKENS([{ imported: "$zIndex" }]),
         };
       }
       if (ctx.importedName === "config") {
         const path = ctx.path ?? "";
-        // For nested paths like "ui.spacing.small", use bracket notation with the full path
         return {
           expr: path ? `$config["${path}"]` : "$config",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "$config" }],
-            },
-          ],
+          imports: TOKENS([{ imported: "$config" }]),
         };
       }
-      // Handle imported styled components used as mixins
-      // TruncateText -> helpers.truncate (a StyleX style object)
       if (ctx.importedName === "TruncateText") {
         return {
           usage: "props",
           expr: "helpers.truncate",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./lib/helpers.stylex" },
-              names: [{ imported: "helpers" }],
-            },
-          ],
+          imports: HELPERS_STYLEX([{ imported: "helpers" }]),
         };
       }
     }
 
-    // Return undefined to bail/skip the file
     return undefined;
   },
-  resolveCall(ctx) {
-    const src = ctx.calleeSource.value;
-    // Note: calleeSource.value may or may not include the extension
-    if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
-      throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
-    }
-
-    // extraClassNames test: draggableRegion returns a CSS module className
-    if (ctx.calleeImportedName === "draggableRegion") {
-      return {
+  // Declarative call mapping — handles simple helper patterns declaratively.
+  callMapping: [
+    // CSS module className injection
+    [
+      "draggableRegion",
+      {
         extraClassNames: [
           {
             expr: "electronStyles.draggableRegionDisableChildren",
             imports: [
               {
-                from: { kind: "specifier" as const, value: "./lib/electronMixins.module.css" },
+                from: { kind: "specifier", value: "./lib/electronMixins.module.css" },
                 names: [{ imported: "default", local: "electronStyles" }],
               },
             ],
           },
         ],
-      };
+      },
+    ],
+    // StyleX mixin objects (usage: "props" + cssText for pseudo expansion)
+    [
+      "truncate",
+      {
+        usage: "props",
+        expr: "helpers.truncate",
+        cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
+        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+      },
+    ],
+    [
+      "flexCenter",
+      {
+        usage: "props",
+        expr: "helpers.flexCenter",
+        cssText: "display: flex; align-items: center; justify-content: center;",
+        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+      },
+    ],
+    [
+      "gradient",
+      {
+        usage: "props",
+        expr: "helpers.gradient",
+        cssText: "background-image: linear-gradient(90deg, #ff6b6b, #5f6cff); color: transparent;",
+        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+      },
+    ],
+    // Simple CSS value token accessors
+    ["thinPixel", { expr: "pixelVars.thin", imports: TOKENS([{ imported: "pixelVars" }]) }],
+    ["color", { expr: "$colors.{arg0}", imports: TOKENS([{ imported: "$colors" }]) }],
+    [
+      "fontWeight",
+      { expr: "fontWeightVars.{arg0}", imports: TOKENS([{ imported: "fontWeightVars" }]) },
+    ],
+    ["fontSize", { expr: "fontSizeVars.{arg0}", imports: TOKENS([{ imported: "fontSizeVars" }]) }],
+    [
+      "transitionSpeed",
+      { expr: "transitionSpeed.{arg0}", imports: TOKENS([{ imported: "transitionSpeed" }]) },
+    ],
+    // Dynamic arg with memberAccess: shadow("dark") → $shadow.dark, shadow(prop) → $shadow[prop]
+    [
+      "shadow",
+      {
+        expr: "$shadow.{arg0}",
+        dynamicArgUsage: "memberAccess",
+        imports: TOKENS([{ imported: "$shadow" }]),
+      },
+    ],
+    // Runtime-only helpers (kept as wrapper inline styles)
+    ["ColorConverter.cssWithAlpha", { preserveRuntimeCall: true }],
+    ["getRowHighlightColor", { preserveRuntimeCall: true }],
+  ],
+
+  // Imperative fallback for exotic call patterns that need arg inspection
+  resolveCall(ctx) {
+    const src = ctx.calleeSource.value;
+    if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
+      throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
+    // Parameterized helpers: pass args through to StyleX style function
     if (ctx.calleeImportedName === "truncateMultiline") {
       return resolveParameterizedHelperCall(ctx, "helpers.truncateMultiline", "helpers");
     }
-
     if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
       return resolveParameterizedHelperCall(ctx, "scrollFadeMaskStyles", "scrollFadeMaskStyles");
     }
 
-    // Map helper names to their CSS text for pseudo-selector expansion
-    const helperCssText: Record<string, string> = {
-      truncate: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-      flexCenter: "display: flex; align-items: center; justify-content: center;",
-      gradient: "background-image: linear-gradient(90deg, #ff6b6b, #5f6cff); color: transparent;",
-    };
-    const helperStyleKey = (() => {
-      switch (ctx.calleeImportedName) {
-        case "gradient":
-        case "truncate":
-        case "flexCenter":
-          return ctx.calleeImportedName;
-        default:
-          return undefined;
-      }
-    })();
-    if (helperStyleKey) {
-      // These helpers return StyleX style objects (for standalone interpolations)
-      // Explicitly mark as "props" so the codemod knows not to use them as CSS values
-      // Include cssText so the codemod can expand properties for pseudo-selector wrapping
-      return {
-        usage: "props",
-        expr: `helpers.${helperStyleKey}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers.stylex" },
-            names: [{ imported: "helpers" }],
-          },
-        ],
-        cssText: helperCssText[helperStyleKey],
-      };
-    }
-
-    if (ctx.calleeImportedName === "thinPixel") {
-      return {
-        expr: "pixelVars.thin",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "pixelVars" }],
-          },
-        ],
-      };
-    }
-
+    // Template literal helpers that embed theme args or literal args
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
 
-    // Handle thinBorder(color) helper from ./lib/helpers.ts
-    // thinBorder("transparent") -> `${pixelVars.thin} solid transparent`
     if (ctx.calleeImportedName === "thinBorder" && key) {
       return {
         expr: `\`\${pixelVars.thin} solid ${key}\``,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "pixelVars" }],
-          },
-        ],
+        imports: TOKENS([{ imported: "pixelVars" }]),
       };
     }
-    const themeColorKey = (() => {
-      if (!arg0 || arg0.kind !== "theme") {
-        return undefined;
-      }
-      // Only support theme color paths like: props.theme.color.bgSub -> "color.bgSub"
-      if (!arg0.path.startsWith("color.")) {
-        return undefined;
-      }
-      const k = arg0.path.slice("color.".length);
-      return k ? k : null;
-    })();
 
-    // Handle borderByColor(theme.color.*) helper from ./lib/helpers.ts
-    // borderByColor(props.theme.color.bgSub) -> `1px solid ${$colors.bgSub}`
+    const themeColorKey = extractThemeColorKey(arg0);
     if (ctx.calleeImportedName === "borderByColor" && themeColorKey) {
       return {
         expr: `\`1px solid \${$colors.${themeColorKey}}\``,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
+        imports: TOKENS([{ imported: "$colors" }]),
       };
     }
-
-    // Handle ColorConverter.cssWithAlpha(theme.color.*, alpha) helper
-    // Keep this as a runtime helper call in the generated wrapper (no static fallback).
-    if (
-      ctx.calleeImportedName === "ColorConverter" &&
-      ctx.calleeMemberPath?.[0] === "cssWithAlpha" &&
-      themeColorKey
-    ) {
-      return {
-        preserveRuntimeCall: true,
-      };
-    }
-
-    // Handle getRowHighlightColor(theme.isDark) helper
-    // Takes a theme boolean arg — preserve as runtime call.
-    if (ctx.calleeImportedName === "getRowHighlightColor" && arg0?.kind === "theme") {
-      return {
-        preserveRuntimeCall: true,
-      };
-    }
-
-    // Handle shadow() helper — demonstrates dynamic prop arg resolution.
-    // shadow("dark") → $shadow.dark (literal arg)
-    // shadow(props.level) → $shadow[level] (dynamic arg — adapter remaps callee with member access)
-    if (ctx.calleeImportedName === "shadow") {
-      if (key) {
-        return {
-          expr: `$shadow.${key}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "$shadow" }],
-            },
-          ],
-        };
-      }
-      // Dynamic arg — return the vars object with memberAccess usage
-      return {
-        expr: "$shadow",
-        dynamicArgUsage: "memberAccess",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$shadow" }],
-          },
-        ],
-      };
-    }
-
-    if (!key) {
-      return undefined;
-    }
-
-    // Handle color() helper from ./lib/helpers.ts
-    // color("bgBase") -> $colors.bgBase
-    if (ctx.calleeImportedName === "color") {
-      return {
-        expr: `$colors.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
-      };
-    }
-
-    // Handle fontWeight() helper from ./lib/helpers.ts
-    // fontWeight("medium") -> fontWeightVars.medium
-    if (ctx.calleeImportedName === "fontWeight") {
-      return {
-        expr: `fontWeightVars.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "fontWeightVars" }],
-          },
-        ],
-      };
-    }
-
-    // Handle fontSize() helper from ./lib/helpers.ts
-    // fontSize("medium") -> fontSizeVars.medium
-    if (ctx.calleeImportedName === "fontSize") {
-      return {
-        expr: `fontSizeVars.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "fontSizeVars" }],
-          },
-        ],
-      };
-    }
-
-    // Handle transitionSpeed() helper from ./lib/helpers.ts
-    if (ctx.calleeImportedName === "transitionSpeed") {
-      return {
-        expr: `transitionSpeed.${key}`,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "transitionSpeed" }],
-          },
-        ],
-      };
-    }
-
-    // Handle themedBorder() helper from ./lib/helpers.ts
-    // Returns undefined (bails) if key is missing, e.g. themedBorder() without argument
-    // Returns a CSS value expression that gets expanded to borderWidth/Style/Color properties
     if (ctx.calleeImportedName === "themedBorder" && key) {
       return {
         expr: `\`\${pixelVars.thin} solid \${$colors.${key}}\``,
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "pixelVars" }, { imported: "$colors" }],
-          },
-        ],
+        imports: TOKENS([{ imported: "pixelVars" }, { imported: "$colors" }]),
       };
     }
 
@@ -588,34 +488,37 @@ export const fixtureAdapter = defineAdapter({
     }
     return undefined;
   },
-  resolveSelector(ctx) {
-    const source = ctx.source.value;
-    if (!source.includes("lib/helpers") && !source.includes("lib\\helpers")) {
-      return undefined;
-    }
-
-    // Handle screenSize.phone / screenSizeBreakPoints.phone, etc.
-    if (
-      (ctx.importedName === "screenSize" || ctx.importedName === "screenSizeBreakPoints") &&
-      ctx.path
-    ) {
-      return {
+  // Declarative selector mapping — all selector patterns handled declaratively.
+  selectorMapping: [
+    [
+      "screenSize.*",
+      {
         kind: "media",
-        expr: `breakpoints.${ctx.path}`,
+        expr: "breakpoints.{property}",
         imports: [
           {
             from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
             names: [{ imported: "breakpoints" }],
           },
         ],
-      };
-    }
-
-    // Handle `highlight` pseudo-class interpolation: &:${highlight}
-    // Resolves to a pseudoAlias that expands into :active and :hover pseudo style objects,
-    // wrapped in a highlightStyles() function call for runtime selection.
-    if (ctx.importedName === "highlight") {
-      return {
+      },
+    ],
+    [
+      "screenSizeBreakPoints.*",
+      {
+        kind: "media",
+        expr: "breakpoints.{property}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+            names: [{ imported: "breakpoints" }],
+          },
+        ],
+      },
+    ],
+    [
+      "highlight",
+      {
         kind: "pseudoAlias",
         values: ["active", "hover"],
         styleSelectorExpr: "highlightStyles",
@@ -625,18 +528,11 @@ export const fixtureAdapter = defineAdapter({
             names: [{ imported: "highlightStyles" }],
           },
         ],
-      };
-    }
-
-    // Handle `highlightExpand` pseudo-class interpolation: &:${highlightExpand}
-    // Resolves to a pseudoExpand that creates one merged style object with
-    // :active direct + :hover wrapped in $interaction.canHover condition.
-    if (ctx.importedName === "highlightExpand") {
-      const interactionImport = {
-        from: { kind: "specifier" as const, value: "./lib/interaction.stylex" },
-        names: [{ imported: "$interaction" }],
-      };
-      return {
+      },
+    ],
+    [
+      "highlightExpand",
+      {
         kind: "pseudoExpand",
         expansions: [
           { pseudo: "active" },
@@ -644,17 +540,37 @@ export const fixtureAdapter = defineAdapter({
             pseudo: "hover",
             condition: {
               expr: "$interaction.canHover",
-              imports: [interactionImport],
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./lib/interaction.stylex" },
+                  names: [{ imported: "$interaction" }],
+                },
+              ],
             },
           },
         ],
         imports: [],
-      };
-    }
+      },
+    ],
+  ],
 
+  // Imperative fallback — no exotic selector patterns currently needed
+  resolveSelector(_ctx) {
     return undefined;
   },
 });
+
+/** Extract theme color key from a call argument (e.g. theme.color.bgSub → "bgSub"). */
+function extractThemeColorKey(arg: CallResolveContext["args"][0] | undefined): string | undefined {
+  if (!arg || arg.kind !== "theme") {
+    return undefined;
+  }
+  if (!arg.path.startsWith("color.")) {
+    return undefined;
+  }
+  const k = arg.path.slice("color.".length);
+  return k || undefined;
+}
 
 /**
  * Shared helper for parameterized helpers that return StyleX style objects.

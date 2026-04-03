@@ -15,6 +15,9 @@ export function generateAdapterStub(patterns: ScannedPatterns): string {
     "export const adapter = defineAdapter({",
     STYLE_MERGER,
     patterns.themeRoots.size > 0 ? themeMappingSection(patterns) : "",
+    patterns.cssVariables.size > 0 ? cssVariableMappingSection(patterns) : "",
+    patterns.helperCalls.size > 0 ? callMappingSection(patterns) : "",
+    patterns.selectorInterpolations.size > 0 ? selectorMappingSection(patterns) : "",
     resolveValueSection(patterns),
     resolveCallSection(patterns),
     resolveSelectorSection(patterns),
@@ -93,18 +96,23 @@ export function generateSummary(patterns: ScannedPatterns): string {
     parts.push("useTheme() hook usage detected\n");
   }
 
-  parts.push("Adapter hooks needed:");
-  parts.push(`  - resolveValue: ${describeResolveValueNeeds(patterns)}`);
-  parts.push(
-    `  - resolveCall: ${patterns.helperCalls.size > 0 ? `${patterns.helperCalls.size} helper(s)` : "none detected"}`,
-  );
-  parts.push(
-    `  - resolveSelector: ${patterns.selectorInterpolations.size > 0 ? `${patterns.selectorInterpolations.size} selector(s)` : "none detected"}`,
-  );
-  parts.push("  - externalInterface: needs configuration");
+  parts.push("Declarative mappings:");
   if (patterns.themeRoots.size > 0) {
     parts.push(`  - themeMapping: ${patterns.themeRoots.size} theme root(s)`);
   }
+  if (patterns.cssVariables.size > 0) {
+    parts.push(`  - cssVariableMapping: ${patterns.cssVariables.size} variable(s)`);
+  }
+  if (patterns.helperCalls.size > 0) {
+    parts.push(`  - callMapping: ${patterns.helperCalls.size} helper(s)`);
+  }
+  if (patterns.selectorInterpolations.size > 0) {
+    parts.push(`  - selectorMapping: ${patterns.selectorInterpolations.size} selector(s)`);
+  }
+  parts.push("");
+  parts.push("Imperative hooks (fallback):");
+  parts.push(`  - resolveValue: ${describeResolveValueNeeds(patterns)}`);
+  parts.push("  - externalInterface: needs configuration");
   if (patterns.hasUseTheme) {
     parts.push("  - themeHook: useTheme detected");
   }
@@ -213,19 +221,76 @@ ${entries.join("\n")}  ],
 `;
 }
 
+function cssVariableMappingSection(patterns: ScannedPatterns): string {
+  const entries = sorted(patterns.cssVariables)
+    .slice(0, 10)
+    .map((v) => {
+      const camel = v.replace(/^--/, "").replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      return `    // TODO: ["${v}", { expr: "vars.${camel}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "vars" }] }] }],`;
+    })
+    .join("\n");
+  const more =
+    patterns.cssVariables.size > 10
+      ? `\n    // ... and ${patterns.cssVariables.size - 10} more`
+      : "";
+  return `\
+  /**
+   * Declarative CSS variable → StyleX token mapping. First match wins.
+   * Patterns: exact ("--color-primary"), prefix ("--color-*"), catch-all ("*")
+   * Placeholders: {name} (camelCase), {raw} (original --name)
+   */
+  cssVariableMapping: [
+${entries}${more}
+  ],
+`;
+}
+
+function callMappingSection(patterns: ScannedPatterns): string {
+  const entries = sortedEntries(patterns.helperCalls)
+    .map(
+      ([n]) =>
+        `    // TODO: ["${n}", { expr: "helpers.${n}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],`,
+    )
+    .join("\n");
+  return `\
+  /**
+   * Declarative helper function → StyleX expression mapping. First match wins.
+   * Patterns: exact ("color"), qualified ("Obj.method")
+   * Placeholders: {arg0} (first literal string argument)
+   * Entry types: { expr, imports } | { preserveRuntimeCall: true } | { extraClassNames: [...] }
+   */
+  callMapping: [
+${entries}
+  ],
+`;
+}
+
+function selectorMappingSection(patterns: ScannedPatterns): string {
+  const entries = sortedEntries(patterns.selectorInterpolations)
+    .map(
+      ([n]) =>
+        `    // TODO: ["${n}.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],`,
+    )
+    .join("\n");
+  return `\
+  /**
+   * Declarative selector interpolation mapping. First match wins.
+   * Patterns: exact ("highlight"), prefix ("screenSize.*")
+   * Entry types: { kind: "media", expr, imports } | { kind: "pseudoAlias", ... } | { kind: "pseudoExpand", ... }
+   */
+  selectorMapping: [
+${entries}
+  ],
+`;
+}
+
 function resolveValueSection(patterns: ScannedPatterns): string {
   let body = "";
   if (patterns.themeRoots.size > 0) {
     body += "    // Theme lookups handled by themeMapping above.\n";
   }
   if (patterns.cssVariables.size > 0) {
-    const sample = sorted(patterns.cssVariables).slice(0, 5).join(", ");
-    const ellipsis = patterns.cssVariables.size > 5 ? ", ..." : "";
-    body +=
-      `\n    if (ctx.kind === "cssVariable") {\n` +
-      `      // TODO: Map CSS variables to StyleX tokens. Found: ${sample}${ellipsis}\n` +
-      `      // Example: return { expr: \`$vars.\${camel}\`, imports: [...] };\n` +
-      `      return undefined;\n    }\n`;
+    body += "    // CSS variables handled by cssVariableMapping above.\n";
   }
   if (patterns.styledWrappers.size > 0) {
     body +=
@@ -235,7 +300,7 @@ function resolveValueSection(patterns: ScannedPatterns): string {
   }
   return `\
   /**
-   * Resolve dynamic values: theme access, CSS variables, imported values.
+   * Fallback resolver for values not handled by themeMapping/cssVariableMapping.
    * Return { expr, imports } or undefined to bail.
    */
   resolveValue(ctx) {
@@ -246,43 +311,32 @@ ${body}
 }
 
 function resolveCallSection(patterns: ScannedPatterns): string {
-  let body: string;
-  if (patterns.helperCalls.size > 0) {
-    const list = sortedEntries(patterns.helperCalls)
-      .map(([n, e]) => `    //   ${n} (from "${e.source}")`)
-      .join("\n");
-    body = `    // Detected helpers:\n${list}\n    // TODO: Map each helper. Return { expr, imports } or { preserveRuntimeCall: true }.`;
-  } else {
-    body = "    // No helper calls detected.";
-  }
+  const note =
+    patterns.helperCalls.size > 0
+      ? "    // Fallback for exotic helpers not covered by callMapping."
+      : "    // No helper calls detected.";
   return `\
   /**
-   * Resolve helper function calls in interpolations.
-   * With ctx.cssProperty → CSS value; without → StyleX style object.
+   * Fallback resolver for helpers not handled by callMapping.
    */
   resolveCall(ctx) {
-${body}
+${note}
     return undefined;
   },
 `;
 }
 
 function resolveSelectorSection(patterns: ScannedPatterns): string {
-  let body: string;
-  if (patterns.selectorInterpolations.size > 0) {
-    const list = sortedEntries(patterns.selectorInterpolations)
-      .map(([n, e]) => `    //   \${${n}} (from "${e.source}")`)
-      .join("\n");
-    body = `    // Detected selectors:\n${list}\n    // TODO: Return { kind: "media", expr, imports } or { kind: "pseudoAlias", values, imports }.`;
-  } else {
-    body = "    // No selector interpolations detected.";
-  }
+  const note =
+    patterns.selectorInterpolations.size > 0
+      ? "    // Fallback for selectors not covered by selectorMapping."
+      : "    // No selector interpolations detected.";
   return `\
   /**
-   * Resolve interpolations in CSS selector position.
+   * Fallback resolver for selectors not handled by selectorMapping.
    */
   resolveSelector(ctx) {
-${body}
+${note}
     return undefined;
   },
 `;
