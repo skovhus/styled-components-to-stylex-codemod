@@ -226,6 +226,12 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     );
   }
 
+  // Validate themeMapping (optional array of [pattern, entry] tuples)
+  const themeMapping = obj?.themeMapping;
+  if (themeMapping !== undefined && themeMapping !== null) {
+    assertThemeMapping(themeMapping, where);
+  }
+
   // Validate themeHook config (null/undefined or object with functionName/importSource)
   const themeHook = obj?.themeHook;
   if (themeHook !== null && themeHook !== undefined) {
@@ -310,6 +316,48 @@ function assertFunctionNameAndImportSource(args: {
         `Received: value=${describeValue(value)}`,
       ].join("\n"),
     );
+  }
+}
+
+function assertThemeMapping(value: unknown, where: string): void {
+  if (!Array.isArray(value)) {
+    throw new Error(
+      [
+        `${where}: adapter.themeMapping must be an array of [pattern, entry] tuples.`,
+        `Received: themeMapping=${describeValue(value)}`,
+      ].join("\n"),
+    );
+  }
+  for (let i = 0; i < value.length; i++) {
+    const tuple = value[i];
+    if (!Array.isArray(tuple) || tuple.length !== 2) {
+      throw new Error(`${where}: adapter.themeMapping[${i}] must be a [pattern, entry] tuple.`);
+    }
+    const [pattern, entry] = tuple as [unknown, unknown];
+    if (typeof pattern !== "string" || !pattern.trim()) {
+      throw new Error(
+        `${where}: adapter.themeMapping[${i}][0] (pattern) must be a non-empty string.`,
+      );
+    }
+    if (!entry || typeof entry !== "object") {
+      throw new Error(`${where}: adapter.themeMapping[${i}][1] (entry) must be an object.`);
+    }
+    const e = entry as Record<string, unknown>;
+    // Validate entry shape: must be one of bail, directional, or resolve
+    const hasBail = "bail" in e;
+    const hasDirectional = "directional" in e;
+    const hasExpr = "expr" in e;
+    if (!hasBail && !hasDirectional && !hasExpr) {
+      throw new Error(
+        [
+          `${where}: adapter.themeMapping[${i}][1] must have "bail", "directional", or "expr".`,
+          `Received: ${describeValue(entry)}`,
+        ].join("\n"),
+      );
+    }
+    if (hasExpr && typeof e.expr !== "string") {
+      throw new Error(`${where}: adapter.themeMapping[${i}][1].expr must be a string.`);
+    }
   }
 }
 

@@ -8,7 +8,6 @@ import {
   defineAdapter,
   type ExternalInterfaceResult,
   type ResolveValueContext,
-  type ResolveValueDirectionalResult,
   type ResolveValueResult,
   type SelectorResolveContext,
   type SelectorResolveResult,
@@ -151,91 +150,87 @@ export const fixtureAdapter = defineAdapter({
     };
   },
 
-  resolveValue(ctx) {
-    if (ctx.kind === "theme") {
-      // Directional expansion for opaque shorthand tokens:
-      // When `cssProperty` is "padding" and path is "inputPadding",
-      // return separate paddingBlock/paddingInline tokens.
-      if (ctx.cssProperty === "padding" && ctx.path === "inputPadding") {
-        return {
-          directional: [
-            {
-              prop: "paddingBlock",
-              expr: "$input.inputPaddingBlock",
-              imports: [
-                {
-                  from: { kind: "specifier", value: "./tokens.stylex" },
-                  names: [{ imported: "$input" }],
-                },
-              ],
-            },
-            {
-              prop: "paddingInline",
-              expr: "$input.inputPaddingInline",
-              imports: [
-                {
-                  from: { kind: "specifier", value: "./tokens.stylex" },
-                  names: [{ imported: "$input" }],
-                },
-              ],
-            },
-          ],
-        } satisfies ResolveValueDirectionalResult;
-      }
-
-      // Nested theme objects (e.g. theme.baseTheme?.color.X) are not resolvable
-      // to static tokens — return undefined so the codemod falls back to runtime.
-      if (ctx.path.startsWith("baseTheme.")) {
-        return undefined;
-      }
-
-      // Test fixtures use a small ThemeProvider theme shape:
-      //   props.theme.color.labelBase  -> $colors.labelBase
-      //   props.theme.color[bg]        -> $colors[bg]
-      //
-      // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
-
-      // For indexed theme lookups with a known CSS property, return a prebuilt
-      // per-property mixin map so the codemod can emit a `stylex.props()` lookup
-      // instead of a dynamic `stylex.create()` style function.
-      if (ctx.path === "color" && ctx.indexedLookup && ctx.cssProperty) {
-        const camelProp = ctx.cssProperty.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-        return {
-          usage: "props",
-          dynamicArgUsage: "memberAccess",
-          expr: `$colorMixins.${camelProp}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./lib/colorMixins.stylex" },
-              names: [{ imported: "$colorMixins" }],
-            },
-          ],
-        };
-      }
-
-      if (ctx.path === "color") {
-        return {
-          expr: "$colors",
-          imports: [
-            {
-              from: { kind: "specifier", value: "./tokens.stylex" },
-              names: [{ imported: "$colors" }],
-            },
-          ],
-        };
-      }
-
-      const lastSegment = ctx.path.split(".").pop();
-      return {
-        expr: `$colors.${lastSegment}`,
+  // Declarative theme mapping — replaces the imperative resolveValue theme branch.
+  // Evaluated in order; first match wins.
+  themeMapping: [
+    // Shorthand expansion: theme.inputPadding + CSS "padding" → paddingBlock/paddingInline
+    [
+      "inputPadding",
+      {
+        directional: [
+          {
+            prop: "paddingBlock",
+            expr: "$input.inputPaddingBlock",
+            imports: [
+              {
+                from: { kind: "specifier", value: "./tokens.stylex" },
+                names: [{ imported: "$input" }],
+              },
+            ],
+          },
+          {
+            prop: "paddingInline",
+            expr: "$input.inputPaddingInline",
+            imports: [
+              {
+                from: { kind: "specifier", value: "./tokens.stylex" },
+                names: [{ imported: "$input" }],
+              },
+            ],
+          },
+        ],
+        cssProperties: ["padding"],
+      },
+    ],
+    // Bail: baseTheme.* is not resolvable to static tokens
+    ["baseTheme.*", { bail: true }],
+    // Indexed lookup → props-map: theme.color[prop] for a known CSS property
+    [
+      "color",
+      {
+        indexed: true,
+        usage: "props",
+        dynamicArgUsage: "memberAccess",
+        expr: "$colorMixins.{cssProperty}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/colorMixins.stylex" },
+            names: [{ imported: "$colorMixins" }],
+          },
+        ],
+      },
+    ],
+    // Object-level: theme.color → $colors
+    [
+      "color",
+      {
+        expr: "$colors",
         imports: [
           {
             from: { kind: "specifier", value: "./tokens.stylex" },
             names: [{ imported: "$colors" }],
           },
         ],
-      };
-    }
+      },
+    ],
+    // Catch-all: theme.X.Y → $colors.Y (uses last segment as property)
+    [
+      "*",
+      {
+        expr: "$colors.{property}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$colors" }],
+          },
+        ],
+      },
+    ],
+  ],
+
+  resolveValue(ctx) {
+    // Theme lookups are handled by themeMapping above.
+    // resolveValue now only handles cssVariable and importedValue.
 
     if (ctx.kind === "cssVariable") {
       const { name, definedValue } = ctx;

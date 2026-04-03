@@ -234,6 +234,68 @@ export type ResolveValueResult = {
   dynamicArgUsage?: "memberAccess";
 };
 
+// ────────────────────────────────────────────────────────────────────────────
+// Theme Mapping (declarative theme resolution)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A resolve entry that produces an expression + imports.
+ *
+ * Supports placeholders in `expr`:
+ * - `{property}`: remaining path after the matched prefix
+ *     e.g. pattern `"color.*"` matching `"color.labelBase"` → property = `"labelBase"`
+ * - `{cssProperty}`: camelCase CSS property name (only for indexed entries)
+ *     e.g. CSS property `"background-color"` → `"backgroundColor"`
+ */
+export type ThemeMappingResolveEntry = {
+  expr: string;
+  imports: ImportSpec[];
+  /** When true, only matches indexed lookups (`ctx.indexedLookup === true`). */
+  indexed?: boolean;
+  /** Mark result as a `stylex.props()`-compatible style object. */
+  usage?: "props";
+  /** Use computed member access: `expr[propValue]`. */
+  dynamicArgUsage?: "memberAccess";
+};
+
+/** An entry that bails (returns undefined) for matched paths. */
+export type ThemeMappingBailEntry = {
+  bail: true;
+};
+
+/** A directional expansion entry for shorthand CSS properties. */
+export type ThemeMappingDirectionalEntry = {
+  directional: Array<{
+    /** camelCase CSS longhand property (e.g. `"paddingBlock"`) */
+    prop: string;
+    expr: string;
+    imports: ImportSpec[];
+  }>;
+  /** Only apply for these CSS property names. If omitted, matches any. */
+  cssProperties?: string[];
+};
+
+export type ThemeMappingValue =
+  | ThemeMappingResolveEntry
+  | ThemeMappingBailEntry
+  | ThemeMappingDirectionalEntry;
+
+/**
+ * Declarative theme path → StyleX token mapping.
+ *
+ * An ordered array of `[pattern, entry]` tuples. First match wins.
+ *
+ * Pattern syntax (matched against `ctx.path`):
+ * - Exact: `"color"` matches `ctx.path === "color"`
+ * - Prefix: `"color.*"` matches paths starting with `"color."`
+ * - Catch-all: `"*"` matches any path
+ *
+ * When `themeMapping` is set, the codemod checks it before calling `resolveValue`
+ * for `kind: "theme"` lookups. If no entry matches, `resolveValue` is called
+ * as the fallback.
+ */
+export type ThemeMapping = Array<[pattern: string, value: ThemeMappingValue]>;
+
 export type CallResolveResultWithExpr = {
   /**
    * JS expression string to inline into generated output.
@@ -631,6 +693,15 @@ export const DEFAULT_THEME_HOOK: ThemeHookConfig = {
 
 export interface Adapter {
   /**
+   * Optional declarative mapping for theme path resolution.
+   *
+   * When provided, the codemod checks this mapping before calling `resolveValue`
+   * for `kind: "theme"` lookups. If no entry matches, `resolveValue` is called
+   * as the fallback. See `ThemeMapping` for syntax.
+   */
+  themeMapping?: ThemeMapping;
+
+  /**
    * Resolver for theme paths + CSS variables + imported values.
    *
    * Return:
@@ -794,6 +865,7 @@ export interface Adapter {
  * are re-styled or used with the `as` prop.
  */
 export interface AdapterInput {
+  themeMapping?: Adapter["themeMapping"];
   resolveValue: Adapter["resolveValue"];
   resolveCall: Adapter["resolveCall"];
   resolveSelector: Adapter["resolveSelector"];

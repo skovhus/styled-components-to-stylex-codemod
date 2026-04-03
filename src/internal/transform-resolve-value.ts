@@ -15,6 +15,7 @@ import {
   type SelectorResolveResult,
 } from "../adapter.js";
 import type { WarningLog } from "./logger.js";
+import { resolveThemeFromMapping, THEME_MAPPING_NO_MATCH } from "./theme-mapping-resolver.js";
 
 export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: WarningLog[] }): {
   resolveValueSafe: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
@@ -45,6 +46,20 @@ export function createResolveAdapterSafe(args: { adapter: Adapter; warnings: War
     if (ctx.kind === "importedValue" && isStylexFileSource(ctx.source)) {
       return stylexImportPassthrough(ctx.importedName, ctx.source, ctx.path);
     }
+
+    // Declarative theme mapping: try static mapping before calling resolveValue
+    if (ctx.kind === "theme" && adapter.themeMapping) {
+      const mapped = resolveThemeFromMapping(adapter.themeMapping, ctx);
+      if (mapped !== THEME_MAPPING_NO_MATCH) {
+        // mapped is either a result or undefined (bail)
+        if (mapped === undefined) {
+          bailRef.value = true;
+        }
+        return mapped;
+      }
+      // No match — fall through to resolveValue
+    }
+
     const res = adapter.resolveValue(ctx);
     // `undefined` means bail/skip the file, except for cssVariable where it means "keep as-is"
     if (res === undefined && ctx.kind !== "cssVariable") {

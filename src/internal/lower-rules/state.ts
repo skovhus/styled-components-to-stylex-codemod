@@ -3,6 +3,7 @@
  * Core concepts: resolver wiring, precomputed mixin values, and shared tracking maps.
  */
 import { type ImportSource, isDirectionalResult } from "../../adapter.js";
+import { resolveThemeFromMapping, THEME_MAPPING_NO_MATCH } from "../theme-mapping-resolver.js";
 import type { InternalHandlerContext } from "../builtin-handlers/types.js";
 import type { TransformContext } from "../transform-context.js";
 import type { CrossFileSelectorUsage, StyledDecl } from "../transform-types.js";
@@ -53,6 +54,16 @@ export function createLowerRulesState(ctx: TransformContext) {
   // Non-bailing versions: call the adapter directly without triggering the global bail flag.
   // Used for speculative/optional resolution (e.g., prop-arg helper remapping, theme branch probing).
   const resolveValueOptional: InternalHandlerContext["resolveValueOptional"] = (rvCtx) => {
+    // Check declarative themeMapping first (same precedence as resolveValueCore)
+    if (rvCtx.kind === "theme" && ctx.adapter.themeMapping) {
+      const mapped = resolveThemeFromMapping(ctx.adapter.themeMapping, rvCtx);
+      if (mapped !== THEME_MAPPING_NO_MATCH) {
+        if (mapped && isDirectionalResult(mapped)) {
+          return undefined;
+        }
+        return mapped ?? undefined;
+      }
+    }
     const res = ctx.adapter.resolveValue(rvCtx);
     if (res && isDirectionalResult(res)) {
       return undefined;
