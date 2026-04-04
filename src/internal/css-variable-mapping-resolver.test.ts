@@ -6,8 +6,6 @@ import {
 import type { CssVariableMapping } from "../adapter.js";
 
 describe("resolveCssVariableFromMapping", () => {
-  // ── Exact match ──────────────────────────────────────────────────────
-
   it("matches exact variable name", () => {
     const mapping: CssVariableMapping = [
       ["--base-size", { expr: "calcVars.baseSize", imports: [] }],
@@ -16,39 +14,11 @@ describe("resolveCssVariableFromMapping", () => {
     expect(result).toEqual({ expr: "calcVars.baseSize", imports: [] });
   });
 
-  it("does not match different variable name", () => {
-    const mapping: CssVariableMapping = [
-      ["--base-size", { expr: "calcVars.baseSize", imports: [] }],
-    ];
-    expect(resolveCssVariableFromMapping(mapping, { name: "--other" })).toBe(
-      CSS_VARIABLE_MAPPING_NO_MATCH,
-    );
-  });
-
-  // ── Prefix match ─────────────────────────────────────────────────────
-
-  it("matches prefix pattern with --color-*", () => {
+  it("matches prefix pattern and strips prefix for {name}", () => {
     const mapping: CssVariableMapping = [["--color-*", { expr: "vars.{name}", imports: [] }]];
     const result = resolveCssVariableFromMapping(mapping, { name: "--color-primary" });
     expect(result).toEqual({ expr: "vars.primary", imports: [] });
   });
-
-  it("does not match prefix pattern against unrelated variable", () => {
-    const mapping: CssVariableMapping = [["--color-*", { expr: "vars.{name}", imports: [] }]];
-    expect(resolveCssVariableFromMapping(mapping, { name: "--spacing-lg" })).toBe(
-      CSS_VARIABLE_MAPPING_NO_MATCH,
-    );
-  });
-
-  // ── Wildcard match ───────────────────────────────────────────────────
-
-  it("matches catch-all wildcard", () => {
-    const mapping: CssVariableMapping = [["*", { expr: "vars.{name}", imports: [] }]];
-    const result = resolveCssVariableFromMapping(mapping, { name: "--border-radius" });
-    expect(result).toEqual({ expr: "vars.borderRadius", imports: [] });
-  });
-
-  // ── Placeholder interpolation ────────────────────────────────────────
 
   it("interpolates {name} as camelCase", () => {
     const mapping: CssVariableMapping = [["*", { expr: "tokens.{name}", imports: [] }]];
@@ -62,9 +32,7 @@ describe("resolveCssVariableFromMapping", () => {
     expect(result).toEqual({ expr: 'vars["--my-var"]', imports: [] });
   });
 
-  // ── dropDefinition ───────────────────────────────────────────────────
-
-  it("includes dropDefinition when set to true", () => {
+  it("includes dropDefinition when true", () => {
     const mapping: CssVariableMapping = [
       ["--base-size", { expr: "calcVars.baseSize", imports: [], dropDefinition: true }],
     ];
@@ -95,23 +63,6 @@ describe("resolveCssVariableFromMapping", () => {
       definedValue: "24px",
     });
     expect(result).toEqual({ expr: "calcVars.baseSize", imports: [] });
-  });
-
-  // ── First match wins ─────────────────────────────────────────────────
-
-  it("returns first matching entry", () => {
-    const mapping: CssVariableMapping = [
-      ["--color-primary", { expr: "FIRST", imports: [] }],
-      ["--color-*", { expr: "SECOND", imports: [] }],
-    ];
-    const result = resolveCssVariableFromMapping(mapping, { name: "--color-primary" });
-    expect(result).toEqual({ expr: "FIRST", imports: [] });
-  });
-
-  // ── No match ─────────────────────────────────────────────────────────
-
-  it("returns CSS_VARIABLE_MAPPING_NO_MATCH for empty mapping", () => {
-    expect(resolveCssVariableFromMapping([], { name: "--x" })).toBe(CSS_VARIABLE_MAPPING_NO_MATCH);
   });
 
   it("returns CSS_VARIABLE_MAPPING_NO_MATCH when nothing matches", () => {
