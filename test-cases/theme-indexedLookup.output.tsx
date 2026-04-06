@@ -16,8 +16,8 @@ function Box(props: BoxProps) {
     <div
       sx={[
         styles.box,
-        $colorMixins.backgroundColor[bg],
         styles.boxBackgroundColorHover(hoverColor),
+        $colorMixins.backgroundColor[bg],
       ]}
     >
       {children}

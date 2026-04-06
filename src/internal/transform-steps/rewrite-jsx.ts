@@ -404,6 +404,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build interleaved extra args based on mixinOrder (if available)
         const extraMixinArgs: ExpressionKind[] = [];
         const extraAfterBaseArgs: ExpressionKind[] = [];
+        const extraAfterVariantsArgs: ExpressionKind[] = [];
         if (mixinOrder && mixinOrder.length > 0) {
           let styleKeyIdx = 0;
           let propsArgIdx = 0;
@@ -426,7 +427,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const arg = extraStylexPropsArgs[propsArgIdx];
               propsArgIdx++;
               if (arg) {
-                if (arg.afterBase) {
+                if (arg.afterVariants) {
+                  extraAfterVariantsArgs.push(arg.expr);
+                } else if (arg.afterBase) {
                   extraAfterBaseArgs.push(arg.expr);
                 } else {
                   extraMixinArgs.push(arg.expr);
@@ -437,7 +440,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         } else {
           // Fallback: no order tracking, use legacy behavior (propsArgs first, then styleKeys)
           for (const arg of extraStylexPropsArgs) {
-            extraMixinArgs.push(arg.expr);
+            if (arg.afterVariants) {
+              extraAfterVariantsArgs.push(arg.expr);
+            } else {
+              extraMixinArgs.push(arg.expr);
+            }
           }
           for (const key of extraStyleKeys) {
             const expr = j.memberExpression(
@@ -756,6 +763,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         if (promotedMerge) {
           styleAttr = null;
         }
+
+        // Append afterVariants entries last — they must override all variant/attr styles.
+        styleArgs.push(...extraAfterVariantsArgs);
 
         // Build extra className expression from CSS module classes (if any).
         const extraClassNameExpr =

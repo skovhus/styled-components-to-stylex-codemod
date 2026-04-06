@@ -665,7 +665,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
           ) as ExpressionKind;
 
           decl.extraStylexPropsArgs ??= [];
-          decl.extraStylexPropsArgs.push({ expr: indexedExpr, afterBase: true });
+          decl.extraStylexPropsArgs.push({ expr: indexedExpr, afterVariants: true });
 
           // Track in mixinOrder for correct cascade interleaving with extraStyleKeys
           const order = decl.mixinOrder ?? [];
