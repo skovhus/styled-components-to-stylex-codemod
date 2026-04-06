@@ -112,4 +112,27 @@ const Wrapper = styled.div\`
     expect(stub).toContain('"OriginalComp');
     expect(stub).not.toMatch(/selectorMapping[\s\S]*"AliasedComp/);
   });
+
+  it("generates exact pattern for bare selector, wildcard for member-access selector", () => {
+    const file = writeFixture(
+      "bare-vs-member-selector.tsx",
+      `
+import styled from "styled-components";
+import { Icon } from "./icon";
+import { screenSize } from "./breakpoints";
+const Wrapper = styled.div\`
+  \${Icon} { color: red; }
+  @media \${screenSize.desktop} { padding: 8px; }
+\`;
+`,
+    );
+    const patterns = scanPatterns([file]);
+    expect(patterns.selectorInterpolations.get("Icon")?.hasMemberAccess).toBe(false);
+    expect(patterns.selectorInterpolations.get("screenSize")?.hasMemberAccess).toBe(true);
+
+    const stub = generateAdapterStub(patterns);
+    expect(stub).toContain('"Icon"');
+    expect(stub).not.toContain('"Icon.*"');
+    expect(stub).toContain('"screenSize.*"');
+  });
 });

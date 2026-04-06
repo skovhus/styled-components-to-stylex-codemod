@@ -267,10 +267,13 @@ ${entries}
 
 function selectorMappingSection(patterns: ScannedPatterns): string {
   const entries = sortedEntries(patterns.selectorInterpolations)
-    .map(
-      ([, entry]) =>
-        `    // TODO: ["${entry.importedName}.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],`,
-    )
+    .map(([, entry]) => {
+      const pattern = entry.hasMemberAccess ? `${entry.importedName}.*` : entry.importedName;
+      const example = entry.hasMemberAccess
+        ? `{ kind: "media", expr: "breakpoints.{property}", imports: [...] }`
+        : `{ kind: "pseudoAlias", values: [...], styleSelectorExpr: "...", imports: [...] }`;
+      return `    // TODO: ["${pattern}", ${example}],`;
+    })
     .join("\n");
   return `\
   /**
@@ -366,7 +369,7 @@ function sorted(set: Set<string>): string[] {
   return [...set].sort();
 }
 
-function sortedEntries(map: Map<string, ImportEntry>): [string, ImportEntry][] {
+function sortedEntries<T extends ImportEntry>(map: Map<string, T>): [string, T][] {
   return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 }
 

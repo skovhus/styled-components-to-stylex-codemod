@@ -231,9 +231,9 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
   if (themeMapping !== undefined && themeMapping !== null) {
     assertThemeMapping(themeMapping, where);
   }
-  assertOptionalTupleArray(obj?.cssVariableMapping, "cssVariableMapping", where);
-  assertOptionalTupleArray(obj?.callMapping, "callMapping", where);
-  assertOptionalTupleArray(obj?.selectorMapping, "selectorMapping", where);
+  assertOptionalTupleArray(obj?.cssVariableMapping, "cssVariableMapping", where, true);
+  assertOptionalTupleArray(obj?.callMapping, "callMapping", where, false);
+  assertOptionalTupleArray(obj?.selectorMapping, "selectorMapping", where, false);
 
   // Validate themeHook config (null/undefined or object with functionName/importSource)
   const themeHook = obj?.themeHook;
@@ -364,8 +364,13 @@ function assertThemeMapping(value: unknown, where: string): void {
   }
 }
 
-/** Validate that an optional mapping field is an array of [string, object] tuples. */
-function assertOptionalTupleArray(value: unknown, fieldName: string, where: string): void {
+/** Validate that an optional mapping field is an array of [string, entry] tuples. */
+function assertOptionalTupleArray(
+  value: unknown,
+  fieldName: string,
+  where: string,
+  allowFunctionEntries: boolean,
+): void {
   if (value === undefined || value === null) {
     return;
   }
@@ -384,10 +389,16 @@ function assertOptionalTupleArray(value: unknown, fieldName: string, where: stri
         `${where}: adapter.${fieldName}[${i}][0] (pattern) must be a non-empty string.`,
       );
     }
-    if (!item[1] || (typeof item[1] !== "object" && typeof item[1] !== "function")) {
-      throw new Error(
-        `${where}: adapter.${fieldName}[${i}][1] (entry) must be an object or function.`,
-      );
+    const entry = item[1];
+    if (typeof entry === "function") {
+      if (!allowFunctionEntries) {
+        throw new Error(
+          `${where}: adapter.${fieldName}[${i}][1] (entry) must be an object, not a function. Only cssVariableMapping supports function entries.`,
+        );
+      }
+    } else if (!entry || typeof entry !== "object") {
+      const expected = allowFunctionEntries ? "an object or function" : "an object";
+      throw new Error(`${where}: adapter.${fieldName}[${i}][1] (entry) must be ${expected}.`);
     }
   }
 }

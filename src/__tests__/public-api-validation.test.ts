@@ -118,4 +118,43 @@ describe("assertValidAdapterInput", () => {
       assertValidAdapterInput({ ...makeMinimalAdapter(), externalInterface: "nope" }, "test"),
     ).toThrow(/externalInterface/);
   });
+
+  it("allows function entries in cssVariableMapping", () => {
+    expect(() =>
+      assertValidAdapterInput(
+        {
+          ...makeMinimalAdapter(),
+          externalInterface: "auto",
+          cssVariableMapping: [["--color-*", () => ({ expr: "vars.x", imports: [] })]],
+        },
+        "test",
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects function entries in callMapping", () => {
+    expect(() =>
+      assertValidAdapterInput(
+        {
+          ...makeMinimalAdapter(),
+          externalInterface: "auto",
+          callMapping: [["helper", () => ({ expr: "x", imports: [] })]],
+        },
+        "test",
+      ),
+    ).toThrow(/must be an object, not a function.*Only cssVariableMapping/);
+  });
+
+  it("rejects function entries in selectorMapping", () => {
+    expect(() =>
+      assertValidAdapterInput(
+        {
+          ...makeMinimalAdapter(),
+          externalInterface: "auto",
+          selectorMapping: [["Component", () => ({ kind: "media", expr: "x", imports: [] })]],
+        },
+        "test",
+      ),
+    ).toThrow(/must be an object, not a function.*Only cssVariableMapping/);
+  });
 });
