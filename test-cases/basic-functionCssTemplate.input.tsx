@@ -1,3 +1,4 @@
+import "./cssVariable-basic.css";
 import styled, { css } from "styled-components";
 
 type Align = "left" | "right";

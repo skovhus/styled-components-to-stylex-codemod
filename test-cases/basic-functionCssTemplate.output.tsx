@@ -1,4 +1,5 @@
 import * as React from "react";
+import "./cssVariable-basic.css";
 import * as stylex from "@stylexjs/stylex";
 import { vars } from "./css-variables.stylex";
 
