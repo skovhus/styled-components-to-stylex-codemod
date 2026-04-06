@@ -793,9 +793,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
-        // sx prop requires at least one local stylex.create() reference so the
-        // StyleX compiler can verify and transform it. When all styles are external
-        // (e.g. only extraStylexPropsArgs mixin lookups), fall back to stylex.props().
+        // Prefer sx prop only when local stylex.create() references exist. When all
+        // styles are external (e.g. only mixin map lookups), the compiler bails out
+        // of static compilation and leaves stylex.props() as a runtime call anyway.
+        // Emitting stylex.props() directly avoids the unnecessary sx→stylex.props rewrite.
         const stylesId = ctx.stylesIdentifier ?? "styles";
         const hasLocalStyleRef = styleArgs.some(
           (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
