@@ -340,9 +340,15 @@ function scanTemplateForInterpolations(
       continue;
     }
 
-    // Helper function calls: ${fn(args)} or ${obj.method(args)}
-    if (expr.type === "CallExpression") {
-      const calleeName = getCalleeImportName(expr, importMap, styledName);
+    // Helper function calls: ${fn(args)}, ${obj.method(args)}, or ${(props) => fn(props.x)}
+    const callExpr =
+      expr.type === "CallExpression"
+        ? expr
+        : expr.type === "ArrowFunctionExpression"
+          ? findCallInArrowBody(expr.body as AstNode | undefined)
+          : undefined;
+    if (callExpr) {
+      const calleeName = getCalleeImportName(callExpr, importMap, styledName);
       if (calleeName) {
         const entry = importMap.get(calleeName);
         if (entry && entry.source !== "styled-components") {
@@ -388,6 +394,29 @@ function scanForStyledWrappers(
 }
 
 /* ── Low-level helpers ────────────────────────────────────────────────── */
+
+/** Find a CallExpression in an arrow function body (expression body or return statement). */
+function findCallInArrowBody(body: AstNode | undefined): AstNode | undefined {
+  if (!body) {
+    return undefined;
+  }
+  if (body.type === "CallExpression") {
+    return body;
+  }
+  // Block body: look for a return statement with a call
+  if (body.type === "BlockStatement") {
+    const stmts = (body.body as AstNode[] | undefined) ?? [];
+    for (const stmt of stmts) {
+      if (stmt.type === "ReturnStatement") {
+        const arg = stmt.argument as AstNode | undefined;
+        if (arg?.type === "CallExpression") {
+          return arg;
+        }
+      }
+    }
+  }
+  return undefined;
+}
 
 /** Get the argument of styled(X) from a tag expression (handles .attrs() chain). */
 function getStyledCallArg(tag: AstNode | undefined, styledName: string): AstNode | undefined {

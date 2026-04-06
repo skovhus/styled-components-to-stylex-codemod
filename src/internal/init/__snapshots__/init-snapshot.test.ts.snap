@@ -124,18 +124,22 @@ export const adapter = defineAdapter({
    * Entry types: { expr, imports } | { preserveRuntimeCall: true } | { extraClassNames: [...] }
    */
   callMapping: [
+    // TODO: ["borderByColor", { expr: "helpers.borderByColor", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["color", { expr: "helpers.color", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["ColorConverter", { expr: "helpers.ColorConverter", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["draggableRegion", { expr: "helpers.draggableRegion", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["flexCenter", { expr: "helpers.flexCenter", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["fontSize", { expr: "helpers.fontSize", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["fontWeight", { expr: "helpers.fontWeight", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["gradient", { expr: "helpers.gradient", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["scrollFadeMaskStyles", { expr: "helpers.scrollFadeMaskStyles", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["shadow", { expr: "helpers.shadow", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["themedBorder", { expr: "helpers.themedBorder", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["thinBorder", { expr: "helpers.thinBorder", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["thinPixel", { expr: "helpers.thinPixel", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["transitionSpeed", { expr: "helpers.transitionSpeed", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
     // TODO: ["truncate", { expr: "helpers.truncate", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
+    // TODO: ["truncateMultiline", { expr: "helpers.truncateMultiline", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],
   ],
 
   /**
@@ -144,7 +148,7 @@ export const adapter = defineAdapter({
    * Entry types: { kind: "media", expr, imports } | { kind: "pseudoAlias", ... } | { kind: "pseudoExpand", ... }
    */
   selectorMapping: [
-    // TODO: ["Arrow.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["CrossFileIcon.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
     // TODO: ["CollapseArrowIconGlobalSelector.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
     // TODO: ["CrossFileIcon.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
     // TODO: ["CrossFileLink.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
@@ -275,19 +279,23 @@ CSS variables (16):
   - --sticky-top
   ... and 1 more
 
-Helper functions called in interpolations (12):
+Helper functions called in interpolations (16):
+  - borderByColor (from "./lib/helpers")
   - color (from "./lib/helpers")
+  - ColorConverter (from "./lib/helpers")
   - draggableRegion (from "./lib/helpers")
   - flexCenter (from "./lib/helpers")
   - fontSize (from "./lib/helpers")
   - fontWeight (from "./lib/helpers")
   - gradient (from "./lib/helpers")
   - scrollFadeMaskStyles (from "./lib/helpers")
+  - shadow (from "./lib/helpers")
   - themedBorder (from "./lib/helpers")
   - thinBorder (from "./lib/helpers")
   - thinPixel (from "./lib/helpers")
   - transitionSpeed (from "./lib/helpers")
   - truncate (from "./lib/helpers")
+  - truncateMultiline (from "./lib/helpers")
 
 Selector interpolations (5):
   - \${Arrow} (from "./lib/cross-file-icon.styled")
@@ -312,7 +320,7 @@ useTheme() hook usage detected
 Declarative mappings:
   - themeMapping: 8 theme root(s)
   - cssVariableMapping: 16 variable(s)
-  - callMapping: 12 helper(s)
+  - callMapping: 16 helper(s)
   - selectorMapping: 5 selector(s)
 
 Hooks (fallback for patterns not covered by declarative mappings):
@@ -346,6 +354,14 @@ exports[`init against test-cases > scanned patterns snapshot 1`] = `
   "hasIndexedThemeLookup": true,
   "hasUseTheme": true,
   "helperCalls": {
+    "ColorConverter": {
+      "importedName": "ColorConverter",
+      "source": "./lib/helpers",
+    },
+    "borderByColor": {
+      "importedName": "borderByColor",
+      "source": "./lib/helpers",
+    },
     "color": {
       "importedName": "color",
       "source": "./lib/helpers",
@@ -374,6 +390,10 @@ exports[`init against test-cases > scanned patterns snapshot 1`] = `
       "importedName": "scrollFadeMaskStyles",
       "source": "./lib/helpers",
     },
+    "shadow": {
+      "importedName": "shadow",
+      "source": "./lib/helpers",
+    },
     "themedBorder": {
       "importedName": "themedBorder",
       "source": "./lib/helpers",
@@ -392,6 +412,10 @@ exports[`init against test-cases > scanned patterns snapshot 1`] = `
     },
     "truncate": {
       "importedName": "truncate",
+      "source": "./lib/helpers",
+    },
+    "truncateMultiline": {
+      "importedName": "truncateMultiline",
       "source": "./lib/helpers",
     },
   },

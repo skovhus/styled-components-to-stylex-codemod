@@ -248,8 +248,8 @@ ${entries}${more}
 function callMappingSection(patterns: ScannedPatterns): string {
   const entries = sortedEntries(patterns.helperCalls)
     .map(
-      ([n]) =>
-        `    // TODO: ["${n}", { expr: "helpers.${n}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],`,
+      ([, entry]) =>
+        `    // TODO: ["${entry.importedName}", { expr: "helpers.${entry.importedName}", imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "helpers" }] }] }],`,
     )
     .join("\n");
   return `\
@@ -268,8 +268,8 @@ ${entries}
 function selectorMappingSection(patterns: ScannedPatterns): string {
   const entries = sortedEntries(patterns.selectorInterpolations)
     .map(
-      ([n]) =>
-        `    // TODO: ["${n}.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],`,
+      ([, entry]) =>
+        `    // TODO: ["${entry.importedName}.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],`,
     )
     .join("\n");
   return `\
