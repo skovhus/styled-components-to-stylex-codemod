@@ -28,9 +28,6 @@ export function matchPattern(pattern: string, key: string): PatternMatch | null 
     if (key.startsWith(prefix + ".")) {
       return { property: key.slice(prefix.length + 1) };
     }
-    if (key === prefix) {
-      return { property: "" };
-    }
     return null;
   }
   if (key === pattern) {

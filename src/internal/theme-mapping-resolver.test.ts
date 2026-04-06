@@ -32,10 +32,9 @@ describe("resolveThemeFromMapping", () => {
     expect(result).toEqual({ expr: "$colors.labelBase", imports: [] });
   });
 
-  it("matches prefix pattern against exact prefix (empty property)", () => {
+  it("does not match prefix pattern against bare prefix (requires descendant)", () => {
     const mapping: ThemeMapping = [["color.*", { expr: "$colors.{property}", imports: [] }]];
-    const result = resolveThemeFromMapping(mapping, { path: "color" });
-    expect(result).toEqual({ expr: "$colors.", imports: [] });
+    expect(resolveThemeFromMapping(mapping, { path: "color" })).toBe(THEME_MAPPING_NO_MATCH);
   });
 
   it("does not match prefix pattern against unrelated path", () => {
