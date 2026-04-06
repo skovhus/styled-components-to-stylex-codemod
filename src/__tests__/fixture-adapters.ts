@@ -201,12 +201,9 @@ export const fixtureAdapter = defineAdapter({
       { expr: "calcVars.baseSize", importFrom: "./css-calc.stylex", dropDefinition: "16px" },
     ],
     ["--font-weight-medium", { expr: "fontWeightVars.medium", importFrom: TOKENS }],
-    // Function-based wildcard: --color-* → vars.{camelCase}
+    // Function-based wildcards: --color-* / --spacing-* → vars.{camelCase}
     ["--color-*", (name) => ({ expr: `vars.${name}`, importFrom: "./css-variables.stylex" })],
-    // Individual spacing/border entries (not wildcarded — other --spacing-* vars are unmapped)
-    ["--spacing-sm", { expr: "vars.spacingSm", importFrom: "./css-variables.stylex" }],
-    ["--spacing-md", { expr: "vars.spacingMd", importFrom: "./css-variables.stylex" }],
-    ["--spacing-lg", { expr: "vars.spacingLg", importFrom: "./css-variables.stylex" }],
+    ["--spacing-*", (name) => ({ expr: `vars.${name}`, importFrom: "./css-variables.stylex" })],
     ["--border-radius", { expr: "vars.borderRadius", importFrom: "./css-variables.stylex" }],
   ],
 

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { vars } from "./css-variables.stylex";
 
 type Align = "left" | "right";
 
@@ -50,7 +51,7 @@ export const App = () => (
 const styles = stylex.create({
   flexContainer: {
     display: "flex",
-    gap: "var(--spacing-xxs)",
+    gap: vars.spacingXxs,
     overflow: "hidden",
     whiteSpace: "nowrap",
     position: "relative",
