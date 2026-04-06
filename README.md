@@ -20,28 +20,81 @@ Use `runTransform` to transform files matching a glob pattern:
 import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
 
 const adapter = defineAdapter({
-  // Map theme paths and CSS variables to StyleX expressions
+  // Declarative mappings — data-driven [pattern, entry] tuples (first match wins)
+  themeMapping: [
+    [
+      "color.*",
+      {
+        expr: "$colors.{property}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$colors" }],
+          },
+        ],
+      },
+    ],
+  ],
+  callMapping: [
+    [
+      "truncate",
+      {
+        expr: "helpers.truncate",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./helpers.stylex" },
+            names: [{ imported: "helpers" }],
+          },
+        ],
+        usage: "props",
+      },
+    ],
+  ],
+  cssVariableMapping: [
+    [
+      "--color-*",
+      {
+        expr: "$colors.{name}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$colors" }],
+          },
+        ],
+      },
+    ],
+  ],
+  selectorMapping: [
+    [
+      "screenSize.*",
+      {
+        kind: "media",
+        expr: "breakpoints.{property}",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./breakpoints.stylex" },
+            names: [{ imported: "breakpoints" }],
+          },
+        ],
+      },
+    ],
+  ],
+  // Imperative fallback hooks — for patterns that need runtime logic
   resolveValue(ctx) {
     return null;
   },
-  // Map helper function calls to StyleX expressions
   resolveCall(ctx) {
     return null;
+  },
+  resolveSelector(ctx) {
+    return undefined;
   },
   // Control which components accept external className/style and polymorphic `as`
   externalInterface(ctx) {
     return { style: false, as: false };
   },
-  // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
-  // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
   useSxProp: false,
-  // Optional: customize the runtime theme hook import/call used for theme conditionals
-  // Defaults to { functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }
-  themeHook: {
-    functionName: "useTheme",
-    importSource: { kind: "specifier", value: "styled-components" },
-  },
 });
 
 await runTransform({
@@ -66,16 +119,22 @@ console.log(summary); // what was detected
 // adapterSource contains a ready-to-edit adapter file
 ```
 
-The generated adapter includes inline docs for every hook. Key hooks:
+The generated adapter includes inline docs for every hook. Key options:
 
-- `themeMapping` — declarative theme path → StyleX token mapping (first match wins)
-- `resolveValue` — fallback for theme paths, CSS variables, imported values
-- `resolveCall` — map helper function calls to StyleX expressions
-- `resolveSelector` — map interpolated selectors
-- `resolveBaseComponent` — inline `styled(Component)` into intrinsic elements
-- `externalInterface` — control className/style/as prop support
-- `styleMerger` — custom className/style merging helper
-- `themeHook` — runtime theme hook configuration
+- **Declarative mappings** (preferred — data-driven `[pattern, entry]` tuples, first match wins):
+  - `themeMapping` — theme paths → StyleX token expressions
+  - `callMapping` — helper function calls → StyleX expressions
+  - `cssVariableMapping` — CSS variable names → StyleX expressions
+  - `selectorMapping` — interpolated selectors → media/pseudo mappings
+- **Imperative hooks** (fallback for patterns needing runtime logic):
+  - `resolveValue` — fallback for theme/cssVariable/importedValue lookups
+  - `resolveCall` — fallback for helper call resolution
+  - `resolveSelector` — fallback for selector interpolation resolution
+- **Other options**:
+  - `resolveBaseComponent` — inline `styled(Component)` into intrinsic elements
+  - `externalInterface` — control className/style/as prop support
+  - `styleMerger` — custom className/style merging helper
+  - `themeHook` — runtime theme hook configuration
 
 #### Cross-file selectors (`consumerPaths`)
 

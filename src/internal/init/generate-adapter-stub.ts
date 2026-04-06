@@ -110,7 +110,7 @@ export function generateSummary(patterns: ScannedPatterns): string {
     parts.push(`  - selectorMapping: ${patterns.selectorInterpolations.size} selector(s)`);
   }
   parts.push("");
-  parts.push("Imperative hooks (fallback):");
+  parts.push("Hooks (fallback for patterns not covered by declarative mappings):");
   parts.push(`  - resolveValue: ${describeResolveValueNeeds(patterns)}`);
   parts.push("  - externalInterface: needs configuration");
   if (patterns.hasUseTheme) {

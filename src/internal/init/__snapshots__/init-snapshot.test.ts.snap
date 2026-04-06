@@ -315,7 +315,7 @@ Declarative mappings:
   - callMapping: 12 helper(s)
   - selectorMapping: 5 selector(s)
 
-Imperative hooks (fallback):
+Hooks (fallback for patterns not covered by declarative mappings):
   - resolveValue: 8 theme root(s), 16 CSS variable(s), 9 imported value(s)
   - externalInterface: needs configuration
   - themeHook: useTheme detected"

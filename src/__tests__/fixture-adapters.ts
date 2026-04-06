@@ -160,8 +160,7 @@ export const fixtureAdapter = defineAdapter({
     };
   },
 
-  // Declarative theme mapping — replaces the imperative resolveValue theme branch.
-  // Evaluated in order; first match wins.
+  // Declarative theme mapping — first match wins.
   themeMapping: [
     // Shorthand expansion: theme.inputPadding + CSS "padding" → paddingBlock/paddingInline
     [
@@ -238,7 +237,7 @@ export const fixtureAdapter = defineAdapter({
     ],
   ],
 
-  // Declarative CSS variable mapping — replaces the imperative resolveValue cssVariable branch.
+  // Declarative CSS variable mapping.
   cssVariableMapping: [
     [
       "--base-size",
@@ -332,8 +331,7 @@ export const fixtureAdapter = defineAdapter({
   ],
 
   resolveValue(ctx) {
-    // Theme lookups handled by themeMapping; CSS variables handled by cssVariableMapping.
-    // resolveValue now only handles importedValue.
+    // Only importedValue needs imperative handling; theme and cssVariable use declarative mappings.
 
     if (ctx.kind === "importedValue") {
       const source = ctx.source.value;
@@ -438,7 +436,7 @@ export const fixtureAdapter = defineAdapter({
     ["getRowHighlightColor", { preserveRuntimeCall: true }],
   ],
 
-  // Imperative fallback for exotic call patterns that need arg inspection
+  // Fallback for exotic call patterns that need arg inspection.
   resolveCall(ctx) {
     const src = ctx.calleeSource.value;
     if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
@@ -554,7 +552,7 @@ export const fixtureAdapter = defineAdapter({
     ],
   ],
 
-  // Imperative fallback — no exotic selector patterns currently needed
+  // All selector patterns handled declaratively above.
   resolveSelector(_ctx) {
     return undefined;
   },
