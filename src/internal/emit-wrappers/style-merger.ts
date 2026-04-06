@@ -174,8 +174,12 @@ export function emitStyleMerging(args: {
     !staticClassNameExpr
   ) {
     // When useSxProp is enabled, emit sx={expr} instead of {...stylex.props(expr)}
-    // Only valid on intrinsic elements (the StyleX babel plugin only processes lowercase tags)
-    if (emitter.useSxProp && isIntrinsicElement) {
+    // Only valid on intrinsic elements (the StyleX babel plugin only processes lowercase tags).
+    // sx requires at least one local styles.* reference for the compiler to recognize;
+    // fall back to stylex.props() when all styles are external (e.g. mixin map lookups).
+    const sid = emitter.stylesIdentifier;
+    const hasLocalRef = styleArgs.some((a) => j([a]).find(j.Identifier, { name: sid }).size() > 0);
+    if (emitter.useSxProp && isIntrinsicElement && hasLocalRef) {
       const sxExpr =
         styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
       return {

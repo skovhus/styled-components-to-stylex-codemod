@@ -34,7 +34,7 @@ export function ThemeSpan(
 ) {
   const { children, variant, ...rest } = props;
   return (
-    <span {...rest} sx={$colorMixins.color[variant]}>
+    <span {...rest} {...stylex.props($colorMixins.color[variant])}>
       {children}
     </span>
   );

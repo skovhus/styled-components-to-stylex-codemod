@@ -46,7 +46,7 @@ export function TextColor(
 ) {
   const { children, color, ...rest } = props;
   return (
-    <span {...rest} sx={$colorMixins.color[color]}>
+    <span {...rest} {...stylex.props($colorMixins.color[color])}>
       {children}
     </span>
   );
