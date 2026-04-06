@@ -32,9 +32,12 @@ export interface ScannedPatterns {
   /** Imported helper functions called inside template interpolations:
    *  Map<localName, { source, importedName }> */
   helperCalls: Map<string, { source: string; importedName: string }>;
-  /** Imported identifiers used as selectors (bare `${Component}` in selector context):
-   *  Map<localName, { source, importedName }> */
-  selectorInterpolations: Map<string, { source: string; importedName: string }>;
+  /** Imported identifiers used as selectors in selector context:
+   *  Map<localName, { source, importedName, hasMemberAccess }> */
+  selectorInterpolations: Map<
+    string,
+    { source: string; importedName: string; hasMemberAccess: boolean }
+  >;
   /** Imported components wrapped with styled(): Map<localName, { source, importedName }> */
   styledWrappers: Map<string, { source: string; importedName: string }>;
   /** Whether `useTheme` (or aliased) is imported from styled-components */
@@ -365,7 +368,12 @@ function scanTemplateForInterpolations(
         const before = getQuasiRaw(quasis[i]);
         const after = getQuasiRaw(quasis[i + 1]);
         if (before !== undefined && after !== undefined && isSelectorContext(before, after)) {
-          result.selectorInterpolations.set(selectorName, entry);
+          const isMemberAccess = expr.type === "MemberExpression";
+          const existing = result.selectorInterpolations.get(selectorName);
+          result.selectorInterpolations.set(selectorName, {
+            ...entry,
+            hasMemberAccess: isMemberAccess || (existing?.hasMemberAccess ?? false),
+          });
         }
       }
     }

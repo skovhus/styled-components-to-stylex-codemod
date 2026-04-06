@@ -148,10 +148,10 @@ export const adapter = defineAdapter({
    * Entry types: { kind: "media", expr, imports } | { kind: "pseudoAlias", ... } | { kind: "pseudoExpand", ... }
    */
   selectorMapping: [
-    // TODO: ["CrossFileIcon.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
-    // TODO: ["CollapseArrowIconGlobalSelector.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
-    // TODO: ["CrossFileIcon.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
-    // TODO: ["CrossFileLink.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
+    // TODO: ["CrossFileIcon", { kind: "pseudoAlias", values: [...], styleSelectorExpr: "...", imports: [...] }],
+    // TODO: ["CollapseArrowIconGlobalSelector", { kind: "pseudoAlias", values: [...], styleSelectorExpr: "...", imports: [...] }],
+    // TODO: ["CrossFileIcon", { kind: "pseudoAlias", values: [...], styleSelectorExpr: "...", imports: [...] }],
+    // TODO: ["CrossFileLink", { kind: "pseudoAlias", values: [...], styleSelectorExpr: "...", imports: [...] }],
     // TODO: ["screenSize.*", { kind: "media", expr: "breakpoints.{property}", imports: [...] }],
   ],
 
@@ -421,22 +421,27 @@ exports[`init against test-cases > scanned patterns snapshot 1`] = `
   },
   "selectorInterpolations": {
     "Arrow": {
+      "hasMemberAccess": false,
       "importedName": "CrossFileIcon",
       "source": "./lib/cross-file-icon.styled",
     },
     "CollapseArrowIconGlobalSelector": {
+      "hasMemberAccess": false,
       "importedName": "CollapseArrowIconGlobalSelector",
       "source": "./lib/converted-collapse-icon",
     },
     "CrossFileIcon": {
+      "hasMemberAccess": false,
       "importedName": "CrossFileIcon",
       "source": "./lib/cross-file-icon.styled",
     },
     "CrossFileLink": {
+      "hasMemberAccess": false,
       "importedName": "CrossFileLink",
       "source": "./lib/cross-file-icon.styled",
     },
     "screenSize": {
+      "hasMemberAccess": true,
       "importedName": "screenSize",
       "source": "./lib/helpers",
     },

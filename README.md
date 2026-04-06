@@ -12,90 +12,23 @@ npm install styled-components-to-stylex-codemod
 pnpm add styled-components-to-stylex-codemod
 ```
 
-## Usage
+## Quick start
 
-Use `runTransform` to transform files matching a glob pattern:
+The fastest way to get started is to generate an adapter scaffold from your codebase:
 
 ```ts
-import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
+import { runInit } from "styled-components-to-stylex-codemod";
 
-const adapter = defineAdapter({
-  // Declarative mappings — data-driven [pattern, entry] tuples (first match wins)
-  themeMapping: [
-    [
-      "color.*",
-      {
-        expr: "$colors.{property}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
-      },
-    ],
-  ],
-  callMapping: [
-    [
-      "truncate",
-      {
-        expr: "helpers.truncate",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./helpers.stylex" },
-            names: [{ imported: "helpers" }],
-          },
-        ],
-        usage: "props",
-      },
-    ],
-  ],
-  cssVariableMapping: [
-    [
-      "--color-*",
-      {
-        expr: "$colors.{name}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
-      },
-    ],
-  ],
-  selectorMapping: [
-    [
-      "screenSize.*",
-      {
-        kind: "media",
-        expr: "breakpoints.{property}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./breakpoints.stylex" },
-            names: [{ imported: "breakpoints" }],
-          },
-        ],
-      },
-    ],
-  ],
-  // Imperative fallback hooks — for patterns that need runtime logic
-  resolveValue(ctx) {
-    return null;
-  },
-  resolveCall(ctx) {
-    return null;
-  },
-  resolveSelector(ctx) {
-    return undefined;
-  },
-  // Control which components accept external className/style and polymorphic `as`
-  externalInterface(ctx) {
-    return { style: false, as: false };
-  },
-  styleMerger: null,
-  useSxProp: false,
-});
+const { adapterSource, summary } = await runInit({ files: "src/**/*.tsx" });
+console.log(summary); // what was detected
+// adapterSource contains a ready-to-edit adapter file with TODO placeholders
+```
+
+Fill in the TODOs to map your theme tokens, helpers, and selectors to StyleX equivalents, then run the transform:
+
+```ts
+import { runTransform } from "styled-components-to-stylex-codemod";
+import { adapter } from "./my-adapter"; // the file you just generated
 
 await runTransform({
   files: "src/**/*.tsx",
@@ -107,19 +40,38 @@ await runTransform({
 });
 ```
 
+For a complete real-world adapter example, see the [fixture adapter](src/__tests__/fixture-adapters.ts) used by the test suite.
+
+## Usage
+
 ### Adapter
 
-Adapters map your project's theme tokens, helper functions, and component patterns to StyleX equivalents. Use `runInit` to scan your codebase and generate a starter adapter with TODO placeholders:
+Adapters map your project's theme tokens, helper functions, and component patterns to StyleX equivalents. You can generate one with `runInit` (see [Quick start](#quick-start)) or write one manually with `defineAdapter`:
 
 ```ts
-import { runInit } from "styled-components-to-stylex-codemod";
+import { defineAdapter } from "styled-components-to-stylex-codemod";
 
-const { adapterSource, summary } = await runInit({ files: "src/**/*.tsx" });
-console.log(summary); // what was detected
-// adapterSource contains a ready-to-edit adapter file
+const adapter = defineAdapter({
+  themeMapping: [["color.*", { expr: "$colors.{property}", importFrom: "./tokens.stylex" }]],
+  cssVariableMapping: [["--color-*", { expr: "$colors.{name}", importFrom: "./tokens.stylex" }]],
+  resolveValue(ctx) {
+    return null;
+  },
+  resolveCall(ctx) {
+    return null;
+  },
+  resolveSelector(ctx) {
+    return undefined;
+  },
+  externalInterface(ctx) {
+    return { style: false, as: false };
+  },
+  styleMerger: null,
+  useSxProp: false,
+});
 ```
 
-The generated adapter includes inline docs for every hook. Key options:
+Key options:
 
 - **Declarative mappings** (preferred — data-driven `[pattern, entry]` tuples, first match wins):
   - `themeMapping` — theme paths → StyleX token expressions

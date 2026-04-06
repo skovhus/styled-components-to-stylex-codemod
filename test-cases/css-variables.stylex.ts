@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 export const vars = stylex.defineVars({
   colorPrimary: "#BF4F74",
   colorSecondary: "#4F74BF",
+  spacingXxs: "4px",
   spacingSm: "8px",
   spacingMd: "16px",
   spacingLg: "24px",
