@@ -14,14 +14,16 @@ import {
   type SelectorResolveResult,
 } from "../adapter.ts";
 
-/* ── Shared import specs ─────────────────────────────────────────────── */
+/* ── Shared import sources ──────────────────────────────────────────── */
 
-const TOKENS = (names: Array<{ imported: string; local?: string }>): ImportSpec[] => [
-  { from: { kind: "specifier", value: "./tokens.stylex" }, names },
-];
-const HELPERS_STYLEX = (names: Array<{ imported: string; local?: string }>): ImportSpec[] => [
-  { from: { kind: "specifier", value: "./lib/helpers.stylex" }, names },
-];
+const TOKENS = "./tokens.stylex";
+const HELPERS_STYLEX = "./lib/helpers.stylex";
+
+/** Build explicit ImportSpec — only needed for imperative resolvers or non-standard import names. */
+const importSpec = (
+  from: string,
+  names: Array<{ imported: string; local?: string }>,
+): ImportSpec[] => [{ from: { kind: "specifier", value: from }, names }];
 
 /** Broad consumer props — shorthand for when all element-level flags are enabled. */
 const BROAD_CONSUMER_PROPS = {
@@ -167,26 +169,8 @@ export const fixtureAdapter = defineAdapter({
       "inputPadding",
       {
         directional: [
-          {
-            prop: "paddingBlock",
-            expr: "$input.inputPaddingBlock",
-            imports: [
-              {
-                from: { kind: "specifier", value: "./tokens.stylex" },
-                names: [{ imported: "$input" }],
-              },
-            ],
-          },
-          {
-            prop: "paddingInline",
-            expr: "$input.inputPaddingInline",
-            imports: [
-              {
-                from: { kind: "specifier", value: "./tokens.stylex" },
-                names: [{ imported: "$input" }],
-              },
-            ],
-          },
+          { prop: "paddingBlock", expr: "$input.inputPaddingBlock", importFrom: TOKENS },
+          { prop: "paddingInline", expr: "$input.inputPaddingInline", importFrom: TOKENS },
         ],
         cssProperties: ["padding"],
       },
@@ -201,133 +185,29 @@ export const fixtureAdapter = defineAdapter({
         usage: "props",
         dynamicArgUsage: "memberAccess",
         expr: "$colorMixins.{cssProperty}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/colorMixins.stylex" },
-            names: [{ imported: "$colorMixins" }],
-          },
-        ],
+        importFrom: "./lib/colorMixins.stylex",
       },
     ],
     // Object-level: theme.color → $colors
-    [
-      "color",
-      {
-        expr: "$colors",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
-      },
-    ],
+    ["color", { expr: "$colors", importFrom: TOKENS }],
     // Catch-all: theme.X.Y → $colors.Y (uses last segment as property)
-    [
-      "*",
-      {
-        expr: "$colors.{property}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./tokens.stylex" },
-            names: [{ imported: "$colors" }],
-          },
-        ],
-      },
-    ],
+    ["*", { expr: "$colors.{property}", importFrom: TOKENS }],
   ],
 
   // Declarative CSS variable mapping.
   cssVariableMapping: [
     [
       "--base-size",
-      {
-        expr: "calcVars.baseSize",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-calc.stylex" },
-            names: [{ imported: "calcVars" }],
-          },
-        ],
-        dropDefinition: "16px",
-      },
+      { expr: "calcVars.baseSize", importFrom: "./css-calc.stylex", dropDefinition: "16px" },
     ],
-    [
-      "--color-primary",
-      {
-        expr: "vars.colorPrimary",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--color-secondary",
-      {
-        expr: "vars.colorSecondary",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--spacing-sm",
-      {
-        expr: "vars.spacingSm",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--spacing-md",
-      {
-        expr: "vars.spacingMd",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--spacing-lg",
-      {
-        expr: "vars.spacingLg",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--border-radius",
-      {
-        expr: "vars.borderRadius",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./css-variables.stylex" },
-            names: [{ imported: "vars" }],
-          },
-        ],
-      },
-    ],
-    [
-      "--font-weight-medium",
-      { expr: "fontWeightVars.medium", imports: TOKENS([{ imported: "fontWeightVars" }]) },
-    ],
+    ["--font-weight-medium", { expr: "fontWeightVars.medium", importFrom: TOKENS }],
+    // Function-based wildcard: --color-* → vars.{camelCase}
+    ["--color-*", (name) => ({ expr: `vars.${name}`, importFrom: "./css-variables.stylex" })],
+    // Individual spacing/border entries (not wildcarded — other --spacing-* vars are unmapped)
+    ["--spacing-sm", { expr: "vars.spacingSm", importFrom: "./css-variables.stylex" }],
+    ["--spacing-md", { expr: "vars.spacingMd", importFrom: "./css-variables.stylex" }],
+    ["--spacing-lg", { expr: "vars.spacingLg", importFrom: "./css-variables.stylex" }],
+    ["--border-radius", { expr: "vars.borderRadius", importFrom: "./css-variables.stylex" }],
   ],
 
   resolveValue(ctx) {
@@ -342,21 +222,21 @@ export const fixtureAdapter = defineAdapter({
         const path = ctx.path ?? "";
         return {
           expr: path ? `$zIndex.${path}` : "$zIndex",
-          imports: TOKENS([{ imported: "$zIndex" }]),
+          imports: importSpec(TOKENS, [{ imported: "$zIndex" }]),
         };
       }
       if (ctx.importedName === "config") {
         const path = ctx.path ?? "";
         return {
           expr: path ? `$config["${path}"]` : "$config",
-          imports: TOKENS([{ imported: "$config" }]),
+          imports: importSpec(TOKENS, [{ imported: "$config" }]),
         };
       }
       if (ctx.importedName === "TruncateText") {
         return {
           usage: "props",
           expr: "helpers.truncate",
-          imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+          imports: importSpec(HELPERS_STYLEX, [{ imported: "helpers" }]),
         };
       }
     }
@@ -365,19 +245,16 @@ export const fixtureAdapter = defineAdapter({
   },
   // Declarative call mapping — handles simple helper patterns declaratively.
   callMapping: [
-    // CSS module className injection
+    // CSS module className injection (needs explicit imports for `default` → `electronStyles` rename)
     [
       "draggableRegion",
       {
         extraClassNames: [
           {
             expr: "electronStyles.draggableRegionDisableChildren",
-            imports: [
-              {
-                from: { kind: "specifier", value: "./lib/electronMixins.module.css" },
-                names: [{ imported: "default", local: "electronStyles" }],
-              },
-            ],
+            imports: importSpec("./lib/electronMixins.module.css", [
+              { imported: "default", local: "electronStyles" },
+            ]),
           },
         ],
       },
@@ -389,7 +266,7 @@ export const fixtureAdapter = defineAdapter({
         usage: "props",
         expr: "helpers.truncate",
         cssText: "white-space: nowrap; overflow: hidden; text-overflow: ellipsis;",
-        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+        importFrom: HELPERS_STYLEX,
       },
     ],
     [
@@ -398,7 +275,7 @@ export const fixtureAdapter = defineAdapter({
         usage: "props",
         expr: "helpers.flexCenter",
         cssText: "display: flex; align-items: center; justify-content: center;",
-        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+        importFrom: HELPERS_STYLEX,
       },
     ],
     [
@@ -407,30 +284,17 @@ export const fixtureAdapter = defineAdapter({
         usage: "props",
         expr: "helpers.gradient",
         cssText: "background-image: linear-gradient(90deg, #ff6b6b, #5f6cff); color: transparent;",
-        imports: HELPERS_STYLEX([{ imported: "helpers" }]),
+        importFrom: HELPERS_STYLEX,
       },
     ],
     // Simple CSS value token accessors
-    ["thinPixel", { expr: "pixelVars.thin", imports: TOKENS([{ imported: "pixelVars" }]) }],
-    ["color", { expr: "$colors.{arg0}", imports: TOKENS([{ imported: "$colors" }]) }],
-    [
-      "fontWeight",
-      { expr: "fontWeightVars.{arg0}", imports: TOKENS([{ imported: "fontWeightVars" }]) },
-    ],
-    ["fontSize", { expr: "fontSizeVars.{arg0}", imports: TOKENS([{ imported: "fontSizeVars" }]) }],
-    [
-      "transitionSpeed",
-      { expr: "transitionSpeed.{arg0}", imports: TOKENS([{ imported: "transitionSpeed" }]) },
-    ],
+    ["thinPixel", { expr: "pixelVars.thin", importFrom: TOKENS }],
+    ["color", { expr: "$colors.{arg0}", importFrom: TOKENS }],
+    ["fontWeight", { expr: "fontWeightVars.{arg0}", importFrom: TOKENS }],
+    ["fontSize", { expr: "fontSizeVars.{arg0}", importFrom: TOKENS }],
+    ["transitionSpeed", { expr: "transitionSpeed.{arg0}", importFrom: TOKENS }],
     // Dynamic arg with memberAccess: shadow("dark") → $shadow.dark, shadow(prop) → $shadow[prop]
-    [
-      "shadow",
-      {
-        expr: "$shadow.{arg0}",
-        dynamicArgUsage: "memberAccess",
-        imports: TOKENS([{ imported: "$shadow" }]),
-      },
-    ],
+    ["shadow", { expr: "$shadow.{arg0}", dynamicArgUsage: "memberAccess", importFrom: TOKENS }],
     // Runtime-only helpers (kept as wrapper inline styles)
     ["ColorConverter.cssWithAlpha", { preserveRuntimeCall: true }],
     ["getRowHighlightColor", { preserveRuntimeCall: true }],
@@ -458,7 +322,7 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.calleeImportedName === "thinBorder" && key) {
       return {
         expr: `\`\${pixelVars.thin} solid ${key}\``,
-        imports: TOKENS([{ imported: "pixelVars" }]),
+        imports: importSpec(TOKENS, [{ imported: "pixelVars" }]),
       };
     }
 
@@ -466,13 +330,13 @@ export const fixtureAdapter = defineAdapter({
     if (ctx.calleeImportedName === "borderByColor" && themeColorKey) {
       return {
         expr: `\`1px solid \${$colors.${themeColorKey}}\``,
-        imports: TOKENS([{ imported: "$colors" }]),
+        imports: importSpec(TOKENS, [{ imported: "$colors" }]),
       };
     }
     if (ctx.calleeImportedName === "themedBorder" && key) {
       return {
         expr: `\`\${pixelVars.thin} solid \${$colors.${key}}\``,
-        imports: TOKENS([{ imported: "pixelVars" }, { imported: "$colors" }]),
+        imports: importSpec(TOKENS, [{ imported: "pixelVars" }, { imported: "$colors" }]),
       };
     }
 
@@ -490,29 +354,11 @@ export const fixtureAdapter = defineAdapter({
   selectorMapping: [
     [
       "screenSize.*",
-      {
-        kind: "media",
-        expr: "breakpoints.{property}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
-            names: [{ imported: "breakpoints" }],
-          },
-        ],
-      },
+      { kind: "media", expr: "breakpoints.{property}", importFrom: "./lib/breakpoints.stylex" },
     ],
     [
       "screenSizeBreakPoints.*",
-      {
-        kind: "media",
-        expr: "breakpoints.{property}",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
-            names: [{ imported: "breakpoints" }],
-          },
-        ],
-      },
+      { kind: "media", expr: "breakpoints.{property}", importFrom: "./lib/breakpoints.stylex" },
     ],
     [
       "highlight",
@@ -520,12 +366,7 @@ export const fixtureAdapter = defineAdapter({
         kind: "pseudoAlias",
         values: ["active", "hover"],
         styleSelectorExpr: "highlightStyles",
-        imports: [
-          {
-            from: { kind: "specifier", value: "./lib/helpers" },
-            names: [{ imported: "highlightStyles" }],
-          },
-        ],
+        importFrom: "./lib/helpers",
       },
     ],
     [
@@ -536,15 +377,7 @@ export const fixtureAdapter = defineAdapter({
           { pseudo: "active" },
           {
             pseudo: "hover",
-            condition: {
-              expr: "$interaction.canHover",
-              imports: [
-                {
-                  from: { kind: "specifier", value: "./lib/interaction.stylex" },
-                  names: [{ imported: "$interaction" }],
-                },
-              ],
-            },
+            condition: { expr: "$interaction.canHover", importFrom: "./lib/interaction.stylex" },
           },
         ],
         imports: [],
@@ -591,12 +424,7 @@ function resolveParameterizedHelperCall(
   return {
     usage: "props",
     expr: `${exprTemplate}(${argsStr})`,
-    imports: [
-      {
-        from: { kind: "specifier", value: "./lib/helpers.stylex" },
-        names: [{ imported: importName }],
-      },
-    ],
+    imports: importSpec(HELPERS_STYLEX, [{ imported: importName }]),
   };
 }
 
@@ -606,12 +434,7 @@ function customResolveValue(ctx: ResolveValueContext): ResolveValueResult | unde
   }
   return {
     expr: `customVar('${ctx.path}', '')`,
-    imports: [
-      {
-        from: { kind: "specifier", value: "./custom-theme" },
-        names: [{ imported: "customVar" }],
-      },
-    ],
+    imports: importSpec("./custom-theme", [{ imported: "customVar" }]),
   };
 }
 

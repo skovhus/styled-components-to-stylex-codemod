@@ -2,7 +2,7 @@
  * Resolves CSS variable lookups from a declarative CssVariableMapping configuration.
  */
 import type { CssVariableMapping, ResolveValueResult } from "../adapter.js";
-import { MAPPING_NO_MATCH } from "./mapping-utils.js";
+import { MAPPING_NO_MATCH, resolveImports } from "./mapping-utils.js";
 
 /* ── Exports ─────────────────────────────────────────────────────────── */
 
@@ -22,9 +22,15 @@ export function resolveCssVariableFromMapping(
   mapping: CssVariableMapping,
   ctx: { name: string; definedValue?: string },
 ): CssVariableMappingResult {
-  for (const [pattern, entry] of mapping) {
+  for (const [pattern, entryOrFn] of mapping) {
     const match = matchCssVarPattern(pattern, ctx.name);
     if (!match) {
+      continue;
+    }
+
+    // Function-based entry: call with camelCase name and raw name
+    const entry = typeof entryOrFn === "function" ? entryOrFn(match.name, match.raw) : entryOrFn;
+    if (!entry) {
       continue;
     }
 
@@ -33,7 +39,7 @@ export function resolveCssVariableFromMapping(
 
     return {
       expr,
-      imports: entry.imports,
+      imports: resolveImports(entry),
       ...(dropDefinition ? { dropDefinition: true } : {}),
     };
   }
@@ -43,36 +49,39 @@ export function resolveCssVariableFromMapping(
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-type CssVarMatch = { name: string; raw: string };
+type CssVarMatch = { name: string; suffix: string; raw: string };
 
 /** Match a CSS variable pattern against a variable name. */
 function matchCssVarPattern(pattern: string, varName: string): CssVarMatch | null {
   const camelName = cssVarToCamelCase(varName);
 
   if (pattern === "*") {
-    return { name: camelName, raw: varName };
+    return { name: camelName, suffix: camelName, raw: varName };
   }
   // Prefix: "--color-*" matches "--color-primary"
   if (pattern.endsWith("*")) {
     const prefix = pattern.slice(0, -1);
     if (varName.startsWith(prefix)) {
       const remainder = varName.slice(prefix.length);
-      return { name: cssVarToCamelCase("--" + remainder), raw: varName };
+      return { name: camelName, suffix: cssVarToCamelCase("--" + remainder), raw: varName };
     }
     return null;
   }
   // Exact match
   if (varName === pattern) {
-    return { name: camelName, raw: varName };
+    return { name: camelName, suffix: camelName, raw: varName };
   }
   return null;
 }
 
-/** Replace `{name}` and `{raw}` placeholders. */
+/** Replace `{name}`, `{suffix}`, and `{raw}` placeholders. */
 function interpolateCssVarExpr(template: string, match: CssVarMatch): string {
   let result = template;
   if (result.includes("{name}")) {
     result = result.replace(/\{name\}/g, match.name);
+  }
+  if (result.includes("{suffix}")) {
+    result = result.replace(/\{suffix\}/g, match.suffix);
   }
   if (result.includes("{raw}")) {
     result = result.replace(/\{raw\}/g, match.raw);

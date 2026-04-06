@@ -384,8 +384,10 @@ function assertOptionalTupleArray(value: unknown, fieldName: string, where: stri
         `${where}: adapter.${fieldName}[${i}][0] (pattern) must be a non-empty string.`,
       );
     }
-    if (!item[1] || typeof item[1] !== "object") {
-      throw new Error(`${where}: adapter.${fieldName}[${i}][1] (entry) must be an object.`);
+    if (!item[1] || (typeof item[1] !== "object" && typeof item[1] !== "function")) {
+      throw new Error(
+        `${where}: adapter.${fieldName}[${i}][1] (entry) must be an object or function.`,
+      );
     }
   }
 }

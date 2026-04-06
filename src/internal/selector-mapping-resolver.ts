@@ -2,7 +2,12 @@
  * Resolves selector interpolations from a declarative SelectorMapping configuration.
  */
 import type { SelectorMapping, SelectorResolveContext, SelectorResolveResult } from "../adapter.js";
-import { interpolateExpr, MAPPING_NO_MATCH, matchPattern } from "./mapping-utils.js";
+import {
+  interpolateExpr,
+  MAPPING_NO_MATCH,
+  matchPattern,
+  resolveImports,
+} from "./mapping-utils.js";
 
 /* ── Exports ─────────────────────────────────────────────────────────── */
 
@@ -34,7 +39,7 @@ export function resolveSelectorFromMapping(
       return {
         kind: "media",
         expr: interpolateExpr(entry.expr, match, {}),
-        imports: entry.imports,
+        imports: resolveImports(entry),
       };
     }
 
@@ -43,15 +48,20 @@ export function resolveSelectorFromMapping(
         kind: "pseudoAlias",
         values: entry.values,
         styleSelectorExpr: entry.styleSelectorExpr,
-        imports: entry.imports,
+        imports: resolveImports(entry),
       };
     }
 
     if (entry.kind === "pseudoExpand") {
       return {
         kind: "pseudoExpand",
-        expansions: entry.expansions,
-        imports: entry.imports,
+        expansions: entry.expansions.map((e) => ({
+          pseudo: e.pseudo,
+          ...(e.condition
+            ? { condition: { expr: e.condition.expr, imports: resolveImports(e.condition) } }
+            : {}),
+        })),
+        imports: resolveImports(entry),
       };
     }
   }

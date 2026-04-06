@@ -249,14 +249,13 @@ export type ResolveValueResult = {
  */
 export type ThemeMappingResolveEntry = {
   expr: string;
-  imports: ImportSpec[];
   /** When true, only matches indexed lookups (`ctx.indexedLookup === true`). */
   indexed?: boolean;
   /** Mark result as a `stylex.props()`-compatible style object. */
   usage?: "props";
   /** Use computed member access: `expr[propValue]`. */
   dynamicArgUsage?: "memberAccess";
-};
+} & ImportSpecOrShorthand;
 
 /** An entry that bails (returns undefined) for matched paths. */
 export type ThemeMappingBailEntry = {
@@ -265,12 +264,13 @@ export type ThemeMappingBailEntry = {
 
 /** A directional expansion entry for shorthand CSS properties. */
 export type ThemeMappingDirectionalEntry = {
-  directional: Array<{
-    /** camelCase CSS longhand property (e.g. `"paddingBlock"`) */
-    prop: string;
-    expr: string;
-    imports: ImportSpec[];
-  }>;
+  directional: Array<
+    {
+      /** camelCase CSS longhand property (e.g. `"paddingBlock"`) */
+      prop: string;
+      expr: string;
+    } & ImportSpecOrShorthand
+  >;
   /** Only apply for these CSS property names. If omitted, matches any. */
   cssProperties?: string[];
 };
@@ -304,19 +304,38 @@ export type ThemeMapping = Array<[pattern: string, value: ThemeMappingValue]>;
  * A resolve entry for CSS variable mapping.
  *
  * Supports placeholders in `expr`:
- * - `{name}`: camelCase variable name (e.g. `--color-primary` → `colorPrimary`)
+ * - `{name}`: full camelCase variable name (e.g. `--color-primary` → `colorPrimary`)
+ * - `{suffix}`: camelCase of the remainder after the prefix (e.g. `--color-*` matching `--color-primary` → `primary`)
  * - `{raw}`: original variable name including `--` prefix
  */
 export type CssVariableMappingResolveEntry = {
   expr: string;
-  imports: ImportSpec[];
   /**
    * Drop the local CSS variable definition when it matches a specific value.
    * - `true`: always drop the definition
    * - `string`: only drop if `ctx.definedValue` equals this string
    */
   dropDefinition?: boolean | string;
-};
+} & ImportSpecOrShorthand;
+
+/**
+ * Function-based entry for CSS variable mapping.
+ *
+ * Receives the matched variable name and returns a resolve entry (or `undefined` to skip).
+ * Useful when variable names follow a convention that's easier to express in code
+ * than with template placeholders.
+ *
+ * Example:
+ * ```ts
+ * ["--color-*", (name) => ({ expr: `vars.${name}`, importFrom: "./vars.stylex" })]
+ * ```
+ */
+export type CssVariableMappingFn = (
+  /** camelCase variable name (e.g. `--color-primary` → `colorPrimary`) */
+  name: string,
+  /** Original variable name including `--` prefix */
+  raw: string,
+) => CssVariableMappingResolveEntry | undefined;
 
 /**
  * Declarative CSS variable → StyleX token mapping.
@@ -328,9 +347,14 @@ export type CssVariableMappingResolveEntry = {
  * - Prefix: `"--color-*"` matches variables starting with `--color-`
  * - Catch-all: `"*"` matches any variable
  *
+ * The entry can be either a static object or a function that receives the
+ * matched variable name and returns a resolve entry.
+ *
  * Evaluated before `resolveValue` for `kind: "cssVariable"` lookups.
  */
-export type CssVariableMapping = Array<[pattern: string, entry: CssVariableMappingResolveEntry]>;
+export type CssVariableMapping = Array<
+  [pattern: string, entry: CssVariableMappingResolveEntry | CssVariableMappingFn]
+>;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Call Mapping
@@ -344,13 +368,12 @@ export type CssVariableMapping = Array<[pattern: string, entry: CssVariableMappi
  */
 export type CallMappingResolveEntry = {
   expr: string;
-  imports: ImportSpec[];
   usage?: "create" | "props";
   dynamicArgUsage?: "call" | "memberAccess";
   cssText?: string;
   preserveRuntimeCall?: boolean;
   extraClassNames?: ExprWithImports[];
-};
+} & ImportSpecOrShorthand;
 
 /** Keep the original helper call as a runtime override. */
 export type CallMappingRuntimeEntry = {
@@ -410,24 +433,21 @@ type SelectorMappingMedia = {
   kind: "media";
   /** Expression template. Supports `{property}` placeholder. */
   expr: string;
-  imports: ImportSpec[];
-};
+} & ImportSpecOrShorthand;
 
 type SelectorMappingPseudoAlias = {
   kind: "pseudoAlias";
   values: string[];
   styleSelectorExpr: string;
-  imports: ImportSpec[];
-};
+} & ImportSpecOrShorthand;
 
 type SelectorMappingPseudoExpand = {
   kind: "pseudoExpand";
   expansions: Array<{
     pseudo: string;
-    condition?: { expr: string; imports: ImportSpec[] };
+    condition?: { expr: string } & ImportSpecOrShorthand;
   }>;
-  imports: ImportSpec[];
-};
+} & ImportSpecOrShorthand;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Call Resolution (imperative hook types)
@@ -565,6 +585,26 @@ export type ImportSpec = {
   from: ImportSource;
   names: Array<{ imported: string; local?: string }>;
 };
+
+/**
+ * Shorthand for specifying import sources.
+ *
+ * When `importFrom` is provided instead of `imports`, the imported identifier
+ * is automatically inferred from the root identifier in the `expr` string.
+ * For example, `expr: "fontSizeVars.{arg0}", importFrom: "./tokens.stylex"`
+ * is equivalent to `imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "fontSizeVars" }] }]`.
+ *
+ * Accepts either a bare string (specifier) or an `ImportSource` object.
+ */
+export type ImportFromShorthand = string | ImportSource;
+
+/**
+ * Either explicit `imports` or the `importFrom` shorthand.
+ * When `importFrom` is set, imports are inferred from the `expr` root identifier.
+ */
+export type ImportSpecOrShorthand =
+  | { imports: ImportSpec[]; importFrom?: never }
+  | { imports?: never; importFrom: ImportFromShorthand };
 
 /** An expression string with its required imports, used for className emission. */
 export type ExprWithImports = { expr: string; imports: ImportSpec[] };

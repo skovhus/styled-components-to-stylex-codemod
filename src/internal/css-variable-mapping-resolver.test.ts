@@ -14,10 +14,16 @@ describe("resolveCssVariableFromMapping", () => {
     expect(result).toEqual({ expr: "calcVars.baseSize", imports: [] });
   });
 
-  it("matches prefix pattern and strips prefix for {name}", () => {
+  it("matches prefix pattern with {name} giving full camelCase", () => {
     const mapping: CssVariableMapping = [["--color-*", { expr: "vars.{name}", imports: [] }]];
     const result = resolveCssVariableFromMapping(mapping, { name: "--color-primary" });
-    expect(result).toEqual({ expr: "vars.primary", imports: [] });
+    expect(result).toEqual({ expr: "vars.colorPrimary", imports: [] });
+  });
+
+  it("matches prefix pattern with {suffix} giving only the remainder", () => {
+    const mapping: CssVariableMapping = [["--color-*", { expr: "colors.{suffix}", imports: [] }]];
+    const result = resolveCssVariableFromMapping(mapping, { name: "--color-primary" });
+    expect(result).toEqual({ expr: "colors.primary", imports: [] });
   });
 
   it("interpolates {name} as camelCase", () => {

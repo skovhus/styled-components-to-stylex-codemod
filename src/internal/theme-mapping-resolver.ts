@@ -8,7 +8,12 @@ import type {
   ThemeMapping,
   ThemeMappingValue,
 } from "../adapter.js";
-import { interpolateExpr, MAPPING_NO_MATCH, matchPattern } from "./mapping-utils.js";
+import {
+  interpolateExpr,
+  MAPPING_NO_MATCH,
+  matchPattern,
+  resolveImports,
+} from "./mapping-utils.js";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Exports
@@ -58,7 +63,13 @@ export function resolveThemeFromMapping(
       ) {
         continue;
       }
-      return { directional: entry.directional };
+      return {
+        directional: entry.directional.map((d) => ({
+          prop: d.prop,
+          expr: d.expr,
+          imports: resolveImports(d),
+        })),
+      };
     }
 
     // Bail entry
@@ -70,7 +81,7 @@ export function resolveThemeFromMapping(
     const expr = interpolateExpr(entry.expr, match, ctx);
     return {
       expr,
-      imports: entry.imports,
+      imports: resolveImports(entry),
       ...(entry.usage ? { usage: entry.usage } : {}),
       ...(entry.dynamicArgUsage ? { dynamicArgUsage: entry.dynamicArgUsage } : {}),
     };

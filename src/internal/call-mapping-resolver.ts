@@ -8,7 +8,7 @@ import type {
   CallResolveContext,
   CallResolveResult,
 } from "../adapter.js";
-import { MAPPING_NO_MATCH } from "./mapping-utils.js";
+import { MAPPING_NO_MATCH, resolveImports } from "./mapping-utils.js";
 
 /* ── Exports ─────────────────────────────────────────────────────────── */
 
@@ -96,7 +96,7 @@ function buildCallResult(entry: CallMappingValue, ctx: CallResolveContext): Call
 
   return {
     expr,
-    imports: resolveEntry.imports,
+    imports: resolveImports(resolveEntry),
     ...(resolveEntry.usage ? { usage: resolveEntry.usage } : {}),
     ...(resolveEntry.dynamicArgUsage ? { dynamicArgUsage: resolveEntry.dynamicArgUsage } : {}),
     ...(resolveEntry.cssText ? { cssText: resolveEntry.cssText } : {}),
