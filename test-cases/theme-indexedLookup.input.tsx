@@ -32,3 +32,27 @@ interface TextColorProps {
 export const TextColor = styled.span<TextColorProps>`
   color: ${(props) => props.theme.color[props.color]};
 `;
+
+// Pattern 3: Indexed theme lookup BEFORE a conditional — cascade order must be preserved.
+// The indexed lookup should NOT override the conditional's value.
+interface OrderedProps {
+  bg: Color;
+  $active?: boolean;
+}
+
+const OrderedBox = styled.div<OrderedProps>`
+  background-color: ${(props) => props.theme.color[props.bg]};
+  ${(props) => props.$active && "background-color: red;"}
+  padding: 8px;
+`;
+
+export function OrderedApp() {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <OrderedBox bg="labelBase">Inactive</OrderedBox>
+      <OrderedBox bg="labelBase" $active>
+        Active (should be red)
+      </OrderedBox>
+    </div>
+  );
+}

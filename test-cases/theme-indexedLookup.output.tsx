@@ -52,6 +52,39 @@ export function TextColor(
   );
 }
 
+// Pattern 3: Indexed theme lookup BEFORE a conditional — cascade order must be preserved.
+// The indexed lookup should NOT override the conditional's value.
+interface OrderedProps {
+  bg: Color;
+  active?: boolean;
+}
+
+function OrderedBox(props: React.PropsWithChildren<OrderedProps>) {
+  const { children, bg, active } = props;
+  return (
+    <div
+      sx={[
+        styles.orderedBox,
+        $colorMixins.backgroundColor[bg],
+        active ? styles.orderedBoxActive : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function OrderedApp() {
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <OrderedBox bg="labelBase">Inactive</OrderedBox>
+      <OrderedBox bg="labelBase" active>
+        Active (should be red)
+      </OrderedBox>
+    </div>
+  );
+}
+
 const styles = stylex.create({
   box: {
     width: 42,
@@ -64,4 +97,10 @@ const styles = stylex.create({
       ":hover": $colors[hoverColor],
     },
   }),
+  orderedBox: {
+    padding: 8,
+  },
+  orderedBoxActive: {
+    backgroundColor: "red",
+  },
 });

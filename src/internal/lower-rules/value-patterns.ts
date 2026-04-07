@@ -665,7 +665,20 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
           ) as ExpressionKind;
 
           decl.extraStylexPropsArgs ??= [];
-          decl.extraStylexPropsArgs.push({ expr: indexedExpr, afterVariants: true });
+          const hasVariantsBefore = Object.keys(variantStyleKeys).length > 0;
+          const hasStyleFnBefore = styleFnDecls.size > 0;
+          decl.extraStylexPropsArgs.push({
+            expr: indexedExpr,
+            // Position the indexed lookup to preserve CSS cascade order:
+            // - afterVariants: when variants/conditionals or pseudo-class
+            //   style functions appeared before, the indexed lookup should
+            //   come after them (it was declared later in CSS source).
+            // - afterBase: when no variants or style functions precede it,
+            //   later conditionals (added by processAttr) can still override.
+            ...(hasVariantsBefore || hasStyleFnBefore
+              ? { afterVariants: true }
+              : { afterBase: true }),
+          });
 
           // Track in mixinOrder for correct cascade interleaving with extraStyleKeys
           const order = decl.mixinOrder ?? [];

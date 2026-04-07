@@ -778,21 +778,6 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // merger behavior (or verbose fallback when no merger is configured).
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
 
-        // When NOT using sx prop, CSS module classNames must be merged into
-        // the stylex.props spread (via classNameAttr) to avoid a duplicate
-        // className attribute that would override the spread's className.
-        // When using sx prop, sx and className are independent attributes.
-        let effectiveClassNameAttr = classNameAttr;
-        if (extraClassNameExpr && !ctx.adapter.useSxProp) {
-          // Synthesize a JSX className attribute so buildInlineMergeCall
-          // folds the CSS module class into the spread merge.
-          effectiveClassNameAttr = j.jsxAttribute(
-            j.jsxIdentifier("className"),
-            j.jsxExpressionContainer(extraClassNameExpr),
-          );
-        }
-
-        const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
         // Prefer sx prop only when local stylex.create() references exist. When all
         // styles are external (e.g. only mixin map lookups), the compiler bails out
         // of static compilation and leaves stylex.props() as a runtime call anyway.
@@ -801,8 +786,44 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const hasLocalStyleRef = styleArgs.some(
           (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
         );
+
+        // Determine whether sx prop will be used. sx requires: adapter opt-in,
+        // intrinsic element, local style refs, AND no className/style attrs to merge.
+        const hasMergeAttrs = classNameAttr !== null || styleAttr !== null;
         const useSxProp =
-          ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef;
+          ctx.adapter.useSxProp && isIntrinsicTag && hasLocalStyleRef && !hasMergeAttrs;
+
+        // When NOT using sx prop, CSS module classNames must be merged into
+        // the stylex.props spread (via classNameAttr) to avoid a duplicate
+        // className attribute that would override the spread's className.
+        // When using sx prop, sx and className are independent attributes.
+        let effectiveClassNameAttr = classNameAttr;
+        if (extraClassNameExpr && !useSxProp) {
+          const existingClassExpr = classNameAttr
+            ? extractJsxAttrValueExpr(j, classNameAttr)
+            : undefined;
+          const combinedExpr = existingClassExpr
+            ? j.callExpression(
+                j.memberExpression(
+                  j.callExpression(
+                    j.memberExpression(
+                      j.arrayExpression([extraClassNameExpr, existingClassExpr]),
+                      j.identifier("filter"),
+                    ),
+                    [j.identifier("Boolean")],
+                  ),
+                  j.identifier("join"),
+                ),
+                [j.literal(" ")],
+              )
+            : extraClassNameExpr;
+          effectiveClassNameAttr = j.jsxAttribute(
+            j.jsxIdentifier("className"),
+            j.jsxExpressionContainer(combinedExpr),
+          );
+        }
+
+        const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
         const stylexAttr = useSxProp
           ? (() => {
               const sxExpr =
