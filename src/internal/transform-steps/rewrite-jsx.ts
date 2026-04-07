@@ -778,12 +778,27 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // merger behavior (or verbose fallback when no merger is configured).
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
 
+        // Prefer sx prop only when local stylex.create() references exist. When all
+        // styles are external (e.g. only mixin map lookups), the compiler bails out
+        // of static compilation and leaves stylex.props() as a runtime call anyway.
+        // Emitting stylex.props() directly avoids the unnecessary sx→stylex.props rewrite.
+        const stylesId = ctx.stylesIdentifier ?? "styles";
+        const hasLocalStyleRef = styleArgs.some(
+          (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
+        );
+
+        // Determine whether sx prop will be used. sx requires: adapter opt-in,
+        // intrinsic element, local style refs, AND no className/style attrs to merge.
+        const hasMergeAttrs = classNameAttr !== null || styleAttr !== null;
+        const useSxProp =
+          ctx.adapter.useSxProp && isIntrinsicTag && hasLocalStyleRef && !hasMergeAttrs;
+
         // When NOT using sx prop, CSS module classNames must be merged into
         // the stylex.props spread (via classNameAttr) to avoid a duplicate
         // className attribute that would override the spread's className.
         // When using sx prop, sx and className are independent attributes.
         let effectiveClassNameAttr = classNameAttr;
-        if (extraClassNameExpr && !ctx.adapter.useSxProp) {
+        if (extraClassNameExpr && !useSxProp) {
           // Synthesize a JSX className attribute so buildInlineMergeCall
           // folds the CSS module class into the spread merge.
           effectiveClassNameAttr = j.jsxAttribute(
@@ -793,16 +808,6 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
-        // Prefer sx prop only when local stylex.create() references exist. When all
-        // styles are external (e.g. only mixin map lookups), the compiler bails out
-        // of static compilation and leaves stylex.props() as a runtime call anyway.
-        // Emitting stylex.props() directly avoids the unnecessary sx→stylex.props rewrite.
-        const stylesId = ctx.stylesIdentifier ?? "styles";
-        const hasLocalStyleRef = styleArgs.some(
-          (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
-        );
-        const useSxProp =
-          ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef;
         const stylexAttr = useSxProp
           ? (() => {
               const sxExpr =

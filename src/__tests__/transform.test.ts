@@ -5669,6 +5669,50 @@ export function App() {
   });
 });
 
+describe("extraClassNames with useSxProp and className merge", () => {
+  it("should merge extraClassNames into spread when useSxProp falls back due to className merge", () => {
+    const source = `
+import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
+
+const DraggableBar = styled.div\`
+  pointer-events: all;
+  \${draggableRegion(true)};
+\`;
+
+export function App() {
+  return <DraggableBar className="extra">Draggable</DraggableBar>;
+}
+`;
+
+    const adapterWithSxProp = {
+      ...fixtureAdapter,
+      useSxProp: true,
+      styleMerger: null,
+    };
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "mixin-extraClassNamesSxFallback.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithSxProp },
+    );
+
+    if (result.code === null) {
+      expect(result.warnings).toEqual([]);
+    }
+    expect(result.code).not.toBeNull();
+    // When className is passed, useSxProp falls back to spread mode (needsMerge).
+    // With adapter.useSxProp = true, the code at line 786 skips merging
+    // extraClassNames because !ctx.adapter.useSxProp is false.
+    // But since sx prop can't be used anyway (needsMerge), extraClassNames
+    // must still be folded into the spread merge call.
+    expect(result.code).toContain("electronStyles");
+  });
+});
+
 describe("compound :has() component selectors", () => {
   it("should bail on &:has(${Component}):hover (compound pseudo + has)", () => {
     const source = `
