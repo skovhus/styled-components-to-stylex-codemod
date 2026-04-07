@@ -116,11 +116,13 @@ function emitDefineMarkerDeclarations(
     .join("\n\n");
   ctx.sidecarStylexContent = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
 
-  // Determine sidecar import path — use adapter.markerFile if provided, otherwise derive from basename
+  // Use adapter.markerFile only when at least one marker is truly cross-file.
+  // Internal-only markers (sibling selectors within the same file) use the default
+  // local sidecar so they don't pollute a shared marker file.
   let sidecarImportPath: string;
-  const adapterMarkerFile = ctx.adapter.markerFile;
-  if (adapterMarkerFile) {
-    const importSource = adapterMarkerFile({ filePath: ctx.file.path });
+  const adapterMarkerFile = ctx.hasCrossFileMarkerRelations ? ctx.adapter.markerFile : undefined;
+  const importSource = adapterMarkerFile?.({ filePath: ctx.file.path });
+  if (importSource) {
     sidecarImportPath = importSourceToModuleSpecifier(importSource, ctx.file.path);
     ctx.sidecarFilePath = importSourceToAbsolutePath(importSource, ctx.file.path);
   } else {

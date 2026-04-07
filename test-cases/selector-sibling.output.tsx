@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
-import { ThingMarker, ThingThemedMarker, RowMarker } from "./markers.stylex";
+import { ThingMarker, ThingThemedMarker, RowMarker } from "./selector-sibling.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
   return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;

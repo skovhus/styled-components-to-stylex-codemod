@@ -99,6 +99,8 @@ export class TransformContext {
   bridgeComponentNames?: Set<string>;
   /** Marker variable names generated for cross-file parent components and sibling selectors (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
+  /** True when at least one marker originates from a cross-file relation (not just internal sibling selectors) */
+  hasCrossFileMarkerRelations?: boolean;
   /** Style keys that use sibling markers (scoped marker replaces defaultMarker) */
   siblingMarkerKeys?: Set<string>;
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */

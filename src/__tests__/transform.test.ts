@@ -406,19 +406,24 @@ describe("transform", () => {
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
 
-    // Verify sidecar marker content: all marker declarations should be present in the shared markers file
+    // Verify sidecar marker content
     if (diagnostics.sidecarContent) {
-      const sharedMarkersPath = join(testCasesDir, "markers.stylex.ts");
-      const sharedMarkers = readFileSync(sharedMarkersPath, "utf-8");
       const markerLines = diagnostics.sidecarContent
         .split("\n")
         .filter((line) => line.startsWith("export const"));
       expect(markerLines.length).toBeGreaterThan(0);
-      for (const line of markerLines) {
-        expect(sharedMarkers).toContain(line);
+
+      if (diagnostics.sidecarFilePath) {
+        // Cross-file markers: sidecarFilePath points to the shared markers file
+        const sharedMarkersPath = join(testCasesDir, "markers.stylex.ts");
+        const sharedMarkers = readFileSync(sharedMarkersPath, "utf-8");
+        for (const line of markerLines) {
+          expect(sharedMarkers).toContain(line);
+        }
+        expect(diagnostics.sidecarFilePath).toBe(sharedMarkersPath);
       }
-      // Verify sidecarFilePath points to the shared markers file
-      expect(diagnostics.sidecarFilePath).toBe(sharedMarkersPath);
+      // Internal-only markers (e.g. sibling selectors): no sidecarFilePath,
+      // default local sidecar file is used
     }
   });
 });

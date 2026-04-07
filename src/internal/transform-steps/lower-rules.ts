@@ -21,6 +21,7 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   ctx.relationOverrides = lowered.relationOverrides;
   ctx.ancestorSelectorParents = lowered.ancestorSelectorParents;
   ctx.crossFileMarkers = lowered.crossFileMarkers;
+  ctx.hasCrossFileMarkerRelations = lowered.hasCrossFileMarkerRelations;
   ctx.siblingMarkerKeys = lowered.siblingMarkerKeys;
   ctx.parentsNeedingDefaultMarker = lowered.parentsNeedingDefaultMarker;
   ctx.ancestorAttrsByStyleKey = lowered.ancestorAttrsByStyleKey;

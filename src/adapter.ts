@@ -752,7 +752,12 @@ export interface Adapter {
    *
    * When provided, the function receives the source file path and returns an `ImportSource`
    * that determines both the import path in the transformed file and the file path where
-   * markers are written.
+   * markers are written. Return `undefined` to fall back to the default behavior (local
+   * sidecar file next to the source).
+   *
+   * Only consulted when a file has cross-file marker relations. Files that only
+   * reference markers internally (e.g., sibling selectors within the same file)
+   * always use a local sidecar file regardless of this setting.
    *
    * Example:
    * ```typescript
@@ -761,7 +766,7 @@ export interface Adapter {
    * }
    * ```
    */
-  markerFile?: (context: MarkerFileContext) => ImportSource;
+  markerFile?: (context: MarkerFileContext) => ImportSource | undefined;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

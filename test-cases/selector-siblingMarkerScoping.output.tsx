@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { RowMarker } from "./markers.stylex";
+import { RowMarker } from "./selector-siblingMarkerScoping.input.stylex";
 
 // NOTE: defaultMarker() is file-global — not scoped per component.
 // If another component in the same file also uses defaultMarker() (e.g. for

@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { LinkMarker } from "./markers.stylex";
+import { LinkMarker } from "./selector-componentSiblingCombinator.input.stylex";
 
 function Link(props: React.ComponentProps<"a">) {
   const { children, ...rest } = props;
