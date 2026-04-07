@@ -5705,11 +5705,11 @@ export function App() {
     }
     expect(result.code).not.toBeNull();
     // When className is passed, useSxProp falls back to spread mode (needsMerge).
-    // With adapter.useSxProp = true, the code at line 786 skips merging
-    // extraClassNames because !ctx.adapter.useSxProp is false.
-    // But since sx prop can't be used anyway (needsMerge), extraClassNames
-    // must still be folded into the spread merge call.
+    // extraClassNames must be folded into the spread merge call.
     expect(result.code).toContain("electronStyles");
+    // The user's original className="extra" must also be preserved in the
+    // merge — it must not be replaced by the extraClassNames expression.
+    expect(result.code).toContain('"extra"');
   });
 });
 

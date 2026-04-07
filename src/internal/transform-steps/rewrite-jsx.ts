@@ -799,11 +799,27 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // When using sx prop, sx and className are independent attributes.
         let effectiveClassNameAttr = classNameAttr;
         if (extraClassNameExpr && !useSxProp) {
-          // Synthesize a JSX className attribute so buildInlineMergeCall
-          // folds the CSS module class into the spread merge.
+          const existingClassExpr = classNameAttr
+            ? extractJsxAttrValueExpr(j, classNameAttr)
+            : undefined;
+          const combinedExpr = existingClassExpr
+            ? j.callExpression(
+                j.memberExpression(
+                  j.callExpression(
+                    j.memberExpression(
+                      j.arrayExpression([extraClassNameExpr, existingClassExpr]),
+                      j.identifier("filter"),
+                    ),
+                    [j.identifier("Boolean")],
+                  ),
+                  j.identifier("join"),
+                ),
+                [j.literal(" ")],
+              )
+            : extraClassNameExpr;
           effectiveClassNameAttr = j.jsxAttribute(
             j.jsxIdentifier("className"),
-            j.jsxExpressionContainer(extraClassNameExpr),
+            j.jsxExpressionContainer(combinedExpr),
           );
         }
 
