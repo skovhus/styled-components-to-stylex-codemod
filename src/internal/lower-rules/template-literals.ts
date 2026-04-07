@@ -491,25 +491,11 @@ export function resolveTemplateLiteralBranch(
         });
         continue;
       }
-      // Handle `background: ${expr}` shorthand → backgroundColor dynamic entry.
-      // Only apply for theme-resolved conditionals (ConditionalExpression with condition: "always"),
-      // where both branches are theme color tokens. Destructured defaults also set condition: "always"
-      // but produce Identifier/other node types and may carry non-color values (gradients, images).
-      if (
-        propName === "background" &&
-        !prefix &&
-        !suffix &&
-        resolved.condition === "always" &&
-        resolved.callArg.type === "ConditionalExpression"
-      ) {
-        dynamicEntries.push({
-          jsxProp: resolved.jsxProp,
-          stylexProp: "backgroundColor",
-          callArg: resolved.callArg,
-          condition: resolved.condition,
-        });
-        continue;
-      }
+      // Dynamic `background: ${expr}` goes through the longhand-only shorthand path
+      // below, which emits an inline style entry. This is intentional: at static
+      // analysis time we cannot determine whether the dynamic value is a color
+      // (backgroundColor) or a gradient/image (backgroundImage), so we preserve
+      // the `background` shorthand as an inline style that the browser resolves.
       const isLonghandOnlyShorthand = isStylexLonghandOnlyShorthand(propName);
       const callArg =
         prefix || suffix
