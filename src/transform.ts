@@ -62,23 +62,24 @@ export default function transform(file: FileInfo, api: API, options: Options): s
     Logger.logWarnings(result.warnings, file.path);
 
     // Store sidecar .stylex.ts content in the options side-channel for the runner to write
-    if (result.sidecarContent) {
-      const sidecarFiles = (options as Record<string, unknown>).sidecarFiles as
+    if (result.sidecarFiles && result.sidecarFiles.length > 0) {
+      const sidecarFilesMap = (options as Record<string, unknown>).sidecarFiles as
         | Map<string, string>
         | undefined;
-      if (sidecarFiles) {
-        // Use adapter-provided path if set, otherwise compute from basename
-        const sidecarPath =
-          result.sidecarFilePath ??
-          join(dirname(file.path), `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`);
-        // Merge with existing content when multiple files write to the same sidecar path
-        const existing = sidecarFiles.get(sidecarPath);
-        sidecarFiles.set(
-          sidecarPath,
-          existing
-            ? mergeMarkerDeclarations(existing, result.sidecarContent)
-            : result.sidecarContent,
+      if (sidecarFilesMap) {
+        const defaultPath = join(
+          dirname(file.path),
+          `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`,
         );
+        for (const sidecar of result.sidecarFiles) {
+          const sidecarPath = sidecar.filePath ?? defaultPath;
+          // Merge with existing content when multiple files write to the same sidecar path
+          const existing = sidecarFilesMap.get(sidecarPath);
+          sidecarFilesMap.set(
+            sidecarPath,
+            existing ? mergeMarkerDeclarations(existing, sidecar.content) : sidecar.content,
+          );
+        }
       }
     }
 

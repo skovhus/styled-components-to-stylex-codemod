@@ -407,23 +407,24 @@ describe("transform", () => {
     expect(normalizedResult).toEqual(normalizedExpected);
 
     // Verify sidecar marker content
-    if (diagnostics.sidecarContent) {
-      const markerLines = diagnostics.sidecarContent
-        .split("\n")
-        .filter((line) => line.startsWith("export const"));
-      expect(markerLines.length).toBeGreaterThan(0);
+    if (diagnostics.sidecarFiles && diagnostics.sidecarFiles.length > 0) {
+      const sharedMarkersPath = join(testCasesDir, "markers.stylex.ts");
+      const sharedMarkers = readFileSync(sharedMarkersPath, "utf-8");
 
-      if (diagnostics.sidecarFilePath) {
-        // Cross-file markers: sidecarFilePath points to the shared markers file
-        const sharedMarkersPath = join(testCasesDir, "markers.stylex.ts");
-        const sharedMarkers = readFileSync(sharedMarkersPath, "utf-8");
-        for (const line of markerLines) {
-          expect(sharedMarkers).toContain(line);
+      for (const sidecar of diagnostics.sidecarFiles) {
+        const markerLines = sidecar.content
+          .split("\n")
+          .filter((line) => line.startsWith("export const"));
+        expect(markerLines.length).toBeGreaterThan(0);
+
+        if (sidecar.filePath) {
+          // Cross-file markers: filePath points to the shared markers file
+          for (const line of markerLines) {
+            expect(sharedMarkers).toContain(line);
+          }
+          expect(sidecar.filePath).toBe(sharedMarkersPath);
         }
-        expect(diagnostics.sidecarFilePath).toBe(sharedMarkersPath);
       }
-      // Internal-only markers (e.g. sibling selectors): no sidecarFilePath,
-      // default local sidecar file is used
     }
   });
 });
