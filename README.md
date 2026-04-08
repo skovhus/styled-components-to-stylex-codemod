@@ -306,6 +306,7 @@ resolveBaseComponent(ctx) {
 When the codemod encounters an interpolation inside a styled template literal, it runs an internal dynamic resolution pipeline which covers common cases like:
 
 - theme access (`props.theme...`) via `resolveValue({ kind: "theme", path })`
+- indexed theme lookups (`props.theme.color[props.$bg]`) — when `ctx.indexedLookup` is true, return `{ usage: "props", dynamicArgUsage: "memberAccess" }` to emit a prebuilt per-property mixin map (e.g., `$colorMixins.backgroundColor[bg]`) instead of a dynamic style function
 - imported value access (`import { zIndex } ...; ${zIndex.popover}`) via `resolveValue({ kind: "importedValue", importedName, source, path })`
 - prop access (`props.foo`) and conditionals (`props.foo ? "a" : "b"`, `props.foo && "color: red;"`)
 - helper calls (`transitionSpeed("slowTransition")`) via `resolveCall({ ... })` — the codemod infers usage from context:
