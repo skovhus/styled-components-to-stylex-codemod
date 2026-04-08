@@ -1,5 +1,10 @@
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif}.cm-gutterElement{color:#bbb!important}:root{--color-primary:#bf4f74;--color-secondary:#4f74bf;--spacing-sm:8px;--spacing-md:16px;--spacing-lg:24px;--border-radius:4px;--text-color:#333;--font-size:16px;--line-height:1.5;--speed-slow:1s;--speed-normal:.25s;--speed-fast:.1s}._draggableRegionDisableChildren_sqf4h_1{-webkit-app-region:drag}._draggableRegionDisableChildren_sqf4h_1>*{-webkit-app-region:no-drag}
 /*$vite$:1*/
+@property --x-color {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-width {
   syntax: "*";
   inherits: false
@@ -15,7 +20,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-color {
+@property --x-borderWidth {
   syntax: "*";
   inherits: false
 }
@@ -70,6 +75,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-1hogkkd {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-qdiqoo {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-animationDelay {
   syntax: "*";
   inherits: false
@@ -90,17 +105,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-borderWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-1hogkkd {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-qdiqoo {
+@property --x-boxShadow {
   syntax: "*";
   inherits: false
 }
@@ -125,12 +130,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-boxShadow {
+@property --x-textAlign {
   syntax: "*";
   inherits: false
 }
 
-@property --x-textAlign {
+@property --x-bcbnzo {
   syntax: "*";
   inherits: false
 }
@@ -155,7 +160,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-transitionDelay {
+@property --x-fill {
   syntax: "*";
   inherits: false
 }
@@ -165,17 +170,47 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-fill {
+@property --x-top {
   syntax: "*";
   inherits: false
 }
 
-@property --x-marginTop {
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-left {
   syntax: "*";
   inherits: false
 }
 
 @property --x-gridRow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-flexShrink {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-transitionDelay {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-flexGrow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderRightColor {
   syntax: "*";
   inherits: false
 }
@@ -195,47 +230,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x---component-width {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-flexShrink {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-flexGrow {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-borderRightColor {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
 
-@property --x-top {
+@property --x-marginTop {
   syntax: "*";
   inherits: false
 }
 
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
+@property --x---component-width {
   syntax: "*";
   inherits: false
 }
@@ -2046,6 +2051,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xl8spv7:not(#\#):not(#\#):not(#\#) {
   background-color: var(--x-backgroundColor);
+}
+
+.x1fvhpy6:not(#\#):not(#\#):not(#\#) {
+  background-color: var(--x-bcbnzo);
 }
 
 .x1fu349m:not(#\#):not(#\#):not(#\#) {
