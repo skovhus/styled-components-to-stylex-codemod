@@ -12,9 +12,6 @@ import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
 
-/**
- * Result of the transform including any log entries
- */
 /** A sidecar .stylex.ts file containing defineMarker() declarations. */
 export interface SidecarFile {
   content: string;
@@ -22,6 +19,9 @@ export interface SidecarFile {
   filePath?: string;
 }
 
+/**
+ * Result of the transform including any log entries
+ */
 export interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
