@@ -1310,6 +1310,11 @@ function collectPropsUsedOutsideExtraStyleConditionals(
     if (pair.jsxProp !== "__props") {
       add(pair.jsxProp);
     }
+    for (const extra of pair.extraCallArgs ?? []) {
+      if (extra.jsxProp !== "__props") {
+        add(extra.jsxProp);
+      }
+    }
   }
   for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
     add(prop);

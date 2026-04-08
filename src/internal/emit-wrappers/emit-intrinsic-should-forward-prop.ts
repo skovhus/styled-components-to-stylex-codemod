@@ -129,6 +129,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       if (p?.jsxProp && p.jsxProp !== "__props") {
         extraProps.add(p.jsxProp);
       }
+      for (const extra of p?.extraCallArgs ?? []) {
+        if (extra.jsxProp && extra.jsxProp !== "__props") {
+          extraProps.add(extra.jsxProp);
+        }
+      }
     }
     for (const a of d.attrsInfo?.defaultAttrs ?? []) {
       if (a?.jsxProp) {
@@ -510,7 +515,19 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           : j.identifier(p.jsxProp);
       const rawCallArg = p.callArg ?? propExpr;
       const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
-      const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
+      const allCallArgs: ExpressionKind[] = [callArg];
+      // Multi-param style functions: append extra call arguments
+      if (p.extraCallArgs) {
+        for (const extra of p.extraCallArgs) {
+          const extraPropExpr =
+            extra.jsxProp === "__props" ? j.identifier("props") : j.identifier(extra.jsxProp);
+          allCallArgs.push(extra.callArg ?? extraPropExpr);
+          if (extra.jsxProp !== "__props" && !destructureParts.includes(extra.jsxProp)) {
+            destructureParts.push(extra.jsxProp);
+          }
+        }
+      }
+      const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), allCallArgs);
       let expr: ExpressionKind;
       if (p.conditionWhen) {
         const { cond, isBoolean } = emitter.collectConditionProps({

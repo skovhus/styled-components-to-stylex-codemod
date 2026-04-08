@@ -1562,6 +1562,14 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       if (sf.callArg) {
         renameIdentifiersInAst(sf.callArg, renames);
       }
+      if (sf.extraCallArgs) {
+        for (const extra of sf.extraCallArgs) {
+          extra.jsxProp = renames.get(extra.jsxProp) ?? extra.jsxProp;
+          if (extra.callArg) {
+            renameIdentifiersInAst(extra.callArg, renames);
+          }
+        }
+      }
     }
   }
 

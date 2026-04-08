@@ -28,6 +28,13 @@ type ThemeResolveContext = {
    * Example: "padding", "margin", "border"
    */
   cssProperty?: string;
+  /**
+   * When true, this resolution is for an indexed (bracket) lookup like
+   * `props.theme.color[props.$bg]`. The adapter can use this to return a
+   * CSS-property-aware prebuilt mixin map (`usage: "props"`) instead of a
+   * raw token object used in `stylex.create()`.
+   */
+  indexedLookup?: boolean;
 };
 
 type CssVariableResolveContext = {
@@ -209,12 +216,22 @@ export type ResolveValueResult = {
   /**
    * Disambiguates how the resolved expression is used:
    * - "props": a StyleX style object suitable for passing to `stylex.props(...)`.
-   *   Use this when resolving imported styled component mixins to their StyleX equivalent.
+   *   Use this when resolving imported styled component mixins to their StyleX equivalent,
+   *   or for indexed theme lookups that resolve to prebuilt per-property mixin maps.
    * - undefined (default): a value that can be used inside `stylex.create(...)`.
    *
-   * Note: Only meaningful for `{ kind: "importedValue" }`.
+   * Meaningful for `{ kind: "importedValue" }` and `{ kind: "theme" }` with `indexedLookup`.
    */
   usage?: "props";
+  /**
+   * When `usage` is `"props"` and the resolved expression should be indexed with a
+   * dynamic prop value (e.g., `$colorMixins.backgroundColor[propValue]`):
+   * - `"memberAccess"`: the codemod applies `expr[propValue]` computed member access
+   *
+   * Only meaningful when `usage` is `"props"` and the resolution context is an indexed
+   * theme lookup (`indexedLookup: true`).
+   */
+  dynamicArgUsage?: "memberAccess";
 };
 
 export type CallResolveResultWithExpr = {

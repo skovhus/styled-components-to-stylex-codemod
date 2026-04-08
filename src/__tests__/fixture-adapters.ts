@@ -194,6 +194,25 @@ export const fixtureAdapter = defineAdapter({
       //   props.theme.color[bg]        -> $colors[bg]
       //
       // `ctx.path` is the dot-path on the theme object (no bracket/index parts).
+
+      // For indexed theme lookups with a known CSS property, return a prebuilt
+      // per-property mixin map so the codemod can emit a `stylex.props()` lookup
+      // instead of a dynamic `stylex.create()` style function.
+      if (ctx.path === "color" && ctx.indexedLookup && ctx.cssProperty) {
+        const camelProp = ctx.cssProperty.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+        return {
+          usage: "props",
+          dynamicArgUsage: "memberAccess",
+          expr: `$colorMixins.${camelProp}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/colorMixins.stylex" },
+              names: [{ imported: "$colorMixins" }],
+            },
+          ],
+        };
+      }
+
       if (ctx.path === "color") {
         return {
           expr: "$colors",

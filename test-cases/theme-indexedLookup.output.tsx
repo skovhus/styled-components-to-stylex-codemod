@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $colorMixins } from "./lib/colorMixins.stylex";
 import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
@@ -11,13 +12,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, hoverColor, bg } = props;
-  return (
-    <div
-      sx={[styles.box, styles.boxBackgroundColorHover(hoverColor), styles.boxBackgroundColor(bg)]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, styles.boxBackgroundColorHover(hoverColor, bg)]}>{children}</div>;
 }
 
 export const App = () => (
@@ -41,7 +36,7 @@ export function TextColor(
 ) {
   const { children, color, ...rest } = props;
   return (
-    <span {...rest} sx={styles.textColorColor(color)}>
+    <span {...rest} {...stylex.props($colorMixins.color[color])}>
       {children}
     </span>
   );
@@ -53,16 +48,10 @@ const styles = stylex.create({
     height: "100%",
     padding: 16,
   },
-  boxBackgroundColorHover: (hoverColor: Color) => ({
+  boxBackgroundColorHover: (hoverColor: Color, bg: Color) => ({
     backgroundColor: {
-      default: null,
+      default: $colors[bg],
       ":hover": $colors[hoverColor],
     },
-  }),
-  boxBackgroundColor: (bg: Color) => ({
-    backgroundColor: $colors[bg],
-  }),
-  textColorColor: (color: Colors) => ({
-    color: $colors[color],
   }),
 });

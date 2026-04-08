@@ -783,7 +783,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
-        const useSxProp = ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag;
+        // sx prop requires at least one local stylex.create() reference so the
+        // StyleX compiler can verify and transform it. When all styles are external
+        // (e.g. only extraStylexPropsArgs mixin lookups), fall back to stylex.props().
+        const stylesId = ctx.stylesIdentifier ?? "styles";
+        const hasLocalStyleRef = styleArgs.some(
+          (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
+        );
+        const useSxProp =
+          ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef;
         const stylexAttr = useSxProp
           ? (() => {
               const sxExpr =
