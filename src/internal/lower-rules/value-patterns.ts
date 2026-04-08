@@ -75,6 +75,33 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
   // matches a top-level import binding.
   const avoidNames = new Set(importMap.keys());
 
+  /** Parse an indexed member expression like `resolvedExpr[paramName]` into an AST node. */
+  const parseIndexedExprAst = (
+    resolvedExprStr: string,
+    paramName: string,
+  ): ExpressionKind | null => {
+    const exprSource = `(${resolvedExprStr})[${paramName}]`;
+    try {
+      const jParse = api.jscodeshift.withParser("tsx");
+      const program = jParse(`(${exprSource});`);
+      const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
+      let expr = stmt?.expression ?? null;
+      while (expr?.type === "ParenthesizedExpression") {
+        expr = expr.expression;
+      }
+      const exprWithExtra = expr as ExpressionKind & {
+        extra?: { parenthesized?: boolean; parenStart?: number };
+      };
+      if (exprWithExtra?.extra?.parenthesized) {
+        delete exprWithExtra.extra.parenthesized;
+        delete exprWithExtra.extra.parenStart;
+      }
+      return expr;
+    } catch {
+      return null;
+    }
+  };
+
   const tryHandleMappedFunctionColor = (d: any): boolean => {
     // Handle: background: ${(props) => getColor(props.variant)}
     // when `getColor` is a simple conditional mapping function.
@@ -640,6 +667,91 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     // try resolving with indexedLookup hint so the adapter can return a prebuilt
     // mixin map for stylex.props() instead of a CSS value for stylex.create().
     if (!opts.pseudos?.length) {
+      // Check if a pseudo style function already targets this CSS property.
+      // When it does, its `default: null` would override a separate props-map
+      // entry for the same property. Merge the base value into the existing
+      // pseudo function instead.
+      const outs = cssDeclarationToStylexDeclarations(d);
+      const firstOutProp = outs.find((o: { prop?: string }) => o.prop)?.prop;
+      if (firstOutProp) {
+        const baseFnKeyPrefix = styleKeyWithSuffix(decl.styleKey, firstOutProp);
+        for (const [pseudoFnKey, pseudoFnAst] of styleFnDecls.entries()) {
+          if (pseudoFnKey === baseFnKeyPrefix || !pseudoFnKey.startsWith(baseFnKeyPrefix)) {
+            continue;
+          }
+          // Found a pseudo style function for the same CSS property.
+          // Resolve the base value and merge it into the pseudo function's default.
+          const baseResolved = resolveValue({
+            kind: "theme",
+            path: themeObjectPath,
+            filePath,
+            loc: getNodeLocStart(body.object) ?? undefined,
+          });
+          if (!baseResolved) {
+            break;
+          }
+
+          registerImports(baseResolved.imports, resolverImports);
+          ensureShouldForwardPropDrop(decl, indexPropName);
+
+          const baseResolvedExprAst = parseExpr(baseResolved.expr);
+          const baseParamName = buildSafeIndexedParamName(indexPropName, baseResolvedExprAst);
+          const baseIndexedExprAst = parseIndexedExprAst(baseResolved.expr, baseParamName);
+          if (!baseIndexedExprAst) {
+            break;
+          }
+
+          // Add base param to the existing pseudo style function
+          const arrowFn = pseudoFnAst as {
+            params: unknown[];
+            body: {
+              properties: {
+                value?: {
+                  type?: string;
+                  properties?: {
+                    key?: { type?: string; name?: string };
+                    value?: { type?: string; value?: unknown };
+                  }[];
+                };
+              }[];
+            };
+          };
+          const baseParam = j.identifier(baseParamName);
+          const basePropTsType = findJsxPropTsType(indexPropName);
+          (baseParam as any).typeAnnotation = j.tsTypeAnnotation(
+            (basePropTsType && typeof basePropTsType === "object" && (basePropTsType as any).type
+              ? (basePropTsType as any)
+              : j.tsStringKeyword()) as any,
+          );
+          arrowFn.params.push(baseParam);
+
+          // Update `default: null` → `default: baseIndexedExprAst` in the function body
+          for (const prop of arrowFn.body.properties) {
+            if (prop.value?.type === "ObjectExpression" && prop.value.properties) {
+              for (const innerProp of prop.value.properties) {
+                if (
+                  innerProp.key?.type === "Identifier" &&
+                  innerProp.key.name === "default" &&
+                  innerProp.value?.type === "Literal" &&
+                  innerProp.value.value === null
+                ) {
+                  (innerProp as any).value = baseIndexedExprAst;
+                }
+              }
+            }
+          }
+
+          // Update styleFnFromProps: add this prop as an extra call arg
+          const existingEntry = styleFnFromProps.find((e) => e.fnKey === pseudoFnKey);
+          if (existingEntry) {
+            existingEntry.extraCallArgs ??= [];
+            existingEntry.extraCallArgs.push({ jsxProp: indexPropName });
+          }
+
+          return true;
+        }
+      }
+
       const propsMapResolved = resolveValue({
         kind: "theme",
         path: themeObjectPath,
@@ -714,28 +826,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       if (!styleFnDecls.has(fnKey)) {
         const resolvedExprAst = parseExpr(resolved.expr);
         const paramName = buildSafeIndexedParamName(indexPropName, resolvedExprAst);
-        const indexedExprAst = (() => {
-          const exprSource = `(${resolved.expr})[${paramName}]`;
-          try {
-            const jParse = api.jscodeshift.withParser("tsx");
-            const program = jParse(`(${exprSource});`);
-            const stmt = program.find(jParse.ExpressionStatement).nodes()[0];
-            let expr = stmt?.expression ?? null;
-            while (expr?.type === "ParenthesizedExpression") {
-              expr = expr.expression;
-            }
-            const exprWithExtra = expr as ExpressionKind & {
-              extra?: { parenthesized?: boolean; parenStart?: number };
-            };
-            if (exprWithExtra?.extra?.parenthesized) {
-              delete exprWithExtra.extra.parenthesized;
-              delete exprWithExtra.extra.parenStart;
-            }
-            return expr;
-          } catch {
-            return null;
-          }
-        })();
+        const indexedExprAst = parseIndexedExprAst(resolved.expr, paramName);
         if (!indexedExprAst) {
           warnings.push({
             severity: "error",

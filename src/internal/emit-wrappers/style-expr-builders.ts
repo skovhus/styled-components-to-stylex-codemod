@@ -663,7 +663,23 @@ export function buildStyleFnExpressions(
     const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
     const rawCallArg = p.callArg ?? propExpr;
     const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
-    const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), [callArg]);
+    const allCallArgs: ExpressionKind[] = [callArg];
+    // Multi-param style functions: append extra call arguments
+    if (p.extraCallArgs) {
+      for (const extra of p.extraCallArgs) {
+        const extraPropExpr =
+          extra.jsxProp === "__props" ? propsId : propExprBuilder(extra.jsxProp);
+        allCallArgs.push(extra.callArg ?? extraPropExpr);
+        if (
+          extra.jsxProp !== "__props" &&
+          destructureProps &&
+          !destructureProps.includes(extra.jsxProp)
+        ) {
+          destructureProps.push(extra.jsxProp);
+        }
+      }
+    }
+    const call = j.callExpression(styleRef(j, stylesIdentifier, p.fnKey), allCallArgs);
 
     // Track call arg identifier for destructuring if needed
     if (p.callArg?.type === "Identifier") {
@@ -756,6 +772,16 @@ export function collectDestructurePropsFromStyleFns(
     }
     if (p.conditionWhen) {
       collectConditionProps(j, { when: p.conditionWhen, destructureProps });
+    }
+    // Collect extra call arg props for multi-param style functions
+    for (const extra of p.extraCallArgs ?? []) {
+      if (
+        extra.jsxProp &&
+        extra.jsxProp !== "__props" &&
+        !destructureProps.includes(extra.jsxProp)
+      ) {
+        destructureProps.push(extra.jsxProp);
+      }
     }
   }
 

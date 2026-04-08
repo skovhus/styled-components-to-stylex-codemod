@@ -379,6 +379,12 @@ export type StyledDecl = {
      * site must wrap the argument in `{ [propsObjectKey]: callArg }`.
      */
     propsObjectKey?: string;
+    /**
+     * Additional call arguments for multi-param style functions.
+     * Used when base and pseudo indexed lookups for the same CSS property
+     * are merged into a single style function.
+     */
+    extraCallArgs?: { jsxProp: string; callArg?: ExpressionKind }[];
   }>;
   shouldForwardProp?: {
     dropProps: string[];

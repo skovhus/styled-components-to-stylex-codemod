@@ -12,17 +12,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, hoverColor, bg } = props;
-  return (
-    <div
-      sx={[
-        styles.box,
-        $colorMixins.backgroundColor[bg],
-        styles.boxBackgroundColorHover(hoverColor),
-      ]}
-    >
-      {children}
-    </div>
-  );
+  return <div sx={[styles.box, styles.boxBackgroundColorHover(hoverColor, bg)]}>{children}</div>;
 }
 
 export const App = () => (
@@ -58,9 +48,9 @@ const styles = stylex.create({
     height: "100%",
     padding: 16,
   },
-  boxBackgroundColorHover: (hoverColor: Color) => ({
+  boxBackgroundColorHover: (hoverColor: Color, bg: Color) => ({
     backgroundColor: {
-      default: null,
+      default: $colors[bg],
       ":hover": $colors[hoverColor],
     },
   }),
