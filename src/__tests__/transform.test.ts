@@ -406,19 +406,25 @@ describe("transform", () => {
     const normalizedExpected = await normalizeCode(output, outputPath);
     expect(normalizedResult).toEqual(normalizedExpected);
 
-    // Verify sidecar marker content: all marker declarations should be present in the shared markers file
-    if (diagnostics.sidecarContent) {
+    // Verify sidecar marker content
+    if (diagnostics.sidecarFiles && diagnostics.sidecarFiles.length > 0) {
       const sharedMarkersPath = join(testCasesDir, "markers.stylex.ts");
       const sharedMarkers = readFileSync(sharedMarkersPath, "utf-8");
-      const markerLines = diagnostics.sidecarContent
-        .split("\n")
-        .filter((line) => line.startsWith("export const"));
-      expect(markerLines.length).toBeGreaterThan(0);
-      for (const line of markerLines) {
-        expect(sharedMarkers).toContain(line);
+
+      for (const sidecar of diagnostics.sidecarFiles) {
+        const markerLines = sidecar.content
+          .split("\n")
+          .filter((line) => line.startsWith("export const"));
+        expect(markerLines.length).toBeGreaterThan(0);
+
+        if (sidecar.filePath) {
+          // Cross-file markers: filePath points to the shared markers file
+          for (const line of markerLines) {
+            expect(sharedMarkers).toContain(line);
+          }
+          expect(sidecar.filePath).toBe(sharedMarkersPath);
+        }
       }
-      // Verify sidecarFilePath points to the shared markers file
-      expect(diagnostics.sidecarFilePath).toBe(sharedMarkersPath);
     }
   });
 });

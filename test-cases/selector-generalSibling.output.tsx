@@ -1,6 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { ThingMarker } from "./markers.stylex";
+import { ThingMarker } from "./selector-generalSibling.input.stylex";
 
 function Thing(props: React.PropsWithChildren<{}>) {
   return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;

@@ -12,16 +12,22 @@ import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
 
+/** A sidecar .stylex.ts file containing defineMarker() declarations. */
+export interface SidecarFile {
+  content: string;
+  /** Absolute file path for writing. Undefined = default local sidecar next to the source file. */
+  filePath?: string;
+}
+
 /**
  * Result of the transform including any log entries
  */
 export interface TransformResult {
   code: string | null;
   warnings: WarningLog[];
-  /** Content for the sidecar .stylex.ts file (defineMarker declarations). Undefined when no markers needed. */
-  sidecarContent?: string;
-  /** Absolute file path for the sidecar file, when adapter.markerFile provides a custom location. */
-  sidecarFilePath?: string;
+  /** Sidecar .stylex.ts files (defineMarker declarations). Multiple entries when a file has
+   *  both cross-file markers (adapter.markerFile) and internal markers (local sidecar). */
+  sidecarFiles?: SidecarFile[];
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */

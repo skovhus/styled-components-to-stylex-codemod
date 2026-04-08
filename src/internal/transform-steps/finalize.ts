@@ -51,8 +51,7 @@ export function finalize(ctx: TransformContext): TransformResult {
   return {
     code,
     warnings: ctx.warnings,
-    sidecarContent: ctx.sidecarStylexContent,
-    sidecarFilePath: ctx.sidecarFilePath,
+    sidecarFiles: ctx.sidecarFiles,
     bridgeResults: ctx.bridgeResults,
     transientPropRenames: ctx.transientPropRenames,
   };

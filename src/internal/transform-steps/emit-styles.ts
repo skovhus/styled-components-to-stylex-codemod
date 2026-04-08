@@ -96,42 +96,88 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
 // --- Non-exported helpers ---
 
 /**
- * Emit defineMarker declarations into a sidecar `.stylex.ts` file and insert
- * an import for the markers into the main file. StyleX requires defineMarker()
+ * Emit defineMarker declarations into sidecar `.stylex.ts` file(s) and insert
+ * import(s) for the markers into the main file. StyleX requires defineMarker()
  * to live in `.stylex.ts` files for the babel plugin's `fileNameForHashing`.
+ *
+ * Cross-file markers (from component selectors across files) are routed to the
+ * adapter's `markerFile` destination. Internal markers (sibling selectors within
+ * the same file) always go to a local sidecar to avoid polluting a shared file.
  */
 function emitDefineMarkerDeclarations(
   ctx: TransformContext,
   crossFileMarkers: Map<string, string>,
 ): void {
-  const j = ctx.j;
-  const markerNames = [...crossFileMarkers.values()];
+  // Partition markers into cross-file (adapter-routed) and internal (local sidecar)
+  const siblingMarkerKeys = ctx.siblingMarkerKeys ?? new Set<string>();
+  const crossFileNames: string[] = [];
+  const internalNames: string[] = [];
+  for (const [styleKey, markerName] of crossFileMarkers) {
+    if (siblingMarkerKeys.has(styleKey)) {
+      internalNames.push(markerName);
+    } else {
+      crossFileNames.push(markerName);
+    }
+  }
 
-  // Build sidecar file content with JSDoc comments for each marker
+  const adapterMarkerFile = ctx.adapter.markerFile;
+  const adapterImportSource =
+    crossFileNames.length > 0 ? adapterMarkerFile?.({ filePath: ctx.file.path }) : undefined;
+
+  const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
+  const localImportPath = `./${fileBase}.stylex`;
+
+  // When adapter doesn't provide a path (or returns undefined), all markers go to local sidecar
+  if (!adapterImportSource) {
+    const allNames = [...crossFileNames, ...internalNames];
+    emitMarkerGroup(ctx, allNames, localImportPath, undefined);
+    return;
+  }
+
+  const adapterPath = importSourceToModuleSpecifier(adapterImportSource, ctx.file.path);
+  const adapterAbsPath = importSourceToAbsolutePath(adapterImportSource, ctx.file.path);
+
+  if (internalNames.length === 0) {
+    // All markers are cross-file — single sidecar at adapter destination
+    emitMarkerGroup(ctx, crossFileNames, adapterPath, adapterAbsPath);
+    return;
+  }
+
+  if (crossFileNames.length === 0) {
+    // All markers are internal — single local sidecar
+    emitMarkerGroup(ctx, internalNames, localImportPath, undefined);
+    return;
+  }
+
+  // Mixed: cross-file markers to adapter destination, internal to local sidecar
+  emitMarkerGroup(ctx, crossFileNames, adapterPath, adapterAbsPath);
+  emitMarkerGroup(ctx, internalNames, localImportPath, undefined);
+}
+
+/** Build sidecar content and import declaration for a group of markers. */
+function emitMarkerGroup(
+  ctx: TransformContext,
+  markerNames: string[],
+  importPath: string,
+  absoluteFilePath: string | undefined,
+): void {
+  const j = ctx.j;
   const markerDecls = markerNames
     .map((name) => {
       const componentName = name.replace(/Marker$/, "");
       return `/** Custom marker for ${componentName} */\nexport const ${name} = stylex.defineMarker();`;
     })
     .join("\n\n");
-  ctx.sidecarStylexContent = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
+  const content = `import * as stylex from "@stylexjs/stylex";\n\n${markerDecls}\n`;
 
-  // Determine sidecar import path — use adapter.markerFile if provided, otherwise derive from basename
-  let sidecarImportPath: string;
-  const adapterMarkerFile = ctx.adapter.markerFile;
-  if (adapterMarkerFile) {
-    const importSource = adapterMarkerFile({ filePath: ctx.file.path });
-    sidecarImportPath = importSourceToModuleSpecifier(importSource, ctx.file.path);
-    ctx.sidecarFilePath = importSourceToAbsolutePath(importSource, ctx.file.path);
-  } else {
-    const fileBase = basename(ctx.file.path).replace(/\.\w+$/, "");
-    sidecarImportPath = `./${fileBase}.stylex`;
+  if (!ctx.sidecarFiles) {
+    ctx.sidecarFiles = [];
   }
+  ctx.sidecarFiles.push({ content, filePath: absoluteFilePath });
 
-  // Insert `import { XMarker, ... } from "./file.stylex"` after existing imports
   const importDecl = j.importDeclaration(
     markerNames.map((name) => j.importSpecifier(j.identifier(name))),
-    j.literal(sidecarImportPath),
+    j.literal(importPath),
   );
 
   const programBody = ctx.root.get().node.program.body as Array<{ type?: string }>;

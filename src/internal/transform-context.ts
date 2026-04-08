@@ -105,10 +105,8 @@ export class TransformContext {
   parentsNeedingDefaultMarker?: Set<string>;
   /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
   ancestorAttrsByStyleKey?: Map<string, Set<string>>;
-  /** Content for the sidecar .stylex.ts file (defineMarker declarations), populated by emitStylesStep */
-  sidecarStylexContent?: string;
-  /** Absolute file path for the sidecar file, when adapter.markerFile provides a custom location */
-  sidecarFilePath?: string;
+  /** Sidecar .stylex.ts files (defineMarker declarations), populated by emitStylesStep */
+  sidecarFiles?: import("./transform-types.js").SidecarFile[];
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: import("./transform-types.js").BridgeComponentResult[];
   /** Transient prop renames for exported components (for consumer patching). */

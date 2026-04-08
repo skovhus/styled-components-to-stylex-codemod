@@ -13,7 +13,6 @@ function createCtx(code: string, hasChanges: boolean): TransformContext {
     warnings: [],
     hasChanges,
     file: { path: "test.tsx", source: code },
-    sidecarStylexContent: null,
     bridgeResults: [],
   } as any;
 }
@@ -43,12 +42,12 @@ describe("finalize", () => {
     expect(result.warnings).toHaveLength(1);
   });
 
-  it("includes sidecar content and bridge results", () => {
+  it("includes sidecar files and bridge results", () => {
     const ctx = createCtx(`const x = 1;`, false);
-    (ctx as any).sidecarStylexContent = "some content";
+    (ctx as any).sidecarFiles = [{ content: "some content" }];
     (ctx as any).bridgeResults = [{ test: true }];
     const result = finalize(ctx);
-    expect(result.sidecarContent).toBe("some content");
+    expect(result.sidecarFiles).toEqual([{ content: "some content" }]);
     expect(result.bridgeResults).toEqual([{ test: true }]);
   });
 
