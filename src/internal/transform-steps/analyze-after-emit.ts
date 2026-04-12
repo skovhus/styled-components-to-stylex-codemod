@@ -424,7 +424,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (extendedBy.has(decl.localName)) {
     return false;
   }
-  if (decl.bridgeClassName || decl.attrWrapper) {
+  if (decl.bridgeMarkerVarName || decl.attrWrapper) {
     return false;
   }
   if ((decl as { usedAsValue?: boolean }).usedAsValue) {

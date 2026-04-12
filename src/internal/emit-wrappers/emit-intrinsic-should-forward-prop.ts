@@ -5,7 +5,6 @@
  * AST for the remaining props.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { buildStyleFnConditionExpr } from "../utilities/jscodeshift-utils.js";
 import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { type ExpressionKind, type InlineStyleProp, type WrapperPropDefaults } from "./types.js";
@@ -693,9 +692,12 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
       d.attrsInfo,
-      getBridgeClassVar(d),
       d.extraClassNames,
     );
+    // Add bridge marker to stylex.props() args so its className is applied to the element
+    if (d.bridgeMarkerVarName) {
+      styleArgs.push(j.identifier(d.bridgeMarkerVarName));
+    }
 
     // When no className/style props, process attrs for JSX rendering and extract forwardedAs fallback
     let attrsInfoForJsx: StyledDecl["attrsInfo"] | undefined;

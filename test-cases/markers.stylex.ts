@@ -1,13 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
 
+/** Custom marker for StyledCollapseButton */
+export const StyledCollapseButtonMarker = stylex.defineMarker();
+
 /** Custom marker for Wrapper */
 export const WrapperMarker = stylex.defineMarker();
 
 /** Custom marker for Link */
 export const LinkMarker = stylex.defineMarker();
-
-/** Custom marker for StyledCollapseButton */
-export const StyledCollapseButtonMarker = stylex.defineMarker();
 
 /** Custom marker for IconButton */
 export const IconButtonMarker = stylex.defineMarker();

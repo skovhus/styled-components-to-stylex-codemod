@@ -1353,8 +1353,8 @@ export class WrapperEmitter {
     inlineStyleProps?: InlineStyleProp[];
     /** Component reference from `.attrs({ as: Component })` — overrides the rendered tag. */
     attrsAsTag?: string;
-    /** Bridge class variable name to reference in the className expression. */
-    bridgeClassVar?: string;
+    /** Bridge marker variable name to include in stylex.props() args. */
+    bridgeMarkerVarName?: string;
   }): ASTNode[] {
     const {
       localName,
@@ -1375,7 +1375,7 @@ export class WrapperEmitter {
       staticAttrs = {},
       inlineStyleProps = [],
       attrsAsTag,
-      bridgeClassVar,
+      bridgeMarkerVarName,
     } = args;
 
     const { j } = this;
@@ -1545,7 +1545,11 @@ export class WrapperEmitter {
       const { className: _omitClassName, ...rest } = staticAttrs;
       return rest;
     })();
-    const staticClassNameExpr = seb.buildStaticClassNameExpr(j, staticClassName, bridgeClassVar);
+    // Add bridge marker to stylex.props() args so its className is applied to the element
+    if (bridgeMarkerVarName) {
+      styleArgs.push(j.identifier(bridgeMarkerVarName));
+    }
+    const staticClassNameExpr = seb.buildStaticClassNameExpr(j, staticClassName);
     const merging = emitStyleMerging({
       j,
       emitter: this,
@@ -1836,10 +1840,9 @@ export class WrapperEmitter {
 
   splitAttrsInfo(
     attrsInfo: StyledDecl["attrsInfo"],
-    bridgeClassVar?: string,
     extraClassNames?: StyledDecl["extraClassNames"],
   ) {
-    return seb.splitAttrsInfo(this.j, attrsInfo, bridgeClassVar, extraClassNames);
+    return seb.splitAttrsInfo(this.j, attrsInfo, extraClassNames);
   }
 
   buildVariantDimensionLookups(args: {

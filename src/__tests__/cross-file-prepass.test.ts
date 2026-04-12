@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
-import { join, resolve as pathResolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -15,11 +15,6 @@ import {
 } from "../internal/prepass/scan-cross-file-selectors.js";
 import { transformWithWarnings } from "../transform.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
-import {
-  generateBridgeClassName,
-  bridgeClassVarName,
-  bridgeExportName,
-} from "../internal/utilities/bridge-classname.js";
 import {
   buildConsumerReplacements,
   patchConsumerFile,
@@ -416,44 +411,10 @@ export const App = ({ show = true }: { show?: boolean }) => (
   });
 });
 
-/* ── Bridge className utilities ──────────────────────────────────────── */
-
-describe("generateBridgeClassName", () => {
-  it("produces a deterministic className", () => {
-    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
-    const b = generateBridgeClassName("/src/foo.tsx", "Foo");
-    expect(a).toBe(b);
-  });
-
-  it("produces different classNames for different components", () => {
-    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
-    const b = generateBridgeClassName("/src/foo.tsx", "Bar");
-    expect(a).not.toBe(b);
-  });
-
-  it("produces different classNames for different files", () => {
-    const a = generateBridgeClassName("/src/foo.tsx", "Foo");
-    const b = generateBridgeClassName("/src/bar.tsx", "Foo");
-    expect(a).not.toBe(b);
-  });
-
-  it("has the expected format: sc2sx-ComponentName-hash", () => {
-    const cn = generateBridgeClassName("/src/foo.tsx", "MyComponent");
-    expect(cn).toMatch(/^sc2sx-MyComponent-[0-9a-f]{8}$/);
-  });
-});
-
-describe("bridgeExportName", () => {
-  it("appends GlobalSelector suffix", () => {
-    expect(bridgeExportName("Foo")).toBe("FooGlobalSelector");
-    expect(bridgeExportName("CollapseArrowIcon")).toBe("CollapseArrowIconGlobalSelector");
-  });
-});
-
 /* ── Bridge transform (end-to-end) ───────────────────────────────────── */
 
 describe("cross-file bridge transform (consumer not transformed)", () => {
-  it("emits bridge className and GlobalSelector export for bridge components", () => {
+  it("emits bridge marker and GlobalSelector export for bridge components", () => {
     const source = `
 import styled from "styled-components";
 
@@ -466,7 +427,6 @@ export const CollapseArrowIcon = styled.svg\`
 export const App = () => <CollapseArrowIcon />;
 `;
 
-    const absPath = pathResolve("/src/lib/collapse-arrow-icon.tsx");
     const bridgeComponentNames = new Set(["CollapseArrowIcon"]);
 
     const result = transformWithWarnings(
@@ -478,24 +438,25 @@ export const App = () => <CollapseArrowIcon />;
     expect(result.code).not.toBeNull();
     const code = result.code!;
 
-    // Should contain the bridge className value as an internal const
-    const bridgeCn = generateBridgeClassName(absPath, "CollapseArrowIcon");
-    const internalVar = bridgeClassVarName("CollapseArrowIcon");
-    expect(code).toContain(`const ${internalVar} = "${bridgeCn}"`);
+    // Should include the bridge marker in stylex.props() args
+    expect(code).toContain("CollapseArrowIconMarker");
 
-    // Should reference the internal const in the className expression
-    expect(code).toContain(internalVar);
-
-    // Should export a GlobalSelector variable using template literal
+    // Should export a GlobalSelector variable using stylex.props(Marker).className
     expect(code).toContain("export const CollapseArrowIconGlobalSelector");
-    expect(code).toContain(`\`.${`\${${internalVar}}`}\``);
+    expect(code).toContain("stylex.props(CollapseArrowIconMarker).className");
+
+    // Should emit a sidecar file with the defineMarker declaration
+    expect(result.sidecarFiles).toBeDefined();
+    expect(result.sidecarFiles!.some((f) => f.content.includes("CollapseArrowIconMarker"))).toBe(
+      true,
+    );
 
     // Should have bridgeResults
     expect(result.bridgeResults).toBeDefined();
     expect(result.bridgeResults).toHaveLength(1);
     expect(result.bridgeResults![0]).toMatchObject({
       componentName: "CollapseArrowIcon",
-      className: bridgeCn,
+      markerVarName: "CollapseArrowIconMarker",
       globalSelectorVarName: "CollapseArrowIconGlobalSelector",
     });
   });
@@ -517,7 +478,6 @@ export default CollapseArrowIcon;
 export const App = () => <CollapseArrowIcon />;
 `;
 
-    const absPath = pathResolve("/src/lib/collapse-arrow-icon.tsx");
     // The prepass stores "default" as the importedName for default imports
     const bridgeComponentNames = new Set(["default"]);
 
@@ -530,9 +490,8 @@ export const App = () => <CollapseArrowIcon />;
     expect(result.code).not.toBeNull();
     const code = result.code!;
 
-    // Should contain the bridge className
-    const bridgeCn = generateBridgeClassName(absPath, "CollapseArrowIcon");
-    expect(code).toContain(bridgeCn);
+    // Should include the bridge marker in the output
+    expect(code).toContain("CollapseArrowIconMarker");
 
     // Should export a GlobalSelector variable
     expect(code).toContain("GlobalSelector");
@@ -542,7 +501,7 @@ export const App = () => <CollapseArrowIcon />;
     expect(result.bridgeResults).toHaveLength(1);
   });
 
-  it("includes bridge class in className for shouldForwardProp components that allow className", () => {
+  it("includes bridge marker in stylex.props for shouldForwardProp components", () => {
     const source = `
 import styled from "styled-components";
 
@@ -556,7 +515,6 @@ export const Flex = styled("div").withConfig({
 export const App = () => <Flex className="extra" column>Content</Flex>;
 `;
 
-    const absPath = pathResolve("/src/lib/flex.tsx");
     const bridgeComponentNames = new Set(["Flex"]);
 
     const result = transformWithWarnings({ source, path: "/src/lib/flex.tsx" }, api, {
@@ -567,20 +525,13 @@ export const App = () => <Flex className="extra" column>Content</Flex>;
     expect(result.code).not.toBeNull();
     const code = result.code!;
 
-    // Should contain the bridge className value as an internal const
-    const bridgeCn = generateBridgeClassName(absPath, "Flex");
-    const internalVar = bridgeClassVarName("Flex");
-    expect(code).toContain(`const ${internalVar} = "${bridgeCn}"`);
+    // Should include the bridge marker in the stylex.props() call
+    expect(code).toContain("FlexMarker");
+    expect(code).toMatch(/stylex\.props\([^)]*FlexMarker/);
 
-    // The bridge class variable must appear in the component's className expression,
-    // not just in the GlobalSelector export.
-    // Count occurrences: at least 3 — definition + GlobalSelector + className usage
-    const varOccurrences = code.split(internalVar).length - 1;
-    expect(varOccurrences).toBeGreaterThanOrEqual(3);
-
-    // The merger should receive the bridge class as part of an array, not pre-joined
-    expect(code).toContain(`[${internalVar}, className]`);
-    expect(code).not.toContain(".filter(Boolean).join");
+    // Should export the GlobalSelector using marker
+    expect(code).toContain("export const FlexGlobalSelector");
+    expect(code).toContain("stylex.props(FlexMarker).className");
   });
 
   it("does NOT emit bridge for components not in bridgeComponentNames", () => {
@@ -634,7 +585,7 @@ describe("buildConsumerReplacements", () => {
         [
           {
             componentName: "Icon",
-            className: "sc2sx-Icon-abc12345",
+            markerVarName: "IconMarker",
             globalSelectorVarName: "IconGlobalSelector",
           },
         ],
@@ -671,7 +622,7 @@ describe("buildConsumerReplacements", () => {
 
     const bridgeResults = new Map<
       string,
-      { componentName: string; className: string; globalSelectorVarName: string }[]
+      { componentName: string; markerVarName: string; globalSelectorVarName: string }[]
     >();
 
     const result = buildConsumerReplacements(selectorUsages, bridgeResults);
@@ -701,7 +652,7 @@ describe("buildConsumerReplacements", () => {
         [
           {
             componentName: "Icon",
-            className: "sc2sx-Icon-abc12345",
+            markerVarName: "IconMarker",
             globalSelectorVarName: "IconGlobalSelector",
           },
         ],
@@ -736,7 +687,7 @@ describe("buildConsumerReplacements", () => {
         [
           {
             componentName: "Icon",
-            className: "sc2sx-Icon-abc12345",
+            markerVarName: "IconMarker",
             globalSelectorVarName: "IconGlobalSelector",
           },
         ],
@@ -779,7 +730,7 @@ describe("buildConsumerReplacements", () => {
         [
           {
             componentName: "Icon",
-            className: "sc2sx-Icon-abc12345",
+            markerVarName: "IconMarker",
             globalSelectorVarName: "IconGlobalSelector",
           },
         ],
@@ -817,7 +768,7 @@ describe("buildConsumerReplacements", () => {
           {
             componentName: "Icon",
             exportName: "default" as const,
-            className: "sc2sx-Icon-abc12345",
+            markerVarName: "IconMarker",
             globalSelectorVarName: "IconGlobalSelector",
           },
         ],

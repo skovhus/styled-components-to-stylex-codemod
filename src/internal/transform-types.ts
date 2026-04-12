@@ -40,12 +40,13 @@ export interface TransientPropRenameResult {
   renames: Record<string, string>;
 }
 
-/** Describes a bridge className emitted for a component targeted by unconverted consumer selectors. */
+/** Describes a bridge marker emitted for a component targeted by unconverted consumer selectors. */
 export interface BridgeComponentResult {
   componentName: string;
   /** The export name (e.g. "default" for default exports, or the named export identifier). */
   exportName?: string;
-  className: string;
+  /** The marker variable name (e.g. "FooMarker") used in the sidecar defineMarker() declaration. */
+  markerVarName: string;
   globalSelectorVarName: string;
 }
 
@@ -576,8 +577,8 @@ export type StyledDecl = {
   };
   // Leading comments (JSDoc, line comments) from the original styled component declaration
   leadingComments?: Comment[];
-  /** Deterministic bridge CSS class name for unconverted consumer selectors */
-  bridgeClassName?: string;
+  /** Marker variable name for bridge global selector (e.g. "FooMarker") */
+  bridgeMarkerVarName?: string;
   /** Local helper functions that were inlined into style functions and should be removed */
   consumedLocalHelpers?: string[];
 };

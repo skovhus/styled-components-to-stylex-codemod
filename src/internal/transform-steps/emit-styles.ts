@@ -20,9 +20,20 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
   ctx.emptyStyleKeys = emptyStyleKeys;
   ctx.markChanged();
 
-  // Emit defineMarker() declarations for cross-file parent components
-  if (ctx.crossFileMarkers && ctx.crossFileMarkers.size > 0) {
-    emitDefineMarkerDeclarations(ctx, ctx.crossFileMarkers);
+  // Collect bridge markers from styledDecls (for unconverted consumer selectors)
+  // and merge them with cross-file markers for sidecar emission.
+  const allMarkers = new Map(ctx.crossFileMarkers ?? []);
+  for (const decl of ctx.styledDecls) {
+    if (decl.bridgeMarkerVarName) {
+      // Use the decl's styleKey as the map key. If a cross-file marker already
+      // exists for this component (ancestor selector), the bridge reuses it.
+      allMarkers.set(decl.localName, decl.bridgeMarkerVarName);
+    }
+  }
+
+  // Emit defineMarker() declarations for cross-file parent components and bridge markers
+  if (allMarkers.size > 0) {
+    emitDefineMarkerDeclarations(ctx, allMarkers);
   }
 
   if (ctx.resolverImportAliases && ctx.resolverImportAliases.size > 0) {

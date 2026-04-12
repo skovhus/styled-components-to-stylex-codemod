@@ -3,7 +3,6 @@
  * Core concepts: wrapper decisions, export mapping, and styles identifier selection.
  */
 import type { JSCodeshift } from "jscodeshift";
-import { resolve as pathResolve } from "node:path";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
@@ -13,7 +12,6 @@ import {
   hasSpreadInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
-import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
   type ExpressionKind,
   getRootJsxIdentifierName,
@@ -197,8 +195,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       wrapperForcedByPrepass.add(decl.localName);
     }
 
-    // Bridge className injection: components referenced by unconverted consumer selectors
-    // get a deterministic className so the consumer's `${Component} { ... }` still works.
+    // Bridge marker injection: components referenced by unconverted consumer selectors
+    // get a defineMarker() so the consumer's `${Component} { ... }` still works.
     // Note: for default imports, the prepass stores "default" as importedName; resolve it
     // to the actual local name by checking which decl is the default export.
     const isBridgeComponent =
@@ -206,8 +204,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       (ctx.bridgeComponentNames?.has("default") &&
         exportedComponents.get(decl.localName)?.isDefault);
     if (isBridgeComponent) {
-      const absPath = pathResolve(file.path);
-      decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
+      decl.bridgeMarkerVarName = `${decl.localName}Marker`;
     }
   }
 
@@ -223,7 +220,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       !decl.isCssHelper &&
       !decl.isDirectJsxResolution &&
       decl.base.kind === "intrinsic" &&
-      !decl.bridgeClassName &&
+      !decl.bridgeMarkerVarName &&
       // attrWrapper components (input[type="checkbox"], a[href^="https"], etc.) need
       // specialized wrapper emitters for conditional attribute-based styles.
       !decl.attrWrapper &&
@@ -2626,7 +2623,7 @@ function canDowngradeStyleFnOnlyWrapper(
   if (decl.base.kind !== "intrinsic") {
     return false;
   }
-  if (decl.bridgeClassName || decl.attrWrapper) {
+  if (decl.bridgeMarkerVarName || decl.attrWrapper) {
     return false;
   }
   return hasInlineableStyleFnOnly(decl);

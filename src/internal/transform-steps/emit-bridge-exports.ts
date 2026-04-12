@@ -2,8 +2,8 @@
  * Step: emit bridge global selector exports for components targeted by
  * unconverted styled-components consumers.
  *
- * For each styled component with a `bridgeClassName`, emits:
- *   export const FooGlobalSelector = ".sc2sx-Foo-a1b2c3";
+ * For each styled component with a `bridgeMarkerVarName`, emits:
+ *   export const FooGlobalSelector = `.${stylex.props(FooMarker).className!}`;
  */
 import {
   CONTINUE,
@@ -12,7 +12,6 @@ import {
   type BridgeComponentResult,
 } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { bridgeClassVarName, bridgeExportName } from "../utilities/bridge-classname.js";
 
 export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
@@ -21,7 +20,7 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   }
 
   const bridgeDecls = styledDecls.filter(
-    (d): d is StyledDecl & { bridgeClassName: string } => !!d.bridgeClassName,
+    (d): d is StyledDecl & { bridgeMarkerVarName: string } => !!d.bridgeMarkerVarName,
   );
   if (bridgeDecls.length === 0) {
     return CONTINUE;
@@ -32,21 +31,22 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
 
   for (const decl of bridgeDecls) {
     const exportVarName = bridgeExportName(decl.localName);
-    const internalVarName = bridgeClassVarName(decl.localName);
-    const className = decl.bridgeClassName;
+    const markerVarName = decl.bridgeMarkerVarName;
 
-    // Build: const fooBridgeClass = "sc2sx-Foo-a1b2c3";
-    const internalDecl = j.variableDeclaration("const", [
-      j.variableDeclarator(j.identifier(internalVarName), j.stringLiteral(className)),
-    ]);
-
-    // Build: export const FooGlobalSelector = `.${fooBridgeClass}`;
+    // Build: export const FooGlobalSelector = `.${stylex.props(FooMarker).className!}`;
+    const stylexPropsCall = j.callExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("props")),
+      [j.identifier(markerVarName)],
+    );
+    const classNameAccess = j.tsNonNullExpression(
+      j.memberExpression(stylexPropsCall, j.identifier("className")),
+    );
     const templateLiteral = j.templateLiteral(
       [
         j.templateElement({ raw: ".", cooked: "." }, false),
         j.templateElement({ raw: "", cooked: "" }, true),
       ],
-      [j.identifier(internalVarName)],
+      [classNameAccess],
     );
     const exportDeclaration = j.variableDeclaration("const", [
       j.variableDeclarator(j.identifier(exportVarName), templateLiteral),
@@ -56,7 +56,7 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
     // Add JSDoc deprecation comment
     (exportDecl as any).comments = [
       j.commentBlock(
-        "* @deprecated Migrate consumer to stylex.defineMarker() — bridge className for unconverted styled-components consumers ",
+        "* @deprecated Migrate consumer to stylex.defineMarker() — bridge selector for unconverted styled-components consumers ",
         true,
         false,
       ),
@@ -64,13 +64,12 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
 
     // Insert at the end of the program body
     const body = root.find(j.Program).get().node.body;
-    body.push(internalDecl);
     body.push(exportDecl);
 
     bridgeResults.push({
       componentName: decl.localName,
       exportName: ctx.exportedComponents?.get(decl.localName)?.exportName,
-      className,
+      markerVarName,
       globalSelectorVarName: exportVarName,
     });
   }
@@ -79,4 +78,11 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   ctx.markChanged();
 
   return CONTINUE;
+}
+
+// --- Non-exported helpers ---
+
+/** E.g., "Foo" → "FooGlobalSelector" */
+function bridgeExportName(componentName: string): string {
+  return `${componentName}GlobalSelector`;
 }

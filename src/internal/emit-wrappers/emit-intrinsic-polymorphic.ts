@@ -5,7 +5,6 @@
  * wrapper functions so the chosen element type drives allowed props.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { type WrapperPropDefaults } from "./types.js";
 import { withLeadingComments } from "./comments.js";
 import { SX_PROP_TYPE_TEXT, type JsxAttr, type StatementKind } from "./wrapper-emitter.js";
@@ -219,9 +218,12 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
         d.attrsInfo,
-        getBridgeClassVar(d),
         d.extraClassNames,
       );
+      // Add bridge marker to stylex.props() args so its className is applied to the element
+      if (d.bridgeMarkerVarName) {
+        styleArgs.push(j.identifier(d.bridgeMarkerVarName));
+      }
       const { attrsInfo: attrsInfoWithoutForwardedAsStatic, forwardedAsStaticFallback } =
         splitForwardedAsStaticAttrs({
           attrsInfo,
