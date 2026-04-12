@@ -3,7 +3,7 @@
  * unconverted styled-components consumers.
  *
  * For each styled component with a `bridgeMarkerVarName`, emits:
- *   export const FooGlobalSelector = `.${stylex.props(FooMarker).className!}`;
+ *   export const FooGlobalSelector = `.${stylex.props(FooMarker).className}`;
  */
 import {
   CONTINUE,
@@ -33,14 +33,12 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
     const exportVarName = bridgeExportName(decl.localName);
     const markerVarName = decl.bridgeMarkerVarName;
 
-    // Build: export const FooGlobalSelector = `.${stylex.props(FooMarker).className!}`;
+    // Build: export const FooGlobalSelector = `.${stylex.props(FooMarker).className}`;
     const stylexPropsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
       [j.identifier(markerVarName)],
     );
-    const classNameAccess = j.tsNonNullExpression(
-      j.memberExpression(stylexPropsCall, j.identifier("className")),
-    );
+    const classNameAccess = j.memberExpression(stylexPropsCall, j.identifier("className"));
     const templateLiteral = j.templateLiteral(
       [
         j.templateElement({ raw: ".", cooked: "." }, false),

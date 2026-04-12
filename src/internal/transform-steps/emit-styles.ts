@@ -25,9 +25,9 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
   const allMarkers = new Map(ctx.crossFileMarkers ?? []);
   for (const decl of ctx.styledDecls) {
     if (decl.bridgeMarkerVarName) {
-      // Use the decl's styleKey as the map key. If a cross-file marker already
-      // exists for this component (ancestor selector), the bridge reuses it.
-      allMarkers.set(decl.localName, decl.bridgeMarkerVarName);
+      // Key by styleKey to match crossFileMarkers convention. If a cross-file
+      // marker already exists for this component (ancestor selector), the bridge reuses it.
+      allMarkers.set(decl.styleKey, decl.bridgeMarkerVarName);
     }
   }
 
