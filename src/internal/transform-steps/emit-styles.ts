@@ -23,17 +23,19 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
   // Collect bridge markers from styledDecls (for unconverted consumer selectors)
   // and merge them with cross-file markers for sidecar emission.
   const allMarkers = new Map(ctx.crossFileMarkers ?? []);
+  const bridgeMarkerKeys = new Set<string>();
   for (const decl of ctx.styledDecls) {
     if (decl.bridgeMarkerVarName) {
       // Key by styleKey to match crossFileMarkers convention. If a cross-file
       // marker already exists for this component (ancestor selector), the bridge reuses it.
       allMarkers.set(decl.styleKey, decl.bridgeMarkerVarName);
+      bridgeMarkerKeys.add(decl.styleKey);
     }
   }
 
   // Emit defineMarker() declarations for cross-file parent components and bridge markers
   if (allMarkers.size > 0) {
-    emitDefineMarkerDeclarations(ctx, allMarkers);
+    emitDefineMarkerDeclarations(ctx, allMarkers, bridgeMarkerKeys);
   }
 
   if (ctx.resolverImportAliases && ctx.resolverImportAliases.size > 0) {
@@ -118,13 +120,16 @@ export function emitStylesStep(ctx: TransformContext): StepResult {
 function emitDefineMarkerDeclarations(
   ctx: TransformContext,
   crossFileMarkers: Map<string, string>,
+  bridgeMarkerKeys?: ReadonlySet<string>,
 ): void {
-  // Partition markers into cross-file (adapter-routed) and internal (local sidecar)
+  // Partition markers into cross-file (adapter-routed) and internal (local sidecar).
+  // Bridge markers always go to the local sidecar (never adapter.markerFile) so each
+  // component's bridge selector is file-scoped and won't collide across modules.
   const siblingMarkerKeys = ctx.siblingMarkerKeys ?? new Set<string>();
   const crossFileNames: string[] = [];
   const internalNames: string[] = [];
   for (const [styleKey, markerName] of crossFileMarkers) {
-    if (siblingMarkerKeys.has(styleKey)) {
+    if (siblingMarkerKeys.has(styleKey) || bridgeMarkerKeys?.has(styleKey)) {
       internalNames.push(markerName);
     } else {
       crossFileNames.push(markerName);
