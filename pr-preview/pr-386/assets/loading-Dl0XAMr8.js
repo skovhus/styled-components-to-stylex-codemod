@@ -1,0 +1,1 @@
+import"./chunk-zsgVPwQN.js";import{t as e}from"./react-D4cBbUL-.js";import{f as t}from"./index-DlzvlVvR.js";e();var n=t();function r({style:e,size:t=`medium`,text:r=`Loading…`}){return(0,n.jsx)(`div`,{style:e,children:(0,n.jsx)(`div`,{className:`spinner spinner-${t}`,children:r})})}export{r as t};
