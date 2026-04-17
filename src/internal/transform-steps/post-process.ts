@@ -4,7 +4,7 @@
  */
 import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ImportSource } from "../../adapter.js";
 import { TransformContext } from "../transform-context.js";
@@ -14,10 +14,12 @@ import { TransformContext } from "../transform-context.js";
  */
 export function postProcessStep(ctx: TransformContext): StepResult {
   const { root, j, file } = ctx;
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls) {
+  const allStyledDecls = ctx.styledDecls as StyledDecl[] | undefined;
+  if (!allStyledDecls) {
     return CONTINUE;
   }
+  // Skip decls that couldn't be lowered — their helpers and JSX must remain untouched.
+  const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
 
   // Extract local names of identifiers added as new imports by the adapter.
   // These should shadow old imports with the same name (e.g., when adapter replaces

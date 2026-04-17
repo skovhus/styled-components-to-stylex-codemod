@@ -35,6 +35,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
   }
 
   for (const decl of styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     if (
       decl.isCssHelper &&
       (ctx.exportedComponents?.has(decl.localName) || decl.preserveCssHelperDeclaration)

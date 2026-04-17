@@ -29,6 +29,16 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
+  // Nothing lowered successfully — every declaration hit a per-decl bail. Skip the
+  // file entirely rather than emitting a no-op stylex import alongside untouched
+  // styled-components source.
+  if (ctx.styledDecls && ctx.styledDecls.length > 0) {
+    const anyTransformable = ctx.styledDecls.some((d) => !d.skipTransform);
+    if (!anyTransformable) {
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
+  }
+
   // Now that we know the file is transformable, remove any css helper functions that were inlined.
   if (
     removeInlinedCssHelperFunctions({

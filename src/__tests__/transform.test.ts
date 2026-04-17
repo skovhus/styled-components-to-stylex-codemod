@@ -19,6 +19,15 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 /** Test cases that intentionally test partial conversion with leftover css helpers. */
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 
+/**
+ * Fixtures that intentionally test partial-file transforms: at least one styled
+ * declaration cannot be transformed and remains as `styled\`...\`` in the output,
+ * so the `styled` default import must be preserved.
+ */
+function isPartialFixture(name: string): boolean {
+  return name.startsWith("partial-");
+}
+
 function isBailOutFixture(filename: string): boolean {
   return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
 }
@@ -286,9 +295,11 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
-    expect(result.code).toBeNull();
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]?.type).toBe(expectedWarning);
+    // With per-decl skips, other decls in the fixture may transform successfully while
+    // the one carrying the unsupported pattern is preserved. Require the expected
+    // warning to be present rather than forcing the whole file to bail.
+    expect(result.warnings.length).toBeGreaterThanOrEqual(1);
+    expect(result.warnings.map((w) => w.type)).toContain(expectedWarning);
   });
 });
 
@@ -339,9 +350,11 @@ describe("output invariants", () => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-        ? ["styled", "keyframes", "createGlobalStyle"]
-        : ["styled", "css", "keyframes", "createGlobalStyle"];
+      const disallowedImports = isPartialFixture(name)
+        ? ["keyframes", "createGlobalStyle"]
+        : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+          ? ["styled", "keyframes", "createGlobalStyle"]
+          : ["styled", "css", "keyframes", "createGlobalStyle"];
       const importMatch = output.match(
         /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
       );
@@ -386,9 +399,11 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-      ? ["styled", "keyframes", "createGlobalStyle"]
-      : ["styled", "css", "keyframes", "createGlobalStyle"];
+    const disallowedImports = isPartialFixture(name)
+      ? ["keyframes", "createGlobalStyle"]
+      : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+        ? ["styled", "keyframes", "createGlobalStyle"]
+        : ["styled", "css", "keyframes", "createGlobalStyle"];
     const importMatch = result.match(
       /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
     );
@@ -4651,8 +4666,14 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
 
-    // Should bail because Link and Button are different components
-    expect(result.code).toBeNull();
+    // The `Icon` decl carries the grouped reverse selector across different
+    // components and cannot be transformed. With per-decl skips the other
+    // decls may convert, but `Icon` must remain as styled-components and the
+    // grouped-reverse-selector warning must be emitted.
+    expect(result.warnings.some((w) => w.type.includes("grouped reverse selector"))).toBe(true);
+    if (result.code !== null) {
+      expect(result.code).toMatch(/const\s+Icon\s*=\s*styled\.span`/);
+    }
   });
 });
 
@@ -5907,8 +5928,18 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
 
-    // Should bail — compound :has + pseudo is not supported
-    expect(result.code).toBeNull();
+    // The `Button` decl carrying the compound :has+pseudo selector cannot be
+    // transformed. With per-decl skips the rest of the file is allowed to
+    // convert, but `Button` itself must remain as a styled-components declaration
+    // and a warning must be emitted for the unsupported selector.
+    expect(
+      result.warnings.some(
+        (w) => w.type.startsWith("Unsupported selector:") || w.type.includes(":has"),
+      ),
+    ).toBe(true);
+    if (result.code !== null) {
+      expect(result.code).toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    }
   });
 
   it("should handle &:has(${Component}) with specificity hack (&&:has)", () => {

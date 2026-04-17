@@ -307,8 +307,29 @@ export function createLowerRulesState(ctx: TransformContext) {
     enumValueMap,
     crossFileSelectorsByLocal,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
+    /**
+     * File-level bail flag. Used only for bails that cannot be scoped to a single
+     * declaration (e.g. invariant violations before per-decl processing begins).
+     * Per-decl bails set `currentDecl.skipTransform = true` instead so the file
+     * can still be partially transformed.
+     */
     bail: false,
+    /**
+     * Set at the start of each decl's processing loop iteration. When a handler
+     * calls markBail/bailUnsupported, this is the decl that gets marked skipped.
+     * When null, markBail falls back to the file-level bail flag.
+     */
+    currentDecl: null as StyledDecl | null,
+    /** Ordered list of decls that were skipped during lowering (for rollback and reporting). */
+    skippedDecls: [] as StyledDecl[],
     markBail: () => {
+      if (state.currentDecl) {
+        if (!state.currentDecl.skipTransform) {
+          state.currentDecl.skipTransform = true;
+          state.skippedDecls.push(state.currentDecl);
+        }
+        return;
+      }
       state.bail = true;
     },
     bailUnsupported: (decl: StyledDecl, type: WarningType): void => {
@@ -318,7 +339,10 @@ export function createLowerRulesState(ctx: TransformContext) {
         loc: decl.loc,
         context: { localName: decl.localName },
       });
-      state.bail = true;
+      if (!decl.skipTransform) {
+        decl.skipTransform = true;
+        state.skippedDecls.push(decl);
+      }
     },
   };
 

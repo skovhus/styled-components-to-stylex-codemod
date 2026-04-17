@@ -204,6 +204,17 @@ export type CallSiteCombinedStyle = {
   styles: Record<string, unknown>;
 };
 
+/**
+ * Filters out declarations that couldn't be lowered in `lowerRulesStep`. Downstream
+ * steps use this to skip emission/rewrite for decls that must remain in the source
+ * as original styled-components code.
+ */
+export function getActiveStyledDecls(
+  styledDecls: StyledDecl[] | undefined,
+): StyledDecl[] | undefined {
+  return styledDecls?.filter((d) => !d.skipTransform);
+}
+
 export type StyledDecl = {
   /**
    * Index of the parent top-level statement (VariableDeclaration) within Program.body at
@@ -586,4 +597,11 @@ export type StyledDecl = {
   bridgeClassName?: string;
   /** Local helper functions that were inlined into style functions and should be removed */
   consumedLocalHelpers?: string[];
+  /**
+   * When true, this declaration could not be transformed to StyleX and should be left
+   * untouched in the output (original `styled\`...\`` template preserved, JSX usages
+   * unchanged). Set by per-decl bails in lower-rules. Downstream emission, JSX
+   * rewriting, and wrapper emission must skip declarations with this flag.
+   */
+  skipTransform?: boolean;
 };

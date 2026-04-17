@@ -3,7 +3,8 @@
  * Core concepts: stateful rule processing, variant extraction, and safe bailouts.
  */
 import type { TransformContext } from "./transform-context.js";
-import type { RelationOverride } from "./lower-rules/state.js";
+import type { StyledDecl } from "./transform-types.js";
+import type { LowerRulesState, RelationOverride } from "./lower-rules/state.js";
 import { createLowerRulesState } from "./lower-rules/state.js";
 import { createDeclProcessingState } from "./lower-rules/decl-setup.js";
 import { preScanCssHelperPlaceholders } from "./lower-rules/pre-scan.js";
@@ -69,20 +70,46 @@ export function lowerRules(ctx: TransformContext): {
       continue;
     }
 
+    const snapshot = snapshotStateForDecl(state);
+    state.currentDecl = decl;
+
     const declState = createDeclProcessingState(state, decl);
     if (!preScanCssHelperPlaceholders(declState)) {
+      // preScanCssHelperPlaceholders returning false means markBail was called;
+      // with per-decl skips that translates to the current decl being skipped.
+      if (decl.skipTransform) {
+        restoreStateSnapshot(state, snapshot);
+        state.currentDecl = null;
+        continue;
+      }
+      // Legacy path: file-level bail.
+      state.currentDecl = null;
       break;
     }
 
     processDeclRules(declState);
+    if (decl.skipTransform) {
+      restoreStateSnapshot(state, snapshot);
+      state.currentDecl = null;
+      continue;
+    }
     if (state.bail) {
+      state.currentDecl = null;
       break;
     }
 
     finalizeDeclProcessing(declState);
+    if (decl.skipTransform) {
+      restoreStateSnapshot(state, snapshot);
+      state.currentDecl = null;
+      continue;
+    }
     if (state.bail) {
+      state.currentDecl = null;
       break;
     }
+
+    state.currentDecl = null;
   }
 
   if (!state.bail) {
@@ -99,6 +126,14 @@ export function lowerRules(ctx: TransformContext): {
       makeCssPropKey,
       childPseudoMarkers: state.childPseudoMarkers,
     });
+  }
+
+  // Final cleanup: any decl that became skipped after its per-decl rollback window
+  // (e.g. during postProcessAfterBaseMixins or finalizeRelationOverrides) still has
+  // its styleKeys in the shared maps — prune them so emission never emits entries
+  // for skipped decls.
+  if (!state.bail) {
+    pruneSkippedDeclsFromState(state);
   }
 
   // Determine which parent style keys actually need markers (defaultMarker or
@@ -164,4 +199,147 @@ export function lowerRules(ctx: TransformContext): {
     ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
     bail: state.bail,
   };
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Snapshot of shared state that per-decl processing may mutate. Used to roll back
+ * partial mutations when a decl marks itself skipped mid-processing, so that the
+ * skipped decl does not leak styleKeys or relation overrides into the output.
+ */
+type StateSnapshot = {
+  resolvedStyleKeys: Set<string>;
+  relationOverridesLength: number;
+  ancestorSelectorParents: Set<string>;
+  siblingMarkerParents: Set<string>;
+  siblingMarkerNames: Array<[string, string]>;
+  relationOverridePseudoKeys: Set<string>;
+  childPseudoKeys: Set<string>;
+  ancestorAttrKeys: Set<string>;
+  usedCssHelperFunctions: Set<string>;
+};
+
+function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
+  return {
+    resolvedStyleKeys: new Set(state.resolvedStyleObjects.keys()),
+    relationOverridesLength: state.relationOverrides.length,
+    ancestorSelectorParents: new Set(state.ancestorSelectorParents),
+    siblingMarkerParents: new Set(state.siblingMarkerParents),
+    siblingMarkerNames: [...state.siblingMarkerNames.entries()],
+    relationOverridePseudoKeys: new Set(state.relationOverridePseudoBuckets.keys()),
+    childPseudoKeys: new Set(state.childPseudoMarkers.keys()),
+    ancestorAttrKeys: new Set(state.ancestorAttrsByStyleKey.keys()),
+    usedCssHelperFunctions: new Set(state.usedCssHelperFunctions),
+  };
+}
+
+function collectDeclStyleKeys(decl: StyledDecl): Set<string> {
+  const keys = new Set<string>();
+  keys.add(decl.styleKey);
+  if (decl.extendsStyleKey) {
+    keys.add(decl.extendsStyleKey);
+  }
+  for (const key of Object.values(decl.variantStyleKeys ?? {})) {
+    keys.add(key);
+  }
+  for (const key of decl.extraStyleKeys ?? []) {
+    keys.add(key);
+  }
+  for (const key of decl.extraStyleKeysAfterBase ?? []) {
+    keys.add(key);
+  }
+  if (decl.enumVariant) {
+    keys.add(decl.enumVariant.baseKey);
+    for (const c of decl.enumVariant.cases) {
+      keys.add(c.styleKey);
+    }
+  }
+  if (decl.attrWrapper) {
+    for (const k of [
+      decl.attrWrapper.checkboxKey,
+      decl.attrWrapper.radioKey,
+      decl.attrWrapper.readonlyKey,
+      decl.attrWrapper.externalKey,
+      decl.attrWrapper.httpsKey,
+      decl.attrWrapper.pdfKey,
+    ]) {
+      if (k) {
+        keys.add(k);
+      }
+    }
+  }
+  for (const sbv of decl.staticBooleanVariants ?? []) {
+    keys.add(sbv.styleKey);
+  }
+  for (const cc of decl.callSiteCombinedStyles ?? []) {
+    keys.add(cc.styleKey);
+  }
+  return keys;
+}
+
+function pruneSkippedDeclsFromState(state: LowerRulesState): void {
+  const skipped = state.styledDecls.filter((d: StyledDecl) => d.skipTransform);
+  if (skipped.length === 0) {
+    return;
+  }
+  const keysToDelete = new Set<string>();
+  for (const d of skipped) {
+    for (const key of collectDeclStyleKeys(d)) {
+      keysToDelete.add(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    state.resolvedStyleObjects.delete(key);
+    state.relationOverridePseudoBuckets.delete(key);
+    state.childPseudoMarkers.delete(key);
+    state.ancestorAttrsByStyleKey.delete(key);
+    state.ancestorSelectorParents.delete(key);
+    state.siblingMarkerParents.delete(key);
+    state.siblingMarkerNames.delete(key);
+  }
+  if (keysToDelete.size > 0) {
+    const kept = state.relationOverrides.filter(
+      (o) =>
+        !keysToDelete.has(o.parentStyleKey) &&
+        !keysToDelete.has(o.childStyleKey) &&
+        !keysToDelete.has(o.overrideStyleKey),
+    );
+    state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+  }
+}
+
+function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void {
+  pruneMapKeysNotIn(state.resolvedStyleObjects, snap.resolvedStyleKeys);
+  state.relationOverrides.length = snap.relationOverridesLength;
+  resetSet(state.ancestorSelectorParents, snap.ancestorSelectorParents);
+  resetSet(state.siblingMarkerParents, snap.siblingMarkerParents);
+  state.siblingMarkerNames.clear();
+  for (const [k, v] of snap.siblingMarkerNames) {
+    state.siblingMarkerNames.set(k, v);
+  }
+  pruneMapKeysNotIn(state.relationOverridePseudoBuckets, snap.relationOverridePseudoKeys);
+  pruneMapKeysNotIn(state.childPseudoMarkers, snap.childPseudoKeys);
+  pruneMapKeysNotIn(state.ancestorAttrsByStyleKey, snap.ancestorAttrKeys);
+  resetSet(state.usedCssHelperFunctions, snap.usedCssHelperFunctions);
+}
+
+/** Delete every key from `map` that isn't also in `allowed`. Collects first to avoid mutating during iteration. */
+function pruneMapKeysNotIn(map: Map<string, unknown>, allowed: Set<string>): void {
+  const toDelete: string[] = [];
+  for (const key of map.keys()) {
+    if (!allowed.has(key)) {
+      toDelete.push(key);
+    }
+  }
+  for (const key of toDelete) {
+    map.delete(key);
+  }
+}
+
+function resetSet<T>(target: Set<T>, source: Set<T>): void {
+  target.clear();
+  for (const v of source) {
+    target.add(v);
+  }
 }

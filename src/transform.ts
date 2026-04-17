@@ -25,6 +25,7 @@ import { collectStaticPropsStep } from "./internal/transform-steps/collect-stati
 import { collectStyledDeclsStep } from "./internal/transform-steps/collect-styled-decls.js";
 import { convertKeyframesStep } from "./internal/transform-steps/convert-keyframes.js";
 import { detectCascadeConflictStep } from "./internal/transform-steps/detect-cascade-conflict.js";
+import { detectPartialCascadeConflictStep } from "./internal/transform-steps/detect-partial-cascade-conflict.js";
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { resolveBaseComponentsStep } from "./internal/transform-steps/resolve-base-components.js";
@@ -147,6 +148,7 @@ export function transformWithWarnings(
     resolveBaseComponentsStep,
     detectCascadeConflictStep,
     lowerRulesStep,
+    detectPartialCascadeConflictStep,
     analyzeBeforeEmitStep,
     rewriteCssHelpersStep,
     emitStylesStep,

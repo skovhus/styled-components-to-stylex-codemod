@@ -131,13 +131,32 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   };
 
   const hasExportedCssHelper = styledDecls.some((d) => d.isCssHelper && d.isExported);
+  // When any decl failed to transform, preserve the `styled` default import so the
+  // untouched `styled\`...\`` declarations in the source remain functional. Other
+  // styled-components re-exports (keyframes, css helpers) stay managed as usual.
+  const hasSkippedStyledDecls = styledDecls.some((d) => d.skipTransform);
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
   const preservedSpecifiers: string[] = [];
+  let preservedDefaultStyled: string | undefined;
   for (const importNode of styledImports.nodes()) {
     const specifiers = (importNode as any).specifiers ?? [];
     for (const spec of specifiers) {
+      if (hasSkippedStyledDecls) {
+        if (spec.type === "ImportDefaultSpecifier" && spec.local?.name) {
+          preservedDefaultStyled = spec.local.name;
+          continue;
+        }
+        if (
+          spec.type === "ImportSpecifier" &&
+          spec.imported?.type === "Identifier" &&
+          spec.imported.name === "styled"
+        ) {
+          preservedSpecifiers.push(spec.local?.name ?? "styled");
+          continue;
+        }
+      }
       // Skip default import (styled) and namespace imports - handled separately above
       if (spec.type !== "ImportSpecifier") {
         continue;
@@ -205,11 +224,15 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Re-add preserved imports from styled-components if any (AFTER stylex import)
-  if (preservedSpecifiers.length > 0) {
-    const preservedImport = j.importDeclaration(
-      preservedSpecifiers.map((name) => j.importSpecifier(j.identifier(name))),
-      j.literal("styled-components"),
-    );
+  if (preservedSpecifiers.length > 0 || preservedDefaultStyled) {
+    const specifiers: any[] = [];
+    if (preservedDefaultStyled) {
+      specifiers.push(j.importDefaultSpecifier(j.identifier(preservedDefaultStyled)));
+    }
+    for (const name of preservedSpecifiers) {
+      specifiers.push(j.importSpecifier(j.identifier(name)));
+    }
+    const preservedImport = j.importDeclaration(specifiers, j.literal("styled-components"));
     // Insert after stylex import
     const body = root.get().node.program.body as any[];
     const stylexIdx = body.findIndex(
@@ -259,6 +282,9 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // comments via `StyledDecl.leadingComments`.
   const propCommentKeys = new Set<string>();
   for (const decl of styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     const cs = (decl as any).leadingComments;
     if (!Array.isArray(cs)) {
       continue;
@@ -274,11 +300,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // Prefer sourcing these from `StyledDecl.leadingComments` (captured from the original styled
   // declaration VariableDeclaration). This is more reliable than reading statement comments
   // because some parsers/printers split multi-line comment runs across different comment arrays.
-  const declsByLoc = [...styledDecls].sort((a, b) => {
-    const al = ((a as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
-    const bl = ((b as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
-    return al - bl;
-  });
+  const declsByLoc = styledDecls
+    .filter((d) => !d.skipTransform)
+    .sort((a, b) => {
+      const al = ((a as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
+      const bl = ((b as any)?.loc?.start?.line ?? Number.POSITIVE_INFINITY) as number;
+      return al - bl;
+    });
   const firstDeclLocalName = declsByLoc[0]?.localName;
   for (const d of declsByLoc) {
     const cs = (d as any).leadingComments;
@@ -468,7 +496,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // so skip them to avoid duplication in stylex.create.
   const styleKeyToComments = new Map<string, any[]>();
   for (const decl of styledDecls) {
-    if (decl.needsWrapperComponent) {
+    if (decl.skipTransform || decl.needsWrapperComponent) {
       continue;
     }
     if (decl.leadingComments && decl.leadingComments.length > 0) {
@@ -609,7 +637,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   >();
 
   for (const decl of styledDecls) {
-    if (!decl.variantDimensions) {
+    if (decl.skipTransform || !decl.variantDimensions) {
       continue;
     }
     for (const dimension of decl.variantDimensions) {
@@ -642,7 +670,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // Third pass: emit declarations (dedupe by final name and content)
   const emittedDimensions = new Map<string, string>(); // name → contentKey
   for (const decl of styledDecls) {
-    if (!decl.variantDimensions) {
+    if (decl.skipTransform || !decl.variantDimensions) {
       continue;
     }
 
@@ -838,6 +866,9 @@ function normalizeShorthandLonghandConflicts(
   resolvedStyleObjects: Map<string, unknown>,
 ): void {
   for (const decl of styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     const componentStyleKeys = collectComponentStyleKeys(decl);
     if (componentStyleKeys.length < 2) {
       continue;

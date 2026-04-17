@@ -4,7 +4,12 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import { resolve as pathResolve } from "node:path";
-import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
+import {
+  CONTINUE,
+  getActiveStyledDecls,
+  returnResult,
+  type StepResult,
+} from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
@@ -39,14 +44,19 @@ const INLINE_USAGE_THRESHOLD = 1;
  */
 export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   const { root, j, adapter, file } = ctx;
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls) {
+  const allStyledDecls = ctx.styledDecls as StyledDecl[] | undefined;
+  if (!allStyledDecls) {
     return CONTINUE;
   }
 
   // Detect if there's a local variable named `styles` in the file (not part of styled-components code)
   // If so, we'll use `stylexStyles` as the StyleX constant name to avoid shadowing.
-  const styledDeclNames = new Set(styledDecls.map((d) => d.localName));
+  // Naming-collision check uses ALL decl names (including skipped ones) because skipped
+  // declarations remain in the source as `const <name> = styled\`...\``.
+  const styledDeclNames = new Set(allStyledDecls.map((d) => d.localName));
+  // All per-decl analyses below skip decls that couldn't be lowered — they stay in the
+  // source as-is and must not be wrapped, exported-tagged, or re-analyzed.
+  const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
   let hasStylesVariable = false;
   root.find(j.VariableDeclarator).forEach((path) => {
     const id = path.node.id;
