@@ -91,6 +91,21 @@ export class TransformContext {
   emptyStyleKeys?: Set<string>;
   stylesIdentifier?: string;
   stylesInsertPosition?: "end" | "afterImports";
+  /**
+   * When set, the file already contains `const <name> = stylex.create({...})` and
+   * the codemod will append new style entries into that existing object expression
+   * instead of emitting a new declaration. Enables incremental migration where some
+   * components are already on StyleX and new entries should merge into the same
+   * `styles` object.
+   */
+  existingStylexStylesTarget?: {
+    /** Binding name of the existing `stylex.create` declaration (e.g. "styles") */
+    name: string;
+    /** The ObjectExpression node passed to `stylex.create(...)` — appended to in place */
+    objectExpression: unknown;
+    /** Property keys already present in the existing object (used to detect collisions) */
+    existingKeys: Set<string>;
+  };
   declByLocal?: Map<string, any>;
   extendedBy?: Map<string, string[]>;
   exportedComponents?: Map<string, ExportInfo>;

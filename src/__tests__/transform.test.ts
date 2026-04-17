@@ -371,6 +371,82 @@ export const App = () => (
     expect(result.warnings.some((w) => w.type.startsWith("Unsupported selector"))).toBe(true);
   });
 
+  it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
+    // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
+    // must survive the re-emit. Emitting only the alias would produce
+    // `import { sc }` which is not an exported name.
+    const source = `
+import { styled as sc } from "styled-components";
+
+const Container = sc.div\`
+  padding: 12px;
+\`;
+
+const Complex = sc.nav\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-aliasedStyled.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Alias is preserved: `import { styled as sc }` must survive.
+    expect(result.code).toMatch(
+      /import\s+\{\s*styled\s+as\s+sc\s*\}\s+from\s+["']styled-components["']/,
+    );
+    // The preserved decl still uses the alias (sc.nav).
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*sc\.nav`/);
+  });
+
+  it("falls back to stylexStyles when a new style key collides with an existing stylex.create key", () => {
+    // The existing `styles.container` and our new entry would both be called
+    // `container`. To avoid silently overwriting the user's styles, emit a
+    // separate `stylexStyles` declaration instead of merging.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  container: { color: "red" },
+});
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <p {...stylex.props(styles.container)}>existing</p>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-keyCollision.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // A second `stylex.create` declaration is emitted under a different name.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+    // Existing `styles` is preserved as-is.
+    expect(result.code).toMatch(/container:\s*\{\s*color:\s*["']red["']/);
+  });
+
   it("bails the whole file when a `css` helper decl cannot be lowered", () => {
     // `css\`\`` helpers are extracted (and removed from the source) before lowering.
     // If the helper itself fails to lower, its declaration is gone and any consumer

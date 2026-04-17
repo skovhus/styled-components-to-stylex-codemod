@@ -139,7 +139,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
-  const preservedSpecifiers: string[] = [];
+  const preservedSpecifiers: Array<{ imported: string; local: string }> = [];
   let preservedDefaultStyled: string | undefined;
   // Exports that the codemod transforms away: removed unless they're still referenced
   // by other surviving code. When a skipped decl is present, every surviving reference
@@ -164,8 +164,12 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       if (spec.type !== "ImportSpecifier") {
         continue;
       }
-      const localName = spec.local?.name ?? spec.imported?.name;
-      if (!localName) {
+      const importedName = spec.imported?.name;
+      const localName = spec.local?.name ?? importedName;
+      // The imported name is what styled-components exports (e.g. `css`) and must
+      // survive into the re-emitted specifier — emitting only the alias would turn
+      // `import { styled as sc }` into `import { sc }`, which is not a valid export.
+      if (!importedName || !localName) {
         continue;
       }
       if (!hasSkippedStyledDecls && transformedAway.includes(localName)) {
@@ -179,7 +183,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
         return !(parent?.type === "ImportSpecifier");
       });
       if (realUsages.size() > 0) {
-        preservedSpecifiers.push(localName);
+        preservedSpecifiers.push({ imported: importedName, local: localName });
       }
     }
   }
@@ -224,8 +228,14 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     if (preservedDefaultStyled) {
       specifiers.push(j.importDefaultSpecifier(j.identifier(preservedDefaultStyled)));
     }
-    for (const name of preservedSpecifiers) {
-      specifiers.push(j.importSpecifier(j.identifier(name)));
+    for (const { imported, local } of preservedSpecifiers) {
+      // Preserve `import { X as Y }` aliases — specifier's `local` must match how the
+      // surviving source references the binding, while `imported` stays the actual export.
+      specifiers.push(
+        imported === local
+          ? j.importSpecifier(j.identifier(imported))
+          : j.importSpecifier(j.identifier(imported), j.identifier(local)),
+      );
     }
     const preservedImport = j.importDeclaration(specifiers, j.literal("styled-components"));
     // Insert after stylex import
@@ -531,32 +541,45 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     ([k]) => !emptyStyleKeys.has(k),
   );
 
+  const buildStyleEntryProperty = ([k, v]: [string, unknown]): any => {
+    const prop = j.property(
+      "init",
+      j.identifier(k),
+      v && typeof v === "object" && !isAstNode(v)
+        ? objectToAst(j, v as Record<string, unknown>)
+        : literalToAst(j, v),
+    );
+    const comments = styleKeyToComments.get(k);
+    if (comments && comments.length > 0) {
+      (prop as any).comments = comments.map((c: any) => ({
+        ...c,
+        leading: true,
+        trailing: false,
+      }));
+    }
+    return prop;
+  };
+
+  // If we're merging new entries into an existing `stylex.create({...})` that was
+  // already present in the source (partial-migration flow), append properties to
+  // its ObjectExpression in-place instead of creating a second declaration.
+  const mergeTarget = ctx.existingStylexStylesTarget;
+  if (mergeTarget && nonEmptyStyleEntries.length > 0) {
+    const existingObj = mergeTarget.objectExpression as { properties?: any[] };
+    const existingProps = existingObj.properties ?? [];
+    existingObj.properties = [
+      ...existingProps,
+      ...nonEmptyStyleEntries.map(buildStyleEntryProperty),
+    ];
+  }
+
   const stylesDecl =
-    nonEmptyStyleEntries.length > 0
+    !mergeTarget && nonEmptyStyleEntries.length > 0
       ? j.variableDeclaration("const", [
           j.variableDeclarator(
             j.identifier(stylesIdentifier),
             j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("create")), [
-              j.objectExpression(
-                nonEmptyStyleEntries.map(([k, v]) => {
-                  const prop = j.property(
-                    "init",
-                    j.identifier(k),
-                    v && typeof v === "object" && !isAstNode(v)
-                      ? objectToAst(j, v as Record<string, unknown>)
-                      : literalToAst(j, v),
-                  );
-                  const comments = styleKeyToComments.get(k);
-                  if (comments && comments.length > 0) {
-                    (prop as any).comments = comments.map((c: any) => ({
-                      ...c,
-                      leading: true,
-                      trailing: false,
-                    }));
-                  }
-                  return prop;
-                }),
-              ),
+              j.objectExpression(nonEmptyStyleEntries.map(buildStyleEntryProperty)),
             ]),
           ),
         ])

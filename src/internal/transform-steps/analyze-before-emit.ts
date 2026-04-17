@@ -57,14 +57,28 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // All per-decl analyses below skip decls that couldn't be lowered — they stay in the
   // source as-is and must not be wrapped, exported-tagged, or re-analyzed.
   const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
+
+  // Partial-migration support: if the file already has exactly one top-level
+  // `const <name> = stylex.create({...})` call with no key collisions against the
+  // entries we're about to emit, we merge new entries into the existing object
+  // rather than introducing a second `stylexStyles` declaration.
+  const existingStylexTarget = findExistingStylexStylesTarget(ctx, styledDeclNames);
+  ctx.existingStylexStylesTarget = existingStylexTarget;
+
   let hasStylesVariable = false;
-  root.find(j.VariableDeclarator).forEach((path) => {
-    const id = path.node.id;
-    if (patternContainsName(id, "styles") && !styledDeclNames.has("styles")) {
-      hasStylesVariable = true;
-    }
-  });
-  const stylesIdentifier = hasStylesVariable ? "stylexStyles" : "styles";
+  if (!existingStylexTarget) {
+    root.find(j.VariableDeclarator).forEach((path) => {
+      const id = path.node.id;
+      if (patternContainsName(id, "styles") && !styledDeclNames.has("styles")) {
+        hasStylesVariable = true;
+      }
+    });
+  }
+  const stylesIdentifier = existingStylexTarget
+    ? existingStylexTarget.name
+    : hasStylesVariable
+      ? "stylexStyles"
+      : "styles";
   ctx.stylesIdentifier = stylesIdentifier;
 
   // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
@@ -1127,6 +1141,152 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+/**
+ * Detect a single top-level `const <name> = stylex.create({...})` declaration that
+ * we can merge new entries into. Returns `undefined` when there is no such decl,
+ * when the object passed to `stylex.create` is not a plain object literal, when
+ * there are multiple candidates (ambiguous target), when the binding name collides
+ * with a surviving styled-component name, or when any existing key would collide
+ * with a style key we're about to emit.
+ *
+ * A collision is a conservative signal: rather than risk overwriting user-authored
+ * styles or producing a duplicate property, fall back to emitting a separate
+ * `stylexStyles` declaration.
+ */
+function findExistingStylexStylesTarget(
+  ctx: TransformContext,
+  styledDeclNames: Set<string>,
+): { name: string; objectExpression: unknown; existingKeys: Set<string> } | undefined {
+  const { root, j } = ctx;
+  const candidates: Array<{
+    name: string;
+    objectExpression: unknown;
+    existingKeys: Set<string>;
+  }> = [];
+
+  root.find(j.VariableDeclaration).forEach((declPath) => {
+    // Only consider top-level declarations — nested ones aren't safe merge targets.
+    const parentType = declPath.parentPath?.node?.type;
+    if (parentType !== "Program" && parentType !== "ExportNamedDeclaration") {
+      return;
+    }
+    for (const declarator of declPath.node.declarations) {
+      if (declarator.type !== "VariableDeclarator") {
+        continue;
+      }
+      const id = declarator.id;
+      if (id?.type !== "Identifier") {
+        continue;
+      }
+      const name = id.name;
+      if (styledDeclNames.has(name)) {
+        continue;
+      }
+      const init = declarator.init;
+      if (!isStylexCreateCall(init)) {
+        continue;
+      }
+      const arg = (init as { arguments?: unknown[] }).arguments?.[0];
+      if (!isObjectExpression(arg)) {
+        continue;
+      }
+      const existingKeys = collectObjectPropertyKeys(arg);
+      if (!existingKeys) {
+        // Non-literal keys (computed/spread) — can't reason about collisions, skip.
+        continue;
+      }
+      candidates.push({ name, objectExpression: arg, existingKeys });
+    }
+  });
+
+  if (candidates.length !== 1) {
+    return undefined;
+  }
+  const target = candidates[0]!;
+
+  // Check key collisions with the entries we're about to emit.
+  const resolvedStyleObjects = ctx.resolvedStyleObjects;
+  if (resolvedStyleObjects) {
+    for (const key of resolvedStyleObjects.keys()) {
+      if (target.existingKeys.has(key)) {
+        return undefined;
+      }
+    }
+  }
+  return target;
+}
+
+/** True if `node` is `stylex.create(...)`. */
+function isStylexCreateCall(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const call = node as {
+    type?: string;
+    callee?: {
+      type?: string;
+      object?: { type?: string; name?: string };
+      property?: { type?: string; name?: string };
+    };
+  };
+  if (call.type !== "CallExpression") {
+    return false;
+  }
+  const callee = call.callee;
+  if (callee?.type !== "MemberExpression") {
+    return false;
+  }
+  return (
+    callee.object?.type === "Identifier" &&
+    callee.object.name === "stylex" &&
+    callee.property?.type === "Identifier" &&
+    callee.property.name === "create"
+  );
+}
+
+function isObjectExpression(node: unknown): boolean {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "ObjectExpression"
+  );
+}
+
+/**
+ * Collect the literal property keys from an ObjectExpression. Returns `undefined`
+ * if the object contains spread elements, computed keys, or non-identifier/string
+ * keys we can't reason about safely.
+ */
+function collectObjectPropertyKeys(objectExpression: unknown): Set<string> | undefined {
+  const obj = objectExpression as { properties?: Array<unknown> };
+  const keys = new Set<string>();
+  for (const p of obj.properties ?? []) {
+    const prop = p as {
+      type?: string;
+      computed?: boolean;
+      key?: { type?: string; name?: string; value?: unknown };
+    };
+    if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+      return undefined;
+    }
+    if (prop.computed) {
+      return undefined;
+    }
+    const key = prop.key;
+    if (key?.type === "Identifier" && typeof key.name === "string") {
+      keys.add(key.name);
+      continue;
+    }
+    if (
+      (key?.type === "Literal" || key?.type === "StringLiteral") &&
+      typeof key.value === "string"
+    ) {
+      keys.add(key.value);
+      continue;
+    }
+    return undefined;
+  }
+  return keys;
+}
 
 /**
  * Check if a name refers to a locally-defined function component (FunctionDeclaration,

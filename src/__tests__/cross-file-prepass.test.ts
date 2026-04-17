@@ -353,8 +353,9 @@ export const App = () => (
     expect(stylexPropsCount).toBeLessThanOrEqual(2);
 
     // The CrossFileIcon's stylex.props should contain both the existing iconStyles.icon
-    // AND the override styles.crossFileIconInContainer
-    expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*styles\./);
+    // AND the override crossFileIconInContainer. New entries get merged into the
+    // existing `iconStyles` object (single stylex.create per file when safe).
+    expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*iconStyles\./);
   });
 
   it("bridge forward in conditional JSX: adds marker on parent and override on imported child", () => {
