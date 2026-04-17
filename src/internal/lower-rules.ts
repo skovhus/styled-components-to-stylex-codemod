@@ -72,44 +72,16 @@ export function lowerRules(ctx: TransformContext): {
 
     const snapshot = snapshotStateForDecl(state);
     state.currentDecl = decl;
-
-    const declState = createDeclProcessingState(state, decl);
-    if (!preScanCssHelperPlaceholders(declState)) {
-      // preScanCssHelperPlaceholders returning false means markBail was called;
-      // with per-decl skips that translates to the current decl being skipped.
-      if (decl.skipTransform) {
-        restoreStateSnapshot(state, snapshot);
-        state.currentDecl = null;
-        continue;
-      }
-      // Legacy path: file-level bail.
-      state.currentDecl = null;
-      break;
-    }
-
-    processDeclRules(declState);
-    if (decl.skipTransform) {
-      restoreStateSnapshot(state, snapshot);
-      state.currentDecl = null;
-      continue;
-    }
-    if (state.bail) {
-      state.currentDecl = null;
-      break;
-    }
-
-    finalizeDeclProcessing(declState);
-    if (decl.skipTransform) {
-      restoreStateSnapshot(state, snapshot);
-      state.currentDecl = null;
-      continue;
-    }
-    if (state.bail) {
-      state.currentDecl = null;
-      break;
-    }
-
+    const outcome = processOneDecl(state, decl);
     state.currentDecl = null;
+
+    if (outcome === "skip") {
+      restoreStateSnapshot(state, snapshot);
+      continue;
+    }
+    if (outcome === "bail") {
+      break;
+    }
   }
 
   if (!state.bail) {
@@ -202,6 +174,37 @@ export function lowerRules(ctx: TransformContext): {
 }
 
 // --- Non-exported helpers ---
+
+type DeclOutcome = "ok" | "skip" | "bail";
+
+/**
+ * Lower one decl through the pre-scan → process-rules → finalize sequence.
+ * Returns `"skip"` if the decl marked itself skipped (per-decl bail), `"bail"` if
+ * something set the file-level bail, or `"ok"` on success.
+ */
+function processOneDecl(state: LowerRulesState, decl: StyledDecl): DeclOutcome {
+  const declState = createDeclProcessingState(state, decl);
+  // preScanCssHelperPlaceholders returns false when markBail was called during
+  // scanning — either as a per-decl skip (new) or a legacy file-level bail.
+  if (!preScanCssHelperPlaceholders(declState)) {
+    return decl.skipTransform ? "skip" : "bail";
+  }
+  processDeclRules(declState);
+  if (decl.skipTransform) {
+    return "skip";
+  }
+  if (state.bail) {
+    return "bail";
+  }
+  finalizeDeclProcessing(declState);
+  if (decl.skipTransform) {
+    return "skip";
+  }
+  if (state.bail) {
+    return "bail";
+  }
+  return "ok";
+}
 
 /**
  * Snapshot of shared state that per-decl processing may mutate. Used to roll back

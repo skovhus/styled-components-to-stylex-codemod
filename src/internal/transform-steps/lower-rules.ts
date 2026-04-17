@@ -37,6 +37,14 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     if (!anyTransformable) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
+    // `css\`\`` helpers are extracted (and their source declarations removed) by
+    // extractCssHelpersStep before lowering runs. If we then can't lower the helper,
+    // we have no way to restore its source — any consumer that references it would
+    // dangle. Bail the whole file so the original stays intact.
+    const skippedHelper = ctx.styledDecls.find((d) => d.skipTransform && d.isCssHelper);
+    if (skippedHelper) {
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
   }
 
   // Now that we know the file is transformable, remove any css helper functions that were inlined.

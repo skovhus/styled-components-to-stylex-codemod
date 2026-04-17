@@ -332,6 +332,116 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
   });
 });
 
+describe("partial-file transforms", () => {
+  it("emits a warning for the skipped decl and transforms the rest", () => {
+    const source = `
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-warning.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // StyleX output for Container (fixture adapter uses the `sx` prop)
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toMatch(/sx=\{styles\.container\}/);
+    // Original styled-components declaration preserved for Complex
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+    expect(result.code).toContain('import styled from "styled-components"');
+    // Warning emitted for the skipped decl
+    expect(result.warnings.some((w) => w.type.startsWith("Unsupported selector"))).toBe(true);
+  });
+
+  it("bails the whole file when a `css` helper decl cannot be lowered", () => {
+    // `css\`\`` helpers are extracted (and removed from the source) before lowering.
+    // If the helper itself fails to lower, its declaration is gone and any consumer
+    // would dangle — so the whole file must bail rather than emit broken output.
+    const source = `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  \${hoverStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-cssHelper.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("bails the whole file when a non-leaf converts but an extending leaf is skipped", () => {
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.div\`
+  color: navy;
+\`;
+
+const Derived = styled(Base)\`
+  & a.active {
+    color: gold;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Base>b</Base>
+    <Derived><a className="active">d</a></Derived>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-cascade.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Partial transform would mix StyleX with styled-components across an extends chain — the base was transformed but an extending component could not be, so the extending component's CSS cannot reliably override the base",
+    );
+  });
+});
+
 describe("test case exports", () => {
   it.each(fixtureCases)(
     "$outputFile should export App in both input and output",

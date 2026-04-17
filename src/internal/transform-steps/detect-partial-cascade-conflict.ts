@@ -23,25 +23,27 @@ export function detectPartialCascadeConflictStep(ctx: TransformContext): StepRes
     if (base.skipTransform) {
       continue;
     }
-    const extendingLeaves = styledDecls.filter(
-      (d) =>
+    const extendingLeafNames: string[] = [];
+    for (const d of styledDecls) {
+      if (
         d !== base &&
         d.skipTransform &&
         d.base.kind === "component" &&
-        d.base.ident === base.localName,
-    );
-    if (extendingLeaves.length === 0) {
+        d.base.ident === base.localName
+      ) {
+        extendingLeafNames.push(d.localName);
+      }
+    }
+    if (extendingLeafNames.length === 0) {
       continue;
     }
-    const leaf = extendingLeaves[0]!;
     ctx.warnings.push({
       severity: "warning",
       type: "Partial transform would mix StyleX with styled-components across an extends chain — the base was transformed but an extending component could not be, so the extending component's CSS cannot reliably override the base",
       loc: base.loc,
       context: {
         base: base.localName,
-        extendedBy: extendingLeaves.map((d) => d.localName).join(", "),
-        exampleLeaf: leaf.localName,
+        extendedBy: extendingLeafNames.join(", "),
       },
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");

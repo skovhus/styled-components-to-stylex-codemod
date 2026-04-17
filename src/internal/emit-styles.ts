@@ -131,33 +131,36 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   };
 
   const hasExportedCssHelper = styledDecls.some((d) => d.isCssHelper && d.isExported);
-  // When any decl failed to transform, preserve the `styled` default import so the
-  // untouched `styled\`...\`` declarations in the source remain functional. Other
-  // styled-components re-exports (keyframes, css helpers) stay managed as usual.
+  // When any decl failed to transform, its original `styled\`...\`` declaration
+  // stays in the source. The `styled` default import (and any named styled-components
+  // imports the skipped decl still references — e.g. `css` used inside its template)
+  // must be preserved so the surviving code keeps compiling.
   const hasSkippedStyledDecls = styledDecls.some((d) => d.skipTransform);
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
   const preservedSpecifiers: string[] = [];
   let preservedDefaultStyled: string | undefined;
+  // Exports that the codemod transforms away: removed unless they're still referenced
+  // by other surviving code. When a skipped decl is present, every surviving reference
+  // matters, so we skip the fast-path and fall through to the reference check.
+  const transformedAway = [
+    "styled",
+    "keyframes",
+    "createGlobalStyle",
+    ...(hasExportedCssHelper ? [] : ["css"]),
+  ];
   for (const importNode of styledImports.nodes()) {
     const specifiers = (importNode as any).specifiers ?? [];
     for (const spec of specifiers) {
-      if (hasSkippedStyledDecls) {
-        if (spec.type === "ImportDefaultSpecifier" && spec.local?.name) {
+      // Default import: only `styled`. Preserved whenever a decl stayed as
+      // styled-components — the remaining `styled.tag` call sites need it.
+      if (spec.type === "ImportDefaultSpecifier") {
+        if (hasSkippedStyledDecls && spec.local?.name) {
           preservedDefaultStyled = spec.local.name;
-          continue;
         }
-        if (
-          spec.type === "ImportSpecifier" &&
-          spec.imported?.type === "Identifier" &&
-          spec.imported.name === "styled"
-        ) {
-          preservedSpecifiers.push(spec.local?.name ?? "styled");
-          continue;
-        }
+        continue;
       }
-      // Skip default import (styled) and namespace imports - handled separately above
       if (spec.type !== "ImportSpecifier") {
         continue;
       }
@@ -165,15 +168,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       if (!localName) {
         continue;
       }
-      // Check if this import is still referenced elsewhere in the code
-      // Skip common styled-components exports that are being transformed away
-      const transformedAway = [
-        "styled",
-        "keyframes",
-        "createGlobalStyle",
-        ...(hasExportedCssHelper ? [] : ["css"]),
-      ];
-      if (transformedAway.includes(localName)) {
+      if (!hasSkippedStyledDecls && transformedAway.includes(localName)) {
         continue;
       }
       // Check if the identifier is used anywhere in the code

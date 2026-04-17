@@ -320,14 +320,9 @@ export function createLowerRulesState(ctx: TransformContext) {
      * When null, markBail falls back to the file-level bail flag.
      */
     currentDecl: null as StyledDecl | null,
-    /** Ordered list of decls that were skipped during lowering (for rollback and reporting). */
-    skippedDecls: [] as StyledDecl[],
     markBail: () => {
       if (state.currentDecl) {
-        if (!state.currentDecl.skipTransform) {
-          state.currentDecl.skipTransform = true;
-          state.skippedDecls.push(state.currentDecl);
-        }
+        state.currentDecl.skipTransform = true;
         return;
       }
       state.bail = true;
@@ -339,10 +334,7 @@ export function createLowerRulesState(ctx: TransformContext) {
         loc: decl.loc,
         context: { localName: decl.localName },
       });
-      if (!decl.skipTransform) {
-        decl.skipTransform = true;
-        state.skippedDecls.push(decl);
-      }
+      decl.skipTransform = true;
     },
   };
 
