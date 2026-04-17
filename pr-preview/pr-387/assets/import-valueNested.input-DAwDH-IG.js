@@ -1,0 +1,6 @@
+import"./chunk-zsgVPwQN.js";import{t as e}from"./react-D4cBbUL-.js";import{f as t,s as n}from"./index-8WZYew3G.js";import{o as r}from"./helpers-Dbhie3LG.js";e();var i=t(),a=n.div`
+  padding: ${r.ui.spacing.medium};
+  margin: ${r.ui.spacing.small};
+  background: white;
+  border-radius: 8px;
+`;function o(){return(0,i.jsx)(a,{})}export{o as App};
