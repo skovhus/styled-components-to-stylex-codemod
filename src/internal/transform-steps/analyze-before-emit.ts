@@ -1270,6 +1270,7 @@ function isNameShadowedOutsideDeclarator(
 ): boolean {
   const { root, j } = ctx;
   let shadowed = false;
+  // VariableDeclarator bindings anywhere (top-level or nested).
   root.find(j.VariableDeclarator).forEach((path) => {
     if (shadowed) {
       return;
@@ -1284,13 +1285,86 @@ function isNameShadowedOutsideDeclarator(
   if (shadowed) {
     return true;
   }
-  // Function params and declarations with the same name also shadow at their scope.
+  // Function-like params (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression,
+  // ObjectMethod, ClassMethod) and the function's own name: any of these bind `name` in
+  // their scope and would shadow the top-level merge target.
   root
-    .find(j.FunctionDeclaration, { id: { type: "Identifier", name } as object } as object)
+    .find(j.Function)
+    .filter((path) => {
+      const fn = path.node as {
+        id?: { name?: string } | null;
+        params?: Array<unknown>;
+      };
+      if (fn.id?.name === name) {
+        return true;
+      }
+      for (const param of fn.params ?? []) {
+        if (paramBindsName(param, name)) {
+          return true;
+        }
+      }
+      return false;
+    })
     .forEach(() => {
       shadowed = true;
     });
   return shadowed;
+}
+
+/**
+ * True if a function-parameter pattern binds the given name. Covers the full set of
+ * destructuring and defaulting forms: `Identifier`, `AssignmentPattern`, `RestElement`,
+ * `ObjectPattern` (nested), and `ArrayPattern` (nested).
+ */
+function paramBindsName(param: unknown, name: string): boolean {
+  if (!param || typeof param !== "object") {
+    return false;
+  }
+  const p = param as {
+    type?: string;
+    name?: string;
+    left?: unknown;
+    argument?: unknown;
+    properties?: Array<{
+      type?: string;
+      value?: unknown;
+      argument?: unknown;
+      key?: { name?: string };
+    }>;
+    elements?: Array<unknown>;
+  };
+  if (p.type === "Identifier") {
+    return p.name === name;
+  }
+  if (p.type === "AssignmentPattern") {
+    return paramBindsName(p.left, name);
+  }
+  if (p.type === "RestElement") {
+    return paramBindsName(p.argument, name);
+  }
+  if (p.type === "ObjectPattern") {
+    for (const prop of p.properties ?? []) {
+      if (prop.type === "RestElement") {
+        if (paramBindsName(prop.argument, name)) {
+          return true;
+        }
+        continue;
+      }
+      if (paramBindsName(prop.value, name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (p.type === "ArrayPattern") {
+    for (const el of p.elements ?? []) {
+      if (el && paramBindsName(el, name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
 }
 
 /** True if any top-level or nested variable declarator in the file binds the given name. */

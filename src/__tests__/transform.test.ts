@@ -410,6 +410,129 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Complex\s*=\s*sc\.nav`/);
   });
 
+  it("falls back to stylexStyles when the existing stylex.create name is shadowed by a function parameter", () => {
+    // A function parameter named `styles` shadows the top-level `const styles = ...`
+    // inside the function body. Emitting `sx={styles.container}` at a call site
+    // inside that function would bind to the parameter — reject the merge.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  heading: { color: "navy" },
+});
+
+function Row(styles) {
+  return <Container>{styles.label}</Container>;
+}
+
+export const App = () => (
+  <div>
+    <Row styles={{ label: "a" }} />
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-shadowedParam.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Merge rejected → new declaration under `stylexStyles`.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+  });
+
+  it("bails when a skipped decl still interpolates an extracted css helper", () => {
+    // `const hoverStyles = css\`...\`` is simple and would normally lower cleanly,
+    // but extractCssHelpersStep removes its source declaration before lowering.
+    // If the consumer `Complex` is then skipped (unsupported selector), its
+    // preserved template would reference the now-undefined `hoverStyles` identifier.
+    const source = `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  color: tomato;
+\`;
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  \${hoverStyles}
+  & a.active { color: gold; }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-danglingHelper.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {
+    // `sharedReset` is a css helper used by both `Container` (transforms) and
+    // `Complex` (skipped). The helper's `stylex.create` entry must survive so the
+    // transformed `Container` still gets its mixin styles.
+    const source = `
+import styled, { css } from "styled-components";
+
+const sharedReset = css\`
+  box-sizing: border-box;
+\`;
+
+const Container = styled.div\`
+  \${sharedReset}
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  color: rebeccapurple;
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-sharedMixin.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Container transforms — its mixin reference compiled into the shared helper's
+    // style entry, and `collectOwnedDeclStyleKeys` doesn't delete keys referenced
+    // by non-skipped decls even though Complex (skipped) conceptually also
+    // referenced the reset helper.
+    expect(result.code).toMatch(/container:\s*\{/);
+    expect(result.code).toMatch(/boxSizing:\s*["']border-box["']/);
+    // Complex stays as styled-components since its descendant selector can't lower.
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+  });
+
   it("falls back to stylexStyles when the existing stylex.create name is shadowed by a nested binding", () => {
     // The top-level `const styles = stylex.create({...})` name is shadowed by
     // a nested `const styles = ...` inside the component. Emitting `sx={styles.X}`

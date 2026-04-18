@@ -237,19 +237,19 @@ function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
   };
 }
 
-function collectDeclStyleKeys(decl: StyledDecl): Set<string> {
+/**
+ * Collect style keys *owned* by this decl — keys whose corresponding entry in
+ * `resolvedStyleObjects` was created by this decl's own processing.
+ *
+ * Excludes *referenced* keys (extends, extra mixin keys) because those are owned
+ * by another decl (typically a css helper or base component). Pruning referenced
+ * keys for a skipped decl would also remove them for transformed decls that
+ * still need them — silently dropping styles from otherwise-fine output.
+ */
+function collectOwnedDeclStyleKeys(decl: StyledDecl): Set<string> {
   const keys = new Set<string>();
   keys.add(decl.styleKey);
-  if (decl.extendsStyleKey) {
-    keys.add(decl.extendsStyleKey);
-  }
   for (const key of Object.values(decl.variantStyleKeys ?? {})) {
-    keys.add(key);
-  }
-  for (const key of decl.extraStyleKeys ?? []) {
-    keys.add(key);
-  }
-  for (const key of decl.extraStyleKeysAfterBase ?? []) {
     keys.add(key);
   }
   if (decl.enumVariant) {
@@ -286,10 +286,35 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   if (skipped.length === 0) {
     return;
   }
+
+  // Any key still referenced by a transformed (non-skipped) decl must be preserved,
+  // even if the skipped decl also claims ownership of it. This covers shared helper
+  // and mixin style keys that appear in multiple decls' owned key sets.
+  const keepKeys = new Set<string>();
+  for (const d of state.styledDecls) {
+    if (d.skipTransform) {
+      continue;
+    }
+    for (const key of collectOwnedDeclStyleKeys(d)) {
+      keepKeys.add(key);
+    }
+    if (d.extendsStyleKey) {
+      keepKeys.add(d.extendsStyleKey);
+    }
+    for (const key of d.extraStyleKeys ?? []) {
+      keepKeys.add(key);
+    }
+    for (const key of d.extraStyleKeysAfterBase ?? []) {
+      keepKeys.add(key);
+    }
+  }
+
   const keysToDelete = new Set<string>();
   for (const d of skipped) {
-    for (const key of collectDeclStyleKeys(d)) {
-      keysToDelete.add(key);
+    for (const key of collectOwnedDeclStyleKeys(d)) {
+      if (!keepKeys.has(key)) {
+        keysToDelete.add(key);
+      }
     }
   }
   for (const key of keysToDelete) {
