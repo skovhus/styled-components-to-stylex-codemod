@@ -65,13 +65,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
   // so that comment placement can be determined correctly.
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
+  // The `extendedBy` map must include skipped decls as potential extenders. A
+  // skipped leaf preserved as `styled(Base)\`...\`` references `Base` at
+  // runtime, which only works if Base keeps a wrapper function (not inlined).
+  // Downstream wrapper-decision logic keys off this map to require a wrapper.
   const extendedBy = new Map<string, string[]>();
-  for (const decl of styledDecls) {
+  const allDeclsByLocal = new Map(allStyledDecls.map((d) => [d.localName, d]));
+  for (const decl of allStyledDecls) {
     if (decl.base.kind !== "component") {
       continue;
     }
-    const base = declByLocal.get(decl.base.ident);
+    const base = allDeclsByLocal.get(decl.base.ident);
     if (!base) {
+      continue;
+    }
+    // Only track relationships pointing at base decls we still plan to emit.
+    // If the base is skipped it remains as raw styled-components and doesn't
+    // need wrapper bookkeeping.
+    if (base.skipTransform) {
       continue;
     }
     extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
@@ -200,6 +211,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     // Exported components must keep a wrapper to preserve the module's public API.
     if (exportedComponents.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+
+    // A skipped extender preserved as `styled(decl.localName)\`...\`` still
+    // references `decl.localName` at runtime, so the identifier must remain
+    // a callable component — emit a wrapper rather than inlining the decl.
+    if (extendedBySkippedDecl(allStyledDecls, decl.localName)) {
       decl.needsWrapperComponent = true;
     }
 
@@ -482,6 +500,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     root,
     j,
     styledDecls,
+    allStyledDecls,
     declByLocal,
     getJsxUsageCount,
     ctx.resolvedStyleObjects ?? new Map(),
@@ -1143,6 +1162,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+/** True if any skipped decl in the file extends the given component via `styled(name)`. */
+function extendedBySkippedDecl(allStyledDecls: StyledDecl[], name: string): boolean {
+  return allStyledDecls.some(
+    (d) => d.skipTransform && d.base.kind === "component" && d.base.ident === name,
+  );
+}
 
 /**
  * Detect a single top-level `const <name> = stylex.create({...})` declaration that
@@ -2611,6 +2637,12 @@ function analyzePromotableStyleProps(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   styledDecls: StyledDecl[],
+  /**
+   * Every decl in the file, including skipped ones. A preserved `styled(Base)` leaf
+   * still references `Base` at runtime, so Base must stay a wrapper — the extends
+   * check uses this list so it sees skipped extenders.
+   */
+  allStyledDecls: StyledDecl[],
   declByLocal: Map<string, StyledDecl>,
   getJsxUsageCount: (name: string) => number,
   resolvedStyleObjects: Map<string, unknown>,
@@ -2879,8 +2911,10 @@ function analyzePromotableStyleProps(
         }
 
         // Don't merge if another styled component extends this one — converting
-        // the base style to a function would break the child's static style reference.
-        const isExtendedByOther = styledDecls.some(
+        // the base style to a function would break the child's static style
+        // reference. Also include skipped decls here: a preserved `styled(Base)`
+        // leaf references `Base` at runtime and would break if merged.
+        const isExtendedByOther = allStyledDecls.some(
           (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
         );
         const baseObj = resolvedStyleObjects.get(decl.styleKey);

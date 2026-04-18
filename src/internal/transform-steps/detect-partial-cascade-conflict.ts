@@ -1,8 +1,22 @@
 /**
- * Step: detect partial-file cascade conflicts. When a base (non-leaf) styled component
- * was transformed to StyleX but a component that extends it (leaf) was skipped, the
- * leaf's styled-components override cannot reliably beat StyleX's atomic CSS due to
- * stylesheet ordering — bail the whole file to preserve semantics.
+ * Step: detect partial-file cascade conflicts. Bails when an extending (leaf)
+ * styled component was transformed to StyleX while its base (non-leaf) was left
+ * as styled-components.
+ *
+ * Why this direction and not the other:
+ *
+ *  - styled-components injects its CSS at runtime, AFTER StyleX's precompiled
+ *    atomic CSS is already in the stylesheet.
+ *  - When an extending styled-component stays as `styled(Base)\`...\`` but its
+ *    Base is converted to StyleX, at runtime the element carries both the
+ *    StyleX atomic classes AND the styled-components class from the leaf.
+ *    Styled-components CSS arrives last, so its leaf-scoped overrides win.
+ *    This is "styled-components restyling StyleX" and preserves the cascade.
+ *  - The opposite — StyleX leaf wrapping a styled-components base — is unsafe:
+ *    StyleX classes carry the leaf's overrides, styled-components CSS is
+ *    injected later for the base, and the base's rules can win against the
+ *    leaf's intended overrides depending on property overlap. This is
+ *    "StyleX restyling styled-components" and we bail to avoid surprise.
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -19,31 +33,29 @@ export function detectPartialCascadeConflictStep(ctx: TransformContext): StepRes
     return CONTINUE;
   }
 
-  for (const base of styledDecls) {
-    if (base.skipTransform) {
+  const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
+
+  for (const derived of styledDecls) {
+    // Unsafe direction: leaf (extending) converts to StyleX but base (non-leaf)
+    // stays as styled-components. Iterate transformed decls and check whether
+    // their local base is a skipped styled-component.
+    if (derived.skipTransform) {
       continue;
     }
-    const extendingLeafNames: string[] = [];
-    for (const d of styledDecls) {
-      if (
-        d !== base &&
-        d.skipTransform &&
-        d.base.kind === "component" &&
-        d.base.ident === base.localName
-      ) {
-        extendingLeafNames.push(d.localName);
-      }
+    if (derived.base.kind !== "component") {
+      continue;
     }
-    if (extendingLeafNames.length === 0) {
+    const baseDecl = declByLocalName.get(derived.base.ident);
+    if (!baseDecl || !baseDecl.skipTransform) {
       continue;
     }
     ctx.warnings.push({
       severity: "warning",
-      type: "Partial transform would mix StyleX with styled-components across an extends chain — the base was transformed but an extending component could not be, so the extending component's CSS cannot reliably override the base",
-      loc: base.loc,
+      type: "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles",
+      loc: derived.loc,
       context: {
-        base: base.localName,
-        extendedBy: extendingLeafNames.join(", "),
+        leaf: derived.localName,
+        base: baseDecl.localName,
       },
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");

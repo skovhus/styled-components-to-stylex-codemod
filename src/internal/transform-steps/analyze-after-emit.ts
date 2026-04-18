@@ -352,8 +352,10 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       continue;
     }
     // Check if any child still delegates to this parent (i.e., has base.kind === "component"
-    // with base.ident pointing to the parent after flattening)
-    const hasDelegate = styledDecls.some(
+    // with base.ident pointing to the parent after flattening). Include skipped decls:
+    // a preserved `styled(Parent)\`...\`` leaf still references Parent at runtime and
+    // needs className/style forwarding so styled-components can inject its class.
+    const hasDelegate = allStyledDecls.some(
       (d) => d.base.kind === "component" && d.base.ident === parentName,
     );
     if (!hasDelegate) {

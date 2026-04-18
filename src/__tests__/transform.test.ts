@@ -646,15 +646,63 @@ export const App = () => (
     expect(result.code).toBeNull();
   });
 
-  it("bails the whole file when a non-leaf converts but an extending leaf is skipped", () => {
+  it("bails the whole file when a leaf converts but its non-leaf base is skipped", () => {
+    // `Base` carries an unsupported descendant selector and stays as styled-components.
+    // `Derived` is simple and would convert to StyleX. That direction is unsafe:
+    // the StyleX leaf's overrides can lose to the base's later-injected
+    // styled-components CSS depending on property overlap. Bail.
     const source = `
 import styled from "styled-components";
 
 const Base = styled.div\`
   color: navy;
+
+  & a.active {
+    color: gold;
+  }
 \`;
 
 const Derived = styled(Base)\`
+  color: red;
+  padding: 16px;
+\`;
+
+export const App = () => (
+  <div>
+    <Base><a className="active">b</a></Base>
+    <Derived>d</Derived>
+  </div>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-cascade.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles",
+    );
+  });
+
+  it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
+    // `Derived` has an unsupported selector and stays as styled-components.
+    // `Base` is simple and converts to StyleX. styled-components injects its
+    // class AFTER StyleX's precompiled atomic CSS, so the leaf's overrides
+    // still win. Base must be emitted as a wrapper so `styled(Base)` in the
+    // preserved leaf still has a callable React component to reference.
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.div\`
+  color: navy;
+  padding: 8px;
+\`;
+
+const Derived = styled(Base)\`
+  color: tomato;
+
   & a.active {
     color: gold;
   }
@@ -668,15 +716,16 @@ export const App = () => (
 );
 `;
     const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-cascade.input.tsx") },
+      { source, path: join(testCasesDir, "partial-nonleafBase.input.tsx") },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toContain(
-      "Partial transform would mix StyleX with styled-components across an extends chain — the base was transformed but an extending component could not be, so the extending component's CSS cannot reliably override the base",
-    );
+    expect(result.code).not.toBeNull();
+    // Base converts to a wrapper function (not inlined) so `styled(Base)` works.
+    expect(result.code).toMatch(/function\s+Base\s*</);
+    // Derived stays as styled-components and references the Base wrapper.
+    expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
   });
 });
 
