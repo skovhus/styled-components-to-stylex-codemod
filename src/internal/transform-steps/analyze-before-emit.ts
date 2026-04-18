@@ -58,28 +58,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // source as-is and must not be wrapped, exported-tagged, or re-analyzed.
   const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
 
-  // Partial-migration support: if the file already has exactly one top-level
-  // `const <name> = stylex.create({...})` call with no key collisions against the
-  // entries we're about to emit, we merge new entries into the existing object
-  // rather than introducing a second `stylexStyles` declaration.
-  const existingStylexTarget = findExistingStylexStylesTarget(ctx, styledDeclNames);
-  ctx.existingStylexStylesTarget = existingStylexTarget;
-
-  let hasStylesVariable = false;
-  if (!existingStylexTarget) {
-    root.find(j.VariableDeclarator).forEach((path) => {
-      const id = path.node.id;
-      if (patternContainsName(id, "styles") && !styledDeclNames.has("styles")) {
-        hasStylesVariable = true;
-      }
-    });
-  }
-  const stylesIdentifier = existingStylexTarget
-    ? existingStylexTarget.name
-    : hasStylesVariable
-      ? "stylexStyles"
-      : "styles";
-  ctx.stylesIdentifier = stylesIdentifier;
+  // The stylesIdentifier / merge-target decision runs at the END of this step: any
+  // keys added below (staticBooleanVariants, callSiteCombinedStyles, promoted styles)
+  // must be visible to the collision check against an existing stylex.create object.
 
   // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
   // so that comment placement can be determined correctly.
@@ -1137,6 +1118,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Partial-migration support: if the file already has exactly one top-level
+  // `const <name> = stylex.create({...})` call with no collisions and no shadowing,
+  // merge new entries into the existing object instead of emitting a second
+  // `stylexStyles` declaration. Deferred to here so every emit-time style key
+  // (incl. staticBooleanVariants, callSiteCombinedStyles, promotedStyleProps) is
+  // in `resolvedStyleObjects` when we check for collisions.
+  const emitKeyNames = buildEmitKeyNames(ctx, styledDecls);
+  const existingStylexTarget = findExistingStylexStylesTarget({
+    ctx,
+    styledDeclNames,
+    emitKeyNames,
+  });
+  ctx.existingStylexStylesTarget = existingStylexTarget;
+  const hasStylesVariable =
+    !existingStylexTarget && fileHasLocalName(ctx, "styles", styledDeclNames);
+  ctx.stylesIdentifier = existingStylexTarget
+    ? existingStylexTarget.name
+    : hasStylesVariable
+      ? "stylexStyles"
+      : "styles";
+
   return CONTINUE;
 }
 
@@ -1147,22 +1149,27 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
  * we can merge new entries into. Returns `undefined` when there is no such decl,
  * when the object passed to `stylex.create` is not a plain object literal, when
  * there are multiple candidates (ambiguous target), when the binding name collides
- * with a surviving styled-component name, or when any existing key would collide
- * with a style key we're about to emit.
+ * with a surviving styled-component name, when the name is shadowed elsewhere in
+ * the file (so emitted `name.key` references could bind to the wrong scope), or
+ * when any existing key would collide with a style key we're about to emit.
  *
  * A collision is a conservative signal: rather than risk overwriting user-authored
  * styles or producing a duplicate property, fall back to emitting a separate
  * `stylexStyles` declaration.
  */
-function findExistingStylexStylesTarget(
-  ctx: TransformContext,
-  styledDeclNames: Set<string>,
-): { name: string; objectExpression: unknown; existingKeys: Set<string> } | undefined {
+function findExistingStylexStylesTarget(args: {
+  ctx: TransformContext;
+  styledDeclNames: Set<string>;
+  /** The final set of style keys emit-styles will write into the merged object. */
+  emitKeyNames: Set<string>;
+}): { name: string; objectExpression: unknown; existingKeys: Set<string> } | undefined {
+  const { ctx, styledDeclNames, emitKeyNames } = args;
   const { root, j } = ctx;
   const candidates: Array<{
     name: string;
     objectExpression: unknown;
     existingKeys: Set<string>;
+    declaratorNode: unknown;
   }> = [];
 
   root.find(j.VariableDeclaration).forEach((declPath) => {
@@ -1196,7 +1203,7 @@ function findExistingStylexStylesTarget(
         // Non-literal keys (computed/spread) — can't reason about collisions, skip.
         continue;
       }
-      candidates.push({ name, objectExpression: arg, existingKeys });
+      candidates.push({ name, objectExpression: arg, existingKeys, declaratorNode: declarator });
     }
   });
 
@@ -1205,16 +1212,106 @@ function findExistingStylexStylesTarget(
   }
   const target = candidates[0]!;
 
-  // Check key collisions with the entries we're about to emit.
-  const resolvedStyleObjects = ctx.resolvedStyleObjects;
-  if (resolvedStyleObjects) {
-    for (const key of resolvedStyleObjects.keys()) {
-      if (target.existingKeys.has(key)) {
-        return undefined;
-      }
+  // Shadow check: reject if `name` is bound anywhere else in the file (nested scope
+  // like a function component). Rewrite-jsx emits plain `name.key` references and
+  // would silently bind to the shadowing binding instead of the top-level object.
+  if (isNameShadowedOutsideDeclarator(ctx, target.name, target.declaratorNode)) {
+    return undefined;
+  }
+
+  for (const key of emitKeyNames) {
+    if (target.existingKeys.has(key)) {
+      return undefined;
     }
   }
   return target;
+}
+
+/**
+ * Collects every style key that will be written into the merged `stylex.create`
+ * object by emit-styles. Includes the top-level keys in `resolvedStyleObjects`
+ * plus any keys injected by analyzeBeforeEmit (staticBooleanVariants,
+ * callSiteCombinedStyles, promotedStyleProps — these are already present in
+ * `resolvedStyleObjects` by the time this helper runs, but we re-derive them
+ * from the decls so future additions stay in sync).
+ */
+function buildEmitKeyNames(ctx: TransformContext, styledDecls: StyledDecl[]): Set<string> {
+  const keys = new Set<string>();
+  if (ctx.resolvedStyleObjects) {
+    for (const key of ctx.resolvedStyleObjects.keys()) {
+      keys.add(key);
+    }
+  }
+  for (const decl of styledDecls) {
+    keys.add(decl.styleKey);
+    for (const sbv of decl.staticBooleanVariants ?? []) {
+      keys.add(sbv.styleKey);
+    }
+    for (const cc of decl.callSiteCombinedStyles ?? []) {
+      keys.add(cc.styleKey);
+    }
+    for (const ps of decl.promotedStyleProps ?? []) {
+      if (!ps.mergeIntoBase) {
+        keys.add(ps.styleKey);
+      }
+    }
+    for (const variantKey of Object.values(decl.variantStyleKeys ?? {})) {
+      keys.add(variantKey);
+    }
+  }
+  return keys;
+}
+
+/** True if the given name is declared anywhere in the file outside `declaratorNode`. */
+function isNameShadowedOutsideDeclarator(
+  ctx: TransformContext,
+  name: string,
+  declaratorNode: unknown,
+): boolean {
+  const { root, j } = ctx;
+  let shadowed = false;
+  root.find(j.VariableDeclarator).forEach((path) => {
+    if (shadowed) {
+      return;
+    }
+    if (path.node === declaratorNode) {
+      return;
+    }
+    if (patternContainsName(path.node.id, name)) {
+      shadowed = true;
+    }
+  });
+  if (shadowed) {
+    return true;
+  }
+  // Function params and declarations with the same name also shadow at their scope.
+  root
+    .find(j.FunctionDeclaration, { id: { type: "Identifier", name } as object } as object)
+    .forEach(() => {
+      shadowed = true;
+    });
+  return shadowed;
+}
+
+/** True if any top-level or nested variable declarator in the file binds the given name. */
+function fileHasLocalName(
+  ctx: TransformContext,
+  name: string,
+  styledDeclNames: Set<string>,
+): boolean {
+  // Skipped styled decls keep their binding (e.g. `const styles = styled.div\`\``), so
+  // we treat that as a conflict only if the name isn't already a styled-decl name.
+  if (styledDeclNames.has(name)) {
+    return false;
+  }
+  const { root, j } = ctx;
+  let found = false;
+  root.find(j.VariableDeclarator).forEach((path) => {
+    if (!found && patternContainsName(path.node.id, name)) {
+      found = true;
+    }
+  });
+  return found;
 }
 
 /** True if `node` is `stylex.create(...)`. */

@@ -410,6 +410,45 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Complex\s*=\s*sc\.nav`/);
   });
 
+  it("falls back to stylexStyles when the existing stylex.create name is shadowed by a nested binding", () => {
+    // The top-level `const styles = stylex.create({...})` name is shadowed by
+    // a nested `const styles = ...` inside the component. Emitting `sx={styles.X}`
+    // at that call site would bind to the inner variable — reject the merge.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  heading: { color: "navy" },
+});
+
+export const App = () => {
+  const styles = { inline: true };
+  return (
+    <div>
+      <Container data-inline={styles.inline}>c</Container>
+    </div>
+  );
+};
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-shadowedStyles.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Merge rejected → new declaration under `stylexStyles`.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+    // Existing `styles` is preserved as-is.
+    expect(result.code).toMatch(/heading:\s*\{\s*color:\s*["']navy["']/);
+  });
+
   it("falls back to stylexStyles when a new style key collides with an existing stylex.create key", () => {
     // The existing `styles.container` and our new entry would both be called
     // `container`. To avoid silently overwriting the user's styles, emit a
