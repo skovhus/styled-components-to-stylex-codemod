@@ -24,8 +24,8 @@ import {
   isPureIdempotentExpression,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
-import { escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
-import { splitDirectionalProperty } from "../stylex-shorthands.js";
+import { camelToKebabCase, escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
@@ -1987,44 +1987,62 @@ const FORBIDDEN_SHORTHAND_PROPS = new Set([
   "background",
 ]);
 
-/** Camel-cased directional shorthand keys allowed in React-style style objects. */
-const DIRECTIONAL_SHORTHAND_KEYS: Record<
-  string,
-  "padding" | "margin" | "scrollMargin" | "scrollPadding"
-> = {
-  padding: "padding",
-  margin: "margin",
-  scrollPadding: "scrollPadding",
-  scrollMargin: "scrollMargin",
-};
+/**
+ * Expands a static React-style inline style entry into one or more StyleX
+ * longhand entries via the authoritative `cssDeclarationToStylexDeclarations`
+ * helper. The React key is converted to kebab-case CSS first (e.g.
+ * `backgroundColor` → `background-color`) so the helper sees the same input
+ * shape it sees when processing styled-components template declarations.
+ *
+ * Returns null when the resulting StyleX property would still be a forbidden
+ * shorthand (the helper failed to decompose it), so the caller can bail and
+ * preserve the original inline style instead of producing invalid StyleX.
+ */
+function expandStaticStylePropToStylex(
+  reactKey: string,
+  value: string | number | boolean,
+): Array<{ key: string; value: string | number | boolean }> | null {
+  if (typeof value === "boolean") {
+    return [{ key: reactKey, value }];
+  }
+  const cssProp = camelToKebabCase(reactKey);
+  const rawValue = typeof value === "number" ? String(value) : value;
+  const expanded = cssDeclarationToStylexDeclarations({
+    property: cssProp,
+    value: { kind: "static", value: rawValue },
+    valueRaw: rawValue,
+    important: false,
+  });
+  const result: Array<{ key: string; value: string | number | boolean }> = [];
+  for (const entry of expanded) {
+    if (FORBIDDEN_SHORTHAND_PROPS.has(entry.prop)) {
+      // Helper couldn't fully decompose the shorthand — bail so we don't emit
+      // invalid StyleX (e.g. `border: "1px"` with no style/color tokens).
+      return null;
+    }
+    if (entry.value.kind !== "static") {
+      return null;
+    }
+    result.push({ key: entry.prop, value: coerceExpandedValue(entry.value.value) });
+  }
+  return result.length > 0 ? result : null;
+}
 
 /**
- * Expands a directional shorthand (e.g., `padding: "20px 0"`) into longhand entries
- * suitable for `stylex.create`. Returns null when the key is not a directional
- * shorthand or the value is a single token (StyleX accepts those as-is).
+ * Re-numifies a static expanded value when it is purely numeric. The expansion
+ * pipeline emits everything as strings; converting bare numbers back to JS
+ * numbers keeps emitted StyleX entries consistent with handwritten code (e.g.
+ * `paddingInline: 0` instead of `paddingInline: "0"`).
  */
-function expandDirectionalShorthandStatic(
-  key: string,
-  value: string | number | boolean,
-): Array<{ prop: string; value: string | number }> | null {
-  const directional = DIRECTIONAL_SHORTHAND_KEYS[key];
-  if (!directional) {
-    return null;
+function coerceExpandedValue(raw: string): string | number {
+  if (raw === "") {
+    return raw;
   }
-  if (typeof value !== "string" && typeof value !== "number") {
-    return null;
+  if (!/^-?\d+(\.\d+)?$/.test(raw)) {
+    return raw;
   }
-  const entries = splitDirectionalProperty({ prop: directional, rawValue: value });
-  if (entries.length <= 1) {
-    return null;
-  }
-  return entries.map((entry) => {
-    const numeric = typeof value === "number" ? Number(entry.value) : NaN;
-    return {
-      prop: entry.prop,
-      value: Number.isFinite(numeric) ? numeric : entry.value,
-    };
-  });
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : raw;
 }
 
 /**
@@ -2144,6 +2162,20 @@ function analyzePromotableStyleProps(
       continue;
     }
     if (!resolvesToIntrinsic(decl, declByLocal)) {
+      continue;
+    }
+    // Promotion inlines call sites (replacing `<Decl ... style={...}>` with the
+    // intrinsic JSX). Inlining is unsafe when the styled decl's resolved style
+    // pipeline still has wrapper-scoped expressions or extra-style logic that
+    // can't be re-evaluated at the call site. In those cases, the call site
+    // would emit unresolved identifiers (e.g. `showProperty(width) ? ...`).
+    // Conservatively bail when any of these wrapper-only artifacts are present.
+    if (
+      decl.inlineStyleProps?.length ||
+      decl.extraStylexPropsArgs?.length ||
+      decl.extraStyleKeys?.length ||
+      decl.styleFnFromProps?.some((p) => p.conditionWhen)
+    ) {
       continue;
     }
     // Bail if the base style uses !important on any property — promoting call-site
@@ -2283,30 +2315,30 @@ function analyzePromotableStyleProps(
           siteBail = true;
           break;
         }
-        // Bail: forbidden StyleX shorthand properties (e.g., `background`, `border`, `margin`)
-        if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
-          siteBail = true;
-          break;
-        }
-
         const staticVal = literalToStaticValue(prop.value);
         if (staticVal !== null) {
-          // Expand directional shorthands (padding/margin/scrollPadding/scrollMargin)
-          // when given multiple values, since StyleX requires longhand-only values for
-          // those properties (e.g., `padding: "20px 0"` → `paddingBlock`/`paddingInline`).
-          const expanded = expandDirectionalShorthandStatic(keyName, staticVal);
-          if (expanded) {
-            for (const entry of expanded) {
-              properties.push({
-                key: entry.prop,
-                staticValue: entry.value,
-                dynamicExpr: null,
-              });
-            }
-          } else {
-            properties.push({ key: keyName, staticValue: staticVal, dynamicExpr: null });
+          // Route static values through the authoritative CSS → StyleX mapping so
+          // shorthands (`padding`, `margin`, `border`, `background`, …) are expanded
+          // into longhand-only entries that StyleX accepts.
+          const expanded = expandStaticStylePropToStylex(keyName, staticVal);
+          if (!expanded) {
+            siteBail = true;
+            break;
+          }
+          for (const entry of expanded) {
+            properties.push({
+              key: entry.key,
+              staticValue: entry.value,
+              dynamicExpr: null,
+            });
           }
         } else {
+          // Dynamic values can't be statically decomposed, so shorthands with a
+          // dynamic value can't be promoted (StyleX would reject them).
+          if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
+            siteBail = true;
+            break;
+          }
           properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value });
         }
       }
