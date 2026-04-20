@@ -21,9 +21,57 @@ const InputRow = ({ hasRange }: { hasRange: boolean }) => (
   />
 );
 
+// A shared ternary whose test is a function call. Promotion must NOT collapse
+// the per-property ternaries here: hoisting to a single `cond && styles.x` would
+// evaluate the call only once instead of once-per-property and can apply a
+// different branch than the original inline style object when the call returns
+// a different value each time (e.g. `Math.random()` based logic, time-based
+// flags, side-effecting getters).
+const RandomBox = styled.div`
+  padding: 8px;
+`;
+const flipCoin = () => Math.random() > 0.5;
+const RandomRow = () => (
+  <RandomBox
+    style={{
+      width: flipCoin() ? 48 : 96,
+      color: flipCoin() ? "red" : "blue",
+    }}
+  >
+    random
+  </RandomBox>
+);
+
+// A shared-ternary promotion for `<Box>` would generate the key
+// `${box}${Active}` = `boxActive`, which collides with the unrelated styled
+// component `BoxActive` already registered under that key. The promoted entry
+// must be deduplicated against existing style keys so it doesn't silently
+// overwrite `BoxActive`'s style.
+const Box = styled.div`
+  padding: 4px;
+`;
+const BoxActive = styled.div`
+  background: yellow;
+`;
+const ActiveRow = ({ active }: { active: boolean }) => (
+  <>
+    <Box
+      style={{
+        width: active ? 40 : 80,
+        height: active ? 40 : 20,
+      }}
+    >
+      box
+    </Box>
+    <BoxActive>active marker</BoxActive>
+  </>
+);
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <InputRow hasRange={true} />
     <InputRow hasRange={false} />
+    <RandomRow />
+    <ActiveRow active={true} />
   </div>
 );
