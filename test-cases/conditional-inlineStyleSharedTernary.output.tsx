@@ -11,9 +11,12 @@ const InputRow = ({ hasRange }: { hasRange: boolean }) => (
   />
 );
 
-const flipCoin = () => Math.random() > 0.5;
-const RandomRow = () => (
-  <div sx={styles.randomBox(flipCoin() ? 48 : 96, flipCoin() ? "red" : "blue")}>random</div>
+// Deterministic at runtime so input/output renders match pixel-for-pixel, but
+// still a `CallExpression` at AST analysis time so the purity check trips and
+// the codemod falls back to the per-property dynamic style function.
+const isImpureFlag = () => true;
+const ImpureRow = () => (
+  <div sx={styles.impureBox(isImpureFlag() ? 48 : 96, isImpureFlag() ? "red" : "blue")}>call</div>
 );
 
 const ActiveRow = ({ active }: { active: boolean }) => (
@@ -27,7 +30,7 @@ export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <InputRow hasRange={true} />
     <InputRow hasRange={false} />
-    <RandomRow />
+    <ImpureRow />
     <ActiveRow active={true} />
   </div>
 );
@@ -50,7 +53,7 @@ const styles = stylex.create({
   // different branch than the original inline style object when the call returns
   // a different value each time (e.g. `Math.random()` based logic, time-based
   // flags, side-effecting getters).
-  randomBox: (width: number | string, color: string) => ({
+  impureBox: (width: number | string, color: string) => ({
     padding: 8,
     width,
     color,

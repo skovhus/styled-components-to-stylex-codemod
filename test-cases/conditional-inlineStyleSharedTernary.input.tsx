@@ -27,19 +27,22 @@ const InputRow = ({ hasRange }: { hasRange: boolean }) => (
 // different branch than the original inline style object when the call returns
 // a different value each time (e.g. `Math.random()` based logic, time-based
 // flags, side-effecting getters).
-const RandomBox = styled.div`
+const ImpureBox = styled.div`
   padding: 8px;
 `;
-const flipCoin = () => Math.random() > 0.5;
-const RandomRow = () => (
-  <RandomBox
+// Deterministic at runtime so input/output renders match pixel-for-pixel, but
+// still a `CallExpression` at AST analysis time so the purity check trips and
+// the codemod falls back to the per-property dynamic style function.
+const isImpureFlag = () => true;
+const ImpureRow = () => (
+  <ImpureBox
     style={{
-      width: flipCoin() ? 48 : 96,
-      color: flipCoin() ? "red" : "blue",
+      width: isImpureFlag() ? 48 : 96,
+      color: isImpureFlag() ? "red" : "blue",
     }}
   >
-    random
-  </RandomBox>
+    call
+  </ImpureBox>
 );
 
 // A shared-ternary promotion for `<Box>` would generate the key
@@ -71,7 +74,7 @@ export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <InputRow hasRange={true} />
     <InputRow hasRange={false} />
-    <RandomRow />
+    <ImpureRow />
     <ActiveRow active={true} />
   </div>
 );
