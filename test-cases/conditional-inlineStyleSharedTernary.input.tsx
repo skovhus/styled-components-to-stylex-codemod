@@ -10,15 +10,20 @@ const Input = styled.input`
   padding: 4px 8px;
 `;
 
-export const App = ({ hasRange = false }: { hasRange?: boolean }) => (
+const InputRow = ({ hasRange }: { hasRange: boolean }) => (
+  <Input
+    style={{
+      width: hasRange ? 48 : "100%",
+      cursor: hasRange ? "text" : "ew-resize",
+      textAlign: hasRange ? "right" : "left",
+    }}
+    defaultValue={hasRange ? "hasRange" : "no range"}
+  />
+);
+
+export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
-    <Input
-      style={{
-        width: hasRange ? 48 : "100%",
-        cursor: hasRange ? "text" : "ew-resize",
-        textAlign: hasRange ? "right" : "left",
-      }}
-      defaultValue="value"
-    />
+    <InputRow hasRange={true} />
+    <InputRow hasRange={false} />
   </div>
 );

@@ -4,9 +4,17 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-export const App = ({ hasRange = false }: { hasRange?: boolean }) => (
+const InputRow = ({ hasRange }: { hasRange: boolean }) => (
+  <input
+    defaultValue={hasRange ? "hasRange" : "no range"}
+    sx={[styles.input, hasRange && styles.inputHasRange]}
+  />
+);
+
+export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
-    <input defaultValue="value" sx={[styles.input, hasRange && styles.inputHasRange]} />
+    <InputRow hasRange={true} />
+    <InputRow hasRange={false} />
   </div>
 );
 
