@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { looksLikeLength, isBackgroundImageValue, kebabToCamelCase } from "./string-utils.js";
+import {
+  looksLikeLength,
+  isBackgroundImageValue,
+  kebabToCamelCase,
+  camelToKebabCase,
+} from "./string-utils.js";
 
 describe("looksLikeLength", () => {
   it("matches numeric values with common CSS units", () => {
@@ -80,5 +85,27 @@ describe("kebabToCamelCase", () => {
   it("returns single-word strings unchanged", () => {
     expect(kebabToCamelCase("hover")).toBe("hover");
     expect(kebabToCamelCase("color")).toBe("color");
+  });
+});
+
+describe("camelToKebabCase", () => {
+  it("converts camelCase to kebab-case", () => {
+    expect(camelToKebabCase("backgroundColor")).toBe("background-color");
+    expect(camelToKebabCase("borderTopWidth")).toBe("border-top-width");
+  });
+
+  it("returns single-word strings unchanged", () => {
+    expect(camelToKebabCase("padding")).toBe("padding");
+    expect(camelToKebabCase("color")).toBe("color");
+  });
+
+  it("treats leading uppercase as a vendor prefix marker", () => {
+    expect(camelToKebabCase("WebkitAppearance")).toBe("-webkit-appearance");
+    expect(camelToKebabCase("MozAppearance")).toBe("-moz-appearance");
+  });
+
+  it("preserves CSS custom property prefixes", () => {
+    expect(camelToKebabCase("--my-color")).toBe("--my-color");
+    expect(camelToKebabCase("--background")).toBe("--background");
   });
 });

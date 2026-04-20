@@ -31,6 +31,21 @@ export function kebabToCamelCase(s: string): string {
 }
 
 /**
+ * Converts a camelCase string to kebab-case.
+ * Preserves CSS custom property prefixes (`--foo`). React uses leading uppercase
+ * to indicate vendor prefixes (e.g. `WebkitAppearance` → `-webkit-appearance`).
+ * @example camelToKebabCase("backgroundColor") => "background-color"
+ * @example camelToKebabCase("padding") => "padding"
+ * @example camelToKebabCase("WebkitAppearance") => "-webkit-appearance"
+ */
+export function camelToKebabCase(s: string): string {
+  if (s.startsWith("--")) {
+    return s;
+  }
+  return s.replace(/([A-Z])/g, (_, ch: string) => `-${ch.toLowerCase()}`);
+}
+
+/**
  * Lowercases the first character of a string.
  * @example lowerFirst("Hello") => "hello"
  */
