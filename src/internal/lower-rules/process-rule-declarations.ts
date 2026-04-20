@@ -8,6 +8,8 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
+import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
@@ -37,12 +39,19 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
 
   for (const d of rule.declarations) {
     // Dynamic property names (slot placeholders in property position) such as
-    // `${CSS_VAR}: 100%;` cannot be safely lowered to StyleX. Bail with a clear
-    // warning instead of emitting a broken style entry whose key is the raw
-    // placeholder text (e.g. `__SC_EXPR_0__`).
+    // `${CSS_VAR}: 100%;`. Try to resolve every placeholder in the property
+    // name to a static string (e.g. via a top-level `const X = "--var"`). If
+    // every slot resolves to a CSS-variable-compatible literal, substitute the
+    // resolved name and continue processing as a regular declaration. Bail
+    // otherwise — emitting the raw `__SC_EXPR_N__` placeholder produces broken
+    // StyleX output.
     if (d.property && d.property.includes("__SC_EXPR_")) {
-      ctx.state.bailUnsupported(ctx.decl, "Unsupported interpolation: property");
-      break;
+      const resolvedProperty = resolveInterpolatedPropertyName(d.property, ctx);
+      if (resolvedProperty === null) {
+        ctx.state.bailUnsupported(ctx.decl, "Unsupported interpolation: property");
+        break;
+      }
+      d.property = resolvedProperty;
     }
 
     if (d.value.kind === "interpolated") {
@@ -125,4 +134,105 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       applyResolvedPropValue(out.prop, value, commentSource);
     }
   }
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * Attempts to substitute `__SC_EXPR_N__` placeholders in a CSS property name
+ * with statically-resolvable string values pulled from the styled component's
+ * template expressions. Only succeeds when:
+ *   - every placeholder slot resolves to a string literal (directly or via a
+ *     top-level `const NAME = "..."` binding in the same file), and
+ *   - the resulting property name is a CSS custom property (starts with `--`).
+ *
+ * Returns the resolved property name on success, or `null` when the property
+ * cannot be safely lowered.
+ */
+function resolveInterpolatedPropertyName(
+  property: string,
+  ctx: DeclProcessingState,
+): string | null {
+  const { decl, state } = ctx;
+  const placeholderRe = new RegExp(PLACEHOLDER_RE.source, "g");
+  let failed = false;
+  const resolved = property.replace(placeholderRe, (_match, slotIdRaw: string) => {
+    const slotId = Number(slotIdRaw);
+    const expr = decl.templateExpressions[slotId];
+    const value = resolveExpressionToStaticString(expr, state);
+    if (value === null) {
+      failed = true;
+      return "";
+    }
+    return value;
+  });
+  if (failed) {
+    return null;
+  }
+  // Only substitute names that look like CSS custom properties to avoid
+  // accidentally turning unrelated dynamic patterns (e.g. computed standard
+  // property names) into silently mistransformed output.
+  if (!resolved.startsWith("--")) {
+    return null;
+  }
+  return resolved;
+}
+
+/**
+ * Resolves an AST expression to a static string. Handles direct string literals
+ * and identifiers bound to top-level `const NAME = "..."` declarations in the
+ * file being transformed.
+ */
+function resolveExpressionToStaticString(
+  expr: unknown,
+  state: DeclProcessingState["state"],
+): string | null {
+  const direct = literalToStaticValue(expr);
+  if (typeof direct === "string") {
+    return direct;
+  }
+  if (isIdentifierNode(expr)) {
+    return findTopLevelConstStringInit(expr.name, state);
+  }
+  return null;
+}
+
+/**
+ * Finds a top-level `const <name> = <literal>` declaration in the current file
+ * and returns its initializer when it resolves to a static string. Skips
+ * declarators with multiple bindings or non-`const` declarations to avoid
+ * picking up reassignable values.
+ */
+function findTopLevelConstStringInit(
+  name: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  const { root, j } = state;
+  let resolved: string | null = null;
+  root
+    .find(j.VariableDeclaration, { kind: "const" } as { kind: "const" })
+    .filter((p) => {
+      const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
+      return parentType === "Program" || parentType === "ExportNamedDeclaration";
+    })
+    .forEach((p) => {
+      if (resolved !== null) {
+        return;
+      }
+      for (const declarator of p.node.declarations) {
+        if (
+          declarator.type !== "VariableDeclarator" ||
+          declarator.id.type !== "Identifier" ||
+          declarator.id.name !== name
+        ) {
+          continue;
+        }
+        const value = literalToStaticValue(declarator.init);
+        if (typeof value === "string") {
+          resolved = value;
+        }
+        return;
+      }
+    });
+  return resolved;
 }
