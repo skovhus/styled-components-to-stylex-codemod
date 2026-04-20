@@ -1,0 +1,1 @@
+import"./chunk-zsgVPwQN.js";import{t as e}from"./react-D4cBbUL-.js";import{f as t}from"./index-WkY8w7Ey.js";e();var n=t(),r=e=>{let{text:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};r.HEIGHT=30;var i=e=>{let{title:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};i.HEIGHT=28;export{r as n,i as t};
