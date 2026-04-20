@@ -99,6 +99,19 @@ export interface RunTransformOptions {
    * @default false
    */
   silent?: boolean;
+
+  /**
+   * When true, allow the codemod to leave individual styled declarations as-is when
+   * they hit an unsupported pattern while transforming the rest of the file. This
+   * enables incremental migration: a file with one unconvertible component still
+   * produces useful output for the others.
+   *
+   * When false (default), any per-decl bail escalates to a whole-file bail — the
+   * safer/stricter behavior matching the pre-partial-migration semantics.
+   *
+   * @default false
+   */
+  allowPartialMigration?: boolean;
 }
 
 export interface RunTransformResult {
@@ -488,6 +501,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     bridgeResults,
     transformedFiles,
     transientPropRenames,
+    allowPartialMigration: options.allowPartialMigration ?? false,
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,

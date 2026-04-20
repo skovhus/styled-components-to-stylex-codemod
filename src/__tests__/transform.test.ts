@@ -290,10 +290,15 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
     const inputPath = join(testCasesDir, bailOutInput);
     const input = readFileSync(inputPath, "utf-8");
     const expectedWarning = getExpectedWarningType(input, inputPath);
+    // Only the `_unsupported.partial-*` fixtures need partial-migration mode —
+    // they exercise the cascade-conflict guard that fires only when per-decl
+    // skips are allowed. Regular `_unsupported.*` cases should bail under the
+    // default stricter semantics.
+    const allowPartialMigration = bailOutInput.startsWith("_unsupported.partial-");
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
+      { adapter: fixtureAdapter, allowPartialMigration },
     );
     // With per-decl skips, other decls in the fixture may transform successfully while
     // the one carrying the unsupported pattern is preserved. Require the expected
@@ -333,6 +338,15 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
 });
 
 describe("partial-file transforms", () => {
+  // All partial-file tests need allowPartialMigration: true so per-decl bails
+  // don't escalate to a whole-file bail.
+  const runPartial = (source: string, filename: string) =>
+    transformWithWarnings(
+      { source, path: join(testCasesDir, filename) },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
   it("emits a warning for the skipped decl and transforms the rest", () => {
     const source = `
 import styled from "styled-components";
@@ -354,11 +368,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-warning.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-warning.input.tsx");
 
     expect(result.code).not.toBeNull();
     // StyleX output for Container (fixture adapter uses the `sx` prop)
@@ -395,11 +405,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-aliasedStyled.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-aliasedStyled.input.tsx");
 
     expect(result.code).not.toBeNull();
     // Alias is preserved: `import { styled as sc }` must survive.
@@ -436,11 +442,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-shadowedParam.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-shadowedParam.input.tsx");
 
     expect(result.code).not.toBeNull();
     // Merge rejected → new declaration under `stylexStyles`.
@@ -476,11 +478,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-danglingHelper.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-danglingHelper.input.tsx");
 
     expect(result.code).toBeNull();
   });
@@ -516,11 +514,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-sharedMixin.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-sharedMixin.input.tsx");
 
     expect(result.code).not.toBeNull();
     // Container transforms — its mixin reference compiled into the shared helper's
@@ -558,11 +552,7 @@ export const App = () => {
   );
 };
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-shadowedStyles.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-shadowedStyles.input.tsx");
 
     expect(result.code).not.toBeNull();
     // Merge rejected → new declaration under `stylexStyles`.
@@ -595,11 +585,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-keyCollision.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-keyCollision.input.tsx");
 
     expect(result.code).not.toBeNull();
     // A second `stylex.create` declaration is emitted under a different name.
@@ -637,11 +623,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-cssHelper.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-cssHelper.input.tsx");
 
     expect(result.code).toBeNull();
   });
@@ -674,11 +656,7 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-cascade.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-cascade.input.tsx");
 
     expect(result.code).toBeNull();
     expect(result.warnings.map((w) => w.type)).toContain(
@@ -715,17 +693,48 @@ export const App = () => (
   </div>
 );
 `;
-    const result = transformWithWarnings(
-      { source, path: join(testCasesDir, "partial-nonleafBase.input.tsx") },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
+    const result = runPartial(source, "partial-nonleafBase.input.tsx");
 
     expect(result.code).not.toBeNull();
     // Base converts to a wrapper function (not inlined) so `styled(Base)` works.
     expect(result.code).toMatch(/function\s+Base\s*</);
     // Derived stays as styled-components and references the Base wrapper.
     expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
+  });
+
+  it("bails the whole file by default when a decl cannot be lowered (allowPartialMigration: false)", () => {
+    // Default behavior matches the pre-flag semantics: any per-decl bail
+    // escalates to a whole-file bail unless `allowPartialMigration: true` is
+    // explicitly passed.
+    const source = `
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  & a.active { color: tomato; }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const defaultResult = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-defaultBail.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(defaultResult.code).toBeNull();
+
+    // Same source with the flag explicitly enabled produces partial output.
+    const partialResult = runPartial(source, "partial-defaultBail.input.tsx");
+    expect(partialResult.code).not.toBeNull();
+    expect(partialResult.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
   });
 });
 
@@ -778,7 +787,12 @@ describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
-    const diagnostics = runTransformWithDiagnostics(input, { crossFileInfo }, inputPath, parser);
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
+      inputPath,
+      parser,
+    );
     const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed

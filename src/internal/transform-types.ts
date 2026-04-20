@@ -90,6 +90,13 @@ export interface TransformOptions extends Options {
    * When present, enables cross-file component selector handling.
    */
   crossFileInfo?: CrossFileInfo;
+
+  /**
+   * When true, individual declarations that hit an unsupported pattern are left
+   * as-is while the rest of the file is transformed. When false (default), any
+   * per-decl bail escalates to a whole-file bail.
+   */
+  allowPartialMigration?: boolean;
 }
 
 /**

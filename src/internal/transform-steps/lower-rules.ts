@@ -80,12 +80,15 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
-  // Nothing lowered successfully — every declaration hit a per-decl bail. Skip the
-  // file entirely rather than emitting a no-op stylex import alongside untouched
-  // styled-components source.
+  // Partial migration is opt-in. When disabled, any per-decl bail escalates to a
+  // whole-file bail so the output matches the stricter pre-flag behavior.
+  const allowPartialMigration = ctx.options.allowPartialMigration ?? false;
   if (ctx.styledDecls && ctx.styledDecls.length > 0) {
     const anyTransformable = ctx.styledDecls.some((d) => !d.skipTransform);
     if (!anyTransformable) {
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
+    if (!allowPartialMigration && ctx.styledDecls.some((d) => d.skipTransform)) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
     // `css\`\`` helpers are extracted (and their source declarations removed) by
