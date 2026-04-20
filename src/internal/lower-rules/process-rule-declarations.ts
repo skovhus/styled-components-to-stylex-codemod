@@ -181,7 +181,10 @@ function resolveInterpolatedPropertyName(
 /**
  * Resolves an AST expression to a static string. Handles direct string literals
  * and identifiers bound to top-level `const NAME = "..."` declarations in the
- * file being transformed.
+ * file being transformed. Identifiers that are shadowed by an enclosing scope
+ * (e.g. a local `const NAME = "..."` inside the function containing the styled
+ * template) are not resolved — bailing is safer than substituting the wrong
+ * value.
  */
 function resolveExpressionToStaticString(
   expr: unknown,
@@ -191,17 +194,20 @@ function resolveExpressionToStaticString(
   if (typeof direct === "string") {
     return direct;
   }
-  if (isIdentifierNode(expr)) {
-    return findTopLevelConstStringInit(expr.name, state);
+  if (!isIdentifierNode(expr)) {
+    return null;
   }
-  return null;
+  if (state.isIdentifierShadowed(expr, expr.name)) {
+    return null;
+  }
+  return findTopLevelConstStringInit(expr.name, state);
 }
 
 /**
  * Finds a top-level `const <name> = <literal>` declaration in the current file
  * and returns its initializer when it resolves to a static string. Skips
- * declarators with multiple bindings or non-`const` declarations to avoid
- * picking up reassignable values.
+ * non-`const` declarations and declarators whose initializer is not a static
+ * literal so we never substitute a value that could change at runtime.
  */
 function findTopLevelConstStringInit(
   name: string,

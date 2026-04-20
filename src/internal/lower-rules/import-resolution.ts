@@ -283,5 +283,6 @@ export const createImportResolver = (args: {
   return {
     resolveImportInScope,
     resolveImportForExpr,
+    isIdentifierShadowed,
   };
 };

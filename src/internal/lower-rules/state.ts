@@ -221,11 +221,13 @@ export function createLowerRulesState(ctx: TransformContext) {
     },
   );
 
-  const { resolveImportInScope, resolveImportForExpr } = createImportResolver({
-    root,
-    j,
-    importMap,
-  });
+  const { resolveImportInScope, resolveImportForExpr, isIdentifierShadowed } = createImportResolver(
+    {
+      root,
+      j,
+      importMap,
+    },
+  );
 
   const { isCssHelperTaggedTemplate, resolveCssHelperTemplate } = createCssHelperResolver({
     importMap,
@@ -297,6 +299,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveCssHelperTemplate,
     resolveImportInScope,
     resolveImportForExpr,
+    isIdentifierShadowed,
     enumValueMap,
     crossFileSelectorsByLocal,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
