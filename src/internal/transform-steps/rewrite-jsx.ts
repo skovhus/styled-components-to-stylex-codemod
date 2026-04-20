@@ -123,7 +123,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         if (decl.needsWrapperComponent) {
           const hasPromoted =
             ((opening as any).__promotedStyleKey && !(opening as any).__promotedMergeIntoBase) ||
-            (opening as any).__promotedMergeArgs;
+            (opening as any).__promotedMergeArgs ||
+            (opening as any).__promotedConditionalVariant;
           if (!hasPromoted) {
             return;
           }
@@ -732,6 +733,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const promotedKey = (opening as any).__promotedStyleKey as string | undefined;
         const promotedArgs = (opening as any).__promotedStyleArgs as ExpressionKind[] | undefined;
         const promotedMerge = (opening as any).__promotedMergeIntoBase as boolean | undefined;
+        const promotedConditionalVariant = (
+          opening as { __promotedConditionalVariant?: { styleKey: string; conditionExpr: unknown } }
+        ).__promotedConditionalVariant;
 
         if (promotedKey) {
           const stylesId = ctx.stylesIdentifier ?? "styles";
@@ -755,6 +759,23 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // just consume the style attr.
         if (promotedMerge) {
           styleAttr = null;
+        }
+
+        // Shared-ternary promotion: emit `cond && styles.variantKey` after the
+        // base style, so the truthy branch overrides the alternate values
+        // already folded into the base.
+        if (promotedConditionalVariant) {
+          const stylesId = ctx.stylesIdentifier ?? "styles";
+          styleArgs.push(
+            j.logicalExpression(
+              "&&",
+              promotedConditionalVariant.conditionExpr as ExpressionKind,
+              j.memberExpression(
+                j.identifier(stylesId),
+                j.identifier(promotedConditionalVariant.styleKey),
+              ),
+            ),
+          );
         }
 
         // Build extra className expression from CSS module classes (if any).

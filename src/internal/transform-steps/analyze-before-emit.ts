@@ -15,14 +15,17 @@ import {
 } from "../utilities/delegation-utils.js";
 import { generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
+  astNodesEqual,
   type ExpressionKind,
   getRootJsxIdentifierName,
   isAstNode,
+  isConditionalExpressionNode,
   isFunctionNode,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import { escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
+import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -2310,29 +2313,54 @@ function analyzePromotableStyleProps(
           }
         }
 
-        // Check if we can merge the base static styles into this dynamic function.
-        // This produces a single style entry instead of separate static + dynamic keys.
-        // Bail when base values include non-primitive, non-AST objects (e.g., pseudo-selector maps).
-        const baseObj = resolvedStyleObjects.get(decl.styleKey);
-        const baseIsSimpleObject =
-          baseObj &&
-          typeof baseObj === "object" &&
-          !isAstNode(baseObj) &&
-          Object.values(baseObj as Record<string, unknown>).every(
-            (v) =>
-              typeof v === "string" ||
-              typeof v === "number" ||
-              typeof v === "boolean" ||
-              isAstNode(v),
-          );
         // Don't merge if another styled component extends this one — converting
         // the base style to a function would break the child's static style reference.
         const isExtendedByOther = styledDecls.some(
           (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
         );
+        const baseObj = resolvedStyleObjects.get(decl.styleKey);
+        const baseIsSimpleObject = isPlainStyleObject(baseObj);
+        const isReusable = usageCount > 1 || decl.isExported === true;
+
+        // Shared-ternary promotion: when every dynamic value is the same
+        // conditional `cond ? a : b` with literal branches, fold the alternate
+        // values into the base and emit the consequent values as a separate
+        // boolean-gated variant style. This produces `[styles.x, cond && styles.xVariant]`
+        // instead of `styles.x(cond ? a : b, cond ? c : d, ...)`.
+        if (!isReusable && !isExtendedByOther && baseIsSimpleObject) {
+          const sharedTernary = tryExtractSharedTernaryPromotion({
+            dynamicParams,
+            inlineStaticObj,
+            baseStyleKey: decl.styleKey,
+            existingBaseStyles: baseObj,
+            usedKeyNames,
+          });
+          if (sharedTernary) {
+            promotedEntries.push({
+              styleKey: decl.styleKey,
+              styleValue: sharedTernary.alternateStyles,
+              mergeIntoBase: true,
+            });
+            promotedEntries.push({
+              styleKey: sharedTernary.variantKey,
+              styleValue: sharedTernary.consequentStyles,
+            });
+            (site.opening as { __promotedMergeIntoBase?: boolean }).__promotedMergeIntoBase = true;
+            (
+              site.opening as { __promotedConditionalVariant?: PromotedConditionalVariantTag }
+            ).__promotedConditionalVariant = {
+              styleKey: sharedTernary.variantKey,
+              conditionExpr: sharedTernary.conditionExpr,
+            };
+            usedKeyNames.add(sharedTernary.variantKey);
+            continue;
+          }
+        }
+
+        // Check if we can merge the base static styles into this dynamic function.
+        // This produces a single style entry instead of separate static + dynamic keys.
         const canMergeDynamic =
-          usageCount <= 1 &&
-          !decl.isExported &&
+          !isReusable &&
           !isExtendedByOther &&
           baseIsSimpleObject &&
           !hasPropertyOverlap(inlineStaticObj, baseObj as Record<string, unknown>);
@@ -2630,4 +2658,132 @@ function canDowngradeStyleFnOnlyWrapper(
     return false;
   }
   return hasInlineableStyleFnOnly(decl);
+}
+
+/** JSX-side tag for shared-ternary promotion: applies `cond && styles.variantKey` at the call site. */
+type PromotedConditionalVariantTag = {
+  styleKey: string;
+  conditionExpr: unknown;
+};
+
+/**
+ * Detects when every dynamic property in a promoted style object shares the same
+ * conditional `cond ? a : b` test with literal branches, and folds the alternate
+ * values into the base style + emits the consequent values as a boolean-gated
+ * variant style key. Returns `null` when the pattern doesn't apply.
+ *
+ * Caller must already have verified that:
+ * - The component is single-use, non-exported, and not extended by another component.
+ * - The base style object has only primitive/AST-node values (no nested rule objects).
+ */
+function tryExtractSharedTernaryPromotion(args: {
+  dynamicParams: Array<{ cssProp: string; expr: unknown }>;
+  inlineStaticObj: Record<string, unknown>;
+  baseStyleKey: string;
+  existingBaseStyles: Record<string, unknown>;
+  usedKeyNames: Set<string>;
+}): {
+  variantKey: string;
+  consequentStyles: Record<string, unknown>;
+  alternateStyles: Record<string, unknown>;
+  conditionExpr: unknown;
+} | null {
+  const { dynamicParams, inlineStaticObj, baseStyleKey, existingBaseStyles, usedKeyNames } = args;
+
+  if (dynamicParams.length < 2) {
+    return null;
+  }
+
+  let conditionExpr: unknown = null;
+  const consequentEntries: Array<{ key: string; value: string | number | boolean }> = [];
+  const alternateEntries: Array<{ key: string; value: string | number | boolean }> = [];
+  for (const dp of dynamicParams) {
+    const expr = dp.expr;
+    if (!isConditionalExpressionNode(expr)) {
+      return null;
+    }
+    const consequentVal = literalToStaticValue(expr.consequent);
+    const alternateVal = literalToStaticValue(expr.alternate);
+    if (consequentVal === null || alternateVal === null) {
+      return null;
+    }
+    if (conditionExpr === null) {
+      conditionExpr = expr.test;
+    } else if (!astNodesEqual(conditionExpr, expr.test)) {
+      return null;
+    }
+    consequentEntries.push({
+      key: dp.cssProp,
+      value: coerceToStringForStyleX(dp.cssProp, consequentVal) as string | number | boolean,
+    });
+    alternateEntries.push({
+      key: dp.cssProp,
+      value: coerceToStringForStyleX(dp.cssProp, alternateVal) as string | number | boolean,
+    });
+  }
+
+  if (!conditionExpr) {
+    return null;
+  }
+
+  // The variant key must be derivable from the condition; bail when we can't
+  // produce a stable readable suffix (matches existing variant-naming conventions).
+  const conditionName = extractConditionName(conditionExpr as ExpressionKind);
+  if (!conditionName) {
+    return null;
+  }
+
+  // Reject overlap between the alternate-branch values folded into the base and
+  // any pre-existing base or inline-static property — overwriting would silently
+  // change semantics.
+  for (const e of alternateEntries) {
+    if (
+      Object.prototype.hasOwnProperty.call(existingBaseStyles, e.key) ||
+      Object.prototype.hasOwnProperty.call(inlineStaticObj, e.key)
+    ) {
+      return null;
+    }
+  }
+
+  const alternateStyles: Record<string, unknown> = { ...inlineStaticObj };
+  for (const e of alternateEntries) {
+    alternateStyles[e.key] = e.value;
+  }
+  const consequentStyles: Record<string, unknown> = {};
+  for (const e of consequentEntries) {
+    consequentStyles[e.key] = e.value;
+  }
+
+  const variantKey = ensureUniqueKey(`${baseStyleKey}${conditionName}`, usedKeyNames);
+
+  return {
+    variantKey,
+    consequentStyles,
+    alternateStyles,
+    conditionExpr,
+  };
+}
+
+function ensureUniqueKey(key: string, used: Set<string>): string {
+  if (!used.has(key)) {
+    return key;
+  }
+  let i = 2;
+  while (used.has(`${key}${i}`)) {
+    i++;
+  }
+  return `${key}${i}`;
+}
+
+function isPlainStyleObject(value: unknown): value is Record<string, unknown> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    !isAstNode(value) &&
+    Object.values(value as Record<string, unknown>).every(
+      (v) =>
+        typeof v === "string" || typeof v === "number" || typeof v === "boolean" || isAstNode(v),
+    )
+  );
 }

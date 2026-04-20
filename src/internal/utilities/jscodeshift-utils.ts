@@ -805,6 +805,48 @@ export function cloneAstNode<T>(node: T): T {
 }
 
 /**
+ * Structural equality check for AST nodes.
+ * Compares two nodes recursively, ignoring metadata (loc, start/end, comments, tokens).
+ * Returns true when the nodes have the same shape and values.
+ */
+export function astNodesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a === null || b === null || a === undefined || b === undefined) {
+    return false;
+  }
+  if (typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!astNodesEqual(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  const aKeys = Object.keys(a as Record<string, unknown>).filter((k) => !AST_METADATA_KEYS.has(k));
+  const bKeys = Object.keys(b as Record<string, unknown>).filter((k) => !AST_METADATA_KEYS.has(k));
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, key)) {
+      return false;
+    }
+    if (!astNodesEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Type guard for LogicalExpression nodes.
  */
 export function isLogicalExpressionNode(
