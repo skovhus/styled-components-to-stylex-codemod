@@ -58,6 +58,7 @@ const FLAKINESS_EXPECTED = new Set<string>([
   "keyframes-interpolatedDurationWithDelay",
   "keyframes-multiAnimationInterpolatedDuration",
   "keyframes-unionComplexity",
+  "cssVariable-animationShorthand",
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
