@@ -176,6 +176,8 @@ function rewriteCssVarsInTemplateLiteral(
   // Null bytes ensure the placeholder cannot appear in legitimate CSS source text.
   const PLACEHOLDER_PREFIX = "\u0000__SC_TPL_EXPR_";
   const PLACEHOLDER_SUFFIX = "__\u0000";
+  // eslint-disable-next-line no-control-regex
+  const placeholderPattern = /\u0000__SC_TPL_EXPR_\d+__\u0000/g;
   const slotPositions: Array<{ start: number; end: number; slotIdx: number }> = [];
   let combined = "";
   for (let i = 0; i < quasis.length; i++) {
@@ -203,11 +205,18 @@ function rewriteCssVarsInTemplateLiteral(
 
   for (const call of calls) {
     const definedValue = ctx.definedVars.get(call.name);
+    // Strip placeholder sentinels from the fallback before forwarding to the adapter so
+    // adapter logic that inspects `ctx.fallback` (validation, parsing, expression generation)
+    // never sees synthetic interpolation markers. When the fallback consists entirely of
+    // placeholders/whitespace, omit it altogether.
+    const cleanedFallback = call.fallback
+      ? call.fallback.replace(placeholderPattern, "").trim().replace(/,\s*$/, "")
+      : undefined;
     const res = ctx.resolveValue({
       kind: "cssVariable",
       name: call.name,
       filePath: ctx.filePath,
-      ...(call.fallback ? { fallback: call.fallback } : {}),
+      ...(cleanedFallback ? { fallback: cleanedFallback } : {}),
       ...(definedValue ? { definedValue } : {}),
     });
     if (!res) {

@@ -5745,3 +5745,101 @@ export const App = () => (
     expect(result.code).toContain("stylex.when.descendant");
   });
 });
+
+describe("var() rewriter — adapter contract", () => {
+  it("should not pass placeholder sentinels to adapter when var() default contains a dynamic interpolation", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $tone: string }>\`
+  width: \${(props) => \`var(--known-var, \${props.$tone})\`};
+\`;
+
+export const App = () => <Box $tone="red">x</Box>;
+`;
+
+    const fallbacksSeen: Array<string | undefined> = [];
+    const recordingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--known-var") {
+          fallbacksSeen.push(ctx.fallback);
+          return {
+            expr: "vars.knownVar",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./vars.stylex" },
+                names: [{ imported: "vars" }],
+              },
+            ],
+          };
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: recordingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(fallbacksSeen.length).toBeGreaterThan(0);
+    for (const fallback of fallbacksSeen) {
+      // Adapter must never receive synthetic interpolation markers as fallback text;
+      // it would mis-parse them as part of the user's CSS fallback content.
+      expect(fallback ?? "").not.toMatch(/__SC_TPL_EXPR_/);
+      expect(fallback ?? "").not.toContain("\u0000");
+    }
+  });
+
+  it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  color: var(--variant-color);
+  \${(props) => (props.$active ? "--variant-color: red;" : "")}
+\`;
+
+export const App = () => (
+  <div>
+    <Box>off</Box>
+    <Box $active>on</Box>
+  </div>
+);
+`;
+
+    const droppingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--variant-color") {
+          return {
+            expr: "vars.variantColor",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./vars.stylex" },
+                names: [{ imported: "vars" }],
+              },
+            ],
+            dropDefinition: true,
+          };
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: droppingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // The original `--variant-color: red` definition lived inside the active-variant
+    // bucket. With dropDefinition: true the codemod must remove it from every bucket
+    // that holds the local definition, not just the base styleObj.
+    expect(result.code).not.toContain("--variant-color");
+  });
+});

@@ -106,12 +106,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   warnOpaqueShorthands(styleObj, decl, warnings);
 
   const varsToDrop = new Set<string>();
-  rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
-  for (const extraObj of extraStyleObjects.values()) {
-    rewriteCssVarsInStyleObject(extraObj, localVarValues, varsToDrop);
-  }
-  for (const variantObj of variantBuckets.values()) {
-    rewriteCssVarsInStyleObject(variantObj, localVarValues, varsToDrop);
+  const bucketsForVarRewrite: Array<Record<string, unknown>> = [
+    styleObj,
+    ...extraStyleObjects.values(),
+    ...variantBuckets.values(),
+  ];
+  for (const bucket of bucketsForVarRewrite) {
+    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop);
   }
   // styleFnDecls hold AST nodes (ArrowFunctionExpression bodies). Walking their
   // template-literal quasis lets us resolve var() calls embedded inside dynamic
@@ -121,8 +122,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
     }
   }
+  // Apply `dropDefinition: true` results to every bucket that may carry a
+  // `--name: ...` definition for the resolved variable. Otherwise, the local
+  // definition would survive in non-base buckets and contradict the adapter contract.
   for (const name of varsToDrop) {
-    delete (styleObj as any)[name];
+    for (const bucket of bucketsForVarRewrite) {
+      delete (bucket as Record<string, unknown>)[name];
+    }
   }
 
   // Check for interpolations in pseudo selectors that can't be safely transformed
