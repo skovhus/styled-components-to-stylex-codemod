@@ -36,6 +36,15 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
   const { state } = ctx;
 
   for (const d of rule.declarations) {
+    // Dynamic property names (slot placeholders in property position) such as
+    // `${CSS_VAR}: 100%;` cannot be safely lowered to StyleX. Bail with a clear
+    // warning instead of emitting a broken style entry whose key is the raw
+    // placeholder text (e.g. `__SC_EXPR_0__`).
+    if (d.property && d.property.includes("__SC_EXPR_")) {
+      ctx.state.bailUnsupported(ctx.decl, "Unsupported interpolation: property");
+      break;
+    }
+
     if (d.value.kind === "interpolated") {
       handleInterpolatedDeclaration({
         ctx,
