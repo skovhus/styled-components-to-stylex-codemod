@@ -452,6 +452,38 @@ export function tryResolveConditionalValue(
     return branchToExpr(value);
   };
 
+  // Convert `prop ? value : undefined/null/false/""` (or its inverse) into a
+  // single-side `splitVariantsResolved*` result. Returns null if both branches
+  // resolve to real values (caller continues with two-side handling) or if the
+  // unresolved side isn't an empty CSS sentinel (caller bails or falls back).
+  const buildOneSidedVariantResult = (args: {
+    cons: Branch;
+    alt: Branch;
+    consequent: unknown;
+    alternate: unknown;
+    truthyWhen: string;
+    falsyWhen: string;
+  }): HandlerResult | null => {
+    const { cons, alt, consequent, alternate, truthyWhen, falsyWhen } = args;
+    const buildResult = (
+      branch: NonNullable<Branch>,
+      nameHint: "truthy" | "falsy",
+      when: string,
+    ): HandlerResult => {
+      const variants = [{ nameHint, when, expr: branch.expr, imports: branch.imports }];
+      return branch.usage === "props"
+        ? { type: "splitVariantsResolvedStyles", variants }
+        : { type: "splitVariantsResolvedValue", variants };
+    };
+    if (cons && !alt && isEmptyCssBranch(alternate)) {
+      return buildResult(cons, "truthy", truthyWhen);
+    }
+    if (!cons && alt && isEmptyCssBranch(consequent)) {
+      return buildResult(alt, "falsy", falsyWhen);
+    }
+    return null;
+  };
+
   // Helper: resolve a 4-branch compound ternary once both the outer prop and inner prop
   // have been identified. Returns null if leaf branches can't all be resolved as "create".
   const tryBuildDualBranchResult = (outerProp: string, innerProp: string): HandlerResult | null => {
@@ -739,6 +771,23 @@ export function tryResolveConditionalValue(
       }
     }
 
+    // Positive-only variant for `prop ? value : undefined/null/false/""` —
+    // styled-components treats falsy interpolations as "omit this declaration",
+    // so model it as a single-side variant bucket rather than emitting a
+    // dynamic style function (which would clash with pseudo overrides on the
+    // same property elsewhere in the rule).
+    const oneSided = buildOneSidedVariantResult({
+      cons,
+      alt,
+      consequent,
+      alternate,
+      truthyWhen: outerProp,
+      falsyWhen: `!${outerProp}`,
+    });
+    if (oneSided) {
+      return oneSided;
+    }
+
     if (!cons || !alt) {
       return buildRuntimeCallResult();
     }
@@ -792,6 +841,17 @@ export function tryResolveConditionalValue(
           : { type: "splitVariantsResolvedValue", variants };
       }
     }
+    const oneSided = buildOneSidedVariantResult({
+      cons,
+      alt,
+      consequent,
+      alternate,
+      truthyWhen: destructuredProp,
+      falsyWhen: `!${destructuredProp}`,
+    });
+    if (oneSided) {
+      return oneSided;
+    }
     if (!cons || !alt) {
       return buildRuntimeCallResult();
     }
@@ -841,6 +901,17 @@ export function tryResolveConditionalValue(
         }
       }
 
+      const oneSided = buildOneSidedVariantResult({
+        cons,
+        alt,
+        consequent,
+        alternate,
+        truthyWhen: resolvedProp,
+        falsyWhen: `!${resolvedProp}`,
+      });
+      if (oneSided) {
+        return oneSided;
+      }
       if (!cons || !alt) {
         return buildRuntimeCallResult();
       }

@@ -2233,9 +2233,9 @@ export const App = () => <Box>Hello</Box>;
 });
 
 describe("conditional value handling", () => {
-  it("should bail when a boolean literal is used as a CSS value in conditional expression", () => {
+  it("emits a positive-only variant when alternate is `false` (omit-declaration sentinel)", () => {
     // In styled-components, falsy interpolations like `false` mean "omit this declaration".
-    // We should bail rather than producing invalid CSS like `cursor: "false"`.
+    // We model this as a single positive variant bucket — equivalent to `$disabled && "not-allowed"`.
     const source = `
 import styled from "styled-components";
 
@@ -2252,7 +2252,10 @@ export const App = () => <Button $disabled>Click</Button>;
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).toBeNull();
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('cursor: "not-allowed"');
+    expect(result.code).not.toContain('cursor: "false"');
+    expect(result.code).not.toContain("cursor: false");
   });
 
   it("should bail when true is used as a CSS value in conditional expression", () => {
