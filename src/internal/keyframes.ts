@@ -488,9 +488,13 @@ export function expandStaticAnimationShorthand(
   const jsName = nameMap?.get(cssName) ?? cssKeyframeNameToIdentifier(cssName);
   const remaining = tokens.filter((_, i) => i !== nameIdx);
 
+  const classified = classifyAnimationTokens(remaining);
+  if (!classified) {
+    return false;
+  }
+
   styleObj.animationName = j.identifier(jsName);
 
-  const classified = classifyAnimationTokens(remaining);
   if (classified.duration) {
     styleObj.animationDuration = classified.duration;
   }
