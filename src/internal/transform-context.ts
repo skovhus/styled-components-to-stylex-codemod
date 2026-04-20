@@ -17,7 +17,10 @@ import { assertValidAdapter } from "./public-api-validation.js";
 import type { WarningLog } from "./logger.js";
 import { parseExpr as parseExprImpl } from "./transform-parse-expr.js";
 import { createResolveAdapterSafe } from "./transform-resolve-value.js";
-import { rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl } from "./transform-css-vars.js";
+import {
+  rewriteCssVarsInAstNodeRoot as rewriteCssVarsInAstNodeRootImpl,
+  rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl,
+} from "./transform-css-vars.js";
 import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
   patternProp as patternPropImpl,
@@ -50,6 +53,11 @@ export class TransformContext {
   parseExpr: (exprSource: string) => any;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
+    definedVars: Map<string, string>,
+    varsToDrop: Set<string>,
+  ) => void;
+  rewriteCssVarsInAstNode: (
+    node: { type: string },
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
   ) => void;
@@ -143,6 +151,19 @@ export class TransformContext {
 
     const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
 
+    const buildCssVarRewriteContext = (
+      definedVars: Map<string, string>,
+      varsToDrop: Set<string>,
+    ) => ({
+      filePath: file.path,
+      definedVars,
+      varsToDrop,
+      resolveValue: resolveValueSafe,
+      addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),
+      parseExpr,
+      j,
+    });
+
     const rewriteCssVarsInStyleObject = (
       obj: Record<string, unknown>,
       definedVars: Map<string, string>,
@@ -150,13 +171,17 @@ export class TransformContext {
     ): void =>
       rewriteCssVarsInStyleObjectImpl({
         obj,
-        filePath: file.path,
-        definedVars,
-        varsToDrop,
-        resolveValue: resolveValueSafe,
-        addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),
-        parseExpr,
-        j,
+        ...buildCssVarRewriteContext(definedVars, varsToDrop),
+      });
+
+    const rewriteCssVarsInAstNode = (
+      node: { type: string },
+      definedVars: Map<string, string>,
+      varsToDrop: Set<string>,
+    ): void =>
+      rewriteCssVarsInAstNodeRootImpl({
+        node,
+        ...buildCssVarRewriteContext(definedVars, varsToDrop),
       });
 
     const patternProp = (keyName: string, valueId?: any) => patternPropImpl(j, keyName, valueId);
@@ -182,6 +207,7 @@ export class TransformContext {
     this.getStaticPropertiesFromImport = getStaticPropertiesFromImport;
     this.parseExpr = parseExpr;
     this.rewriteCssVarsInStyleObject = rewriteCssVarsInStyleObject;
+    this.rewriteCssVarsInAstNode = rewriteCssVarsInAstNode;
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();

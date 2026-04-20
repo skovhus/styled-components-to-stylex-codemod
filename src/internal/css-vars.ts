@@ -18,15 +18,21 @@ export function rewriteCssVarsInString(args: {
   return rewriteCssVarsInStringImpl(args);
 }
 
-type VarCall = {
+export function findCssVarCallsInString(raw: string): CssVarCall[] {
+  return findCssVarCalls(raw);
+}
+
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+
+type CssVarCall = {
   start: number;
   end: number;
   name: string;
   fallback?: string;
 };
 
-function findCssVarCalls(raw: string): VarCall[] {
-  const out: VarCall[] = [];
+function findCssVarCalls(raw: string): CssVarCall[] {
+  const out: CssVarCall[] = [];
   let i = 0;
   while (i < raw.length) {
     const idx = raw.indexOf("var(", i);
@@ -184,5 +190,3 @@ function rewriteCssVarsInStringImpl(args: {
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);
 }
-
-type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];

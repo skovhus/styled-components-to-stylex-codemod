@@ -53,6 +53,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
+    rewriteCssVarsInAstNode,
     relationOverridePseudoBuckets,
     relationOverrides,
     ancestorSelectorParents,
@@ -106,6 +107,20 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 
   const varsToDrop = new Set<string>();
   rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
+  for (const extraObj of extraStyleObjects.values()) {
+    rewriteCssVarsInStyleObject(extraObj, localVarValues, varsToDrop);
+  }
+  for (const variantObj of variantBuckets.values()) {
+    rewriteCssVarsInStyleObject(variantObj, localVarValues, varsToDrop);
+  }
+  // styleFnDecls hold AST nodes (ArrowFunctionExpression bodies). Walking their
+  // template-literal quasis lets us resolve var() calls embedded inside dynamic
+  // style functions (e.g. `flexShrink: \`var(--x, ${expr})\``).
+  for (const fnAst of styleFnDecls.values()) {
+    if (fnAst && typeof fnAst === "object" && isAstNode(fnAst)) {
+      rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
+    }
+  }
   for (const name of varsToDrop) {
     delete (styleObj as any)[name];
   }

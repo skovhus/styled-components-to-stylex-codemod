@@ -45,6 +45,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     keyframesNames,
     parseExpr,
     rewriteCssVarsInStyleObject,
+    rewriteCssVarsInAstNode,
   } = ctx;
   const filePath = file.path;
   const resolveValue = ctx.resolveValueSafe;
@@ -262,6 +263,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     keyframesNames,
     parseExpr,
     rewriteCssVarsInStyleObject,
+    rewriteCssVarsInAstNode,
     resolveValue,
     resolveValueOptional,
     resolveValueDirectional,
