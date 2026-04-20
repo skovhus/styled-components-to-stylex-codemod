@@ -1,0 +1,1 @@
+import"./chunk-zsgVPwQN.js";import{t as e}from"./react-D4cBbUL-.js";import"./stylex-B9_aYcJU.js";import{f as t}from"./index-CkrlbPnj.js";e();var n=t();function r(){return(0,n.jsx)(`div`,{className:`xur7f20 x1ruevkc x1dt7z5j xixxii4 x8ihxv3`})}export{r as App};
