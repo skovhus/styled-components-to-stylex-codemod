@@ -2258,6 +2258,34 @@ export const App = () => <Button $disabled>Click</Button>;
     expect(result.code).not.toContain("cursor: false");
   });
 
+  it("does not unconditionally apply the alternate when consequent is `undefined`", () => {
+    // `prop ? undefined : value` must NOT be lowered to a single `!prop`
+    // variant via splitVariantsResolved* — that path treats `!`-prefixed
+    // `when` strings as the unconditional default and would silently drop
+    // the gate. Falling back to a dynamic style function is the safe choice.
+    const source = `
+import styled from "styled-components";
+
+const Button = styled.button<{ $disabled?: boolean }>\`
+  cursor: \${(p) => (p.$disabled ? undefined : "pointer")};
+\`;
+
+export const App = () => <Button>Click</Button>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "negative-only-variant.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // Guard against the regression where the value bleeds into an unconditional
+    // base style rule (which would set cursor: "pointer" for ALL <Button> uses,
+    // including when $disabled is true).
+    expect(result.code).not.toMatch(/cursor:\s*"pointer"\s*[,}]/);
+  });
+
   it("should bail when true is used as a CSS value in conditional expression", () => {
     const source = `
 import styled from "styled-components";

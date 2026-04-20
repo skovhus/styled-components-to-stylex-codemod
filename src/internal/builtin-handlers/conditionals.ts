@@ -452,36 +452,35 @@ export function tryResolveConditionalValue(
     return branchToExpr(value);
   };
 
-  // Convert `prop ? value : undefined/null/false/""` (or its inverse) into a
-  // single-side `splitVariantsResolved*` result. Returns null if both branches
-  // resolve to real values (caller continues with two-side handling) or if the
-  // unresolved side isn't an empty CSS sentinel (caller bails or falls back).
+  // Convert `prop ? value : undefined/null/false/""` into a positive-only
+  // `splitVariantsResolved*` result (one variant bucket gated on `prop`).
+  // Returns null when both branches resolve, or when the alternate isn't an
+  // empty CSS sentinel — the caller continues with two-side handling or falls
+  // back to a dynamic style function.
+  //
+  // We intentionally do NOT handle the inverse `prop ? undefined : value`
+  // here: `splitVariantsResolved*` treats variants whose `when` starts with
+  // `!` as the unconditional default (applied directly to `styleObj`), so
+  // emitting a single negated variant would silently drop the `!prop` gate
+  // and apply the value unconditionally. Inverse forms continue to be lowered
+  // by the dynamic style-function fallback, which is correct (just less
+  // optimal).
   const buildOneSidedVariantResult = (args: {
     cons: Branch;
     alt: Branch;
-    consequent: unknown;
     alternate: unknown;
     truthyWhen: string;
-    falsyWhen: string;
   }): HandlerResult | null => {
-    const { cons, alt, consequent, alternate, truthyWhen, falsyWhen } = args;
-    const buildResult = (
-      branch: NonNullable<Branch>,
-      nameHint: "truthy" | "falsy",
-      when: string,
-    ): HandlerResult => {
-      const variants = [{ nameHint, when, expr: branch.expr, imports: branch.imports }];
-      return branch.usage === "props"
-        ? { type: "splitVariantsResolvedStyles", variants }
-        : { type: "splitVariantsResolvedValue", variants };
-    };
-    if (cons && !alt && isEmptyCssBranch(alternate)) {
-      return buildResult(cons, "truthy", truthyWhen);
+    const { cons, alt, alternate, truthyWhen } = args;
+    if (!cons || alt || !isEmptyCssBranch(alternate)) {
+      return null;
     }
-    if (!cons && alt && isEmptyCssBranch(consequent)) {
-      return buildResult(alt, "falsy", falsyWhen);
-    }
-    return null;
+    const variants = [
+      { nameHint: "truthy" as const, when: truthyWhen, expr: cons.expr, imports: cons.imports },
+    ];
+    return cons.usage === "props"
+      ? { type: "splitVariantsResolvedStyles", variants }
+      : { type: "splitVariantsResolvedValue", variants };
   };
 
   // Helper: resolve a 4-branch compound ternary once both the outer prop and inner prop
@@ -779,10 +778,8 @@ export function tryResolveConditionalValue(
     const oneSided = buildOneSidedVariantResult({
       cons,
       alt,
-      consequent,
       alternate,
       truthyWhen: outerProp,
-      falsyWhen: `!${outerProp}`,
     });
     if (oneSided) {
       return oneSided;
@@ -844,10 +841,8 @@ export function tryResolveConditionalValue(
     const oneSided = buildOneSidedVariantResult({
       cons,
       alt,
-      consequent,
       alternate,
       truthyWhen: destructuredProp,
-      falsyWhen: `!${destructuredProp}`,
     });
     if (oneSided) {
       return oneSided;
@@ -904,10 +899,8 @@ export function tryResolveConditionalValue(
       const oneSided = buildOneSidedVariantResult({
         cons,
         alt,
-        consequent,
         alternate,
         truthyWhen: resolvedProp,
-        falsyWhen: `!${resolvedProp}`,
       });
       if (oneSided) {
         return oneSided;
