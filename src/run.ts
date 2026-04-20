@@ -431,6 +431,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ? resolveBaseComponentWithLogging
       : undefined,
     resolveThemeCall: resolvedAdapter.resolveThemeCall,
+    wrappedComponentInterface: resolvedAdapter.wrappedComponentInterface,
     markerFile: resolvedAdapter.markerFile,
   };
 

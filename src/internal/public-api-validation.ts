@@ -226,6 +226,25 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     );
   }
 
+  // Validate wrappedComponentInterface (optional function)
+  const wrappedComponentInterface = obj?.wrappedComponentInterface;
+  if (
+    wrappedComponentInterface !== undefined &&
+    wrappedComponentInterface !== null &&
+    typeof wrappedComponentInterface !== "function"
+  ) {
+    throw new Error(
+      [
+        `${where}: adapter.wrappedComponentInterface must be a function when provided.`,
+        `Received: wrappedComponentInterface=${describeValue(wrappedComponentInterface)}`,
+        "",
+        "Expected signature:",
+        "  wrappedComponentInterface(ctx: { importSource: string; importedName: string; filePath: string })",
+        "    => { acceptsSx: boolean } | undefined",
+      ].join("\n"),
+    );
+  }
+
   // Validate themeHook config (null/undefined or object with functionName/importSource)
   const themeHook = obj?.themeHook;
   if (themeHook !== null && themeHook !== undefined) {

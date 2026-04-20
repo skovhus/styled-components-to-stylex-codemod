@@ -36,6 +36,12 @@ const adapter = defineAdapter({
   styleMerger: null,
   // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
   useSxProp: false,
+  // Optional: declare that an imported component already accepts a StyleX `sx` prop
+  // (e.g. one migrated to StyleX). When wrapping it via styled(Component), the codemod
+  // emits `sx={...}` instead of `{...stylex.props(...)}`. Requires `useSxProp: true`.
+  wrappedComponentInterface(ctx) {
+    return undefined;
+  },
   // Optional: customize the runtime theme hook import/call used for theme conditionals
   // Defaults to { functionName: "useTheme", importSource: { kind: "specifier", value: "styled-components" } }
   themeHook: {
@@ -173,6 +179,24 @@ const adapter = defineAdapter({
   useSxProp: false,
 
   /**
+   * Optional: declare that an imported component already accepts a StyleX `sx`
+   * prop (typically because it was migrated to StyleX previously). When the
+   * codemod re-styles such a component via `styled(Component)`, it emits
+   * `<Component sx={styles.x} />` instead of
+   * `<Component {...stylex.props(styles.x)} />` and lets the wrapped component
+   * merge className/style itself.
+   *
+   * Only consulted for `styled(ImportedComponent)` declarations and requires
+   * `useSxProp: true`.
+   */
+  wrappedComponentInterface(ctx) {
+    if (ctx.importSource.startsWith("@company/ui/")) {
+      return { acceptsSx: true };
+    }
+    return undefined;
+  },
+
+  /**
    * Optional: customize the runtime theme hook used when wrappers need theme booleans.
    * Defaults to useTheme from styled-components.
    */
@@ -203,6 +227,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`, or `{ preserveRuntimeCall: true }` to keep only the original helper runtime call; `null`/`undefined` bails the file)
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
+- which imported components already accept a StyleX `sx` prop, so the codemod emits `sx={styles.x}` instead of `{...stylex.props(styles.x)}` when re-styling them via `styled(Component)` (`wrappedComponentInterface`, requires `useSxProp: true`)
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
 - how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
 

@@ -145,6 +145,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
+    // When the wrapped component accepts a StyleX `sx` prop (per adapter), the
+    // wrapper passes className/style through unchanged via `{...rest}` and the
+    // wrapped component merges them with its `sx` itself. The wrapper still
+    // accepts className/style in its type, but does not destructure them.
+    const wrappedAcceptsSx =
+      emitter.useSxProp && emitter.wrappedComponentAcceptsSxProp(wrappedComponent);
     // When the wrapped component has className/style as REQUIRED props, we must
     // force them to be optional in the wrapper's type. Otherwise, the wrapper would
     // inherit the requiredness, breaking call sites that don't pass className/style
@@ -792,6 +798,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
 
+      // When wrapped component is sx-aware, className/style/sx flow through
+      // {...rest} unchanged — don't destructure them in the wrapper.
+      const destructureClassName = allowClassNameProp && !wrappedAcceptsSx;
+      const destructureStyle = allowStyleProp && !wrappedAcceptsSx;
+      const destructureSx = allowSxProp && !wrappedAcceptsSx;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -803,10 +814,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
                 ) as Property,
               ]
             : []),
-          ...(allowClassNameProp ? [patternProp("className", classNameId)] : []),
+          ...(destructureClassName ? [patternProp("className", classNameId)] : []),
           ...(includeChildren ? [patternProp("children", childrenId)] : []),
-          ...(allowStyleProp ? [patternProp("style", styleId)] : []),
-          ...(allowSxProp ? [patternProp("sx", sxId)] : []),
+          ...(destructureStyle ? [patternProp("style", styleId)] : []),
+          ...(destructureSx ? [patternProp("sx", sxId)] : []),
           ...((d.supportsRefProp ?? false) ? [patternProp("ref", refId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
@@ -833,6 +844,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticClassNameExpr,
         isIntrinsicElement: false,
+        wrappedAcceptsSxProp: wrappedAcceptsSx,
       });
 
       const stmts: StatementKind[] = [declStmt];
@@ -1027,7 +1039,16 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       openingAttrs.push(
         ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
       );
-      openingAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
+      // When the wrapped component accepts a StyleX `sx` prop, emit `sx={...}`
+      // instead of `{...stylex.props(...)}` so the wrapped component can merge it
+      // with any sx/className/style it receives from `{...props}`.
+      if (wrappedAcceptsSx) {
+        const sxExpr =
+          styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression([...styleArgs]);
+        openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxExpr)));
+      } else {
+        openingAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));
+      }
 
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,

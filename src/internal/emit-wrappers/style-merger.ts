@@ -87,6 +87,9 @@ export function emitStyleMerging(args: {
   /** Set to true when the rendered tag is an intrinsic HTML element (lowercase).
    * The sx prop is only valid on intrinsic elements (processed by the StyleX babel plugin). */
   isIntrinsicElement?: boolean;
+  /** Set to true when the rendered (non-intrinsic) component already accepts a
+   * StyleX `sx` prop. Enables the `sx={...}` fast path for component wrappers. */
+  wrappedAcceptsSxProp?: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -100,6 +103,7 @@ export function emitStyleMerging(args: {
     inlineStyleProps = [],
     staticClassNameExpr,
     isIntrinsicElement = true,
+    wrappedAcceptsSxProp = false,
   } = args;
 
   const {
@@ -164,6 +168,24 @@ export function emitStyleMerging(args: {
       staticClassNameExpr,
       emitTypes,
     });
+  }
+
+  // When the wrapped component accepts a StyleX `sx` prop (per adapter), emit
+  // `sx={...}` directly and skip className/style merging — the wrapped component
+  // handles className/style itself. The destructured className/style values are
+  // forwarded to the wrapped component via the surrounding `{...rest}` spread.
+  if (wrappedAcceptsSxProp && inlineStyleProps.length === 0 && !staticClassNameExpr) {
+    const sxExpr =
+      styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+    return {
+      needsSxVar: false,
+      sxDecl: null,
+      jsxSpreadExpr: null,
+      sxPropExpr: sxExpr,
+      classNameAttr: null,
+      classNameBeforeSpread: false,
+      styleAttr: null,
+    };
   }
 
   // If neither className nor style merging is needed, just use stylex.props directly

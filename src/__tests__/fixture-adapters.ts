@@ -37,6 +37,19 @@ export const fixtureAdapter = defineAdapter({
   // Write all defineMarker() declarations to a single shared sidecar file
   markerFile: () => ({ kind: "specifier", value: "./markers.stylex" }),
 
+  // Declare that certain already-migrated components accept a StyleX `sx` prop
+  // so the codemod emits `sx={...}` instead of `{...stylex.props(...)}` when
+  // wrapping them via `styled(Component)`.
+  wrappedComponentInterface(ctx) {
+    if (
+      ctx.importSource.includes("/sx-aware-component") ||
+      ctx.importSource.includes("\\sx-aware-component")
+    ) {
+      return { acceptsSx: true };
+    }
+    return undefined;
+  },
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both

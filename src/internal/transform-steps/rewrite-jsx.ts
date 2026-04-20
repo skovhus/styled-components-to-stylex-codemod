@@ -789,6 +789,25 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // merger behavior (or verbose fallback when no merger is configured).
         const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
 
+        // The adapter may declare that an imported component accepts a StyleX `sx`
+        // prop (already migrated to StyleX). When wrapping such a component, emit
+        // `sx={...}` on the wrapped tag instead of `{...stylex.props(...)}`.
+        const wrappedAcceptsSxProp = (() => {
+          if (!ctx.adapter.useSxProp || !ctx.adapter.wrappedComponentInterface || isIntrinsicTag) {
+            return false;
+          }
+          const importInfo = ctx.importMap?.get(finalTag);
+          if (!importInfo) {
+            return false;
+          }
+          const result = ctx.adapter.wrappedComponentInterface({
+            importSource: importInfo.source.value,
+            importedName: importInfo.importedName,
+            filePath: ctx.file.path,
+          });
+          return result?.acceptsSx === true;
+        })();
+
         // When NOT using sx prop, CSS module classNames must be merged into
         // the stylex.props spread (via classNameAttr) to avoid a duplicate
         // className attribute that would override the spread's className.
@@ -811,8 +830,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const hasLocalStyleRef = styleArgs.some(
           (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
         );
+        // sx-aware wrapped components: always emit `sx={...}` and let the
+        // wrapped component merge className/style itself. The original
+        // className/style JSX attributes are forwarded unchanged.
+        const useSxPropForWrapped =
+          ctx.adapter.useSxProp && wrappedAcceptsSxProp && hasLocalStyleRef;
         const useSxProp =
-          ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef;
+          useSxPropForWrapped ||
+          (ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef);
         const stylexAttr = useSxProp
           ? (() => {
               const sxExpr =
@@ -848,10 +873,17 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           );
         }
 
+        // For sx-aware wrapped components, keep className/style attributes
+        // unchanged — the wrapped component handles merging them with `sx`.
+        const passThroughClassName = useSxPropForWrapped && classNameAttr ? [classNameAttr] : [];
+        const passThroughStyle = useSxPropForWrapped && styleAttr ? [styleAttr] : [];
+
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
           stylexAttr,
           ...extraClassNameAttrs,
+          ...passThroughClassName,
+          ...passThroughStyle,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 
@@ -860,7 +892,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         opening.attributes = [
           ...keptLeadingAfterVariants,
           ...finalRest,
-          ...(styleAttr && !needsMerge ? [styleAttr] : []),
+          ...(styleAttr && !needsMerge && !useSxPropForWrapped ? [styleAttr] : []),
         ];
       });
   }

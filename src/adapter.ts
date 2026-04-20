@@ -574,6 +574,47 @@ export interface MarkerFileContext {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Wrapped Component Interface
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Context for `adapter.wrappedComponentInterface(...)`.
+ *
+ * Called for each `styled(Component)` declaration where `Component` is
+ * imported from another module. Lets the adapter declare that the wrapped
+ * component already accepts a StyleX `sx` prop so the codemod can emit
+ * `sx={style}` instead of `{...stylex.props(style)}`.
+ */
+export interface WrappedComponentInterfaceContext {
+  /**
+   * Import source for the wrapped base component.
+   * - package import: e.g. `"@company/ui"`
+   * - relative import: resolved absolute path
+   */
+  importSource: string;
+  /**
+   * Imported binding name for the wrapped base component.
+   * Example: `import { Button as UiButton } ...` -> importedName: "Button"
+   */
+  importedName: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   */
+  filePath: string;
+}
+
+/**
+ * Result for `adapter.wrappedComponentInterface(...)`.
+ *
+ * - `acceptsSx: true` — the wrapped component accepts an `sx` prop. The codemod
+ *   emits `sx={style}` instead of `{...stylex.props(style)}` and skips
+ *   className/style merging in the wrapper (the wrapped component owns that).
+ */
+export interface WrappedComponentInterfaceResult {
+  acceptsSx: boolean;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -764,6 +805,25 @@ export interface Adapter {
   usePhysicalProperties?: boolean;
 
   /**
+   * Optional resolver describing the public interface of an imported component
+   * that is being wrapped via `styled(Component)`. When the wrapped component
+   * already accepts a StyleX `sx` prop (typically because it has been migrated
+   * to StyleX), the codemod can emit `<Component sx={styles.x} />` instead of
+   * `<Component {...stylex.props(styles.x)} />`.
+   *
+   * Return:
+   * - `{ acceptsSx: true }` to emit `sx={...}` and skip className/style merging
+   * - `{ acceptsSx: false }` (or `undefined`) for the default `{...stylex.props(...)}` spread
+   *
+   * Only consulted for `styled(ImportedComponent)` declarations and only when
+   * the wrapped component is imported from another module. Local components in
+   * the same file fall back to the default behavior.
+   */
+  wrappedComponentInterface?: (
+    context: WrappedComponentInterfaceContext,
+  ) => WrappedComponentInterfaceResult | undefined;
+
+  /**
    * Optional function to customize where marker sidecar files (`stylex.defineMarker()`)
    * are written. By default, markers are placed in a `.stylex.ts` file next to the source.
    *
@@ -818,6 +878,7 @@ export interface AdapterInput {
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
   usePhysicalProperties?: Adapter["usePhysicalProperties"];
+  wrappedComponentInterface?: Adapter["wrappedComponentInterface"];
   markerFile?: Adapter["markerFile"];
 }
 

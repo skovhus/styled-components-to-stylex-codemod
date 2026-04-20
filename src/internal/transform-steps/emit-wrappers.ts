@@ -33,6 +33,8 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     siblingMarkerKeys: ctx.siblingMarkerKeys,
     parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
     useSxProp: ctx.adapter.useSxProp,
+    importMap: ctx.importMap,
+    wrappedComponentInterface: ctx.adapter.wrappedComponentInterface?.bind(ctx.adapter),
   });
 
   return CONTINUE;
