@@ -134,12 +134,14 @@ function extractVarFallback(token: string): string | null {
 /**
  * Classifies animation tokens (excluding the animation name) into longhand categories.
  *
- * `var(...)` tokens are positionally assigned: when the var()'s fallback hints
- * at a specific longhand (e.g., a time literal → duration/delay, an easing
- * keyword → timing-function), the token is bound to that longhand. Otherwise,
- * the var() is treated as a time value at the next free time position
- * (duration first, then delay). This matches browser behavior, where var()
- * values are resolved at runtime and placed at the matching shorthand position.
+ * `var(...)` tokens are bound to the longhand hinted by their fallback value
+ * (e.g., a time literal → duration/delay, an easing keyword → timing-function).
+ * When a var()'s fallback cannot be classified (e.g., `var(--x)` with no
+ * fallback, or `var(--x, foo)` with an unrecognized fallback), the runtime
+ * value is unknown and could resolve to any longhand category — coercing it
+ * to a time slot would change semantics for valid shorthands like
+ * `${kf} var(--token) 2s infinite` where `--token: ease-in`. In that case
+ * this function returns `null` to signal that the caller should bail.
  */
 export function classifyAnimationTokens(tokens: string[]): {
   duration: string | null;
@@ -149,7 +151,7 @@ export function classifyAnimationTokens(tokens: string[]): {
   fillMode: string | null;
   playState: string | null;
   iteration: string | null;
-} {
+} | null {
   const result: Record<AnimLonghandCategory, string | null> = {
     duration: null,
     delay: null,
@@ -160,22 +162,36 @@ export function classifyAnimationTokens(tokens: string[]): {
     iteration: null,
   };
 
-  const assignTime = (t: string): void => {
+  const assignTime = (t: string): boolean => {
     if (result.duration === null) {
       result.duration = t;
-    } else if (result.delay === null) {
-      result.delay = t;
+      return true;
     }
+    if (result.delay === null) {
+      result.delay = t;
+      return true;
+    }
+    return false;
   };
 
   for (const t of tokens) {
     if (isVarToken(t)) {
       const hinted = classifyVarTokenFallback(t);
-      if (hinted && hinted !== "time" && result[hinted] === null) {
-        result[hinted] = t;
+      if (hinted === null) {
+        // Unknown var() type — runtime value could be anything. Bail.
+        return null;
+      }
+      if (hinted === "time") {
+        if (!assignTime(t)) {
+          return null;
+        }
         continue;
       }
-      assignTime(t);
+      if (result[hinted] !== null) {
+        // Conflicting var() with same hinted longhand already assigned. Bail.
+        return null;
+      }
+      result[hinted] = t;
       continue;
     }
     if (isTimeToken(t)) {
@@ -208,6 +224,7 @@ export function tryHandleAnimation(args: {
     value: unknown,
     commentSource: { leading?: string; trailingLine?: string } | null,
   ) => void;
+  bailUnsupportedUnknownVar?: () => void;
 }): boolean {
   const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
   const applyProp =
@@ -350,9 +367,10 @@ export function tryHandleAnimation(args: {
       const timeSlots: TimeSlot[] = [];
 
       // First pass: collect all time tokens with original indices.
-      // `var(...)` tokens are also treated as time-position candidates when
-      // their fallback value is a time literal or when no other classifier
-      // claims them (positional CSS shorthand semantics).
+      // `var(...)` tokens are bound to time slots only when their fallback is
+      // a time literal; var() with non-time fallbacks is left for the longhand
+      // classifier; var() with no classifiable fallback bails (we cannot know
+      // its runtime category — see classifyAnimationTokens for details).
       for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i]!;
         const interpMatch = token.match(INTERPOLATED_TIME_RE);
@@ -371,10 +389,11 @@ export function tryHandleAnimation(args: {
         }
         if (isVarToken(token)) {
           const hinted = classifyVarTokenFallback(token);
-          // Only consume var() as a time slot if its fallback hints at time
-          // or is unknown — leave it for the longhand classifier when the
-          // fallback clearly indicates timing/direction/etc.
-          if (hinted === null || hinted === "time") {
+          if (hinted === null) {
+            args.bailUnsupportedUnknownVar?.();
+            return false;
+          }
+          if (hinted === "time") {
             timeSlots.push({ kind: "static", value: token, originalIndex: i });
           }
         }
@@ -394,6 +413,10 @@ export function tryHandleAnimation(args: {
 
       // Classify remaining (non-interpolated) tokens into animation longhand categories
       const classified = classifyAnimationTokens(tokens);
+      if (!classified) {
+        args.bailUnsupportedUnknownVar?.();
+        return false;
+      }
 
       // Reset duration/delay from classified — we'll reassign based on original order.
       let durationValue: AnimLonghandValue = null;

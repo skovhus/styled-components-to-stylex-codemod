@@ -345,9 +345,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         filePath,
         avoidNames,
         applyResolvedPropValue,
+        bailUnsupportedUnknownVar: () =>
+          bailUnsupportedLocal(
+            decl,
+            "animation shorthand contains a var() with no classifiable fallback — its longhand position cannot be determined statically; bind the variable to a specific longhand (e.g. animation-duration: var(--x)) instead",
+          ),
       })
     ) {
       continue;
+    }
+    if (bail) {
+      break;
     }
     if (isPseudoElementSelector(pseudoElement)) {
       if (tryHandleDynamicPseudoElementStyleFunction(args)) {
