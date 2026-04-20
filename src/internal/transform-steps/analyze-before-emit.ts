@@ -1988,20 +1988,318 @@ const FORBIDDEN_SHORTHAND_PROPS = new Set([
 ]);
 
 /**
+ * React-style camelCase CSS property names that we know are safe to promote
+ * from a JSX `style={{ ... }}` object into a `stylex.create` entry. Any property
+ * outside this allowlist (or its expanded longhand) causes promotion to bail
+ * for that call site so the inline style is preserved verbatim instead of
+ * silently producing a StyleX declaration for an unvetted property.
+ *
+ * Curated to cover the common surface area of React inline styles (layout,
+ * spacing, typography, color, borders, basic visual effects). Add more entries
+ * as test coverage demonstrates safe transformations; never add shorthand
+ * properties that StyleX requires to be expanded — list the longhands instead.
+ */
+const PROMOTABLE_STYLE_PROPS = new Set<string>([
+  // Layout / box model
+  "boxSizing",
+  "display",
+  "position",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "inset",
+  "insetBlock",
+  "insetBlockStart",
+  "insetBlockEnd",
+  "insetInline",
+  "insetInlineStart",
+  "insetInlineEnd",
+  "zIndex",
+  "float",
+  "clear",
+  "isolation",
+  "objectFit",
+  "objectPosition",
+
+  // Sizing
+  "width",
+  "height",
+  "minWidth",
+  "minHeight",
+  "maxWidth",
+  "maxHeight",
+  "blockSize",
+  "minBlockSize",
+  "maxBlockSize",
+  "inlineSize",
+  "minInlineSize",
+  "maxInlineSize",
+  "aspectRatio",
+
+  // Padding
+  "padding",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "paddingBlock",
+  "paddingBlockStart",
+  "paddingBlockEnd",
+  "paddingInline",
+  "paddingInlineStart",
+  "paddingInlineEnd",
+
+  // Margin
+  "margin",
+  "marginTop",
+  "marginRight",
+  "marginBottom",
+  "marginLeft",
+  "marginBlock",
+  "marginBlockStart",
+  "marginBlockEnd",
+  "marginInline",
+  "marginInlineStart",
+  "marginInlineEnd",
+
+  // Flex & grid (longhand only)
+  "flex",
+  "flexBasis",
+  "flexGrow",
+  "flexShrink",
+  "flexDirection",
+  "flexWrap",
+  "alignItems",
+  "alignSelf",
+  "alignContent",
+  "justifyItems",
+  "justifySelf",
+  "justifyContent",
+  "placeItems",
+  "placeSelf",
+  "placeContent",
+  "order",
+  "gap",
+  "rowGap",
+  "columnGap",
+  "gridAutoFlow",
+  "gridAutoRows",
+  "gridAutoColumns",
+  "gridTemplateRows",
+  "gridTemplateColumns",
+  "gridTemplateAreas",
+  "gridRow",
+  "gridRowStart",
+  "gridRowEnd",
+  "gridColumn",
+  "gridColumnStart",
+  "gridColumnEnd",
+
+  // Border longhands (StyleX rejects the `border` shorthand with multi-token values)
+  "borderWidth",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "borderBlockWidth",
+  "borderBlockStartWidth",
+  "borderBlockEndWidth",
+  "borderInlineWidth",
+  "borderInlineStartWidth",
+  "borderInlineEndWidth",
+  "borderStyle",
+  "borderTopStyle",
+  "borderRightStyle",
+  "borderBottomStyle",
+  "borderLeftStyle",
+  "borderBlockStyle",
+  "borderBlockStartStyle",
+  "borderBlockEndStyle",
+  "borderInlineStyle",
+  "borderInlineStartStyle",
+  "borderInlineEndStyle",
+  "borderColor",
+  "borderTopColor",
+  "borderRightColor",
+  "borderBottomColor",
+  "borderLeftColor",
+  "borderBlockColor",
+  "borderBlockStartColor",
+  "borderBlockEndColor",
+  "borderInlineColor",
+  "borderInlineStartColor",
+  "borderInlineEndColor",
+  "borderRadius",
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomLeftRadius",
+  "borderBottomRightRadius",
+  "borderStartStartRadius",
+  "borderStartEndRadius",
+  "borderEndStartRadius",
+  "borderEndEndRadius",
+  "borderCollapse",
+  "borderSpacing",
+
+  // Outline
+  "outlineWidth",
+  "outlineStyle",
+  "outlineColor",
+  "outlineOffset",
+
+  // Background longhands
+  "backgroundColor",
+  "backgroundImage",
+  "backgroundSize",
+  "backgroundPosition",
+  "backgroundRepeat",
+  "backgroundAttachment",
+  "backgroundOrigin",
+  "backgroundClip",
+
+  // Color & typography
+  "color",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontWeight",
+  "fontVariant",
+  "fontVariantNumeric",
+  "lineHeight",
+  "letterSpacing",
+  "wordSpacing",
+  "textAlign",
+  "textAlignLast",
+  "textDecoration",
+  "textDecorationColor",
+  "textDecorationLine",
+  "textDecorationStyle",
+  "textDecorationThickness",
+  "textTransform",
+  "textIndent",
+  "textOverflow",
+  "textShadow",
+  "textWrap",
+  "verticalAlign",
+  "whiteSpace",
+  "wordBreak",
+  "wordWrap",
+  "overflowWrap",
+  "hyphens",
+  "tabSize",
+  "direction",
+  "writingMode",
+  "fontFeatureSettings",
+
+  // Lists
+  "listStyleType",
+  "listStylePosition",
+  "listStyleImage",
+
+  // Tables
+  "tableLayout",
+  "captionSide",
+  "emptyCells",
+
+  // Visual / interaction
+  "opacity",
+  "visibility",
+  "overflow",
+  "overflowX",
+  "overflowY",
+  "overflowAnchor",
+  "overflowClipMargin",
+  "scrollBehavior",
+  "scrollSnapType",
+  "scrollSnapAlign",
+  "overscrollBehavior",
+  "overscrollBehaviorX",
+  "overscrollBehaviorY",
+  "cursor",
+  "pointerEvents",
+  "userSelect",
+  "touchAction",
+  "appearance",
+  "resize",
+  "caretColor",
+  "accentColor",
+
+  // Effects
+  "boxShadow",
+  "filter",
+  "backdropFilter",
+  "mixBlendMode",
+  "backgroundBlendMode",
+  "clipPath",
+  "mask",
+  "maskImage",
+  "maskSize",
+  "maskPosition",
+  "maskRepeat",
+
+  // Transforms / motion
+  "transform",
+  "transformOrigin",
+  "transformStyle",
+  "perspective",
+  "perspectiveOrigin",
+  "willChange",
+  "translate",
+  "rotate",
+  "scale",
+
+  // Transitions / animations (single-value forms only)
+  "transitionProperty",
+  "transitionDuration",
+  "transitionTimingFunction",
+  "transitionDelay",
+  "animationName",
+  "animationDuration",
+  "animationTimingFunction",
+  "animationDelay",
+  "animationIterationCount",
+  "animationDirection",
+  "animationFillMode",
+  "animationPlayState",
+  "contain",
+  "content",
+]);
+
+/** Returns true when this key is one we know is safe to emit into stylex.create. */
+function isPromotableStylexKey(key: string): boolean {
+  return PROMOTABLE_STYLE_PROPS.has(key);
+}
+
+/**
  * Expands a static React-style inline style entry into one or more StyleX
  * longhand entries via the authoritative `cssDeclarationToStylexDeclarations`
  * helper. The React key is converted to kebab-case CSS first (e.g.
  * `backgroundColor` → `background-color`) so the helper sees the same input
  * shape it sees when processing styled-components template declarations.
  *
- * Returns null when the resulting StyleX property would still be a forbidden
- * shorthand (the helper failed to decompose it), so the caller can bail and
- * preserve the original inline style instead of producing invalid StyleX.
+ * Returns null when the input key (or any expanded longhand) is outside the
+ * curated allowlist or when the helper failed to decompose a forbidden
+ * shorthand. The caller bails in those cases and preserves the original inline
+ * style verbatim instead of emitting an unvetted StyleX entry.
  */
 function expandStaticStylePropToStylex(
   reactKey: string,
   value: string | number | boolean,
 ): Array<{ key: string; value: string | number | boolean }> | null {
+  // Shorthand inputs (`padding`, `margin`, `border`, …) round-trip through the
+  // CSS expansion helper and are validated against the allowlist by their
+  // expanded longhands, so they don't need to be in the allowlist themselves.
+  // Every other input must be on the allowlist.
+  const isShorthandInput =
+    FORBIDDEN_SHORTHAND_PROPS.has(reactKey) ||
+    reactKey === "padding" ||
+    reactKey === "margin" ||
+    reactKey === "scrollPadding" ||
+    reactKey === "scrollMargin";
+  if (!isShorthandInput && !isPromotableStylexKey(reactKey)) {
+    return null;
+  }
   if (typeof value === "boolean") {
     return [{ key: reactKey, value }];
   }
@@ -2018,6 +2316,11 @@ function expandStaticStylePropToStylex(
     if (FORBIDDEN_SHORTHAND_PROPS.has(entry.prop)) {
       // Helper couldn't fully decompose the shorthand — bail so we don't emit
       // invalid StyleX (e.g. `border: "1px"` with no style/color tokens).
+      return null;
+    }
+    // Every emitted longhand must also be on the allowlist; otherwise we'd be
+    // promoting a property we haven't vetted to be safely usable in StyleX.
+    if (!isPromotableStylexKey(entry.prop)) {
       return null;
     }
     if (entry.value.kind !== "static") {
@@ -2333,9 +2636,10 @@ function analyzePromotableStyleProps(
             });
           }
         } else {
-          // Dynamic values can't be statically decomposed, so shorthands with a
-          // dynamic value can't be promoted (StyleX would reject them).
-          if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
+          // Dynamic values can't be statically decomposed, so the property must
+          // already be a known-safe longhand. Shorthands or unrecognized props
+          // can't be safely promoted with a dynamic value.
+          if (!isPromotableStylexKey(keyName)) {
             siteBail = true;
             break;
           }
