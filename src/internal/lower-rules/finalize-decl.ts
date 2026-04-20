@@ -53,6 +53,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
+    rewriteCssVarsInAstNode,
     relationOverridePseudoBuckets,
     relationOverrides,
     ancestorSelectorParents,
@@ -105,9 +106,29 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   warnOpaqueShorthands(styleObj, decl, warnings);
 
   const varsToDrop = new Set<string>();
-  rewriteCssVarsInStyleObject(styleObj, localVarValues, varsToDrop);
+  const bucketsForVarRewrite: Array<Record<string, unknown>> = [
+    styleObj,
+    ...extraStyleObjects.values(),
+    ...variantBuckets.values(),
+  ];
+  for (const bucket of bucketsForVarRewrite) {
+    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop);
+  }
+  // styleFnDecls hold AST nodes (ArrowFunctionExpression bodies). Walking their
+  // template-literal quasis lets us resolve var() calls embedded inside dynamic
+  // style functions (e.g. `flexShrink: \`var(--x, ${expr})\``).
+  for (const fnAst of styleFnDecls.values()) {
+    if (fnAst && typeof fnAst === "object" && isAstNode(fnAst)) {
+      rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
+    }
+  }
+  // Apply `dropDefinition: true` results to every bucket that may carry a
+  // `--name: ...` definition for the resolved variable. Otherwise, the local
+  // definition would survive in non-base buckets and contradict the adapter contract.
   for (const name of varsToDrop) {
-    delete (styleObj as any)[name];
+    for (const bucket of bucketsForVarRewrite) {
+      delete (bucket as Record<string, unknown>)[name];
+    }
   }
 
   // Check for interpolations in pseudo selectors that can't be safely transformed

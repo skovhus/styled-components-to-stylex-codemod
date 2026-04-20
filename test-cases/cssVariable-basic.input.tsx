@@ -27,9 +27,17 @@ const Text = styled.p`
   line-height: var(--line-height, 1.5);
 `;
 
+// Adapter-resolvable var() with a default value should drop the default
+// (the resolved StyleX token supersedes the runtime fallback).
+const TaggedSpan = styled.span<{ $tone: string }>`
+  color: var(--color-primary, "tomato");
+  background: ${(props) => `var(--color-secondary, ${props.$tone})`};
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
     <Button>Click me</Button>
+    <TaggedSpan $tone="papayawhip">Tagged</TaggedSpan>
   </Card>
 );
