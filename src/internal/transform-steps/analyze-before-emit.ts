@@ -25,6 +25,7 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import { escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
+import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
@@ -1986,6 +1987,46 @@ const FORBIDDEN_SHORTHAND_PROPS = new Set([
   "background",
 ]);
 
+/** Camel-cased directional shorthand keys allowed in React-style style objects. */
+const DIRECTIONAL_SHORTHAND_KEYS: Record<
+  string,
+  "padding" | "margin" | "scrollMargin" | "scrollPadding"
+> = {
+  padding: "padding",
+  margin: "margin",
+  scrollPadding: "scrollPadding",
+  scrollMargin: "scrollMargin",
+};
+
+/**
+ * Expands a directional shorthand (e.g., `padding: "20px 0"`) into longhand entries
+ * suitable for `stylex.create`. Returns null when the key is not a directional
+ * shorthand or the value is a single token (StyleX accepts those as-is).
+ */
+function expandDirectionalShorthandStatic(
+  key: string,
+  value: string | number | boolean,
+): Array<{ prop: string; value: string | number }> | null {
+  const directional = DIRECTIONAL_SHORTHAND_KEYS[key];
+  if (!directional) {
+    return null;
+  }
+  if (typeof value !== "string" && typeof value !== "number") {
+    return null;
+  }
+  const entries = splitDirectionalProperty({ prop: directional, rawValue: value });
+  if (entries.length <= 1) {
+    return null;
+  }
+  return entries.map((entry) => {
+    const numeric = typeof value === "number" ? Number(entry.value) : NaN;
+    return {
+      prop: entry.prop,
+      value: Number.isFinite(numeric) ? numeric : entry.value,
+    };
+  });
+}
+
 /**
  * Returns true if a StyledDecl ultimately renders as an intrinsic element,
  * either directly (`styled.div`) or through a chain of styled extensions
@@ -2099,7 +2140,7 @@ function analyzePromotableStyleProps(
   for (const decl of styledDecls) {
     // Only promote for elements that don't already need wrappers and ultimately render
     // as intrinsic elements (either directly or through a chain of styled extensions).
-    if (decl.isCssHelper || decl.needsWrapperComponent || decl.isDirectJsxResolution) {
+    if (decl.isCssHelper || decl.needsWrapperComponent) {
       continue;
     }
     if (!resolvesToIntrinsic(decl, declByLocal)) {
@@ -2250,7 +2291,21 @@ function analyzePromotableStyleProps(
 
         const staticVal = literalToStaticValue(prop.value);
         if (staticVal !== null) {
-          properties.push({ key: keyName, staticValue: staticVal, dynamicExpr: null });
+          // Expand directional shorthands (padding/margin/scrollPadding/scrollMargin)
+          // when given multiple values, since StyleX requires longhand-only values for
+          // those properties (e.g., `padding: "20px 0"` → `paddingBlock`/`paddingInline`).
+          const expanded = expandDirectionalShorthandStatic(keyName, staticVal);
+          if (expanded) {
+            for (const entry of expanded) {
+              properties.push({
+                key: entry.prop,
+                staticValue: entry.value,
+                dynamicExpr: null,
+              });
+            }
+          } else {
+            properties.push({ key: keyName, staticValue: staticVal, dynamicExpr: null });
+          }
         } else {
           properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value });
         }
