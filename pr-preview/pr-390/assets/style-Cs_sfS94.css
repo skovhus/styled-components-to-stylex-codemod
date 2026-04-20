@@ -20,6 +20,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-126kuz7 {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-fontSize {
   syntax: "*";
   inherits: false
@@ -50,47 +55,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-backgroundColor {
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
 
-@property --x-bf5hz0 {
+@property --x-zIndex {
   syntax: "*";
   inherits: false
 }
 
-@property --x-1113oo7 {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-64unvl {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-maxWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-maxHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-animationDelay {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-126kuz7 {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-borderWidth {
+@property --x-scrollbarGutter {
   syntax: "*";
   inherits: false
 }
@@ -105,27 +80,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-backgroundColor {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-boxShadow {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-alignSelf {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-columnGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-rowGap {
   syntax: "*";
   inherits: false
 }
@@ -150,12 +110,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-zIndex {
+@property --x-bf5hz0 {
   syntax: "*";
   inherits: false
 }
 
-@property --x-scrollbarGutter {
+@property --x-1113oo7 {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-64unvl {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-alignSelf {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-columnGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-animationDelay {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-maxWidth {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-maxHeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderWidth {
   syntax: "*";
   inherits: false
 }
@@ -185,12 +185,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gridRow {
+@property --x-transitionDelay {
   syntax: "*";
   inherits: false
 }
 
-@property --x-transitionDelay {
+@property --x-gridRow {
   syntax: "*";
   inherits: false
 }
@@ -210,12 +210,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fill {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-outline {
   syntax: "*";
   inherits: false
 }
 
 @property --x-marginTop {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderRightColor {
   syntax: "*";
   inherits: false
 }
@@ -235,17 +245,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-borderRightColor {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-strokeWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fill {
   syntax: "*";
   inherits: false
 }
@@ -290,16 +290,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x18re5ia-B {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes x2t3rfm-B {
   0% {
     opacity: 1;
@@ -320,6 +310,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 
   100% {
+    opacity: 1;
+  }
+}
+
+@keyframes x18re5ia-B {
+  from {
+    opacity: 0;
+  }
+
+  to {
     opacity: 1;
   }
 }
@@ -714,14 +714,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@media (width >= 768px) and (width <= 1023.99px) {
-  .x1t32qvz.x1t32qvz:not(#\#) {
+@media (width >= 1024px) {
+  .x1i7j8g4.x1i7j8g4:not(#\#) {
     padding: 2rem;
   }
 }
 
-@media (width >= 1024px) {
-  .x1i7j8g4.x1i7j8g4:not(#\#) {
+@media (width >= 768px) and (width <= 1023.99px) {
+  .x1t32qvz.x1t32qvz:not(#\#) {
     padding: 2rem;
   }
 }
@@ -1344,7 +1344,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #ddd;
 }
 
-.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
+.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -1352,7 +1352,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline: 2px solid #00f;
 }
 
-.x16vwmpi:focus:not(:disabled):not(#\#):not(#\#), .x1me46yj:focus[data-no-outline="true"]:not(#\#):not(#\#), .xk2swo9:focus-visible:not(#\#):not(#\#) {
+.x1me46yj:focus[data-no-outline="true"]:not(#\#):not(#\#), .x16vwmpi:focus:not(:disabled):not(#\#):not(#\#), .xk2swo9:focus-visible:not(#\#):not(#\#) {
   outline: none;
 }
 
@@ -3350,7 +3350,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: 1;
 }
 
-.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
+.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
@@ -4614,7 +4614,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-bottom-color: var(--xy9b778);
 }
 
-.x137r021:not(:last-child):not(#\#):not(#\#):not(#\#):not(#\#), .x1v9id2g.x1v9id2g:where(.x1njtr7s:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#), .xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
+.x1v9id2g.x1v9id2g:where(.x1njtr7s:is(*) ~ *):not(#\#):not(#\#):not(#\#):not(#\#), .x137r021:not(:last-child):not(#\#):not(#\#):not(#\#):not(#\#), .xzdg7oe:not(:only-child):not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-style: solid;
 }
 
