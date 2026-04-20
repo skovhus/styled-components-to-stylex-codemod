@@ -267,6 +267,9 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
     registerImports(parsed.imports, resolverImports);
 
     // Get or create a condition map (pseudo/media) for a property, preserving the default value.
+    // When the inherited base value is itself a pseudo/media map (e.g., styleObj already has
+    // `{ default: A, ":focus": B }` from an earlier rule), flatten its `default` so we don't
+    // produce a malformed nested map like `{ default: { default: A, ":focus": B } }`.
     const getOrCreateConditionMap = (prop: string): Record<string, unknown> => {
       const existing = target[prop];
       const map =
@@ -275,7 +278,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
           : ({} as Record<string, unknown>);
       if (!("default" in map)) {
         const baseValue = existing ?? styleObj[prop];
-        map.default = baseValue ?? null;
+        map.default = unwrapConditionMapDefault(baseValue);
       }
       target[prop] = map;
       return map;
@@ -539,9 +542,10 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
           : ({} as Record<string, unknown>);
       // Set default from target first, then fall back to base styleObj.
       // Only use null if neither has a value (for properties like outlineStyle that need explicit null).
+      // unwrapConditionMapDefault prevents nesting an inherited pseudo map under `default`.
       if (!("default" in map)) {
         const baseValue = existing ?? styleObj[stylexPropMulti];
-        map.default = baseValue ?? null;
+        map.default = unwrapConditionMapDefault(baseValue);
       }
       for (const ps of pseudos) {
         map[ps] = parsed.exprAst as any;
@@ -743,4 +747,31 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+// --- Non-exported helpers ---
+
+/**
+ * When seeding `default` of a new pseudo/media map from an inherited base value,
+ * collapse a base value that is itself a pseudo/media map down to its `default`
+ * entry. Without this, layering a new pseudo override (e.g. variant bucket)
+ * would produce a malformed nested map like
+ * `{ default: { default: A, ":focus": B }, ":focus": C }`, which StyleX rejects
+ * with "the same pseudo selector or at-rule cannot be used more than once".
+ *
+ * Returns `null` (the StyleX "no override" sentinel) when no usable default is
+ * present.
+ */
+function unwrapConditionMapDefault(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value) || isAstNode(value)) {
+    return value ?? null;
+  }
+  const map = value as Record<string, unknown>;
+  if ("default" in map) {
+    return map.default ?? null;
+  }
+  // Object without a `default` key — treat as no inherited base value.
+  // (Bare pseudo-only maps like { ":focus": X } never appear here in practice
+  // because callers always seed `default` first.)
+  return null;
 }

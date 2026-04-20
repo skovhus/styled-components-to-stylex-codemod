@@ -452,6 +452,37 @@ export function tryResolveConditionalValue(
     return branchToExpr(value);
   };
 
+  // Convert `prop ? value : undefined/null/false/""` into a positive-only
+  // `splitVariantsResolved*` result (one variant bucket gated on `prop`).
+  // Returns null when both branches resolve, or when the alternate isn't an
+  // empty CSS sentinel — the caller continues with two-side handling or falls
+  // back to a dynamic style function.
+  //
+  // We intentionally do NOT handle the inverse `prop ? undefined : value`
+  // here: `splitVariantsResolved*` treats variants whose `when` starts with
+  // `!` as the unconditional default (applied directly to `styleObj`), so
+  // emitting a single negated variant would silently drop the `!prop` gate
+  // and apply the value unconditionally. Inverse forms continue to be lowered
+  // by the dynamic style-function fallback, which is correct (just less
+  // optimal).
+  const buildOneSidedVariantResult = (args: {
+    cons: Branch;
+    alt: Branch;
+    alternate: unknown;
+    truthyWhen: string;
+  }): HandlerResult | null => {
+    const { cons, alt, alternate, truthyWhen } = args;
+    if (!cons || alt || !isEmptyCssBranch(alternate)) {
+      return null;
+    }
+    const variants = [
+      { nameHint: "truthy" as const, when: truthyWhen, expr: cons.expr, imports: cons.imports },
+    ];
+    return cons.usage === "props"
+      ? { type: "splitVariantsResolvedStyles", variants }
+      : { type: "splitVariantsResolvedValue", variants };
+  };
+
   // Helper: resolve a 4-branch compound ternary once both the outer prop and inner prop
   // have been identified. Returns null if leaf branches can't all be resolved as "create".
   const tryBuildDualBranchResult = (outerProp: string, innerProp: string): HandlerResult | null => {
@@ -739,6 +770,21 @@ export function tryResolveConditionalValue(
       }
     }
 
+    // Positive-only variant for `prop ? value : undefined/null/false/""` —
+    // styled-components treats falsy interpolations as "omit this declaration",
+    // so model it as a single-side variant bucket rather than emitting a
+    // dynamic style function (which would clash with pseudo overrides on the
+    // same property elsewhere in the rule).
+    const oneSided = buildOneSidedVariantResult({
+      cons,
+      alt,
+      alternate,
+      truthyWhen: outerProp,
+    });
+    if (oneSided) {
+      return oneSided;
+    }
+
     if (!cons || !alt) {
       return buildRuntimeCallResult();
     }
@@ -792,6 +838,15 @@ export function tryResolveConditionalValue(
           : { type: "splitVariantsResolvedValue", variants };
       }
     }
+    const oneSided = buildOneSidedVariantResult({
+      cons,
+      alt,
+      alternate,
+      truthyWhen: destructuredProp,
+    });
+    if (oneSided) {
+      return oneSided;
+    }
     if (!cons || !alt) {
       return buildRuntimeCallResult();
     }
@@ -841,6 +896,15 @@ export function tryResolveConditionalValue(
         }
       }
 
+      const oneSided = buildOneSidedVariantResult({
+        cons,
+        alt,
+        alternate,
+        truthyWhen: resolvedProp,
+      });
+      if (oneSided) {
+        return oneSided;
+      }
       if (!cons || !alt) {
         return buildRuntimeCallResult();
       }
