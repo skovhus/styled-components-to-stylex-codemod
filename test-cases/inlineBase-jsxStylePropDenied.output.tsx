@@ -5,12 +5,15 @@ export function App() {
   return (
     <div sx={styles.wrapper}>
       <div {...mergedSx([styles.flex, flexGapVariants[8]], undefined, { color: "white" })}>
-        Recognized prop
+        Sibling site is also held back by the denylisted entry below
       </div>
       <div
-        {...mergedSx([styles.flex, flexGapVariants[12]], undefined, { WebkitMaskImage: "none" })}
+        {...mergedSx([styles.flex, flexGapVariants[12]], undefined, {
+          font: "12px/1.4 system-ui",
+          color: "black",
+        })}
       >
-        Vendor-prefixed prop is not on the allowlist
+        font shorthand is denylisted
       </div>
     </div>
   );

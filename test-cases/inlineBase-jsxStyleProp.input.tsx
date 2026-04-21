@@ -26,6 +26,9 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <Flex gap={16} style={{ color: accentColor, opacity: 0.5 }}>
         Dynamic color and opacity
       </Flex>
+      <Flex gap={20} style={{ WebkitMaskImage: "none", color: "white" }}>
+        Vendor-prefixed longhand still promotes
+      </Flex>
     </Wrapper>
   );
 }

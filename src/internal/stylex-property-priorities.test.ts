@@ -11,6 +11,8 @@ import fs from "node:fs";
 import { STYLEX_LONGHAND_ONLY_SHORTHANDS } from "./stylex-shorthands.js";
 import { SHORTHAND_LONGHANDS } from "./emit-styles.js";
 import { UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR } from "./builtin-handlers/css-parsing.js";
+import { NON_PROMOTABLE_STYLE_PROPS } from "./transform-steps/analyze-before-emit.js";
+import { camelToKebabCase } from "./utilities/string-utils.js";
 
 // --- Helpers to parse StyleX property-priorities source ---
 
@@ -136,6 +138,31 @@ describe("StyleX property-priorities cross-reference", () => {
       `UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR contains properties not in STYLEX_LONGHAND_ONLY_SHORTHANDS: ` +
         `${notInLonghandOnly.join(", ")}. Every shorthand we bail on for template expressions should also be ` +
         `in the longhand-only set.`,
+    ).toEqual([]);
+  });
+
+  it("NON_PROMOTABLE_STYLE_PROPS is a superset of NOT_APPLICABLE_SHORTHANDS", () => {
+    // Multi-component shorthands the codemod refuses to expand from styled-
+    // components templates must also be refused for inline-style promotion;
+    // otherwise we'd emit a multi-token shorthand that StyleX rejects. Extra
+    // entries (e.g. `transition`) are allowed because StyleX rejects multi-
+    // token forms even though StyleX doesn't classify them as a
+    // shorthandsOfShorthands.
+    const denylistKebab = new Set<string>();
+    for (const camel of NON_PROMOTABLE_STYLE_PROPS) {
+      denylistKebab.add(camelToKebabCase(camel));
+    }
+    const missing: string[] = [];
+    for (const prop of NOT_APPLICABLE_SHORTHANDS) {
+      if (!denylistKebab.has(prop)) {
+        missing.push(prop);
+      }
+    }
+    expect(
+      missing,
+      `NON_PROMOTABLE_STYLE_PROPS is missing entries from NOT_APPLICABLE_SHORTHANDS: ` +
+        `${missing.join(", ")}. Add the camelCase form to NON_PROMOTABLE_STYLE_PROPS in ` +
+        `analyze-before-emit.ts.`,
     ).toEqual([]);
   });
 

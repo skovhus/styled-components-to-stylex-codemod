@@ -15,6 +15,9 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <div sx={[styles.flex, flexGapVariants[16], styles.flexDynamicColorAnd(accentColor)]}>
         Dynamic color and opacity
       </div>
+      <div sx={[styles.flex, flexGapVariants[20], styles.flexInline]}>
+        Vendor-prefixed longhand still promotes
+      </div>
     </div>
   );
 }
@@ -53,6 +56,10 @@ const styles = stylex.create({
     opacity: 0.5,
     color,
   }),
+  flexInline: {
+    WebkitMaskImage: "none",
+    color: "white",
+  },
 });
 
 const flexGapVariants = stylex.create({
@@ -64,6 +71,9 @@ const flexGapVariants = stylex.create({
   },
   16: {
     gap: "16px",
+  },
+  20: {
+    gap: "20px",
   },
   24: {
     gap: "24px",
