@@ -24,7 +24,8 @@ import {
   isPureIdempotentExpression,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
-import { escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
+import { camelToKebabCase, escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
+import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
@@ -1975,8 +1976,12 @@ function patternContainsName(node: { type?: string } | null | undefined, name: s
 
 // --- Promotable style prop analysis ---
 
-/** StyleX shorthand properties that must be expanded. Bail from promotion if encountered.
- *  Note: margin/padding are NOT forbidden — StyleX accepts them as single-value shorthands. */
+/**
+ * StyleX shorthand properties that the codemod's CSS expander treats as
+ * "longhand-only": StyleX (`@stylexjs/valid-styles`) rejects these when given
+ * a multi-token value. We bail from promotion when the helper can't fully
+ * decompose them into safe longhands.
+ */
 const FORBIDDEN_SHORTHAND_PROPS = new Set([
   "border",
   "borderTop",
@@ -1985,6 +1990,149 @@ const FORBIDDEN_SHORTHAND_PROPS = new Set([
   "borderLeft",
   "background",
 ]);
+
+/**
+ * React-style camelCase CSS property names that promotion refuses to emit into
+ * `stylex.create`. Membership means: even when the value is a literal we can
+ * read statically, the property is structurally too unconstrained for the
+ * codemod to know it's safe (multi-component shorthands, `all`, etc.). Anything
+ * NOT in this set is allowed through — StyleX's `valid-styles` and TypeScript
+ * types remain the ultimate source of truth for typo/unsupported-prop errors.
+ *
+ * Keep in sync with the kebab-case sources of truth in this repo:
+ * - `STYLEX_LONGHAND_ONLY_SHORTHANDS` in `stylex-shorthands.ts` (handled by
+ *   `cssDeclarationToStylexDeclarations`, so they don't appear here).
+ * - `NOT_APPLICABLE_SHORTHANDS` in `stylex-property-priorities.test.ts`
+ *   (multi-component shorthands the codemod refuses to expand — mirrored here
+ *   in camelCase).
+ */
+export const NON_PROMOTABLE_STYLE_PROPS = new Set<string>([
+  // Mirror of NOT_APPLICABLE_SHORTHANDS in `stylex-property-priorities.test.ts`.
+  "all",
+  "animation",
+  "borderBlock",
+  "borderInline",
+  "font",
+  "grid",
+  "gridArea",
+  "gridTemplate",
+  "inset",
+  // Additional multi-component shorthands StyleX rejects when given multiple
+  // tokens, but which aren't classified by StyleX as shorthandsOfShorthands so
+  // they don't appear in NOT_APPLICABLE_SHORTHANDS above.
+  "transition",
+]);
+
+/** Returns true when this key is one we refuse to emit into stylex.create. */
+function isNonPromotableStylexKey(key: string): boolean {
+  return NON_PROMOTABLE_STYLE_PROPS.has(key);
+}
+
+/**
+ * Expands a static React-style inline style entry into one or more StyleX
+ * longhand entries via the authoritative `cssDeclarationToStylexDeclarations`
+ * helper. The React key is converted to kebab-case CSS first (e.g.
+ * `backgroundColor` → `background-color`) so the helper sees the same input
+ * shape it sees when processing styled-components template declarations.
+ *
+ * Returns null when the input key (or any expanded longhand) is on the
+ * non-promotable denylist, or when the helper failed to decompose a forbidden
+ * StyleX shorthand. The caller bails in those cases and preserves the original
+ * inline style verbatim.
+ */
+function expandStaticStylePropToStylex(
+  reactKey: string,
+  value: string | number | boolean,
+): Array<{ key: string; value: string | number | boolean }> | null {
+  if (isNonPromotableStylexKey(reactKey)) {
+    return null;
+  }
+  if (typeof value === "boolean") {
+    return [{ key: reactKey, value }];
+  }
+  const cssProp = camelToKebabCase(reactKey);
+  const rawValue = typeof value === "number" ? String(value) : value;
+  // `cssDeclarationToStylexDeclarations` handles `background` by classifying
+  // the value as image-like vs color, but doesn't validate that the value is a
+  // single component. A multi-token shorthand like `red no-repeat center/cover`
+  // would be silently mapped to `backgroundColor: "red no-repeat ..."`, which
+  // is invalid CSS. Bail so the inline style is preserved verbatim.
+  if (reactKey === "background" && !isSingleBackgroundComponent(rawValue)) {
+    return null;
+  }
+  const expanded = cssDeclarationToStylexDeclarations({
+    property: cssProp,
+    value: { kind: "static", value: rawValue },
+    valueRaw: rawValue,
+    important: false,
+  });
+  const result: Array<{ key: string; value: string | number | boolean }> = [];
+  for (const entry of expanded) {
+    if (FORBIDDEN_SHORTHAND_PROPS.has(entry.prop)) {
+      // Helper couldn't fully decompose the shorthand — bail so we don't emit
+      // invalid StyleX (e.g. `border: "1px"` with no style/color tokens).
+      return null;
+    }
+    if (isNonPromotableStylexKey(entry.prop)) {
+      return null;
+    }
+    if (entry.value.kind !== "static") {
+      return null;
+    }
+    result.push({ key: entry.prop, value: coerceExpandedValue(entry.value.value) });
+  }
+  return result.length > 0 ? result : null;
+}
+
+/**
+ * Returns true when a `background` shorthand value is structurally simple
+ * enough to map onto a single `background-color` or `background-image`
+ * longhand: a single token, or a single function call (e.g. `rgb(…)`,
+ * `linear-gradient(…)`, `url(…)`). Multi-component shorthands (color +
+ * position/size, image + repeat, comma-separated layers, …) bail.
+ */
+function isSingleBackgroundComponent(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  // Top-level commas are layer separators; slashes separate <bg-position> from
+  // <bg-size>; whitespace separates multiple component values. Any of these
+  // makes the value a true shorthand we can't statically map to a longhand.
+  return !hasTopLevelMatch(trimmed, /[\s,/]/);
+}
+
+/** Returns true when `pattern` matches a character outside of any parenthesized group. */
+function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
+  let depth = 0;
+  for (const c of value) {
+    if (c === "(") {
+      depth++;
+    } else if (c === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && pattern.test(c)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Re-numifies a static expanded value when it is purely numeric. The expansion
+ * pipeline emits everything as strings; converting bare numbers back to JS
+ * numbers keeps emitted StyleX entries consistent with handwritten code (e.g.
+ * `paddingInline: 0` instead of `paddingInline: "0"`).
+ */
+function coerceExpandedValue(raw: string): string | number {
+  if (raw === "") {
+    return raw;
+  }
+  if (!/^-?\d+(\.\d+)?$/.test(raw)) {
+    return raw;
+  }
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : raw;
+}
 
 /**
  * Returns true if a StyledDecl ultimately renders as an intrinsic element,
@@ -2099,10 +2247,24 @@ function analyzePromotableStyleProps(
   for (const decl of styledDecls) {
     // Only promote for elements that don't already need wrappers and ultimately render
     // as intrinsic elements (either directly or through a chain of styled extensions).
-    if (decl.isCssHelper || decl.needsWrapperComponent || decl.isDirectJsxResolution) {
+    if (decl.isCssHelper || decl.needsWrapperComponent) {
       continue;
     }
     if (!resolvesToIntrinsic(decl, declByLocal)) {
+      continue;
+    }
+    // Promotion inlines call sites (replacing `<Decl ... style={...}>` with the
+    // intrinsic JSX). Inlining is unsafe when the styled decl's resolved style
+    // pipeline still has wrapper-scoped expressions or extra-style logic that
+    // can't be re-evaluated at the call site. In those cases, the call site
+    // would emit unresolved identifiers (e.g. `showProperty(width) ? ...`).
+    // Conservatively bail when any of these wrapper-only artifacts are present.
+    if (
+      decl.inlineStyleProps?.length ||
+      decl.extraStylexPropsArgs?.length ||
+      decl.extraStyleKeys?.length ||
+      decl.styleFnFromProps?.some((p) => p.conditionWhen)
+    ) {
       continue;
     }
     // Bail if the base style uses !important on any property — promoting call-site
@@ -2242,16 +2404,31 @@ function analyzePromotableStyleProps(
           siteBail = true;
           break;
         }
-        // Bail: forbidden StyleX shorthand properties (e.g., `background`, `border`, `margin`)
-        if (FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
-          siteBail = true;
-          break;
-        }
-
         const staticVal = literalToStaticValue(prop.value);
         if (staticVal !== null) {
-          properties.push({ key: keyName, staticValue: staticVal, dynamicExpr: null });
+          // Route static values through the authoritative CSS → StyleX mapping so
+          // shorthands (`padding`, `margin`, `border`, `background`, …) are expanded
+          // into longhand-only entries that StyleX accepts.
+          const expanded = expandStaticStylePropToStylex(keyName, staticVal);
+          if (!expanded) {
+            siteBail = true;
+            break;
+          }
+          for (const entry of expanded) {
+            properties.push({
+              key: entry.key,
+              staticValue: entry.value,
+              dynamicExpr: null,
+            });
+          }
         } else {
+          // Dynamic values can't be statically decomposed, so shorthands and
+          // multi-component properties on the denylist (or the StyleX-rejected
+          // shorthand set) can't be safely promoted with a dynamic value.
+          if (isNonPromotableStylexKey(keyName) || FORBIDDEN_SHORTHAND_PROPS.has(keyName)) {
+            siteBail = true;
+            break;
+          }
           properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value });
         }
       }
@@ -2602,15 +2779,43 @@ function extractTextSuffixFromChildren(children: unknown[] | undefined): string 
     return null;
   }
   // Limit to first 3 words and 20 chars to keep keys readable
-  const suffix = words
-    .slice(0, 3)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
+  const truncated = words.slice(0, 3);
+  // Drop trailing connector words (e.g. "Margin quad and explicit" → "MarginQuad")
+  // so suffixes don't dangle on filler words.
+  while (
+    truncated.length > 0 &&
+    SUFFIX_STOP_WORDS.has(truncated[truncated.length - 1]!.toLowerCase())
+  ) {
+    truncated.pop();
+  }
+  if (truncated.length === 0) {
+    return null;
+  }
+  const suffix = truncated.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
   if (suffix.length > 20) {
     return null;
   }
   return suffix;
 }
+
+/** Connector words dropped from the trailing position of text-derived style key suffixes. */
+const SUFFIX_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "but",
+  "by",
+  "for",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+]);
 
 /**
  * Returns true if any property key in `incoming` already exists in `base`.
