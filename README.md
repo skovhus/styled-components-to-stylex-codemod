@@ -36,9 +36,10 @@ const adapter = defineAdapter({
   styleMerger: null,
   // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
   useSxProp: false,
-  // Optional: declare that an imported component already accepts a StyleX `sx` prop
-  // (e.g. one migrated to StyleX). When wrapping it via styled(Component), the codemod
-  // emits `sx={...}` instead of `{...stylex.props(...)}`. Requires `useSxProp: true`.
+  // Optional override for sx-aware wrapped components. Auto-detection is on by
+  // default when `useSxProp: true` — the codemod scans the imported component's
+  // prop type for an `sx?:` member. Use this hook to override (e.g. for package
+  // imports that auto-detection can't reach).
   wrappedComponentInterface(ctx) {
     return undefined;
   },
@@ -179,15 +180,19 @@ const adapter = defineAdapter({
   useSxProp: false,
 
   /**
-   * Optional: declare that an imported component already accepts a StyleX `sx`
-   * prop (typically because it was migrated to StyleX previously). When the
-   * codemod re-styles such a component via `styled(Component)`, it emits
-   * `<Component sx={styles.x} />` instead of
-   * `<Component {...stylex.props(styles.x)} />` and lets the wrapped component
-   * merge className/style itself.
+   * Optional override for sx-aware wrapped components.
    *
-   * Only consulted for `styled(ImportedComponent)` declarations and requires
-   * `useSxProp: true`.
+   * When `useSxProp: true`, the codemod auto-detects whether an imported
+   * component accepts an `sx` prop by walking its declared prop type
+   * (intersections, type aliases, and interfaces in the same file). When
+   * `styled(Component)` wraps an sx-aware component, the codemod emits
+   * `<Component sx={styles.x} />` instead of `<Component {...stylex.props(styles.x)} />`
+   * and lets the wrapped component merge className/style itself.
+   *
+   * Use this hook to override auto-detection for cases it can't see — typically
+   * package imports (where the source isn't on disk) or components whose sx
+   * support is added by a HOC at runtime. Returning `undefined` falls through
+   * to auto-detection.
    */
   wrappedComponentInterface(ctx) {
     if (ctx.importSource.startsWith("@company/ui/")) {
@@ -227,7 +232,7 @@ Adapters are the main extension point, see full example above. They let you cont
 - how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`, or `{ preserveRuntimeCall: true }` to keep only the original helper runtime call; `null`/`undefined` bails the file)
 - which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
-- which imported components already accept a StyleX `sx` prop, so the codemod emits `sx={styles.x}` instead of `{...stylex.props(styles.x)}` when re-styling them via `styled(Component)` (`wrappedComponentInterface`, requires `useSxProp: true`)
+- which imported components already accept a StyleX `sx` prop (auto-detected from the imported component's prop type when `useSxProp: true`; can be overridden via `wrappedComponentInterface`). When detected, the codemod emits `sx={styles.x}` on the wrapped component instead of `{...stylex.props(styles.x)}`.
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
 - how `styled(ImportedComponent)` wrapping an external base component can be inlined into an intrinsic element with static StyleX styles (`resolveBaseComponent`)
 

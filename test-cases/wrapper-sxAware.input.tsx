@@ -1,10 +1,14 @@
 // styled(Component) where the wrapped component accepts a StyleX `sx` prop.
-// The adapter's `wrappedComponentInterface` hook returns `{ acceptsSx: true }`
-// for this import, so the codemod emits `sx={styles.x}` instead of
-// `{...stylex.props(styles.x)}` on the rendered wrapped component.
+// The codemod auto-detects sx support by walking the imported component's
+// prop type signature (no adapter configuration required), so it emits
+// `sx={styles.x}` instead of `{...stylex.props(styles.x)}` on the rendered
+// wrapped component.
 import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { SxAwareButton } from "./lib/sx-aware-component";
+// Generic component whose props type intersects an aliased object literal
+// containing `sx?:` — exercises type-alias resolution + intersection walking.
+import { Text } from "./lib/sx-aware-text";
 
 // Single call site → inlined into JSX directly.
 const StyledButton = styled(SxAwareButton)`
@@ -31,6 +35,13 @@ export const ExportedAccentButton = styled(SxAwareButton)`
   color: red;
 `;
 
+// Wrapping the generic Text component — auto-detection has to walk
+// `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
+// find the `sx` member.
+const StyledText = styled(Text)`
+  color: navy;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -48,5 +59,6 @@ export const App = () => (
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
+    <StyledText size="md">Generic Text</StyledText>
   </div>
 );

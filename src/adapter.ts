@@ -805,19 +805,25 @@ export interface Adapter {
   usePhysicalProperties?: boolean;
 
   /**
-   * Optional resolver describing the public interface of an imported component
-   * that is being wrapped via `styled(Component)`. When the wrapped component
-   * already accepts a StyleX `sx` prop (typically because it has been migrated
-   * to StyleX), the codemod can emit `<Component sx={styles.x} />` instead of
+   * Optional override for sx-aware wrapped component detection.
+   *
+   * When `useSxProp: true`, the codemod auto-detects whether an imported
+   * component accepts a StyleX `sx` prop by reading its definition file and
+   * walking its declared prop type (intersections, type aliases, interfaces
+   * in the same file). When detected, `styled(Component)` emits
+   * `<Component sx={styles.x} />` instead of
    * `<Component {...stylex.props(styles.x)} />`.
    *
-   * Return:
-   * - `{ acceptsSx: true }` to emit `sx={...}` and skip className/style merging
-   * - `{ acceptsSx: false }` (or `undefined`) for the default `{...stylex.props(...)}` spread
+   * Use this hook to override auto-detection for cases it cannot see — most
+   * commonly package imports (e.g. `@company/ui`) where the source isn't on
+   * disk, or components whose sx support is added by a HOC at runtime.
    *
-   * Only consulted for `styled(ImportedComponent)` declarations and only when
-   * the wrapped component is imported from another module. Local components in
-   * the same file fall back to the default behavior.
+   * Return:
+   * - `{ acceptsSx: true }` to force the `sx={...}` path
+   * - `{ acceptsSx: false }` to force the `{...stylex.props(...)}` path
+   * - `undefined` to fall through to auto-detection (default)
+   *
+   * Only consulted for `styled(ImportedComponent)` declarations.
    */
   wrappedComponentInterface?: (
     context: WrappedComponentInterfaceContext,

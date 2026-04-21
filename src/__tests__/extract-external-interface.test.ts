@@ -1143,6 +1143,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": true,
         },
+        "test-cases/lib/sx-aware-text.tsx:Text": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": true,
+          "style": false,
+          "styles": true,
+        },
         "test-cases/lib/text.ts:Text": {
           "as": false,
           "className": false,
