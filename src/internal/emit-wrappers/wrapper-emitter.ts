@@ -18,6 +18,7 @@ import type {
   ThemeHookConfig,
   WrappedComponentInterfaceResult,
 } from "../../adapter.js";
+import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
@@ -133,19 +134,15 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
-    if (!this.wrappedComponentInterface) {
-      return false;
-    }
-    const importInfo = this.importMap.get(componentLocalName);
-    if (!importInfo) {
-      return false;
-    }
-    const result = this.wrappedComponentInterface({
-      importSource: importInfo.source.value,
-      importedName: importInfo.importedName,
+    return isWrappedComponentSxAware({
+      adapter: {
+        useSxProp: this.useSxProp,
+        wrappedComponentInterface: this.wrappedComponentInterface,
+      },
+      importMap: this.importMap,
+      componentLocalName,
       filePath: this.filePath,
     });
-    return result?.acceptsSx === true;
   }
 
   propsTypeNameFor(localName: string): string {

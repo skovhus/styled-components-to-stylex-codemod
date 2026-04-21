@@ -786,7 +786,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
 
-      if (allowSxProp) {
+      // When the wrapped component accepts a StyleX `sx` prop, callers may also
+      // pass `sx` even when the wrapper does not declare it externally. Destructure
+      // it so we can compose with internal styles instead of letting `{...rest}`
+      // forward it (which would be overwritten by the wrapper's own `sx={...}`).
+      if (allowSxProp || wrappedAcceptsSx) {
         styleArgs.push(sxId);
       }
 
@@ -798,11 +802,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
 
-      // When wrapped component is sx-aware, className/style/sx flow through
-      // {...rest} unchanged — don't destructure them in the wrapper.
+      // When the wrapped component is sx-aware, className/style flow through
+      // `{...rest}` unchanged — the wrapped component merges them with its
+      // internal styles itself. `sx` is destructured so the wrapper can compose
+      // it with its own internal styles via `sx={[styles.x, sx]}`.
       const destructureClassName = allowClassNameProp && !wrappedAcceptsSx;
       const destructureStyle = allowStyleProp && !wrappedAcceptsSx;
-      const destructureSx = allowSxProp && !wrappedAcceptsSx;
+      const destructureSx = allowSxProp || wrappedAcceptsSx;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1041,10 +1047,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       );
       // When the wrapped component accepts a StyleX `sx` prop, emit `sx={...}`
       // instead of `{...stylex.props(...)}` so the wrapped component can merge it
-      // with any sx/className/style it receives from `{...props}`.
+      // with className/style it receives from `{...props}`. The caller's `sx` (if
+      // any) is composed in by appending `props.sx` to the array — the spread
+      // above would otherwise be overwritten by this `sx` attribute.
       if (wrappedAcceptsSx) {
-        const sxExpr =
-          styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression([...styleArgs]);
+        const composedStyleArgs: ExpressionKind[] = [
+          ...styleArgs,
+          j.memberExpression(propsId, j.identifier("sx")),
+        ];
+        const sxExpr = j.arrayExpression(composedStyleArgs);
         openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxExpr)));
       } else {
         openingAttrs.push(j.jsxSpreadAttribute(stylexPropsCall));

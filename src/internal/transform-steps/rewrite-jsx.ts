@@ -7,6 +7,7 @@ import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
+import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
@@ -371,6 +372,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const rest: typeof keptAttrs = [];
         let styleAttr: (typeof keptAttrs)[0] | null = null;
         let classNameAttr: (typeof keptAttrs)[0] | null = null;
+        // `sxAttr` is captured separately so the inlined `sx={...}` replacement can
+        // compose the caller-supplied `sx` into the new one (avoids duplicate `sx=`
+        // attributes and silent overrides). Set later by the sx-aware-wrapped path.
+        let sxAttr: (typeof keptAttrs)[0] | null = null;
         let seenSpread = false;
         for (const attr of keptAttrs) {
           if (
@@ -385,6 +390,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.name === "className"
           ) {
             classNameAttr = attr;
+          } else if (
+            attr.type === "JSXAttribute" &&
+            attr.name.type === "JSXIdentifier" &&
+            attr.name.name === "sx"
+          ) {
+            sxAttr = attr;
           } else if (attr.type === "JSXSpreadAttribute") {
             rest.push(attr);
             seenSpread = true;
@@ -792,21 +803,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // The adapter may declare that an imported component accepts a StyleX `sx`
         // prop (already migrated to StyleX). When wrapping such a component, emit
         // `sx={...}` on the wrapped tag instead of `{...stylex.props(...)}`.
-        const wrappedAcceptsSxProp = (() => {
-          if (!ctx.adapter.useSxProp || !ctx.adapter.wrappedComponentInterface || isIntrinsicTag) {
-            return false;
-          }
-          const importInfo = ctx.importMap?.get(finalTag);
-          if (!importInfo) {
-            return false;
-          }
-          const result = ctx.adapter.wrappedComponentInterface({
-            importSource: importInfo.source.value,
-            importedName: importInfo.importedName,
+        const wrappedAcceptsSxProp =
+          !isIntrinsicTag &&
+          isWrappedComponentSxAware({
+            adapter: ctx.adapter,
+            importMap: ctx.importMap,
+            componentLocalName: finalTag,
             filePath: ctx.file.path,
           });
-          return result?.acceptsSx === true;
-        })();
 
         // When NOT using sx prop, CSS module classNames must be merged into
         // the stylex.props spread (via classNameAttr) to avoid a duplicate
@@ -838,12 +842,22 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const useSxProp =
           useSxPropForWrapped ||
           (ctx.adapter.useSxProp && !needsMerge && isIntrinsicTag && hasLocalStyleRef);
+        // Compose any caller-supplied `sx={...}` JSX attribute into the emitted
+        // sx expression so the caller's styles are preserved (would otherwise be
+        // silently overwritten by the new `sx={...}` attribute).
+        const callerSxExpr =
+          sxAttr &&
+          sxAttr.type === "JSXAttribute" &&
+          sxAttr.value?.type === "JSXExpressionContainer"
+            ? (sxAttr.value.expression as ExpressionKind)
+            : null;
         const stylexAttr = useSxProp
           ? (() => {
+              const allArgs: ExpressionKind[] = callerSxExpr
+                ? [...styleArgs, callerSxExpr]
+                : [...styleArgs];
               const sxExpr =
-                styleArgs.length === 1 && styleArgs[0]
-                  ? styleArgs[0]
-                  : j.arrayExpression([...styleArgs]);
+                allArgs.length === 1 && allArgs[0] ? allArgs[0] : j.arrayExpression(allArgs);
               return j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxExpr));
             })()
           : j.jsxSpreadAttribute(
@@ -877,6 +891,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // unchanged — the wrapped component handles merging them with `sx`.
         const passThroughClassName = useSxPropForWrapped && classNameAttr ? [classNameAttr] : [];
         const passThroughStyle = useSxPropForWrapped && styleAttr ? [styleAttr] : [];
+        // When not using the sx-prop fast path, restore any caller-supplied
+        // `sx={...}` attribute so it isn't silently dropped (we extracted it
+        // above to compose it into the emitted sx expression in the sx path).
+        const passThroughSx = !useSxProp && sxAttr ? [sxAttr] : [];
 
         const finalRest = [
           ...keptRestAfterVariants.slice(0, finalInsertIndex),
@@ -884,6 +902,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...extraClassNameAttrs,
           ...passThroughClassName,
           ...passThroughStyle,
+          ...passThroughSx,
           ...keptRestAfterVariants.slice(finalInsertIndex),
         ];
 

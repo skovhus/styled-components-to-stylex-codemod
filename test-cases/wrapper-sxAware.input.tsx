@@ -2,6 +2,7 @@
 // The adapter's `wrappedComponentInterface` hook returns `{ acceptsSx: true }`
 // for this import, so the codemod emits `sx={styles.x}` instead of
 // `{...stylex.props(styles.x)}` on the rendered wrapped component.
+import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
@@ -16,13 +17,36 @@ const StyledPrimary = styled(SxAwareButton)`
   color: white;
 `;
 
+// Single call site with caller-passed sx → tests inlined path composing
+// the caller's sx with the styled component's internal sx.
+const InlinedAccent = styled(SxAwareButton)`
+  background-color: #fef3c7;
+`;
+
+// Exported wrapper with external `sx` support (per fixture adapter
+// externalInterface). Even when the wrapped component accepts `sx`, the
+// wrapper itself accepts an external `sx` prop and must compose it with the
+// internal `styles.exportedAccent` style.
+export const ExportedAccentButton = styled(SxAwareButton)`
+  color: red;
+`;
+
+const callerStyles = stylex.create({
+  caller: { textDecorationLine: "underline" },
+});
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 8, padding: 16 }}>
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 480 }}>
     <StyledButton>Default</StyledButton>
     <StyledButton className="extra-class" style={{ marginTop: 4 }}>
       With external className/style
     </StyledButton>
+    {/* Caller passes its own sx — must compose with the wrapper's internal sx */}
+    <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
+    <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>
+    <ExportedAccentButton>Exported</ExportedAccentButton>
+    <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
   </div>
 );
