@@ -29,6 +29,9 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <Flex gap={20} style={{ WebkitMaskImage: "none", color: "white" }}>
         Vendor-prefixed longhand still promotes
       </Flex>
+      <Flex gap={28} style={{ background: "linear-gradient(to right, #f00, #00f)" }}>
+        Single-function background still promotes
+      </Flex>
     </Wrapper>
   );
 }

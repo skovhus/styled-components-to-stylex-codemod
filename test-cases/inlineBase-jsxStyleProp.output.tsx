@@ -18,6 +18,9 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <div sx={[styles.flex, flexGapVariants[20], styles.flexInline]}>
         Vendor-prefixed longhand still promotes
       </div>
+      <div sx={[styles.flex, flexGapVariants[28], styles.flexInline2]}>
+        Single-function background still promotes
+      </div>
     </div>
   );
 }
@@ -60,6 +63,9 @@ const styles = stylex.create({
     WebkitMaskImage: "none",
     color: "white",
   },
+  flexInline2: {
+    backgroundImage: "linear-gradient(to right, #f00, #00f)",
+  },
 });
 
 const flexGapVariants = stylex.create({
@@ -77,5 +83,8 @@ const flexGapVariants = stylex.create({
   },
   24: {
     gap: "24px",
+  },
+  28: {
+    gap: "28px",
   },
 });

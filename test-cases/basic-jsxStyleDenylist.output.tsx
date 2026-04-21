@@ -16,6 +16,19 @@ export function App() {
       <Card style={{ font: "12px/1.4 system-ui", color: "black" }}>
         font shorthand is denylisted
       </Card>
+      {/*
+        Complex `background` shorthand (color + repeat + position/size) cannot
+        be safely decomposed into backgroundColor/backgroundImage longhands.
+        Promotion bails so the inline style is preserved verbatim.
+      */}
+      <div
+        {...mergedSx(styles.banner, undefined, {
+          background: "red no-repeat center/cover",
+          color: "white",
+        })}
+      >
+        Complex background shorthand cannot be promoted
+      </div>
     </div>
   );
 }
@@ -25,5 +38,9 @@ const styles = stylex.create({
     padding: 12,
     backgroundColor: "#f0f5ff",
     borderRadius: 6,
+  },
+  banner: {
+    padding: 12,
+    backgroundColor: "#ffe0e0",
   },
 });

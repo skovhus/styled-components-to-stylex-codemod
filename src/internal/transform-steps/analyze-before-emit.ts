@@ -2052,6 +2052,14 @@ function expandStaticStylePropToStylex(
   }
   const cssProp = camelToKebabCase(reactKey);
   const rawValue = typeof value === "number" ? String(value) : value;
+  // `cssDeclarationToStylexDeclarations` handles `background` by classifying
+  // the value as image-like vs color, but doesn't validate that the value is a
+  // single component. A multi-token shorthand like `red no-repeat center/cover`
+  // would be silently mapped to `backgroundColor: "red no-repeat ..."`, which
+  // is invalid CSS. Bail so the inline style is preserved verbatim.
+  if (reactKey === "background" && !isSingleBackgroundComponent(rawValue)) {
+    return null;
+  }
   const expanded = cssDeclarationToStylexDeclarations({
     property: cssProp,
     value: { kind: "static", value: rawValue },
@@ -2074,6 +2082,39 @@ function expandStaticStylePropToStylex(
     result.push({ key: entry.prop, value: coerceExpandedValue(entry.value.value) });
   }
   return result.length > 0 ? result : null;
+}
+
+/**
+ * Returns true when a `background` shorthand value is structurally simple
+ * enough to map onto a single `background-color` or `background-image`
+ * longhand: a single token, or a single function call (e.g. `rgb(…)`,
+ * `linear-gradient(…)`, `url(…)`). Multi-component shorthands (color +
+ * position/size, image + repeat, comma-separated layers, …) bail.
+ */
+function isSingleBackgroundComponent(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  // Top-level commas are layer separators; slashes separate <bg-position> from
+  // <bg-size>; whitespace separates multiple component values. Any of these
+  // makes the value a true shorthand we can't statically map to a longhand.
+  return !hasTopLevelMatch(trimmed, /[\s,/]/);
+}
+
+/** Returns true when `pattern` matches a character outside of any parenthesized group. */
+function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
+  let depth = 0;
+  for (const c of value) {
+    if (c === "(") {
+      depth++;
+    } else if (c === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && pattern.test(c)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
