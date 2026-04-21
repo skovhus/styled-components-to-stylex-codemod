@@ -1241,7 +1241,7 @@ function findExistingStylexStylesTarget(args: {
   // Shadow check: reject if `name` is bound anywhere else in the file (nested scope
   // like a function component). Rewrite-jsx emits plain `name.key` references and
   // would silently bind to the shadowing binding instead of the top-level object.
-  if (isNameShadowedOutsideDeclarator(ctx, target.name, target.declaratorNode)) {
+  if (isNameBoundInFile(ctx, target.name, target.declaratorNode)) {
     return undefined;
   }
 
@@ -1288,53 +1288,49 @@ function buildEmitKeyNames(ctx: TransformContext, styledDecls: StyledDecl[]): Se
   return keys;
 }
 
-/** True if the given name is declared anywhere in the file outside `declaratorNode`. */
-function isNameShadowedOutsideDeclarator(
+/**
+ * True if the given name is bound anywhere in the file — by a variable declarator,
+ * a function declaration's own name, or a function parameter (including destructuring
+ * forms). When `excludeDeclaratorNode` is provided, that specific VariableDeclarator
+ * is skipped so a decl's own binding doesn't count as self-shadowing.
+ */
+function isNameBoundInFile(
   ctx: TransformContext,
   name: string,
-  declaratorNode: unknown,
+  excludeDeclaratorNode?: unknown,
 ): boolean {
   const { root, j } = ctx;
-  let shadowed = false;
-  // VariableDeclarator bindings anywhere (top-level or nested).
+  let found = false;
   root.find(j.VariableDeclarator).forEach((path) => {
-    if (shadowed) {
-      return;
-    }
-    if (path.node === declaratorNode) {
+    if (found || path.node === excludeDeclaratorNode) {
       return;
     }
     if (patternContainsName(path.node.id, name)) {
-      shadowed = true;
+      found = true;
     }
   });
-  if (shadowed) {
+  if (found) {
     return true;
   }
-  // Function-like params (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression,
-  // ObjectMethod, ClassMethod) and the function's own name: any of these bind `name` in
-  // their scope and would shadow the top-level merge target.
-  root
-    .find(j.Function)
-    .filter((path) => {
-      const fn = path.node as {
-        id?: { name?: string } | null;
-        params?: Array<unknown>;
-      };
-      if (fn.id?.name === name) {
-        return true;
+  // Function-like bindings (FunctionDeclaration, FunctionExpression,
+  // ArrowFunctionExpression, ObjectMethod, ClassMethod): own name or any param.
+  root.find(j.Function).forEach((path) => {
+    if (found) {
+      return;
+    }
+    const fn = path.node as { id?: { name?: string } | null; params?: Array<unknown> };
+    if (fn.id?.name === name) {
+      found = true;
+      return;
+    }
+    for (const param of fn.params ?? []) {
+      if (paramBindsName(param, name)) {
+        found = true;
+        return;
       }
-      for (const param of fn.params ?? []) {
-        if (paramBindsName(param, name)) {
-          return true;
-        }
-      }
-      return false;
-    })
-    .forEach(() => {
-      shadowed = true;
-    });
-  return shadowed;
+    }
+  });
+  return found;
 }
 
 /**
@@ -1393,25 +1389,21 @@ function paramBindsName(param: unknown, name: string): boolean {
   return false;
 }
 
-/** True if any top-level or nested variable declarator in the file binds the given name. */
+/**
+ * True if the file would collide on `name` if we used it for the stylex binding.
+ * Skipped styled decls keep their own binding (e.g. `const styles = styled.div\`...\``),
+ * which is fine as long as no OTHER scope also binds the same name — the regular
+ * isNameBoundInFile check handles that.
+ */
 function fileHasLocalName(
   ctx: TransformContext,
   name: string,
   styledDeclNames: Set<string>,
 ): boolean {
-  // Skipped styled decls keep their binding (e.g. `const styles = styled.div\`\``), so
-  // we treat that as a conflict only if the name isn't already a styled-decl name.
   if (styledDeclNames.has(name)) {
     return false;
   }
-  const { root, j } = ctx;
-  let found = false;
-  root.find(j.VariableDeclarator).forEach((path) => {
-    if (!found && patternContainsName(path.node.id, name)) {
-      found = true;
-    }
-  });
-  return found;
+  return isNameBoundInFile(ctx, name);
 }
 
 /** True if `node` is `stylex.create(...)`. */

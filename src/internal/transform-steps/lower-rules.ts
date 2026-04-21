@@ -6,53 +6,27 @@ import { lowerRules } from "../lower-rules.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
+import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 
 /**
- * True when any identifier inside the skipped decl's template references a css helper
- * that was extracted (and its source declaration removed) earlier in the pipeline.
- * Checks the raw template expression AST plus any resolved references the lowering
- * process captured before bailing.
+ * True when the skipped decl's template interpolates a css helper that was extracted
+ * (and its source declaration removed) earlier in the pipeline. The preserved decl
+ * would otherwise reference an undefined identifier at runtime.
  */
 function skippedDeclReferencesHelper(
-  decl: { templateExpressions?: unknown[]; extraStyleKeys?: string[] },
+  decl: { templateExpressions?: unknown[] },
   helperLocalNames: Set<string>,
 ): boolean {
-  for (const expr of decl.templateExpressions ?? []) {
-    if (expressionReferencesAny(expr, helperLocalNames)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function expressionReferencesAny(node: unknown, names: Set<string>): boolean {
-  if (!node || typeof node !== "object") {
+  if (helperLocalNames.size === 0) {
     return false;
   }
-  const n = node as { type?: string; name?: string };
-  if (n.type === "Identifier" && typeof n.name === "string" && names.has(n.name)) {
-    return true;
+  const identifiers = new Set<string>();
+  for (const expr of decl.templateExpressions ?? []) {
+    collectIdentifiers(expr, identifiers);
   }
-  for (const key of Object.keys(n)) {
-    if (
-      key === "loc" ||
-      key === "comments" ||
-      key === "leadingComments" ||
-      key === "trailingComments"
-    ) {
-      continue;
-    }
-    const child = (n as Record<string, unknown>)[key];
-    if (Array.isArray(child)) {
-      for (const c of child) {
-        if (expressionReferencesAny(c, names)) {
-          return true;
-        }
-      }
-    } else if (child && typeof child === "object") {
-      if (expressionReferencesAny(child, names)) {
-        return true;
-      }
+  for (const name of identifiers) {
+    if (helperLocalNames.has(name)) {
+      return true;
     }
   }
   return false;
