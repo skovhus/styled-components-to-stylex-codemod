@@ -2738,15 +2738,43 @@ function extractTextSuffixFromChildren(children: unknown[] | undefined): string 
     return null;
   }
   // Limit to first 3 words and 20 chars to keep keys readable
-  const suffix = words
-    .slice(0, 3)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join("");
+  const truncated = words.slice(0, 3);
+  // Drop trailing connector words (e.g. "Margin quad and explicit" → "MarginQuad")
+  // so suffixes don't dangle on filler words.
+  while (
+    truncated.length > 0 &&
+    SUFFIX_STOP_WORDS.has(truncated[truncated.length - 1]!.toLowerCase())
+  ) {
+    truncated.pop();
+  }
+  if (truncated.length === 0) {
+    return null;
+  }
+  const suffix = truncated.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
   if (suffix.length > 20) {
     return null;
   }
   return suffix;
 }
+
+/** Connector words dropped from the trailing position of text-derived style key suffixes. */
+const SUFFIX_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "but",
+  "by",
+  "for",
+  "in",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+]);
 
 /**
  * Returns true if any property key in `incoming` already exists in `base`.

@@ -9,10 +9,10 @@ export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) 
       <div sx={[styles.flex, flexGapVariants[8], styles.flexBackgroundAndBorder]}>
         Background and border shorthands
       </div>
-      <div sx={[styles.flex, flexGapVariants[12], styles.flexMarginQuadAnd]}>
+      <div sx={[styles.flex, flexGapVariants[12], styles.flexMarginQuad]}>
         Margin quad and explicit longhands
       </div>
-      <div sx={[styles.flex, flexGapVariants[16], styles.flexDynamicColorAnd(accentColor)]}>
+      <div sx={[styles.flex, flexGapVariants[16], styles.flexDynamicColor(accentColor)]}>
         Dynamic color and opacity
       </div>
       <div sx={[styles.flex, flexGapVariants[20], styles.flexInline]}>
@@ -44,7 +44,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#b97",
   },
-  flexMarginQuadAnd: {
+  flexMarginQuad: {
     marginTop: "8px",
     marginRight: "16px",
     marginBottom: "4px",
@@ -52,7 +52,7 @@ const styles = stylex.create({
     paddingBlock: 4,
     paddingInline: 8,
   },
-  flexDynamicColorAnd: (color: string) => ({
+  flexDynamicColor: (color: string) => ({
     opacity: 0.5,
     color,
   }),
