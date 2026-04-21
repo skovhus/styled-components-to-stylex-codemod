@@ -109,6 +109,41 @@ export function PlainButton(props: { className?: string }) {
     expect(check("PlainButton", lib)).toBe(false);
   });
 
+  it("does not match `sx` appearing as an Omit utility argument", () => {
+    const lib = writeLib(
+      "no-sx-omit",
+      `
+import * as React from "react";
+
+type ButtonVariant = "primary" | "secondary";
+
+/** Props for the button components. Explicitly omits sx to forbid it. */
+export type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "sx"> & {
+  /** Button style variant. */
+  variant?: ButtonVariant;
+};
+
+export const Button = (props: ButtonProps) => null as any;
+`,
+    );
+    expect(check("Button", lib)).toBe(false);
+  });
+
+  it("does not match `sx` appearing in a string literal value of another prop", () => {
+    const lib = writeLib(
+      "no-sx-string-value",
+      `
+export type WeirdProps = {
+  /** Some unrelated prop whose default literal type happens to contain "sx". */
+  variant?: "sx-like" | "other";
+};
+
+export const Weird = (props: WeirdProps) => null as any;
+`,
+    );
+    expect(check("Weird", lib)).toBe(false);
+  });
+
   it("returns false for package-style imports (no source to scan)", () => {
     expect(
       isWrappedComponentSxAware({
