@@ -56,6 +56,7 @@ export const fixtureAdapter = defineAdapter({
         "basic-jsdocExported",
         "htmlProp-element",
         "wrapper-mergerImported",
+        "wrapper-sxAware",
         "htmlProp-input",
         "transientProp-notForwarded",
         "inlineBase-booleanVariantKey",

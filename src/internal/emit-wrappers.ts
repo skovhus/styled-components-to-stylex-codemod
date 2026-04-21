@@ -3,7 +3,13 @@
  * Core concepts: intrinsic vs component wrappers and insertion ordering.
  */
 import type { ASTNode, Collection, JSCodeshift, Property } from "jscodeshift";
-import { DEFAULT_THEME_HOOK, type StyleMergerConfig, type ThemeHookConfig } from "../adapter.js";
+import {
+  DEFAULT_THEME_HOOK,
+  type ImportSource,
+  type StyleMergerConfig,
+  type ThemeHookConfig,
+  type WrappedComponentInterfaceResult,
+} from "../adapter.js";
 import type { StyledDecl } from "./transform-types.js";
 import { emitComponentWrappers } from "./emit-wrappers/emit-component.js";
 import { emitIntrinsicWrappers } from "./emit-wrappers/emit-intrinsic.js";
@@ -28,6 +34,12 @@ export function emitWrappers(args: {
   siblingMarkerKeys?: Set<string>;
   parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
+  importMap?: Map<string, { importedName: string; source: ImportSource }>;
+  wrappedComponentInterface?: (ctx: {
+    importSource: string;
+    importedName: string;
+    filePath: string;
+  }) => WrappedComponentInterfaceResult | undefined;
 }): void {
   const {
     root,
@@ -46,6 +58,8 @@ export function emitWrappers(args: {
     siblingMarkerKeys,
     parentsNeedingDefaultMarker,
     useSxProp,
+    importMap,
+    wrappedComponentInterface,
   } = args;
 
   const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
@@ -70,6 +84,8 @@ export function emitWrappers(args: {
     siblingMarkerKeys,
     parentsNeedingDefaultMarker,
     useSxProp,
+    importMap,
+    wrappedComponentInterface,
   });
 
   const emitted: ASTNode[] = [];

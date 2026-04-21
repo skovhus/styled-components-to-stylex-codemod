@@ -12,7 +12,13 @@ import type {
   Property,
   RestElement,
 } from "jscodeshift";
-import type { StyleMergerConfig, ThemeHookConfig } from "../../adapter.js";
+import type {
+  ImportSource,
+  StyleMergerConfig,
+  ThemeHookConfig,
+  WrappedComponentInterfaceResult,
+} from "../../adapter.js";
+import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
@@ -53,6 +59,16 @@ type WrapperEmitterArgs = {
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
   parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
+  /** Import map of local identifiers to their import source. Used to query adapter
+   * hooks about wrapped imported components. */
+  importMap?: Map<string, { importedName: string; source: ImportSource }>;
+  /** Optional adapter hook describing the public interface of an imported component
+   * being wrapped via `styled(Component)`. */
+  wrappedComponentInterface?: (ctx: {
+    importSource: string;
+    importedName: string;
+    filePath: string;
+  }) => WrappedComponentInterfaceResult | undefined;
 };
 
 export class WrapperEmitter {
@@ -72,6 +88,12 @@ export class WrapperEmitter {
   readonly siblingMarkerKeys: Set<string>;
   readonly parentsNeedingDefaultMarker: Set<string>;
   readonly useSxProp: boolean;
+  readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
+  readonly wrappedComponentInterface?: (ctx: {
+    importSource: string;
+    importedName: string;
+    filePath: string;
+  }) => WrappedComponentInterfaceResult | undefined;
 
   // For plain JS/JSX and Flow transforms, skip emitting TS syntax entirely for now.
   readonly emitTypes: boolean;
@@ -100,7 +122,27 @@ export class WrapperEmitter {
     this.siblingMarkerKeys = args.siblingMarkerKeys ?? new Set<string>();
     this.parentsNeedingDefaultMarker = args.parentsNeedingDefaultMarker ?? new Set<string>();
     this.useSxProp = args.useSxProp;
+    this.importMap = args.importMap ?? new Map();
+    this.wrappedComponentInterface = args.wrappedComponentInterface;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
+  }
+
+  /**
+   * Returns true when the wrapped imported component for `styled(Foo)`
+   * accepts a StyleX `sx` prop, per the adapter `wrappedComponentInterface` hook.
+   * Falls back to false for local components or when the adapter does not
+   * configure the hook.
+   */
+  wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
+    return isWrappedComponentSxAware({
+      adapter: {
+        useSxProp: this.useSxProp,
+        wrappedComponentInterface: this.wrappedComponentInterface,
+      },
+      importMap: this.importMap,
+      componentLocalName,
+      filePath: this.filePath,
+    });
   }
 
   propsTypeNameFor(localName: string): string {

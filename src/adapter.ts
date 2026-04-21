@@ -574,6 +574,47 @@ export interface MarkerFileContext {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Wrapped Component Interface
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Context for `adapter.wrappedComponentInterface(...)`.
+ *
+ * Called for each `styled(Component)` declaration where `Component` is
+ * imported from another module. Lets the adapter declare that the wrapped
+ * component already accepts a StyleX `sx` prop so the codemod can emit
+ * `sx={style}` instead of `{...stylex.props(style)}`.
+ */
+export interface WrappedComponentInterfaceContext {
+  /**
+   * Import source for the wrapped base component.
+   * - package import: e.g. `"@company/ui"`
+   * - relative import: resolved absolute path
+   */
+  importSource: string;
+  /**
+   * Imported binding name for the wrapped base component.
+   * Example: `import { Button as UiButton } ...` -> importedName: "Button"
+   */
+  importedName: string;
+  /**
+   * Absolute path of the file currently being transformed.
+   */
+  filePath: string;
+}
+
+/**
+ * Result for `adapter.wrappedComponentInterface(...)`.
+ *
+ * - `acceptsSx: true` — the wrapped component accepts an `sx` prop. The codemod
+ *   emits `sx={style}` instead of `{...stylex.props(style)}` and skips
+ *   className/style merging in the wrapper (the wrapped component owns that).
+ */
+export interface WrappedComponentInterfaceResult {
+  acceptsSx: boolean;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Style Merger Configuration
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -764,6 +805,31 @@ export interface Adapter {
   usePhysicalProperties?: boolean;
 
   /**
+   * Optional override for sx-aware wrapped component detection.
+   *
+   * When `useSxProp: true`, the codemod auto-detects whether an imported
+   * component accepts a StyleX `sx` prop by reading its definition file and
+   * walking its declared prop type (intersections, type aliases, interfaces
+   * in the same file). When detected, `styled(Component)` emits
+   * `<Component sx={styles.x} />` instead of
+   * `<Component {...stylex.props(styles.x)} />`.
+   *
+   * Use this hook to override auto-detection for cases it cannot see — most
+   * commonly package imports (e.g. `@company/ui`) where the source isn't on
+   * disk, or components whose sx support is added by a HOC at runtime.
+   *
+   * Return:
+   * - `{ acceptsSx: true }` to force the `sx={...}` path
+   * - `{ acceptsSx: false }` to force the `{...stylex.props(...)}` path
+   * - `undefined` to fall through to auto-detection (default)
+   *
+   * Only consulted for `styled(ImportedComponent)` declarations.
+   */
+  wrappedComponentInterface?: (
+    context: WrappedComponentInterfaceContext,
+  ) => WrappedComponentInterfaceResult | undefined;
+
+  /**
    * Optional function to customize where marker sidecar files (`stylex.defineMarker()`)
    * are written. By default, markers are placed in a `.stylex.ts` file next to the source.
    *
@@ -818,6 +884,7 @@ export interface AdapterInput {
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
   usePhysicalProperties?: Adapter["usePhysicalProperties"];
+  wrappedComponentInterface?: Adapter["wrappedComponentInterface"];
   markerFile?: Adapter["markerFile"];
 }
 
