@@ -109,22 +109,6 @@ export function patchSourceTransientProps(
   return modified !== source ? modified : null;
 }
 
-/**
- * File-based convenience wrapper around `patchSourceTransientProps`.
- */
-export function patchConsumerTransientProps(
-  filePath: string,
-  entries: readonly TransientPropConsumerEntry[],
-): string | null {
-  let source: string;
-  try {
-    source = readFileSync(filePath, "utf-8");
-  } catch {
-    return null;
-  }
-  return patchSourceTransientProps(source, entries);
-}
-
 /* ── Non-exported helpers ─────────────────────────────────────────────── */
 
 /**

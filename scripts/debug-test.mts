@@ -13,13 +13,7 @@ const { default: transform } = await import("../src/transform.ts");
 import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
 
 // Get test case names from command line or use defaults
-const defaultTestCases = [
-  "attrs",
-  "as-prop",
-  "duplicate-type-identifier",
-  "removed-export",
-  "static-properties",
-];
+const defaultTestCases = ["attrs"];
 
 const testCases = process.argv.slice(2).length > 0 ? process.argv.slice(2) : defaultTestCases;
 
