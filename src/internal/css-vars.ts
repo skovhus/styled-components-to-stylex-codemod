@@ -5,6 +5,13 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 
+export type CssVarCall = {
+  start: number;
+  end: number;
+  name: string;
+  fallback?: string;
+};
+
 export function rewriteCssVarsInString(args: {
   raw: string;
   filePath: string;
@@ -22,14 +29,32 @@ export function findCssVarCallsInString(raw: string): CssVarCall[] {
   return findCssVarCalls(raw);
 }
 
-type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
+export function resolveCssVarCall(args: {
+  call: CssVarCall;
+  definedValue?: string;
+  filePath: string;
+  resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
+}): ResolveValueResult | undefined {
+  const { call, definedValue, filePath, resolveValue } = args;
+  const baseContext = {
+    kind: "cssVariable" as const,
+    name: call.name,
+    filePath,
+    ...(definedValue ? { definedValue } : {}),
+  };
+  const result = resolveValue({
+    ...baseContext,
+    ...(call.fallback ? { fallback: call.fallback } : {}),
+  });
+  // Adapter-backed variables supersede CSS defaults. Some adapters only recognize the
+  // canonical variable name, so retry without the fallback before preserving raw var().
+  if (result || !call.fallback) {
+    return result;
+  }
+  return resolveValue(baseContext);
+}
 
-type CssVarCall = {
-  start: number;
-  end: number;
-  name: string;
-  fallback?: string;
-};
+type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
 function findCssVarCalls(raw: string): CssVarCall[] {
   const out: CssVarCall[] = [];
@@ -122,13 +147,11 @@ function rewriteCssVarsInStringImpl(args: {
     if (c.start > last) {
       segments.push({ kind: "text", value: raw.slice(last, c.start) });
     }
-    const definedValue = definedVars.get(c.name);
-    const res = resolveValue({
-      kind: "cssVariable",
-      name: c.name,
+    const res = resolveCssVarCall({
+      call: c,
+      definedValue: definedVars.get(c.name),
       filePath,
-      ...(c.fallback ? { fallback: c.fallback } : {}),
-      ...(definedValue ? { definedValue } : {}),
+      resolveValue,
     });
     if (!res) {
       segments.push({ kind: "text", value: raw.slice(c.start, c.end) });

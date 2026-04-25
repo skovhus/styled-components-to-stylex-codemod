@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
-import { findCssVarCallsInString, rewriteCssVarsInString } from "./css-vars.js";
+import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function rewriteCssVarsInStyleObject(
@@ -204,7 +204,6 @@ function rewriteCssVarsInTemplateLiteral(
   const replacements: Replacement[] = [];
 
   for (const call of calls) {
-    const definedValue = ctx.definedVars.get(call.name);
     // Strip placeholder sentinels from the fallback before forwarding to the adapter so
     // adapter logic that inspects `ctx.fallback` (validation, parsing, expression generation)
     // never sees synthetic interpolation markers. When the fallback consists entirely of
@@ -212,12 +211,16 @@ function rewriteCssVarsInTemplateLiteral(
     const cleanedFallback = call.fallback
       ? call.fallback.replace(placeholderPattern, "").trim().replace(/,\s*$/, "")
       : undefined;
-    const res = ctx.resolveValue({
-      kind: "cssVariable",
-      name: call.name,
+    const res = resolveCssVarCall({
+      call: {
+        start: call.start,
+        end: call.end,
+        name: call.name,
+        ...(cleanedFallback ? { fallback: cleanedFallback } : {}),
+      },
+      definedValue: ctx.definedVars.get(call.name),
       filePath: ctx.filePath,
-      ...(cleanedFallback ? { fallback: cleanedFallback } : {}),
-      ...(definedValue ? { definedValue } : {}),
+      resolveValue: ctx.resolveValue,
     });
     if (!res) {
       continue;

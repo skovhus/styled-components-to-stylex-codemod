@@ -5778,6 +5778,52 @@ export const App = () => (
 });
 
 describe("var() rewriter — adapter contract", () => {
+  it("should retry adapter resolution without fallback and drop the CSS var default when resolved", () => {
+    const source = `
+import styled from "styled-components";
+
+const Container = styled.div\`
+  border-radius: var(--control-border-radius, 4px);
+\`;
+
+export const App = () => <Container>content</Container>;
+`;
+
+    const seenFallbacks: Array<string | undefined> = [];
+    const noFallbackAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--control-border-radius") {
+          seenFallbacks.push(ctx.fallback);
+          if (ctx.fallback) {
+            return undefined;
+          }
+          return {
+            expr: "vars.controlBorderRadius",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./vars.stylex" },
+                names: [{ imported: "vars" }],
+              },
+            ],
+          };
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: noFallbackAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(seenFallbacks).toEqual(["4px", undefined]);
+    expect(result.code).toContain("borderRadius: vars.controlBorderRadius");
+    expect(result.code).not.toContain("var(--control-border-radius, 4px)");
+  });
+
   it("should not pass placeholder sentinels to adapter when var() default contains a dynamic interpolation", () => {
     const source = `
 import styled from "styled-components";
