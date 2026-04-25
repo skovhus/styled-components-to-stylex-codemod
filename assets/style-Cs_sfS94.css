@@ -105,6 +105,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-bcbnzo {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-1e2mv7m {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-boxShadow {
   syntax: "*";
   inherits: false
@@ -131,16 +141,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-textAlign {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bcbnzo {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-1e2mv7m {
   syntax: "*";
   inherits: false
 }
@@ -185,22 +185,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-strokeWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-transitionDelay {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-fill {
   syntax: "*";
   inherits: false
 }
 
 @property --x-gridRow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-transitionDelay {
   syntax: "*";
   inherits: false
 }
@@ -230,7 +225,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x---component-width {
+@property --x-flexGrow {
   syntax: "*";
   inherits: false
 }
@@ -240,12 +235,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-flexGrow {
+@property --x-borderRightColor {
   syntax: "*";
   inherits: false
 }
 
-@property --x-borderRightColor {
+@property --x---component-width {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
