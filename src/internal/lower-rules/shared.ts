@@ -7,6 +7,82 @@ import type { JSCodeshift } from "jscodeshift";
 import type { ExpressionKind } from "./decl-types.js";
 import type { RelationOverride } from "./state.js";
 
+export function findPlaceholderBlock(
+  rawCss: string,
+  placeholder: string,
+): { start: number; end: number } | null {
+  let searchFrom = 0;
+  while (true) {
+    const start = rawCss.indexOf(placeholder, searchFrom);
+    if (start < 0) {
+      return null;
+    }
+    const blockOpen = readNextNonWhitespace(rawCss, start + placeholder.length);
+    if (blockOpen?.value !== "{") {
+      searchFrom = start + placeholder.length;
+      continue;
+    }
+    return { start, end: blockOpen.index };
+  }
+}
+
+export function findPreviousOpeningBraceBeforeSelector(
+  rawCss: string,
+  position: number,
+): number | null {
+  let depth = 0;
+  for (let i = position - 1; i >= 0; i--) {
+    const ch = rawCss[i];
+    if (ch === "}") {
+      depth++;
+      continue;
+    }
+    if (ch === "{") {
+      if (depth > 0) {
+        depth--;
+        continue;
+      }
+      return i;
+    }
+    if (depth === 0 && ch === ";") {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function readSelectorBeforeBlock(rawCss: string, blockStart: number): string {
+  let selectorStart = blockStart - 1;
+  while (selectorStart >= 0) {
+    const ch = rawCss[selectorStart];
+    if (ch === "}" || ch === "{" || ch === ";") {
+      break;
+    }
+    selectorStart--;
+  }
+  return rawCss.slice(selectorStart + 1, blockStart).trim();
+}
+
+export function parseSimpleParentPseudoSelectorList(selectorText: string): string[] | null {
+  const parts = selectorText
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const pseudos: string[] = [];
+  for (const part of parts) {
+    const match = part.match(/^&(:[a-z-]+(?:\([^)]*\))?)$/i);
+    if (!match?.[1]) {
+      return null;
+    }
+    pseudos.push(match[1]);
+  }
+  return pseudos;
+}
+
 /**
  * Builds a `stylex.when.ancestor(pseudo, marker?)` AST call expression.
  */
@@ -122,6 +198,19 @@ export function getOrCreateRelationOverrideBucket(
     pseudoBuckets.set(ancestorPseudo, bucket);
   }
   return bucket;
+}
+
+function readNextNonWhitespace(
+  rawCss: string,
+  position: number,
+): { index: number; value: string } | null {
+  for (let i = position; i < rawCss.length; i++) {
+    const ch = rawCss[i]!;
+    if (!/\s/.test(ch)) {
+      return { index: i, value: ch };
+    }
+  }
+  return null;
 }
 
 /**

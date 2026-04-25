@@ -25,7 +25,13 @@ import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
-import { getOrCreateRelationOverrideBucket } from "./shared.js";
+import {
+  findPlaceholderBlock,
+  findPreviousOpeningBraceBeforeSelector,
+  getOrCreateRelationOverrideBucket,
+  parseSimpleParentPseudoSelectorList,
+  readSelectorBeforeBlock,
+} from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
@@ -224,9 +230,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     const baseRe = /__SC_EXPR_(\d+)__\s*\{([\s\S]*?)\}/g;
     let m: RegExpExecArray | null;
     while ((m = baseRe.exec(decl.rawCss))) {
-      const before = decl.rawCss.slice(Math.max(0, m.index - 30), m.index);
-      // Skip if this is preceded by a pseudo selector pattern
-      if (/&:[a-z-]+(?:\([^)]*\))?\s+$/i.test(before)) {
+      if (isComponentBlockHandledByRuleProcessor(decl.rawCss, m.index)) {
         continue;
       }
       applyBlock(Number(m[1]), m[2] ?? "", null);
@@ -1368,6 +1372,43 @@ function mergeVariantDimensions(
     return existingDimensions;
   }
   return [...existingDimensions, ...nextDimensions];
+}
+
+function isComponentBlockHandledByRuleProcessor(
+  rawCss: string,
+  componentBlockStart: number,
+): boolean {
+  const placeholderMatch = rawCss.slice(componentBlockStart).match(/^__SC_EXPR_\d+__/);
+  if (!placeholderMatch?.[0]) {
+    return false;
+  }
+  const componentBlock = findPlaceholderBlock(rawCss, placeholderMatch[0]);
+  if (!componentBlock || componentBlock.start !== componentBlockStart) {
+    return false;
+  }
+  const parentSelectorBlockStart = findPreviousOpeningBraceBeforeSelector(
+    rawCss,
+    componentBlockStart,
+  );
+  if (parentSelectorBlockStart === null) {
+    return false;
+  }
+  const componentSelectorText = readSelectorBeforeBlock(rawCss, componentBlock.end);
+  if (
+    new RegExp(`^&:[a-z-]+(?:\\([^)]*\\))?\\s+${placeholderMatch[0]}$`, "i").test(
+      componentSelectorText,
+    )
+  ) {
+    return true;
+  }
+  if (componentSelectorText !== placeholderMatch[0]) {
+    return false;
+  }
+  return (
+    parseSimpleParentPseudoSelectorList(
+      readSelectorBeforeBlock(rawCss, parentSelectorBlockStart),
+    ) !== null
+  );
 }
 
 type PseudoHelperCallResult =

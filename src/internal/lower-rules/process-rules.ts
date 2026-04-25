@@ -33,11 +33,15 @@ import {
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
+  findPlaceholderBlock,
+  findPreviousOpeningBraceBeforeSelector,
   getOrCreateRelationOverrideBucket,
   makeAncestorKeyExpr,
   makeDescendantKeyExpr,
   makeCssProperty,
   makeCssPropKey,
+  parseSimpleParentPseudoSelectorList,
+  readSelectorBeforeBlock,
 } from "./shared.js";
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
@@ -642,9 +646,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const crossFileUsage = !childDecl
           ? state.crossFileSelectorsByLocal.get(otherLocal)
           : undefined;
-        // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible")
+        // Extract the actual pseudo-selector (e.g., ":hover", ":focus-visible").
+        // Stylis flattens nested grouped selectors like
+        // `&:hover, &:focus { ${Child} { ... } }` into a standalone
+        // `__SC_EXPR_N__` rule, so recover the parent pseudos from raw CSS.
         const pseudoMatch = rule.selector.match(/&(:[a-z-]+(?:\([^)]*\))?)/i);
-        const ancestorPseudo: string | null = pseudoMatch?.[1] ?? null;
+        const ancestorPseudos =
+          pseudoMatch?.[1] ??
+          (slotId !== null
+            ? extractParentPseudosForNestedComponentBlock(decl.rawCss, slotId)
+            : null);
         if (!childDecl && !crossFileUsage) {
           state.markBail();
           warnings.push({
@@ -695,11 +706,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
         // call for this overrideStyleKey. Track count to detect new entries.
         const overrideCountBefore = relationOverrides.length;
+        const firstAncestorPseudo = Array.isArray(ancestorPseudos) ? null : ancestorPseudos;
         const bucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
           decl.styleKey,
           childStyleKey,
-          ancestorPseudo,
+          firstAncestorPseudo,
           relationOverrides,
           relationOverridePseudoBuckets,
         );
@@ -729,7 +741,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               resolveThemeValue,
               resolveThemeValueFromFn,
               inlineStyleProps,
-              ancestorPseudo,
+              firstAncestorPseudo,
             );
             if (bridgeResult !== "bail") {
               continue;
@@ -744,6 +756,22 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
           });
           break;
+        }
+
+        if (Array.isArray(ancestorPseudos)) {
+          for (const pseudo of ancestorPseudos) {
+            const extraBucket = getOrCreateRelationOverrideBucket(
+              overrideStyleKey,
+              decl.styleKey,
+              childStyleKey,
+              pseudo,
+              relationOverrides,
+              relationOverridePseudoBuckets,
+            );
+            for (const key of forwardResult) {
+              extraBucket[key] = bucket[key];
+            }
+          }
         }
         continue;
       }
@@ -2366,6 +2394,36 @@ const HAS_COMPONENT_SELECTOR_STRICT_RE = /^&:has\(__SC_EXPR_\d+__\)\s*$/;
 
 /** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
 const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
+
+function extractParentPseudosForNestedComponentBlock(
+  rawCss: string | undefined,
+  slotId: number,
+): string[] | null {
+  if (!rawCss) {
+    return null;
+  }
+  const placeholder = `__SC_EXPR_${slotId}__`;
+  const componentBlock = findPlaceholderBlock(rawCss, placeholder);
+  if (!componentBlock) {
+    return null;
+  }
+
+  const componentSelector = readSelectorBeforeBlock(rawCss, componentBlock.end);
+  if (componentSelector !== placeholder) {
+    return null;
+  }
+
+  const parentSelectorBlockStart = findPreviousOpeningBraceBeforeSelector(
+    rawCss,
+    componentBlock.start,
+  );
+  if (parentSelectorBlockStart === null) {
+    return null;
+  }
+  return parseSimpleParentPseudoSelectorList(
+    readSelectorBeforeBlock(rawCss, parentSelectorBlockStart),
+  );
+}
 
 /**
  * Checks if a comma-separated selector has all parts matching the reverse
