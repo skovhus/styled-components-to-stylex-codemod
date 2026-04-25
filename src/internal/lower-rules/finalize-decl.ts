@@ -30,6 +30,7 @@ import {
   findPreviousOpeningBraceBeforeSelector,
   getOrCreateRelationOverrideBucket,
   parseSimpleParentPseudoSelectorList,
+  readPrefixSinceLastBlockBoundary,
   readSelectorBeforeBlock,
 } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
@@ -1378,6 +1379,13 @@ function isComponentBlockHandledByRuleProcessor(
   rawCss: string,
   componentBlockStart: number,
 ): boolean {
+  if (
+    /&:[a-z-]+(?:\([^)]*\))?\s+$/i.test(
+      readPrefixSinceLastBlockBoundary(rawCss, componentBlockStart),
+    )
+  ) {
+    return true;
+  }
   const placeholderMatch = rawCss.slice(componentBlockStart).match(/^__SC_EXPR_\d+__/);
   if (!placeholderMatch?.[0]) {
     return false;

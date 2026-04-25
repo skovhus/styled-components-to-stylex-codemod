@@ -63,6 +63,18 @@ export function readSelectorBeforeBlock(rawCss: string, blockStart: number): str
   return rawCss.slice(selectorStart + 1, blockStart).trim();
 }
 
+export function readPrefixSinceLastBlockBoundary(rawCss: string, position: number): string {
+  let start = position - 1;
+  while (start >= 0) {
+    const ch = rawCss[start];
+    if (ch === "{" || ch === "}") {
+      break;
+    }
+    start--;
+  }
+  return rawCss.slice(start + 1, position);
+}
+
 export function parseSimpleParentPseudoSelectorList(selectorText: string): string[] | null {
   const parts = selectorText
     .split(",")

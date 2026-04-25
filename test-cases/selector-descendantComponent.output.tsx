@@ -98,7 +98,7 @@ const styles = stylex.create({
       [stylex.when.ancestor(":focus-visible")]: `10px solid ${$colors.labelBase}`,
     },
     outlineOffset: {
-      default: 5,
+      default: null,
       [stylex.when.ancestor(":focus-visible")]: 5,
     },
   },
@@ -112,11 +112,11 @@ const styles = stylex.create({
     width: 20,
     height: 20,
     opacity: {
-      default: 1,
+      default: 0.8,
       [stylex.when.ancestor(":hover")]: 1,
     },
     transform: {
-      default: "scale(1.1)",
+      default: null,
       [stylex.when.ancestor(":hover")]: "scale(1.1)",
     },
   },
