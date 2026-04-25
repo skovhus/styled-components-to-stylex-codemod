@@ -90,7 +90,11 @@ const styles = stylex.create({
     gap: 8,
     padding: 8,
     backgroundColor: "#f5f5f5",
-    color: "#333",
+    color: {
+      default: "#333",
+      ":hover": "#111",
+      ":focus-within": "#111",
+    },
   },
   contentInContainerLink: {
     outline: {

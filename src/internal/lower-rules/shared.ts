@@ -33,6 +33,9 @@ export function findPreviousOpeningBraceBeforeSelector(
   let depth = 0;
   for (let i = position - 1; i >= 0; i--) {
     const ch = rawCss[i];
+    if (ch === ";") {
+      continue;
+    }
     if (ch === "}") {
       depth++;
       continue;
@@ -43,9 +46,6 @@ export function findPreviousOpeningBraceBeforeSelector(
         continue;
       }
       return i;
-    }
-    if (depth === 0 && ch === ";") {
-      return null;
     }
   }
   return null;

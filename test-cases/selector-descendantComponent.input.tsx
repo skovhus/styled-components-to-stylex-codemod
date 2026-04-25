@@ -89,6 +89,8 @@ const HoverFocusContainer = styled.div`
 
   &:hover,
   &:focus-within {
+    color: #111;
+
     ${MoreActionsIcon} {
       opacity: 1;
     }
