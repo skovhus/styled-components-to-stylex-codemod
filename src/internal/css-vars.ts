@@ -5,7 +5,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 
-export type CssVarCall = {
+type CssVarCall = {
   start: number;
   end: number;
   name: string;
