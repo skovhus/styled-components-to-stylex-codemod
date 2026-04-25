@@ -7,7 +7,9 @@ description: Address PR review comments following test-driven approach. Use when
 
 Address PR review comments using a test-driven approach: document the issue first, then fix it.
 
-**Requires**: GitHub CLI (`gh`) authenticated and available.
+This playbook is tool-agnostic. Use the repository's approved git/PR workflow for your environment.
+
+**Requires**: Ability to inspect PR review feedback (for example via `gh` or your environment's PR tooling).
 
 ## Process
 
@@ -93,7 +95,8 @@ If you added a new test case or modified existing ones:
 node scripts/regenerate-test-case-outputs.mts --only <case-name>
 
 # Verify the output is correct
-cat test-cases/<case-name>.output.tsx
+# Use your normal file-reading tool to inspect:
+# test-cases/<case-name>.output.tsx
 ```
 
 ### Step 6: Run Full Validation
@@ -118,12 +121,12 @@ git commit -m "fix: <description>
 
 Addresses review comment: <brief summary>
 "
-git push
+git push -u origin <branch-name>
 ```
 
 ### Step 8: Run Code Quality Refactoring
 
-After addressing review feedback, run the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) skill to:
+After addressing review feedback, run the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) playbook to:
 
 - Remove any code duplication introduced by the fix
 - Extract shared patterns if applicable

@@ -1,6 +1,15 @@
-# CLAUDE.md
+# Agent Guide
 
 This file provides guidance to AI coding agents when working with code in this repository.
+
+## Cross-Agent Compatibility
+
+- `AGENTS.md` is the primary entry point for Codex/OpenAI agents.
+- `CLAUDE.md` exists for Claude-compatible tooling and should stay in sync with this file.
+- In this repository, `AGENTS.md` is a symlink to `CLAUDE.md`, so editing `CLAUDE.md` updates both entry points.
+- Skill files live under `.claude/skills/` for historical reasons, but they are plain Markdown playbooks that any agent can read and follow directly.
+- If your environment does not support first-class "skills", open the relevant `SKILL.md` file and follow it manually.
+- When another repo document says to "use a skill", interpret that as "read the matching `SKILL.md` file and follow its process" if your agent runtime does not have a native skill system.
 
 ## Self-Improvement
 
@@ -210,6 +219,15 @@ To verify rendering programmatically, run `node scripts/verify-storybook-renderi
 ## Skills
 
 Skills are located in `.claude/skills/`.
+
+Available playbooks:
+
+- `.claude/skills/address-review-comments/SKILL.md`
+- `.claude/skills/create-pr/SKILL.md`
+- `.claude/skills/refactor-code-quality/SKILL.md`
+- `.claude/skills/stylex-authoring/SKILL.md`
+
+These files are repository documentation, not Claude-only metadata. Codex-compatible agents should read them directly when the task matches their scope.
 
 ## Plans
 
