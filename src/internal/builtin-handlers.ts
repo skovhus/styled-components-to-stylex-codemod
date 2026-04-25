@@ -22,6 +22,7 @@ import {
 import { sanitizeIdentifier } from "./utilities/string-utils.js";
 import { hasThemeAccessInArrowFn } from "./lower-rules/inline-styles.js";
 import { isMemberExpression, isSupportedAtRule } from "./lower-rules/utils.js";
+import { isCssCustomPropertyDeclaration } from "./css-custom-properties.js";
 import { styleFromSingleDeclaration } from "./builtin-handlers/css-parsing.js";
 import {
   buildResolvedHandlerResult,
@@ -80,6 +81,18 @@ export function resolveDynamicNode(
 }
 
 // --- Non-exported handler functions ---
+
+function getSingleStylexPropertyForDeclaration(property: string): string | null {
+  if (isCssCustomPropertyDeclaration(property)) {
+    return null;
+  }
+  const style = styleFromSingleDeclaration(property, "value");
+  if (!style) {
+    return null;
+  }
+  const keys = Object.keys(style);
+  return keys.length === 1 ? (keys[0] ?? null) : null;
+}
 
 function tryResolveThemeAccess(
   node: DynamicNode,
@@ -604,11 +617,16 @@ function tryResolveArrowFnCallWithSinglePropArg(
   // Try to resolve the callee through the adapter so imports can be remapped
   const adapterResolution = tryResolveCalleeViaAdapter(calleeIdent, body.callee, node, ctx);
 
+  const styleProp = getSingleStylexPropertyForDeclaration(node.css.property);
+  if (!styleProp) {
+    return null;
+  }
+
   return {
     type: "emitStyleFunction",
     nameHint: `${sanitizeIdentifier(node.css.property)}FromProp`,
     params: "value: any",
-    body: `{ ${Object.keys(styleFromSingleDeclaration(node.css.property, "value"))[0]}: value }`,
+    body: `{ ${styleProp}: value }`,
     call: propName,
     valueTransform: {
       kind: "call",
@@ -1225,6 +1243,10 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   }
 
   const cssProp = node.css.property;
+  const styleProp = getSingleStylexPropertyForDeclaration(cssProp);
+  if (!styleProp) {
+    return null;
+  }
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
 
   // If there's a default value, emit both static base style and dynamic override
@@ -1233,7 +1255,7 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
       type: "emitStyleFunctionWithDefault",
       nameHint,
       params: "value: string",
-      body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
+      body: `{ ${styleProp}: value }`,
       call: propName,
       defaultValue,
     };
@@ -1243,7 +1265,7 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
     type: "emitStyleFunction",
     nameHint,
     params: "value: string",
-    body: `{ ${Object.keys(styleFromSingleDeclaration(cssProp, "value"))[0]}: value }`,
+    body: `{ ${styleProp}: value }`,
     call: propName,
   };
 }

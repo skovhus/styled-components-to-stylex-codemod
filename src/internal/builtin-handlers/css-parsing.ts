@@ -17,9 +17,9 @@ import type { ExpressionKind } from "./types.js";
 export function styleFromSingleDeclaration(
   property: string,
   value: string | number,
-): Record<string, unknown> {
+): Record<string, unknown> | null {
   if (isCssCustomPropertyDeclaration(property)) {
-    return { [property]: value };
+    return null;
   }
   const valueRaw = typeof value === "number" ? String(value) : value;
   const decl = {

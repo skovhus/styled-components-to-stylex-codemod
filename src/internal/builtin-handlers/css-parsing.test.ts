@@ -23,7 +23,7 @@ describe("styleFromSingleDeclaration", () => {
 
   it("coerces leading-dot decimals like .5 to numbers", () => {
     const result = styleFromSingleDeclaration("opacity", ".5");
-    expect(result.opacity).toBe(0.5);
+    expect(result).toEqual({ opacity: 0.5 });
   });
 
   it("expands border shorthand to longhand properties", () => {
@@ -31,6 +31,10 @@ describe("styleFromSingleDeclaration", () => {
     expect(result).toHaveProperty("borderWidth", "1px");
     expect(result).toHaveProperty("borderStyle", "solid");
     expect(result).toHaveProperty("borderColor", "red");
+  });
+
+  it("returns null for CSS custom property declarations", () => {
+    expect(styleFromSingleDeclaration("--component-width", "100%")).toBeNull();
   });
 });
 
