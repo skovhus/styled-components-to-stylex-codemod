@@ -380,7 +380,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             pushAdjacentSiblingWarning(ctx, rule);
             break;
           }
-          const siblingAction = handleSiblingSelector(s, rule, ctx);
+          const siblingAction = handleSiblingSelector(rule, ctx);
           if (siblingAction === "break") {
             break;
           }
@@ -2554,7 +2554,6 @@ function resolveMediaAndEmitComputedKeys(
  * Returns "break" on error to bail, otherwise the caller should `continue`.
  */
 function handleSiblingSelector(
-  selector: string,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "break" | void {
