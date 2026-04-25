@@ -13,6 +13,10 @@ import type {
 import { resolveDynamicNode, type InternalHandlerContext } from "../builtin-handlers.js";
 import { extractIndexedThemeLookupInfo } from "../builtin-handlers/resolver-utils.js";
 import {
+  CSS_CUSTOM_PROPERTY_DECLARATION_WARNING,
+  isCssCustomPropertyDeclaration,
+} from "../css-custom-properties.js";
+import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   parseInterpolatedBorderStaticParts,
@@ -196,6 +200,14 @@ export function resolveTemplateLiteralBranch(
 
     for (const d of rule.declarations) {
       if (!d.property) {
+        return null;
+      }
+      if (isCssCustomPropertyDeclaration(d.property)) {
+        ctx.warnings?.push({
+          severity: "warning",
+          type: CSS_CUSTOM_PROPERTY_DECLARATION_WARNING,
+          loc: null,
+        });
         return null;
       }
       // Dynamic property names (slot placeholders in property position) are handled

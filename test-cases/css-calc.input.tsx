@@ -33,7 +33,6 @@ const ComplexCalc = styled.div`
 
 // Calc with CSS variables
 const WithVariables = styled.div`
-  --base-size: 16px;
   width: calc(var(--base-size) * 10);
   padding: calc(var(--base-size) / 2);
 `;

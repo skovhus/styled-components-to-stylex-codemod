@@ -3,6 +3,7 @@
  * Core concepts: CSS declaration block parsing, shorthand expansion, and template literal AST construction.
  */
 import type { API, JSCodeshift, TemplateLiteral } from "jscodeshift";
+import { isCssCustomPropertyDeclaration } from "../css-custom-properties.js";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
@@ -17,6 +18,9 @@ export function styleFromSingleDeclaration(
   property: string,
   value: string | number,
 ): Record<string, unknown> {
+  if (isCssCustomPropertyDeclaration(property)) {
+    return { [property]: value };
+  }
   const valueRaw = typeof value === "number" ? String(value) : value;
   const decl = {
     property,
@@ -50,6 +54,9 @@ export function parseCssDeclarationBlock(cssText: string): Record<string, unknow
       return null;
     }
     const property = m[1].trim();
+    if (isCssCustomPropertyDeclaration(property)) {
+      return null;
+    }
     const valueRaw = m[2].trim();
     const decl = {
       property,
@@ -119,6 +126,9 @@ export function parseCssDeclarationBlockWithTemplateExpr(
       return null;
     }
     const property = m[1].trim();
+    if (isCssCustomPropertyDeclaration(property)) {
+      return null;
+    }
     const valueRaw = m[2].trim();
 
     // Check if value contains template expressions

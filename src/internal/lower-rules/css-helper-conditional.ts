@@ -10,6 +10,7 @@ import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-typ
 import type { InternalHandlerContext } from "../builtin-handlers.js";
 import type { LowerRulesState } from "./state.js";
 import { resolveDynamicNode } from "../builtin-handlers.js";
+import { isCssCustomPropertyDeclaration } from "../css-custom-properties.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { parseCssTemplateToRules, type ConditionalVariant } from "./css-helper.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
@@ -481,6 +482,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
         for (const d of rule.declarations) {
           if (!d.property) {
+            return null;
+          }
+          if (isCssCustomPropertyDeclaration(d.property)) {
             return null;
           }
           // Reject property names containing slot placeholders (ternary in property position)

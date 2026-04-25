@@ -42,6 +42,7 @@ export type WarningType =
   | "Conditional `css` block: ternary expressions inside pseudo selectors are not supported"
   | "Conditional `css` block: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)"
   | "Conditional `css` block: unsupported selector"
+  | "CSS custom property declarations are not supported in StyleX"
   | "Directional border helper styles are not supported"
   | "Multi-slot border interpolation could not be resolved"
   | "Resolved border helper value could not be expanded to longhand properties"

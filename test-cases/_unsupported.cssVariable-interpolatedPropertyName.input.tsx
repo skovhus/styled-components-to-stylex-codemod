@@ -1,3 +1,4 @@
+// @expected-warning: CSS custom property declarations are not supported in StyleX
 // A styled component that sets a CSS variable whose name is provided via a
 // template interpolation (e.g. `${ITEM_MIN_WIDTH_VAR}: 100%;`). The codemod
 // resolves the identifier to its top-level static string value.

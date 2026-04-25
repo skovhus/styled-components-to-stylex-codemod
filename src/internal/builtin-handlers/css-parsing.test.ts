@@ -45,6 +45,10 @@ describe("parseCssDeclarationBlock", () => {
     expect(parseCssDeclarationBlock("invalid")).toBeNull();
   });
 
+  it("returns null for CSS custom property declarations", () => {
+    expect(parseCssDeclarationBlock("--component-width: 100%; color: red")).toBeNull();
+  });
+
   it("handles CSS values containing colons (e.g. URLs)", () => {
     const result = parseCssDeclarationBlock("background-image: url(https://example.com/img.png)");
     expect(result).toBeDefined();
@@ -122,6 +126,12 @@ describe("parseCssDeclarationBlockWithTemplateExpr", () => {
     for (const shorthand of UNSUPPORTED_SHORTHANDS_FOR_TEMPLATE_EXPR) {
       expect(parseCssDeclarationBlockWithTemplateExpr(`${shorthand}: \${spacing}`, api)).toBeNull();
     }
+  });
+
+  it("returns null for CSS custom property declarations with template expressions", () => {
+    expect(
+      parseCssDeclarationBlockWithTemplateExpr("--component-width: ${width}px", api),
+    ).toBeNull();
   });
 
   it("handles mixed static and template values", () => {

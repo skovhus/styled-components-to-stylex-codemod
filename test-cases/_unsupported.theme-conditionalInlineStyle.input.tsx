@@ -1,3 +1,4 @@
+// @expected-warning: CSS custom property declarations are not supported in StyleX
 import * as React from "react";
 import styled from "styled-components";
 

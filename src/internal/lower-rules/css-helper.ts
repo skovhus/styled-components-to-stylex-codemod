@@ -11,6 +11,10 @@ import type {
   ResolveValueContext,
   ResolveValueResult,
 } from "../../adapter.js";
+import {
+  CSS_CUSTOM_PROPERTY_DECLARATION_WARNING,
+  isCssCustomPropertyDeclaration,
+} from "../css-custom-properties.js";
 import { normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
@@ -454,6 +458,9 @@ export function createCssHelperResolver(args: {
       for (const d of rule.declarations) {
         if (!d.property) {
           return bail("Conditional `css` block: missing CSS property name");
+        }
+        if (isCssCustomPropertyDeclaration(d.property)) {
+          return bail(CSS_CUSTOM_PROPERTY_DECLARATION_WARNING, { property: d.property });
         }
         if (d.value.kind === "static") {
           // Expand animation shorthand referencing inline @keyframes

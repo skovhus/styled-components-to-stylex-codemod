@@ -1,3 +1,4 @@
+// @expected-warning: CSS custom property declarations are not supported in StyleX
 import styled from "styled-components";
 
 // A wrapper that conditionally sets a CSS custom property based on prop

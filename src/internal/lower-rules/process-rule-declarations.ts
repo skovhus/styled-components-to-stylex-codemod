@@ -4,6 +4,10 @@
  */
 import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
+import {
+  CSS_CUSTOM_PROPERTY_DECLARATION_WARNING,
+  isCssCustomPropertyDeclaration,
+} from "../css-custom-properties.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
@@ -39,12 +43,9 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
 
   for (const d of rule.declarations) {
     // Dynamic property names (slot placeholders in property position) such as
-    // `${CSS_VAR}: 100%;`. Try to resolve every placeholder in the property
-    // name to a static string (e.g. via a top-level `const X = "--var"`). If
-    // every slot resolves to a CSS-variable-compatible literal, substitute the
-    // resolved name and continue processing as a regular declaration. Bail
-    // otherwise — emitting the raw `__SC_EXPR_N__` placeholder produces broken
-    // StyleX output.
+    // `${CSS_VAR}: 100%;` need to be resolved before we can decide whether the
+    // declaration is safe. Unresolved property slots would otherwise leak raw
+    // `__SC_EXPR_N__` placeholders into generated StyleX.
     if (d.property && d.property.includes("__SC_EXPR_")) {
       const resolvedProperty = resolveInterpolatedPropertyName(d.property, ctx);
       if (resolvedProperty === null) {
@@ -52,6 +53,11 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         break;
       }
       d.property = resolvedProperty;
+    }
+
+    if (isCssCustomPropertyDeclaration(d.property)) {
+      ctx.state.bailUnsupported(ctx.decl, CSS_CUSTOM_PROPERTY_DECLARATION_WARNING);
+      break;
     }
 
     if (d.value.kind === "interpolated") {
