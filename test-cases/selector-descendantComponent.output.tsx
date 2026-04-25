@@ -35,6 +35,12 @@ export const App = () => (
     <div sx={stylex.defaultMarker()}>
       <div sx={[styles.shadowBox, styles.shadowBoxInShadowContainer]} />
     </div>
+    <br />
+    <br />
+    <div tabIndex={0} sx={[styles.hoverFocusContainer, stylex.defaultMarker()]}>
+      Grouped parent pseudos
+      <span sx={[styles.moreActionsIcon, styles.moreActionsIconInHoverFocusContainer]} />
+    </div>
   </div>
 );
 
@@ -71,6 +77,25 @@ const styles = stylex.create({
     borderColor: "initial",
     borderRadius: 4,
   },
+  moreActionsIcon: {
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    backgroundColor: "currentColor",
+    borderRadius: 999,
+  },
+  hoverFocusContainer: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    backgroundColor: "#f5f5f5",
+    color: {
+      default: "#333",
+      ":hover": "#111",
+      ":focus-within": "#111",
+    },
+  },
   contentInContainerLink: {
     outline: {
       default: null,
@@ -97,6 +122,14 @@ const styles = stylex.create({
     transform: {
       default: null,
       [stylex.when.ancestor(":hover")]: "scale(1.1)",
+    },
+  },
+  moreActionsIconInHoverFocusContainer: {
+    transform: "scale(0.75)",
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover")]: 1,
+      [stylex.when.ancestor(":focus-within")]: 1,
     },
   },
 });

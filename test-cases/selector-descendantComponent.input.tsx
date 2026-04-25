@@ -66,6 +66,37 @@ const Button = styled.button`
   }
 `;
 
+const MoreActionsIcon = styled.span`
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  border-radius: 999px;
+`;
+
+const HoverFocusContainer = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  color: #333;
+
+  ${MoreActionsIcon} {
+    transform: scale(0.75);
+    opacity: 0;
+  }
+
+  &:hover,
+  &:focus-within {
+    color: #111;
+
+    ${MoreActionsIcon} {
+      opacity: 1;
+    }
+  }
+`;
+
 export const App = () => (
   <div>
     <Button>
@@ -82,5 +113,11 @@ export const App = () => (
     <ShadowContainer>
       <ShadowBox />
     </ShadowContainer>
+    <br />
+    <br />
+    <HoverFocusContainer tabIndex={0}>
+      Grouped parent pseudos
+      <MoreActionsIcon />
+    </HoverFocusContainer>
   </div>
 );

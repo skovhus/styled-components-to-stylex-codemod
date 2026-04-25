@@ -46,7 +46,8 @@ export const finalizeRelationOverrides = (args: {
   const isExpressionNode = (v: unknown): v is ExpressionKind => isAstNode(v);
 
   for (const [overrideKey, pseudoBuckets] of relationOverridePseudoBuckets.entries()) {
-    const baseBucket = pseudoBuckets.get(null) ?? {};
+    const explicitBaseBucket = pseudoBuckets.get(null);
+    const baseBucket = explicitBaseBucket ?? {};
     const props: any[] = [];
     const markerVarName = overrideToMarker.get(overrideKey);
 
@@ -54,14 +55,10 @@ export const finalizeRelationOverrides = (args: {
     // for fallback base values. This handles:
     // 1. CSS ordering: reverse selector rule processed before base declaration
     // 2. Composed mixins: base value comes from a css helper, not the child's own style
-    const childKeys = overrideToChildKeys.get(overrideKey) ?? [];
-    const childStyleObjects: Array<Record<string, unknown>> = [];
-    for (const key of childKeys) {
-      const obj = resolvedStyleObjects.get(key);
-      if (obj && typeof obj === "object" && !isAstNode(obj)) {
-        childStyleObjects.push(obj as Record<string, unknown>);
-      }
-    }
+    const childStyleObjects = buildChildStyleObjectList(
+      overrideToChildKeys.get(overrideKey) ?? [],
+      resolvedStyleObjects,
+    );
 
     // Collect all property names across all pseudo buckets
     const allPropNames = new Set<string>();
@@ -158,4 +155,18 @@ function extractScalarDefault(value: unknown): unknown {
     return map.default;
   }
   return value;
+}
+
+function buildChildStyleObjectList(
+  childKeys: string[],
+  resolvedStyleObjects: Map<string, unknown>,
+): Array<Record<string, unknown>> {
+  const childStyleObjects: Array<Record<string, unknown>> = [];
+  for (const key of childKeys) {
+    const obj = resolvedStyleObjects.get(key);
+    if (obj && typeof obj === "object" && !isAstNode(obj)) {
+      childStyleObjects.push(obj as Record<string, unknown>);
+    }
+  }
+  return childStyleObjects;
 }
