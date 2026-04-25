@@ -4,7 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import { resolve as pathResolve } from "node:path";
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
@@ -436,6 +436,41 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     return { className: foundClassName, style: foundStyle, ref: foundRef };
   };
 
+  // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
+  // is statically enumerable, each usage site stays on the inline JSX rewrite path,
+  // and no caller-supplied merge/ref behavior requires a wrapper component.
+  for (const decl of styledDecls) {
+    if (!decl.adjacentSiblingStyleKey) {
+      continue;
+    }
+
+    const { className, style, ref } = getJsxAttributeUsage(decl.localName);
+    const adjacentSupported =
+      decl.base.kind === "intrinsic" &&
+      !decl.isExported &&
+      !decl.needsWrapperComponent &&
+      !className &&
+      !style &&
+      !ref &&
+      !hasSpreadInJsx(root, j, decl.localName) &&
+      hasOnlyProvableAdjacentSiblingUsages(root, j, decl.localName);
+
+    if (adjacentSupported) {
+      continue;
+    }
+
+    if (ctx.resolvedStyleObjects) {
+      ctx.resolvedStyleObjects.delete(decl.adjacentSiblingStyleKey);
+    }
+    decl.adjacentSiblingStyleKey = undefined;
+    ctx.warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: adjacent sibling combinator",
+      loc: decl.adjacentSiblingLoc,
+    });
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // Pre-analyze inline style props at JSX call sites to determine if they can be promoted
   // to static/dynamic stylex.create entries (avoiding wrapper components and mergedSx).
   analyzePromotableStyleProps(
@@ -502,6 +537,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     const { ref } = getJsxAttributeUsage(decl.localName);
     if (ref) {
+      continue;
+    }
+    if (decl.adjacentSiblingStyleKey) {
       continue;
     }
     if (usageCount > INLINE_USAGE_THRESHOLD) {
@@ -3043,6 +3081,99 @@ function collectReservedStyleKeys(
     }
   }
   return keys;
+}
+
+function hasOnlyProvableAdjacentSiblingUsages(
+  root: TransformContext["root"],
+  j: JSCodeshift,
+  componentName: string,
+): boolean {
+  let hasUsage = false;
+  let isSafe = true;
+
+  const inspectChildren = (children: unknown[]): void => {
+    let previousWasTarget = false;
+
+    for (const child of children) {
+      if (!isSafe) {
+        return;
+      }
+      const childState = classifyAdjacentSiblingChild(child, componentName);
+      if (childState.kind === "dynamic") {
+        isSafe = false;
+        return;
+      }
+      if (childState.kind === "target") {
+        hasUsage = true;
+        if (!previousWasTarget) {
+          previousWasTarget = true;
+          continue;
+        }
+        previousWasTarget = true;
+        continue;
+      }
+      if (childState.kind === "other") {
+        previousWasTarget = false;
+      }
+    }
+  };
+
+  root.find(j.JSXElement).forEach((path: any) => {
+    if (!isSafe) {
+      return;
+    }
+    inspectChildren(path.node.children ?? []);
+  });
+
+  root.find(j.JSXFragment).forEach((path: any) => {
+    if (!isSafe) {
+      return;
+    }
+    inspectChildren(path.node.children ?? []);
+  });
+
+  return hasUsage && isSafe;
+}
+
+function classifyAdjacentSiblingChild(
+  child: unknown,
+  componentName: string,
+): { kind: "target" | "other" | "dynamic" } {
+  if (!child || typeof child !== "object") {
+    return { kind: "other" };
+  }
+
+  const node = child as {
+    type?: string;
+    openingElement?: { name?: unknown };
+    name?: unknown;
+    expression?: { type?: string };
+  };
+
+  if (node.type === "JSXText") {
+    return /\S/.test((node as { value?: string }).value ?? "")
+      ? { kind: "other" }
+      : { kind: "other" };
+  }
+
+  if (node.type === "JSXElement") {
+    const name = getRootJsxIdentifierName(node.openingElement?.name);
+    return name === componentName ? { kind: "target" } : { kind: "other" };
+  }
+
+  if (node.type === "JSXFragment") {
+    return { kind: "dynamic" };
+  }
+
+  if (node.type === "JSXExpressionContainer") {
+    const exprType = node.expression?.type;
+    if (exprType === "Literal" || exprType === "StringLiteral" || exprType === "TemplateLiteral") {
+      return { kind: "other" };
+    }
+    return { kind: "dynamic" };
+  }
+
+  return { kind: "other" };
 }
 
 function isPlainStyleObject(value: unknown): value is Record<string, unknown> {

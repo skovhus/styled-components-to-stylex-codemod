@@ -113,6 +113,12 @@ export class TransformContext {
   parentsNeedingDefaultMarker?: Set<string>;
   /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
   ancestorAttrsByStyleKey?: Map<string, Set<string>>;
+  /** Adjacent-sibling selectors (`& + &`) deferred for same-file JSX adjacency analysis. */
+  deferredAdjacentSiblingWarnings?: Array<{
+    localName: string;
+    overrideStyleKey: string;
+    loc?: { line: number; column: number } | null;
+  }>;
   /** Sidecar .stylex.ts files (defineMarker declarations), populated by emitStylesStep */
   sidecarFiles?: import("./transform-types.js").SidecarFile[];
   /** Bridge components emitted for unconverted consumer selectors. */

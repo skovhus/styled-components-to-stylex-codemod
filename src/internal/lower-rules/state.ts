@@ -22,6 +22,8 @@ export type RelationOverride = {
   parentStyleKey: string;
   childStyleKey: string;
   overrideStyleKey: string;
+  /** Override applied only when the child is statically proven to be adjacent to a same-style sibling. */
+  adjacentOnly?: boolean;
   /** Additional style keys (from composed mixins) to search for base values */
   childExtraStyleKeys?: string[];
   /** When true, this override involves a cross-file component and uses defineMarker() */

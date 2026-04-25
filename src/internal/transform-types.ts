@@ -224,6 +224,13 @@ export type StyledDecl = {
   localName: string;
   base: { kind: "intrinsic"; tagName: string } | { kind: "component"; ident: string };
   styleKey: string;
+  /**
+   * Style key for a same-file self-adjacent sibling override (`& + &`) that can be
+   * applied at statically-provable JSX call sites.
+   */
+  adjacentSiblingStyleKey?: string;
+  /** Best-effort source location for the `& + &` selector used for bail warnings. */
+  adjacentSiblingLoc?: { line: number; column: number };
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
   /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */
@@ -549,7 +556,6 @@ export type StyledDecl = {
     /** When true, this entry should be placed after variant conditional styles to preserve CSS cascade order. */
     afterVariants?: boolean;
   }>;
-
   /**
    * Extra className expressions from CSS modules to merge into the rendered element's className.
    * These are combined with any static className from `.attrs()` and bridge classes.

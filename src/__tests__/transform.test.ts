@@ -669,7 +669,7 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(7);
   });
 
-  it("should bail on & + & because adjacent sibling is not lossless", () => {
+  it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";
 
@@ -680,7 +680,15 @@ const Thing = styled.div\`
   }
 \`;
 
-export const App = () => <Thing />;
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+    <span>Spacer</span>
+    <Thing>Third</Thing>
+    <Thing>Fourth</Thing>
+  </>
+);
 `;
 
     const result = transformWithWarnings(
@@ -689,12 +697,9 @@ export const App = () => <Thing />;
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).toBeNull();
-    expect(result.warnings).toEqual([
-      expect.objectContaining({
-        type: "Unsupported selector: adjacent sibling combinator",
-      }),
-    ]);
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
   });
 
   it("should bail on cross-component + sibling selectors because adjacent sibling is not lossless", () => {

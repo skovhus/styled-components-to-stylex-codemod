@@ -374,11 +374,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
         // General-sibling selectors (`~`) can map to siblingBefore(). Adjacent sibling
-        // selectors (`+`) are not lossless, so they must bail.
+        // selectors (`+`) are only supported when later JSX analysis can prove exact
+        // same-file adjacency for every use site.
         if (/^&\s*[+~]\s*&$/.test(s)) {
           if (/\+/.test(s)) {
-            pushAdjacentSiblingWarning(ctx, rule);
-            break;
+            const adjacentAction = handleAdjacentSiblingSelector(rule, ctx);
+            if (adjacentAction === "break") {
+              break;
+            }
+            continue;
           }
           const siblingAction = handleSiblingSelector(rule, ctx);
           if (siblingAction === "break") {
@@ -765,7 +769,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const combinator = crossComponentSiblingMatch[2] as "+" | "~";
 
         if (combinator === "+") {
-          pushAdjacentSiblingWarning(ctx, rule);
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: adjacent sibling combinator",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
           break;
         }
 
@@ -2614,17 +2623,42 @@ function handleSiblingSelector(
   );
 }
 
-function pushAdjacentSiblingWarning(
-  ctx: Pick<DeclProcessingState, "state" | "decl">,
+/**
+ * Handles a self-referencing adjacent sibling selector (`& + &`) by capturing the
+ * declarations into a dedicated override style key. Later JSX analysis decides whether
+ * every same-file usage site is provably adjacent; if not, the transform bails.
+ */
+function handleAdjacentSiblingSelector(
   rule: DeclProcessingState["decl"]["rules"][number],
-): void {
-  const { state, decl } = ctx;
-  state.markBail();
-  state.warnings.push({
-    severity: "warning",
-    type: "Unsupported selector: adjacent sibling combinator",
-    loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-  });
+  ctx: DeclProcessingState,
+): "break" | void {
+  const { state, decl, extraStyleObjects } = ctx;
+  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+  const overrideStyleKey = `${decl.styleKey}AdjacentSibling`;
+  const bucket = extraStyleObjects.get(overrideStyleKey) ?? {};
+  extraStyleObjects.set(overrideStyleKey, bucket);
+
+  const result = processDeclarationsIntoBucket(
+    rule,
+    bucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (result === "bail") {
+    state.markBail();
+    state.warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  decl.adjacentSiblingStyleKey = overrideStyleKey;
+  decl.adjacentSiblingLoc = computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector);
 }
 
 /**
