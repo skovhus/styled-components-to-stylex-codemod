@@ -7,7 +7,9 @@ description: Create pull requests. Use when opening PRs, writing PR descriptions
 
 Create pull requests.
 
-**Requires**: GitHub CLI (`gh`) authenticated and available.
+**Requires**: Git access and whatever PR creation mechanism your environment supports.
+
+If your agent runtime provides a dedicated PR tool, use that instead of shelling out to `gh pr create`. Treat this file as a workflow checklist, not a requirement to use a specific tool.
 
 ## Process
 
@@ -21,10 +23,10 @@ git branch --show-current
 
 ```bash
 # Create and switch to a feature branch
-git checkout -b feat/<descriptive-name>
+git checkout -b <feature-branch-name>
 ```
 
-Use a descriptive branch name like:
+Use your environment's branch naming policy. If the repo or runtime specifies a required prefix/suffix, follow that instead of inventing a new pattern. Otherwise, use a descriptive branch name such as:
 
 - `feat/add-user-authentication`
 - `fix/null-pointer-in-parser`
@@ -104,12 +106,13 @@ Follow this structure:
 
 ### Step 6: Create the PR
 
-```bash
-gh pr create --title "<type>(<scope>): <description>" --body "$(cat <<'EOF'
-<description body here>
-EOF
-)"
-```
+Create the PR using your environment's approved mechanism:
+
+- dedicated PR tool in the agent runtime, if available
+- repository automation that registers/updates PRs for the current branch
+- `gh pr create` only when shell-based PR creation is actually supported and allowed
+
+Regardless of mechanism, use the same title/body guidance from this skill and make sure the branch has already been pushed.
 
 **Title format** follows commit conventions:
 
