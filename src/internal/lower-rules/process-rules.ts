@@ -373,9 +373,13 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Self-referencing sibling combinators (`& + &`, `& ~ &`) are supported via
-        // stylex.when.siblingBefore(). Non-self-referencing patterns still bail.
+        // General-sibling selectors (`~`) can map to siblingBefore(). Adjacent sibling
+        // selectors (`+`) are not lossless, so they must bail.
         if (/^&\s*[+~]\s*&$/.test(s)) {
+          if (/\+/.test(s)) {
+            pushAdjacentSiblingWarning(ctx, rule);
+            break;
+          }
           const siblingAction = handleSiblingSelector(s, rule, ctx);
           if (siblingAction === "break") {
             break;
@@ -385,7 +389,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         state.markBail();
         warnings.push({
           severity: "warning",
-          type: "Unsupported selector: sibling combinator",
+          type: /\+/.test(s)
+            ? "Unsupported selector: adjacent sibling combinator"
+            : "Unsupported selector: sibling combinator",
           loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
         });
         break;
@@ -758,6 +764,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const siblingPseudo = `:${crossComponentSiblingMatch[1]}`;
         const combinator = crossComponentSiblingMatch[2] as "+" | "~";
 
+        if (combinator === "+") {
+          pushAdjacentSiblingWarning(ctx, rule);
+          break;
+        }
+
         const referencedDecl = declByLocalName.get(otherLocal);
         if (!referencedDecl) {
           // Cross-file cross-component sibling selectors are not yet supported:
@@ -772,9 +783,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-
-        // Track adjacent combinator so we can annotate the emitted computed keys
-        const isAdjacentCombinator = combinator === "+";
 
         // Register marker for the referenced component
         const refMarkerVarName = registerReferencedMarker(
@@ -821,12 +829,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           rule,
           ctx,
           "Unsupported selector: computed media query inside cross-component sibling selector",
-          isAdjacentCombinator
-            ? {
-                leadingComment:
-                  "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-              }
-            : undefined,
         );
         if (emitResult === "break") {
           break;
@@ -2535,15 +2537,8 @@ function resolveMediaAndEmitComputedKeys(
 }
 
 /**
- * Handles a self-referencing sibling selector (`& + &` or `& ~ &`) by processing
+ * Handles a self-referencing general sibling selector (`& ~ &`) by processing
  * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)', Marker)`.
- *
- * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
- * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
- * (`~`) which matches *any* preceding sibling. This means the styles may apply
- * even when a non-matching element sits between two instances of the component.
- * In practice this rarely matters because `& + &` is almost always used with
- * consecutive homogeneous lists. For `& ~ &`, the mapping is semantically exact.
  *
  * Uses per-component `defineMarker()` (emitted in a `.stylex` sidecar file) so that
  * sibling matching is component-scoped. Without a scoped marker, `defaultMarker()` is
@@ -2566,9 +2561,6 @@ function handleSiblingSelector(
   const { state, decl } = ctx;
   const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
     state;
-
-  // Track adjacent combinator so we can annotate the emitted computed keys
-  const isAdjacent = /\+/.test(selector);
 
   // Add to ancestorSelectorParents so the marker is injected into stylex.props() calls.
   // Also add to siblingMarkerParents to distinguish from forward/reverse selectors —
@@ -2620,13 +2612,20 @@ function handleSiblingSelector(
     rule,
     ctx,
     "Unsupported selector: computed media query inside sibling selector",
-    isAdjacent
-      ? {
-          leadingComment:
-            "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-        }
-      : undefined,
   );
+}
+
+function pushAdjacentSiblingWarning(
+  ctx: Pick<DeclProcessingState, "state" | "decl">,
+  rule: DeclProcessingState["decl"]["rules"][number],
+): void {
+  const { state, decl } = ctx;
+  state.markBail();
+  state.warnings.push({
+    severity: "warning",
+    type: "Unsupported selector: adjacent sibling combinator",
+    loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+  });
 }
 
 /**

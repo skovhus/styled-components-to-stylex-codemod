@@ -5,7 +5,7 @@ const Thing = styled.div`
   padding: 8px;
 
   @media (min-width: 768px) {
-    & + & {
+    & ~ & {
       margin-top: 16px;
     }
   }

@@ -29,7 +29,7 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "papayawhip",
   },
-  // ${Link}:focus-visible + & uses a sibling combinator between the
+  // ${Link}:focus-visible ~ & uses a sibling combinator between the
   // component and self. This is NOT an ancestor relationship, so
   // stylex.when.ancestor() would produce incorrect semantics.
   badge: {
@@ -37,12 +37,11 @@ const styles = stylex.create({
     paddingInline: 8,
     color: {
       default: "gray",
-      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
       [stylex.when.siblingBefore(":focus-visible", LinkMarker)]: "blue",
     },
     backgroundColor: {
       default: null,
-      // TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.
+
       [stylex.when.siblingBefore(":hover", LinkMarker)]: {
         default: null,
         "@media (min-width: 768px)": "lightyellow",

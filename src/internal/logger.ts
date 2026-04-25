@@ -78,6 +78,7 @@ export type WarningType =
   | "Unsupported selector: class selector"
   | "Unsupported selector: comma-separated selectors must all be simple pseudos or pseudo-elements"
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
+  | "Unsupported selector: adjacent sibling combinator"
   | "Unsupported selector: descendant/child/sibling selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"

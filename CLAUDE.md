@@ -22,6 +22,7 @@ pnpm check       # Run lint + tsc + test
 
 - src folder code should never depend on test-cases or test-case logic
 - transformations should be safe and lossless, bail if we cannot preserve the semantics of the input
+- adjacent sibling selectors (`+`) are not representable losslessly with current StyleX APIs; bail instead of approximating them as general siblings (`~`)
 - always run "pnpm run ci" to validate changes
 - when fixing bugs or addressing review comments, add test coverage to document the regression and prevent future breakage. **Prefer extending an existing test case** over creating a new one — only create a new test case when no existing case covers the same category/feature area
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
