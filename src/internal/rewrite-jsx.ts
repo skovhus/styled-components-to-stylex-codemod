@@ -3,6 +3,7 @@
  * Core concepts: relation overrides (descendant/ancestor) and stylex.props cleanup.
  */
 import type { Collection } from "jscodeshift";
+import type { LocalElementOverrideCandidate, StyledDecl } from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
 import { cleanupEmptyStyleReferences } from "./post-process-empty-style-references.js";
 import { cleanupPostProcessImports } from "./post-process-imports.js";
@@ -18,6 +19,8 @@ export function postProcessTransformedAst(args: {
   j: any;
   relationOverrides: RelationOverride[];
   ancestorSelectorParents: Set<string>;
+  styledDecls?: StyledDecl[];
+  localElementOverridesByParent?: Map<string, LocalElementOverrideCandidate[]>;
   /** Map from component local name to its style key (for ancestor selector matching) */
   componentNameToStyleKey?: Map<string, string>;
   /** Set of style keys that have empty style objects (should be excluded from stylex.props calls) */
@@ -41,6 +44,8 @@ export function postProcessTransformedAst(args: {
     j,
     relationOverrides,
     ancestorSelectorParents,
+    styledDecls,
+    localElementOverridesByParent = new Map<string, LocalElementOverrideCandidate[]>(),
     componentNameToStyleKey,
     emptyStyleKeys,
     preserveReactImport,
@@ -68,6 +73,7 @@ export function postProcessTransformedAst(args: {
   if (
     relationOverrides.length > 0 ||
     ancestorSelectorParents.size > 0 ||
+    localElementOverridesByParent.size > 0 ||
     (ancestorAttrsByStyleKey && ancestorAttrsByStyleKey.size > 0)
   ) {
     // IMPORTANT: Do not reuse the same AST node instance across multiple insertion points.
@@ -201,21 +207,28 @@ export function postProcessTransformedAst(args: {
     for (const o of relationOverrides) {
       overridesByChild.set(o.childStyleKey, [...(overridesByChild.get(o.childStyleKey) ?? []), o]);
     }
+    const componentNameToDecl = new Map<string, StyledDecl>();
+    for (const decl of styledDecls ?? []) {
+      componentNameToDecl.set(decl.localName, decl);
+    }
+
+    const ancestorEntryHasParentKey = (ancestor: any, parentStyleKey: string): boolean => {
+      const markerVarName = crossFileMarkers?.get(parentStyleKey);
+      return (
+        (ancestor?.call && hasStyleKeyArg(ancestor.call, parentStyleKey)) ||
+        (ancestor?.sxAttr &&
+          getSxAttrArgs(ancestor.sxAttr.value.expression).some((arg: any) =>
+            isStyleKeyRef(arg, parentStyleKey),
+          )) ||
+        (ancestor?.elementStyleKey && ancestor.elementStyleKey === parentStyleKey) ||
+        (markerVarName && ancestor?.markerVarName === markerVarName)
+      );
+    };
 
     /** Check if any ancestor in the JSX tree contains the given parent style key. */
     const ancestorHasParentKey = (ancestors: any[], parentStyleKey: string): boolean => {
       // For cross-file reverse selectors, the ancestor has a marker variable instead of styles.X
-      const markerVarName = crossFileMarkers?.get(parentStyleKey);
-      return ancestors.some(
-        (a: any) =>
-          (a?.call && hasStyleKeyArg(a.call, parentStyleKey)) ||
-          (a?.sxAttr &&
-            getSxAttrArgs(a.sxAttr.value.expression).some((arg: any) =>
-              isStyleKeyRef(arg, parentStyleKey),
-            )) ||
-          (a?.elementStyleKey && a.elementStyleKey === parentStyleKey) ||
-          (markerVarName && a?.markerVarName === markerVarName),
-      );
+      return ancestors.some((a: any) => ancestorEntryHasParentKey(a, parentStyleKey));
     };
 
     const directParentHasParentKey = (ancestors: any[], parentStyleKey: string): boolean => {
@@ -223,14 +236,7 @@ export function postProcessTransformedAst(args: {
       if (!directParent) {
         return false;
       }
-      return (
-        (directParent.call && hasStyleKeyArg(directParent.call, parentStyleKey)) ||
-        (directParent.sxAttr &&
-          getSxAttrArgs(directParent.sxAttr.value.expression).some((arg: any) =>
-            isStyleKeyRef(arg, parentStyleKey),
-          )) ||
-        directParent.elementStyleKey === parentStyleKey
-      );
+      return ancestorEntryHasParentKey(directParent, parentStyleKey);
     };
 
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
@@ -248,6 +254,8 @@ export function postProcessTransformedAst(args: {
       const elementName = getJsxElementName(opening?.name, { allowMemberExpression: false });
       // Get the style key for this element if it's a known component
       const elementStyleKey = elementName ? componentNameToStyleKey?.get(elementName) : null;
+      const originalStyledName = (opening as { __styledComponentLocalName?: string })
+        .__styledComponentLocalName;
 
       // Process ancestor selector parents — works with both stylex.props() and sx={}
       if (call) {
@@ -323,6 +331,60 @@ export function postProcessTransformedAst(args: {
               call.arguments = [...(call.arguments ?? []), overrideArg];
             } else if (sxAttr) {
               addArgsToSxAttr(sxAttr, [overrideArg]);
+            }
+            changed = true;
+          }
+        }
+      }
+
+      const nearestAncestor = ancestors[ancestors.length - 1];
+      const targetId = getLocalElementTargetId(opening, elementName ?? null, originalStyledName);
+      if (targetId || localElementOverridesByParent.size > 0) {
+        for (const [parentStyleKey, localOverrides] of localElementOverridesByParent.entries()) {
+          if (!ancestorHasParentKey(ancestors, parentStyleKey)) {
+            continue;
+          }
+          for (const override of localOverrides) {
+            if (
+              override.relation === "child" &&
+              (!nearestAncestor || !ancestorEntryHasParentKey(nearestAncestor, parentStyleKey))
+            ) {
+              continue;
+            }
+            const resolvedTargetId = resolveLocalElementTargetForNode({
+              targetId,
+              override,
+              attrs,
+              opening,
+              componentNameToDecl,
+              hasStyleKeyInAttrs,
+            });
+            if (!resolvedTargetId) {
+              continue;
+            }
+            const localStyleKey = override.styleKeysByTargetId?.[resolvedTargetId];
+            if (!localStyleKey) {
+              continue;
+            }
+            const alreadyHas = call
+              ? hasStyleKeyArg(call, localStyleKey)
+              : hasStyleKeyInAttrs(attrs, localStyleKey);
+            if (alreadyHas) {
+              continue;
+            }
+            const overrideArg = j.memberExpression(
+              j.identifier(stylesIdentifier),
+              j.identifier(localStyleKey),
+            );
+            if (call) {
+              call.arguments = [...(call.arguments ?? []), overrideArg];
+            } else if (sxAttr) {
+              addArgsToSxAttr(sxAttr, [overrideArg]);
+            } else {
+              opening.attributes = [
+                ...attrs,
+                j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(overrideArg)),
+              ];
             }
             changed = true;
           }
@@ -619,4 +681,55 @@ function appendToMapList<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   } else {
     map.set(key, [value]);
   }
+}
+
+function getLocalElementTargetId(
+  opening: any,
+  _elementName: string | null,
+  originalStyledName?: string,
+): string | null {
+  if (!opening?.name) {
+    return null;
+  }
+  if (originalStyledName) {
+    return `styled:${originalStyledName}`;
+  }
+  if (opening.name.type === "JSXIdentifier" && /^[a-z]/.test(opening.name.name)) {
+    return `intrinsic:${opening.name.name}`;
+  }
+  return null;
+}
+
+function resolveLocalElementTargetForNode(args: {
+  targetId: string | null;
+  override: LocalElementOverrideCandidate;
+  attrs: any[];
+  opening: any;
+  componentNameToDecl: Map<string, StyledDecl>;
+  hasStyleKeyInAttrs: (attrs: any[], key: string) => boolean;
+}): string | null {
+  const { targetId, override, attrs, opening, componentNameToDecl, hasStyleKeyInAttrs } = args;
+  if (targetId && override.styleKeysByTargetId?.[targetId]) {
+    return targetId;
+  }
+
+  for (const candidateId of Object.keys(override.styleKeysByTargetId ?? {})) {
+    if (!candidateId.startsWith("styled:")) {
+      continue;
+    }
+    const localName = candidateId.slice("styled:".length);
+    const decl = componentNameToDecl.get(localName);
+    if (decl && hasStyleKeyInAttrs(attrs, decl.styleKey)) {
+      return candidateId;
+    }
+  }
+
+  if (opening?.name?.type === "JSXIdentifier" && /^[a-z]/.test(opening.name.name)) {
+    const intrinsicId = `intrinsic:${opening.name.name}`;
+    if (override.styleKeysByTargetId?.[intrinsicId]) {
+      return intrinsicId;
+    }
+  }
+
+  return null;
 }

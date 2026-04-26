@@ -280,6 +280,37 @@ export type CallSiteCombinedStyle = {
   styles: Record<string, unknown>;
 };
 
+export type LocalElementOverrideRelation = "child" | "descendant";
+
+export type LocalElementOverrideCandidate = {
+  /**
+   * Style key for a same-file callsite-local element override candidate.
+   * Added to concrete matching child JSX nodes only after static topology proof succeeds.
+   */
+  styleKey: string;
+  /** The intrinsic tag targeted by the selector (e.g. `svg`, `button`). */
+  tagName: string;
+  /** Whether the original selector was a direct-child (`>`) or descendant (` `) selector. */
+  relation: LocalElementOverrideRelation;
+  /** Optional ancestor pseudo (e.g. `:hover` from `&:hover svg`). */
+  ancestorPseudo: string | null;
+  /** Optional child pseudo/normalized attribute pseudo (e.g. `:disabled`). */
+  childPseudo: string | null;
+  /**
+   * Per-pseudo declaration buckets keyed by ancestor/child pseudo.
+   * `null` is the unconditional bucket; non-null keys are finalized later into
+   * either string-literal child pseudos or `stylex.when.ancestor()` entries.
+   */
+  pseudoBuckets: Map<string | null, Record<string, unknown>>;
+  /**
+   * Concrete target-id → emitted style key, populated after same-file JSX proof succeeds.
+   * Target IDs use the format `styled:<LocalName>` or `intrinsic:<tagName>`.
+   */
+  styleKeysByTargetId?: Record<string, string>;
+  /** Best-effort source location for bail warnings tied to this selector. */
+  loc?: { line: number; column: number };
+};
+
 /**
  * Filters out declarations that couldn't be lowered in `lowerRulesStep`. Downstream
  * steps use this to skip emission/rewrite for decls that must remain in the source
@@ -318,6 +349,11 @@ export type StyledDecl = {
   adjacentSiblingStyleKey?: string;
   /** Best-effort source location for the `& + &` selector used for bail warnings. */
   adjacentSiblingLoc?: { line: number; column: number };
+  /**
+   * Same-file element-selector override candidates (`svg`, `> button`, `&:hover svg`, etc.)
+   * that are only emitted when every JSX usage is statically provable.
+   */
+  localElementOverrides?: LocalElementOverrideCandidate[];
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
   /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */

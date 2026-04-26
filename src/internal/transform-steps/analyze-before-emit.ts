@@ -11,7 +11,11 @@ import {
   returnResult,
   type StepResult,
 } from "../transform-types.js";
-import type { StyledDecl } from "../transform-types.js";
+import type {
+  LocalElementOverrideCandidate,
+  LocalElementOverrideRelation,
+  StyledDecl,
+} from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import {
   countComponentJsxUsages,
@@ -45,6 +49,8 @@ import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
+import { makeCssPropKey } from "../lower-rules/shared.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
 
@@ -473,6 +479,122 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       loc: decl.adjacentSiblingLoc,
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
+  const reservedStyleKeys = collectReservedStyleKeys(
+    ctx.resolvedStyleObjects ?? new Map(),
+    styledDecls,
+  );
+  const usedLocalElementStyleKeys = new Set<string>();
+  const localElementTargetStyleKeys = new Set<string>();
+
+  for (const decl of styledDecls) {
+    if (!decl.localElementOverrides?.length) {
+      continue;
+    }
+
+    const { className, style, ref } = getJsxAttributeUsage(decl.localName);
+    const proof = proveLocalElementOverrideUsages(
+      root,
+      j,
+      decl.localName,
+      decl.localElementOverrides,
+      declByLocal,
+    );
+    const localElementUnsupportedReason = decl.isExported
+      ? "exported-parent"
+      : decl.base.kind !== "intrinsic" ||
+          decl.needsWrapperComponent ||
+          className ||
+          style ||
+          ref ||
+          hasSpreadInJsx(root, j, decl.localName)
+        ? "dynamic"
+        : proof.safe
+          ? "none"
+          : proof.reason;
+    const localElementSupported = localElementUnsupportedReason === "none";
+
+    if (!localElementSupported) {
+      for (const override of decl.localElementOverrides) {
+        ctx.warnings.push({
+          severity: "warning",
+          type: getLocalElementWarningType(
+            override,
+            localElementUnsupportedReason as LocalElementProofReason,
+          ),
+          loc: override.loc,
+        });
+      }
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
+
+    const nextOverrides: LocalElementOverrideCandidate[] = [];
+    for (const override of decl.localElementOverrides) {
+      const targetIds = proof.targetsByStyleKey.get(override.styleKey) ?? new Set<string>();
+      const styleKeysByTargetId: Record<string, string> = {};
+      for (const targetId of [...targetIds].sort()) {
+        const targetDecl = targetId.startsWith("styled:")
+          ? declByLocal.get(targetId.slice("styled:".length))
+          : undefined;
+        if (targetDecl) {
+          const {
+            className: childClassName,
+            style: childStyle,
+            ref: childRef,
+          } = getJsxAttributeUsage(targetDecl.localName);
+          const childInlineable =
+            targetDecl.base.kind === "intrinsic" &&
+            !targetDecl.isExported &&
+            !targetDecl.needsWrapperComponent &&
+            !childClassName &&
+            !childStyle &&
+            !childRef &&
+            !hasSpreadInJsx(root, j, targetDecl.localName);
+          if (!childInlineable) {
+            ctx.warnings.push({
+              severity: "warning",
+              type: getLocalElementWarningType(override, "child-not-inlineable"),
+              loc: override.loc,
+            });
+            return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+          }
+          localElementTargetStyleKeys.add(targetDecl.styleKey);
+        }
+
+        const emittedStyleKey = ensureUniqueKey(
+          makeLocalElementTargetStyleKey(override, targetId),
+          usedLocalElementStyleKeys,
+          reservedStyleKeys,
+        );
+        usedLocalElementStyleKeys.add(emittedStyleKey);
+        reservedStyleKeys.add(emittedStyleKey);
+        styleKeysByTargetId[targetId] = emittedStyleKey;
+
+        const childStyleObjects =
+          targetDecl && ctx.resolvedStyleObjects
+            ? buildResolvedStyleObjectList(targetDecl, ctx.resolvedStyleObjects)
+            : [];
+        const props = buildLocalElementOverrideProperties({
+          j,
+          override,
+          childStyleObjects,
+        });
+        if (props.length > 0) {
+          ctx.resolvedStyleObjects?.set(emittedStyleKey, j.objectExpression(props));
+        }
+      }
+
+      nextOverrides.push({ ...override, styleKeysByTargetId });
+      if (override.ancestorPseudo) {
+        ctx.ancestorSelectorParents ??= new Set<string>();
+        ctx.ancestorSelectorParents.add(decl.styleKey);
+        ctx.parentsNeedingDefaultMarker ??= new Set<string>();
+        ctx.parentsNeedingDefaultMarker.add(decl.styleKey);
+      }
+    }
+
+    decl.localElementOverrides = nextOverrides;
   }
 
   // Pre-analyze inline style props at JSX call sites to determine if they can be promoted
@@ -3544,6 +3666,215 @@ function classifyAdjacentSiblingChild(
   }
 
   return { kind: "other" };
+}
+
+type LocalElementProofReason =
+  | "ok"
+  | "no-usage"
+  | "dynamic-usage"
+  | "non-jsx-usage"
+  | "unsupported-wrapper"
+  | "child-not-inlineable";
+
+type LocalElementProofResult = {
+  safe: boolean;
+  reason: LocalElementProofReason;
+  targetsByStyleKey: Map<string, Set<string>>;
+};
+
+function proveLocalElementOverrideUsages(
+  root: TransformContext["root"],
+  j: JSCodeshift,
+  componentName: string,
+  overrides: LocalElementOverrideCandidate[],
+  declByLocal: Map<string, StyledDecl>,
+): LocalElementProofResult {
+  const targetsByStyleKey = new Map<string, Set<string>>(
+    overrides.map((override) => [override.styleKey, new Set<string>()]),
+  );
+  let sawUsage = false;
+  let reason: LocalElementProofReason = "ok";
+
+  const inspectChildren = (
+    children: unknown[],
+    relation: LocalElementOverrideRelation,
+    tagName: string,
+  ): { safe: boolean; matches: Set<string> } => {
+    const matches = new Set<string>();
+    const visitChild = (child: unknown, isDirectChild: boolean): boolean => {
+      if (!child || typeof child !== "object") {
+        return true;
+      }
+      const node = child as {
+        type?: string;
+        children?: unknown[];
+        openingElement?: { name?: unknown };
+        expression?: {
+          type?: string;
+          expressions?: unknown[];
+          elements?: unknown[];
+          left?: unknown;
+          right?: unknown;
+          consequent?: unknown;
+          alternate?: unknown;
+        };
+      };
+
+      if (node.type === "JSXText") {
+        return true;
+      }
+      if (node.type === "JSXFragment") {
+        return false;
+      }
+      if (node.type === "JSXExpressionContainer") {
+        const exprType = node.expression?.type;
+        return (
+          exprType === "JSXEmptyExpression" ||
+          exprType === "Literal" ||
+          exprType === "StringLiteral" ||
+          exprType === "TemplateLiteral"
+        );
+      }
+      if (node.type !== "JSXElement") {
+        return false;
+      }
+
+      const name = getRootJsxIdentifierName(node.openingElement?.name);
+      if (!name) {
+        return false;
+      }
+
+      const decl = declByLocal.get(name);
+      const isIntrinsicMatch = !decl && name === tagName;
+      const isStyledIntrinsicMatch =
+        !!decl && decl.base.kind === "intrinsic" && decl.base.tagName === tagName;
+
+      if (
+        (relation === "child" ? isDirectChild : true) &&
+        (isIntrinsicMatch || isStyledIntrinsicMatch)
+      ) {
+        matches.add(isStyledIntrinsicMatch ? `styled:${name}` : `intrinsic:${tagName}`);
+      }
+
+      if (relation === "descendant") {
+        for (const grandchild of node.children ?? []) {
+          if (!visitChild(grandchild, false)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    for (const child of children) {
+      if (!visitChild(child, true)) {
+        return { safe: false, matches };
+      }
+    }
+    return { safe: true, matches };
+  };
+
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name: componentName } },
+    } as any)
+    .forEach((path: any) => {
+      sawUsage = true;
+      for (const override of overrides) {
+        const inspected = inspectChildren(
+          path.node.children ?? [],
+          override.relation,
+          override.tagName,
+        );
+        if (!inspected.safe) {
+          reason = "dynamic-usage";
+          return;
+        }
+        const targetSet = targetsByStyleKey.get(override.styleKey)!;
+        for (const match of inspected.matches) {
+          targetSet.add(match);
+        }
+      }
+    });
+
+  if (reason !== "ok") {
+    return { safe: false, reason, targetsByStyleKey };
+  }
+  if (!sawUsage) {
+    return { safe: false, reason: "no-usage", targetsByStyleKey };
+  }
+  if ([...targetsByStyleKey.values()].some((set) => set.size === 0)) {
+    return { safe: false, reason: "no-usage", targetsByStyleKey };
+  }
+  return { safe: true, reason: "ok", targetsByStyleKey };
+}
+
+function getLocalElementWarningType(
+  override: LocalElementOverrideCandidate,
+  reason: LocalElementProofReason,
+):
+  | "Unsupported selector: ambiguous element selector"
+  | "Unsupported selector: descendant/child/sibling selector"
+  | "Unsupported selector: element selector with dynamic children"
+  | "Unsupported selector: element selector with plain intrinsic children" {
+  if (reason === "no-usage") {
+    return "Unsupported selector: descendant/child/sibling selector";
+  }
+  if (reason === "dynamic-usage" || reason === "unsupported-wrapper") {
+    return "Unsupported selector: element selector with dynamic children";
+  }
+  if (reason === "child-not-inlineable" || reason === "non-jsx-usage") {
+    return "Unsupported selector: ambiguous element selector";
+  }
+  return override.tagName === "svg" || override.tagName === "button"
+    ? "Unsupported selector: element selector with plain intrinsic children"
+    : "Unsupported selector: ambiguous element selector";
+}
+
+function makeLocalElementTargetStyleKey(
+  override: LocalElementOverrideCandidate,
+  targetId: string,
+): string {
+  const targetName = targetId.startsWith("styled:")
+    ? targetId.slice("styled:".length)
+    : targetId.slice("intrinsic:".length);
+  const normalizedTargetName =
+    targetName[0]?.toLowerCase() === targetName[0]
+      ? targetName
+      : `${targetName[0]?.toLowerCase() ?? ""}${targetName.slice(1)}`;
+  const relationSuffix = override.relation === "child" ? "Child" : "Descendant";
+  return `${camelToKebabCase(normalizedTargetName).replace(/-([a-z])/g, (_, c) => c.toUpperCase())}In${relationSuffix}`;
+}
+
+function buildLocalElementOverrideProperties(args: {
+  j: JSCodeshift;
+  override: LocalElementOverrideCandidate;
+  childStyleObjects: Array<Record<string, unknown>>;
+}) {
+  const { j, override, childStyleObjects } = args;
+  return buildRelationOverrideProperties({
+    j,
+    pseudoBuckets: override.pseudoBuckets,
+    childStyleObjects,
+    makeCssPropKey,
+    childPseudos: override.childPseudo ? new Set([override.childPseudo]) : undefined,
+    markerVarName: undefined,
+  });
+}
+
+function buildResolvedStyleObjectList(
+  decl: StyledDecl,
+  resolvedStyleObjects: Map<string, unknown>,
+): Array<Record<string, unknown>> {
+  const keys = [decl.styleKey, ...(decl.extraStyleKeys ?? [])];
+  const results: Array<Record<string, unknown>> = [];
+  for (const key of keys) {
+    const value = resolvedStyleObjects.get(key);
+    if (isPlainStyleObject(value)) {
+      results.push(value);
+    }
+  }
+  return results;
 }
 
 function isPlainStyleObject(value: unknown): value is Record<string, unknown> {
