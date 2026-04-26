@@ -1,1 +1,0 @@
-import{f as e}from"./index-DimFOxuE.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`div`,{className:`x1e2nbdu x137v6ai`,children:`Red with mixin`}),(0,t.jsx)(`div`,{className:`x7z7khe x1e2nbdu x1t391ir`,children:`Multiple mixins`})]});export{n as App};
