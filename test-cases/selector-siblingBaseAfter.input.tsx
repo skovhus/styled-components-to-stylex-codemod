@@ -1,9 +1,9 @@
 import styled from "styled-components";
 
-// The adjacent sibling rule appears BEFORE the base color declaration.
+// The general sibling rule appears BEFORE the base color declaration.
 // The base value must still be preserved as the default.
 const Thing = styled.div`
-  & + & {
+  & ~ & {
     color: red;
   }
 
@@ -14,6 +14,6 @@ const Thing = styled.div`
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: 16 }}>
     <Thing>First (blue)</Thing>
-    <Thing>Second (red - adjacent)</Thing>
+    <Thing>Second (red - general sibling)</Thing>
   </div>
 );

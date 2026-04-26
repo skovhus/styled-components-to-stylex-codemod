@@ -8,12 +8,12 @@ const Container = styled.div`
 // NOTE: defaultMarker() is file-global — not scoped per component.
 // If another component in the same file also uses defaultMarker() (e.g. for
 // an ancestor relation override), its marker could incorrectly activate
-// Row's sibling styles. Use defineMarker() for strict scoping.
+// Row's general-sibling styles. Use defineMarker() for strict scoping.
 const Row = styled.div`
   color: blue;
   padding: 8px;
 
-  & + & {
+  & ~ & {
     border-top: 1px solid gray;
   }
 `;

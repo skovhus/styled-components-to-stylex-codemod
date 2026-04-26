@@ -132,6 +132,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         const closing = p.node.closingElement;
+        (opening as { __styledComponentLocalName?: string }).__styledComponentLocalName =
+          decl.localName;
         let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
         const inlineVariantDimensions = decl.inlinedBaseComponent?.hasInlineJsxVariants
           ? (decl.variantDimensions ?? [])
@@ -499,6 +501,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...(decl.skipBaseStyleRef ? [] : [baseExpr]),
           ...extraAfterBaseArgs,
         ];
+        const adjacentSiblingStyleKey = decl.adjacentSiblingStyleKey;
 
         const variantKeys = decl.variantStyleKeys ?? {};
         const variantProps = new Set(Object.keys(variantKeys));
@@ -727,6 +730,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Process rest attrs (from first spread onwards, preserving interleaved order)
         for (const attr of rest) {
           processAttr(attr, keptRestAfterVariants);
+        }
+
+        if (adjacentSiblingStyleKey && hasPreviousStaticSiblingWithName(p, decl.localName)) {
+          styleArgs.push(
+            j.memberExpression(
+              j.identifier(ctx.stylesIdentifier ?? "styles"),
+              j.identifier(adjacentSiblingStyleKey),
+            ),
+          );
         }
 
         // Recalculate insert index after filtering (some attrs may have been removed)
@@ -1045,6 +1057,91 @@ function extractJsxAttrValueExpr(
     return a.value.expression as ExpressionKind;
   }
   return undefined;
+}
+
+function hasPreviousStaticSiblingWithName(path: any, componentName: string): boolean {
+  const currentNode = path.node;
+  let cursor = path.parentPath;
+  let parentNode: { type?: string; children?: unknown[] } | undefined;
+
+  while (cursor) {
+    const candidate = cursor.node as { type?: string; children?: unknown[] } | undefined;
+    if (
+      candidate &&
+      (candidate.type === "JSXElement" || candidate.type === "JSXFragment") &&
+      Array.isArray(candidate.children) &&
+      candidate.children.includes(currentNode)
+    ) {
+      parentNode = candidate;
+      break;
+    }
+    cursor = cursor.parentPath;
+  }
+
+  if (!parentNode?.children) {
+    return false;
+  }
+
+  const siblings = parentNode.children;
+  const currentIndex = siblings.indexOf(currentNode);
+  if (currentIndex <= 0) {
+    return false;
+  }
+
+  type AdjacentSiblingNode =
+    | { type: "JSXText"; value: string }
+    | { type: "JSXExpressionContainer"; expression?: { type?: string; value?: unknown } }
+    | {
+        type: "JSXElement";
+        openingElement?: {
+          name?: { type?: string; name?: string };
+          __styledComponentLocalName?: string;
+        };
+      }
+    | { type?: string };
+  const isJsxTextSibling = (
+    sibling: AdjacentSiblingNode,
+  ): sibling is Extract<AdjacentSiblingNode, { type: "JSXText" }> => sibling.type === "JSXText";
+  const isJsxElementSibling = (
+    sibling: AdjacentSiblingNode,
+  ): sibling is Extract<AdjacentSiblingNode, { type: "JSXElement" }> =>
+    sibling.type === "JSXElement";
+  const isJsxExpressionContainerSibling = (
+    sibling: AdjacentSiblingNode,
+  ): sibling is Extract<AdjacentSiblingNode, { type: "JSXExpressionContainer" }> =>
+    sibling.type === "JSXExpressionContainer";
+
+  for (let i = currentIndex - 1; i >= 0; i--) {
+    const sibling = siblings[i] as AdjacentSiblingNode | undefined;
+    if (!sibling) {
+      continue;
+    }
+    if (isJsxTextSibling(sibling)) {
+      continue;
+    }
+    if (isJsxExpressionContainerSibling(sibling)) {
+      const expression = sibling.expression;
+      if (
+        expression?.type === "Literal" ||
+        expression?.type === "StringLiteral" ||
+        expression?.type === "TemplateLiteral"
+      ) {
+        continue;
+      }
+      return false;
+    }
+    if (!isJsxElementSibling(sibling)) {
+      return false;
+    }
+    const originalStyledName = sibling.openingElement?.__styledComponentLocalName;
+    if (originalStyledName) {
+      return originalStyledName === componentName;
+    }
+    const siblingName = sibling.openingElement?.name;
+    return siblingName?.type === "JSXIdentifier" && siblingName.name === componentName;
+  }
+
+  return false;
 }
 
 /**

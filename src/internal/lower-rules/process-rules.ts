@@ -377,10 +377,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       } else if (/[+~]/.test(s) && !isHandledComponentPattern) {
-        // Self-referencing sibling combinators (`& + &`, `& ~ &`) are supported via
-        // stylex.when.siblingBefore(). Non-self-referencing patterns still bail.
+        // General-sibling selectors (`~`) can map to siblingBefore(). Adjacent sibling
+        // selectors (`+`) are only supported when later JSX analysis can prove exact
+        // same-file adjacency for every use site.
         if (/^&\s*[+~]\s*&$/.test(s)) {
-          const siblingAction = handleSiblingSelector(s, rule, ctx);
+          if (/\+/.test(s)) {
+            const adjacentAction = handleAdjacentSiblingSelector(rule, ctx);
+            if (adjacentAction === "break") {
+              break;
+            }
+            continue;
+          }
+          const siblingAction = handleSiblingSelector(rule, ctx);
           if (siblingAction === "break") {
             break;
           }
@@ -389,7 +397,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         state.markBail();
         warnings.push({
           severity: "warning",
-          type: "Unsupported selector: sibling combinator",
+          type: /\+/.test(s)
+            ? "Unsupported selector: adjacent sibling combinator"
+            : "Unsupported selector: sibling combinator",
           loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
         });
         break;
@@ -786,6 +796,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         const siblingPseudo = `:${crossComponentSiblingMatch[1]}`;
         const combinator = crossComponentSiblingMatch[2] as "+" | "~";
 
+        if (combinator === "+") {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: adjacent sibling combinator",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
+        }
+
         const referencedDecl = declByLocalName.get(otherLocal);
         if (!referencedDecl) {
           // Cross-file cross-component sibling selectors are not yet supported:
@@ -800,9 +820,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           });
           break;
         }
-
-        // Track adjacent combinator so we can annotate the emitted computed keys
-        const isAdjacentCombinator = combinator === "+";
 
         // Register marker for the referenced component
         const refMarkerVarName = registerReferencedMarker(
@@ -849,12 +866,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           rule,
           ctx,
           "Unsupported selector: computed media query inside cross-component sibling selector",
-          isAdjacentCombinator
-            ? {
-                leadingComment:
-                  "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-              }
-            : undefined,
         );
         if (emitResult === "break") {
           break;
@@ -2593,15 +2604,8 @@ function resolveMediaAndEmitComputedKeys(
 }
 
 /**
- * Handles a self-referencing sibling selector (`& + &` or `& ~ &`) by processing
+ * Handles a self-referencing general sibling selector (`& ~ &`) by processing
  * declarations and storing them as computed keys using `stylex.when.siblingBefore(':is(*)', Marker)`.
- *
- * **Semantic approximation:** CSS `& + &` targets only the *immediately adjacent*
- * sibling, while `stylex.when.siblingBefore()` generates a general sibling rule
- * (`~`) which matches *any* preceding sibling. This means the styles may apply
- * even when a non-matching element sits between two instances of the component.
- * In practice this rarely matters because `& + &` is almost always used with
- * consecutive homogeneous lists. For `& ~ &`, the mapping is semantically exact.
  *
  * Uses per-component `defineMarker()` (emitted in a `.stylex` sidecar file) so that
  * sibling matching is component-scoped. Without a scoped marker, `defaultMarker()` is
@@ -2617,16 +2621,12 @@ function resolveMediaAndEmitComputedKeys(
  * Returns "break" on error to bail, otherwise the caller should `continue`.
  */
 function handleSiblingSelector(
-  selector: string,
   rule: DeclProcessingState["decl"]["rules"][number],
   ctx: DeclProcessingState,
 ): "break" | void {
   const { state, decl } = ctx;
   const { j, warnings, resolveThemeValue, resolveThemeValueFromFn, ancestorSelectorParents } =
     state;
-
-  // Track adjacent combinator so we can annotate the emitted computed keys
-  const isAdjacent = /\+/.test(selector);
 
   // Add to ancestorSelectorParents so the marker is injected into stylex.props() calls.
   // Also add to siblingMarkerParents to distinguish from forward/reverse selectors —
@@ -2678,13 +2678,95 @@ function handleSiblingSelector(
     rule,
     ctx,
     "Unsupported selector: computed media query inside sibling selector",
-    isAdjacent
-      ? {
-          leadingComment:
-            "TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-        }
-      : undefined,
   );
+}
+
+/**
+ * Handles a self-referencing adjacent sibling selector (`& + &`) by capturing the
+ * declarations into a dedicated override style key. Later JSX analysis decides whether
+ * every same-file usage site is provably adjacent; if not, the transform bails.
+ */
+function handleAdjacentSiblingSelector(
+  rule: DeclProcessingState["decl"]["rules"][number],
+  ctx: DeclProcessingState,
+): "break" | void {
+  const { state, decl, extraStyleObjects } = ctx;
+  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+  const overrideStyleKey = `${decl.styleKey}AdjacentSibling`;
+  const bucket = extraStyleObjects.get(overrideStyleKey) ?? {};
+  const ruleBucket: Record<string, unknown> = {};
+  extraStyleObjects.set(overrideStyleKey, bucket);
+
+  const result = processDeclarationsIntoBucket(
+    rule,
+    ruleBucket,
+    j,
+    decl,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    { bailOnUnresolved: true },
+  );
+  if (result === "bail") {
+    state.markBail();
+    state.warnings.push({
+      severity: "warning",
+      type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  let media = findSupportedAtRule(rule.atRuleStack);
+  if (media) {
+    const resolved = resolveMediaAtRulePlaceholders(
+      media,
+      (slotId) => decl.templateExpressions[slotId],
+      {
+        lookupImport: state.resolveImportInScope,
+        resolveValue: state.resolveValue,
+        resolveSelector: state.resolveSelector,
+        parseExpr: state.parseExpr,
+        filePath: state.filePath,
+        resolverImports: state.resolverImports,
+      },
+    );
+    if (resolved === null) {
+      state.markBail();
+      state.warnings.push({
+        severity: "warning",
+        type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (resolved.kind !== "static") {
+      state.markBail();
+      state.warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: computed media query inside sibling selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    media = resolved.value;
+  }
+
+  if (media) {
+    for (const [prop, value] of Object.entries(ruleBucket)) {
+      const existing = bucket[prop];
+      bucket[prop] =
+        existing === undefined
+          ? { default: null, [media]: value }
+          : { default: existing, [media]: value };
+    }
+  } else {
+    for (const [prop, value] of Object.entries(ruleBucket)) {
+      bucket[prop] = value;
+    }
+  }
+
+  decl.adjacentSiblingStyleKey = overrideStyleKey;
+  decl.adjacentSiblingLoc = computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector);
 }
 
 /**

@@ -609,7 +609,7 @@ export const App = () => <Container />;
     expect(typeof warning.loc?.column).toBe("number");
   });
 
-  it("should warn with correct line number for sibling combinator selector", () => {
+  it("should warn with correct line number for adjacent sibling selector", () => {
     const source = `
 import styled from 'styled-components';
 
@@ -632,7 +632,7 @@ export const App = () => <Box />;
 
     expect(result.code).toBeNull();
     const warning = result.warnings.find(
-      (w) => w.type === "Unsupported selector: sibling combinator",
+      (w) => w.type === "Unsupported selector: adjacent sibling combinator",
     );
     expect(warning).toBeDefined();
     // Line 4 is template start, `& + span` is on line 7 (3 lines into template content)
@@ -669,7 +669,7 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(7);
   });
 
-  it("should emit NOTE comment for & + & (adjacent sibling broadens to general)", () => {
+  it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";
 
@@ -680,7 +680,15 @@ const Thing = styled.div\`
   }
 \`;
 
-export const App = () => <Thing />;
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+    <span>Spacer</span>
+    <Thing>Third</Thing>
+    <Thing>Fourth</Thing>
+  </>
+);
 `;
 
     const result = transformWithWarnings(
@@ -690,18 +698,189 @@ export const App = () => <Thing />;
     );
 
     expect(result.code).not.toBeNull();
-    // No info warning — the broadening note is emitted as a code comment instead
-    const infoWarnings = result.warnings.filter(
-      (w) => w.severity === "info" && w.type.includes("Sibling selector broadened"),
-    );
-    expect(infoWarnings).toHaveLength(0);
-    // The output should contain a NOTE comment about the broadening
-    expect(result.code).toContain(
-      "// TODO(codemod): CSS `+` (adjacent) was broadened to `~` (general sibling). Verify siblings are always adjacent.",
-    );
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
   });
 
-  it("should NOT emit NOTE comment for & ~ & (general sibling is exact match)", () => {
+  it("should preserve media guards for supported & + & callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  @media (min-width: 768px) {
+    & + & {
+      margin-top: 16px;
+    }
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain('"@media (min-width: 768px)": 16');
+  });
+
+  it("should ignore text nodes when proving adjacent & + & callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    {"hello"}
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain("Second");
+    expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
+  });
+
+  it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  & + & {
+    color: red;
+  }
+
+  @media (min-width: 768px) {
+    & + & {
+      margin-top: 16px;
+    }
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("marginTop: {");
+    expect(result.code).toContain('"@media (min-width: 768px)": 16');
+  });
+
+  it("should ignore unrelated dynamic JSX subtrees when proving adjacent sibling callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = ({ items }: { items: string[] }) => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+    <section>{items.map((item) => <span key={item}>{item}</span>)}</section>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
+  });
+
+  it("should bail on cross-component + sibling selectors because adjacent sibling is not lossless", () => {
+    const source = `
+import styled from "styled-components";
+
+const Link = styled.a\`
+  color: blue;
+\`;
+
+const Badge = styled.span\`
+  color: gray;
+
+  \${Link}:focus-visible + & {
+    color: red;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Link href="#">Link</Link>
+    <Badge>Badge</Badge>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: adjacent sibling combinator",
+      }),
+    ]);
+  });
+
+  it("should transform & ~ & without emitting an adjacent-sibling warning", () => {
     const source = `
 import styled from "styled-components";
 
@@ -722,12 +901,8 @@ export const App = () => <Thing />;
     );
 
     expect(result.code).not.toBeNull();
-    const infoWarnings = result.warnings.filter(
-      (w) => w.severity === "info" && w.type.includes("Sibling selector broadened"),
-    );
-    expect(infoWarnings).toHaveLength(0);
-    // No NOTE comment for general sibling — it's an exact match
-    expect(result.code).not.toContain("NOTE: CSS `+`");
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain('[stylex.when.siblingBefore(":is(*)", ThingMarker)]');
   });
 
   it("should emit info warning when transient props are renamed on exported component", () => {
