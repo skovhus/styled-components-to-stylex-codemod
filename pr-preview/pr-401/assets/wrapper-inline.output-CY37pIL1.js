@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import{f as e,p as t}from"./index-BPaLyyRP.js";import{t as n}from"./external-component-CQxb7P2z.js";t();var r=e();function i(){return(0,r.jsx)(`div`,{children:(0,r.jsx)(n,{isOpen:!0,className:`xdj266r xv8wvd9 xat24cr x1bawvfr`})})}export{i as App};
