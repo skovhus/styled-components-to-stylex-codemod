@@ -3122,14 +3122,30 @@ function hasOnlyProvableAdjacentSiblingUsages(
     if (!isSafe) {
       return;
     }
-    inspectChildren(path.node.children ?? []);
+    const children = path.node.children ?? [];
+    if (
+      !children.some(
+        (child: unknown) => classifyAdjacentSiblingChild(child, componentName).kind === "target",
+      )
+    ) {
+      return;
+    }
+    inspectChildren(children);
   });
 
   root.find(j.JSXFragment).forEach((path: any) => {
     if (!isSafe) {
       return;
     }
-    inspectChildren(path.node.children ?? []);
+    const children = path.node.children ?? [];
+    if (
+      !children.some(
+        (child: unknown) => classifyAdjacentSiblingChild(child, componentName).kind === "target",
+      )
+    ) {
+      return;
+    }
+    inspectChildren(children);
   });
 
   return hasUsage && isSafe;

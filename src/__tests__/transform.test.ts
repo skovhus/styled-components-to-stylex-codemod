@@ -769,6 +769,79 @@ export const App = () => (
     expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
   });
 
+  it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  & + & {
+    color: red;
+  }
+
+  @media (min-width: 768px) {
+    & + & {
+      margin-top: 16px;
+    }
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("marginTop: {");
+    expect(result.code).toContain('"@media (min-width: 768px)": 16');
+  });
+
+  it("should ignore unrelated dynamic JSX subtrees when proving adjacent sibling callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = ({ items }: { items: string[] }) => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+    <section>{items.map((item) => <span key={item}>{item}</span>)}</section>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
+  });
+
   it("should bail on cross-component + sibling selectors because adjacent sibling is not lossless", () => {
     const source = `
 import styled from "styled-components";

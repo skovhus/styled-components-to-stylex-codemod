@@ -2636,11 +2636,12 @@ function handleAdjacentSiblingSelector(
   const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
   const overrideStyleKey = `${decl.styleKey}AdjacentSibling`;
   const bucket = extraStyleObjects.get(overrideStyleKey) ?? {};
+  const ruleBucket: Record<string, unknown> = {};
   extraStyleObjects.set(overrideStyleKey, bucket);
 
   const result = processDeclarationsIntoBucket(
     rule,
-    bucket,
+    ruleBucket,
     j,
     decl,
     resolveThemeValue,
@@ -2693,8 +2694,16 @@ function handleAdjacentSiblingSelector(
   }
 
   if (media) {
-    for (const [prop, value] of Object.entries(bucket)) {
-      bucket[prop] = { default: null, [media]: value };
+    for (const [prop, value] of Object.entries(ruleBucket)) {
+      const existing = bucket[prop];
+      bucket[prop] =
+        existing === undefined
+          ? { default: null, [media]: value }
+          : { default: existing, [media]: value };
+    }
+  } else {
+    for (const [prop, value] of Object.entries(ruleBucket)) {
+      bucket[prop] = value;
     }
   }
 
