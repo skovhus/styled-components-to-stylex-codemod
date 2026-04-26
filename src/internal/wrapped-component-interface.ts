@@ -49,11 +49,6 @@ export function isWrappedComponentSxAware(args: {
   return detectExportedSxProp(importInfo.source.value, importInfo.importedName);
 }
 
-/** Reset the auto-detection cache. Test-only. */
-export function __resetWrappedComponentSxAwareCacheForTests(): void {
-  detectionCache.clear();
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Auto-detection: check whether `componentName` exported from `absolutePath`
 // declares an `sx?` member on its props type.

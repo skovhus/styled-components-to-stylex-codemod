@@ -2,10 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  __resetWrappedComponentSxAwareCacheForTests,
-  isWrappedComponentSxAware,
-} from "./wrapped-component-interface.js";
+import { isWrappedComponentSxAware } from "./wrapped-component-interface.js";
 
 let dir: string;
 
@@ -57,7 +54,6 @@ function checkWithAdapter(args: {
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "sx-aware-detection-"));
-  __resetWrappedComponentSxAwareCacheForTests();
 });
 
 afterEach(() => {

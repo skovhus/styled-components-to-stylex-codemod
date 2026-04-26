@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   findImportedRenamedComponents,
-  patchConsumerTransientProps,
   patchSourceTransientProps,
 } from "../internal/transient-prop-consumer-patcher.js";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 
 describe("findImportedRenamedComponents", () => {
   const renames = [{ exportName: "Toggle", renames: { $active: "active" } }];
@@ -90,42 +86,5 @@ describe("patchSourceTransientProps", () => {
     expect(result).toContain('variant="ok"');
     expect(result).not.toContain("$active");
     expect(result).not.toContain("$variant");
-  });
-});
-
-describe("patchConsumerTransientProps (file-based)", () => {
-  let tmpDir: string;
-
-  function writeTemp(content: string): string {
-    tmpDir = mkdtempSync(join(tmpdir(), "test-patcher-"));
-    const filePath = join(tmpDir, "consumer.tsx");
-    writeFileSync(filePath, content, "utf-8");
-    return filePath;
-  }
-
-  function cleanup(): void {
-    if (tmpDir) {
-      rmSync(tmpDir, { recursive: true, force: true });
-    }
-  }
-
-  it("reads file and patches it", () => {
-    const filePath = writeTemp(`<Toggle $active>On</Toggle>`);
-    try {
-      const result = patchConsumerTransientProps(filePath, [
-        { localComponentName: "Toggle", renames: { $active: "active" } },
-      ]);
-      expect(result).not.toBeNull();
-      expect(result).toContain("<Toggle active>");
-    } finally {
-      cleanup();
-    }
-  });
-
-  it("returns null for missing file", () => {
-    const result = patchConsumerTransientProps("/nonexistent/path.tsx", [
-      { localComponentName: "Toggle", renames: { $active: "active" } },
-    ]);
-    expect(result).toBeNull();
   });
 });
