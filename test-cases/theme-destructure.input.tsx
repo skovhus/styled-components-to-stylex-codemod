@@ -3,7 +3,8 @@ import styled from "styled-components";
 type Props = { enabled?: boolean };
 
 const StatusBadge = styled.div<Props>`
-  background-color: ${({ enabled, theme }) => (enabled ? theme.color.greenBase : theme.color.labelMuted)};
+  background-color: ${({ enabled, theme }) =>
+    enabled ? theme.color.greenBase : theme.color.labelMuted};
   color: white;
   width: 80px;
   height: 80px;

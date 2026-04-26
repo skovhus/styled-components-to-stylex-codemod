@@ -101,7 +101,8 @@ export const Flex = styled("div").withConfig({
   ${({ alignSelf }) => (alignSelf ? `align-self: ${alignSelf};` : "")};
   ${({ overflowHidden }) => (overflowHidden ? `overflow: hidden;` : "")};
   ${({ gap }) => (typeof gap === "number" ? `gap: ${gap}px` : "")};
-  ${({ wrapGap, column }) => (typeof wrapGap === "number" ? `${column ? "column" : "row"}-gap: ${wrapGap}px` : "")};
+  ${({ wrapGap, column }) =>
+    typeof wrapGap === "number" ? `${column ? "column" : "row"}-gap: ${wrapGap}px` : ""};
   ${({ noMinWidth }) => (noMinWidth ? "min-width: 0px" : "")};
   ${({ noMinHeight }) => (noMinHeight ? "min-height: 0px" : "")};
 `;

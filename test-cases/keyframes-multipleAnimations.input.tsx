@@ -37,7 +37,9 @@ const FadeBox = styled.div`
 
 // Multiple animations combined
 const AnimatedCard = styled.div`
-  animation: ${fadeIn} 0.3s ease-out, ${slideIn} 0.5s ease-out;
+  animation:
+    ${fadeIn} 0.3s ease-out,
+    ${slideIn} 0.5s ease-out;
   padding: 20px;
   background: white;
   border-radius: 8px;
@@ -54,7 +56,9 @@ const BounceIn = styled.div`
 
 // Chained animations with delay
 const SequentialAnimation = styled.div`
-  animation: ${fadeIn} 0.3s ease-out 0s, ${slideIn} 0.5s ease-out 0.3s;
+  animation:
+    ${fadeIn} 0.3s ease-out 0s,
+    ${slideIn} 0.5s ease-out 0.3s;
 `;
 
 // Shorthand with full property coverage
@@ -64,7 +68,8 @@ const FullAnimation = styled.div`
 
 // Mixed play-state, direction, fill-mode across segments
 const MixedStates = styled.div`
-  animation: ${fadeIn} 500ms ease-in 0s 1 normal both paused,
+  animation:
+    ${fadeIn} 500ms ease-in 0s 1 normal both paused,
     ${slideIn} 700ms ease-out 100ms infinite reverse forwards paused;
 `;
 

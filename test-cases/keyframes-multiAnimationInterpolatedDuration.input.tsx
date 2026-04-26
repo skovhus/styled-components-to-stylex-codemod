@@ -22,7 +22,9 @@ const slideIn = keyframes`
 
 // Both animations share the same interpolated duration prop
 const AnimatedCard = styled.div<{ $duration?: number }>`
-  animation: ${fadeIn} ${(props) => props.$duration ?? 200}ms ease, ${slideIn} ${(props) => props.$duration ?? 1000}ms linear;
+  animation:
+    ${fadeIn} ${(props) => props.$duration ?? 200}ms ease,
+    ${slideIn} ${(props) => props.$duration ?? 1000}ms linear;
   padding: 20px;
   background: white;
 `;

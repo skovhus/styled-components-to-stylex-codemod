@@ -19,7 +19,8 @@ const Gutter = styled.div`
   text-align: right;
   padding: 4px 6px;
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 12px;
 `;
 
@@ -28,7 +29,8 @@ const Code = styled.div`
   color: #0b4f6c;
   padding: 4px 8px;
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 12px;
 `;
 

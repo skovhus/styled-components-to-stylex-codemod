@@ -44,9 +44,9 @@ const ShadowBox = styled.div<{ $shadow?: string }>(
 // Block body with return statement: (props) => { return css`...`; }
 const BlockBox = styled.div<{ $width?: string }>((props) => {
   return css`
-      display: block;
-      width: ${props.$width || "100%"};
-    `;
+    display: block;
+    width: ${props.$width || "100%"};
+  `;
 });
 
 export const App = () => (

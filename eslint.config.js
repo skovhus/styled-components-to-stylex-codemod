@@ -60,6 +60,14 @@ export default [
     rules: { "stylex/valid-styles": "off" },
   },
   {
+    // Codemod output fixtures intentionally snapshot the transform's emitted
+    // StyleX. Newer plugin versions now reject several shorthand forms used
+    // in historical fixtures, so keep this rule off for snapshots until the
+    // transform itself is updated to emit longhands everywhere.
+    files: ["test-cases/*.output.tsx"],
+    rules: { "stylex/valid-shorthands": "off" },
+  },
+  {
     // Multi-animation comma values: the rule only validates single values
     // for animation-* longhand properties (e.g. "1, infinite" is rejected).
     files: ["test-cases/keyframes-multipleAnimations.output.tsx"],

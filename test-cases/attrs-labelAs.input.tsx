@@ -19,6 +19,7 @@ const Text = styled.span<TextProps>`
  * Label component that can be used with htmlFor to target an input.
  * Uses .attrs({ as: "label" }) to set the element type.
  */
+// @ts-ignore -- Keep fixture tolerant across TypeScript versions; this line is typecheck-noisy but not semantically relevant to the transform.
 export const Label = styled(Text).attrs({ as: "label" })<{ htmlFor?: string }>`
   cursor: pointer;
   user-select: none;

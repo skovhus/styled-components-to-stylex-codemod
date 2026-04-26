@@ -5,7 +5,8 @@ const Container = styled.div`
   display: flex;
   padding: 1px;
   border-radius: 6px;
-  background: ${(props) => (props.theme.isDark ? props.theme.color.bgBase : props.theme.color.bgSub)};
+  background: ${(props) =>
+    props.theme.isDark ? props.theme.color.bgBase : props.theme.color.bgSub};
 `;
 
 const Tab = styled.button`
@@ -22,7 +23,8 @@ const Tab = styled.button`
 
   &[data-state="active"] {
     background: ${(props) => props.theme.color.bgBase};
-    box-shadow: 0 0 0 1px ${(props) => props.theme.color.bgBorderFaint},
+    box-shadow:
+      0 0 0 1px ${(props) => props.theme.color.bgBorderFaint},
       0 1px 2px rgba(0, 0, 0, 0.1);
   }
 `;

@@ -254,7 +254,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");
-      const hasInterpolatedPseudo = /:[^\s{]*__SC_EXPR_\d+__/.test(selectorForAnalysis);
+      const hasInterpolatedPseudo = /:\s*__SC_EXPR_\d+__/.test(selectorForAnalysis);
       // &:has(${Component}) has a placeholder inside :has() — not an interpolated pseudo.
       // Skip the interpolated-pseudo handler so it reaches the component selector path.
       const isHasComponentSelector = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selectorForAnalysis);
@@ -268,7 +268,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // Uses `selectorForAnalysis` so that `&&:${expr}` (specificity hack) is accepted
         // after being normalized to `&:__SC_EXPR_N__`.
         const pseudoSlotMatch = selectorForAnalysis.match(
-          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
+          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):\s*__SC_EXPR_(\d+)__\s*$/,
         );
         if (!pseudoSlotMatch) {
           state.markBail();
@@ -634,6 +634,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         continue;
+      }
+
+      // `:has(${Component})` is only supported in the exact `&:has(${Component})` form.
+      // Compound selectors like `&:has(${Component}):hover` must still bail.
+      if (/:has\(__SC_EXPR_\d+__\)/.test(normalizedSel2) && !isHasPattern) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: unknown component selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
       }
 
       // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (Parent styling a descendant child)

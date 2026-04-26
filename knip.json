@@ -1,9 +1,16 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": ["src/run.ts", "scripts/**/*.{mjs,mts}", "src/__tests__/**/*.test.ts"],
   "project": ["src/**/*.{ts,tsx}", "playground/**/*.{ts,tsx}", "scripts/**/*.{mjs,mts}"],
-  "ignoreDependencies": ["agent", "assert", "path-browserify"],
-
+  "ignoreDependencies": ["assert", "path-browserify"],
+  "ignoreIssues": {
+    "src/adapter.ts": ["types"],
+    "src/internal/builtin-handlers/types.ts": ["types"],
+    "src/internal/emit-wrappers/emit-intrinsic-helpers.ts": ["types"],
+    "src/internal/emit-wrappers/types.ts": ["types"],
+    "src/internal/lower-rules/template-literals.ts": ["types"],
+    "src/internal/transform-types.ts": ["types"]
+  },
   "ignore": [
     "src/__tests__/fixtures/**",
     "playground/src/lib/fs-stub.ts",

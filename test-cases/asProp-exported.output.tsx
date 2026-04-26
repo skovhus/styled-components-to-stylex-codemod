@@ -37,8 +37,10 @@ export function StyledWrapper<C extends React.ElementType = typeof BaseComponent
   props: StyledWrapperProps<C>,
 ) {
   const { as: Component = BaseComponent, variant, ...rest } = props;
+  const RenderComponent = Component as React.ElementType;
+
   return (
-    <Component
+    <RenderComponent
       {...rest}
       {...stylex.props(styles.wrapper, variant === "primary" && styles.wrapperVariantPrimary)}
     />

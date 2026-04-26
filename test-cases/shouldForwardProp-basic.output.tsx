@@ -128,7 +128,7 @@ const styles = stylex.create({
   link: {
     color: {
       default: "#333",
-      ":hover": "#BF4F74",
+      ":hover": "#bf4f74",
     },
     fontWeight: "normal",
     textDecoration: "none",

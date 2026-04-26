@@ -14,7 +14,8 @@ type HeaderTitleProps<C extends React.ElementType = typeof Text> = React.Compone
 
 export function HeaderTitle<C extends React.ElementType = typeof Text>(props: HeaderTitleProps<C>) {
   const { as: Component = Text, ...rest } = props;
-  return <Component {...rest} {...stylex.props(styles.headerTitle)} />;
+  const RenderComponent = Component as React.ElementType;
+  return <RenderComponent {...rest} {...stylex.props(styles.headerTitle)} />;
 }
 
 export const App = () => (

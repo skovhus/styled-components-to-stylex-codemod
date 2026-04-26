@@ -70,7 +70,7 @@ const styles = stylex.create({
     gap: 8,
     paddingBlock: 8,
     paddingInline: 16,
-    backgroundColor: "#BF4F74",
+    backgroundColor: "#bf4f74",
     color: "white",
     borderWidth: 0,
     borderStyle: "none",

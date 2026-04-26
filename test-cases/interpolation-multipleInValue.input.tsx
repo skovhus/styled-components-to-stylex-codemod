@@ -31,7 +31,8 @@ const RepeatingLinearGradientBox = styled.div`
 // Multiple interpolations in a transform value
 // Should produce a single template literal preserving all transform functions
 const Popover = styled.div<{ $expanded: boolean }>`
-  transform: translateY(-50%) translateX(${(props) => (props.$expanded ? "0" : "-8px")}) scale(${(props) => (props.$expanded ? 1 : 0.9)});
+  transform: translateY(-50%) translateX(${(props) => (props.$expanded ? "0" : "-8px")})
+    scale(${(props) => (props.$expanded ? 1 : 0.9)});
   opacity: ${(props) => (props.$expanded ? 1 : 0)};
 `;
 

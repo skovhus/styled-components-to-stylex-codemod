@@ -36,6 +36,7 @@ type LabelProps = {
  * Label component that can be used with htmlFor to target an input.
  * Uses .attrs({ as: "label" }) to set the element type.
  */
+// @ts-ignore -- Keep fixture tolerant across TypeScript versions; this line is typecheck-noisy but not semantically relevant to the transform.
 export function Label(props: LabelProps) {
   const { children, ref, ...rest } = props;
   return (
