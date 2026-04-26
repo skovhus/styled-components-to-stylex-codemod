@@ -736,7 +736,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Handle both simple identifiers (Button) and member expressions (animated.div)
     let jsxTagName: JsxTagName;
     if (isPolymorphicComponentWrapper) {
-      jsxTagName = j.jsxIdentifier("RenderComponent");
+      jsxTagName = j.jsxIdentifier("Component");
     } else if (renderedComponent.includes(".")) {
       const parts = renderedComponent.split(".");
       const firstPart = parts[0];
@@ -854,16 +854,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       });
 
       const stmts: StatementKind[] = [declStmt];
-      if (isPolymorphicComponentWrapper) {
-        stmts.push(
-          j.variableDeclaration("const", [
-            j.variableDeclarator(
-              j.identifier("RenderComponent"),
-              j.tsAsExpression(componentId, j.tsTypeReference(j.identifier("React.ElementType"))),
-            ),
-          ]),
-        );
-      }
       if (needsUseTheme) {
         stmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
       }

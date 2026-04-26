@@ -11,7 +11,7 @@ const Button = styled.button`
   color: blue;
   padding: 8px 16px;
 
-  &: ${highlight} {
+  &:${highlight} {
     color: red;
     background-color: yellow;
   }
@@ -25,7 +25,7 @@ const SpecificButton = styled.button`
   color: green;
   padding: 8px 16px;
 
-  &&: ${highlight} {
+  &&:${highlight} {
     color: purple;
     background-color: orange;
   }

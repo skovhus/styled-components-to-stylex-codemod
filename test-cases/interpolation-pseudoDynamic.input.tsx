@@ -5,7 +5,7 @@ const Button = styled.button<{ $active?: boolean }>`
   color: blue;
   padding: 8px 16px;
 
-  &: ${highlight} {
+  &:${highlight} {
     ${(props) => props.$active && `background-color: red;`}
   }
 `;
@@ -18,7 +18,7 @@ const InvertedButton = styled.button<{ $disabled?: boolean }>`
   color: blue;
   padding: 8px 16px;
 
-  &: ${highlight} {
+  &:${highlight} {
     ${(props) => (props.$disabled ? "" : "background-color: green;")}
   }
 `;

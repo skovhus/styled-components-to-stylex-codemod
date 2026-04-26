@@ -4,7 +4,7 @@ import styled from "styled-components";
 const Title = styled.h1<{ $upsideDown?: boolean }>`
   ${(props) => props.$upsideDown && "transform: rotate(180deg);"}
   text-align: center;
-  color: #bf4f74;
+  color: #BF4F74;
 `;
 
 const Box = styled.div<{ $isActive?: boolean; $isDisabled?: boolean }>`

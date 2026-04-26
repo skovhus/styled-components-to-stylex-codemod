@@ -5,9 +5,7 @@ type Props = { state: "up" | "down" | "both" };
 const TopArrowStem = styled.g<{ $state: Props["state"] }>`
   opacity: ${(props) => (props.$state === "down" ? 0 : 1)};
   transform-origin: 8px 4.5px; /* Top of stem - where it connects to arrow head */
-  transition:
-    opacity 150ms ease,
-    transform 150ms ease;
+  transition: opacity 150ms ease, transform 150ms ease;
   transform: ${(props) => {
     if (props.$state === "up") {
       return "scaleY(3.27)"; /* Stretch down to match original SVG proportions (1.5 * 3.27 ≈ 4.9px) */

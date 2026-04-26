@@ -12,9 +12,9 @@ const Thing = styled.div<{ outlined: boolean; color?: Colors }>`
             ${props.color ? props.theme.color[props.color] : props.theme.color.labelMuted};
         `
       : css`
-          background: ${props.color
-            ? props.theme.color[props.color]
-            : props.theme.color.labelMuted};
+          background: ${
+            props.color ? props.theme.color[props.color] : props.theme.color.labelMuted
+          };
         `}
 `;
 

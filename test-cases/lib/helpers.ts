@@ -239,9 +239,11 @@ export const scrollFadeMaskStyles = (size: number, direction?: "top" | "bottom" 
     to bottom,
     ${direction === "top" || direction === "both" ? "transparent, black var(--fade-size)," : ""}
       black,
-    ${direction === "bottom" || direction === "both"
-      ? "black calc(100% - var(--fade-size)), transparent"
-      : ""}
+    ${
+      direction === "bottom" || direction === "both"
+        ? "black calc(100% - var(--fade-size)), transparent"
+        : ""
+    }
   );
 `;
 

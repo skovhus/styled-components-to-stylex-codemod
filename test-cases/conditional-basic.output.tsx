@@ -111,7 +111,7 @@ export const App = () => (
 const styles = stylex.create({
   title: {
     textAlign: "center",
-    color: "#bf4f74",
+    color: "#BF4F74",
   },
   titleUpsideDown: {
     transform: "rotate(180deg)",

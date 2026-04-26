@@ -6,7 +6,7 @@ const highlight = "hover";
 const Container = styled.div`
   padding: 16px;
 
-  &: ${highlight} ${CollapseArrowIcon} {
+  &:${highlight} ${CollapseArrowIcon} {
     display: block;
   }
 `;

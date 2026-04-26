@@ -10,7 +10,7 @@ const TitleWrapper = styled.div`
   ${(props: { onClick?: unknown; disabled?: boolean }) =>
     props.onClick && !props.disabled
       ? css`
-          &: ${highlight} ${CollapseArrowIcon} {
+          &:${highlight} ${CollapseArrowIcon} {
             display: block;
           }
         `

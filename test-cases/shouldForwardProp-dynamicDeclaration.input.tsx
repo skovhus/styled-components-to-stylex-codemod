@@ -42,8 +42,7 @@ export const FlexBox = styled("div").withConfig({
   ${({ wrap }) => (wrap ? "flex-wrap: wrap;" : "")};
   ${({ alignSelf }) => (alignSelf ? `align-self: ${alignSelf};` : "")};
   ${({ gap }) => (typeof gap === "number" ? `gap: ${gap}px` : "")};
-  ${({ wrapGap, column }) =>
-    typeof wrapGap === "number" ? `${column ? "column" : "row"}-gap: ${wrapGap}px` : ""};
+  ${({ wrapGap, column }) => (typeof wrapGap === "number" ? `${column ? "column" : "row"}-gap: ${wrapGap}px` : "")};
 `;
 
 export const App = () => (

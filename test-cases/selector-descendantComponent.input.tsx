@@ -49,7 +49,7 @@ const Button = styled.button`
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #bf4f74;
+  background: #BF4F74;
   color: white;
   border: none;
   border-radius: 4px;

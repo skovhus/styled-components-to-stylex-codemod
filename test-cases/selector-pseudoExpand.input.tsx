@@ -8,7 +8,7 @@ const Button = styled.button`
   background-color: #f0f0f0;
   color: #333;
 
-  &: ${highlightExpand} {
+  &:${highlightExpand} {
     background-color: #e0e0e0;
     color: #111;
   }

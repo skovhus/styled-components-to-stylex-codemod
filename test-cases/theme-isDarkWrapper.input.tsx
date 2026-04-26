@@ -12,8 +12,7 @@ const StyledList = styled(InnerList)`
   display: flex;
   padding: 4px;
   border-radius: 6px;
-  background: ${(props) =>
-    props.theme.isDark ? props.theme.color.bgBase : props.theme.color.bgSub};
+  background: ${(props) => (props.theme.isDark ? props.theme.color.bgBase : props.theme.color.bgSub)};
 `;
 
 export const App = () => (

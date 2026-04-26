@@ -35,8 +35,6 @@ export function ClickableText(
 
 export const App = () => (
   <div>
-    {/* TS 6 expands the styled-components polymorphic attrs() type into an excessively large union here. */}
-    {/* @ts-ignore TS2590 -- fixture intentionally exercises attrs({ as: "button" }) chaining */}
     <ClickableText>Click me</ClickableText>
   </div>
 );

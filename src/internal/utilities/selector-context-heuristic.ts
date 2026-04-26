@@ -30,10 +30,7 @@ export function isSelectorContext(before: string, after: string): boolean {
   const lastColon = before.lastIndexOf(":");
   if (lastColon > lastSemiOrBrace) {
     const colonContext = before.slice(lastColon).trim();
-    const isPseudoSelectorContext =
-      /^::?[a-z-]+(?:\([^)]*\))?$/i.test(colonContext) ||
-      /^::?\s*(?:__SC_EXPR_\d+__|[a-z-]+(?:\([^)]*\))?)$/i.test(colonContext);
-    if (!isPseudoSelectorContext) {
+    if (!/^:[a-z-]+/i.test(colonContext)) {
       return false;
     }
   }
