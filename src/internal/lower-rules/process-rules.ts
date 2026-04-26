@@ -2657,6 +2657,47 @@ function handleAdjacentSiblingSelector(
     return "break";
   }
 
+  let media = findSupportedAtRule(rule.atRuleStack);
+  if (media) {
+    const resolved = resolveMediaAtRulePlaceholders(
+      media,
+      (slotId) => decl.templateExpressions[slotId],
+      {
+        lookupImport: state.resolveImportInScope,
+        resolveValue: state.resolveValue,
+        resolveSelector: state.resolveSelector,
+        parseExpr: state.parseExpr,
+        filePath: state.filePath,
+        resolverImports: state.resolverImports,
+      },
+    );
+    if (resolved === null) {
+      state.markBail();
+      state.warnings.push({
+        severity: "warning",
+        type: "Unsupported: media query interpolation must be a simple imported reference (expressions like `value + 1` are not supported)",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (resolved.kind !== "static") {
+      state.markBail();
+      state.warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: computed media query inside sibling selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    media = resolved.value;
+  }
+
+  if (media) {
+    for (const [prop, value] of Object.entries(bucket)) {
+      bucket[prop] = { default: null, [media]: value };
+    }
+  }
+
   decl.adjacentSiblingStyleKey = overrideStyleKey;
   decl.adjacentSiblingLoc = computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector);
 }

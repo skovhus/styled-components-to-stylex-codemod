@@ -1090,7 +1090,7 @@ function hasPreviousStaticSiblingWithName(path: any, componentName: string): boo
 
   type AdjacentSiblingNode =
     | { type: "JSXText"; value: string }
-    | { type: "JSXExpressionContainer" }
+    | { type: "JSXExpressionContainer"; expression?: { type?: string; value?: unknown } }
     | {
         type: "JSXElement";
         openingElement?: {
@@ -1106,6 +1106,10 @@ function hasPreviousStaticSiblingWithName(path: any, componentName: string): boo
     sibling: AdjacentSiblingNode,
   ): sibling is Extract<AdjacentSiblingNode, { type: "JSXElement" }> =>
     sibling.type === "JSXElement";
+  const isJsxExpressionContainerSibling = (
+    sibling: AdjacentSiblingNode,
+  ): sibling is Extract<AdjacentSiblingNode, { type: "JSXExpressionContainer" }> =>
+    sibling.type === "JSXExpressionContainer";
 
   for (let i = currentIndex - 1; i >= 0; i--) {
     const sibling = siblings[i] as AdjacentSiblingNode | undefined;
@@ -1113,12 +1117,17 @@ function hasPreviousStaticSiblingWithName(path: any, componentName: string): boo
       continue;
     }
     if (isJsxTextSibling(sibling)) {
-      if (sibling.value.trim() === "") {
+      continue;
+    }
+    if (isJsxExpressionContainerSibling(sibling)) {
+      const expression = sibling.expression;
+      if (
+        expression?.type === "Literal" ||
+        expression?.type === "StringLiteral" ||
+        expression?.type === "TemplateLiteral"
+      ) {
         continue;
       }
-      return false;
-    }
-    if (sibling.type === "JSXExpressionContainer") {
       return false;
     }
     if (!isJsxElementSibling(sibling)) {

@@ -702,6 +702,73 @@ export const App = () => (
     expect(result.code).toContain("thingAdjacentSibling");
   });
 
+  it("should preserve media guards for supported & + & callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+
+  @media (min-width: 768px) {
+    & + & {
+      margin-top: 16px;
+    }
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain('"@media (min-width: 768px)": 16');
+  });
+
+  it("should ignore text nodes when proving adjacent & + & callsites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Thing = styled.div\`
+  color: blue;
+  & + & {
+    color: red;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Thing>First</Thing>
+    {"hello"}
+    <Thing>Second</Thing>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain("thingAdjacentSibling");
+    expect(result.code).toContain("Second");
+    expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
+  });
+
   it("should bail on cross-component + sibling selectors because adjacent sibling is not lossless", () => {
     const source = `
 import styled from "styled-components";
