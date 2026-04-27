@@ -3,7 +3,6 @@
  * Core concepts: declaration/value modeling and selector normalization.
  */
 import type { Element } from "stylis";
-import { isCssInheritedProperty } from "./css-inherited-properties.js";
 import { PLACEHOLDER_RE, type StyledInterpolationSlot } from "./styled-css.js";
 import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
 
@@ -546,77 +545,10 @@ function sameArray(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
- * Selector pattern for a simple descendant universal selector.
- * Stylis normalizes `& * { ... }` to selector `"& *"`, and
- * bare `* { ... }` to selector `"*"`. Both are equivalent.
+ * Check if any rule has a universal selector (`*`) in its selector string.
  */
-const SIMPLE_DESCENDANT_UNIVERSAL_RE = /^(&\s+\*|\*)$/;
-
-/**
- * Rewrite `& *` rules whose declarations are ALL inherited CSS properties
- * into base `&` rules (lifting them to the parent element).
- *
- * Returns the (possibly modified) rules and whether any un-rewritable
- * universal selectors remain (which should still trigger a bail).
- */
-export function rewriteInheritedUniversalRules(rules: CssRuleIR[]): {
-  rules: CssRuleIR[];
-  hasRemainingUniversal: boolean;
-} {
-  // Quick check: if no rule contains `*` at all, skip detailed analysis
-  if (!rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"))) {
-    return { rules, hasRemainingUniversal: false };
-  }
-
-  let hasRemainingUniversal = false;
-  const result: CssRuleIR[] = [];
-
-  for (const rule of rules) {
-    if (typeof rule.selector !== "string" || !rule.selector.includes("*")) {
-      result.push(rule);
-      continue;
-    }
-
-    // Only handle simple `& *` (descendant universal) with no at-rules
-    if (!SIMPLE_DESCENDANT_UNIVERSAL_RE.test(rule.selector) || rule.atRuleStack.length > 0) {
-      hasRemainingUniversal = true;
-      result.push(rule);
-      continue;
-    }
-
-    // Check if ALL declarations use inherited properties and none are !important.
-    // !important on descendants is semantically different from !important on the parent
-    // (inherited values lose to any explicit declaration, even without !important).
-    const allInherited = rule.declarations.every(
-      (d) => isCssInheritedProperty(d.property) && !d.important,
-    );
-
-    if (!allInherited) {
-      hasRemainingUniversal = true;
-      result.push(rule);
-      continue;
-    }
-
-    // Bail if the base `&` rule already declares any of the same properties.
-    // This means the developer intentionally set different values for the parent
-    // vs descendants (e.g., `color: blue; & * { color: red; }`), and lifting
-    // would overwrite the parent's value.
-    const baseRule = result.find((r) => r.selector === "&" && r.atRuleStack.length === 0);
-    if (baseRule) {
-      const baseProps = new Set(baseRule.declarations.map((d) => d.property));
-      const hasConflict = rule.declarations.some((d) => baseProps.has(d.property));
-      if (hasConflict) {
-        hasRemainingUniversal = true;
-        result.push(rule);
-        continue;
-      }
-      baseRule.declarations.push(...rule.declarations);
-    } else {
-      result.push({ selector: "&", atRuleStack: [], declarations: [...rule.declarations] });
-    }
-  }
-
-  return { rules: result, hasRemainingUniversal };
+export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
+  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
 }
 
 /**

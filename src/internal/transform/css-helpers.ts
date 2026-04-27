@@ -9,8 +9,8 @@ import type { CssRuleIR } from "../css-ir.js";
 import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
 import {
   computeUniversalSelectorLoc,
+  hasUniversalSelectorInRules,
   normalizeStylisAstToIR,
-  rewriteInheritedUniversalRules,
 } from "../css-ir.js";
 import { parseStyledTemplateLiteral } from "../styled-css.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -130,15 +130,6 @@ export function isIdentifierReference(p: any): boolean {
   return true;
 }
 
-/** Rewrite inherited-only `& *` rules to base and notify via callback if universals remain. */
-function applyUniversalRewrite(rules: CssRuleIR[], onRemaining: () => void): CssRuleIR[] {
-  const rewritten = rewriteInheritedUniversalRules(rules);
-  if (rewritten.hasRemainingUniversal) {
-    onRemaining();
-  }
-  return rewritten.rules;
-}
-
 function buildExportedLocalNames(root: any, j: JSCodeshift): Set<string> {
   const exportedLocalNames = new Set<string>();
   root.find(j.ExportNamedDeclaration).forEach((p: any) => {
@@ -255,10 +246,10 @@ function parseCssHelperTemplate(args: {
   const parsed = parseStyledTemplateLiteral(template);
   const rawCss = `& { ${parsed.rawCss} }`;
   const stylisAst = compile(rawCss);
-  const rules = applyUniversalRewrite(
-    normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss }),
-    () => noteUniversalSelector(template, parsed.rawCss),
-  );
+  const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
+  if (hasUniversalSelectorInRules(rules)) {
+    noteUniversalSelector(template, parsed.rawCss);
+  }
   return {
     rules,
     rawCss,
@@ -1153,10 +1144,11 @@ export function extractAndRemoveCssHelpers(args: {
 
         const rawCss = `& { ${parsed.rawCss} }`;
         const stylisAst = compile(rawCss);
-        const rules = applyUniversalRewrite(
-          normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss }),
-          () => noteCssHelperUniversalSelector(template, parsed.rawCss),
-        );
+        const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss });
+
+        if (hasUniversalSelectorInRules(rules)) {
+          noteCssHelperUniversalSelector(template, parsed.rawCss);
+        }
 
         // Create a qualified name for the style key: objectName + PropName
         const qualifiedName = `${objectName}.${propName}`;
