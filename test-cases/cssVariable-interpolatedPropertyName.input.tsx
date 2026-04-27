@@ -17,6 +17,11 @@ import {
 // resolver). Exercises that the codemod uses real module resolution rather
 // than naive extension fallback.
 import { ITEM_GAP_VAR } from "./lib/css-vars";
+// Local-const + `export { ... }` form: the binding is declared as a plain
+// `const` and exported via a separate `export { ITEM_PADDING_VAR };` at the
+// bottom of `lib/item-padding.ts`. Resolution must inspect the local
+// declaration via the export specifier, not just `export const ...`.
+import { ITEM_PADDING_VAR } from "./lib/item-padding";
 
 const ITEM_MIN_WIDTH_VAR = "--item-min-width";
 
@@ -70,6 +75,16 @@ const DirectoryBarrelSetter = styled.div`
   padding: 8px;
 `;
 
+// Specifier-export-resolved: imported binding's source module declares a
+// plain `const` and exports it via `export { ... };` at the bottom of the
+// file rather than the `export const ...` form.
+const SpecifierExportSetter = styled.div`
+  ${ITEM_PADDING_VAR}: 16px;
+  background-color: chocolate;
+  color: white;
+  padding: 8px;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <Container>Sets --item-min-width: 100%</Container>
@@ -78,5 +93,6 @@ export const App = () => (
     <BarrelMinSetter>Sets --item-min-width via barrel re-export</BarrelMinSetter>
     <BarrelMaxSetter>Sets --item-max-width via barrel star re-export</BarrelMaxSetter>
     <DirectoryBarrelSetter>Sets --item-gap via directory-style barrel</DirectoryBarrelSetter>
+    <SpecifierExportSetter>Sets --item-padding via local-const re-export</SpecifierExportSetter>
   </div>
 );

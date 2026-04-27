@@ -229,7 +229,9 @@ function findDefaultExportedString(
 }
 
 /**
- * Looks for a top-level `export const <name> = "..."` in this program. Skips
+ * Looks for a top-level `export const <name> = "..."` in this program, OR an
+ * `export { <name> };` (no `from`) statement paired with a top-level
+ * `const <local> = "..."` declaration in the same file. Skips
  * `export { ... } from "..."` (handled by the re-export path) and any
  * non-`const` variable declarations.
  */
@@ -238,13 +240,46 @@ function findDirectNamedExportString(
   exportedName: string,
   state: DeclProcessingState["state"],
 ): string | null {
-  return findFirst(program.find(state.j.ExportNamedDeclaration), (p) => {
+  // 1. `export const <name> = "..."` (declaration form)
+  const fromDeclaration = findFirst(program.find(state.j.ExportNamedDeclaration), (p) => {
     const decl = p.node.declaration;
     if (decl?.type !== "VariableDeclaration" || decl.kind !== "const") {
       return null;
     }
     return findConstDeclaratorString(decl.declarations, exportedName);
   });
+  if (fromDeclaration !== null) {
+    return fromDeclaration;
+  }
+
+  // 2. `export { <name> };` (specifier form, no `from`) paired with a
+  //    top-level `const <localName> = "..."` declaration.
+  const localBinding = findLocalBindingForReExport(program, exportedName, state);
+  if (localBinding === null) {
+    return null;
+  }
+  return findTopLevelLocalConstString(program, localBinding, state);
+}
+
+/**
+ * Finds a top-level `const <name> = "..."` declaration that is NOT part of an
+ * `export` statement. Used to resolve the local-binding side of an
+ * `export { X };` re-export pair.
+ */
+function findTopLevelLocalConstString(
+  program: ParsedProgram,
+  name: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  return findFirst(
+    program
+      .find(state.j.VariableDeclaration, { kind: "const" } as { kind: "const" })
+      .filter((p) => {
+        const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
+        return parentType === "Program";
+      }),
+    (p) => findConstDeclaratorString(p.node.declarations, name),
+  );
 }
 
 /**
