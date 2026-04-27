@@ -12,6 +12,11 @@ import {
   ITEM_MIN_WIDTH_VAR as BARREL_MIN_WIDTH_VAR,
   ITEM_MAX_WIDTH_VAR as BARREL_MAX_WIDTH_VAR,
 } from "./lib/css-vars-barrel";
+// Directory-style barrel: `./lib/css-vars` resolves to `lib/css-vars/index.ts`
+// via TypeScript's index-file resolution (probed by the shared module
+// resolver). Exercises that the codemod uses real module resolution rather
+// than naive extension fallback.
+import { ITEM_GAP_VAR } from "./lib/css-vars";
 
 const ITEM_MIN_WIDTH_VAR = "--item-min-width";
 
@@ -56,6 +61,15 @@ const BarrelMaxSetter = styled.div`
   padding: 8px;
 `;
 
+// Directory-barrel-resolved: imported from `./lib/css-vars` which has no
+// extension on disk and points at `lib/css-vars/index.ts`.
+const DirectoryBarrelSetter = styled.div`
+  ${ITEM_GAP_VAR}: 12px;
+  background-color: seagreen;
+  color: white;
+  padding: 8px;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <Container>Sets --item-min-width: 100%</Container>
@@ -63,5 +77,6 @@ export const App = () => (
     <ImportedSetter>Sets --item-min-width via imported constant</ImportedSetter>
     <BarrelMinSetter>Sets --item-min-width via barrel re-export</BarrelMinSetter>
     <BarrelMaxSetter>Sets --item-max-width via barrel star re-export</BarrelMaxSetter>
+    <DirectoryBarrelSetter>Sets --item-gap via directory-style barrel</DirectoryBarrelSetter>
   </div>
 );

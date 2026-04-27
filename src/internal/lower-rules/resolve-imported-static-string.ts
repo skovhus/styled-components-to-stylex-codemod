@@ -12,8 +12,8 @@
  * with a per-resolution visit set to guard against cycles.
  */
 import { readFileSync } from "node:fs";
-import { dirname, resolve as pathResolve } from "node:path";
 import type { DeclProcessingState } from "./decl-setup.js";
+import { createModuleResolver, type ModuleResolver } from "../prepass/resolve-imports.js";
 import { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
 
@@ -25,12 +25,15 @@ export function resolveImportedConstStringInit(
   if (!importEntry || importEntry.source.kind !== "absolutePath") {
     return null;
   }
-  return resolveExportFromFile(
-    importEntry.source.value,
-    importEntry.importedName,
-    state,
-    new Set(),
-  );
+  // `importMap` stores `pathResolve(currentDir, originalSpecifier)` without
+  // probing extensions or index files. Re-run real module resolution from
+  // the importing file so directory barrels (`./lib/foo` →
+  // `./lib/foo/index.ts`) and TypeScript's extension precedence are honored.
+  const resolved = resolveModulePath(state, state.filePath, importEntry.source.value);
+  if (resolved === null) {
+    return null;
+  }
+  return resolveExportFromFile(resolved, importEntry.importedName, state, new Set());
 }
 
 /**
@@ -71,9 +74,44 @@ export function findConstDeclaratorString(declarations: unknown[], name: string)
  */
 const MAX_REEXPORT_DEPTH = 8;
 
-const MODULE_FILE_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mts", ".cts", ".mjs", ".cjs"];
-
 type ParsedProgram = ReturnType<DeclProcessingState["state"]["api"]["jscodeshift"]>;
+
+/**
+ * Per-state cached module resolver. Configured to prefer `.ts` over `.tsx`
+ * (and to probe `index.*`) when an import omits the extension, matching how
+ * TypeScript resolves `import "./foo"` and avoiding silent mistransforms
+ * when both `foo.ts` and `foo.tsx` exist. Cached on `state` because
+ * constructing the underlying `ResolverFactory` is non-trivial.
+ */
+const MODULE_RESOLVERS = new WeakMap<object, ModuleResolver>();
+
+const RESOLVER_CONFIG = {
+  // `.ts` before `.tsx` so a `foo.ts` neighbor wins over a `foo.tsx` neighbor
+  // for extensionless imports — we are looking up string-literal constants,
+  // which conventionally live in `.ts` files.
+  extensions: [".ts", ".tsx", ".jsx", ".js", ".mts", ".cts", ".mjs", ".cjs"],
+  conditionNames: ["import", "types", "default"],
+  mainFields: ["module", "main"],
+  extensionAlias: {
+    ".js": [".ts", ".tsx", ".js"],
+    ".jsx": [".tsx", ".jsx"],
+    ".ts": [".ts", ".tsx"],
+  },
+  tsconfig: "auto" as const,
+};
+
+function resolveModulePath(
+  state: DeclProcessingState["state"],
+  fromFile: string,
+  specifier: string,
+): string | null {
+  let resolver = MODULE_RESOLVERS.get(state);
+  if (!resolver) {
+    resolver = createModuleResolver(RESOLVER_CONFIG);
+    MODULE_RESOLVERS.set(state, resolver);
+  }
+  return resolver.resolve(fromFile, specifier) ?? null;
+}
 
 /**
  * Per-state cache of parsed imported files so that multiple template slots
@@ -117,13 +155,14 @@ function resolveExportFromFile(
 }
 
 /**
- * Reads and parses an imported source file with the same `tsx` parser used by
- * the transform. The `importMap` stores the original specifier resolved
- * relative to the source directory but does not probe extensions, so we try
- * the exact path first and then common module extensions.
+ * Reads and parses a fully-resolved imported source file with the same `tsx`
+ * parser used by the transform. The path passed in is expected to be the
+ * output of `oxc-resolver` (extension- and index-resolved), so this function
+ * does not probe additional candidates — that responsibility lives in
+ * `resolveModulePath`.
  */
 function parseImportedSource(
-  importedPath: string,
+  resolvedPath: string,
   state: DeclProcessingState["state"],
 ): ParsedProgram | null {
   let cache = PARSED_IMPORT_CACHES.get(state);
@@ -131,36 +170,27 @@ function parseImportedSource(
     cache = new Map();
     PARSED_IMPORT_CACHES.set(state, cache);
   }
-  const memo = cache.get(importedPath);
+  const memo = cache.get(resolvedPath);
   if (memo !== undefined) {
     return memo;
   }
 
-  const source = readSourceWithExtensionFallback(importedPath);
-  if (source === null) {
-    cache.set(importedPath, null);
+  let source: string;
+  try {
+    source = readFileSync(resolvedPath, "utf-8");
+  } catch {
+    cache.set(resolvedPath, null);
     return null;
   }
+
   let program: ParsedProgram | null = null;
   try {
     program = state.api.jscodeshift.withParser("tsx")(source);
   } catch {
     program = null;
   }
-  cache.set(importedPath, program);
+  cache.set(resolvedPath, program);
   return program;
-}
-
-function readSourceWithExtensionFallback(importedPath: string): string | null {
-  const candidates = [importedPath, ...MODULE_FILE_EXTENSIONS.map((ext) => importedPath + ext)];
-  for (const candidate of candidates) {
-    try {
-      return readFileSync(candidate, "utf-8");
-    } catch {
-      // Try next candidate
-    }
-  }
-  return null;
 }
 
 /**
@@ -224,9 +254,10 @@ function findDirectNamedExportString(
  *   - `import { Original } from "./other"; export { Original as exportedName };`
  *   - `export * from "./other"` (probed when no direct match)
  *
- * Each candidate's specifier is resolved relative to `<programPath>`'s
- * directory, mirroring how `transform-import-map.ts` handles relative
- * imports. Star exports are tried last so direct matches always win.
+ * Each candidate specifier is resolved with the shared module resolver
+ * relative to `<programPath>`, so directory barrels (`./lib/foo` →
+ * `./lib/foo/index.ts`) and TypeScript's extension precedence are honored.
+ * Star exports are tried last so direct matches always win.
  */
 function followReExports(
   program: ParsedProgram,
@@ -235,9 +266,13 @@ function followReExports(
   state: DeclProcessingState["state"],
   visited: Set<string>,
 ): string | null {
-  const programDir = dirname(programPath);
-  const resolveTarget = (specifier: string, originalName: string): string | null =>
-    resolveExportFromFile(pathResolve(programDir, specifier), originalName, state, visited);
+  const resolveTarget = (specifier: string, originalName: string): string | null => {
+    const targetPath = resolveModulePath(state, programPath, specifier);
+    if (targetPath === null) {
+      return null;
+    }
+    return resolveExportFromFile(targetPath, originalName, state, visited);
+  };
 
   for (const entry of collectNamedReExports(program, state)) {
     if (entry.localExportedAs !== exportedName) {

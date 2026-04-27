@@ -9,6 +9,7 @@ export const App = () => (
     <div sx={styles.importedSetter}>Sets --item-min-width via imported constant</div>
     <div sx={styles.barrelMinSetter}>Sets --item-min-width via barrel re-export</div>
     <div sx={styles.barrelMaxSetter}>Sets --item-max-width via barrel star re-export</div>
+    <div sx={styles.directoryBarrelSetter}>Sets --item-gap via directory-style barrel</div>
   </div>
 );
 
@@ -46,6 +47,14 @@ const styles = stylex.create({
   barrelMaxSetter: {
     "--item-max-width": "90%",
     backgroundColor: "darkslateblue",
+    color: "white",
+    padding: 8,
+  },
+  // Directory-barrel-resolved: imported from `./lib/css-vars` which has no
+  // extension on disk and points at `lib/css-vars/index.ts`.
+  directoryBarrelSetter: {
+    "--item-gap": "12px",
+    backgroundColor: "seagreen",
     color: "white",
     padding: 8,
   },
