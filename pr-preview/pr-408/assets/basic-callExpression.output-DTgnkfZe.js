@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import"./stylex-vFXG5bjz.js";import{f as e,p as t}from"./index-Dt1coIup.js";import{E as n}from"./helpers-Dhc4hWbq.js";t();var r=e(),i=n(e=>(0,r.jsx)(`div`,{...e})),a=()=>(0,r.jsx)(i,{className:`x1e2nbdu`,children:`Hello`});export{a as App};
