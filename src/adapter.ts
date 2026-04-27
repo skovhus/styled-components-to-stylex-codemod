@@ -587,6 +587,11 @@ export interface MarkerFileContext {
  */
 export interface WrappedComponentInterfaceContext {
   /**
+   * Local binding name used in the file currently being transformed.
+   * Example: `import { Button as UiButton } ...` -> localName: "UiButton"
+   */
+  localName: string;
+  /**
    * Import source for the wrapped base component.
    * - package import: e.g. `"@company/ui"`
    * - relative import: resolved absolute path

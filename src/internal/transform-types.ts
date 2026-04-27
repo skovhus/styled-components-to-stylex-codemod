@@ -136,6 +136,8 @@ export interface CrossFileInfo {
   styledDefFiles?: Map<string, Set<string>>;
   /** Global leaf keys from prepass when leaves-only mode is enabled. */
   globalLeafKeys?: Set<string>;
+  /** Files included in the current transform run. Used to avoid bailing on bases converted in the same run. */
+  transformedFiles?: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {

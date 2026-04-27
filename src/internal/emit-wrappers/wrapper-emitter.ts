@@ -65,6 +65,7 @@ type WrapperEmitterArgs = {
   /** Optional adapter hook describing the public interface of an imported component
    * being wrapped via `styled(Component)`. */
   wrappedComponentInterface?: (ctx: {
+    localName: string;
     importSource: string;
     importedName: string;
     filePath: string;
@@ -90,6 +91,7 @@ export class WrapperEmitter {
   readonly useSxProp: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
   readonly wrappedComponentInterface?: (ctx: {
+    localName: string;
     importSource: string;
     importedName: string;
     filePath: string;

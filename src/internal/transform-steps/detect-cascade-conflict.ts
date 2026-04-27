@@ -3,7 +3,7 @@
  * whose file contains internal styled-components. With StyleX's atomic CSS, the
  * override may lose depending on class insertion order — bail with a clear warning.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
@@ -21,6 +21,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   }
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
+  const transformedFiles = ctx.options.crossFileInfo?.transformedFiles;
 
   // Build lookup of locally defined styled-component names for exclusion
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
@@ -47,6 +48,9 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     const importedPath = importEntry.source.value;
+    if (transformedFiles && pathSetContainsWithExtensionFallback(importedPath, transformedFiles)) {
+      continue;
+    }
 
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
@@ -179,6 +183,27 @@ function resolveStyledDefFile(
     }
   }
   return undefined;
+}
+
+function pathSetContainsWithExtensionFallback(filePath: string, paths: Set<string>): boolean {
+  for (const candidate of pathCandidates(filePath)) {
+    if (paths.has(candidate)) {
+      return true;
+    }
+    try {
+      if (paths.has(realpathSync(candidate))) {
+        return true;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return false;
+}
+
+function pathCandidates(filePath: string): string[] {
+  const resolved = pathResolve(filePath);
+  return [resolved, ...EXTENSIONS.map((ext) => resolved + ext)];
 }
 
 /**

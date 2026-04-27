@@ -26,6 +26,10 @@ import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import type { TransformMode } from "./internal/transform-types.js";
+import {
+  resolveBarrelReExport,
+  type Resolve,
+} from "./internal/prepass/extract-external-interface.js";
 
 export { mergeMarkerDeclarations };
 
@@ -400,6 +404,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const { runPrepass } = await import("./internal/prepass/run-prepass.js");
   const absoluteFiles = filePaths.map((f) => resolve(f));
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
+  const normalizeFilePath = (filePath: string): string => {
+    try {
+      return realpathSync(resolve(filePath));
+    } catch {
+      return resolve(filePath);
+    }
+  };
 
   let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
   try {
@@ -433,28 +444,65 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  const crossFilePrepassResult = prepassResult.crossFileInfo;
+  const crossFilePrepassResult = {
+    ...prepassResult.crossFileInfo,
+    transformedFiles: new Set(absoluteFiles.map(normalizeFilePath)),
+  };
 
   // Resolve "auto" externalInterface → concrete function using consumer analysis
   const resolvedAdapter: Adapter = (() => {
     if (adapterInput.externalInterface === "auto" && prepassResult.consumerAnalysis) {
       const analysisMap = prepassResult.consumerAnalysis;
+      const prepassResolve: Resolve = (specifier, fromFile) => {
+        const resolved = sharedResolver.resolve(resolve(fromFile), specifier);
+        return resolved ? normalizeFilePath(resolved) : null;
+      };
+      const cachedRead = (filePath: string): string => {
+        try {
+          return readFileSync(filePath, "utf-8");
+        } catch {
+          return "";
+        }
+      };
+      const lookupAutoExternalInterface = (filePath: string, componentName: string) =>
+        analysisMap.get(`${normalizeFilePath(filePath)}:${componentName}`);
+
       return {
         ...adapterInput,
         externalInterface: (ctx) => {
-          let realPath: string;
-          try {
-            realPath = realpathSync(resolve(ctx.filePath));
-          } catch {
-            realPath = resolve(ctx.filePath);
-          }
           return (
-            analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
+            lookupAutoExternalInterface(ctx.filePath, ctx.componentName) ?? {
               styles: false,
               as: false,
               ref: false,
             }
           );
+        },
+        wrappedComponentInterface: (ctx) => {
+          const explicitResult = adapterInput.wrappedComponentInterface?.(ctx);
+          if (explicitResult !== undefined) {
+            return explicitResult;
+          }
+
+          if (!adapterInput.useSxProp) {
+            return undefined;
+          }
+
+          const resolvedImport = sharedResolver.resolve(resolve(ctx.filePath), ctx.importSource);
+          if (!resolvedImport) {
+            return undefined;
+          }
+
+          const resolvedPath = normalizeFilePath(resolvedImport);
+          const definitionPath =
+            resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
+            resolvedPath;
+          const autoInterfaceNames =
+            ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
+          const autoInterface = autoInterfaceNames
+            .map((name) => lookupAutoExternalInterface(definitionPath, name))
+            .find((result) => result !== undefined);
+          return autoInterface?.styles ? { acceptsSx: true } : undefined;
         },
       };
     }

@@ -33,6 +33,7 @@ export function isWrappedComponentSxAware(args: {
 
   // 1) Adapter override always wins when it returns a value.
   const adapterResult = adapter.wrappedComponentInterface?.({
+    localName: componentLocalName,
     importSource: importInfo.source.value,
     importedName: importInfo.importedName,
     filePath,
