@@ -16,3 +16,21 @@ export function toRealPath(filePath: string): string {
     return resolved;
   }
 }
+
+/**
+ * Returns `true` for ESM/CJS module specifiers that should be resolved
+ * relative to the importing file (e.g. `./foo`, `../bar`, `.`, `..`). Bare
+ * specifiers like `react` or `@scope/pkg` return `false`. Backslash-prefixed
+ * forms are accepted to match how authoring tools sometimes emit Windows
+ * paths into source.
+ */
+export function isRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier === "." ||
+    specifier === ".." ||
+    specifier.startsWith("./") ||
+    specifier.startsWith("../") ||
+    specifier.startsWith(".\\") ||
+    specifier.startsWith("..\\")
+  );
+}

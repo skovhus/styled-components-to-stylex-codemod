@@ -7,6 +7,7 @@ import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { isRelativeSpecifier } from "../utilities/path-utils.js";
 
 export function buildImportMapStep(ctx: TransformContext): StepResult {
   ctx.importMap = buildImportMap({ root: ctx.root, j: ctx.j, filePath: ctx.file.path });
@@ -74,14 +75,7 @@ function buildImportMap(args: {
  * tsconfig paths, or use Node resolution.
  */
 function resolveImportSource(specifier: string, baseDir: string): ImportSource {
-  const isRelative =
-    specifier === "." ||
-    specifier === ".." ||
-    specifier.startsWith("./") ||
-    specifier.startsWith("../") ||
-    specifier.startsWith(".\\") ||
-    specifier.startsWith("..\\");
-  return isRelative
+  return isRelativeSpecifier(specifier)
     ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
     : { kind: "specifier", value: specifier };
 }

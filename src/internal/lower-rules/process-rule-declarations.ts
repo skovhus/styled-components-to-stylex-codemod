@@ -8,6 +8,10 @@ import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
+import {
+  findConstDeclaratorString,
+  resolveImportedConstStringInit,
+} from "./resolve-imported-static-string.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 
@@ -179,12 +183,16 @@ function resolveInterpolatedPropertyName(
 }
 
 /**
- * Resolves an AST expression to a static string. Handles direct string literals
- * and identifiers bound to top-level `const NAME = "..."` declarations in the
- * file being transformed. Identifiers that are shadowed by an enclosing scope
- * (e.g. a local `const NAME = "..."` inside the function containing the styled
- * template) are not resolved — bailing is safer than substituting the wrong
- * value.
+ * Resolves an AST expression to a static string. Handles direct string
+ * literals and identifiers bound to:
+ *   - a top-level `const NAME = "..."` declaration in the file being
+ *     transformed, or
+ *   - an imported binding whose source file declares a top-level
+ *     `export const NAME = "..."`.
+ *
+ * Identifiers that are shadowed by an enclosing scope (e.g. a local `const
+ * NAME = "..."` inside the function containing the styled template) are not
+ * resolved — bailing is safer than substituting the wrong value.
  */
 function resolveExpressionToStaticString(
   expr: unknown,
@@ -199,6 +207,10 @@ function resolveExpressionToStaticString(
   }
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
+  }
+  const fromImport = resolveImportedConstStringInit(expr.name, state);
+  if (fromImport !== null) {
+    return fromImport;
   }
   return findTopLevelConstStringInit(expr.name, state);
 }
@@ -225,19 +237,9 @@ function findTopLevelConstStringInit(
       if (resolved !== null) {
         return;
       }
-      for (const declarator of p.node.declarations) {
-        if (
-          declarator.type !== "VariableDeclarator" ||
-          declarator.id.type !== "Identifier" ||
-          declarator.id.name !== name
-        ) {
-          continue;
-        }
-        const value = literalToStaticValue(declarator.init);
-        if (typeof value === "string") {
-          resolved = value;
-        }
-        return;
+      const found = findConstDeclaratorString(p.node.declarations, name);
+      if (found !== null) {
+        resolved = found;
       }
     });
   return resolved;
