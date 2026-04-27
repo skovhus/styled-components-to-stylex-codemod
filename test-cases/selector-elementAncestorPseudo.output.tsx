@@ -9,7 +9,7 @@ import * as stylex from "@stylexjs/stylex";
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
     <div sx={[styles.card, stylex.defaultMarker()]}>
-      <svg viewBox="0 0 24 24" sx={[styles.icon, styles.iconInCard]}>
+      <svg viewBox="0 0 24 24" sx={[styles.icon, styles.iconInDescendant]}>
         <circle cx="12" cy="12" r="10" />
       </svg>
       <span>Hover me</span>
@@ -30,7 +30,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#ccc",
   },
-  iconInCard: {
+  iconInDescendant: {
     fill: {
       default: "gray",
       [stylex.when.ancestor(":hover")]: "red",

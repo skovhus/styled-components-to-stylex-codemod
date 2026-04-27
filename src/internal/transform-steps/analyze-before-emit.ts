@@ -653,9 +653,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.base.kind !== "intrinsic") {
       continue;
     }
-    // Relation overrides (`Parent > Child`, `${Parent} &`, etc.) are attached at callsites.
-    // Keep these children inlined so post-process can inject override style keys conditionally.
-    if (relationChildStyleKeys.has(decl.styleKey)) {
+    // Relation overrides (`Parent > Child`, `${Parent} &`, etc.) and same-file local
+    // element overrides are attached at callsites. Keep these children inlined so
+    // post-process can inject override style keys conditionally.
+    if (
+      relationChildStyleKeys.has(decl.styleKey) ||
+      localElementTargetStyleKeys.has(decl.styleKey)
+    ) {
       continue;
     }
     // When every call site has promoted style props, each site is fully inlined;
@@ -3673,6 +3677,7 @@ type LocalElementProofReason =
   | "no-usage"
   | "dynamic-usage"
   | "non-jsx-usage"
+  | "unknown-wrapper"
   | "unsupported-wrapper"
   | "child-not-inlineable";
 
@@ -3680,6 +3685,7 @@ type LocalElementProofResult = {
   safe: boolean;
   reason: LocalElementProofReason;
   targetsByStyleKey: Map<string, Set<string>>;
+  sawCandidateMatch: boolean;
 };
 
 function proveLocalElementOverrideUsages(
@@ -3693,13 +3699,14 @@ function proveLocalElementOverrideUsages(
     overrides.map((override) => [override.styleKey, new Set<string>()]),
   );
   let sawUsage = false;
+  let sawCandidateMatch = false;
   let reason: LocalElementProofReason = "ok";
 
   const inspectChildren = (
     children: unknown[],
     relation: LocalElementOverrideRelation,
     tagName: string,
-  ): { safe: boolean; matches: Set<string> } => {
+  ): { safe: boolean; matches: Set<string>; reason?: LocalElementProofReason } => {
     const matches = new Set<string>();
     const visitChild = (child: unknown, isDirectChild: boolean): boolean => {
       if (!child || typeof child !== "object") {
@@ -3745,18 +3752,26 @@ function proveLocalElementOverrideUsages(
       }
 
       const decl = declByLocal.get(name);
-      const isIntrinsicMatch = !decl && name === tagName;
+      const isIntrinsicTagName = /^[a-z]/.test(name);
+      const isIntrinsicMatch = isIntrinsicTagName && name === tagName;
       const isStyledIntrinsicMatch =
         !!decl && decl.base.kind === "intrinsic" && decl.base.tagName === tagName;
+      const isUnknownWrapperBoundary =
+        !isIntrinsicMatch && !isStyledIntrinsicMatch && (!!decl || !isIntrinsicTagName);
 
       if (
         (relation === "child" ? isDirectChild : true) &&
         (isIntrinsicMatch || isStyledIntrinsicMatch)
       ) {
+        sawCandidateMatch = true;
         matches.add(isStyledIntrinsicMatch ? `styled:${name}` : `intrinsic:${tagName}`);
       }
 
       if (relation === "descendant") {
+        if (isUnknownWrapperBoundary) {
+          reason = "unsupported-wrapper";
+          return false;
+        }
         for (const grandchild of node.children ?? []) {
           if (!visitChild(grandchild, false)) {
             return false;
@@ -3768,7 +3783,7 @@ function proveLocalElementOverrideUsages(
 
     for (const child of children) {
       if (!visitChild(child, true)) {
-        return { safe: false, matches };
+        return { safe: false, matches, reason };
       }
     }
     return { safe: true, matches };
@@ -3787,7 +3802,7 @@ function proveLocalElementOverrideUsages(
           override.tagName,
         );
         if (!inspected.safe) {
-          reason = "dynamic-usage";
+          reason = inspected.reason ?? "dynamic-usage";
           return;
         }
         const targetSet = targetsByStyleKey.get(override.styleKey)!;
@@ -3798,15 +3813,20 @@ function proveLocalElementOverrideUsages(
     });
 
   if (reason !== "ok") {
-    return { safe: false, reason, targetsByStyleKey };
+    return { safe: false, reason, targetsByStyleKey, sawCandidateMatch };
   }
   if (!sawUsage) {
-    return { safe: false, reason: "no-usage", targetsByStyleKey };
+    return { safe: false, reason: "no-usage", targetsByStyleKey, sawCandidateMatch };
   }
   if ([...targetsByStyleKey.values()].some((set) => set.size === 0)) {
-    return { safe: false, reason: "no-usage", targetsByStyleKey };
+    return {
+      safe: false,
+      reason: sawCandidateMatch ? "dynamic-usage" : "no-usage",
+      targetsByStyleKey,
+      sawCandidateMatch,
+    };
   }
-  return { safe: true, reason: "ok", targetsByStyleKey };
+  return { safe: true, reason: "ok", targetsByStyleKey, sawCandidateMatch };
 }
 
 function getLocalElementWarningType(

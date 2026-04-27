@@ -307,6 +307,8 @@ export type LocalElementOverrideCandidate = {
    * Target IDs use the format `styled:<LocalName>` or `intrinsic:<tagName>`.
    */
   styleKeysByTargetId?: Record<string, string>;
+  /** Whether the proof path had to cross a custom/local wrapper component to reach a match. */
+  traversesWrapper?: boolean;
   /** Best-effort source location for bail warnings tied to this selector. */
   loc?: { line: number; column: number };
 };

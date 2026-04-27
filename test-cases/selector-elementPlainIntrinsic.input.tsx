@@ -16,6 +16,11 @@ const Container = styled.div`
   svg {
     fill: blue;
   }
+
+  > svg {
+    stroke: red;
+    stroke-width: 2px;
+  }
 `;
 
 export const App = () => (

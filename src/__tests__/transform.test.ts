@@ -2533,6 +2533,56 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(8);
   });
 
+  it("should bail when same-file descendant proof crosses a non-provable local wrapper component", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+\`;
+
+function Wrapper({
+  children,
+  asChild,
+}: {
+  children: React.ReactNode;
+  asChild?: boolean;
+}) {
+  return asChild ? children : <section>{children}</section>;
+}
+
+export const App = () => (
+  <Container>
+    <Wrapper asChild>
+      <Icon viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+      </Icon>
+    </Wrapper>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: element selector with dynamic children",
+      }),
+    ]);
+  });
+
   it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";

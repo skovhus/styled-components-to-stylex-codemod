@@ -95,11 +95,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     parseExpr,
     cssHelperNames,
     declByLocalName,
-    styledDecls,
     relationOverridePseudoBuckets,
     relationOverrides,
     ancestorSelectorParents,
-    childPseudoMarkers,
     resolveThemeValue,
     resolveThemeValueFromFn,
     resolveImportInScope,
@@ -139,9 +137,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const exactStyledChild =
       matchingStyledChildren.length === 1 ? matchingStyledChildren[0] : undefined;
 
+    if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: ELEMENT_BAIL_WARNING_MAP["bail-dynamic"],
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+
     if (
       exactStyledChild &&
-      !hasDynamicJsxChildren(parentDecl.localName, root, j) &&
       !hasPlainIntrinsicDescendant(
         parentDecl.localName,
         tagName,
@@ -219,7 +226,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       ancestorSelectorParents.add(parentDecl.styleKey);
       return "continue";
     }
-
     if (
       hasLocalElementPseudoCollision(
         parentDecl.localElementOverrides ?? [],
@@ -2199,39 +2205,6 @@ function isComponentExported(
     return decl?.type === "Identifier" && (decl as any).name === name;
   });
   return defaultExport.size() > 0;
-}
-
-function hasPlainIntrinsicDescendant(
-  parentName: string,
-  tagName: string,
-  styledChildName: string,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-): boolean {
-  let found = false;
-  root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: parentName },
-      },
-    } as any)
-    .forEach((path) => {
-      if (found) {
-        return;
-      }
-      for (const child of path.node.children ?? []) {
-        if (
-          child.type === "JSXElement" &&
-          child.openingElement.name.type === "JSXIdentifier" &&
-          child.openingElement.name.name === tagName &&
-          child.openingElement.name.name !== styledChildName
-        ) {
-          found = true;
-          return;
-        }
-      }
-    });
-  return found;
 }
 
 function hasDynamicJsxChildren(

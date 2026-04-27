@@ -381,10 +381,15 @@ export function postProcessTransformedAst(args: {
             } else if (sxAttr) {
               addArgsToSxAttr(sxAttr, [overrideArg]);
             } else {
-              opening.attributes = [
-                ...attrs,
-                j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(overrideArg)),
-              ];
+              const existingSxAttr = getSxAttrFromAttrs(opening.attributes ?? []);
+              if (existingSxAttr) {
+                addArgsToSxAttr(existingSxAttr, [overrideArg]);
+              } else {
+                opening.attributes = [
+                  ...(opening.attributes ?? []),
+                  j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(overrideArg)),
+                ];
+              }
             }
             changed = true;
           }
