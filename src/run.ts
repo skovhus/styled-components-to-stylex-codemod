@@ -347,7 +347,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
-  const filePaths: string[] = [];
+  let filePaths: string[] = [];
 
   const cwd = process.cwd();
   for (const pattern of patterns) {
@@ -396,6 +396,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Create shared module resolver
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
+  const normalizeFilePath = (filePath: string): string => {
+    try {
+      return realpathSync(resolve(filePath));
+    } catch {
+      return resolve(filePath);
+    }
+  };
+  filePaths = orderFilesByLocalImportDependencies(filePaths, sharedResolver, normalizeFilePath);
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
   // Contract:
@@ -404,13 +412,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const { runPrepass } = await import("./internal/prepass/run-prepass.js");
   const absoluteFiles = filePaths.map((f) => resolve(f));
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
-  const normalizeFilePath = (filePath: string): string => {
-    try {
-      return realpathSync(resolve(filePath));
-    } catch {
-      return resolve(filePath);
-    }
-  };
 
   let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
   try {
@@ -444,9 +445,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
+  // Populated by the per-file transform as each file successfully converts.
+  // Adapter hooks and cascade-conflict checks consult this live set so same-run
+  // wrappers only assume a base accepts StyleX props after the base actually converted.
+  const transformedFiles = new Set<string>();
+
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
-    transformedFiles: new Set(absoluteFiles.map(normalizeFilePath)),
+    transformedFiles,
   };
 
   // Resolve "auto" externalInterface → concrete function using consumer analysis
@@ -497,6 +503,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           const definitionPath =
             resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
             resolvedPath;
+          if (!transformedFiles.has(normalizeFilePath(definitionPath))) {
+            return undefined;
+          }
+
           const autoInterfaceNames =
             ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
           const autoInterface = autoInterfaceNames
@@ -561,17 +571,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     import("./internal/transform-types.js").BridgeComponentResult[]
   >();
 
-  // Set populated by the per-file transform to track which files were actually transformed.
-  // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
-  const transformedFiles = new Set<string>();
-
   // Map populated by the per-file transform: target file → transient prop renames for consumer patching
   const transientPropRenames = new Map<
     string,
     import("./internal/transform-types.js").TransientPropRenameResult[]
   >();
 
-  const result = await jscodeshiftRun(transformPath, filePaths, {
+  const runnerOptions = {
     parser,
     dry: dryRun,
     print,
@@ -590,7 +596,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
     silent: options.silent ?? false,
-  });
+  };
+
+  const result =
+    adapterInput.externalInterface === "auto" && adapterInput.useSxProp
+      ? await runJscodeshiftSequentially(transformPath, filePaths, runnerOptions)
+      : await jscodeshiftRun(transformPath, filePaths, runnerOptions);
 
   // Write sidecar .stylex.ts files (defineMarker declarations)
   // Merge with existing content to avoid clobbering user-owned exports (e.g. defineVars).
@@ -721,6 +732,112 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
     return newContent;
   }
   return mergeMarkerDeclarations(existing, newContent);
+}
+
+function orderFilesByLocalImportDependencies(
+  filePaths: readonly string[],
+  resolver: { resolve(fromFile: string, specifier: string): string | undefined },
+  normalizeFilePath: (filePath: string) => string,
+): string[] {
+  const filePathByNormalized = new Map<string, string>();
+  for (const filePath of filePaths) {
+    filePathByNormalized.set(normalizeFilePath(filePath), filePath);
+  }
+
+  const dependenciesByFile = new Map<string, string[]>();
+  for (const filePath of filePaths) {
+    const dependencies: string[] = [];
+    const source = readFileForOrdering(filePath);
+    MODULE_SPECIFIER_RE.lastIndex = 0;
+    for (const match of source.matchAll(MODULE_SPECIFIER_RE)) {
+      const specifier = match[1];
+      if (!specifier) {
+        continue;
+      }
+      const resolved = resolver.resolve(resolve(filePath), specifier);
+      if (!resolved) {
+        continue;
+      }
+      const dependency = filePathByNormalized.get(normalizeFilePath(resolved));
+      if (dependency && dependency !== filePath && !dependencies.includes(dependency)) {
+        dependencies.push(dependency);
+      }
+    }
+    dependenciesByFile.set(filePath, dependencies);
+  }
+
+  const ordered: string[] = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (filePath: string): void => {
+    if (visited.has(filePath)) {
+      return;
+    }
+    if (visiting.has(filePath)) {
+      return;
+    }
+    visiting.add(filePath);
+    for (const dependency of dependenciesByFile.get(filePath) ?? []) {
+      visit(dependency);
+    }
+    visiting.delete(filePath);
+    visited.add(filePath);
+    ordered.push(filePath);
+  };
+
+  for (const filePath of filePaths) {
+    visit(filePath);
+  }
+  return ordered;
+}
+
+const MODULE_SPECIFIER_RE = /\b(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
+
+function readFileForOrdering(filePath: string): string {
+  try {
+    return readFileSync(resolve(filePath), "utf-8");
+  } catch {
+    return "";
+  }
+}
+
+type JscodeshiftRunOptions = Parameters<typeof jscodeshiftRun>[2];
+type JscodeshiftRunResult = {
+  error: number;
+  nochange: number;
+  skip: number;
+  ok: number;
+  timeElapsed: string;
+};
+
+async function runJscodeshiftSequentially(
+  transformPath: string,
+  filePaths: readonly string[],
+  options: JscodeshiftRunOptions,
+): Promise<JscodeshiftRunResult> {
+  const aggregate: JscodeshiftRunResult = {
+    error: 0,
+    nochange: 0,
+    skip: 0,
+    ok: 0,
+    timeElapsed: "0",
+  };
+  let elapsed = 0;
+
+  for (const filePath of filePaths) {
+    const result = await jscodeshiftRun(transformPath, [filePath], options);
+    if (!result) {
+      continue;
+    }
+    aggregate.error += result.error;
+    aggregate.nochange += result.nochange;
+    aggregate.skip += result.skip;
+    aggregate.ok += result.ok;
+    elapsed += Number.parseFloat(result.timeElapsed) || 0;
+  }
+
+  aggregate.timeElapsed = elapsed.toFixed(3);
+  return aggregate;
 }
 
 /** Run formatter commands on a list of files, logging warnings on failure. */

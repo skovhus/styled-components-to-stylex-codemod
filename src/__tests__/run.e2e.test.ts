@@ -206,4 +206,31 @@ describe("runTransform (e2e)", () => {
       }),
     );
   });
+
+  it("does not infer sx for wrappers when the base file bails in the same run", async () => {
+    const { result, container, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-sx-aware-bailed-base-",
+      componentLines: [
+        'import styled from "styled-components";',
+        "",
+        "export const ContentViewContainer = styled.div`",
+        "  display: flex;",
+        "  * {",
+        "    color: red;",
+        "  }",
+        "`;",
+        "",
+      ],
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(0);
+    expect(result.skipped).toBe(2);
+    expect(container).not.toContain("sx?: stylex.StyleXStyles");
+    expect(consumer).toContain("const Body = styled(ContentViewContainer)`");
+    expect(consumer).not.toContain("sx={styles.body}");
+    expect(consumer).not.toContain("stylex.props(styles.body)");
+  });
 });
