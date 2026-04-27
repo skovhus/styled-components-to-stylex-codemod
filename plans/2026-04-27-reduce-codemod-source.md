@@ -31,7 +31,7 @@ Estimated savings: ~40 LOC, risk: low.
 
 ### P1.2 Drop the `transform-*.ts` "facade" layer
 
-Files `src/internal/transform-utils.ts`, `transform-parse-expr.ts`, `transform-resolve-value.ts`, `transform-css-vars.ts`, `transform-import-map.ts` are *all* small modules that exist only because `TransformContext` constructed thunks over them. Several have a single caller.
+Files `src/internal/transform-utils.ts`, `transform-parse-expr.ts`, `transform-resolve-value.ts`, `transform-css-vars.ts`, `transform-import-map.ts` are _all_ small modules that exist only because `TransformContext` constructed thunks over them. Several have a single caller.
 
 Concretely:
 

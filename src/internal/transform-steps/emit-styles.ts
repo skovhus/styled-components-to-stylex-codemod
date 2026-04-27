@@ -191,4 +191,3 @@ function emitMarkerGroup(
     importDecl as unknown as { type?: string },
   );
 }
-

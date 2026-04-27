@@ -8,7 +8,9 @@ import type { ASTNode, Collection, ImportDeclaration } from "jscodeshift";
  * Return the index of the LAST top-level `ImportDeclaration` in `body`, or -1
  * when there are none.
  */
-export function findLastImportIndex(body: ReadonlyArray<{ type?: string } | undefined | null>): number {
+export function findLastImportIndex(
+  body: ReadonlyArray<{ type?: string } | undefined | null>,
+): number {
   let last = -1;
   for (let i = 0; i < body.length; i++) {
     if (body[i]?.type === "ImportDeclaration") {
