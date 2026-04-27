@@ -5,6 +5,7 @@
 import { dirname, resolve as pathResolve } from "node:path";
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../adapter.js";
+import { isRelativeSpecifier } from "./utilities/path-utils.js";
 
 export function buildImportMap(args: {
   root: Collection<ASTNode>;
@@ -30,14 +31,7 @@ export function buildImportMap(args: {
   const resolveImportSource = (specifier: string): ImportSource => {
     // Deterministic resolution: for relative specifiers, just resolve against the current file’s folder.
     // This intentionally does NOT probe extensions, consult tsconfig paths, or use Node resolution.
-    const isRelative =
-      specifier === "." ||
-      specifier === ".." ||
-      specifier.startsWith("./") ||
-      specifier.startsWith("../") ||
-      specifier.startsWith(".\\") ||
-      specifier.startsWith("..\\");
-    return isRelative
+    return isRelativeSpecifier(specifier)
       ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
       : { kind: "specifier", value: specifier };
   };
