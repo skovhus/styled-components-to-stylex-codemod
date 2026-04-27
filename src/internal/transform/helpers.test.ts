@@ -172,6 +172,11 @@ describe("cssValueToJs", () => {
     expect(cssValueToJs({ kind: "static", value: "0" }, false, "flex")).toBe("0");
   });
 
+  it("keeps pixel line-height values as strings", () => {
+    expect(cssValueToJs({ kind: "static", value: "20px" }, false, "lineHeight")).toBe("20px");
+    expect(cssValueToJs({ kind: "static", value: "1.5" }, false, "lineHeight")).toBe(1.5);
+  });
+
   it("appends !important and avoids double-adding", () => {
     expect(cssValueToJs({ kind: "static", value: "red" }, true)).toBe("red !important");
     expect(cssValueToJs({ kind: "static", value: "red !important" }, true)).toBe("red !important");

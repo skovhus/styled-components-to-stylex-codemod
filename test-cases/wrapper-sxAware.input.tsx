@@ -40,6 +40,7 @@ export const ExportedAccentButton = styled(SxAwareButton)`
 // find the `sx` member.
 const StyledText = styled(Text)`
   color: navy;
+  line-height: 20px;
 `;
 
 const callerStyles = stylex.create({

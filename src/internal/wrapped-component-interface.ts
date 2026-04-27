@@ -14,6 +14,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import jscodeshift, { type ASTNode, type JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../adapter.js";
+import { createModuleResolver } from "./prepass/resolve-imports.js";
 
 export function isWrappedComponentSxAware(args: {
   adapter: Pick<Adapter, "useSxProp" | "wrappedComponentInterface">;
@@ -40,13 +41,13 @@ export function isWrappedComponentSxAware(args: {
     return adapterResult.acceptsSx === true;
   }
 
-  // 2) Static auto-detection: only relative imports are scannable. Package
-  //    imports (e.g. "@company/ui") are out of reach without node_modules
-  //    resolution; the adapter hook is the way to handle those.
-  if (importInfo.source.kind !== "absolutePath") {
+  // 2) Static auto-detection: resolve the imported component to source on disk
+  //    and scan its declared props type.
+  const absolutePath = resolveWrappedComponentSource(importInfo.source, filePath);
+  if (!absolutePath) {
     return false;
   }
-  return detectExportedSxProp(importInfo.source.value, importInfo.importedName);
+  return detectExportedSxProp(absolutePath, importInfo.importedName);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ export function isWrappedComponentSxAware(args: {
 
 const FILE_EXTENSIONS = ["", ".tsx", ".ts", ".jsx", ".js"];
 const SX_PROP_NAME = "sx";
+const moduleResolver = createModuleResolver();
 
 /**
  * Cache keyed by `absolutePath\u0000componentName`. Detection requires reading
@@ -63,6 +65,13 @@ const SX_PROP_NAME = "sx";
  * that happen during a single transform pass.
  */
 const detectionCache = new Map<string, boolean>();
+
+function resolveWrappedComponentSource(source: ImportSource, filePath: string): string | null {
+  if (source.kind === "absolutePath") {
+    return source.value;
+  }
+  return moduleResolver.resolve(filePath, source.value) ?? null;
+}
 
 function detectExportedSxProp(absolutePath: string, componentName: string): boolean {
   const cacheKey = `${absolutePath}\u0000${componentName}`;

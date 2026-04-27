@@ -229,6 +229,9 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
     // StyleX defaults to pixels for length properties; convert "26px" → 26.
     const pxMatch = /^(-?\d*\.?\d+)px$/.exec(raw);
     if (pxMatch) {
+      if (propName === "lineHeight") {
+        return raw;
+      }
       return Number(pxMatch[1]);
     }
 
