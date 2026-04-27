@@ -4,18 +4,19 @@
 import type { StyledDecl } from "../transform-types.js";
 
 /**
- * Locate the slot interpolation in a `${...}` value, return its arrow-function
- * expression node and the name of its first identifier parameter. Returns
- * `null` when the declaration is not interpolated, has no slot, or the
- * interpolation is not a single-param arrow function.
+ * Locate the slot interpolation in a `${...}` value and return its
+ * arrow-function expression node. Returns `null` when the declaration is not
+ * interpolated, has no slot, or the interpolation is not an
+ * ArrowFunctionExpression.
  *
  * Several `tryHandle*` factories share this same opening preamble; this helper
- * centralises the AST shape checks.
+ * centralises the AST shape checks. Callers that need a simple identifier
+ * parameter should use `findArrowSlotExprWithIdentParam` instead, which
+ * additionally requires `(name) => ...`. Callers that support destructured
+ * parameters (e.g. `({ $flag }) => ...`) should use `findArrowSlotExpr` and
+ * resolve their own parameter bindings via `getArrowFnParamBindings`.
  */
-export function findArrowSlotExpr(
-  d: any,
-  decl: StyledDecl,
-): { expr: any; paramName: string } | null {
+export function findArrowSlotExpr(d: any, decl: StyledDecl): { expr: any } | null {
   if (d?.value?.kind !== "interpolated") {
     return null;
   }
@@ -27,9 +28,26 @@ export function findArrowSlotExpr(
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return null;
   }
-  const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-  if (!paramName) {
+  return { expr };
+}
+
+/**
+ * Like `findArrowSlotExpr`, but additionally requires the arrow function's
+ * first parameter to be a plain Identifier (e.g. `(props) => ...`). Returns
+ * the parameter's name alongside the expression.
+ */
+export function findArrowSlotExprWithIdentParam(
+  d: any,
+  decl: StyledDecl,
+): { expr: any; paramName: string } | null {
+  const found = findArrowSlotExpr(d, decl);
+  if (!found) {
     return null;
   }
-  return { expr, paramName };
+  const params = (found.expr as { params?: Array<{ type?: string; name?: string }> }).params ?? [];
+  const first = params[0];
+  if (first?.type !== "Identifier" || typeof first.name !== "string") {
+    return null;
+  }
+  return { expr: found.expr, paramName: first.name };
 }

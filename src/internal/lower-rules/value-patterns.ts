@@ -20,7 +20,7 @@ import { resolveThemeFromPropsMember } from "./template-literals.js";
 import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
-import { findArrowSlotExpr } from "./slot-utils.js";
+import { findArrowSlotExprWithIdentParam } from "./slot-utils.js";
 import { registerImports } from "./utils.js";
 
 type ValuePatternContext = Pick<
@@ -109,7 +109,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if ((d.property ?? "").trim() !== "background") {
       return false;
     }
-    const found = findArrowSlotExpr(d, decl);
+    const found = findArrowSlotExprWithIdentParam(d, decl);
     if (!found) {
       return false;
     }
@@ -178,7 +178,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (!d.property) {
       return false;
     }
-    const found = findArrowSlotExpr(d, decl);
+    const found = findArrowSlotExprWithIdentParam(d, decl);
     if (!found) {
       return false;
     }
@@ -409,7 +409,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (opts.pseudos?.length || opts.media || opts.attrTarget) {
       return false;
     }
-    const found = findArrowSlotExpr(d, decl);
+    const found = findArrowSlotExprWithIdentParam(d, decl);
     if (!found) {
       return false;
     }
@@ -569,7 +569,7 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (prefix || suffix) {
       return false;
     }
-    const found = findArrowSlotExpr(d, decl);
+    const found = findArrowSlotExprWithIdentParam(d, decl);
     if (!found) {
       return false;
     }
