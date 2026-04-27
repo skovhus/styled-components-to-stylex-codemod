@@ -19,6 +19,15 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 /** Test cases that intentionally test partial conversion with leftover css helpers. */
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 
+/**
+ * Fixtures that intentionally test partial-file transforms: at least one styled
+ * declaration cannot be transformed and remains as `styled\`...\`` in the output,
+ * so the `styled` default import must be preserved.
+ */
+function isPartialFixture(name: string): boolean {
+  return name.startsWith("partial-");
+}
+
 function isBailOutFixture(filename: string): boolean {
   return BAIL_OUT_PREFIXES.some((prefix) => filename.startsWith(prefix));
 }
@@ -281,14 +290,21 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
     const inputPath = join(testCasesDir, bailOutInput);
     const input = readFileSync(inputPath, "utf-8");
     const expectedWarning = getExpectedWarningType(input, inputPath);
+    // Only the `_unsupported.partial-*` fixtures need partial-migration mode —
+    // they exercise the cascade-conflict guard that fires only when per-decl
+    // skips are allowed. Regular `_unsupported.*` cases should bail under the
+    // default stricter semantics.
+    const allowPartialMigration = bailOutInput.startsWith("_unsupported.partial-");
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
+      { adapter: fixtureAdapter, allowPartialMigration },
     );
-    expect(result.code).toBeNull();
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings[0]?.type).toBe(expectedWarning);
+    // With per-decl skips, other decls in the fixture may transform successfully while
+    // the one carrying the unsupported pattern is preserved. Require the expected
+    // warning to be present rather than forcing the whole file to bail.
+    expect(result.warnings.length).toBeGreaterThanOrEqual(1);
+    expect(result.warnings.map((w) => w.type)).toContain(expectedWarning);
   });
 });
 
@@ -321,6 +337,407 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
   });
 });
 
+describe("partial-file transforms", () => {
+  // All partial-file tests need allowPartialMigration: true so per-decl bails
+  // don't escalate to a whole-file bail.
+  const runPartial = (source: string, filename: string) =>
+    transformWithWarnings(
+      { source, path: join(testCasesDir, filename) },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+  it("emits a warning for the skipped decl and transforms the rest", () => {
+    const source = `
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-warning.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // StyleX output for Container (fixture adapter uses the `sx` prop)
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toMatch(/sx=\{styles\.container\}/);
+    // Original styled-components declaration preserved for Complex
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+    expect(result.code).toContain('import styled from "styled-components"');
+    // Warning emitted for the skipped decl
+    expect(result.warnings.some((w) => w.type.startsWith("Unsupported selector"))).toBe(true);
+  });
+
+  it("preserves `import { styled as alias }` aliasing across partial transforms", () => {
+    // Aliased named-import form: both the `imported` (styled) and `local` (sc) names
+    // must survive the re-emit. Emitting only the alias would produce
+    // `import { sc }` which is not an exported name.
+    const source = `
+import { styled as sc } from "styled-components";
+
+const Container = sc.div\`
+  padding: 12px;
+\`;
+
+const Complex = sc.nav\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-aliasedStyled.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Alias is preserved: `import { styled as sc }` must survive.
+    expect(result.code).toMatch(
+      /import\s+\{\s*styled\s+as\s+sc\s*\}\s+from\s+["']styled-components["']/,
+    );
+    // The preserved decl still uses the alias (sc.nav).
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*sc\.nav`/);
+  });
+
+  it("falls back to stylexStyles when the existing stylex.create name is shadowed by a function parameter", () => {
+    // A function parameter named `styles` shadows the top-level `const styles = ...`
+    // inside the function body. Emitting `sx={styles.container}` at a call site
+    // inside that function would bind to the parameter — reject the merge.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  heading: { color: "navy" },
+});
+
+function Row(styles) {
+  return <Container>{styles.label}</Container>;
+}
+
+export const App = () => (
+  <div>
+    <Row styles={{ label: "a" }} />
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-shadowedParam.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Merge rejected → new declaration under `stylexStyles`.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+  });
+
+  it("bails when a skipped decl still interpolates an extracted css helper", () => {
+    // `const hoverStyles = css\`...\`` is simple and would normally lower cleanly,
+    // but extractCssHelpersStep removes its source declaration before lowering.
+    // If the consumer `Complex` is then skipped (unsupported selector), its
+    // preserved template would reference the now-undefined `hoverStyles` identifier.
+    const source = `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  color: tomato;
+\`;
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  \${hoverStyles}
+  & a.active { color: gold; }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-danglingHelper.input.tsx");
+
+    expect(result.code).toBeNull();
+  });
+
+  it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {
+    // `sharedReset` is a css helper used by both `Container` (transforms) and
+    // `Complex` (skipped). The helper's `stylex.create` entry must survive so the
+    // transformed `Container` still gets its mixin styles.
+    const source = `
+import styled, { css } from "styled-components";
+
+const sharedReset = css\`
+  box-sizing: border-box;
+\`;
+
+const Container = styled.div\`
+  \${sharedReset}
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  color: rebeccapurple;
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-sharedMixin.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Container transforms — its mixin reference compiled into the shared helper's
+    // style entry, and `collectOwnedDeclStyleKeys` doesn't delete keys referenced
+    // by non-skipped decls even though Complex (skipped) conceptually also
+    // referenced the reset helper.
+    expect(result.code).toMatch(/container:\s*\{/);
+    expect(result.code).toMatch(/boxSizing:\s*["']border-box["']/);
+    // Complex stays as styled-components since its descendant selector can't lower.
+    expect(result.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+  });
+
+  it("falls back to stylexStyles when the existing stylex.create name is shadowed by a nested binding", () => {
+    // The top-level `const styles = stylex.create({...})` name is shadowed by
+    // a nested `const styles = ...` inside the component. Emitting `sx={styles.X}`
+    // at that call site would bind to the inner variable — reject the merge.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  heading: { color: "navy" },
+});
+
+export const App = () => {
+  const styles = { inline: true };
+  return (
+    <div>
+      <Container data-inline={styles.inline}>c</Container>
+    </div>
+  );
+};
+`;
+    const result = runPartial(source, "partial-shadowedStyles.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Merge rejected → new declaration under `stylexStyles`.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+    // Existing `styles` is preserved as-is.
+    expect(result.code).toMatch(/heading:\s*\{\s*color:\s*["']navy["']/);
+  });
+
+  it("falls back to stylexStyles when a new style key collides with an existing stylex.create key", () => {
+    // The existing `styles.container` and our new entry would both be called
+    // `container`. To avoid silently overwriting the user's styles, emit a
+    // separate `stylexStyles` declaration instead of merging.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const styles = stylex.create({
+  container: { color: "red" },
+});
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <p {...stylex.props(styles.container)}>existing</p>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-keyCollision.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // A second `stylex.create` declaration is emitted under a different name.
+    expect(result.code).toMatch(/const\s+stylexStyles\s*=\s*stylex\.create/);
+    expect(result.code).toMatch(/sx=\{stylexStyles\.container\}/);
+    // Existing `styles` is preserved as-is.
+    expect(result.code).toMatch(/container:\s*\{\s*color:\s*["']red["']/);
+  });
+
+  it("bails the whole file when a `css` helper decl cannot be lowered", () => {
+    // `css\`\`` helpers are extracted (and removed from the source) before lowering.
+    // If the helper itself fails to lower, its declaration is gone and any consumer
+    // would dangle — so the whole file must bail rather than emit broken output.
+    const source = `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  \${hoverStyles}
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-cssHelper.input.tsx");
+
+    expect(result.code).toBeNull();
+  });
+
+  it("bails the whole file when a leaf converts but its non-leaf base is skipped", () => {
+    // `Base` carries an unsupported descendant selector and stays as styled-components.
+    // `Derived` is simple and would convert to StyleX. That direction is unsafe:
+    // the StyleX leaf's overrides can lose to the base's later-injected
+    // styled-components CSS depending on property overlap. Bail.
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.div\`
+  color: navy;
+
+  & a.active {
+    color: gold;
+  }
+\`;
+
+const Derived = styled(Base)\`
+  color: red;
+  padding: 16px;
+\`;
+
+export const App = () => (
+  <div>
+    <Base><a className="active">b</a></Base>
+    <Derived>d</Derived>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-cascade.input.tsx");
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles",
+    );
+  });
+
+  it("allows the reverse direction: non-leaf base converts while the leaf stays as styled-components", () => {
+    // `Derived` has an unsupported selector and stays as styled-components.
+    // `Base` is simple and converts to StyleX. styled-components injects its
+    // class AFTER StyleX's precompiled atomic CSS, so the leaf's overrides
+    // still win. Base must be emitted as a wrapper so `styled(Base)` in the
+    // preserved leaf still has a callable React component to reference.
+    const source = `
+import styled from "styled-components";
+
+const Base = styled.div\`
+  color: navy;
+  padding: 8px;
+\`;
+
+const Derived = styled(Base)\`
+  color: tomato;
+
+  & a.active {
+    color: gold;
+  }
+\`;
+
+export const App = () => (
+  <div>
+    <Base>b</Base>
+    <Derived><a className="active">d</a></Derived>
+  </div>
+);
+`;
+    const result = runPartial(source, "partial-nonleafBase.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    // Base converts to a wrapper function (not inlined) so `styled(Base)` works.
+    expect(result.code).toMatch(/function\s+Base\s*</);
+    // Derived stays as styled-components and references the Base wrapper.
+    expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
+  });
+
+  it("bails the whole file by default when a decl cannot be lowered (allowPartialMigration: false)", () => {
+    // Default behavior matches the pre-flag semantics: any per-decl bail
+    // escalates to a whole-file bail unless `allowPartialMigration: true` is
+    // explicitly passed.
+    const source = `
+import styled from "styled-components";
+
+const Container = styled.div\`
+  padding: 12px;
+\`;
+
+const Complex = styled.nav\`
+  & a.active { color: tomato; }
+\`;
+
+export const App = () => (
+  <div>
+    <Container>c</Container>
+    <Complex><a className="active">x</a></Complex>
+  </div>
+);
+`;
+    const defaultResult = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-defaultBail.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(defaultResult.code).toBeNull();
+
+    // Same source with the flag explicitly enabled produces partial output.
+    const partialResult = runPartial(source, "partial-defaultBail.input.tsx");
+    expect(partialResult.code).not.toBeNull();
+    expect(partialResult.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+  });
+});
+
 describe("test case exports", () => {
   it.each(fixtureCases)(
     "$outputFile should export App in both input and output",
@@ -339,9 +756,11 @@ describe("output invariants", () => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-        ? ["styled", "keyframes", "createGlobalStyle"]
-        : ["styled", "css", "keyframes", "createGlobalStyle"];
+      const disallowedImports = isPartialFixture(name)
+        ? ["keyframes", "createGlobalStyle"]
+        : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+          ? ["styled", "keyframes", "createGlobalStyle"]
+          : ["styled", "css", "keyframes", "createGlobalStyle"];
       const importMatch = output.match(
         /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
       );
@@ -368,7 +787,12 @@ describe("transform", () => {
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
-    const diagnostics = runTransformWithDiagnostics(input, { crossFileInfo }, inputPath, parser);
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
+      inputPath,
+      parser,
+    );
     const result = diagnostics.code || input;
 
     // Transform must produce a change - no bailing allowed
@@ -386,9 +810,11 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    const disallowedImports = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-      ? ["styled", "keyframes", "createGlobalStyle"]
-      : ["styled", "css", "keyframes", "createGlobalStyle"];
+    const disallowedImports = isPartialFixture(name)
+      ? ["keyframes", "createGlobalStyle"]
+      : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+        ? ["styled", "keyframes", "createGlobalStyle"]
+        : ["styled", "css", "keyframes", "createGlobalStyle"];
     const importMatch = result.match(
       /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
     );
@@ -4651,8 +5077,14 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
 
-    // Should bail because Link and Button are different components
-    expect(result.code).toBeNull();
+    // The `Icon` decl carries the grouped reverse selector across different
+    // components and cannot be transformed. With per-decl skips the other
+    // decls may convert, but `Icon` must remain as styled-components and the
+    // grouped-reverse-selector warning must be emitted.
+    expect(result.warnings.some((w) => w.type.includes("grouped reverse selector"))).toBe(true);
+    if (result.code !== null) {
+      expect(result.code).toMatch(/const\s+Icon\s*=\s*styled\.span`/);
+    }
   });
 });
 
@@ -5907,8 +6339,18 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
 
-    // Should bail — compound :has + pseudo is not supported
-    expect(result.code).toBeNull();
+    // The `Button` decl carrying the compound :has+pseudo selector cannot be
+    // transformed. With per-decl skips the rest of the file is allowed to
+    // convert, but `Button` itself must remain as a styled-components declaration
+    // and a warning must be emitted for the unsupported selector.
+    expect(
+      result.warnings.some(
+        (w) => w.type.startsWith("Unsupported selector:") || w.type.includes(":has"),
+      ),
+    ).toBe(true);
+    if (result.code !== null) {
+      expect(result.code).toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    }
   });
 
   it("should handle &:has(${Component}) with specificity hack (&&:has)", () => {

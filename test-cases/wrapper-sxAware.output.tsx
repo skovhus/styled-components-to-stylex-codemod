@@ -15,7 +15,7 @@ import { Text } from "./lib/sx-aware-text";
 function StyledButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
   const { children, sx, ...rest } = props;
   return (
-    <SxAwareButton {...rest} sx={[styles.button, sx]}>
+    <SxAwareButton {...rest} sx={[callerStyles.button, sx]}>
       {children}
     </SxAwareButton>
   );
@@ -34,7 +34,7 @@ export function ExportedAccentButton(
 ) {
   const { children, sx, ...rest } = props;
   return (
-    <SxAwareButton {...rest} sx={[styles.exportedAccentButton, sx]}>
+    <SxAwareButton {...rest} sx={[callerStyles.exportedAccentButton, sx]}>
       {children}
     </SxAwareButton>
   );
@@ -42,6 +42,29 @@ export function ExportedAccentButton(
 
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
+  button: {
+    color: "#bf4f74",
+    fontWeight: "bold",
+  },
+  // Multiple call sites → emitted as a wrapper function component.
+  primary: {
+    color: "white",
+  },
+  // Single call site with caller-passed sx → tests inlined path composing
+  // the caller's sx with the styled component's internal sx.
+  inlinedAccent: {
+    backgroundColor: "#fef3c7",
+  },
+  exportedAccentButton: {
+    color: "red",
+  },
+  // Wrapping the generic Text component — auto-detection has to walk
+  // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
+  // find the `sx` member.
+  text: {
+    color: "navy",
+    lineHeight: "20px",
+  },
 });
 
 export const App = () => (
@@ -52,45 +75,15 @@ export const App = () => (
     </StyledButton>
     {/* Caller passes its own sx — must compose with the wrapper's internal sx */}
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
-    <SxAwareButton sx={styles.primary}>Primary 1</SxAwareButton>
-    <SxAwareButton sx={styles.primary}>Primary 2</SxAwareButton>
-    <SxAwareButton sx={[styles.inlinedAccent, callerStyles.caller]}>
+    <SxAwareButton sx={callerStyles.primary}>Primary 1</SxAwareButton>
+    <SxAwareButton sx={callerStyles.primary}>Primary 2</SxAwareButton>
+    <SxAwareButton sx={[callerStyles.inlinedAccent, callerStyles.caller]}>
       Inlined with caller sx
     </SxAwareButton>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
-    <Text size="md" sx={styles.text}>
+    <Text size="md" sx={callerStyles.text}>
       Generic Text
     </Text>
   </div>
 );
-
-const styles = stylex.create({
-  button: {
-    color: "#bf4f74",
-    fontWeight: "bold",
-  },
-
-  // Multiple call sites → emitted as a wrapper function component.
-  primary: {
-    color: "white",
-  },
-
-  // Single call site with caller-passed sx → tests inlined path composing
-  // the caller's sx with the styled component's internal sx.
-  inlinedAccent: {
-    backgroundColor: "#fef3c7",
-  },
-
-  exportedAccentButton: {
-    color: "red",
-  },
-
-  // Wrapping the generic Text component — auto-detection has to walk
-  // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
-  // find the `sx` member.
-  text: {
-    color: "navy",
-    lineHeight: "20px",
-  },
-});

@@ -2,7 +2,7 @@
  * Step: collect static property assignments on styled components.
  * Core concepts: static metadata capture and inheritance generation.
  */
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 
@@ -11,10 +11,13 @@ import { TransformContext } from "../transform-context.js";
  */
 export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   const { root, j } = ctx;
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls || !ctx.declByLocal || !ctx.extendedBy || !ctx.exportedComponents) {
+  const allStyledDecls = ctx.styledDecls as StyledDecl[] | undefined;
+  if (!allStyledDecls || !ctx.declByLocal || !ctx.extendedBy || !ctx.exportedComponents) {
     return CONTINUE;
   }
+  // Skip decls that couldn't be lowered — their static props assignments, if any,
+  // remain attached to the original styled-components declaration in the source.
+  const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
 
   // Collect static property assignments for styled components (e.g., ListItem.HEIGHT = 42)
   // These need to be repositioned after the wrapper functions are emitted.

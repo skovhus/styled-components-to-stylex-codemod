@@ -3,7 +3,7 @@
  * Core concepts: wrapper decisions and polymorphic-as handling.
  */
 import type { JSCodeshift } from "jscodeshift";
-import { CONTINUE, type StepResult } from "../transform-types.js";
+import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import {
@@ -21,10 +21,12 @@ const INLINE_USAGE_THRESHOLD = 1;
  */
 export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
   const { root, j } = ctx;
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls || !ctx.declByLocal || !ctx.extendedBy || !ctx.exportedComponents) {
+  const allStyledDecls = ctx.styledDecls as StyledDecl[] | undefined;
+  if (!allStyledDecls || !ctx.declByLocal || !ctx.extendedBy || !ctx.exportedComponents) {
     return CONTINUE;
   }
+  // Skip decls that couldn't be lowered — they remain as original styled-components code.
+  const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
 
   const declByLocal = ctx.declByLocal;
   const extendedBy = ctx.extendedBy;
@@ -350,8 +352,10 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       continue;
     }
     // Check if any child still delegates to this parent (i.e., has base.kind === "component"
-    // with base.ident pointing to the parent after flattening)
-    const hasDelegate = styledDecls.some(
+    // with base.ident pointing to the parent after flattening). Include skipped decls:
+    // a preserved `styled(Parent)\`...\`` leaf still references Parent at runtime and
+    // needs className/style forwarding so styled-components can inject its class.
+    const hasDelegate = allStyledDecls.some(
       (d) => d.base.kind === "component" && d.base.ident === parentName,
     );
     if (!hasDelegate) {

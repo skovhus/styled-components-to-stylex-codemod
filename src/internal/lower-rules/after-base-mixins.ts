@@ -76,7 +76,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
   };
 
   for (const decl of styledDecls) {
-    if (decl.isCssHelper) {
+    if (decl.isCssHelper || decl.skipTransform) {
       continue;
     }
     const afterBaseKeys = decl.extraStyleKeysAfterBase ?? [];
@@ -84,6 +84,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
       continue;
     }
 
+    state.currentDecl = decl;
     for (const mixinKey of afterBaseKeys) {
       const mixinStyle = resolvedStyleObjects.get(mixinKey);
       if (!isPlainObject(mixinStyle)) {
@@ -131,7 +132,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
             break;
           }
         }
-        if (state.bail) {
+        if (decl.skipTransform || state.bail) {
           break;
         }
 
@@ -150,7 +151,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
         }
       }
 
-      if (state.bail) {
+      if (decl.skipTransform || state.bail) {
         break;
       }
       if (!didPatch) {
@@ -174,6 +175,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
         );
       }
     }
+    state.currentDecl = null;
     if (state.bail) {
       break;
     }
@@ -185,7 +187,7 @@ export function postProcessAfterBaseMixins(state: LowerRulesState): void {
   if (!state.bail && prunableCssHelperKeys.size > 0) {
     const referencedKeys = new Set<string>();
     for (const d of styledDecls) {
-      if (d.isCssHelper) {
+      if (d.isCssHelper || d.skipTransform) {
         continue;
       }
       referencedKeys.add(d.styleKey);

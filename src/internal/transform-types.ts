@@ -90,6 +90,13 @@ export interface TransformOptions extends Options {
    * When present, enables cross-file component selector handling.
    */
   crossFileInfo?: CrossFileInfo;
+
+  /**
+   * When true, individual declarations that hit an unsupported pattern are left
+   * as-is while the rest of the file is transformed. When false (default), any
+   * per-decl bail escalates to a whole-file bail.
+   */
+  allowPartialMigration?: boolean;
 }
 
 /**
@@ -203,6 +210,17 @@ export type CallSiteCombinedStyle = {
   /** Merged CSS styles from all consumed props in this combination */
   styles: Record<string, unknown>;
 };
+
+/**
+ * Filters out declarations that couldn't be lowered in `lowerRulesStep`. Downstream
+ * steps use this to skip emission/rewrite for decls that must remain in the source
+ * as original styled-components code.
+ */
+export function getActiveStyledDecls(
+  styledDecls: StyledDecl[] | undefined,
+): StyledDecl[] | undefined {
+  return styledDecls?.filter((d) => !d.skipTransform);
+}
 
 export type StyledDecl = {
   /**
@@ -586,4 +604,11 @@ export type StyledDecl = {
   bridgeClassName?: string;
   /** Local helper functions that were inlined into style functions and should be removed */
   consumedLocalHelpers?: string[];
+  /**
+   * When true, this declaration could not be transformed to StyleX and should be left
+   * untouched in the output (original `styled\`...\`` template preserved, JSX usages
+   * unchanged). Set by per-decl bails in lower-rules. Downstream emission, JSX
+   * rewriting, and wrapper emission must skip declarations with this flag.
+   */
+  skipTransform?: boolean;
 };

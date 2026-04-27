@@ -62,7 +62,9 @@ export function emitWrappers(args: {
     wrappedComponentInterface,
   } = args;
 
-  const wrapperDecls = styledDecls.filter((d) => d.needsWrapperComponent && !d.isCssHelper);
+  const wrapperDecls = styledDecls.filter(
+    (d) => d.needsWrapperComponent && !d.isCssHelper && !d.skipTransform,
+  );
   if (wrapperDecls.length === 0) {
     return;
   }

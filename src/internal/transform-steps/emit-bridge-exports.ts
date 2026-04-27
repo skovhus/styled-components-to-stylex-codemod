@@ -21,7 +21,7 @@ export function emitBridgeExportsStep(ctx: TransformContext): StepResult {
   }
 
   const bridgeDecls = styledDecls.filter(
-    (d): d is StyledDecl & { bridgeClassName: string } => !!d.bridgeClassName,
+    (d): d is StyledDecl & { bridgeClassName: string } => !d.skipTransform && !!d.bridgeClassName,
   );
   if (bridgeDecls.length === 0) {
     return CONTINUE;

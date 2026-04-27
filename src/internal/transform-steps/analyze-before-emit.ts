@@ -4,7 +4,12 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import { resolve as pathResolve } from "node:path";
-import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
+import {
+  CONTINUE,
+  getActiveStyledDecls,
+  returnResult,
+  type StepResult,
+} from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext, type ExportInfo } from "../transform-context.js";
 import {
@@ -39,34 +44,45 @@ const INLINE_USAGE_THRESHOLD = 1;
  */
 export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   const { root, j, adapter, file } = ctx;
-  const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
-  if (!styledDecls) {
+  const allStyledDecls = ctx.styledDecls as StyledDecl[] | undefined;
+  if (!allStyledDecls) {
     return CONTINUE;
   }
 
   // Detect if there's a local variable named `styles` in the file (not part of styled-components code)
   // If so, we'll use `stylexStyles` as the StyleX constant name to avoid shadowing.
-  const styledDeclNames = new Set(styledDecls.map((d) => d.localName));
-  let hasStylesVariable = false;
-  root.find(j.VariableDeclarator).forEach((path) => {
-    const id = path.node.id;
-    if (patternContainsName(id, "styles") && !styledDeclNames.has("styles")) {
-      hasStylesVariable = true;
-    }
-  });
-  const stylesIdentifier = hasStylesVariable ? "stylexStyles" : "styles";
-  ctx.stylesIdentifier = stylesIdentifier;
+  // Naming-collision check uses ALL decl names (including skipped ones) because skipped
+  // declarations remain in the source as `const <name> = styled\`...\``.
+  const styledDeclNames = new Set(allStyledDecls.map((d) => d.localName));
+  // All per-decl analyses below skip decls that couldn't be lowered — they stay in the
+  // source as-is and must not be wrapped, exported-tagged, or re-analyzed.
+  const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
+
+  // The stylesIdentifier / merge-target decision runs at the END of this step: any
+  // keys added below (staticBooleanVariants, callSiteCombinedStyles, promoted styles)
+  // must be visible to the collision check against an existing stylex.create object.
 
   // Build lookup maps and set needsWrapperComponent BEFORE emitStylesAndImports
   // so that comment placement can be determined correctly.
   const declByLocal = new Map(styledDecls.map((d) => [d.localName, d]));
+  // The `extendedBy` map must include skipped decls as potential extenders. A
+  // skipped leaf preserved as `styled(Base)\`...\`` references `Base` at
+  // runtime, which only works if Base keeps a wrapper function (not inlined).
+  // Downstream wrapper-decision logic keys off this map to require a wrapper.
   const extendedBy = new Map<string, string[]>();
-  for (const decl of styledDecls) {
+  const allDeclsByLocal = new Map(allStyledDecls.map((d) => [d.localName, d]));
+  for (const decl of allStyledDecls) {
     if (decl.base.kind !== "component") {
       continue;
     }
-    const base = declByLocal.get(decl.base.ident);
+    const base = allDeclsByLocal.get(decl.base.ident);
     if (!base) {
+      continue;
+    }
+    // Only track relationships pointing at base decls we still plan to emit.
+    // If the base is skipped it remains as raw styled-components and doesn't
+    // need wrapper bookkeeping.
+    if (base.skipTransform) {
       continue;
     }
     extendedBy.set(base.localName, [...(extendedBy.get(base.localName) ?? []), decl.localName]);
@@ -195,6 +211,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     // Exported components must keep a wrapper to preserve the module's public API.
     if (exportedComponents.has(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+
+    // A skipped extender preserved as `styled(decl.localName)\`...\`` still
+    // references `decl.localName` at runtime, so the identifier must remain
+    // a callable component — emit a wrapper rather than inlining the decl.
+    if (extendedBySkippedDecl(allStyledDecls, decl.localName)) {
       decl.needsWrapperComponent = true;
     }
 
@@ -477,6 +500,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     root,
     j,
     styledDecls,
+    allStyledDecls,
     declByLocal,
     getJsxUsageCount,
     ctx.resolvedStyleObjects ?? new Map(),
@@ -1113,10 +1137,345 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Partial-migration support: if the file already has exactly one top-level
+  // `const <name> = stylex.create({...})` call with no collisions and no shadowing,
+  // merge new entries into the existing object instead of emitting a second
+  // `stylexStyles` declaration. Deferred to here so every emit-time style key
+  // (incl. staticBooleanVariants, callSiteCombinedStyles, promotedStyleProps) is
+  // in `resolvedStyleObjects` when we check for collisions.
+  const emitKeyNames = buildEmitKeyNames(ctx, styledDecls);
+  const existingStylexTarget = findExistingStylexStylesTarget({
+    ctx,
+    styledDeclNames,
+    emitKeyNames,
+  });
+  ctx.existingStylexStylesTarget = existingStylexTarget;
+  const hasStylesVariable =
+    !existingStylexTarget && fileHasLocalName(ctx, "styles", styledDeclNames);
+  ctx.stylesIdentifier = existingStylexTarget
+    ? existingStylexTarget.name
+    : hasStylesVariable
+      ? "stylexStyles"
+      : "styles";
+
   return CONTINUE;
 }
 
 // --- Non-exported helpers ---
+
+/** True if any skipped decl in the file extends the given component via `styled(name)`. */
+function extendedBySkippedDecl(allStyledDecls: StyledDecl[], name: string): boolean {
+  return allStyledDecls.some(
+    (d) => d.skipTransform && d.base.kind === "component" && d.base.ident === name,
+  );
+}
+
+/**
+ * Detect a single top-level `const <name> = stylex.create({...})` declaration that
+ * we can merge new entries into. Returns `undefined` when there is no such decl,
+ * when the object passed to `stylex.create` is not a plain object literal, when
+ * there are multiple candidates (ambiguous target), when the binding name collides
+ * with a surviving styled-component name, when the name is shadowed elsewhere in
+ * the file (so emitted `name.key` references could bind to the wrong scope), or
+ * when any existing key would collide with a style key we're about to emit.
+ *
+ * A collision is a conservative signal: rather than risk overwriting user-authored
+ * styles or producing a duplicate property, fall back to emitting a separate
+ * `stylexStyles` declaration.
+ */
+function findExistingStylexStylesTarget(args: {
+  ctx: TransformContext;
+  styledDeclNames: Set<string>;
+  /** The final set of style keys emit-styles will write into the merged object. */
+  emitKeyNames: Set<string>;
+}): { name: string; objectExpression: unknown; existingKeys: Set<string> } | undefined {
+  const { ctx, styledDeclNames, emitKeyNames } = args;
+  const { root, j } = ctx;
+  const candidates: Array<{
+    name: string;
+    objectExpression: unknown;
+    existingKeys: Set<string>;
+    declaratorNode: unknown;
+  }> = [];
+
+  root.find(j.VariableDeclaration).forEach((declPath) => {
+    // Only consider top-level declarations — nested ones aren't safe merge targets.
+    const parentType = declPath.parentPath?.node?.type;
+    if (parentType !== "Program" && parentType !== "ExportNamedDeclaration") {
+      return;
+    }
+    for (const declarator of declPath.node.declarations) {
+      if (declarator.type !== "VariableDeclarator") {
+        continue;
+      }
+      const id = declarator.id;
+      if (id?.type !== "Identifier") {
+        continue;
+      }
+      const name = id.name;
+      if (styledDeclNames.has(name)) {
+        continue;
+      }
+      const init = declarator.init;
+      if (!isStylexCreateCall(init)) {
+        continue;
+      }
+      const arg = (init as { arguments?: unknown[] }).arguments?.[0];
+      if (!isObjectExpression(arg)) {
+        continue;
+      }
+      const existingKeys = collectObjectPropertyKeys(arg);
+      if (!existingKeys) {
+        // Non-literal keys (computed/spread) — can't reason about collisions, skip.
+        continue;
+      }
+      candidates.push({ name, objectExpression: arg, existingKeys, declaratorNode: declarator });
+    }
+  });
+
+  if (candidates.length !== 1) {
+    return undefined;
+  }
+  const target = candidates[0]!;
+
+  // Shadow check: reject if `name` is bound anywhere else in the file (nested scope
+  // like a function component). Rewrite-jsx emits plain `name.key` references and
+  // would silently bind to the shadowing binding instead of the top-level object.
+  if (isNameBoundInFile(ctx, target.name, target.declaratorNode)) {
+    return undefined;
+  }
+
+  for (const key of emitKeyNames) {
+    if (target.existingKeys.has(key)) {
+      return undefined;
+    }
+  }
+  return target;
+}
+
+/**
+ * Collects every style key that will be written into the merged `stylex.create`
+ * object by emit-styles. Includes the top-level keys in `resolvedStyleObjects`
+ * plus any keys injected by analyzeBeforeEmit (staticBooleanVariants,
+ * callSiteCombinedStyles, promotedStyleProps — these are already present in
+ * `resolvedStyleObjects` by the time this helper runs, but we re-derive them
+ * from the decls so future additions stay in sync).
+ */
+function buildEmitKeyNames(ctx: TransformContext, styledDecls: StyledDecl[]): Set<string> {
+  const keys = new Set<string>();
+  if (ctx.resolvedStyleObjects) {
+    for (const key of ctx.resolvedStyleObjects.keys()) {
+      keys.add(key);
+    }
+  }
+  for (const decl of styledDecls) {
+    keys.add(decl.styleKey);
+    for (const sbv of decl.staticBooleanVariants ?? []) {
+      keys.add(sbv.styleKey);
+    }
+    for (const cc of decl.callSiteCombinedStyles ?? []) {
+      keys.add(cc.styleKey);
+    }
+    for (const ps of decl.promotedStyleProps ?? []) {
+      if (!ps.mergeIntoBase) {
+        keys.add(ps.styleKey);
+      }
+    }
+    for (const variantKey of Object.values(decl.variantStyleKeys ?? {})) {
+      keys.add(variantKey);
+    }
+  }
+  return keys;
+}
+
+/**
+ * True if the given name is bound anywhere in the file — by a variable declarator,
+ * a function declaration's own name, or a function parameter (including destructuring
+ * forms). When `excludeDeclaratorNode` is provided, that specific VariableDeclarator
+ * is skipped so a decl's own binding doesn't count as self-shadowing.
+ */
+function isNameBoundInFile(
+  ctx: TransformContext,
+  name: string,
+  excludeDeclaratorNode?: unknown,
+): boolean {
+  const { root, j } = ctx;
+  let found = false;
+  root.find(j.VariableDeclarator).forEach((path) => {
+    if (found || path.node === excludeDeclaratorNode) {
+      return;
+    }
+    if (patternContainsName(path.node.id, name)) {
+      found = true;
+    }
+  });
+  if (found) {
+    return true;
+  }
+  // Function-like bindings (FunctionDeclaration, FunctionExpression,
+  // ArrowFunctionExpression, ObjectMethod, ClassMethod): own name or any param.
+  root.find(j.Function).forEach((path) => {
+    if (found) {
+      return;
+    }
+    const fn = path.node as { id?: { name?: string } | null; params?: Array<unknown> };
+    if (fn.id?.name === name) {
+      found = true;
+      return;
+    }
+    for (const param of fn.params ?? []) {
+      if (paramBindsName(param, name)) {
+        found = true;
+        return;
+      }
+    }
+  });
+  return found;
+}
+
+/**
+ * True if a function-parameter pattern binds the given name. Covers the full set of
+ * destructuring and defaulting forms: `Identifier`, `AssignmentPattern`, `RestElement`,
+ * `ObjectPattern` (nested), and `ArrayPattern` (nested).
+ */
+function paramBindsName(param: unknown, name: string): boolean {
+  if (!param || typeof param !== "object") {
+    return false;
+  }
+  const p = param as {
+    type?: string;
+    name?: string;
+    left?: unknown;
+    argument?: unknown;
+    properties?: Array<{
+      type?: string;
+      value?: unknown;
+      argument?: unknown;
+      key?: { name?: string };
+    }>;
+    elements?: Array<unknown>;
+  };
+  if (p.type === "Identifier") {
+    return p.name === name;
+  }
+  if (p.type === "AssignmentPattern") {
+    return paramBindsName(p.left, name);
+  }
+  if (p.type === "RestElement") {
+    return paramBindsName(p.argument, name);
+  }
+  if (p.type === "ObjectPattern") {
+    for (const prop of p.properties ?? []) {
+      if (prop.type === "RestElement") {
+        if (paramBindsName(prop.argument, name)) {
+          return true;
+        }
+        continue;
+      }
+      if (paramBindsName(prop.value, name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (p.type === "ArrayPattern") {
+    for (const el of p.elements ?? []) {
+      if (el && paramBindsName(el, name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
+/**
+ * True if the file would collide on `name` if we used it for the stylex binding.
+ * Skipped styled decls keep their own binding (e.g. `const styles = styled.div\`...\``),
+ * which is fine as long as no OTHER scope also binds the same name — the regular
+ * isNameBoundInFile check handles that.
+ */
+function fileHasLocalName(
+  ctx: TransformContext,
+  name: string,
+  styledDeclNames: Set<string>,
+): boolean {
+  if (styledDeclNames.has(name)) {
+    return false;
+  }
+  return isNameBoundInFile(ctx, name);
+}
+
+/** True if `node` is `stylex.create(...)`. */
+function isStylexCreateCall(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const call = node as {
+    type?: string;
+    callee?: {
+      type?: string;
+      object?: { type?: string; name?: string };
+      property?: { type?: string; name?: string };
+    };
+  };
+  if (call.type !== "CallExpression") {
+    return false;
+  }
+  const callee = call.callee;
+  if (callee?.type !== "MemberExpression") {
+    return false;
+  }
+  return (
+    callee.object?.type === "Identifier" &&
+    callee.object.name === "stylex" &&
+    callee.property?.type === "Identifier" &&
+    callee.property.name === "create"
+  );
+}
+
+function isObjectExpression(node: unknown): boolean {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "ObjectExpression"
+  );
+}
+
+/**
+ * Collect the literal property keys from an ObjectExpression. Returns `undefined`
+ * if the object contains spread elements, computed keys, or non-identifier/string
+ * keys we can't reason about safely.
+ */
+function collectObjectPropertyKeys(objectExpression: unknown): Set<string> | undefined {
+  const obj = objectExpression as { properties?: Array<unknown> };
+  const keys = new Set<string>();
+  for (const p of obj.properties ?? []) {
+    const prop = p as {
+      type?: string;
+      computed?: boolean;
+      key?: { type?: string; name?: string; value?: unknown };
+    };
+    if (prop.type !== "Property" && prop.type !== "ObjectProperty") {
+      return undefined;
+    }
+    if (prop.computed) {
+      return undefined;
+    }
+    const key = prop.key;
+    if (key?.type === "Identifier" && typeof key.name === "string") {
+      keys.add(key.name);
+      continue;
+    }
+    if (
+      (key?.type === "Literal" || key?.type === "StringLiteral") &&
+      typeof key.value === "string"
+    ) {
+      keys.add(key.value);
+      continue;
+    }
+    return undefined;
+  }
+  return keys;
+}
 
 /**
  * Check if a name refers to a locally-defined function component (FunctionDeclaration,
@@ -2270,6 +2629,12 @@ function analyzePromotableStyleProps(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   styledDecls: StyledDecl[],
+  /**
+   * Every decl in the file, including skipped ones. A preserved `styled(Base)` leaf
+   * still references `Base` at runtime, so Base must stay a wrapper — the extends
+   * check uses this list so it sees skipped extenders.
+   */
+  allStyledDecls: StyledDecl[],
   declByLocal: Map<string, StyledDecl>,
   getJsxUsageCount: (name: string) => number,
   resolvedStyleObjects: Map<string, unknown>,
@@ -2538,8 +2903,10 @@ function analyzePromotableStyleProps(
         }
 
         // Don't merge if another styled component extends this one — converting
-        // the base style to a function would break the child's static style reference.
-        const isExtendedByOther = styledDecls.some(
+        // the base style to a function would break the child's static style
+        // reference. Also include skipped decls here: a preserved `styled(Base)`
+        // leaf references `Base` at runtime and would break if merged.
+        const isExtendedByOther = allStyledDecls.some(
           (d) => d !== decl && d.base.kind === "component" && d.base.ident === decl.localName,
         );
         const baseObj = resolvedStyleObjects.get(decl.styleKey);
