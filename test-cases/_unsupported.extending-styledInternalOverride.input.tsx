@@ -1,4 +1,4 @@
-// @expected-warning: styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts
+// @expected-warning: styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts
 // styled() wrapping a component whose internal styled-component sets the same CSS property
 import * as React from "react";
 import styled from "styled-components";

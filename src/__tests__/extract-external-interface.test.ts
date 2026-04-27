@@ -1125,6 +1125,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": true,
         },
+        "test-cases/lib/styled-codeblock.tsx:Codeblock": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": true,
+          "style": false,
+          "styles": true,
+        },
         "test-cases/lib/styled-group-header.tsx:GroupHeader": {
           "as": false,
           "className": false,
