@@ -3,6 +3,7 @@
  * Core concepts: dispatch interpolated declarations and apply static values.
  */
 import type { CssRuleIR } from "../css-ir.js";
+import { readFileSync } from "node:fs";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -200,7 +201,11 @@ function resolveExpressionToStaticString(
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
   }
-  return findTopLevelConstStringInit(expr.name, state);
+  const localConst = findTopLevelConstStringInit(expr.name, state);
+  if (typeof localConst === "string") {
+    return localConst;
+  }
+  return findImportedConstStringInit(expr, state);
 }
 
 /**
@@ -241,4 +246,119 @@ function findTopLevelConstStringInit(
       }
     });
   return resolved;
+}
+
+/**
+ * Resolves an imported identifier to a static string when the imported symbol
+ * is declared as a top-level exported string const in the source module.
+ */
+function findImportedConstStringInit(
+  ident: { name: string },
+  state: DeclProcessingState["state"],
+): string | null {
+  const imp = state.resolveImportInScope(ident.name, ident);
+  if (!imp || imp.source.kind !== "absolutePath") {
+    return null;
+  }
+  return findExportedConstStringInit(imp.source.value, imp.importedName, state);
+}
+
+const exportedConstStringCache = new Map<string, Map<string, string>>();
+const IMPORT_SOURCE_CANDIDATE_SUFFIXES = [
+  "",
+  ".tsx",
+  ".ts",
+  ".jsx",
+  ".js",
+  "/index.tsx",
+  "/index.ts",
+  "/index.jsx",
+  "/index.js",
+];
+
+function findExportedConstStringInit(
+  sourceFilePath: string,
+  exportedName: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  const cached = exportedConstStringCache.get(sourceFilePath);
+  if (cached) {
+    return cached.get(exportedName) ?? null;
+  }
+
+  const source = readImportSourceText(sourceFilePath);
+  if (!source) {
+    exportedConstStringCache.set(sourceFilePath, new Map());
+    return null;
+  }
+
+  let importedRoot;
+  try {
+    importedRoot = state.j(source);
+  } catch {
+    exportedConstStringCache.set(sourceFilePath, new Map());
+    return null;
+  }
+
+  const allTopLevelConstStrings = new Map<string, string>();
+  importedRoot
+    .find(state.j.VariableDeclaration, { kind: "const" } as { kind: "const" })
+    .filter((p) => {
+      const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
+      return parentType === "Program" || parentType === "ExportNamedDeclaration";
+    })
+    .forEach((p) => {
+      for (const declarator of p.node.declarations ?? []) {
+        if (declarator.type !== "VariableDeclarator" || declarator.id.type !== "Identifier") {
+          continue;
+        }
+        const value = literalToStaticValue(declarator.init);
+        if (typeof value === "string") {
+          allTopLevelConstStrings.set(declarator.id.name, value);
+        }
+      }
+    });
+
+  const resolvedByExportedName = new Map<string, string>();
+  importedRoot.find(state.j.ExportNamedDeclaration).forEach((p) => {
+    const decl = p.node.declaration;
+    if (decl?.type === "VariableDeclaration" && decl.kind === "const") {
+      for (const declarator of decl.declarations ?? []) {
+        if (declarator.type !== "VariableDeclarator" || declarator.id.type !== "Identifier") {
+          continue;
+        }
+        const value = literalToStaticValue(declarator.init);
+        if (typeof value === "string") {
+          resolvedByExportedName.set(declarator.id.name, value);
+        }
+      }
+    }
+
+    for (const spec of p.node.specifiers ?? []) {
+      if (spec.type !== "ExportSpecifier") {
+        continue;
+      }
+      if (!isIdentifierNode(spec.local) || !isIdentifierNode(spec.exported)) {
+        continue;
+      }
+      const localValue = allTopLevelConstStrings.get(spec.local.name);
+      if (typeof localValue === "string") {
+        resolvedByExportedName.set(spec.exported.name, localValue);
+      }
+    }
+  });
+
+  exportedConstStringCache.set(sourceFilePath, resolvedByExportedName);
+  return resolvedByExportedName.get(exportedName) ?? null;
+}
+
+function readImportSourceText(importedPath: string): string | null {
+  for (const suffix of IMPORT_SOURCE_CANDIDATE_SUFFIXES) {
+    try {
+      return readFileSync(`${importedPath}${suffix}`, "utf-8");
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }

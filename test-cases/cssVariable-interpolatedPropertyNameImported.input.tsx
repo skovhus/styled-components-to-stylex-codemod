@@ -1,7 +1,4 @@
-// @expected-warning: Unsupported interpolation: property
-// The CSS variable name is imported from another file. The codemod cannot
-// statically resolve cross-file string constants, so this must bail rather
-// than emit a `__SC_EXPR_N__` key.
+// Supports CSS variable property names imported from another module.
 import styled from "styled-components";
 import { ITEM_MIN_WIDTH_VAR } from "./lib/item-min-width";
 
