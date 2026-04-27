@@ -292,9 +292,11 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
   });
 });
 
+const CASCADE_CONFLICT_WARNING =
+  "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+
 describe("cascade conflict detection", () => {
-  const WARNING_TYPE =
-    "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts";
+  const WARNING_TYPE = CASCADE_CONFLICT_WARNING;
 
   it("bails on default-imported component wrapping internal styled-components", () => {
     const source = `
@@ -5048,7 +5050,7 @@ export function App() {
 });
 
 describe("inline base resolver safety guards", () => {
-  it("should skip base inlining when no local JSX callsites are available", () => {
+  it("should bail via cascade detection when inline resolution has no local JSX callsites", () => {
     const source = `
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
@@ -5067,13 +5069,11 @@ export const Container = styled(Flex)\`
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).not.toBeNull();
-    const code = result.code ?? "";
-    expect(code).toContain("<Flex");
-    expect(code).not.toContain('as: Component = "div"');
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(CASCADE_CONFLICT_WARNING);
   });
 
-  it("should skip base inlining when attrs source cannot be statically resolved", () => {
+  it("should bail via cascade detection when attrs source cannot be statically resolved", () => {
     const source = `
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
@@ -5098,13 +5098,11 @@ export function App() {
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).not.toBeNull();
-    const code = result.code ?? "";
-    expect(code).toContain("<Flex");
-    expect(code).not.toContain("containerGapVariants");
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(CASCADE_CONFLICT_WARNING);
   });
 
-  it("should skip base inlining when JSX `as` changes the resolved tag", () => {
+  it("should bail via cascade detection when JSX `as` changes the resolved tag", () => {
     const source = `
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
@@ -5128,11 +5126,8 @@ export function App() {
       { adapter: fixtureAdapter },
     );
 
-    expect(result.code).not.toBeNull();
-    const code = result.code ?? "";
-    expect(code).toContain('<Container as="span" gap={8}>');
-    expect(code).toContain("as: Component = Flex");
-    expect(code).not.toContain("containerGapVariants");
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(CASCADE_CONFLICT_WARNING);
   });
 
   it("should keep template variants when a prop also drives inline base variants", () => {
@@ -5166,7 +5161,7 @@ export function App() {
     expect(code).toContain("styles.containerGap");
   });
 
-  it("should skip base inlining when resolveBaseComponent returns malformed consumedProps", () => {
+  it("should bail via cascade detection when resolveBaseComponent returns malformed consumedProps", () => {
     const source = `
 import styled from "styled-components";
 import { Flex } from "./lib/inline-base-flex";
@@ -5211,8 +5206,8 @@ export function App() {
       );
     }).not.toThrow();
 
-    const code = result?.code ?? "";
-    expect(code).toContain("<Flex");
+    expect(result?.code).toBeNull();
+    expect(result?.warnings.map((w) => w.type)).toContain(CASCADE_CONFLICT_WARNING);
   });
 });
 

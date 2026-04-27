@@ -54,16 +54,13 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    // If the imported name IS one of the styled-component definitions in that file,
-    // it's a direct styled export — delegation handles this case
-    if (styledNames.has(importEntry.importedName) || styledNames.has(baseIdent)) {
-      continue;
-    }
-
-    // The import is a function component that wraps internal styled-components — bail
+    // The base component's file uses styled-components. Whether the import is a
+    // direct styled export or a regular component wrapping internal styled-components,
+    // its CSS is unlayered and the StyleX classes emitted on the wrapper would lose
+    // to it once StyleX is placed in a CSS layer — bail.
     ctx.warnings.push({
       severity: "warning",
-      type: "styled(ImportedComponent) wraps a component whose file contains internal styled-components — convert the base component's file first to avoid CSS cascade conflicts",
+      type: "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts",
       loc: decl.loc,
       context: { component: decl.localName, base: baseIdent },
     });
