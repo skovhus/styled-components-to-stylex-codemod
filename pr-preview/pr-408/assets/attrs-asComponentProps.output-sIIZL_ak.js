@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import"./stylex-vFXG5bjz.js";import{f as e,p as t}from"./index-lcg58oev.js";import{t as n}from"./flex-BTypl_iX.js";t();var r=e();function i(e){return(0,r.jsx)(n,{...e,column:!0,className:`x12peec7 x12oqio5`})}var a=()=>(0,r.jsxs)(i,{children:[(0,r.jsx)(`div`,{children:`Item 1`}),(0,r.jsx)(`div`,{children:`Item 2`})]});export{a as App};
