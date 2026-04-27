@@ -2,6 +2,7 @@
  * Processes declarations within a single CSS rule.
  * Core concepts: dispatch interpolated declarations and apply static values.
  */
+import { readFileSync } from "node:fs";
 import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
@@ -179,12 +180,16 @@ function resolveInterpolatedPropertyName(
 }
 
 /**
- * Resolves an AST expression to a static string. Handles direct string literals
- * and identifiers bound to top-level `const NAME = "..."` declarations in the
- * file being transformed. Identifiers that are shadowed by an enclosing scope
- * (e.g. a local `const NAME = "..."` inside the function containing the styled
- * template) are not resolved — bailing is safer than substituting the wrong
- * value.
+ * Resolves an AST expression to a static string. Handles direct string
+ * literals and identifiers bound to:
+ *   - a top-level `const NAME = "..."` declaration in the file being
+ *     transformed, or
+ *   - an imported binding whose source file declares a top-level
+ *     `export const NAME = "..."`.
+ *
+ * Identifiers that are shadowed by an enclosing scope (e.g. a local `const
+ * NAME = "..."` inside the function containing the styled template) are not
+ * resolved — bailing is safer than substituting the wrong value.
  */
 function resolveExpressionToStaticString(
   expr: unknown,
@@ -199,6 +204,10 @@ function resolveExpressionToStaticString(
   }
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
+  }
+  const fromImport = resolveImportedConstStringInit(expr.name, state);
+  if (fromImport !== null) {
+    return fromImport;
   }
   return findTopLevelConstStringInit(expr.name, state);
 }
@@ -225,20 +234,159 @@ function findTopLevelConstStringInit(
       if (resolved !== null) {
         return;
       }
-      for (const declarator of p.node.declarations) {
-        if (
-          declarator.type !== "VariableDeclarator" ||
-          declarator.id.type !== "Identifier" ||
-          declarator.id.name !== name
-        ) {
-          continue;
-        }
-        const value = literalToStaticValue(declarator.init);
-        if (typeof value === "string") {
-          resolved = value;
-        }
-        return;
+      const found = findConstDeclaratorString(p.node.declarations, name);
+      if (found !== null) {
+        resolved = found;
       }
     });
   return resolved;
+}
+
+/**
+ * Resolves an imported identifier to a top-level `export const NAME = "..."`
+ * (or `export default "..."`) declared in the source module. Only relative
+ * imports resolved by the current file's `importMap` are followed — package
+ * imports are skipped because the codemod has no way to verify their values
+ * statically. Returns `null` when the identifier is not imported, the source
+ * file cannot be read, or the export is not a string literal.
+ */
+function resolveImportedConstStringInit(
+  localName: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  const importEntry = state.importMap.get(localName);
+  if (!importEntry || importEntry.source.kind !== "absolutePath") {
+    return null;
+  }
+  const program = parseImportedSource(importEntry.source.value, state);
+  if (!program) {
+    return null;
+  }
+  return findExportedStringConst(program, importEntry.importedName, state);
+}
+
+const MODULE_FILE_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mts", ".cts", ".mjs", ".cjs"];
+
+type ParsedProgram = ReturnType<DeclProcessingState["state"]["api"]["jscodeshift"]>;
+
+/**
+ * Per-state cache of parsed imported files so that multiple template slots
+ * referencing the same module within one transform parse the file once.
+ * Stores `null` for files that couldn't be read or parsed so unreadable
+ * imports don't retry on every hit. Keyed weakly by the state object so the
+ * cache is naturally released alongside the transform.
+ */
+const PARSED_IMPORT_CACHES = new WeakMap<object, Map<string, ParsedProgram | null>>();
+
+/**
+ * Reads and parses an imported source file with the same `tsx` parser used by
+ * the transform. The `importMap` stores the original specifier resolved
+ * relative to the source directory but does not probe extensions, so we try
+ * the exact path first and then common module extensions.
+ */
+function parseImportedSource(
+  importedPath: string,
+  state: DeclProcessingState["state"],
+): ParsedProgram | null {
+  let cache = PARSED_IMPORT_CACHES.get(state);
+  if (!cache) {
+    cache = new Map();
+    PARSED_IMPORT_CACHES.set(state, cache);
+  }
+  const memo = cache.get(importedPath);
+  if (memo !== undefined) {
+    return memo;
+  }
+
+  const source = readSourceWithExtensionFallback(importedPath);
+  if (source === null) {
+    cache.set(importedPath, null);
+    return null;
+  }
+  let program: ParsedProgram | null = null;
+  try {
+    program = state.api.jscodeshift.withParser("tsx")(source);
+  } catch {
+    program = null;
+  }
+  cache.set(importedPath, program);
+  return program;
+}
+
+function readSourceWithExtensionFallback(importedPath: string): string | null {
+  const candidates = [importedPath, ...MODULE_FILE_EXTENSIONS.map((ext) => importedPath + ext)];
+  for (const candidate of candidates) {
+    try {
+      return readFileSync(candidate, "utf-8");
+    } catch {
+      // Try next candidate
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns the string-literal value of `<program>`'s top-level
+ * `export const <exportedName> = "..."` or `export default "..."`. Anything
+ * more complex than a literal initializer is rejected — we only follow
+ * exports that are unambiguously static.
+ */
+function findExportedStringConst(
+  program: ParsedProgram,
+  exportedName: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  if (exportedName === "default") {
+    let resolved: string | null = null;
+    program.find(state.j.ExportDefaultDeclaration).forEach((p) => {
+      if (resolved !== null) {
+        return;
+      }
+      const value = literalToStaticValue(p.node.declaration);
+      if (typeof value === "string") {
+        resolved = value;
+      }
+    });
+    return resolved;
+  }
+
+  let resolved: string | null = null;
+  program.find(state.j.ExportNamedDeclaration).forEach((p) => {
+    if (resolved !== null) {
+      return;
+    }
+    const decl = p.node.declaration;
+    if (decl?.type !== "VariableDeclaration" || decl.kind !== "const") {
+      return;
+    }
+    resolved = findConstDeclaratorString(decl.declarations, exportedName);
+  });
+  return resolved;
+}
+
+/**
+ * Searches a list of `VariableDeclarator`s for one named `<name>` and returns
+ * its initializer when it resolves to a static string literal. Returns `null`
+ * when no matching declarator is found or its initializer is not a literal.
+ */
+function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
+  for (const declarator of declarations) {
+    if (
+      !declarator ||
+      typeof declarator !== "object" ||
+      (declarator as { type?: string }).type !== "VariableDeclarator"
+    ) {
+      continue;
+    }
+    const d = declarator as {
+      id?: { type?: string; name?: string };
+      init?: unknown;
+    };
+    if (d.id?.type !== "Identifier" || d.id.name !== name) {
+      continue;
+    }
+    const value = literalToStaticValue(d.init);
+    return typeof value === "string" ? value : null;
+  }
+  return null;
 }
