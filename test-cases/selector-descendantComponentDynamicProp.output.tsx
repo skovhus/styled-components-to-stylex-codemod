@@ -120,6 +120,30 @@ function ChipGroup(props: ChipGroupProps) {
   );
 }
 
+type GroupedPanelProps = React.PropsWithChildren<{
+  tone?: string;
+}>;
+
+function GroupedPanel(props: GroupedPanelProps) {
+  const { children, tone } = props;
+  const sx = stylex.props(styles.groupedPanel, stylex.defaultMarker());
+
+  return (
+    <div
+      {...sx}
+      style={
+        {
+          ...sx.style,
+          "--groupedLabelInGroupedPanel-hover-color": props.tone ?? "darkgreen",
+          "--groupedLabelInGroupedPanel-focusWithin-color": props.tone ?? "darkgreen",
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Button color="blue">
@@ -138,6 +162,13 @@ export const App = () => (
     <ChipGroup chipColor="teal">
       <span sx={[styles.chip, styles.chipInChipGroup]}>Destructured prop</span>
     </ChipGroup>
+    <GroupedPanel tone="seagreen">
+      <button type="button">
+        <span sx={[styles.groupedLabel, styles.groupedLabelInGroupedPanel]}>
+          Grouped hover/focus dynamic color
+        </span>
+      </button>
+    </GroupedPanel>
   </div>
 );
 
@@ -186,6 +217,16 @@ const styles = stylex.create({
     display: "flex",
     gap: 4,
   },
+  // Grouped parent pseudos must bridge the dynamic value into every pseudo bucket.
+  groupedLabel: {
+    fontSize: 14,
+  },
+  groupedPanel: {
+    padding: 8,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#ccc",
+  },
   iconInButton: {
     color: {
       default: null,
@@ -223,6 +264,14 @@ const styles = stylex.create({
     color: {
       default: null,
       [stylex.when.ancestor(":hover")]: "var(--chipInChipGroup-hover-color)",
+    },
+  },
+  groupedLabelInGroupedPanel: {
+    color: {
+      default: null,
+      [stylex.when.ancestor(":hover")]: "var(--groupedLabelInGroupedPanel-hover-color)",
+      [stylex.when.ancestor(":focus-within")]:
+        "var(--groupedLabelInGroupedPanel-focusWithin-color)",
     },
   },
 });

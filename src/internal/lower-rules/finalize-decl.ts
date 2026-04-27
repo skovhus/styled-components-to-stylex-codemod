@@ -255,6 +255,29 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       const pseudo = m[1];
       const slotId = Number(m[2]);
       const expr = decl.templateExpressions[slotId] as any;
+      const placeholderIndex = decl.rawCss.indexOf(`__SC_EXPR_${slotId}__`, m.index);
+      if (
+        placeholderIndex >= 0 &&
+        isPlaceholderInsideHandledComponentBlock(decl.rawCss, placeholderIndex)
+      ) {
+        if (isPlaceholderInValuePosition(decl.rawCss, placeholderIndex)) {
+          // Rule processor already lowered this `prop: ${dyn}` slot via the
+          // CSS var bridge / static expansion; nothing left to do here.
+          continue;
+        }
+        // Standalone interpolation inside a `${Child}` block under a parent pseudo.
+        // The rule processor doesn't lower standalone slots, and the conditional
+        // helper resolver below would lose the inner child selector context and
+        // apply styles to the wrong target. Bail rather than silently dropping.
+        warnings.push({
+          severity: "warning",
+          type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+          loc: decl.loc,
+          context: { selector: `&${pseudo}` },
+        });
+        state.markBail();
+        break;
+      }
       // Skip component identifiers (those are handled above)
       if (!expr || expr.type === "Identifier") {
         continue;
@@ -1417,6 +1440,45 @@ function isComponentBlockHandledByRuleProcessor(
       readSelectorBeforeBlock(rawCss, parentSelectorBlockStart),
     ) !== null
   );
+}
+
+function isPlaceholderInsideHandledComponentBlock(
+  rawCss: string,
+  placeholderIndex: number,
+): boolean {
+  const componentBlockOpen = findPreviousOpeningBraceBeforeSelector(rawCss, placeholderIndex);
+  if (componentBlockOpen === null) {
+    return false;
+  }
+
+  const componentSelectorText = readSelectorBeforeBlock(rawCss, componentBlockOpen);
+  const componentPlaceholder = componentSelectorText.match(/__SC_EXPR_\d+__/);
+  if (!componentPlaceholder?.[0]) {
+    return false;
+  }
+
+  const componentBlockStart = rawCss.lastIndexOf(componentPlaceholder[0], componentBlockOpen);
+  return (
+    componentBlockStart >= 0 && isComponentBlockHandledByRuleProcessor(rawCss, componentBlockStart)
+  );
+}
+
+/**
+ * True when the placeholder sits in CSS value position (preceded by `:` since the
+ * last declaration boundary). The rule processor only lowers `prop: value` slots
+ * inside `${Child}` blocks; standalone slots like `${(p) => helper()}` are not.
+ */
+function isPlaceholderInValuePosition(rawCss: string, placeholderIndex: number): boolean {
+  for (let i = placeholderIndex - 1; i >= 0; i--) {
+    const ch = rawCss[i];
+    if (ch === ":") {
+      return true;
+    }
+    if (ch === ";" || ch === "{" || ch === "}") {
+      return false;
+    }
+  }
+  return false;
 }
 
 type PseudoHelperCallResult =

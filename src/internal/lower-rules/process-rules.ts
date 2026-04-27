@@ -80,7 +80,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     localVarValues,
     cssHelperPropValues,
     getComposedDefaultValue,
-    inlineStyleProps,
   } = ctx;
   const {
     j,
@@ -623,25 +622,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           continue;
         }
 
-        // Copy only the declarations written by THIS rule into remaining pseudo buckets.
-        // Using the writtenProps set (returned by processDeclarationsIntoBucket) ensures
-        // we propagate overwrites of existing keys while not leaking unrelated declarations
-        // that were already in firstBucket from earlier rules.
-        const writtenProps = result;
-        for (let i = 1; i < ancestorPseudos.length; i++) {
-          const bucket = getOrCreateRelationOverrideBucket(
-            overrideStyleKey,
-            parentStyleKey,
-            decl.styleKey,
-            ancestorPseudos[i]!,
-            relationOverrides,
-            relationOverridePseudoBuckets,
-            decl.extraStyleKeys,
-          );
-          for (const key of writtenProps) {
-            bucket[key] = firstBucket[key];
-          }
-        }
+        copyWrittenPropsToRemainingAncestorPseudoBuckets({
+          ctx,
+          ancestorPseudos,
+          sourceBucket: firstBucket,
+          writtenProps: result,
+          overrideStyleKey,
+          parentStyleKey,
+          childStyleKey: decl.styleKey,
+          childExtraStyleKeys: decl.extraStyleKeys,
+        });
 
         continue;
       }
@@ -715,8 +705,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
         // getOrCreateRelationOverrideBucket creates the RelationOverride entry on first
         // call for this overrideStyleKey. Track count to detect new entries.
+        // For grouped parent pseudos (`&:hover, &:focus-within ${Child}`), seed the
+        // first pseudo's bucket — not the null/base bucket — so an earlier
+        // `${Child} { ... }` base rule's values aren't overwritten.
         const overrideCountBefore = relationOverrides.length;
-        const firstAncestorPseudo = Array.isArray(ancestorPseudos) ? null : ancestorPseudos;
+        const firstAncestorPseudo = getFirstAncestorPseudo(ancestorPseudos);
         const bucket = getOrCreateRelationOverrideBucket(
           overrideStyleKey,
           decl.styleKey,
@@ -741,21 +734,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         if (forwardResult === "bail") {
           // Try CSS variable bridge: forward prop-based interpolations via CSS custom
           // properties set on the parent component's inline style.
-          if (!crossFileUsage) {
-            const bridgeResult = tryForwardCssVarBridge(
+          if (
+            !crossFileUsage &&
+            tryForwardCssVarBridgeForAncestorPseudos({
+              ctx,
               rule,
-              bucket,
-              j,
-              decl,
+              firstBucket: bucket,
               overrideStyleKey,
-              resolveThemeValue,
-              resolveThemeValueFromFn,
-              inlineStyleProps,
+              childStyleKey,
+              ancestorPseudos,
               firstAncestorPseudo,
-            );
-            if (bridgeResult !== "bail") {
-              continue;
-            }
+            })
+          ) {
+            continue;
           }
           state.markBail();
           warnings.push({
@@ -769,19 +760,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
 
         if (Array.isArray(ancestorPseudos)) {
-          for (const pseudo of ancestorPseudos) {
-            const extraBucket = getOrCreateRelationOverrideBucket(
-              overrideStyleKey,
-              decl.styleKey,
-              childStyleKey,
-              pseudo,
-              relationOverrides,
-              relationOverridePseudoBuckets,
-            );
-            for (const key of forwardResult) {
-              extraBucket[key] = bucket[key];
-            }
-          }
+          copyWrittenPropsToRemainingAncestorPseudoBuckets({
+            ctx,
+            ancestorPseudos,
+            sourceBucket: bucket,
+            writtenProps: forwardResult,
+            overrideStyleKey,
+            parentStyleKey: decl.styleKey,
+            childStyleKey,
+          });
         }
         continue;
       }
@@ -1400,6 +1387,116 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+function getFirstAncestorPseudo(ancestorPseudos: string | string[] | null): string | null {
+  return Array.isArray(ancestorPseudos) ? (ancestorPseudos[0] ?? null) : ancestorPseudos;
+}
+
+function copyWrittenPropsToRemainingAncestorPseudoBuckets(args: {
+  ctx: DeclProcessingState;
+  ancestorPseudos: string[];
+  sourceBucket: Record<string, unknown>;
+  writtenProps: ReadonlySet<string>;
+  overrideStyleKey: string;
+  parentStyleKey: string;
+  childStyleKey: string;
+  childExtraStyleKeys?: string[];
+}): void {
+  const {
+    ctx,
+    ancestorPseudos,
+    sourceBucket,
+    writtenProps,
+    overrideStyleKey,
+    parentStyleKey,
+    childStyleKey,
+    childExtraStyleKeys,
+  } = args;
+  const { relationOverrides, relationOverridePseudoBuckets } = ctx.state;
+
+  for (const ancestorPseudo of ancestorPseudos.slice(1)) {
+    const bucket = getOrCreateRelationOverrideBucket(
+      overrideStyleKey,
+      parentStyleKey,
+      childStyleKey,
+      ancestorPseudo,
+      relationOverrides,
+      relationOverridePseudoBuckets,
+      childExtraStyleKeys,
+    );
+    for (const key of writtenProps) {
+      bucket[key] = sourceBucket[key];
+    }
+  }
+}
+
+function tryForwardCssVarBridgeForAncestorPseudos(args: {
+  ctx: DeclProcessingState;
+  rule: { declarations: CssDeclarationIR[] };
+  firstBucket: Record<string, unknown>;
+  overrideStyleKey: string;
+  childStyleKey: string;
+  ancestorPseudos: string | string[] | null;
+  firstAncestorPseudo: string | null;
+}): boolean {
+  const {
+    ctx,
+    rule,
+    firstBucket,
+    overrideStyleKey,
+    childStyleKey,
+    ancestorPseudos,
+    firstAncestorPseudo,
+  } = args;
+  const { state, decl, inlineStyleProps } = ctx;
+  const { j, resolveThemeValue, resolveThemeValueFromFn } = state;
+
+  const bridgeResult = tryForwardCssVarBridge(
+    rule,
+    firstBucket,
+    j,
+    decl,
+    overrideStyleKey,
+    resolveThemeValue,
+    resolveThemeValueFromFn,
+    inlineStyleProps,
+    firstAncestorPseudo,
+  );
+  if (bridgeResult === "bail") {
+    return false;
+  }
+
+  if (!Array.isArray(ancestorPseudos)) {
+    return true;
+  }
+
+  for (const ancestorPseudo of ancestorPseudos.slice(1)) {
+    const extraBucket = getOrCreateRelationOverrideBucket(
+      overrideStyleKey,
+      decl.styleKey,
+      childStyleKey,
+      ancestorPseudo,
+      state.relationOverrides,
+      state.relationOverridePseudoBuckets,
+    );
+    const extraBridgeResult = tryForwardCssVarBridge(
+      rule,
+      extraBucket,
+      j,
+      decl,
+      overrideStyleKey,
+      resolveThemeValue,
+      resolveThemeValueFromFn,
+      inlineStyleProps,
+      ancestorPseudo,
+    );
+    if (extraBridgeResult === "bail") {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 /**
  * Attempts to resolve unresolvable interpolations in a forward descendant selector

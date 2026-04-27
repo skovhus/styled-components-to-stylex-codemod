@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { CrossFileIcon } from "./lib/cross-file-icon.styled";
 
-import { IconButtonMarker } from "./markers.stylex";
+import { IconButtonMarker, HoverFocusButtonMarker } from "./markers.stylex";
 
 export function App() {
   return (
@@ -10,6 +10,10 @@ export function App() {
       <button sx={[styles.button, styles.iconButton, IconButtonMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInIconButton)} />
         Hover
+      </button>
+      <button sx={[styles.button, styles.hoverFocusButton, HoverFocusButtonMarker]}>
+        <CrossFileIcon {...stylex.props(styles.crossFileIconInHoverFocusButton)} />
+        Hover or focus
       </button>
     </div>
   );
@@ -27,6 +31,11 @@ const styles = stylex.create({
   iconButton: {
     gap: 8,
   },
+  // Grouped parent pseudos AND a base rule that sets the SAME property as the
+  // grouped-pseudo rule. The base value (opacity: 0) must survive as `default`.
+  hoverFocusButton: {
+    gap: 8,
+  },
   crossFileIconInIconButton: {
     width: 30,
     height: 30,
@@ -34,6 +43,13 @@ const styles = stylex.create({
     transform: {
       default: null,
       [stylex.when.ancestor(":hover", IconButtonMarker)]: "rotate(180deg)",
+    },
+  },
+  crossFileIconInHoverFocusButton: {
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover", HoverFocusButtonMarker)]: 1,
+      [stylex.when.ancestor(":focus-within", HoverFocusButtonMarker)]: 1,
     },
   },
 });
