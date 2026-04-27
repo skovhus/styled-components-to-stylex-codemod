@@ -1,1 +1,0 @@
-import"./chunk-jRWAZmH_.js";import{f as e,p as t}from"./index-5IKQCiqd.js";t();var n=e(),r=e=>{let{text:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};r.HEIGHT=30;var i=e=>{let{title:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};i.HEIGHT=28;export{r as n,i as t};
