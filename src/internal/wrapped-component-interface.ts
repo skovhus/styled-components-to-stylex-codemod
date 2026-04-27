@@ -11,10 +11,11 @@
  * Used by both the wrapper-emitter (full wrapper components) and the
  * JSX-rewrite step (inlined re-styles).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import jscodeshift, { type ASTNode, type JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../adapter.js";
 import { createModuleResolver } from "./prepass/resolve-imports.js";
+import { resolveSourcePath } from "./file-resolution.js";
 
 export function isWrappedComponentSxAware(args: {
   adapter: Pick<Adapter, "useSxProp" | "wrappedComponentInterface">;
@@ -55,7 +56,6 @@ export function isWrappedComponentSxAware(args: {
 // declares an `sx?` member on its props type.
 // ────────────────────────────────────────────────────────────────────────────
 
-const FILE_EXTENSIONS = ["", ".tsx", ".ts", ".jsx", ".js"];
 const SX_PROP_NAME = "sx";
 const moduleResolver = createModuleResolver();
 
@@ -119,16 +119,6 @@ function computeDetection(absolutePath: string, componentName: string): boolean 
     return false;
   }
   return typeMentionsSxMember(j, root, propsTypeNode, new Set());
-}
-
-function resolveSourcePath(absolutePath: string): string | null {
-  for (const ext of FILE_EXTENSIONS) {
-    const candidate = absolutePath + ext;
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
 }
 
 /**

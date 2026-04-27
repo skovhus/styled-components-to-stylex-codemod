@@ -3,7 +3,6 @@
  * Core concepts: dispatch interpolated declarations and apply static values.
  */
 import type { CssRuleIR } from "../css-ir.js";
-import { readFileSync } from "node:fs";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -11,6 +10,7 @@ import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import { readSourceText } from "../file-resolution.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
@@ -264,17 +264,6 @@ function findImportedConstStringInit(
 }
 
 const exportedConstStringCache = new Map<string, Map<string, string>>();
-const IMPORT_SOURCE_CANDIDATE_SUFFIXES = [
-  "",
-  ".tsx",
-  ".ts",
-  ".jsx",
-  ".js",
-  "/index.tsx",
-  "/index.ts",
-  "/index.jsx",
-  "/index.js",
-];
 
 function findExportedConstStringInit(
   sourceFilePath: string,
@@ -286,7 +275,7 @@ function findExportedConstStringInit(
     return cached.get(exportedName) ?? null;
   }
 
-  const source = readImportSourceText(sourceFilePath);
+  const source = readSourceText(sourceFilePath, { includeIndexFallbacks: true });
   if (!source) {
     exportedConstStringCache.set(sourceFilePath, new Map());
     return null;
@@ -350,15 +339,4 @@ function findExportedConstStringInit(
 
   exportedConstStringCache.set(sourceFilePath, resolvedByExportedName);
   return resolvedByExportedName.get(exportedName) ?? null;
-}
-
-function readImportSourceText(importedPath: string): string | null {
-  for (const suffix of IMPORT_SOURCE_CANDIDATE_SUFFIXES) {
-    try {
-      return readFileSync(`${importedPath}${suffix}`, "utf-8");
-    } catch {
-      continue;
-    }
-  }
-  return null;
 }
