@@ -1,9 +1,8 @@
-import { beforeAll, describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtemp, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { format } from "oxfmt";
 import { runTransform } from "../run.js";
 import {
@@ -15,7 +14,6 @@ import { fixtureAdapter } from "./fixture-adapters.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const testCasesDir = join(__dirname, "..", "..", "test-cases");
-const repoRoot = join(__dirname, "..", "..");
 
 async function normalizeCode(code: string): Promise<string> {
   const { code: formatted } = await format("test.tsx", code);
@@ -30,6 +28,8 @@ async function runAutoSxWrapperFixture(args: {
   externalInterface?: AdapterInput["externalInterface"];
   useSxProp?: boolean;
   consumerPaths?: string | string[] | null;
+  dryRun?: boolean;
+  print?: boolean;
 }): Promise<{
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
@@ -92,8 +92,8 @@ async function runAutoSxWrapperFixture(args: {
     consumerPaths:
       args.consumerPaths === undefined ? join(tmp, "src/**/*.tsx") : args.consumerPaths,
     adapter,
-    dryRun: false,
-    print: false,
+    dryRun: args.dryRun ?? false,
+    print: args.print ?? false,
     parser: "tsx",
     silent: true,
   });
@@ -126,11 +126,6 @@ describe("index.ts barrel exports", () => {
 });
 
 describe("runTransform (e2e)", () => {
-  beforeAll(() => {
-    // `runTransform` shells out through the built transform module, even in source tests.
-    execFileSync("pnpm", ["build"], { cwd: repoRoot, stdio: "pipe" });
-  });
-
   it("transforms a fixture in a temp folder and matches the .output.tsx file", async () => {
     const fixtureName = "cssVariable-basic";
 
@@ -263,5 +258,84 @@ describe("runTransform (e2e)", () => {
     expect(result.skipped).toBe(0);
     expect(consumer).toContain("{...stylex.props(styles.body)}");
     expect(consumer).not.toContain("sx={styles.body}");
+  });
+
+  it("does not leak jscodeshift worker listeners on runs with more than ten files", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-many-files-"));
+    await mkdir(join(tmp, "src"), { recursive: true });
+    for (let i = 0; i < 12; i += 1) {
+      await writeFile(join(tmp, "src", `File${i}.tsx`), `export const value${i} = ${i};\n`);
+    }
+
+    const warnings: Error[] = [];
+    const onWarning = (warning: Error) => warnings.push(warning);
+    process.on("warning", onWarning);
+    try {
+      const result = await runTransform({
+        files: join(tmp, "src/**/*.tsx"),
+        consumerPaths: null,
+        adapter: defineAdapterFromIndex({
+          useSxProp: false,
+          externalInterface: () => ({ styles: false, as: false, ref: false }),
+          styleMerger: null,
+          resolveValue: () => undefined,
+          resolveCall: () => undefined,
+          resolveSelector: () => undefined,
+        }),
+        dryRun: true,
+        print: false,
+        parser: "tsx",
+        silent: true,
+      });
+
+      expect(result.errors).toBe(0);
+    } finally {
+      process.off("warning", onWarning);
+    }
+
+    expect(warnings.map((warning) => warning.name)).not.toContain("MaxListenersExceededWarning");
+  });
+
+  it("prints dry-run output that matches same-run sx-aware wrapper emission", async () => {
+    const printedChunks: string[] = [];
+    const writeSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk: string | Uint8Array) => {
+        printedChunks.push(String(chunk));
+        return true;
+      });
+
+    let result: Awaited<ReturnType<typeof runTransform>>;
+    let consumer: string;
+    try {
+      const fixture = await runAutoSxWrapperFixture({
+        tmpPrefix: "styledx-run-dry-print-sx-aware-",
+        componentLines: [
+          'import styled from "styled-components";',
+          "",
+          "export const ContentViewContainer = styled.div`",
+          "  display: flex;",
+          "  flex-grow: 1;",
+          "`;",
+          "",
+        ],
+        importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+        bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+        externalInterface: () => ({ styles: true, as: false, ref: false }),
+        consumerPaths: null,
+        dryRun: true,
+        print: true,
+      });
+      result = fixture.result;
+      consumer = fixture.consumer;
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(2);
+    expect(consumer).toContain("const Body = styled(ContentViewContainer)`");
+    expect(printedChunks.join("")).toContain("return <ContentViewContainer sx={styles.body} />");
+    expect(printedChunks.join("")).not.toContain("stylex.props(styles.body)");
   });
 });

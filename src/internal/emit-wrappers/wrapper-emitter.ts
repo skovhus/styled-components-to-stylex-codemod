@@ -62,6 +62,7 @@ type WrapperEmitterArgs = {
   /** Import map of local identifiers to their import source. Used to query adapter
    * hooks about wrapped imported components. */
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
+  sourceOverrides?: ReadonlyMap<string, string>;
   /** Optional adapter hook describing the public interface of an imported component
    * being wrapped via `styled(Component)`. */
   wrappedComponentInterface?: (ctx: {
@@ -90,6 +91,7 @@ export class WrapperEmitter {
   readonly parentsNeedingDefaultMarker: Set<string>;
   readonly useSxProp: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
+  readonly sourceOverrides?: ReadonlyMap<string, string>;
   readonly wrappedComponentInterface?: (ctx: {
     localName: string;
     importSource: string;
@@ -125,6 +127,7 @@ export class WrapperEmitter {
     this.parentsNeedingDefaultMarker = args.parentsNeedingDefaultMarker ?? new Set<string>();
     this.useSxProp = args.useSxProp;
     this.importMap = args.importMap ?? new Map();
+    this.sourceOverrides = args.sourceOverrides;
     this.wrappedComponentInterface = args.wrappedComponentInterface;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
@@ -144,6 +147,7 @@ export class WrapperEmitter {
       importMap: this.importMap,
       componentLocalName,
       filePath: this.filePath,
+      sourceOverrides: this.sourceOverrides,
     });
   }
 

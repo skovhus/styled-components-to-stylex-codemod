@@ -825,6 +825,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             importMap: ctx.importMap,
             componentLocalName: finalTag,
             filePath: ctx.file.path,
+            sourceOverrides: ctx.options.transformedFileSources,
           });
 
         // When NOT using sx prop, CSS module classNames must be merged into

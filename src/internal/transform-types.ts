@@ -121,6 +121,12 @@ export interface TransformOptions extends Options {
    * Set by runTransform.
    */
   resolveModule?: (fromFile: string, specifier: string) => string | undefined;
+
+  /**
+   * In-memory outputs for files already converted in this run. Used during dry-run
+   * so same-run dependency checks see the same source a real run would write.
+   */
+  transformedFileSources?: ReadonlyMap<string, string>;
 }
 
 /**
