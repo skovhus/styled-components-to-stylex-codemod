@@ -10,6 +10,7 @@ import {
   runTransform as runTransformFromIndex,
   defineAdapter as defineAdapterFromIndex,
 } from "../index.js";
+import type { AdapterInput } from "../adapter.js";
 import { fixtureAdapter } from "./fixture-adapters.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,9 @@ async function runAutoSxWrapperFixture(args: {
   componentLines: string[];
   importLine: string;
   bodyRuleLines: string[];
+  externalInterface?: AdapterInput["externalInterface"];
+  useSxProp?: boolean;
+  consumerPaths?: string | string[] | null;
 }): Promise<{
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
@@ -72,8 +76,8 @@ async function runAutoSxWrapperFixture(args: {
   );
 
   const adapter = defineAdapterFromIndex({
-    useSxProp: true,
-    externalInterface: "auto",
+    useSxProp: args.useSxProp ?? true,
+    externalInterface: args.externalInterface ?? "auto",
     styleMerger: {
       functionName: "mergedSx",
       importSource: { kind: "specifier", value: "./mergedSx" },
@@ -85,7 +89,8 @@ async function runAutoSxWrapperFixture(args: {
 
   const result = await runTransform({
     files: join(tmp, "src/**/*.tsx"),
-    consumerPaths: join(tmp, "src/**/*.tsx"),
+    consumerPaths:
+      args.consumerPaths === undefined ? join(tmp, "src/**/*.tsx") : args.consumerPaths,
     adapter,
     dryRun: false,
     print: false,
@@ -232,5 +237,31 @@ describe("runTransform (e2e)", () => {
     expect(consumer).toContain("const Body = styled(ContentViewContainer)`");
     expect(consumer).not.toContain("sx={styles.body}");
     expect(consumer).not.toContain("stylex.props(styles.body)");
+  });
+
+  it("does not false-bail same-run wrappers when sx prop emission is disabled", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-sequential-manual-interface-",
+      componentLines: [
+        'import styled from "styled-components";',
+        "",
+        "export const ContentViewContainer = styled.div`",
+        "  display: flex;",
+        "  flex-grow: 1;",
+        "`;",
+        "",
+      ],
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+      externalInterface: () => ({ styles: true, as: false, ref: false }),
+      useSxProp: false,
+      consumerPaths: null,
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(consumer).toContain("{...stylex.props(styles.body)}");
+    expect(consumer).not.toContain("sx={styles.body}");
   });
 });

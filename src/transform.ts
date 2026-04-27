@@ -220,7 +220,7 @@ function extractCrossFileInfoForFile(
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
-  const hasTransformedFiles = prepass.transformedFiles && prepass.transformedFiles.size > 0;
+  const hasTransformedFiles = prepass.transformedFiles !== undefined;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&

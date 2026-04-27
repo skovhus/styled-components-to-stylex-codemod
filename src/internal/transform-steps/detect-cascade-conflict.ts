@@ -3,7 +3,7 @@
  * whose file contains internal styled-components. With StyleX's atomic CSS, the
  * override may lose depending on class insertion order — bail with a clear warning.
  */
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
@@ -187,15 +187,8 @@ function resolveStyledDefFile(
 
 function pathSetContainsWithExtensionFallback(filePath: string, paths: Set<string>): boolean {
   for (const candidate of pathCandidates(filePath)) {
-    if (paths.has(candidate)) {
+    if (paths.has(candidate) || paths.has(toRealPath(candidate))) {
       return true;
-    }
-    try {
-      if (paths.has(realpathSync(candidate))) {
-        return true;
-      }
-    } catch {
-      // Try the next candidate.
     }
   }
   return false;
@@ -232,8 +225,7 @@ function scanFileForStyledDefs(importedPath: string): Set<string> | undefined {
  * Import paths may lack extensions; tries exact match then common extensions.
  */
 function tryReadFile(importedPath: string): string | undefined {
-  const candidates = [importedPath, ...EXTENSIONS.map((ext) => importedPath + ext)];
-  for (const candidate of candidates) {
+  for (const candidate of pathCandidates(importedPath)) {
     try {
       return readFileSync(candidate, "utf-8");
     } catch {

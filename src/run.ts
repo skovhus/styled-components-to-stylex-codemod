@@ -5,7 +5,7 @@
 import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -30,6 +30,7 @@ import {
   resolveBarrelReExport,
   type Resolve,
 } from "./internal/prepass/extract-external-interface.js";
+import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export { mergeMarkerDeclarations };
 
@@ -396,14 +397,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Create shared module resolver
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
-  const normalizeFilePath = (filePath: string): string => {
-    try {
-      return realpathSync(resolve(filePath));
-    } catch {
-      return resolve(filePath);
-    }
-  };
-  filePaths = orderFilesByLocalImportDependencies(filePaths, sharedResolver, normalizeFilePath);
+  filePaths = orderFilesByLocalImportDependencies(filePaths, sharedResolver, toRealPath);
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
   // Contract:
@@ -461,7 +455,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       const analysisMap = prepassResult.consumerAnalysis;
       const prepassResolve: Resolve = (specifier, fromFile) => {
         const resolved = sharedResolver.resolve(resolve(fromFile), specifier);
-        return resolved ? normalizeFilePath(resolved) : null;
+        return resolved ? toRealPath(resolved) : null;
       };
       const cachedRead = (filePath: string): string => {
         try {
@@ -471,7 +465,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         }
       };
       const lookupAutoExternalInterface = (filePath: string, componentName: string) =>
-        analysisMap.get(`${normalizeFilePath(filePath)}:${componentName}`);
+        analysisMap.get(`${toRealPath(filePath)}:${componentName}`);
 
       return {
         ...adapterInput,
@@ -499,11 +493,11 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             return undefined;
           }
 
-          const resolvedPath = normalizeFilePath(resolvedImport);
+          const resolvedPath = toRealPath(resolvedImport);
           const definitionPath =
             resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
             resolvedPath;
-          if (!transformedFiles.has(normalizeFilePath(definitionPath))) {
+          if (!transformedFiles.has(toRealPath(definitionPath))) {
             return undefined;
           }
 
@@ -598,10 +592,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     silent: options.silent ?? false,
   };
 
-  const result =
-    adapterInput.externalInterface === "auto" && adapterInput.useSxProp
-      ? await runJscodeshiftSequentially(transformPath, filePaths, runnerOptions)
-      : await jscodeshiftRun(transformPath, filePaths, runnerOptions);
+  // Worker.js processes a chunk with async.each even when jscodeshift runs in-band.
+  // Several transform decisions read the live transformedFiles set, so run one
+  // file per jscodeshift invocation to preserve dependency order deterministically.
+  const result = await runJscodeshiftSequentially(transformPath, filePaths, runnerOptions);
 
   // Write sidecar .stylex.ts files (defineMarker declarations)
   // Merge with existing content to avoid clobbering user-owned exports (e.g. defineVars).
