@@ -81,6 +81,23 @@ const ChipGroup = styled.div<{ $chipColor?: string }>`
   }
 `;
 
+// Grouped parent pseudos must bridge the dynamic value into every pseudo bucket.
+const GroupedLabel = styled.span`
+  font-size: 14px;
+`;
+
+const GroupedPanel = styled.div<{ $tone?: string }>`
+  padding: 8px;
+  border: 1px solid #ccc;
+
+  &:hover,
+  &:focus-within {
+    ${GroupedLabel} {
+      color: ${(props) => props.$tone ?? "darkgreen"};
+    }
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Button $color="blue">
@@ -99,5 +116,10 @@ export const App = () => (
     <ChipGroup $chipColor="teal">
       <Chip>Destructured prop</Chip>
     </ChipGroup>
+    <GroupedPanel $tone="seagreen">
+      <button type="button">
+        <GroupedLabel>Grouped hover/focus dynamic color</GroupedLabel>
+      </button>
+    </GroupedPanel>
   </div>
 );

@@ -255,6 +255,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       const pseudo = m[1];
       const slotId = Number(m[2]);
       const expr = decl.templateExpressions[slotId] as any;
+      const placeholderIndex = decl.rawCss.indexOf(`__SC_EXPR_${slotId}__`, m.index);
+      if (
+        placeholderIndex >= 0 &&
+        isPlaceholderInsideHandledComponentBlock(decl.rawCss, placeholderIndex)
+      ) {
+        continue;
+      }
       // Skip component identifiers (those are handled above)
       if (!expr || expr.type === "Identifier") {
         continue;
@@ -1416,6 +1423,27 @@ function isComponentBlockHandledByRuleProcessor(
     parseSimpleParentPseudoSelectorList(
       readSelectorBeforeBlock(rawCss, parentSelectorBlockStart),
     ) !== null
+  );
+}
+
+function isPlaceholderInsideHandledComponentBlock(
+  rawCss: string,
+  placeholderIndex: number,
+): boolean {
+  const componentBlockOpen = findPreviousOpeningBraceBeforeSelector(rawCss, placeholderIndex);
+  if (componentBlockOpen === null) {
+    return false;
+  }
+
+  const componentSelectorText = readSelectorBeforeBlock(rawCss, componentBlockOpen);
+  const componentPlaceholder = componentSelectorText.match(/__SC_EXPR_\d+__/);
+  if (!componentPlaceholder?.[0]) {
+    return false;
+  }
+
+  const componentBlockStart = rawCss.lastIndexOf(componentPlaceholder[0], componentBlockOpen);
+  return (
+    componentBlockStart >= 0 && isComponentBlockHandledByRuleProcessor(rawCss, componentBlockStart)
   );
 }
 
