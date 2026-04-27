@@ -91,5 +91,6 @@ const styles = stylex.create({
   // find the `sx` member.
   text: {
     color: "navy",
+    lineHeight: "20px",
   },
 });
