@@ -821,4 +821,3 @@ function buildExtraPropTypeLines(
   }
   return lines;
 }
-

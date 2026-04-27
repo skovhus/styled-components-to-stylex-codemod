@@ -9,6 +9,7 @@ import {
   getMemberPathFromIdentifier,
 } from "../utilities/jscodeshift-utils.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
+import { findArrowSlotExpr } from "./slot-utils.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import { mergeStyleObjects } from "./utils.js";
 import type { InternalHandlerContext } from "../builtin-handlers.js";
@@ -93,22 +94,14 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
   // When both branches are template literals that can be fully resolved via the adapter,
   // emit StyleX variants for each branch.
   const tryHandlePropertyTernaryTemplateLiteral = (d: any): boolean => {
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (!d.property) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    const slotPart = parts.find((p: any) => p.kind === "slot");
-    if (!slotPart || slotPart.kind !== "slot") {
+    const found = findArrowSlotExpr(d, decl);
+    if (!found) {
       return false;
     }
-    const slotId = slotPart.slotId;
-    const expr = decl.templateExpressions[slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
+    const { expr } = found;
     const bindings = getArrowFnParamBindings(expr);
     if (!bindings) {
       return false;
