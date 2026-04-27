@@ -53,22 +53,6 @@ const DeepReset = styled.div`
   }
 `;
 
-// Inherited property but with !important — cannot lift safely
-const ImportantReset = styled.div`
-  & * {
-    color: red !important;
-  }
-`;
-
-// Inherited property but conflicts with base — developer wants different parent vs descendant values
-const ConflictingColor = styled.div`
-  color: blue;
-
-  & * {
-    color: red;
-  }
-`;
-
 export const App = () => (
   <div>
     <ResetBox>
@@ -93,12 +77,5 @@ export const App = () => (
         <span>Deep nested</span>
       </div>
     </DeepReset>
-    <ImportantReset>
-      <span>Important color</span>
-    </ImportantReset>
-    <ConflictingColor>
-      Parent is blue
-      <span>Child is red</span>
-    </ConflictingColor>
   </div>
 );

@@ -4,10 +4,9 @@
  */
 import type { Collection } from "jscodeshift";
 import {
-  type CssRuleIR,
   computeUniversalSelectorLoc,
+  hasUniversalSelectorInRules,
   normalizeStylisAstToIR,
-  rewriteInheritedUniversalRules,
 } from "./css-ir.js";
 import {
   cloneAstNode,
@@ -61,19 +60,6 @@ function collectStyledDeclsImpl(args: {
       return;
     }
     universalSelectorLoc = computeUniversalSelectorLoc(getNodeLocStart(template), rawCss);
-  };
-
-  /** Rewrite inherited-only `& *` rules to base and note any remaining universals. */
-  const rewriteUniversalRules = (
-    rules: CssRuleIR[],
-    template: any,
-    rawCss: string,
-  ): CssRuleIR[] => {
-    const rewritten = rewriteInheritedUniversalRules(rules);
-    if (rewritten.hasRemainingUniversal) {
-      noteUniversalSelector(template, rawCss);
-    }
-    return rewritten.rules;
   };
 
   /**
@@ -825,11 +811,12 @@ function collectStyledDeclsImpl(args: {
         const template = init.quasi;
         const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = rewriteUniversalRules(
-          normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-          template,
-          parsed.rawCss,
-        );
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template, parsed.rawCss);
+        }
 
         styledDecls.push({
           ...placementHints,
@@ -858,11 +845,12 @@ function collectStyledDeclsImpl(args: {
           const template = init.quasi;
           const templateLoc = getNodeLocStart(template);
           const parsed = parseStyledTemplateLiteral(template);
-          const rules = rewriteUniversalRules(
-            normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-            template,
-            parsed.rawCss,
-          );
+          const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+            rawCss: parsed.rawCss,
+          });
+          if (hasUniversalSelectorInRules(rules)) {
+            noteUniversalSelector(template, parsed.rawCss);
+          }
 
           const attrsInfo = peeled.attrsArg != null ? parseAttrsArg(peeled.attrsArg) : undefined;
           const sfpResult =
@@ -909,11 +897,12 @@ function collectStyledDeclsImpl(args: {
         const template = init.quasi;
         const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = rewriteUniversalRules(
-          normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-          template,
-          parsed.rawCss,
-        );
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template, parsed.rawCss);
+        }
 
         styledDecls.push({
           ...placementHints,
@@ -945,11 +934,12 @@ function collectStyledDeclsImpl(args: {
         const template = init.quasi;
         const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = rewriteUniversalRules(
-          normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-          template,
-          parsed.rawCss,
-        );
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template, parsed.rawCss);
+        }
 
         styledDecls.push({
           ...placementHints,
@@ -981,11 +971,12 @@ function collectStyledDeclsImpl(args: {
         const template = init.quasi;
         const templateLoc = getNodeLocStart(template);
         const parsed = parseStyledTemplateLiteral(template);
-        const rules = rewriteUniversalRules(
-          normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-          template,
-          parsed.rawCss,
-        );
+        const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+          rawCss: parsed.rawCss,
+        });
+        if (hasUniversalSelectorInRules(rules)) {
+          noteUniversalSelector(template, parsed.rawCss);
+        }
 
         styledDecls.push({
           ...placementHints,
@@ -1290,11 +1281,12 @@ function collectStyledDeclsImpl(args: {
           // Handle styled.div(props => css`...`) pattern
           const templateLoc = getNodeLocStart(cssTemplate);
           const parsed = parseStyledTemplateLiteral(cssTemplate);
-          const rules = rewriteUniversalRules(
-            normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, { rawCss: parsed.rawCss }),
-            cssTemplate,
-            parsed.rawCss,
-          );
+          const rules = normalizeStylisAstToIR(parsed.stylisAst, parsed.slots, {
+            rawCss: parsed.rawCss,
+          });
+          if (hasUniversalSelectorInRules(rules)) {
+            noteUniversalSelector(cssTemplate, parsed.rawCss);
+          }
 
           // Extract destructured params and transform expressions
           const destructuredParams = extractDestructuredParams(arg0);
