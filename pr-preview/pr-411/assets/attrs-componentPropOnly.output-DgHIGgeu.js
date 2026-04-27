@@ -1,1 +1,0 @@
-import{f as e}from"./index-K9IPDFre.js";import{t}from"./text-DfgMHrJB.js";var n=e(),r=()=>(0,n.jsx)(`div`,{style:{padding:`16px`},children:(0,n.jsx)(t,{variant:`title2`,children:`Hello World`})});export{r as App};
