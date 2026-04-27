@@ -259,16 +259,10 @@ function parseValueAsTemplateLiteralForColor(
   // For simple cases like "1px solid ${color}", the color is just "${color}"
   // For "${color}" alone, return just that
 
-  // Parse out expressions from fullValue, keeping only what's between prefix and suffix
-  const regex = /\$\{([^}]+)\}/g;
-  const quasis: Array<{ raw: string; cooked: string }> = [];
-  const expressions: ExpressionKind[] = [];
-
   // Find where the prefix ends and extract remaining value
   const prefixTokens = prefix.trim().split(/\s+/).filter(Boolean);
   const fullTokens = fullValue.split(/\s+/);
 
-  // Find the start of the dynamic part
   let dynamicStart = 0;
   for (let i = 0; i < prefixTokens.length && i < fullTokens.length; i++) {
     const fullToken = fullTokens[i];
@@ -284,36 +278,11 @@ function parseValueAsTemplateLiteralForColor(
     .replace(new RegExp(`${escapedSuffix}$`), "")
     .trim();
 
-  // Parse the dynamic part into template literal
-  let lastIndex = 0;
-  let match;
-  regex.lastIndex = 0;
-
-  while ((match = regex.exec(dynamicPart)) !== null) {
-    const beforeExpr = dynamicPart.slice(lastIndex, match.index);
-    quasis.push({ raw: beforeExpr, cooked: beforeExpr });
-
-    const exprText = (match[1] ?? "").trim();
-    const exprAst = parseSimpleExpression(exprText, j);
-    if (!exprAst) {
-      return null;
-    }
-    expressions.push(exprAst);
-    lastIndex = regex.lastIndex;
-  }
-
-  const afterLast = dynamicPart.slice(lastIndex);
-  quasis.push({ raw: afterLast, cooked: afterLast });
-
-  if (expressions.length === 0) {
+  const parsed = splitInterpolatedString(dynamicPart, j);
+  if (!parsed || parsed.expressions.length === 0) {
     return null;
   }
-
-  const quasisAst = quasis.map((q, i) =>
-    j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
-  );
-
-  return j.templateLiteral(quasisAst, expressions);
+  return buildTemplateLiteral(j, parsed.quasis, parsed.expressions);
 }
 
 /**
@@ -326,41 +295,52 @@ function parseValueAsTemplateLiteralForColor(
  * cause this function to return null.
  */
 function parseValueAsTemplateLiteral(value: string, j: JSCodeshift): TemplateLiteral | null {
-  // Split by ${...} patterns
+  const parsed = splitInterpolatedString(value, j);
+  if (!parsed) {
+    return null;
+  }
+  return buildTemplateLiteral(j, parsed.quasis, parsed.expressions);
+}
+
+/**
+ * Split a string containing `${...}` placeholders into its raw quasi parts and
+ * the parsed expression AST nodes for each placeholder. Returns `null` when any
+ * placeholder fails the simple-expression parser.
+ */
+function splitInterpolatedString(
+  value: string,
+  j: JSCodeshift,
+): { quasis: Array<{ raw: string; cooked: string }>; expressions: ExpressionKind[] } | null {
   const regex = /\$\{([^}]+)\}/g;
   const quasis: Array<{ raw: string; cooked: string }> = [];
   const expressions: ExpressionKind[] = [];
-
   let lastIndex = 0;
-  let match;
-
+  let match: RegExpExecArray | null;
   while ((match = regex.exec(value)) !== null) {
-    // Add the static part before this expression
     const raw = value.slice(lastIndex, match.index);
     quasis.push({ raw, cooked: raw });
-
-    // Add the expression (as an identifier for now - will be parsed later if needed)
     const exprText = (match[1] ?? "").trim();
-    // Parse the expression text into AST
-    // For simple cases like "$colors.primaryColor", create a member expression
     const exprAst = parseSimpleExpression(exprText, j);
     if (!exprAst) {
       return null;
     }
     expressions.push(exprAst);
-
     lastIndex = regex.lastIndex;
   }
-
-  // Add the final static part
   const finalRaw = value.slice(lastIndex);
   quasis.push({ raw: finalRaw, cooked: finalRaw });
+  return { quasis, expressions };
+}
 
-  // Build template literal AST
+/** Convert raw quasis + expressions into a TemplateLiteral AST node. */
+function buildTemplateLiteral(
+  j: JSCodeshift,
+  quasis: Array<{ raw: string; cooked: string }>,
+  expressions: ExpressionKind[],
+): TemplateLiteral {
   const quasisAst = quasis.map((q, i) =>
     j.templateElement({ raw: q.raw, cooked: q.cooked }, i === quasis.length - 1),
   );
-
   return j.templateLiteral(quasisAst, expressions);
 }
 

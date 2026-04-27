@@ -143,38 +143,17 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       if (!valueExprRaw) {
         return true;
       }
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
-        const wrapValue = (expr: ExpressionKind): ExpressionKind => {
-          const needsString =
-            out.prop === "boxShadow" ||
-            out.prop === "backgroundColor" ||
-            out.prop.toLowerCase().endsWith("color");
-          if (!needsString) {
-            return expr;
-          }
-          return j.templateLiteral(
-            [
-              j.templateElement({ raw: "", cooked: "" }, false),
-              j.templateElement({ raw: "", cooked: "" }, true),
-            ],
-            [expr],
-          );
-        };
-        const valueExpr = wrapValue(valueExprRaw);
-        const fnKey = `${styleKeyWithSuffix(decl.styleKey, out.prop)}FromProps`;
-        if (!styleFnDecls.has(fnKey)) {
-          const p = j.property(
-            "init",
-            makeCssPropKey(j, out.prop),
-            buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
-          ) as any;
-          const body = j.objectExpression([p]);
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
-        }
-        if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-          styleFnFromProps.push({ fnKey, jsxProp: "__props" });
-        }
-      }
+      emitPseudoMediaStyleFnFromProps({
+        j,
+        d,
+        decl,
+        pseudos,
+        media,
+        valueExprRaw,
+        propsParam,
+        styleFnDecls,
+        styleFnFromProps,
+      });
       return true;
     }
 
@@ -300,38 +279,17 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       const valueExprRaw =
         prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
       const propsParam = j.identifier("props");
-      for (const out of cssDeclarationToStylexDeclarations(d)) {
-        const wrapValue = (expr: ExpressionKind): ExpressionKind => {
-          const needsString =
-            out.prop === "boxShadow" ||
-            out.prop === "backgroundColor" ||
-            out.prop.toLowerCase().endsWith("color");
-          if (!needsString) {
-            return expr;
-          }
-          return j.templateLiteral(
-            [
-              j.templateElement({ raw: "", cooked: "" }, false),
-              j.templateElement({ raw: "", cooked: "" }, true),
-            ],
-            [expr],
-          );
-        };
-        const valueExpr = wrapValue(valueExprRaw);
-        const fnKey = `${styleKeyWithSuffix(decl.styleKey, out.prop)}FromProps`;
-        if (!styleFnDecls.has(fnKey)) {
-          const p = j.property(
-            "init",
-            makeCssPropKey(j, out.prop),
-            buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
-          ) as any;
-          const body = j.objectExpression([p]);
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
-        }
-        if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-          styleFnFromProps.push({ fnKey, jsxProp: "__props" });
-        }
-      }
+      emitPseudoMediaStyleFnFromProps({
+        j,
+        d,
+        decl,
+        pseudos,
+        media,
+        valueExprRaw,
+        propsParam,
+        styleFnDecls,
+        styleFnFromProps,
+      });
       return true;
     }
 
@@ -362,4 +320,54 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
 
 function hasSimpleIdentifierParam(expr: { params?: Array<{ type?: string }> }): boolean {
   return expr.params?.length === 1 && expr.params[0]?.type === "Identifier";
+}
+
+/**
+ * Emit one `${key}FromProps` style function entry per longhand expansion of
+ * `d`, keyed by the StyleX prop name and wrapped in pseudo/media buckets.
+ *
+ * Color-like properties (color tokens, boxShadow, backgroundColor) are wrapped
+ * in a single-slot template literal so the runtime value coerces to a string.
+ */
+function emitPseudoMediaStyleFnFromProps(args: {
+  j: JSCodeshift;
+  d: CssDeclarationIR;
+  decl: StyledDecl;
+  pseudos: string[] | null;
+  media: string | undefined;
+  valueExprRaw: ExpressionKind;
+  propsParam: ReturnType<JSCodeshift["identifier"]>;
+  styleFnDecls: Map<string, unknown>;
+  styleFnFromProps: Array<{ fnKey: string; jsxProp: string }>;
+}): void {
+  const { j, d, decl, pseudos, media, valueExprRaw, propsParam, styleFnDecls, styleFnFromProps } =
+    args;
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    const needsStringWrap =
+      out.prop === "boxShadow" ||
+      out.prop === "backgroundColor" ||
+      out.prop.toLowerCase().endsWith("color");
+    const valueExpr = needsStringWrap
+      ? j.templateLiteral(
+          [
+            j.templateElement({ raw: "", cooked: "" }, false),
+            j.templateElement({ raw: "", cooked: "" }, true),
+          ],
+          [valueExprRaw],
+        )
+      : valueExprRaw;
+    const fnKey = `${styleKeyWithSuffix(decl.styleKey, out.prop)}FromProps`;
+    if (!styleFnDecls.has(fnKey)) {
+      const p = j.property(
+        "init",
+        makeCssPropKey(j, out.prop),
+        buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+      ) as any;
+      const body = j.objectExpression([p]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+    }
+    if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+      styleFnFromProps.push({ fnKey, jsxProp: "__props" });
+    }
+  }
 }

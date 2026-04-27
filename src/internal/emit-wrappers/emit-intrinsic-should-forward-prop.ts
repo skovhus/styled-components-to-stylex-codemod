@@ -184,26 +184,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           ? `${explicit} & { [K in \`$\${string}\`]?: any }`
           : explicit;
       }
-      const variantDimByProp = buildVariantDimPropTypeMap(d);
-      const staticVariantPropTypes = buildStaticVariantPropTypes(d);
-      const lines: string[] = [];
-      for (const p of extraProps) {
-        if (!isValidIdentifierName(p)) {
-          continue;
-        }
-        const variantType = variantDimByProp.get(p);
-        if (variantType) {
-          lines.push(`  ${p}?: ${variantType};`);
-          continue;
-        }
-        const staticType = staticVariantPropTypes.get(p);
-        if (staticType) {
-          lines.push(`  ${p}?: ${staticType};`);
-          continue;
-        }
-        const attrType = p.startsWith("data-") ? "boolean | string" : "any";
-        lines.push(`  ${p}?: ${attrType};`);
-      }
+      const lines = buildExtraPropTypeLines(d, extraProps);
       const literal = lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
       if (dropPrefixFromFilter === "$") {
         return `${literal} & { [K in \`$\${string}\`]?: any }`;
@@ -220,26 +201,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       const compoundWhenKeys = collectCompoundVariantKeys(d.compoundVariants, {
         syntheticOnly: true,
       });
-      const variantDimByProp = buildVariantDimPropTypeMap(d);
-      const staticVariantPropTypes = buildStaticVariantPropTypes(d);
-      const lines: string[] = [];
-      for (const p of extraProps) {
-        if (!isValidIdentifierName(p) || explicitPropNames.has(p) || compoundWhenKeys.has(p)) {
-          continue;
-        }
-        const variantType = variantDimByProp.get(p);
-        if (variantType) {
-          lines.push(`  ${p}?: ${variantType};`);
-          continue;
-        }
-        const staticType = staticVariantPropTypes.get(p);
-        if (staticType) {
-          lines.push(`  ${p}?: ${staticType};`);
-          continue;
-        }
-        const attrType = p.startsWith("data-") ? "boolean | string" : "any";
-        lines.push(`  ${p}?: ${attrType};`);
-      }
+      const lines = buildExtraPropTypeLines(
+        d,
+        extraProps,
+        (p) => explicitPropNames.has(p) || compoundWhenKeys.has(p),
+      );
       return lines.length > 0 ? `{\n${lines.join("\n")}\n}` : "{}";
     })();
 
@@ -819,3 +785,40 @@ function filterAttrsForShouldForwardProp(
     ),
   };
 }
+
+/**
+ * Build typed `prop?: type;` lines for the consumed prop names of `d`.
+ * Variant-dimension and static-boolean-variant types take priority over the
+ * generic `data-*: boolean | string` / `any` fallback.
+ *
+ * Pass `skip(name)` to filter out names that are already part of an explicit
+ * user-supplied props type.
+ */
+function buildExtraPropTypeLines(
+  d: StyledDecl,
+  extraProps: Iterable<string>,
+  skip?: (name: string) => boolean,
+): string[] {
+  const variantDimByProp = buildVariantDimPropTypeMap(d);
+  const staticVariantPropTypes = buildStaticVariantPropTypes(d);
+  const lines: string[] = [];
+  for (const p of extraProps) {
+    if (!isValidIdentifierName(p) || skip?.(p)) {
+      continue;
+    }
+    const variantType = variantDimByProp.get(p);
+    if (variantType) {
+      lines.push(`  ${p}?: ${variantType};`);
+      continue;
+    }
+    const staticType = staticVariantPropTypes.get(p);
+    if (staticType) {
+      lines.push(`  ${p}?: ${staticType};`);
+      continue;
+    }
+    const attrType = p.startsWith("data-") ? "boolean | string" : "any";
+    lines.push(`  ${p}?: ${attrType};`);
+  }
+  return lines;
+}
+

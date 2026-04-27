@@ -3,7 +3,7 @@
  * Core concepts: parse resolved expressions and emit variant buckets safely.
  */
 import type { CssDeclarationIR } from "../css-ir.js";
-import type { WarningType } from "../logger.js";
+import type { WarningLog, WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { LowerRulesState } from "./state.js";
 import {
@@ -94,20 +94,16 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
   const parseResolved = (
     expr: string,
     imports: any[],
-  ): { exprAst: unknown; imports: any[] } | null => {
-    const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
-    const exprAst = parseExpr(wrappedExpr);
-    if (!exprAst) {
-      warnings.push({
-        severity: "error",
-        type: "Adapter resolveCall returned an unparseable styles expression",
-        loc: decl.loc,
-        context: { localName: decl.localName, expr },
-      });
-      return null;
-    }
-    return { exprAst, imports: imports ?? [] };
-  };
+  ): { exprAst: unknown; imports: any[] } | null =>
+    parseResolvedAdapterExpr({
+      expr,
+      imports,
+      staticPrefix,
+      staticSuffix,
+      parseExpr,
+      decl,
+      warnings,
+    });
 
   // Helper to expand border shorthand from a string literal like "2px solid blue"
   // or a template literal like `1px solid ${color}` or `${width} solid ${color}`
@@ -514,20 +510,16 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
   const parseResolved = (
     expr: string,
     imports: any[],
-  ): { exprAst: unknown; imports: any[] } | null => {
-    const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
-    const exprAst = parseExpr(wrappedExpr);
-    if (!exprAst) {
-      warnings.push({
-        severity: "error",
-        type: "Adapter resolveCall returned an unparseable styles expression",
-        loc: decl.loc,
-        context: { localName: decl.localName, expr },
-      });
-      return null;
-    }
-    return { exprAst, imports: imports ?? [] };
-  };
+  ): { exprAst: unknown; imports: any[] } | null =>
+    parseResolvedAdapterExpr({
+      expr,
+      imports,
+      staticPrefix,
+      staticSuffix,
+      parseExpr,
+      decl,
+      warnings,
+    });
 
   const applyParsed = (
     target: Record<string, unknown>,
@@ -649,20 +641,16 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
   const parseResolved = (
     expr: string,
     imports: any[],
-  ): { exprAst: unknown; imports: any[] } | null => {
-    const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
-    const exprAst = parseExpr(wrappedExpr);
-    if (!exprAst) {
-      warnings.push({
-        severity: "error",
-        type: "Adapter resolveCall returned an unparseable styles expression",
-        loc: decl.loc,
-        context: { localName: decl.localName, expr },
-      });
-      return null;
-    }
-    return { exprAst, imports: imports ?? [] };
-  };
+  ): { exprAst: unknown; imports: any[] } | null =>
+    parseResolvedAdapterExpr({
+      expr,
+      imports,
+      staticPrefix,
+      staticSuffix,
+      parseExpr,
+      decl,
+      warnings,
+    });
 
   const applyParsed = (
     target: Record<string, unknown>,
@@ -762,6 +750,35 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
  * Returns `null` (the StyleX "no override" sentinel) when no usable default is
  * present.
  */
+/**
+ * Wrap an adapter-resolved expression source with the original CSS value's
+ * static prefix/suffix and parse it into an AST node. Emits a warning and
+ * returns `null` when parsing fails.
+ */
+function parseResolvedAdapterExpr(args: {
+  expr: string;
+  imports: any[];
+  staticPrefix: string;
+  staticSuffix: string;
+  parseExpr: (source: string) => unknown;
+  decl: StyledDecl;
+  warnings: WarningLog[];
+}): { exprAst: unknown; imports: any[] } | null {
+  const { expr, imports, staticPrefix, staticSuffix, parseExpr, decl, warnings } = args;
+  const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+  const exprAst = parseExpr(wrappedExpr);
+  if (!exprAst) {
+    warnings.push({
+      severity: "error",
+      type: "Adapter resolveCall returned an unparseable styles expression",
+      loc: decl.loc,
+      context: { localName: decl.localName, expr },
+    });
+    return null;
+  }
+  return { exprAst, imports: imports ?? [] };
+}
+
 function unwrapConditionMapDefault(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value) || isAstNode(value)) {
     return value ?? null;
