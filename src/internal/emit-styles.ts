@@ -3,12 +3,19 @@
  * Core concepts: style object serialization and import management.
  */
 import type { StyledDecl, VariantDimension } from "./transform-types.js";
-import path from "node:path";
-import type { ImportSource, ImportSpec } from "../adapter.js";
+import type { ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import {
+  assertValidImportSource,
+  importSourceToModuleSpecifier,
+} from "./utilities/import-source.js";
+import {
+  findLastImportIndex,
+  insertImportDeclarationNearStylex,
+} from "./utilities/import-insertion.js";
 
 /**
  * CSS shorthands that must NEVER appear as property names in stylex.create() output.
@@ -385,56 +392,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   // Inject resolver-provided imports (from adapter.resolveValue calls).
   {
-    const toModuleSpecifier = (from: ImportSource): string => {
-      if (from.kind === "specifier") {
-        if (typeof from.value !== "string" || from.value.trim() === "") {
-          throw new Error(
-            `Invalid import specifier: expected non-empty string, got ${JSON.stringify(
-              from.value,
-            )}`,
-          );
-        }
-        return from.value;
-      }
-      // Absolute file path -> relative module specifier from current file
-      if (typeof from.value !== "string" || from.value.trim() === "") {
-        throw new Error(
-          `Invalid import absolutePath: expected non-empty string, got ${JSON.stringify(
-            from.value,
-          )}`,
-        );
-      }
-      if (!path.isAbsolute(from.value)) {
-        throw new Error(
-          `Invalid import absolutePath: expected absolute path, got ${JSON.stringify(from.value)}`,
-        );
-      }
-      const baseDir = path.dirname(String(filePath));
-      let rel = path.relative(baseDir, from.value);
-      rel = rel.split(path.sep).join("/");
-      if (!rel.startsWith(".")) {
-        rel = `./${rel}`;
-      }
-      return rel;
+    const toModuleSpecifier = (from: ImportSpec["from"]): string => {
+      assertValidImportSource(from, "import");
+      return importSourceToModuleSpecifier(from, String(filePath));
     };
 
     const insertImportDecl = (decl: any): void => {
-      const body = root.get().node.program.body as any[];
-      const stylexIdx = body.findIndex(
-        (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
-      );
-      const lastImportIdx = (() => {
-        let last = -1;
-        for (let i = 0; i < body.length; i++) {
-          if (body[i]?.type === "ImportDeclaration") {
-            last = i;
-          }
-        }
-        return last;
-      })();
-      const importInsertAt =
-        stylexIdx >= 0 ? stylexIdx + 1 : lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-      body.splice(importInsertAt, 0, decl);
+      insertImportDeclarationNearStylex(root, decl);
     };
 
     const ensureImportDecl = (spec: ImportSpec): void => {
@@ -627,15 +591,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
   if (insertNodes.length > 0) {
     if (stylesInsertPosition === "afterImports") {
-      const lastImportIdx = (() => {
-        let last = -1;
-        for (let i = 0; i < programBody.length; i++) {
-          if (programBody[i]?.type === "ImportDeclaration") {
-            last = i;
-          }
-        }
-        return last;
-      })();
+      const lastImportIdx = findLastImportIndex(programBody);
       const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
       programBody.splice(insertAt, 0, ...insertNodes);
     } else {

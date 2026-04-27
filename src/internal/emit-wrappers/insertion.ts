@@ -2,12 +2,11 @@
  * Inserts emitted wrapper nodes into the AST and preserves comments.
  * Core concepts: wrapper ordering and React type import management.
  */
-import nodePath from "node:path";
 import type { ASTNode, Comment } from "jscodeshift";
-import type { ImportSource } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
+import { importSourceToModuleSpecifier } from "../utilities/import-source.js";
 import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
 
 export function insertEmittedWrappers(args: {
@@ -237,7 +236,10 @@ export function insertEmittedWrappers(args: {
   if (needsUseThemeImport) {
     const { functionName: themeHookFunctionName, importSource: themeHookImportSource } =
       emitter.themeHook;
-    const themeHookModuleSpecifier = toModuleSpecifier(themeHookImportSource, emitter.filePath);
+    const themeHookModuleSpecifier = importSourceToModuleSpecifier(
+      themeHookImportSource,
+      emitter.filePath,
+    );
 
     // Check runtime imports from the configured module.
     const runtimeImports = root
@@ -298,15 +300,3 @@ export function insertEmittedWrappers(args: {
   }
 }
 
-function toModuleSpecifier(from: ImportSource, filePath: string): string {
-  if (from.kind === "specifier") {
-    return from.value;
-  }
-  const baseDir = nodePath.dirname(String(filePath));
-  let relativePath = nodePath.relative(baseDir, from.value);
-  relativePath = relativePath.split(nodePath.sep).join("/");
-  if (!relativePath.startsWith(".")) {
-    relativePath = `./${relativePath}`;
-  }
-  return relativePath;
-}

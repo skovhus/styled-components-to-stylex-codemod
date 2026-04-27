@@ -10,6 +10,7 @@ import {
   importSourceToAbsolutePath,
   importSourceToModuleSpecifier,
 } from "../utilities/import-source.js";
+import { insertAfterLastImport } from "../utilities/import-insertion.js";
 
 /**
  * Emits stylex.create objects and required imports, applying resolver import aliasing.
@@ -185,13 +186,9 @@ function emitMarkerGroup(
     j.literal(importPath),
   );
 
-  const programBody = ctx.root.get().node.program.body as Array<{ type?: string }>;
-  const lastImportIdx = programBody.reduce(
-    (last: number, node: { type?: string }, i: number) =>
-      node?.type === "ImportDeclaration" ? i : last,
-    -1,
+  insertAfterLastImport(
+    ctx.root.get().node.program.body,
+    importDecl as unknown as { type?: string },
   );
-  const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-  programBody.splice(insertAt, 0, importDecl as unknown as { type?: string });
 }
 

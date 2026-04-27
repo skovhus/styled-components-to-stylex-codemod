@@ -32,7 +32,7 @@ export function collectCompoundVariantKeys(
   return keys;
 }
 
-export type EmitIntrinsicHelpers = {
+type EmitIntrinsicHelpers = {
   hasForwardedAsUsage: (d: StyledDecl) => boolean;
   withForwardedAsType: (typeText: string, includeForwardedAs: boolean) => string;
   splitForwardedAsStaticAttrs: (args: {

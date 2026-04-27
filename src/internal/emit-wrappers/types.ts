@@ -22,7 +22,7 @@ export const BLOCKED_INTRINSIC_ATTR_RENAMES: Readonly<Record<string, readonly st
 };
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
-export type WrapperPropDefaultValue = string | number | boolean;
+type WrapperPropDefaultValue = string | number | boolean;
 export type WrapperPropDefaults = Map<string, WrapperPropDefaultValue>;
 /**
  * Collects prop identifiers referenced by inline style expressions.
