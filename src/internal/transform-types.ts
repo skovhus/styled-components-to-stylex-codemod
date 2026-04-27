@@ -307,6 +307,11 @@ export type LocalElementOverrideCandidate = {
    * Target IDs use the format `styled:<LocalName>` or `intrinsic:<tagName>`.
    */
   styleKeysByTargetId?: Record<string, string>;
+  /**
+   * Styled local targets that were inlineable at initial proof time. Re-checked after later
+   * wrapper-forcing passes to detect targets that become wrappers too late for safe rewriting.
+   */
+  initiallyInlineableStyledTargets?: string[];
   /** Whether the proof path had to cross a custom/local wrapper component to reach a match. */
   traversesWrapper?: boolean;
   /** Best-effort source location for bail warnings tied to this selector. */
@@ -356,6 +361,15 @@ export type StyledDecl = {
    * that are only emitted when every JSX usage is statically provable.
    */
   localElementOverrides?: LocalElementOverrideCandidate[];
+  /**
+   * Proof-time metadata for styled targets reached by same-file local element overrides.
+   * Used for a later re-check after wrapper-forcing passes settle.
+   */
+  localElementTargetProofs?: Array<{
+    targetId: string;
+    wasInlineableAtProofTime: boolean;
+    loc?: { line: number; column: number };
+  }>;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
   /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */

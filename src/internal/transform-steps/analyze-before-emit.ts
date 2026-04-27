@@ -487,6 +487,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   );
   const usedLocalElementStyleKeys = new Set<string>();
   const localElementTargetStyleKeys = new Set<string>();
+  const localElementProofs = new Map<
+    string,
+    {
+      proof: LocalElementProofResult;
+      unsupportedReason: "none" | "dynamic" | "exported-parent" | LocalElementProofReason;
+    }
+  >();
 
   for (const decl of styledDecls) {
     if (!decl.localElementOverrides?.length) {
@@ -501,7 +508,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       decl.localElementOverrides,
       declByLocal,
     );
-    const localElementUnsupportedReason = decl.isExported
+    const unsupportedReason = decl.isExported
       ? "exported-parent"
       : decl.base.kind !== "intrinsic" ||
           decl.needsWrapperComponent ||
@@ -513,88 +520,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         : proof.safe
           ? "none"
           : proof.reason;
-    const localElementSupported = localElementUnsupportedReason === "none";
-
-    if (!localElementSupported) {
-      for (const override of decl.localElementOverrides) {
-        ctx.warnings.push({
-          severity: "warning",
-          type: getLocalElementWarningType(
-            override,
-            localElementUnsupportedReason as LocalElementProofReason,
-          ),
-          loc: override.loc,
-        });
-      }
-      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
-    }
-
-    const nextOverrides: LocalElementOverrideCandidate[] = [];
-    for (const override of decl.localElementOverrides) {
-      const targetIds = proof.targetsByStyleKey.get(override.styleKey) ?? new Set<string>();
-      const styleKeysByTargetId: Record<string, string> = {};
-      for (const targetId of [...targetIds].sort()) {
-        const targetDecl = targetId.startsWith("styled:")
-          ? declByLocal.get(targetId.slice("styled:".length))
-          : undefined;
-        if (targetDecl) {
-          const {
-            className: childClassName,
-            style: childStyle,
-            ref: childRef,
-          } = getJsxAttributeUsage(targetDecl.localName);
-          const childInlineable =
-            targetDecl.base.kind === "intrinsic" &&
-            !targetDecl.isExported &&
-            !targetDecl.needsWrapperComponent &&
-            !childClassName &&
-            !childStyle &&
-            !childRef &&
-            !hasSpreadInJsx(root, j, targetDecl.localName);
-          if (!childInlineable) {
-            ctx.warnings.push({
-              severity: "warning",
-              type: getLocalElementWarningType(override, "child-not-inlineable"),
-              loc: override.loc,
-            });
-            return returnResult({ code: null, warnings: ctx.warnings }, "bail");
-          }
-          localElementTargetStyleKeys.add(targetDecl.styleKey);
-        }
-
-        const emittedStyleKey = ensureUniqueKey(
-          makeLocalElementTargetStyleKey(override, targetId),
-          usedLocalElementStyleKeys,
-          reservedStyleKeys,
-        );
-        usedLocalElementStyleKeys.add(emittedStyleKey);
-        reservedStyleKeys.add(emittedStyleKey);
-        styleKeysByTargetId[targetId] = emittedStyleKey;
-
-        const childStyleObjects =
-          targetDecl && ctx.resolvedStyleObjects
-            ? buildResolvedStyleObjectList(targetDecl, ctx.resolvedStyleObjects)
-            : [];
-        const props = buildLocalElementOverrideProperties({
-          j,
-          override,
-          childStyleObjects,
-        });
-        if (props.length > 0) {
-          ctx.resolvedStyleObjects?.set(emittedStyleKey, j.objectExpression(props));
-        }
-      }
-
-      nextOverrides.push({ ...override, styleKeysByTargetId });
-      if (override.ancestorPseudo) {
-        ctx.ancestorSelectorParents ??= new Set<string>();
-        ctx.ancestorSelectorParents.add(decl.styleKey);
-        ctx.parentsNeedingDefaultMarker ??= new Set<string>();
-        ctx.parentsNeedingDefaultMarker.add(decl.styleKey);
-      }
-    }
-
-    decl.localElementOverrides = nextOverrides;
+    localElementProofs.set(decl.localName, { proof, unsupportedReason });
   }
 
   // Pre-analyze inline style props at JSX call sites to determine if they can be promoted
@@ -638,6 +564,98 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         decl.needsWrapperComponent = true;
       }
     }
+  }
+
+  for (const decl of styledDecls) {
+    if (!decl.localElementOverrides?.length) {
+      continue;
+    }
+
+    const proofInfo = localElementProofs.get(decl.localName);
+    if (!proofInfo) {
+      continue;
+    }
+
+    const localElementUnsupportedReason = proofInfo.unsupportedReason;
+    if (localElementUnsupportedReason !== "none") {
+      for (const override of decl.localElementOverrides) {
+        ctx.warnings.push({
+          severity: "warning",
+          type: getLocalElementWarningType(
+            override,
+            localElementUnsupportedReason as LocalElementProofReason,
+          ),
+          loc: override.loc,
+        });
+      }
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+    }
+
+    const nextOverrides: LocalElementOverrideCandidate[] = [];
+    for (const override of decl.localElementOverrides) {
+      const targetIds =
+        proofInfo.proof.targetsByStyleKey.get(override.styleKey) ?? new Set<string>();
+      const styleKeysByTargetId: Record<string, string> = {};
+      for (const targetId of [...targetIds].sort()) {
+        const targetDecl = targetId.startsWith("styled:")
+          ? declByLocal.get(targetId.slice("styled:".length))
+          : undefined;
+        if (targetDecl) {
+          const {
+            className: childClassName,
+            style: childStyle,
+            ref: childRef,
+          } = getJsxAttributeUsage(targetDecl.localName);
+          const childInlineable =
+            targetDecl.base.kind === "intrinsic" &&
+            !targetDecl.isExported &&
+            !targetDecl.needsWrapperComponent &&
+            !childClassName &&
+            !childStyle &&
+            !childRef &&
+            !hasSpreadInJsx(root, j, targetDecl.localName);
+          targetDecl.localElementTargetProofs ??= [];
+          targetDecl.localElementTargetProofs.push({
+            targetId,
+            wasInlineableAtProofTime: childInlineable,
+            loc: override.loc,
+          });
+          localElementTargetStyleKeys.add(targetDecl.styleKey);
+        }
+
+        const emittedStyleKey = ensureUniqueKey(
+          makeLocalElementTargetStyleKey(override, targetId),
+          usedLocalElementStyleKeys,
+          reservedStyleKeys,
+        );
+        usedLocalElementStyleKeys.add(emittedStyleKey);
+        reservedStyleKeys.add(emittedStyleKey);
+        styleKeysByTargetId[targetId] = emittedStyleKey;
+
+        const childStyleObjects =
+          targetDecl && ctx.resolvedStyleObjects
+            ? buildResolvedStyleObjectList(targetDecl, ctx.resolvedStyleObjects)
+            : [];
+        const props = buildLocalElementOverrideProperties({
+          j,
+          override,
+          childStyleObjects,
+        });
+        if (props.length > 0) {
+          ctx.resolvedStyleObjects?.set(emittedStyleKey, j.objectExpression(props));
+        }
+      }
+
+      nextOverrides.push({ ...override, styleKeysByTargetId });
+      if (override.ancestorPseudo) {
+        ctx.ancestorSelectorParents ??= new Set<string>();
+        ctx.ancestorSelectorParents.add(decl.styleKey);
+        ctx.parentsNeedingDefaultMarker ??= new Set<string>();
+        ctx.parentsNeedingDefaultMarker.add(decl.styleKey);
+      }
+    }
+
+    decl.localElementOverrides = nextOverrides;
   }
 
   // Preserve locally reusable intrinsic components by emitting wrappers when used more than once.
@@ -1080,6 +1098,33 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (hasAs || hasForwardedAs || propsTypeHasAs) {
         (decl as any).isPolymorphicIntrinsicWrapper = true;
       }
+    }
+  }
+
+  for (const decl of styledDecls) {
+    if (!decl.localElementTargetProofs?.length) {
+      continue;
+    }
+    const { className, style, ref } = getJsxAttributeUsage(decl.localName);
+    const isInlineableNow =
+      decl.base.kind === "intrinsic" &&
+      !decl.isExported &&
+      !decl.needsWrapperComponent &&
+      !className &&
+      !style &&
+      !ref &&
+      !hasSpreadInJsx(root, j, decl.localName);
+    const becameUnsafeAfterProof =
+      decl.localElementTargetProofs.some((proof) => proof.wasInlineableAtProofTime) &&
+      !isInlineableNow &&
+      !!decl.usedAsValue;
+    if (becameUnsafeAfterProof) {
+      ctx.warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: ambiguous element selector",
+        loc: decl.localElementTargetProofs.find((proof) => proof.wasInlineableAtProofTime)?.loc,
+      });
+      return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
   }
 

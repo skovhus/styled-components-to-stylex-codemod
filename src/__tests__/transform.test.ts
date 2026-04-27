@@ -2583,6 +2583,54 @@ export const App = () => (
     ]);
   });
 
+  it("should bail when a locally-targeted styled intrinsic is later forced into a wrapper", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const SmallIcon = styled.svg\`
+  fill: gray;
+\`;
+
+const LargeIcon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+\`;
+
+const useAsValue = (Comp: React.ComponentType<any>) => Comp;
+useAsValue(SmallIcon);
+
+export const App = () => (
+  <Container>
+    <SmallIcon viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6" />
+    </SmallIcon>
+    <LargeIcon viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="12" />
+    </LargeIcon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
   it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";
