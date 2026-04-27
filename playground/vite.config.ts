@@ -29,6 +29,7 @@ export default defineConfig(({ command }) => {
         "node:path": "path-browserify",
         path: "path-browserify",
         assert: "assert",
+        "oxc-resolver": path.resolve(__dirname, "src/lib/oxc-resolver-stub.ts"),
       },
     },
     build: {
