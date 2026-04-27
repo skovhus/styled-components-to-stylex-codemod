@@ -245,16 +245,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       );
     }
     const preservedImport = j.importDeclaration(specifiers, j.literal("styled-components"));
-    // Insert after stylex import
-    const body = root.get().node.program.body as any[];
-    const stylexIdx = body.findIndex(
-      (s) => s?.type === "ImportDeclaration" && (s.source as any)?.value === "@stylexjs/stylex",
-    );
-    if (stylexIdx >= 0) {
-      body.splice(stylexIdx + 1, 0, preservedImport);
-    } else {
-      body.unshift(preservedImport);
-    }
+    insertImportDeclarationNearStylex(root, preservedImport);
   }
 
   // Re-attach preserved header comments to the first statement (preferably the stylex import).

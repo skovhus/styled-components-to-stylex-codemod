@@ -5,7 +5,7 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 import { isMemberExpression } from "../lower-rules/utils.js";
 
-export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
+export type { ExportInfo } from "../transform-context.js";
 
 /**
  * Native HTML attributes that must not be used as renamed transient prop names
