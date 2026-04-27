@@ -3,6 +3,7 @@
  * Core concepts: dispatch interpolated declarations and apply static values.
  */
 import { readFileSync } from "node:fs";
+import { dirname, resolve as pathResolve } from "node:path";
 import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
@@ -247,8 +248,11 @@ function findTopLevelConstStringInit(
  * (or `export default "..."`) declared in the source module. Only relative
  * imports resolved by the current file's `importMap` are followed — package
  * imports are skipped because the codemod has no way to verify their values
- * statically. Returns `null` when the identifier is not imported, the source
- * file cannot be read, or the export is not a string literal.
+ * statically. Re-exports (`export { X } from "./other"`, `export * from
+ * "./other"`, and locally-`import`ed-then-`export {}`-ed bindings) are
+ * followed transitively up to a small depth limit. Returns `null` when the
+ * identifier is not imported, the source file cannot be read, or the export
+ * is not a string literal.
  */
 function resolveImportedConstStringInit(
   localName: string,
@@ -258,12 +262,21 @@ function resolveImportedConstStringInit(
   if (!importEntry || importEntry.source.kind !== "absolutePath") {
     return null;
   }
-  const program = parseImportedSource(importEntry.source.value, state);
-  if (!program) {
-    return null;
-  }
-  return findExportedStringConst(program, importEntry.importedName, state);
+  return resolveExportFromFile(
+    importEntry.source.value,
+    importEntry.importedName,
+    state,
+    new Set(),
+  );
 }
+
+/**
+ * Maximum number of files we will traverse following re-exports for a single
+ * resolution. Shields the codemod against cyclic or pathologically deep
+ * barrel chains while comfortably covering realistic re-export depths (a
+ * package's `index.ts` re-exporting a sub-folder's `index.ts`).
+ */
+const MAX_REEXPORT_DEPTH = 8;
 
 const MODULE_FILE_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".mts", ".cts", ".mjs", ".cjs"];
 
@@ -326,30 +339,89 @@ function readSourceWithExtensionFallback(importedPath: string): string | null {
 }
 
 /**
+ * Reads, parses, and resolves an exported string literal from the file at
+ * `<filePath>`. Handles direct `export const <name> = "..."` /
+ * `export default "..."` declarations and follows re-exports of the form
+ * `export { <name> } from "./other"`, `export { <name> as <other> } from`,
+ * `export * from "./other"`, and same-file `import { <name> } from "./other";
+ * export { <name> };`. The `visited` set is keyed by `<absolutePath>:<name>`
+ * to avoid revisiting the same export pair through different barrel paths,
+ * and the `MAX_REEXPORT_DEPTH` cap shields against pathological chains.
+ */
+function resolveExportFromFile(
+  filePath: string,
+  exportedName: string,
+  state: DeclProcessingState["state"],
+  visited: Set<string>,
+): string | null {
+  if (visited.size >= MAX_REEXPORT_DEPTH) {
+    return null;
+  }
+  const visitKey = `${filePath}\0${exportedName}`;
+  if (visited.has(visitKey)) {
+    return null;
+  }
+  visited.add(visitKey);
+
+  const program = parseImportedSource(filePath, state);
+  if (!program) {
+    return null;
+  }
+  return findExportedStringConst(program, exportedName, filePath, state, visited);
+}
+
+/**
  * Returns the string-literal value of `<program>`'s top-level
- * `export const <exportedName> = "..."` or `export default "..."`. Anything
- * more complex than a literal initializer is rejected — we only follow
- * exports that are unambiguously static.
+ * `export const <exportedName> = "..."` or `export default "..."`, following
+ * re-export chains. Anything more complex than a literal initializer is
+ * rejected — we only follow exports that are unambiguously static.
  */
 function findExportedStringConst(
   program: ParsedProgram,
   exportedName: string,
+  programPath: string,
   state: DeclProcessingState["state"],
+  visited: Set<string>,
 ): string | null {
   if (exportedName === "default") {
-    let resolved: string | null = null;
-    program.find(state.j.ExportDefaultDeclaration).forEach((p) => {
-      if (resolved !== null) {
-        return;
-      }
-      const value = literalToStaticValue(p.node.declaration);
-      if (typeof value === "string") {
-        resolved = value;
-      }
-    });
-    return resolved;
+    return findDefaultExportedString(program, state);
   }
 
+  const direct = findDirectNamedExportString(program, exportedName, state);
+  if (direct !== null) {
+    return direct;
+  }
+
+  return followReExports(program, exportedName, programPath, state, visited);
+}
+
+function findDefaultExportedString(
+  program: ParsedProgram,
+  state: DeclProcessingState["state"],
+): string | null {
+  let resolved: string | null = null;
+  program.find(state.j.ExportDefaultDeclaration).forEach((p) => {
+    if (resolved !== null) {
+      return;
+    }
+    const value = literalToStaticValue(p.node.declaration);
+    if (typeof value === "string") {
+      resolved = value;
+    }
+  });
+  return resolved;
+}
+
+/**
+ * Looks for a top-level `export const <name> = "..."` in this program. Skips
+ * `export { ... } from "..."` (handled by the re-export path) and any
+ * non-`const` variable declarations.
+ */
+function findDirectNamedExportString(
+  program: ParsedProgram,
+  exportedName: string,
+  state: DeclProcessingState["state"],
+): string | null {
   let resolved: string | null = null;
   program.find(state.j.ExportNamedDeclaration).forEach((p) => {
     if (resolved !== null) {
@@ -359,9 +431,219 @@ function findExportedStringConst(
     if (decl?.type !== "VariableDeclaration" || decl.kind !== "const") {
       return;
     }
-    resolved = findConstDeclaratorString(decl.declarations, exportedName);
+    const found = findConstDeclaratorString(decl.declarations, exportedName);
+    if (found !== null) {
+      resolved = found;
+    }
   });
   return resolved;
+}
+
+/**
+ * Tries to follow re-exports for `<exportedName>` from `<program>`:
+ *   - `export { exportedName } from "./other"` (direct)
+ *   - `export { Original as exportedName } from "./other"` (aliased)
+ *   - `import { Original } from "./other"; export { Original as exportedName };`
+ *   - `export * from "./other"` (probed when no direct match)
+ *
+ * Each candidate's specifier is resolved relative to `<programPath>`'s
+ * directory, mirroring how `transform-import-map.ts` handles relative
+ * imports. Star exports are tried last so direct matches always win.
+ */
+function followReExports(
+  program: ParsedProgram,
+  exportedName: string,
+  programPath: string,
+  state: DeclProcessingState["state"],
+  visited: Set<string>,
+): string | null {
+  const programDir = dirname(programPath);
+
+  const reExports = collectNamedReExports(program, state);
+  for (const entry of reExports) {
+    if (entry.localExportedAs !== exportedName) {
+      continue;
+    }
+    const targetPath = pathResolve(programDir, entry.specifier);
+    const result = resolveExportFromFile(targetPath, entry.originalName, state, visited);
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  // Locally imported and then re-exported: `import { X } from "./a"; export { X };`
+  const localReExport = findLocalImportReExport(program, exportedName, state);
+  if (localReExport) {
+    const targetPath = pathResolve(programDir, localReExport.specifier);
+    const result = resolveExportFromFile(targetPath, localReExport.originalName, state, visited);
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  // `export * from "./other"` — probed last so explicit names win.
+  for (const specifier of collectStarReExports(program, state)) {
+    const targetPath = pathResolve(programDir, specifier);
+    const result = resolveExportFromFile(targetPath, exportedName, state, visited);
+    if (result !== null) {
+      return result;
+    }
+  }
+
+  return null;
+}
+
+interface NamedReExport {
+  /** The name as exported by this module. */
+  localExportedAs: string;
+  /** The name as exported by the source module (`Foo` in `Foo as Bar`). */
+  originalName: string;
+  /** The original specifier as written in source. */
+  specifier: string;
+}
+
+function collectNamedReExports(
+  program: ParsedProgram,
+  state: DeclProcessingState["state"],
+): NamedReExport[] {
+  const out: NamedReExport[] = [];
+  program.find(state.j.ExportNamedDeclaration).forEach((p) => {
+    const node = p.node as {
+      source?: { value?: unknown };
+      specifiers?: Array<{
+        type: string;
+        exported?: { type?: string; name?: string };
+        local?: { type?: string; name?: string };
+      }>;
+    };
+    const specifierValue = node.source?.value;
+    if (typeof specifierValue !== "string" || !isRelativeSpecifier(specifierValue)) {
+      return;
+    }
+    for (const spec of node.specifiers ?? []) {
+      if (spec.type !== "ExportSpecifier") {
+        continue;
+      }
+      const localExportedAs = spec.exported?.type === "Identifier" ? spec.exported.name : undefined;
+      const originalName = spec.local?.type === "Identifier" ? spec.local.name : localExportedAs;
+      if (!localExportedAs || !originalName) {
+        continue;
+      }
+      out.push({ localExportedAs, originalName, specifier: specifierValue });
+    }
+  });
+  return out;
+}
+
+function collectStarReExports(
+  program: ParsedProgram,
+  state: DeclProcessingState["state"],
+): string[] {
+  const out: string[] = [];
+  program.find(state.j.ExportAllDeclaration).forEach((p) => {
+    const value = (p.node as { source?: { value?: unknown } }).source?.value;
+    if (typeof value === "string" && isRelativeSpecifier(value)) {
+      out.push(value);
+    }
+  });
+  return out;
+}
+
+/**
+ * Finds the `import { <originalName> } from "./other"` paired with an
+ * `export { <originalName> as <exportedName> }` (or unaliased) statement in
+ * the same file. Returns the resolved-relative specifier and the original
+ * name on the source side, or `null` if no such pair exists.
+ */
+function findLocalImportReExport(
+  program: ParsedProgram,
+  exportedName: string,
+  state: DeclProcessingState["state"],
+): { specifier: string; originalName: string } | null {
+  let localBinding: string | null = null;
+  program.find(state.j.ExportNamedDeclaration).forEach((p) => {
+    if (localBinding !== null) {
+      return;
+    }
+    const node = p.node as {
+      source?: unknown;
+      specifiers?: Array<{
+        type: string;
+        exported?: { type?: string; name?: string };
+        local?: { type?: string; name?: string };
+      }>;
+    };
+    if (node.source) {
+      // `export { X } from "..."` is handled elsewhere
+      return;
+    }
+    for (const spec of node.specifiers ?? []) {
+      if (spec.type !== "ExportSpecifier") {
+        continue;
+      }
+      if (spec.exported?.type === "Identifier" && spec.exported.name === exportedName) {
+        const localName =
+          spec.local?.type === "Identifier" && spec.local.name
+            ? spec.local.name
+            : spec.exported.name;
+        if (localName) {
+          localBinding = localName;
+        }
+        return;
+      }
+    }
+  });
+  if (!localBinding) {
+    return null;
+  }
+
+  let result: { specifier: string; originalName: string } | null = null;
+  program.find(state.j.ImportDeclaration).forEach((p) => {
+    if (result !== null) {
+      return;
+    }
+    const node = p.node as {
+      source?: { value?: unknown };
+      specifiers?: Array<{
+        type: string;
+        local?: { type?: string; name?: string };
+        imported?: { type?: string; name?: string };
+      }>;
+    };
+    const specifierValue = node.source?.value;
+    if (typeof specifierValue !== "string" || !isRelativeSpecifier(specifierValue)) {
+      return;
+    }
+    for (const spec of node.specifiers ?? []) {
+      if (spec.local?.type !== "Identifier" || spec.local.name !== localBinding) {
+        continue;
+      }
+      if (spec.type === "ImportDefaultSpecifier") {
+        result = { specifier: specifierValue, originalName: "default" };
+        return;
+      }
+      if (spec.type === "ImportSpecifier") {
+        const importedName =
+          spec.imported?.type === "Identifier" && spec.imported.name
+            ? spec.imported.name
+            : spec.local.name;
+        result = { specifier: specifierValue, originalName: importedName };
+        return;
+      }
+    }
+  });
+  return result;
+}
+
+function isRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier === "." ||
+    specifier === ".." ||
+    specifier.startsWith("./") ||
+    specifier.startsWith("../") ||
+    specifier.startsWith(".\\") ||
+    specifier.startsWith("..\\")
+  );
 }
 
 /**
