@@ -1227,6 +1227,21 @@ function tryResolvePropAccess(node: DynamicNode): HandlerResult | null {
   const cssProp = node.css.property;
   const nameHint = `${sanitizeIdentifier(cssProp)}FromProp`;
 
+  // Static attrs usually override user-passed props at runtime in
+  // styled-components, so substitute the static value directly into the CSS.
+  // className is special: styled-components merges it with caller className.
+  const attrValue = node.component.attrs?.[propName];
+  if (
+    propName !== "className" &&
+    (typeof attrValue === "string" || typeof attrValue === "number")
+  ) {
+    return {
+      type: "resolvedValue",
+      expr: JSON.stringify(attrValue),
+      imports: [],
+    };
+  }
+
   // If there's a default value, emit both static base style and dynamic override
   if (defaultValue !== null) {
     return {

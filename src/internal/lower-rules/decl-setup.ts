@@ -244,8 +244,11 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolveThemeCall: state.resolveThemeCall,
   };
 
-  // Build component info for resolveDynamicNode calls
+  // Build component info for resolveDynamicNode calls.
+  // Propagate static attrs so CSS interpolations referencing those props
+  // resolve to the attrs value (styled-components merges attrs over user props).
   const withConfig = decl.shouldForwardProp ? { shouldForwardProp: true } : undefined;
+  const attrs = decl.attrsInfo?.staticAttrs;
   const componentInfo =
     decl.base.kind === "intrinsic"
       ? {
@@ -253,12 +256,14 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
           base: "intrinsic" as const,
           tagOrIdent: decl.base.tagName,
           withConfig,
+          ...(attrs ? { attrs } : {}),
         }
       : {
           localName: decl.localName,
           base: "component" as const,
           tagOrIdent: decl.base.ident,
           withConfig,
+          ...(attrs ? { attrs } : {}),
         };
 
   const { tryHandlePropertyTernaryTemplateLiteral, tryHandleCssHelperFunctionSwitchBlock } =
