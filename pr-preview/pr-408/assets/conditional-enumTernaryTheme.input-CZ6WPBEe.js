@@ -1,5 +1,0 @@
-import"./chunk-jRWAZmH_.js";import{f as e,p as t,s as n}from"./index-lcg58oev.js";t();var r=e(),i=function(e){return e.primary=`primary`,e.gradient=`gradient`,e.success=`success`,e.warning=`warning`,e.error=`error`,e}({}),a=n.div`
-  height: 40px;
-  padding: 8px 16px;
-  background: ${e=>e.$type===i.success?e.theme.color.greenBase:e.$type===i.error?e.theme.color.bgBase:e.$type===i.warning?e.theme.color.bgBaseHover:e.$type===i.primary?e.theme.color.controlPrimary:e.$type===i.gradient?`linear-gradient(to right, ${e.theme.color.bgBorderSolid}, ${e.theme.color.labelMuted})`:e.theme.color.labelBase};
-`,o=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8,padding:16},children:[(0,r.jsx)(a,{$type:i.success,children:`Success`}),(0,r.jsx)(a,{$type:i.error,children:`Error`}),(0,r.jsx)(a,{$type:i.warning,children:`Warning`}),(0,r.jsx)(a,{$type:i.primary,children:`Primary`}),(0,r.jsx)(a,{$type:i.gradient,children:`Gradient`}),(0,r.jsx)(a,{children:`Default`})]});export{o as App,i as ProgressType};
