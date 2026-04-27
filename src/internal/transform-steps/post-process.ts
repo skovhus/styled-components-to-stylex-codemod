@@ -2,12 +2,11 @@
  * Step: post-process transformed AST and cleanup imports.
  * Core concepts: relation overrides and import reconciliation.
  */
-import path from "node:path";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
-import type { ImportSource } from "../../adapter.js";
 import { TransformContext } from "../transform-context.js";
+import { importSourceToModuleSpecifier } from "../utilities/import-source.js";
 
 /**
  * Performs post-processing rewrites, import cleanup, and descendant/ancestor selector adjustments.
@@ -24,23 +23,10 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   // Extract local names of identifiers added as new imports by the adapter.
   // These should shadow old imports with the same name (e.g., when adapter replaces
   // `transitionSpeed` from `./lib/helpers` with `transitionSpeed` from `./tokens.stylex`).
-  const toModuleSpecifier = (from: ImportSource): string => {
-    if (from.kind === "specifier") {
-      return from.value;
-    }
-    const baseDir = path.dirname(String(file.path));
-    let rel = path.relative(baseDir, from.value);
-    rel = rel.split(path.sep).join("/");
-    if (!rel.startsWith(".")) {
-      rel = `./${rel}`;
-    }
-    return rel;
-  };
-
   const newImportLocalNames = new Set<string>();
   const newImportSourcesByLocal = new Map<string, Set<string>>();
   for (const imp of ctx.resolverImports.values()) {
-    const source = toModuleSpecifier(imp.from);
+    const source = importSourceToModuleSpecifier(imp.from, String(file.path));
     for (const n of imp.names ?? []) {
       const local = n.local ?? n.imported;
       if (local) {
