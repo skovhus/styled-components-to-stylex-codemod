@@ -1,0 +1,1 @@
+import{f as e}from"./index-Bmpaa2B0.js";import{t}from"./text-B6LQ_LD-.js";var n=e(),r=()=>(0,n.jsx)(`div`,{style:{padding:`16px`},children:(0,n.jsx)(t,{variant:`title2`,children:`Hello World`})});export{r as App};

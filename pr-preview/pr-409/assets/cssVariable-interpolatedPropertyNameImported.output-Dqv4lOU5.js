@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{f as e}from"./index-Bmpaa2B0.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{children:[(0,t.jsx)(`div`,{className:`x1wgacfl x1kncwe2`,children:`Container`}),(0,t.jsx)(`div`,{className:`x1xmry6y x1g3n8tr`,children:`Grid`})]});export{n as App};

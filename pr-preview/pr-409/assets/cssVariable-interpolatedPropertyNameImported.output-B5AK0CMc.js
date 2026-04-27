@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e}from"./index-DfYONWJo.js";var t=e(),n=()=>(0,t.jsx)(`div`,{children:(0,t.jsx)(`div`,{className:`x1wgacfl x1kncwe2`,children:`Container`})});export{n as App};
