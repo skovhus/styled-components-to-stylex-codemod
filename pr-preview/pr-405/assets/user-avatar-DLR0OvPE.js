@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-jRWAZmH_.js";import{f as t,p as n}from"./index-DiTs2smp.js";var r=e(n(),1),i=t(),a={div:r.forwardRef((e,t)=>(0,i.jsx)(`div`,{ref:t,...e}))};function o({className:e,style:t,size:n=`regular`,user:r}){return(0,i.jsx)(`div`,{className:e,style:t,children:(0,i.jsxs)(`span`,{children:[r,` (`,n,`)`]})})}export{a as n,o as t};

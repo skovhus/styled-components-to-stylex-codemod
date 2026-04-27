@@ -1,7 +1,0 @@
-import{f as e,s as t}from"./index-C4zbfvWk.js";var n=e(),r=t.div.attrs({color:`crimson`})`
-  background-color: ${e=>e.color};
-  color: white;
-  padding: 16px 24px;
-  border-radius: 4px;
-  font-weight: 600;
-`,i=()=>(0,n.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:8,padding:16},children:[(0,n.jsx)(r,{color:`dodgerblue`,children:`attrs wins (crimson)`}),(0,n.jsx)(r,{children:`attrs default (crimson)`})]});export{i as App};
