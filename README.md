@@ -39,7 +39,7 @@ const adapter = defineAdapter({
   // Optional override for sx-aware wrapped components. Auto-detection is on by
   // default when `useSxProp: true` — the codemod scans the imported component's
   // prop type for an `sx?:` member. Use this hook to override (e.g. for package
-  // imports that auto-detection can't reach).
+  // imports that cannot be resolved to source on disk).
   wrappedComponentInterface(ctx) {
     return undefined;
   },
@@ -189,10 +189,9 @@ const adapter = defineAdapter({
    * `<Component sx={styles.x} />` instead of `<Component {...stylex.props(styles.x)} />`
    * and lets the wrapped component merge className/style itself.
    *
-   * Use this hook to override auto-detection for cases it can't see — typically
-   * package imports (where the source isn't on disk) or components whose sx
-   * support is added by a HOC at runtime. Returning `undefined` falls through
-   * to auto-detection.
+   * Use this hook to override auto-detection for cases it can't see, such as
+   * unresolvable package imports or components whose sx support is added by a
+   * HOC at runtime. Returning `undefined` falls through to auto-detection.
    */
   wrappedComponentInterface(ctx) {
     if (ctx.importSource.startsWith("@company/ui/")) {

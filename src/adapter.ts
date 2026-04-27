@@ -814,9 +814,9 @@ export interface Adapter {
    * `<Component sx={styles.x} />` instead of
    * `<Component {...stylex.props(styles.x)} />`.
    *
-   * Use this hook to override auto-detection for cases it cannot see — most
-   * commonly package imports (e.g. `@company/ui`) where the source isn't on
-   * disk, or components whose sx support is added by a HOC at runtime.
+   * Use this hook to override auto-detection for cases it cannot see — for
+   * example unresolvable package imports or components whose sx support is
+   * added by a HOC at runtime.
    *
    * Return:
    * - `{ acceptsSx: true }` to force the `sx={...}` path

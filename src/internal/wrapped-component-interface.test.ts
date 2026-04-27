@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isWrappedComponentSxAware } from "./wrapped-component-interface.js";
 
@@ -8,6 +8,13 @@ let dir: string;
 
 function writeLib(name: string, source: string): string {
   const filePath = join(dir, `${name}.tsx`);
+  writeFileSync(filePath, source, "utf8");
+  return filePath;
+}
+
+function writeFile(relativePath: string, source: string): string {
+  const filePath = join(dir, relativePath);
+  mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, source, "utf8");
   return filePath;
 }
@@ -167,6 +174,49 @@ export default function Default(props: { sx?: stylex.StyleXStyles }) {
     // Consumer imports as default: importMap stores importedName="default",
     // local name "Default" matches the function declaration in the file.
     expect(check("Default", lib)).toBe(true);
+  });
+
+  it("detects sx through a package export that resolves to source on disk", () => {
+    writeFile(
+      "node_modules/@company/ui/package.json",
+      JSON.stringify({
+        name: "@company/ui",
+        type: "module",
+        exports: {
+          "./components/Text": "./src/Text.tsx",
+        },
+      }),
+    );
+    writeFile(
+      "node_modules/@company/ui/src/Text.tsx",
+      `
+import * as stylex from "@stylexjs/stylex";
+
+type TextComponentProps = { sx?: stylex.StyleXStyles; children?: React.ReactNode };
+
+export function Text(props: TextComponentProps) {
+  return null as any;
+}
+`,
+    );
+    const consumerPath = writeFile("consumer.tsx", "");
+
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map([
+          [
+            "Text",
+            {
+              importedName: "Text",
+              source: { kind: "specifier", value: "@company/ui/components/Text" },
+            },
+          ],
+        ]),
+        componentLocalName: "Text",
+        filePath: consumerPath,
+      }),
+    ).toBe(true);
   });
 });
 
@@ -398,7 +448,7 @@ export function Foo(props: { sx?: stylex.StyleXStyles }) { return null as any; }
     expect(check("DoesNotExist", lib)).toBe(false);
   });
 
-  it("returns false for package-style imports (no source path on disk)", () => {
+  it("returns false for unresolvable package-style imports", () => {
     expect(
       isWrappedComponentSxAware({
         adapter: { useSxProp: true },
