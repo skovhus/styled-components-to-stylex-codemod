@@ -3753,6 +3753,7 @@ function proveLocalElementOverrideUsages(
     tagName: string,
   ): { safe: boolean; matches: Set<string>; reason?: LocalElementProofReason } => {
     const matches = new Set<string>();
+    let failureReason: LocalElementProofReason | undefined;
     const visitChild = (child: unknown, isDirectChild: boolean): boolean => {
       if (!child || typeof child !== "object") {
         return true;
@@ -3814,7 +3815,7 @@ function proveLocalElementOverrideUsages(
 
       if (relation === "descendant") {
         if (isUnknownWrapperBoundary) {
-          reason = "unsupported-wrapper";
+          failureReason = "unsupported-wrapper";
           return false;
         }
         for (const grandchild of node.children ?? []) {
@@ -3828,7 +3829,7 @@ function proveLocalElementOverrideUsages(
 
     for (const child of children) {
       if (!visitChild(child, true)) {
-        return { safe: false, matches, reason };
+        return { safe: false, matches, ...(failureReason ? { reason: failureReason } : {}) };
       }
     }
     return { safe: true, matches };
