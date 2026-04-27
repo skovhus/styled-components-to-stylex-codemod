@@ -3564,6 +3564,64 @@ export const App = () => <Box>Test</Box>;
     // Should still have the || fallback
     expect(result.code).toContain("|| 5");
   });
+
+  it("should lower destructured-param ternary template literals via the css-helper handler", () => {
+    // Regression test: tryHandlePropertyTernaryTemplateLiteral relies on
+    // getArrowFnParamBindings, which supports object-pattern parameters. The
+    // shared `findArrowSlotExpr` helper must not reject those upstream.
+    // Without this, destructured-param ternaries with adapter-resolvable
+    // helper calls inside the template branches fall through and bail.
+    // The identifier-param shape and the destructured-param shape must produce
+    // the same lowered output.
+    const identSource = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const Box = styled.div<{ $faded: boolean }>\`
+  background: \${(props) =>
+    props.$faded
+      ? \`linear-gradient(to bottom, \${color("bgSub")(props)} 70%, transparent 100%)\`
+      : \`linear-gradient(to bottom, \${color("bgSub")(props)} 70%, \${color("bgSub")(props)} 100%)\`};
+\`;
+
+export const App = () => <Box $faded />;
+`;
+
+    const destructuredSource = `
+import styled from "styled-components";
+import { color } from "./lib/helpers";
+
+const Box = styled.div<{ $faded: boolean }>\`
+  background: \${({ $faded }) =>
+    $faded
+      ? \`linear-gradient(to bottom, \${color("bgSub")()} 70%, transparent 100%)\`
+      : \`linear-gradient(to bottom, \${color("bgSub")()} 70%, \${color("bgSub")()} 100%)\`};
+\`;
+
+export const App = () => <Box $faded />;
+`;
+
+    const identResult = transformWithWarnings(
+      { source: identSource, path: "ternary-template-ident.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    const destrResult = transformWithWarnings(
+      { source: destructuredSource, path: "ternary-template-destr.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(identResult.code).not.toBeNull();
+    expect(destrResult.code).not.toBeNull();
+    // Both branches must reach the css-helper variant lowering — base + variant
+    // entries with backgroundImage strings interpolated through `$colors.bgSub`.
+    for (const code of [identResult.code, destrResult.code] as string[]) {
+      expect(code).toContain("$colors.bgSub");
+      expect(code).toMatch(/backgroundImage:.*70%, transparent/);
+      expect(code).toMatch(/backgroundImage:.*70%, \$\{\$colors\.bgSub\} 100%/);
+    }
+  });
 });
 
 describe("css helper closure variable detection", () => {

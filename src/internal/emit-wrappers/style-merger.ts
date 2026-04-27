@@ -175,17 +175,7 @@ export function emitStyleMerging(args: {
   // handles className/style itself. The destructured className/style values are
   // forwarded to the wrapped component via the surrounding `{...rest}` spread.
   if (wrappedAcceptsSxProp && inlineStyleProps.length === 0 && !staticClassNameExpr) {
-    const sxExpr =
-      styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
-    return {
-      needsSxVar: false,
-      sxDecl: null,
-      jsxSpreadExpr: null,
-      sxPropExpr: sxExpr,
-      classNameAttr: null,
-      classNameBeforeSpread: false,
-      styleAttr: null,
-    };
+    return buildSxOnlyResult(j, styleArgs);
   }
 
   // If neither className nor style merging is needed, just use stylex.props directly
@@ -202,17 +192,7 @@ export function emitStyleMerging(args: {
     const sid = emitter.stylesIdentifier;
     const hasLocalRef = styleArgs.some((a) => j([a]).find(j.Identifier, { name: sid }).size() > 0);
     if (emitter.useSxProp && isIntrinsicElement && hasLocalRef) {
-      const sxExpr =
-        styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
-      return {
-        needsSxVar: false,
-        sxDecl: null,
-        jsxSpreadExpr: null,
-        sxPropExpr: sxExpr,
-        classNameAttr: null,
-        classNameBeforeSpread: false,
-        styleAttr: null,
-      };
+      return buildSxOnlyResult(j, styleArgs);
     }
     const stylexPropsCall = j.callExpression(
       j.memberExpression(j.identifier("stylex"), j.identifier("props")),
@@ -589,6 +569,25 @@ function maybeCastStyleForCustomProps(
     styleExpr,
     j.tsTypeReference(j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties"))),
   );
+}
+
+/**
+ * Build a `StyleMergingResult` that only emits `sx={...}` (no className/style
+ * attributes, no merger var). Two call sites use this: the wrappedAcceptsSx
+ * path and the useSxProp+intrinsic path.
+ */
+function buildSxOnlyResult(j: JSCodeshift, styleArgs: ExpressionKind[]): StyleMergingResult {
+  const sxExpr =
+    styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+  return {
+    needsSxVar: false,
+    sxDecl: null,
+    jsxSpreadExpr: null,
+    sxPropExpr: sxExpr,
+    classNameAttr: null,
+    classNameBeforeSpread: false,
+    styleAttr: null,
+  };
 }
 
 /**

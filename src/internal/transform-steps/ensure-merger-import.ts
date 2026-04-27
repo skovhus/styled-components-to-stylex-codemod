@@ -2,10 +2,12 @@
  * Step: ensure style merger import exists when referenced.
  * Core concepts: identifier usage scanning and import injection.
  */
-import path from "node:path";
-import type { ImportSource } from "../../adapter.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import {
+  assertValidImportSource,
+  importSourceToModuleSpecifier,
+} from "../utilities/import-source.js";
 
 /**
  * Ensures the style merger import is present when the merger function is referenced.
@@ -40,7 +42,8 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
 
     if (hasMergerCall && !hasMergerImportBinding && !hasTopLevelBinding) {
       const source = adapter.styleMerger.importSource;
-      const moduleSpecifier = toModuleSpecifier(source, file.path);
+      assertValidImportSource(source, "styleMerger import");
+      const moduleSpecifier = importSourceToModuleSpecifier(source, file.path);
       const decl = j.importDeclaration(
         [j.importSpecifier(j.identifier(mergerName))],
         j.literal(moduleSpecifier),
@@ -63,42 +66,6 @@ export function ensureMergerImportStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
-}
-
-function toModuleSpecifier(from: ImportSource, filePath: string): string {
-  if (from.kind === "specifier") {
-    if (typeof from.value !== "string" || from.value.trim() === "") {
-      throw new Error(
-        `Invalid styleMerger import specifier: expected non-empty string, got ${JSON.stringify(
-          from.value,
-        )}`,
-      );
-    }
-    return from.value;
-  }
-
-  if (typeof from.value !== "string" || from.value.trim() === "") {
-    throw new Error(
-      `Invalid styleMerger import absolutePath: expected non-empty string, got ${JSON.stringify(
-        from.value,
-      )}`,
-    );
-  }
-  if (!path.isAbsolute(from.value)) {
-    throw new Error(
-      `Invalid styleMerger import absolutePath: expected absolute path, got ${JSON.stringify(
-        from.value,
-      )}`,
-    );
-  }
-
-  const baseDir = path.dirname(String(filePath));
-  let rel = path.relative(baseDir, from.value);
-  rel = rel.split(path.sep).join("/");
-  if (!rel.startsWith(".")) {
-    rel = `./${rel}`;
-  }
-  return rel;
 }
 
 function hasTopLevelValueBinding(root: any, localName: string): boolean {

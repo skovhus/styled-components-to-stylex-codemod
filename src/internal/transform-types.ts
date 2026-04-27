@@ -52,7 +52,7 @@ export interface BridgeComponentResult {
 /**
  * Result of a transform pipeline step.
  */
-export type StepReturnReason = "skip" | "bail";
+type StepReturnReason = "skip" | "bail";
 
 export type StepResult =
   | { kind: "continue" }

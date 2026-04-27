@@ -432,20 +432,16 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     {
       const seen = new Set<string>();
       for (const { file, name } of styledCallUsages) {
-        const importInfo = findImportSource(cachedRead(file), name);
-        if (!importInfo) {
+        const def = resolveDefinitionFile({
+          file,
+          localName: name,
+          cachedRead,
+          resolve,
+        });
+        if (!def) {
           continue;
         }
-
-        const { source: importSource, exportedName } = importInfo;
-
-        let defFile = resolve(importSource, file);
-        if (!defFile) {
-          continue;
-        }
-
-        // Follow barrel re-exports (index.ts -> actual definition)
-        defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
+        const { defFile, exportedName } = def;
 
         const key = `${defFile}:${exportedName}`;
         if (seen.has(key)) {
@@ -483,20 +479,16 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         continue;
       }
 
-      const importInfo = findImportSource(cachedRead(file), wrappedName);
-      if (!importInfo) {
+      const def = resolveDefinitionFile({
+        file,
+        localName: wrappedName,
+        cachedRead,
+        resolve,
+      });
+      if (!def) {
         continue;
       }
-
-      const { source: importSource, exportedName } = importInfo;
-
-      let defFile = resolve(importSource, file);
-      if (!defFile) {
-        continue;
-      }
-
-      // Follow barrel re-exports (index.ts -> actual definition)
-      defFile = resolveBarrelReExport(defFile, exportedName, resolve, cachedRead) ?? defFile;
+      const { defFile } = def;
 
       // The wrapped component's definition file must be in the transform set
       if (!transformSet.has(defFile)) {
@@ -984,4 +976,30 @@ function logPrepassDebug(
   }
 
   process.stderr.write(lines.join("\n") + "\n");
+}
+
+/**
+ * Resolve a local identifier in `file` to the absolute path of the module that
+ * defines it, following barrel re-exports. Returns `null` when the import
+ * cannot be located on disk.
+ */
+function resolveDefinitionFile(args: {
+  file: string;
+  localName: string;
+  cachedRead: (path: string) => string;
+  resolve: (specifier: string, from: string) => string | null;
+}): { defFile: string; exportedName: string } | null {
+  const { file, localName, cachedRead, resolve } = args;
+  const importInfo = findImportSource(cachedRead(file), localName);
+  if (!importInfo) {
+    return null;
+  }
+  const { source: importSource, exportedName } = importInfo;
+  const initialDefFile = resolve(importSource, file);
+  if (!initialDefFile) {
+    return null;
+  }
+  const defFile =
+    resolveBarrelReExport(initialDefFile, exportedName, resolve, cachedRead) ?? initialDefFile;
+  return { defFile, exportedName };
 }

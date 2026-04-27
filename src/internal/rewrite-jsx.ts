@@ -3,7 +3,7 @@
  * Core concepts: relation overrides (descendant/ancestor) and stylex.props cleanup.
  */
 import type { Collection } from "jscodeshift";
-import type { RelationOverride } from "./lower-rules.js";
+import type { RelationOverride } from "./lower-rules/state.js";
 import { toStyleKey } from "./transform/helpers.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
 import { isMemberExpression } from "./lower-rules/utils.js";

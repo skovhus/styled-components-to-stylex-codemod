@@ -469,7 +469,7 @@ export type ConditionalExpressionBody = {
 
 type CssNodeKind = "declaration" | "selector" | "atRule" | "keyframes";
 
-export type DynamicNodeCssContext = {
+type DynamicNodeCssContext = {
   kind: CssNodeKind;
   selector: string;
   atRuleStack: string[];
@@ -477,7 +477,7 @@ export type DynamicNodeCssContext = {
   valueRaw?: string;
 };
 
-export type DynamicNodeComponentContext = {
+type DynamicNodeComponentContext = {
   localName: string;
   base: "intrinsic" | "component";
   tagOrIdent: string;
@@ -485,12 +485,12 @@ export type DynamicNodeComponentContext = {
   attrs?: Record<string, unknown>;
 };
 
-export type DynamicNodeUsageContext = {
+type DynamicNodeUsageContext = {
   jsxUsages: number;
   hasPropsSpread: boolean;
 };
 
-export type DynamicNodeLoc = {
+type DynamicNodeLoc = {
   line?: number;
   column?: number;
 };

@@ -20,6 +20,7 @@ import { resolveThemeFromPropsMember } from "./template-literals.js";
 import { cssValueToJs, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty } from "./shared.js";
 import type { LowerRulesState } from "./state.js";
+import { findArrowSlotExprWithIdentParam } from "./slot-utils.js";
 import { registerImports } from "./utils.js";
 
 type ValuePatternContext = Pick<
@@ -108,21 +109,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if ((d.property ?? "").trim() !== "background") {
       return false;
     }
-    if (d.value.kind !== "interpolated") {
+    const found = findArrowSlotExprWithIdentParam(d, decl);
+    if (!found) {
       return false;
     }
-    const slot = d.value.parts.find((p: any) => p.kind === "slot");
-    if (!slot) {
-      return false;
-    }
-    const expr = decl.templateExpressions[slot.slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-    if (!paramName) {
-      return false;
-    }
+    const { expr, paramName } = found;
     const body = expr.body as any;
     if (!body || body.type !== "CallExpression") {
       return false;
@@ -184,25 +175,14 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     // Handle: background: ${(p) => p.color || "#BF4F74"}
     //         padding: ${(p) => p.$padding || "16px"}
     //         transition-delay: ${(p) => p.$delay ?? 0}ms
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (!d.property) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    const slot = parts.find((p: any) => p.kind === "slot");
-    if (!slot) {
+    const found = findArrowSlotExprWithIdentParam(d, decl);
+    if (!found) {
       return false;
     }
-    const expr = decl.templateExpressions[slot.slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-    if (!paramName) {
-      return false;
-    }
+    const { expr, paramName } = found;
     if (
       expr.body?.type !== "LogicalExpression" ||
       (expr.body.operator !== "||" && expr.body.operator !== "??") ||
@@ -422,9 +402,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       pseudos?: string[] | null;
     },
   ): boolean => {
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (!d.property) {
       return false;
     }
@@ -432,20 +409,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (opts.pseudos?.length || opts.media || opts.attrTarget) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    const slotPart = parts.find((p: any) => p.kind === "slot");
-    if (!slotPart || slotPart.kind !== "slot") {
+    const found = findArrowSlotExprWithIdentParam(d, decl);
+    if (!found) {
       return false;
     }
-    const slotId = slotPart.slotId;
-    const expr = decl.templateExpressions[slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    const paramName = expr.params?.[0]?.type === "Identifier" ? expr.params[0].name : null;
-    if (!paramName) {
-      return false;
-    }
+    const { expr, paramName } = found;
     if (expr.body?.type !== "BlockStatement") {
       return false;
     }
@@ -580,9 +548,6 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       pseudoElement?: string | null;
     },
   ): boolean => {
-    if (d.value.kind !== "interpolated") {
-      return false;
-    }
     if (!d.property) {
       return false;
     }
@@ -604,21 +569,11 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     if (prefix || suffix) {
       return false;
     }
-    const parts = d.value.parts ?? [];
-    const slotPart = parts.find((p: any) => p.kind === "slot");
-    if (!slotPart || slotPart.kind !== "slot") {
+    const found = findArrowSlotExprWithIdentParam(d, decl);
+    if (!found) {
       return false;
     }
-    const slotId = slotPart.slotId;
-    const expr = decl.templateExpressions[slotId] as any;
-    if (!expr || expr.type !== "ArrowFunctionExpression") {
-      return false;
-    }
-    const paramName =
-      expr.params?.[0]?.type === "Identifier" ? (expr.params[0].name as string) : null;
-    if (!paramName) {
-      return false;
-    }
+    const { expr, paramName } = found;
     const body = expr.body as any;
     if (!body || body.type !== "MemberExpression" || body.computed !== true) {
       return false;

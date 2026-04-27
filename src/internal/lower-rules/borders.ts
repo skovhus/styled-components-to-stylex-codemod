@@ -410,8 +410,9 @@ export function tryHandleInterpolatedBorder(
       if (!res) {
         return { kind: "warn", warning: unresolvedCallWarning };
       }
-      if (res.type === "resolvedValue") {
+      if (res.type === "resolvedValue" || res.type === "resolvedStyles") {
         const exprAst = parseExpr(res.expr);
+        const isValue = res.type === "resolvedValue";
         if (!exprAst) {
           const context =
             res.resolveCallContext && res.resolveCallResult
@@ -422,34 +423,16 @@ export function tryHandleInterpolatedBorder(
               : undefined;
           return {
             kind: "warn",
-            warning: "Adapter resolveCall returned an unparseable value expression",
+            warning: isValue
+              ? "Adapter resolveCall returned an unparseable value expression"
+              : "Adapter resolveCall returned an unparseable styles expression",
             context,
+            ...(isValue ? {} : { loc }),
           };
         }
-        return { kind: "okValue", exprAst, imports: res.imports ?? [] };
-      }
-      if (res.type === "resolvedStyles") {
-        const exprAst = parseExpr(res.expr);
-        if (!exprAst) {
-          const context =
-            res.resolveCallContext && res.resolveCallResult
-              ? {
-                  resolveCallContext: res.resolveCallContext,
-                  resolveCallResult: res.resolveCallResult,
-                }
-              : undefined;
-          return {
-            kind: "warn",
-            warning: "Adapter resolveCall returned an unparseable styles expression",
-            context,
-            loc,
-          };
-        }
-        return {
-          kind: "okStyles",
-          exprAst,
-          imports: res.imports ?? [],
-        };
+        return isValue
+          ? { kind: "okValue", exprAst, imports: res.imports ?? [] }
+          : { kind: "okStyles", exprAst, imports: res.imports ?? [] };
       }
       if (res.type === "keepOriginal") {
         return { kind: "warn", warning: res.reason };

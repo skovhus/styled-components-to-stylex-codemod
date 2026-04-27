@@ -5,7 +5,7 @@
 import type { ASTNode, JSCodeshift } from "jscodeshift";
 import { isMemberExpression } from "../lower-rules/utils.js";
 
-export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
+export type { ExportInfo } from "../transform-context.js";
 
 /**
  * Native HTML attributes that must not be used as renamed transient prop names
@@ -22,7 +22,7 @@ export const BLOCKED_INTRINSIC_ATTR_RENAMES: Readonly<Record<string, readonly st
 };
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 export type InlineStyleProp = { prop: string; expr: ExpressionKind; jsxProp?: string };
-export type WrapperPropDefaultValue = string | number | boolean;
+type WrapperPropDefaultValue = string | number | boolean;
 export type WrapperPropDefaults = Map<string, WrapperPropDefaultValue>;
 /**
  * Collects prop identifiers referenced by inline style expressions.

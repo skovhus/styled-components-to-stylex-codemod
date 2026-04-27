@@ -2,11 +2,15 @@
  * Step: emit stylex.create objects and resolver imports.
  * Core concepts: style emission and import aliasing.
  */
-import { basename, dirname, join, relative, sep } from "node:path";
-import type { ImportSource } from "../../adapter.js";
+import { basename } from "node:path";
 import { emitStylesAndImports } from "../emit-styles.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import {
+  importSourceToAbsolutePath,
+  importSourceToModuleSpecifier,
+} from "../utilities/import-source.js";
+import { insertAfterLastImport } from "../utilities/import-insertion.js";
 
 /**
  * Emits stylex.create objects and required imports, applying resolver import aliasing.
@@ -134,7 +138,9 @@ function emitDefineMarkerDeclarations(
     return;
   }
 
-  const adapterPath = importSourceToModuleSpecifier(adapterImportSource, ctx.file.path);
+  const adapterPath = importSourceToModuleSpecifier(adapterImportSource, ctx.file.path, {
+    stripTsExtension: true,
+  });
   const adapterAbsPath = importSourceToAbsolutePath(adapterImportSource, ctx.file.path);
 
   if (internalNames.length === 0) {
@@ -180,42 +186,8 @@ function emitMarkerGroup(
     j.literal(importPath),
   );
 
-  const programBody = ctx.root.get().node.program.body as Array<{ type?: string }>;
-  const lastImportIdx = programBody.reduce(
-    (last: number, node: { type?: string }, i: number) =>
-      node?.type === "ImportDeclaration" ? i : last,
-    -1,
+  insertAfterLastImport(
+    ctx.root.get().node.program.body,
+    importDecl as unknown as { type?: string },
   );
-  const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-  programBody.splice(insertAt, 0, importDecl as unknown as { type?: string });
-}
-
-/** Convert an ImportSource to a module specifier string for use in import declarations. */
-function importSourceToModuleSpecifier(source: ImportSource, filePath: string): string {
-  if (source.kind === "specifier") {
-    return source.value;
-  }
-  // absolutePath → relative module specifier from current file
-  const baseDir = dirname(filePath);
-  let rel = relative(baseDir, source.value).split(sep).join("/");
-  // Strip .ts/.tsx extension for module specifier
-  rel = rel.replace(/\.tsx?$/, "");
-  if (!rel.startsWith(".")) {
-    rel = `./${rel}`;
-  }
-  return rel;
-}
-
-/** Resolve an ImportSource to an absolute file path for writing the sidecar file. */
-function importSourceToAbsolutePath(source: ImportSource, filePath: string): string {
-  if (source.kind === "absolutePath") {
-    return source.value;
-  }
-  // specifier → resolve relative to source file directory, append .ts if no real file extension
-  const baseDir = dirname(filePath);
-  let resolved = join(baseDir, source.value);
-  if (!/\.[jt]sx?$/.test(resolved)) {
-    resolved += ".ts";
-  }
-  return resolved;
 }

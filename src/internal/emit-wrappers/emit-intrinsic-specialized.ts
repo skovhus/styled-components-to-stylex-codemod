@@ -239,33 +239,17 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
-      ...(aw.checkboxKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
-              styleRef(j, stylesIdentifier, aw.checkboxKey),
-            ),
-          ]
-        : []),
-      ...(aw.radioKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
-              styleRef(j, stylesIdentifier, aw.radioKey),
-            ),
-          ]
-        : []),
-      ...(aw.readonlyKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.identifier("readOnly"),
-              styleRef(j, stylesIdentifier, aw.readonlyKey),
-            ),
-          ]
-        : []),
+      ...buildGuardedStyleEntries(j, stylesIdentifier, [
+        {
+          key: aw.checkboxKey,
+          guard: j.binaryExpression("===", j.identifier("type"), j.literal("checkbox")),
+        },
+        {
+          key: aw.radioKey,
+          guard: j.binaryExpression("===", j.identifier("type"), j.literal("radio")),
+        },
+        { key: aw.readonlyKey, guard: j.identifier("readOnly") },
+      ]),
     ];
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
@@ -350,33 +334,11 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
-      ...(aw.externalKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.identifier("isExternal"),
-              styleRef(j, stylesIdentifier, aw.externalKey),
-            ),
-          ]
-        : []),
-      ...(aw.httpsKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.identifier("isHttps"),
-              styleRef(j, stylesIdentifier, aw.httpsKey),
-            ),
-          ]
-        : []),
-      ...(aw.pdfKey
-        ? [
-            j.logicalExpression(
-              "&&",
-              j.identifier("isPdf"),
-              styleRef(j, stylesIdentifier, aw.pdfKey),
-            ),
-          ]
-        : []),
+      ...buildGuardedStyleEntries(j, stylesIdentifier, [
+        { key: aw.externalKey, guard: j.identifier("isExternal") },
+        { key: aw.httpsKey, guard: j.identifier("isHttps") },
+        { key: aw.pdfKey, guard: j.identifier("isPdf") },
+      ]),
     ];
 
     const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
@@ -662,4 +624,24 @@ function injectDestructureProps(j: JSCodeshift, fnDecl: unknown, props: string[]
       }
     }
   }
+}
+
+/**
+ * Build a list of `<guard> && styles.<key>` entries for the style-args array,
+ * skipping entries whose `key` is undefined. Used by the input and link attr
+ * wrappers to fold their per-state pseudo-keys into the style arg list.
+ */
+function buildGuardedStyleEntries(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  entries: Array<{ key: string | undefined; guard: ExpressionKind }>,
+): ExpressionKind[] {
+  const out: ExpressionKind[] = [];
+  for (const { key, guard } of entries) {
+    if (!key) {
+      continue;
+    }
+    out.push(j.logicalExpression("&&", guard, styleRef(j, stylesIdentifier, key)));
+  }
+  return out;
 }
