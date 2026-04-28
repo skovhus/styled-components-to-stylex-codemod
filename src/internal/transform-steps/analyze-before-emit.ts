@@ -632,10 +632,21 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         reservedStyleKeys.add(emittedStyleKey);
         styleKeysByTargetId[targetId] = emittedStyleKey;
 
-        const childStyleObjects =
-          targetDecl && ctx.resolvedStyleObjects
+        const priorLocalOverrideStyleObjects = ctx.resolvedStyleObjects
+          ? nextOverrides
+              .slice()
+              .reverse()
+              .map((priorOverride) => priorOverride.styleKeysByTargetId?.[targetId])
+              .filter((key): key is string => !!key)
+              .map((key) => ctx.resolvedStyleObjects.get(key))
+              .flatMap(getPlainStyleObjectsFromResolvedValue)
+          : [];
+        const childStyleObjects = [
+          ...priorLocalOverrideStyleObjects,
+          ...(targetDecl && ctx.resolvedStyleObjects
             ? buildResolvedStyleObjectList(targetDecl, ctx.resolvedStyleObjects)
-            : [];
+            : []),
+        ];
         const props = buildLocalElementOverrideProperties({
           j,
           override,
@@ -1116,8 +1127,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       !hasSpreadInJsx(root, j, decl.localName);
     const becameUnsafeAfterProof =
       decl.localElementTargetProofs.some((proof) => proof.wasInlineableAtProofTime) &&
-      !isInlineableNow &&
-      !!decl.usedAsValue;
+      !isInlineableNow;
     if (becameUnsafeAfterProof) {
       ctx.warnings.push({
         severity: "warning",
@@ -3936,11 +3946,52 @@ function buildResolvedStyleObjectList(
   const results: Array<Record<string, unknown>> = [];
   for (const key of keys) {
     const value = resolvedStyleObjects.get(key);
-    if (isPlainStyleObject(value)) {
-      results.push(value);
-    }
+    results.push(...getPlainStyleObjectsFromResolvedValue(value));
   }
   return results;
+}
+
+function getPlainStyleObjectsFromResolvedValue(value: unknown): Array<Record<string, unknown>> {
+  if (isPlainStyleObject(value)) {
+    return [value];
+  }
+  if (isAstNode(value) && (value as { type?: string }).type === "ObjectExpression") {
+    const converted = objectExpressionToPlainStyleObject(value as {
+      properties?: Array<{
+        type?: string;
+        key?: { type?: string; name?: string; value?: unknown };
+        value?: unknown;
+      }>;
+    });
+    return converted ? [converted] : [];
+  }
+  return [];
+}
+
+function objectExpressionToPlainStyleObject(node: {
+  properties?: Array<{
+    type?: string;
+    key?: { type?: string; name?: string; value?: unknown };
+    value?: unknown;
+  }>;
+}): Record<string, unknown> | null {
+  const result: Record<string, unknown> = {};
+  for (const property of node.properties ?? []) {
+    if (property.type !== "Property") {
+      return null;
+    }
+    const key =
+      property.key?.type === "Identifier"
+        ? property.key.name
+        : property.key?.type === "Literal" || property.key?.type === "StringLiteral"
+          ? String(property.key.value)
+          : null;
+    if (!key) {
+      return null;
+    }
+    result[key] = property.value;
+  }
+  return result;
 }
 
 function isPlainStyleObject(value: unknown): value is Record<string, unknown> {

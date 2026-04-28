@@ -156,6 +156,29 @@ export function buildRelationOverrideProperties(args: {
  */
 function extractScalarDefault(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value) || isAstNode(value)) {
+    if (isAstNode(value) && (value as { type?: string }).type === "ObjectExpression") {
+      const objectExpression = value as {
+        properties?: Array<{
+          type?: string;
+          key?: { type?: string; name?: string; value?: unknown };
+          value?: unknown;
+        }>;
+      };
+      for (const property of objectExpression.properties ?? []) {
+        if (property.type !== "Property") {
+          continue;
+        }
+        const key =
+          property.key?.type === "Identifier"
+            ? property.key.name
+            : property.key?.type === "Literal" || property.key?.type === "StringLiteral"
+              ? String(property.key.value)
+              : null;
+        if (key === "default") {
+          return property.value;
+        }
+      }
+    }
     return value;
   }
   const map = value as Record<string, unknown>;

@@ -2631,6 +2631,89 @@ export const App = () => (
     ]);
   });
 
+  it("should bail when a locally-targeted styled intrinsic is later wrapped by same-file delegation", () => {
+    const source = `
+import styled from "styled-components";
+
+const BaseIcon = styled.svg\`
+  fill: gray;
+\`;
+
+const DerivedIcon = styled(BaseIcon)\`
+  width: 32px;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <BaseIcon viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6" />
+    </BaseIcon>
+    <DerivedIcon viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="12" />
+    </DerivedIcon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should preserve earlier local override defaults when later child pseudo overrides target the same element", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+
+  svg:hover {
+    fill: red;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('fill: "blue"');
+    expect(result.code).toContain('default: "blue"');
+    expect(result.code).toContain('":hover": "red"');
+  });
+
   it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";
