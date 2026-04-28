@@ -632,19 +632,20 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         reservedStyleKeys.add(emittedStyleKey);
         styleKeysByTargetId[targetId] = emittedStyleKey;
 
-        const priorLocalOverrideStyleObjects = ctx.resolvedStyleObjects
+        const resolvedStyleObjects = ctx.resolvedStyleObjects;
+        const priorLocalOverrideStyleObjects = resolvedStyleObjects
           ? nextOverrides
               .slice()
               .reverse()
               .map((priorOverride) => priorOverride.styleKeysByTargetId?.[targetId])
               .filter((key): key is string => !!key)
-              .map((key) => ctx.resolvedStyleObjects.get(key))
+              .map((key) => resolvedStyleObjects.get(key))
               .flatMap(getPlainStyleObjectsFromResolvedValue)
           : [];
         const childStyleObjects = [
           ...priorLocalOverrideStyleObjects,
-          ...(targetDecl && ctx.resolvedStyleObjects
-            ? buildResolvedStyleObjectList(targetDecl, ctx.resolvedStyleObjects)
+          ...(targetDecl && resolvedStyleObjects
+            ? buildResolvedStyleObjectList(targetDecl, resolvedStyleObjects)
             : []),
         ];
         const props = buildLocalElementOverrideProperties({
@@ -3956,13 +3957,15 @@ function getPlainStyleObjectsFromResolvedValue(value: unknown): Array<Record<str
     return [value];
   }
   if (isAstNode(value) && (value as { type?: string }).type === "ObjectExpression") {
-    const converted = objectExpressionToPlainStyleObject(value as {
-      properties?: Array<{
-        type?: string;
-        key?: { type?: string; name?: string; value?: unknown };
-        value?: unknown;
-      }>;
-    });
+    const converted = objectExpressionToPlainStyleObject(
+      value as {
+        properties?: Array<{
+          type?: string;
+          key?: { type?: string; name?: string; value?: unknown };
+          value?: unknown;
+        }>;
+      },
+    );
     return converted ? [converted] : [];
   }
   return [];

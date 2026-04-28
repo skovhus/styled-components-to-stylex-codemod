@@ -2670,7 +2670,7 @@ export const App = () => (
     expect(result.code).toBeNull();
     expect(result.warnings).toEqual([
       expect.objectContaining({
-        type: "Unsupported selector: ambiguous element selector",
+        type: "Unsupported selector: element selector with dynamic children",
       }),
     ]);
   });
