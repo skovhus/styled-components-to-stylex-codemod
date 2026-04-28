@@ -7,5 +7,7 @@ export default defineConfig({
   clean: true,
   sourcemap: false,
   outDir: "dist",
-  external: ["jscodeshift", "oxc-resolver"],
+  deps: {
+    neverBundle: ["jscodeshift", "oxc-resolver"],
+  },
 });
