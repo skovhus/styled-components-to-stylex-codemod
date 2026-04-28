@@ -25,7 +25,7 @@ register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToF
 
 const [
   { default: transform },
-  { fixtureAdapter, appLikeAdapter },
+  { selectFixtureAdapter },
   { scanCrossFileSelectors },
   { createModuleResolver },
   { Logger },
@@ -47,18 +47,6 @@ Logger.logWarnings = () => {};
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, "..");
 const testCasesDir = join(repoRoot, "test-cases");
-
-// Test cases that use the app-like adapter (styleMerger: null) to reproduce
-// real-world TS errors with the verbose className/style merging pattern.
-const APP_LIKE_ADAPTER_FIXTURES = new Set([
-  "bug-data-style-src-not-accepted",
-  "bug-data-style-src-incompatible-component",
-  "bug-external-styles-missing-classname",
-]);
-
-function selectAdapter(name: string) {
-  return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
-}
 
 async function normalizeCode(code: string, ext: string) {
   const { code: formatted } = await format(`test.${ext}`, code);
@@ -97,7 +85,7 @@ async function updateFixture(name: string, ext: string) {
   // Select adapter: appLikeAdapter (styleMerger: null, externalInterface
   // returns { styles: true }) mimics a real-world app config to reproduce
   // TS errors from the verbose className merging pattern.
-  const adapter = selectAdapter(name);
+  const adapter = selectFixtureAdapter(name);
   const crossFilePrepassResult = {
     selectorUsages: prepassResult.selectorUsages,
     componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,

@@ -8,9 +8,7 @@ import { pathToFileURL } from "node:url";
 register(new URL("./src-ts-specifier-loader.mjs", import.meta.url).href, pathToFileURL(".."));
 
 const { default: transform } = await import("../src/transform.ts");
-
-// Import the fixtureAdapter from the test utilities
-import { fixtureAdapter } from "../src/__tests__/fixture-adapters.ts";
+const { selectFixtureAdapter } = await import("../src/__tests__/fixture-adapters.ts");
 
 // Get test case names from command line or use defaults
 const defaultTestCases = ["attrs"];
@@ -25,7 +23,7 @@ for (const name of testCases) {
   const input = readFileSync(inputPath, "utf8");
   const result = applyTransform(
     transform,
-    { adapter: fixtureAdapter },
+    { adapter: selectFixtureAdapter(name) },
     { source: input, path: inputPath },
     { parser: "tsx" },
   );

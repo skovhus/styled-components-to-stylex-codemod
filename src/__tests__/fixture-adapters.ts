@@ -22,6 +22,15 @@ const BROAD_CONSUMER_PROPS = {
   spreadProps: true,
 } as const;
 
+// Test cases that use the app-like adapter (styleMerger: null) to reproduce
+// real-world TS errors with the verbose className/style merging pattern.
+const APP_LIKE_ADAPTER_FIXTURES = new Set([
+  "bug-data-style-src-not-accepted",
+  "bug-data-style-src-incompatible-component",
+  "bug-external-styles-missing-classname",
+  "wrapper-sxPropVerboseMerge",
+]);
+
 // Fixtures don't use theme resolution, but the transformer requires an adapter.
 export const fixtureAdapter = defineAdapter({
   // Use mergedSx merger function for cleaner className/style merging output
@@ -661,6 +670,24 @@ export const fixtureAdapter = defineAdapter({
     return undefined;
   },
 });
+
+const appLikeAdapter = defineAdapter({
+  ...fixtureAdapter,
+  styleMerger: null,
+  useSxProp: false,
+  externalInterface(): ExternalInterfaceResult {
+    return {
+      styles: true,
+      as: false,
+      ref: false,
+      ...BROAD_CONSUMER_PROPS,
+    };
+  },
+});
+
+export function selectFixtureAdapter(name: string) {
+  return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
+}
 
 /**
  * Shared helper for parameterized helpers that return StyleX style objects.

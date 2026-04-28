@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
-import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
+import { customAdapter, fixtureAdapter, selectFixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
@@ -789,7 +789,11 @@ describe("transform", () => {
     const crossFileInfo = getCrossFileInfo(inputPath);
     const diagnostics = runTransformWithDiagnostics(
       input,
-      { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
+      {
+        adapter: selectFixtureAdapter(name),
+        crossFileInfo,
+        allowPartialMigration: isPartialFixture(name),
+      },
       inputPath,
       parser,
     );
