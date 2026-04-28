@@ -17,7 +17,7 @@ if ! git diff-index --quiet HEAD --; then
 fi
 echo "✓ Working tree is clean"
 
-npm login
+pnpm login
 
 echo ""
 echo "📦 Bumping version..."
