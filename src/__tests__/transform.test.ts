@@ -2583,6 +2583,50 @@ export const App = () => (
     ]);
   });
 
+  it("should bail when same-file descendant proof crosses an imported component", () => {
+    const source = `
+import styled from "styled-components";
+import { SmallIcon } from "./some-ui";
+
+const LargeIcon = styled.svg\`
+  fill: gray;
+  width: 32px;
+\`;
+
+const Container = styled.div\`
+  padding: 16px;
+
+  svg {
+    fill: blue;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <SmallIcon viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6" />
+    </SmallIcon>
+    <LargeIcon viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="12" />
+    </LargeIcon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: element selector with dynamic children",
+      }),
+    ]);
+  });
+
   it("should bail when a locally-targeted styled intrinsic is later forced into a wrapper", () => {
     const source = `
 import * as React from "react";
