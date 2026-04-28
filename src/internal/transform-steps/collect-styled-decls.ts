@@ -71,10 +71,11 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   ctx.styledDecls = styledDecls;
-
   // Check for unparseable shouldForwardProp - bail to avoid semantic changes
-  const unparseableSfpDecl = styledDecls.find((d) => d.hasUnparseableShouldForwardProp);
-  if (unparseableSfpDecl) {
+  const unparseableSfpDecl = styledDecls.find(
+    (d) => !d.skipTransform && d.hasUnparseableShouldForwardProp,
+  );
+  if (unparseableSfpDecl && ctx.options.transformMode !== "leavesOnly") {
     ctx.warnings.push({
       severity: "warning",
       type: "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
@@ -116,7 +117,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
 
   // Universal selectors (`*`) are currently unsupported (too many edge cases to map to StyleX safely).
   // Skip transforming the entire file to avoid producing incorrect output.
-  if (hasUniversalSelectors) {
+  if (hasUniversalSelectors && ctx.options.transformMode !== "leavesOnly") {
     ctx.warnings.push({
       severity: "warning",
       type: "Universal selectors (`*`) are currently unsupported",

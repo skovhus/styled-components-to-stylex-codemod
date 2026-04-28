@@ -12,6 +12,19 @@ import type { Adapter, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import type { CrossFileInfo } from "../internal/transform-types.js";
+import {
+  computeGlobalLeafKeys,
+  extractStyledDefBasesFromAstProgram,
+  extractStyledDefBasesFromSource,
+  type StyledDefBasesMap,
+} from "../internal/prepass/compute-leaf-set.js";
+import { createPrepassParser, type AstNode } from "../internal/prepass/prepass-parser.js";
+import {
+  collectStyledLocalBindingNames,
+  walkForImportsAndTemplates,
+} from "../internal/prepass/scan-cross-file-selectors.js";
+import type { Resolve } from "../internal/prepass/extract-external-interface.js";
+import { toRealPath } from "../internal/utilities/path-utils.js";
 
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
@@ -735,6 +748,199 @@ export const App = () => (
     const partialResult = runPartial(source, "partial-defaultBail.input.tsx");
     expect(partialResult.code).not.toBeNull();
     expect(partialResult.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
+  });
+});
+
+/** Mirrors prepass leaves-only extraction (regex + AST) for fixture-driven tests. */
+function mergeStyledDefBasesForTestFiles(
+  filePaths: readonly string[],
+  into: StyledDefBasesMap,
+): void {
+  for (const filePath of filePaths) {
+    mergeStyledDefBasesForTestSource(filePath, readFileSync(filePath, "utf-8"), into);
+  }
+}
+
+function mergeStyledDefBasesForTestSource(
+  filePath: string,
+  source: string,
+  into: StyledDefBasesMap,
+): void {
+  extractStyledDefBasesFromSource(filePath, source, into);
+  try {
+    const parser = createPrepassParser("tsx");
+    const ast = parser.parse(source) as AstNode;
+    const program = ((ast as { program?: AstNode }).program ?? ast) as AstNode;
+    const importNodes: AstNode[] = [];
+    walkForImportsAndTemplates(program, importNodes, []);
+    extractStyledDefBasesFromAstProgram(
+      filePath,
+      program,
+      collectStyledLocalBindingNames(importNodes),
+      into,
+    );
+  } catch {
+    /* regex-only baseline remains */
+  }
+}
+
+describe("leaves-only mode", () => {
+  const leavesCrossBox = join(__dirname, "fixtures/leaves-only/cross/box.tsx");
+  const leavesCrossWrap = join(__dirname, "fixtures/leaves-only/cross/wrap.tsx");
+  const leavesDefaultBox = join(__dirname, "fixtures/leaves-only/cross/default-box.tsx");
+  const leavesDefaultWrap = join(__dirname, "fixtures/leaves-only/cross/default-wrap.tsx");
+
+  const runLeavesOnly = (source: string, filePath: string, options: TestTransformOptions = {}) =>
+    runTransformWithDiagnostics(
+      source,
+      { transformMode: "leavesOnly", allowPartialMigration: true, ...options },
+      filePath,
+    );
+
+  const collectLeafKeys = (filePaths: readonly string[]) => {
+    const resolver = createModuleResolver();
+    const realPaths = filePaths.map(toRealPath);
+    const styledDefBases: StyledDefBasesMap = new Map();
+    mergeStyledDefBasesForTestFiles(realPaths, styledDefBases);
+    const resolve: Resolve = (specifier, fromFile) =>
+      resolver.resolve(pathResolve(fromFile), specifier) ?? null;
+    const globalLeafKeys = computeGlobalLeafKeys({
+      transformSet: new Set(realPaths),
+      styledDefBases,
+      resolve,
+      cachedRead: (p) => readFileSync(p, "utf-8"),
+      toRealPath,
+    });
+    const requirePath = (index: number): string => {
+      const filePath = realPaths[index];
+      if (!filePath) {
+        throw new Error(`Missing leaves-only fixture path at index ${index}`);
+      }
+      return filePath;
+    };
+    return { globalLeafKeys, requirePath, resolver };
+  };
+
+  it("converts same-file leaves and ignores unsupported skipped non-leaves", () => {
+    const source = `
+import styled from "styled-components";
+
+function Plain() {
+  return null;
+}
+
+const Leaf = styled.div\`
+  color: red;
+\`;
+
+const Wrapped = styled(Leaf)\`
+  padding: 4px;
+\`;
+
+const External = styled(Plain)\`
+  color: tomato;
+\`;
+
+External.defaultProps = {
+  theme: { color: { bgBase: "red" } },
+};
+
+export const App = () => (
+  <div>
+    <Leaf />
+    <Wrapped />
+    <External />
+  </div>
+);
+`;
+    const result = runLeavesOnly(
+      source,
+      pathResolve(join(__dirname, "virtual-leaves-same-file.tsx")),
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toMatch(/leaf:\s*\{/);
+    expect(result.code).toMatch(/wrapped:\s*\{/);
+    expect(result.code).toMatch(/const\s+External\s*=\s*styled\(Plain\)`/);
+  });
+
+  it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {
+    const { globalLeafKeys, requirePath, resolver } = collectLeafKeys([
+      leavesCrossBox,
+      leavesCrossWrap,
+    ]);
+    const boxPath = requirePath(0);
+    const wrapPath = requirePath(1);
+
+    expect(globalLeafKeys.has(`${boxPath}:Box`)).toBe(true);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedBox`)).toBe(true);
+
+    const wrapSource = readFileSync(wrapPath, "utf-8");
+    const result = runLeavesOnly(wrapSource, wrapPath, {
+      globalLeafKeys,
+      resolveModule: (fromFile: string, specifier: string) => resolver.resolve(fromFile, specifier),
+    });
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).not.toMatch(/const\s+WrappedBox\s*=\s*styled\(Box\)`/);
+  });
+
+  it("resolves default-import aliases to the defining leaf binding", () => {
+    const { globalLeafKeys, requirePath } = collectLeafKeys([leavesDefaultBox, leavesDefaultWrap]);
+    const boxPath = requirePath(0);
+    const wrapPath = requirePath(1);
+
+    expect(globalLeafKeys.has(`${boxPath}:Box`)).toBe(true);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedDefaultBox`)).toBe(true);
+  });
+
+  it("counts adapter-resolved imported bases as leaves", () => {
+    const source = `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const Box = styled(Flex)\`
+  color: green;
+\`;
+
+export const App = () => <Box column>adapter leaf</Box>;
+`;
+
+    const result = runLeavesOnly(source, join(testCasesDir, "adapter-leaf.input.tsx"));
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).not.toMatch(/const\s+Box\s*=\s*styled\(Flex\)`/);
+  });
+
+  it("AST prepass classifies let + named styled import as intrinsic leaf", () => {
+    const source = `
+import { styled as sc } from "styled-components";
+
+let Box = sc.div\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+    const virtualPath = pathResolve(join(__dirname, "virtual-leaves-named-styled.tsx"));
+    const styledDefBases: StyledDefBasesMap = new Map();
+    mergeStyledDefBasesForTestSource(virtualPath, source, styledDefBases);
+
+    expect(styledDefBases.get(virtualPath)?.get("Box")).toEqual({ kind: "intrinsic" });
+
+    const absReal = toRealPath(virtualPath);
+    const keys = computeGlobalLeafKeys({
+      transformSet: new Set([absReal]),
+      styledDefBases,
+      resolve: (specifier, fromFile) =>
+        createModuleResolver().resolve(pathResolve(fromFile), specifier) ?? null,
+      cachedRead: () => source,
+      toRealPath,
+    });
+    expect(keys.has(`${absReal}:Box`)).toBe(true);
   });
 });
 

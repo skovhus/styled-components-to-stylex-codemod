@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
+import { toRealPath } from "../utilities/path-utils.js";
 
 export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls;
@@ -24,6 +25,9 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
 
   for (const decl of styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     if (decl.base.kind !== "component") {
       continue;
     }
@@ -42,6 +46,15 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     const importedPath = importEntry.source.value;
+
+    // Leaves-only mode: wrapping another leaf styled component from this transform run
+    // is safe — both sides become StyleX; skip the conservative imported-styled bail.
+    // Import paths omit extensions while prepass keys use resolved files — probe extensions.
+    if (ctx.options.transformMode === "leavesOnly" && ctx.options.globalLeafKeys?.size) {
+      if (globalLeafKeyExists(ctx.options.globalLeafKeys, importedPath, importEntry.importedName)) {
+        continue;
+      }
+    }
 
     // Check if the imported file contains styled-components.
     // Prefer prepass data when available, but fall back to direct file scan if the
@@ -77,6 +90,22 @@ const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
 
 /** Regex matching styled-component definitions: `const Name = styled.tag` or `const Name = styled(Component)` */
 const STYLED_DEF_RE = /const\s+([A-Z][A-Za-z0-9]*)\b[^=]*=\s*styled[.(]/g;
+
+/** Whether `${resolvedDefFile}:${binding}` is in the leaves-only prepass key set. */
+function globalLeafKeyExists(
+  keys: ReadonlySet<string>,
+  importedPath: string,
+  bindingName: string,
+): boolean {
+  const candidates = [importedPath, ...EXTENSIONS.map((ext) => importedPath + ext)];
+  for (const c of candidates) {
+    const key = `${toRealPath(c)}:${bindingName}`;
+    if (keys.has(key)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Resolve an import path to a styledDefFiles entry. The importMap stores resolved

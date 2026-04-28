@@ -9,7 +9,11 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, realpathSync } from "node:fs";
 import { relative, resolve as pathResolve } from "node:path";
-import type { ExternalInterfaceResult } from "../../adapter.js";
+import type {
+  ExternalInterfaceResult,
+  ResolveBaseComponentContext,
+  ResolveBaseComponentResult,
+} from "../../adapter.js";
 import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
@@ -30,6 +34,7 @@ import {
   deduplicateAndResolve,
   findComponentSelectorLocalsFromNodes,
   findCssImportNamesFromNodes,
+  collectStyledLocalBindingNames,
   findStyledImportNameFromNodes,
   walkForImportsAndTemplates,
   type CrossFileInfo,
@@ -37,6 +42,12 @@ import {
   type ImportEntry,
 } from "./scan-cross-file-selectors.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
+import {
+  computeGlobalLeafKeys,
+  extractStyledDefBasesFromAstProgram,
+  extractStyledDefBasesFromSource,
+  type StyledDefBasesMap,
+} from "./compute-leaf-set.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -49,6 +60,12 @@ interface PrepassOptions {
   createExternalInterface: boolean;
   /** When true, cache AST-derived data (importMap, styledImportName, selectorLocals) keyed by content hash */
   enableAstCache?: boolean;
+  /** When true, compute {@link CrossFileInfo.globalLeafKeys} for leaves-only transforms */
+  leavesOnly?: boolean;
+  /** Optional adapter hook so adapter-resolved imported bases can count as leaves. */
+  resolveBaseComponent?: (
+    ctx: ResolveBaseComponentContext,
+  ) => ResolveBaseComponentResult | undefined;
 }
 
 interface ForwardedAsConsumerEntry {
@@ -96,6 +113,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     parserName,
     createExternalInterface,
     enableAstCache,
+    leavesOnly,
+    resolveBaseComponent,
   } = options;
   const t0 = performance.now();
   const astCache = enableAstCache ? new Map<string, AstCacheEntry>() : undefined;
@@ -504,11 +523,28 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  let globalLeafKeys: Set<string> | undefined;
+  if (leavesOnly) {
+    const styledDefBases: StyledDefBasesMap = new Map();
+    for (const filePath of transformSet) {
+      mergeLeafStyledDefBasesForFile(filePath, cachedRead(filePath), parser, styledDefBases);
+    }
+    globalLeafKeys = computeGlobalLeafKeys({
+      transformSet,
+      styledDefBases,
+      resolve,
+      cachedRead,
+      toRealPath,
+      resolveBaseComponent,
+    });
+  }
+
   const crossFileInfo: CrossFileInfo = {
     selectorUsages,
     componentsNeedingMarkerSidecar,
     componentsNeedingGlobalSelectorBridge,
     styledDefFiles: createExternalInterface ? styledDefFiles : undefined,
+    globalLeafKeys,
   };
 
   // Summary log
@@ -538,6 +574,30 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   }
 
   return { crossFileInfo, consumerAnalysis, forwardedAsConsumers };
+}
+
+/** Regex baseline for styled defs, then AST pass overrides/adds rows when parse succeeds. */
+function mergeLeafStyledDefBasesForFile(
+  filePath: string,
+  source: string,
+  parser: ReturnType<typeof createPrepassParser>,
+  styledDefBases: StyledDefBasesMap,
+): void {
+  extractStyledDefBasesFromSource(filePath, source, styledDefBases);
+  try {
+    const ast = parser.parse(source) as AstNode;
+    const program = ((ast as { program?: AstNode }).program ?? ast) as AstNode;
+    const importNodes: AstNode[] = [];
+    walkForImportsAndTemplates(program, importNodes, []);
+    extractStyledDefBasesFromAstProgram(
+      filePath,
+      program,
+      collectStyledLocalBindingNames(importNodes),
+      styledDefBases,
+    );
+  } catch {
+    // Regex rows already populated
+  }
 }
 
 /* ── Phase helpers ────────────────────────────────────────────────────── */

@@ -164,6 +164,40 @@ describe("public API runtime validation (DX)", () => {
     ).rejects.toThrowError(/expected an adapter object/i);
   });
 
+  it("runTransform: throws a helpful message when transformMode is invalid", async () => {
+    await expect(
+      runTransform({
+        files: "src/**/*.tsx",
+        consumerPaths: null,
+        transformMode: "leafOnly",
+        adapter: {},
+      } as any),
+    ).rejects.toThrowError(/`transformMode` must be one of/);
+  });
+
+  it("runTransform: throws when leavesOnly is not boolean", async () => {
+    await expect(
+      runTransform({
+        files: "src/**/*.tsx",
+        consumerPaths: null,
+        leavesOnly: "yes" as any,
+        adapter: {},
+      } as any),
+    ).rejects.toThrowError(/`leavesOnly` must be a boolean/);
+  });
+
+  it('runTransform: throws when leavesOnly conflicts with transformMode "all"', async () => {
+    await expect(
+      runTransform({
+        files: "src/**/*.tsx",
+        consumerPaths: null,
+        leavesOnly: true,
+        transformMode: "all",
+        adapter: {},
+      } as any),
+    ).rejects.toThrowError(/conflicts with `transformMode: "all"`/);
+  });
+
   it('runTransform: throws when externalInterface is "auto" but consumerPaths is null', async () => {
     const adapter = {
       resolveValue: () => undefined,

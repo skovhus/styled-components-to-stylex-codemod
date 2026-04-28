@@ -75,6 +75,8 @@ export function returnResult(result: TransformResult, reason: StepReturnReason):
  */
 export type TransformStep = (ctx: TransformContext) => StepResult;
 
+export type TransformMode = "all" | "leavesOnly";
+
 /**
  * Options for the transform
  */
@@ -97,6 +99,28 @@ export interface TransformOptions extends Options {
    * per-decl bail escalates to a whole-file bail.
    */
   allowPartialMigration?: boolean;
+
+  /**
+   * Controls which styled declarations are eligible for conversion.
+   * - "all" (default): transform every supported styled declaration.
+   * - "leavesOnly": only transform styled declarations whose render base is
+   *   intrinsic after adapter resolution, or that wrap another leaf styled
+   *   declaration in the transform run (including cross-file imports).
+   */
+  transformMode?: TransformMode;
+
+  /**
+   * From prepass when leaves-only mode is on: keys `${realpath}:${bindingName}` for leaf
+   * styled definitions. An empty set means no leaf bindings were found (per-decl policy
+   * treats all `styled(Component)` bases like missing keys). Used internally by the runner.
+   */
+  globalLeafKeys?: Set<string>;
+
+  /**
+   * Module resolver for leaves-only import→definition lookup (`resolve(fromFile, specifier)`).
+   * Set by runTransform.
+   */
+  resolveModule?: (fromFile: string, specifier: string) => string | undefined;
 }
 
 /**
@@ -110,6 +134,8 @@ export interface CrossFileInfo {
   bridgeComponentNames?: Set<string>;
   /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
+  /** Global leaf keys from prepass when leaves-only mode is enabled. */
+  globalLeafKeys?: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {

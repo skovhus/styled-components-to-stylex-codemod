@@ -25,6 +25,7 @@ import type {
 import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
+import type { TransformMode } from "./internal/transform-types.js";
 
 export { mergeMarkerDeclarations };
 
@@ -99,6 +100,25 @@ export interface RunTransformOptions {
    * @default false
    */
   silent?: boolean;
+
+  /**
+   * Controls which styled declarations are eligible for conversion.
+   *
+   * - `"all"` converts every supported styled declaration.
+   * - `"leavesOnly"` only converts declarations whose render base is intrinsic
+   *   after adapter resolution, or that wrap another leaf styled declaration in
+   *   the transform run (including cross-file imports).
+   *
+   * @default "all"
+   */
+  transformMode?: TransformMode;
+
+  /**
+   * Same as `transformMode: "leavesOnly"`. Do not combine with `transformMode: "all"`.
+   *
+   * @default false
+   */
+  leavesOnly?: boolean;
 
   /**
    * When true, allow the codemod to leave individual styled declarations as-is when
@@ -225,6 +245,41 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       ].join("\n"),
     );
   }
+
+  const transformModeRaw = (options as { transformMode?: unknown }).transformMode;
+  if (
+    transformModeRaw !== undefined &&
+    transformModeRaw !== "all" &&
+    transformModeRaw !== "leavesOnly"
+  ) {
+    throw new Error(
+      [
+        'runTransform(options): `transformMode` must be one of: "all", "leavesOnly".',
+        `Received: transformMode=${describeValue(transformModeRaw)}`,
+      ].join("\n"),
+    );
+  }
+
+  const leavesOnlyFlagRaw = (options as { leavesOnly?: unknown }).leavesOnly;
+  if (leavesOnlyFlagRaw !== undefined && typeof leavesOnlyFlagRaw !== "boolean") {
+    throw new Error(
+      [
+        "runTransform(options): `leavesOnly` must be a boolean when provided.",
+        `Received: leavesOnly=${describeValue(leavesOnlyFlagRaw)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (leavesOnlyFlagRaw === true && transformModeRaw === "all") {
+    throw new Error(
+      [
+        'runTransform(options): `leavesOnly: true` conflicts with `transformMode: "all"`.',
+        'Omit `transformMode` or set `transformMode: "leavesOnly"`.',
+      ].join("\n"),
+    );
+  }
+
+  const leavesOnly = options.transformMode === "leavesOnly" || leavesOnlyFlagRaw === true;
 
   const {
     files,
@@ -381,6 +436,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       parserName: parser,
       createExternalInterface: adapterInput.externalInterface === "auto",
       enableAstCache: true,
+      leavesOnly,
+      resolveBaseComponent: adapterInput.resolveBaseComponent,
     });
   } catch (err) {
     if (adapterInput.externalInterface === "auto") {
@@ -395,6 +452,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         selectorUsages: new Map(),
         componentsNeedingMarkerSidecar: new Map(),
         componentsNeedingGlobalSelectorBridge: new Map(),
+        globalLeafKeys: leavesOnly ? new Set() : undefined,
       },
       consumerAnalysis: undefined,
       forwardedAsConsumers: new Map(),
@@ -501,7 +559,11 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     bridgeResults,
     transformedFiles,
     transientPropRenames,
-    allowPartialMigration: options.allowPartialMigration ?? false,
+    allowPartialMigration: options.allowPartialMigration ?? (leavesOnly ? true : false),
+    transformMode: leavesOnly ? "leavesOnly" : (options.transformMode ?? "all"),
+    globalLeafKeys: crossFilePrepassResult.globalLeafKeys,
+    resolveModule: (fromFile: string, specifier: string) =>
+      sharedResolver.resolve(fromFile, specifier),
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
