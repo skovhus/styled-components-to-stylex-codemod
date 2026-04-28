@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
-import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
+import { appLikeAdapter, customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
@@ -779,6 +779,16 @@ describe("output invariants", () => {
   );
 });
 
+// Test cases that use the app-like adapter (styleMerger: null) to reproduce
+// real-world TS errors with the verbose className/style merging pattern.
+// Keep this set in sync with `APP_LIKE_ADAPTER_FIXTURES` in
+// `scripts/regenerate-test-case-outputs.mts`.
+const APP_LIKE_ADAPTER_FIXTURES = new Set<string>(["externalStyles-sxRedeclaration"]);
+
+function adapterForFixture(name: string) {
+  return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
+}
+
 // All test cases must be fully transformed:
 // - Transform must produce a change (no bail/unchanged allowed)
 // - Result must not import styled-components
@@ -789,7 +799,11 @@ describe("transform", () => {
     const crossFileInfo = getCrossFileInfo(inputPath);
     const diagnostics = runTransformWithDiagnostics(
       input,
-      { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
+      {
+        adapter: adapterForFixture(name),
+        crossFileInfo,
+        allowPartialMigration: isPartialFixture(name),
+      },
       inputPath,
       parser,
     );

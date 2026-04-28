@@ -711,6 +711,29 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
   return undefined;
 }
 
+/**
+ * App-like adapter that mirrors a real-world consumer config: no merger
+ * function (verbose `const sx = stylex.props(...)` pattern) and a permissive
+ * `externalInterface`. Used by bug-reproduction fixtures whose failure mode
+ * (e.g. `sx` redeclaration) only manifests with the verbose pattern.
+ */
+export const appLikeAdapter = defineAdapter({
+  styleMerger: null,
+  useSxProp: false,
+  externalInterface(): ExternalInterfaceResult {
+    return { styles: true, as: false, ref: false, ...BROAD_CONSUMER_PROPS };
+  },
+  resolveValue(ctx) {
+    return fixtureAdapter.resolveValue?.(ctx);
+  },
+  resolveCall(ctx) {
+    return fixtureAdapter.resolveCall?.(ctx);
+  },
+  resolveSelector(ctx) {
+    return fixtureAdapter.resolveSelector?.(ctx);
+  },
+});
+
 // Test adapters - examples of custom adapter usage
 export const customAdapter = defineAdapter({
   styleMerger: null,

@@ -50,11 +50,7 @@ const testCasesDir = join(repoRoot, "test-cases");
 
 // Test cases that use the app-like adapter (styleMerger: null) to reproduce
 // real-world TS errors with the verbose className/style merging pattern.
-const APP_LIKE_ADAPTER_FIXTURES = new Set([
-  "bug-data-style-src-not-accepted",
-  "bug-data-style-src-incompatible-component",
-  "bug-external-styles-missing-classname",
-]);
+const APP_LIKE_ADAPTER_FIXTURES = new Set(["externalStyles-sxRedeclaration"]);
 
 function selectAdapter(name: string) {
   return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
