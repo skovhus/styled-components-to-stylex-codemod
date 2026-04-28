@@ -600,6 +600,21 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         const targetDecl = targetId.startsWith("styled:")
           ? declByLocal.get(targetId.slice("styled:".length))
           : undefined;
+        if (
+          targetDecl &&
+          targetIds.size === 1 &&
+          ctx.resolvedStyleObjects &&
+          tryMergeLocalElementOverrideIntoTargetBase({
+            root,
+            j,
+            parentName: decl.localName,
+            targetDecl,
+            override,
+            resolvedStyleObjects: ctx.resolvedStyleObjects,
+          })
+        ) {
+          continue;
+        }
         if (targetDecl) {
           const {
             className: childClassName,
@@ -3937,6 +3952,68 @@ function buildLocalElementOverrideProperties(args: {
     childPseudos: override.childPseudo ? new Set([override.childPseudo]) : undefined,
     markerVarName: undefined,
   });
+}
+
+function tryMergeLocalElementOverrideIntoTargetBase(args: {
+  root: TransformContext["root"];
+  j: JSCodeshift;
+  targetDecl: StyledDecl;
+  parentName: string;
+  override: LocalElementOverrideCandidate;
+  resolvedStyleObjects: Map<string, unknown>;
+}): boolean {
+  const { root, j, targetDecl, parentName, override, resolvedStyleObjects } = args;
+  if (
+    override.relation !== "child" ||
+    override.ancestorPseudo ||
+    override.childPseudo ||
+    override.pseudoBuckets.size !== 1 ||
+    !override.pseudoBuckets.has(null)
+  ) {
+    return false;
+  }
+  if (!hasOnlyDirectChildUsages(root, j, targetDecl.localName, parentName)) {
+    return false;
+  }
+  const baseStyles = resolvedStyleObjects.get(targetDecl.styleKey);
+  if (!isPlainStyleObject(baseStyles)) {
+    return false;
+  }
+  const bucket = override.pseudoBuckets.get(null) ?? {};
+  for (const [prop, value] of Object.entries(bucket)) {
+    baseStyles[prop] = value;
+  }
+  return true;
+}
+
+function hasOnlyDirectChildUsages(
+  root: TransformContext["root"],
+  j: JSCodeshift,
+  childName: string,
+  parentName: string,
+): boolean {
+  let sawUsage = false;
+  let allUsagesAreDirectChildren = true;
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name: childName } },
+    } as any)
+    .forEach((path: any) => {
+      if (!allUsagesAreDirectChildren) {
+        return;
+      }
+      sawUsage = true;
+      const parentNode = path.parentPath?.node;
+      if (parentNode?.type !== "JSXElement") {
+        allUsagesAreDirectChildren = false;
+        return;
+      }
+      const parentElementName = getRootJsxIdentifierName(parentNode.openingElement?.name);
+      if (parentElementName !== parentName) {
+        allUsagesAreDirectChildren = false;
+      }
+    });
+  return sawUsage && allUsagesAreDirectChildren;
 }
 
 function buildResolvedStyleObjectList(
