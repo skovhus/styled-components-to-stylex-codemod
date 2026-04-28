@@ -3934,8 +3934,11 @@ function makeLocalElementTargetStyleKey(
     targetName[0]?.toLowerCase() === targetName[0]
       ? targetName
       : `${targetName[0]?.toLowerCase() ?? ""}${targetName.slice(1)}`;
-  const relationSuffix = override.relation === "child" ? "Child" : "Descendant";
-  return `${camelToKebabCase(normalizedTargetName).replace(/-([a-z])/g, (_, c) => c.toUpperCase())}In${relationSuffix}`;
+  const relationPrefix = override.relation === "child" ? "child" : "descendant";
+  const targetSuffix = camelToKebabCase(normalizedTargetName).replace(/-([a-z])/g, (_, c) =>
+    c.toUpperCase(),
+  );
+  return `${relationPrefix}${targetSuffix[0]?.toUpperCase() ?? ""}${targetSuffix.slice(1)}`;
 }
 
 function buildLocalElementOverrideProperties(args: {

@@ -2,10 +2,10 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div sx={styles.container}>
-    <svg viewBox="0 0 24 24" sx={[styles.icon, styles.iconInDescendant, styles.iconInChild]}>
+    <svg viewBox="0 0 24 24" sx={[styles.icon, styles.descendantIcon, styles.childIcon]}>
       <circle cx="12" cy="12" r="10" />
     </svg>
-    <svg viewBox="0 0 24 24" sx={[styles.svgInDescendant, styles.svgInChild]}>
+    <svg viewBox="0 0 24 24" sx={[styles.descendantSvg, styles.childSvg]}>
       <rect width="10" height="10" />
     </svg>
   </div>
@@ -20,17 +20,17 @@ const styles = stylex.create({
   container: {
     padding: 16,
   },
-  svgInDescendant: {
+  descendantSvg: {
     fill: "blue",
   },
-  iconInDescendant: {
+  descendantIcon: {
     fill: "blue",
   },
-  svgInChild: {
+  childSvg: {
     stroke: "red",
     strokeWidth: 2,
   },
-  iconInChild: {
+  childIcon: {
     stroke: "red",
     strokeWidth: 2,
   },
