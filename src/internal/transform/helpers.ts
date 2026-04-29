@@ -48,6 +48,8 @@ export type ComputedKeyEntry = {
   value: unknown;
   /** Optional leading comment to attach to the emitted property */
   leadingComment?: string;
+  /** Original CSS custom property name when this computed key represents a rewritten definition. */
+  originalCssVariableName?: string;
   /**
    * When true, emit this entry before regular string-keyed properties (e.g. for
    * CSS-variable definitions like `[vars.spacingSm]: "24px"` that should appear

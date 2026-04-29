@@ -6576,6 +6576,48 @@ export const App = () => <Box>content</Box>;
     `);
   });
 
+  it("should drop rewritten local CSS variable definitions when usage requests dropDefinition", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --theme-color: red;
+  color: var(--theme-color, blue);
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const fallbackDroppingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--theme-color") {
+          return {
+            expr: "vars.themeColor",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./vars.stylex" },
+                names: [{ imported: "vars" }],
+              },
+            ],
+            ...(ctx.fallback ? { dropDefinition: true } : {}),
+          };
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fallbackDroppingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("color: vars.themeColor");
+    expect(result.code).not.toContain("[vars.themeColor]");
+  });
+
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
     const source = `
 import styled from "styled-components";

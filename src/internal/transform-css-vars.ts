@@ -5,6 +5,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
+import type { ComputedKeyEntry } from "./transform/helpers.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function rewriteCssVarsInStyleObject(
@@ -89,11 +90,15 @@ function rewriteCssVarsInStyleObjectImpl(
         ctx.addImport(imp);
       }
 
-      const computedKeys =
-        (obj.__computedKeys as
-          | Array<{ keyExpr: unknown; value: unknown; prepend?: boolean }>
-          | undefined) ?? [];
-      computedKeys.push({ keyExpr, value: rewrittenValue, prepend: true });
+      const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
+        ? obj.__computedKeys
+        : [];
+      computedKeys.push({
+        keyExpr,
+        value: rewrittenValue,
+        prepend: true,
+        originalCssVariableName: k,
+      });
       obj.__computedKeys = computedKeys;
       continue;
     }
