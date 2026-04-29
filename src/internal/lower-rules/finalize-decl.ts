@@ -134,7 +134,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // definition would survive in non-base buckets and contradict the adapter contract.
   for (const name of varsToDrop) {
     for (const bucket of bucketsForVarRewrite) {
-      delete (bucket as Record<string, unknown>)[name];
+      dropCssVariableDefinitionsFromBucket(bucket, name);
     }
   }
 
@@ -598,6 +598,50 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+function dropCssVariableDefinitionsFromBucket(bucket: Record<string, unknown>, name: string): void {
+  delete bucket[name];
+
+  const computedKeys = bucket.__computedKeys;
+  if (Array.isArray(computedKeys)) {
+    const retained = computedKeys.filter((entry) => {
+      const cssVariableName = readComputedEntryCssVariableName(entry);
+      return cssVariableName !== name;
+    });
+
+    if (retained.length === 0) {
+      delete bucket.__computedKeys;
+    } else if (retained.length !== computedKeys.length) {
+      bucket.__computedKeys = retained;
+    }
+  }
+
+  for (const [key, value] of Object.entries(bucket)) {
+    if (key.startsWith("__")) {
+      continue;
+    }
+    if (!isStyleObjectForCssVarDrop(value)) {
+      continue;
+    }
+    dropCssVariableDefinitionsFromBucket(value, name);
+  }
+}
+
+function readComputedEntryCssVariableName(entry: unknown): string | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+  if (!("originalCssVariableName" in entry)) {
+    return null;
+  }
+
+  const cssVariableName = entry.originalCssVariableName;
+  return typeof cssVariableName === "string" ? cssVariableName : null;
+}
+
+function isStyleObjectForCssVarDrop(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && !isAstNode(value));
+}
 
 /**
  * Inserts styleFnDecls entries into resolvedStyleObjects right after the last

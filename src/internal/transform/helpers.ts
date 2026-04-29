@@ -48,6 +48,14 @@ export type ComputedKeyEntry = {
   value: unknown;
   /** Optional leading comment to attach to the emitted property */
   leadingComment?: string;
+  /** Original CSS custom property name when this computed key represents a rewritten definition. */
+  originalCssVariableName?: string;
+  /**
+   * When true, emit this entry before regular string-keyed properties (e.g. for
+   * CSS-variable definitions like `[vars.spacingSm]: "24px"` that should appear
+   * at the top of the rule). Default (false) emits at the end (e.g. media queries).
+   */
+  prepend?: boolean;
 };
 
 export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
@@ -70,6 +78,16 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
 
   for (const s of spreads) {
     props.push(j.spreadElement(j.identifier(s)));
+  }
+
+  for (const entry of computedKeys) {
+    if (!entry.prepend) {
+      continue;
+    }
+    const prop = computedKeyEntryToProp(j, entry);
+    if (prop) {
+      props.push(prop);
+    }
   }
 
   for (const [key, value] of Object.entries(obj)) {
@@ -136,31 +154,41 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
     props.push(prop);
   }
 
-  // Emit computed key properties (e.g., [breakpoints.phone]: value)
+  // Emit non-prepend computed key properties (e.g., [breakpoints.phone]: value)
   for (const entry of computedKeys) {
-    if (!entry.keyExpr || !isAstNode(entry.keyExpr)) {
+    if (entry.prepend) {
       continue;
     }
-    const valueAst =
-      entry.value && typeof entry.value === "object" && !isAstNode(entry.value)
-        ? objectToAst(j, entry.value as Record<string, unknown>)
-        : literalToAst(j, entry.value);
-    const prop = j.property("init", entry.keyExpr as any, valueAst);
-    (prop as any).computed = true;
-    if (entry.leadingComment) {
-      (prop as any).comments = [
-        {
-          type: "CommentLine",
-          value: ` ${entry.leadingComment}`,
-          leading: true,
-          trailing: false,
-        },
-      ];
+    const prop = computedKeyEntryToProp(j, entry);
+    if (prop) {
+      props.push(prop);
     }
-    props.push(prop);
   }
 
   return j.objectExpression(props);
+}
+
+function computedKeyEntryToProp(j: API["jscodeshift"], entry: ComputedKeyEntry): any {
+  if (!entry.keyExpr || !isAstNode(entry.keyExpr)) {
+    return null;
+  }
+  const valueAst =
+    entry.value && typeof entry.value === "object" && !isAstNode(entry.value)
+      ? objectToAst(j, entry.value as Record<string, unknown>)
+      : literalToAst(j, entry.value);
+  const prop = j.property("init", entry.keyExpr as any, valueAst);
+  (prop as any).computed = true;
+  if (entry.leadingComment) {
+    (prop as any).comments = [
+      {
+        type: "CommentLine",
+        value: ` ${entry.leadingComment}`,
+        leading: true,
+        trailing: false,
+      },
+    ];
+  }
+  return prop;
 }
 
 export function literalToAst(j: API["jscodeshift"], value: unknown): any {

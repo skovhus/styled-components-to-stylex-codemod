@@ -6541,6 +6541,83 @@ export const App = () => <Box $tone="red">x</Box>;
     }
   });
 
+  it("should rewrite known local CSS variable definitions and usages to the same StyleX variable", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --spacing-sm: 24px;
+  margin-left: var(--spacing-sm);
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import * as stylex from "@stylexjs/stylex";
+      import { vars } from "./css-variables.stylex";
+
+      export const App = () => <div sx={styles.box}>content</div>;
+
+      const styles = stylex.create({
+        box: {
+          [vars.spacingSm]: "24px",
+          marginLeft: vars.spacingSm,
+        },
+      });
+      "
+    `);
+  });
+
+  it("should drop rewritten local CSS variable definitions when usage requests dropDefinition", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --theme-color: red;
+  color: var(--theme-color, blue);
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const fallbackDroppingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--theme-color") {
+          return {
+            expr: "vars.themeColor",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./vars.stylex" },
+                names: [{ imported: "vars" }],
+              },
+            ],
+            ...(ctx.fallback ? { dropDefinition: true } : {}),
+          };
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fallbackDroppingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("color: vars.themeColor");
+    expect(result.code).not.toContain("[vars.themeColor]");
+  });
+
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
     const source = `
 import styled from "styled-components";

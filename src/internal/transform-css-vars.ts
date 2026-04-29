@@ -5,6 +5,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
+import type { ComputedKeyEntry } from "./transform/helpers.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function rewriteCssVarsInStyleObject(
@@ -59,21 +60,67 @@ function rewriteCssVarsInStyleObjectImpl(
   ctx: CssVarRewriteContext,
 ): void {
   for (const [k, v] of Object.entries(obj)) {
-    if (v && typeof v === "object") {
-      if (isAstNode(v)) {
-        const replacement = rewriteCssVarsInAstNodeAndMaybeSimplify(v, ctx);
-        if (replacement) {
-          obj[k] = replacement;
-        }
+    if (k.startsWith("--")) {
+      const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
+      const result = ctx.resolveValue({
+        kind: "cssVariable",
+        name: k,
+        filePath: ctx.filePath,
+        ...(typeof v === "string" ? { definedValue: v } : {}),
+      });
+
+      if (!result) {
+        obj[k] = rewrittenValue;
         continue;
       }
-      rewriteCssVarsInStyleObjectImpl(v as Record<string, unknown>, ctx);
+
+      delete obj[k];
+
+      if (result.dropDefinition) {
+        continue;
+      }
+
+      const keyExpr = ctx.parseExpr(result.expr);
+      if (!keyExpr) {
+        obj[k] = rewrittenValue;
+        continue;
+      }
+
+      for (const imp of result.imports ?? []) {
+        ctx.addImport(imp);
+      }
+
+      const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
+        ? obj.__computedKeys
+        : [];
+      computedKeys.push({
+        keyExpr,
+        value: rewrittenValue,
+        prepend: true,
+        originalCssVariableName: k,
+      });
+      obj.__computedKeys = computedKeys;
       continue;
     }
-    if (typeof v === "string") {
-      obj[k] = rewriteCssVarsInString({ raw: v, ...ctx });
-    }
+
+    obj[k] = rewriteCssVarsInStyleObjectValue(v, ctx);
   }
+}
+
+function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteContext): unknown {
+  if (value && typeof value === "object") {
+    if (isAstNode(value)) {
+      return rewriteCssVarsInAstNodeAndMaybeSimplify(value, ctx) ?? value;
+    }
+    rewriteCssVarsInStyleObjectImpl(value as Record<string, unknown>, ctx);
+    return value;
+  }
+
+  if (typeof value === "string") {
+    return rewriteCssVarsInString({ raw: value, ...ctx });
+  }
+
+  return value;
 }
 
 /**
