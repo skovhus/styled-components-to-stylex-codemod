@@ -308,8 +308,9 @@ export function computeGlobalLeafKeys(args: {
     if (!initialDefFile) {
       return false;
     }
+    const exportNameForBarrel = importInfo.isDefault ? "default" : importInfo.exportedName;
     const defFile =
-      resolveBarrelReExport(initialDefFile, importInfo.exportedName, resolve, cachedRead) ??
+      resolveBarrelReExport(initialDefFile, exportNameForBarrel, resolve, cachedRead) ??
       initialDefFile;
     const defReal = toRealPath(defFile);
     if (!transformSet.has(defReal)) {

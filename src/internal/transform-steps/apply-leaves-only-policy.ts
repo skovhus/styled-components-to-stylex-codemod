@@ -138,8 +138,9 @@ function isImportedLeafBinding(
   }
 
   const cachedRead = (p: string): string => readFileSync(p, "utf-8");
+  const exportNameForBarrel = importInfo.isDefault ? "default" : importInfo.exportedName;
   const defFile =
-    resolveBarrelReExport(initialDefFile, importInfo.exportedName, resolve, cachedRead) ??
+    resolveBarrelReExport(initialDefFile, exportNameForBarrel, resolve, cachedRead) ??
     initialDefFile;
 
   return importedLeafKeyExists(

@@ -583,6 +583,9 @@ function mergeLeafStyledDefBasesForFile(
   parser: ReturnType<typeof createPrepassParser>,
   styledDefBases: StyledDefBasesMap,
 ): void {
+  if (hasLeavesOnlyPrepassBlocker(source)) {
+    return;
+  }
   extractStyledDefBasesFromSource(filePath, source, styledDefBases);
   try {
     const ast = parser.parse(source) as AstNode;
@@ -598,6 +601,14 @@ function mergeLeafStyledDefBasesForFile(
   } catch {
     // Regex rows already populated
   }
+}
+
+function hasLeavesOnlyPrepassBlocker(source: string): boolean {
+  return source.includes("shouldForwardProp") || hasUniversalSelectorCandidate(source);
+}
+
+function hasUniversalSelectorCandidate(source: string): boolean {
+  return /(?:^|[{\n;])\s*(?:&\s*)?(?:[>+~]\s*)?\*/.test(source);
 }
 
 /* ── Phase helpers ────────────────────────────────────────────────────── */

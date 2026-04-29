@@ -757,7 +757,14 @@ function mergeStyledDefBasesForTestFiles(
   into: StyledDefBasesMap,
 ): void {
   for (const filePath of filePaths) {
-    mergeStyledDefBasesForTestSource(filePath, readFileSync(filePath, "utf-8"), into);
+    const source = readFileSync(filePath, "utf-8");
+    if (
+      source.includes("shouldForwardProp") ||
+      /(?:^|[{\n;])\s*(?:&\s*)?(?:[>+~]\s*)?\*/.test(source)
+    ) {
+      continue;
+    }
+    mergeStyledDefBasesForTestSource(filePath, source, into);
   }
 }
 
@@ -789,6 +796,10 @@ describe("leaves-only mode", () => {
   const leavesCrossWrap = join(__dirname, "fixtures/leaves-only/cross/wrap.tsx");
   const leavesDefaultBox = join(__dirname, "fixtures/leaves-only/cross/default-box.tsx");
   const leavesDefaultWrap = join(__dirname, "fixtures/leaves-only/cross/default-wrap.tsx");
+  const leavesBarrelIndex = join(__dirname, "fixtures/leaves-only/cross/barrel/index.ts");
+  const leavesBarrelWrap = join(__dirname, "fixtures/leaves-only/cross/barrel-wrap.tsx");
+  const leavesBlockedBox = join(__dirname, "fixtures/leaves-only/cross/blocked-box.tsx");
+  const leavesBlockedWrap = join(__dirname, "fixtures/leaves-only/cross/blocked-wrap.tsx");
 
   const runLeavesOnly = (source: string, filePath: string, options: TestTransformOptions = {}) =>
     runTransformWithDiagnostics(
@@ -904,6 +915,35 @@ export const App = () => (
     });
     expect(result.code).not.toBeNull();
     expect(result.code).not.toMatch(/const\s+WrappedDefaultBox\s*=\s*styled\(RenamedBox\)`/);
+  });
+
+  it("resolves default re-export barrels to the defining leaf binding", () => {
+    const { globalLeafKeys, requirePath, resolver } = collectLeafKeys([
+      leavesDefaultBox,
+      leavesBarrelIndex,
+      leavesBarrelWrap,
+    ]);
+    const boxPath = requirePath(0);
+    const wrapPath = requirePath(2);
+
+    expect(globalLeafKeys.has(`${boxPath}:Box`)).toBe(true);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedBarrelBox`)).toBe(true);
+
+    const result = runLeavesOnly(readFileSync(wrapPath, "utf-8"), wrapPath, {
+      globalLeafKeys,
+      resolveModule: (fromFile: string, specifier: string) => resolver.resolve(fromFile, specifier),
+    });
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const\s+WrappedBarrelBox\s*=\s*styled\(RenamedBox\)`/);
+  });
+
+  it("does not use prepass keys for leaves that later skip", () => {
+    const { globalLeafKeys, requirePath } = collectLeafKeys([leavesBlockedBox, leavesBlockedWrap]);
+    const boxPath = requirePath(0);
+    const wrapPath = requirePath(1);
+
+    expect(globalLeafKeys.has(`${boxPath}:BlockedBox`)).toBe(false);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedBlockedBox`)).toBe(false);
   });
 
   it("does not treat named non-leaf imports as the default leaf", () => {
