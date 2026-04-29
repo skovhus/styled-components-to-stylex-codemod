@@ -888,12 +888,62 @@ export const App = () => (
   });
 
   it("resolves default-import aliases to the defining leaf binding", () => {
-    const { globalLeafKeys, requirePath } = collectLeafKeys([leavesDefaultBox, leavesDefaultWrap]);
+    const { globalLeafKeys, requirePath, resolver } = collectLeafKeys([
+      leavesDefaultBox,
+      leavesDefaultWrap,
+    ]);
     const boxPath = requirePath(0);
     const wrapPath = requirePath(1);
 
     expect(globalLeafKeys.has(`${boxPath}:Box`)).toBe(true);
     expect(globalLeafKeys.has(`${wrapPath}:WrappedDefaultBox`)).toBe(true);
+
+    const result = runLeavesOnly(readFileSync(wrapPath, "utf-8"), wrapPath, {
+      globalLeafKeys,
+      resolveModule: (fromFile: string, specifier: string) => resolver.resolve(fromFile, specifier),
+    });
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const\s+WrappedDefaultBox\s*=\s*styled\(RenamedBox\)`/);
+  });
+
+  it("does not treat named non-leaf imports as the default leaf", () => {
+    const defPath = toRealPath(pathResolve(join(__dirname, "virtual-mixed-leaves.tsx")));
+    const wrapPath = toRealPath(pathResolve(join(__dirname, "virtual-mixed-wrap.tsx")));
+    const sources = new Map([
+      [
+        defPath,
+        `
+import styled from "styled-components";
+function Plain() { return null; }
+const DefaultLeaf = styled.div\` color: green; \`;
+export default DefaultLeaf;
+export const NamedNonLeaf = styled(Plain)\` color: red; \`;
+`,
+      ],
+      [
+        wrapPath,
+        `
+import styled from "styled-components";
+import { NamedNonLeaf } from "./virtual-mixed-leaves";
+export const WrappedNamed = styled(NamedNonLeaf)\` padding: 4px; \`;
+`,
+      ],
+    ]);
+    const styledDefBases: StyledDefBasesMap = new Map();
+    for (const [filePath, source] of sources) {
+      mergeStyledDefBasesForTestSource(filePath, source, styledDefBases);
+    }
+    const globalLeafKeys = computeGlobalLeafKeys({
+      transformSet: new Set([defPath, wrapPath]),
+      styledDefBases,
+      resolve: (specifier) => (specifier === "./virtual-mixed-leaves" ? defPath : null),
+      cachedRead: (p) => sources.get(toRealPath(p)) ?? "",
+      toRealPath,
+    });
+
+    expect(globalLeafKeys.has(`${defPath}:DefaultLeaf`)).toBe(true);
+    expect(globalLeafKeys.has(`${defPath}:NamedNonLeaf`)).toBe(false);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedNamed`)).toBe(false);
   });
 
   it("counts adapter-resolved imported bases as leaves", () => {

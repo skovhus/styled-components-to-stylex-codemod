@@ -13,6 +13,7 @@ interface ImportInfo {
   source: string;
   /** The original exported name (differs from local name for aliased imports) */
   exportedName: string;
+  isDefault: boolean;
 }
 
 export function findImportSource(src: string, localName: string): ImportInfo | null {
@@ -21,20 +22,23 @@ export function findImportSource(src: string, localName: string): ImportInfo | n
   // Named aliased import: `import { OriginalName as localName }`
   // Skip `{ default as X }` — treat it like a default import so the local name is used.
   const aliasMatch = src.match(aliasRe);
-  if (aliasMatch?.[1] && aliasMatch[1] !== "default" && aliasMatch[2]) {
-    return { source: aliasMatch[2], exportedName: aliasMatch[1] };
+  if (aliasMatch?.[1] && aliasMatch[2]) {
+    if (aliasMatch[1] === "default") {
+      return { source: aliasMatch[2], exportedName: localName, isDefault: true };
+    }
+    return { source: aliasMatch[2], exportedName: aliasMatch[1], isDefault: false };
   }
 
   // Named import (no alias): `import { localName }`
   const namedMatch = src.match(namedRe);
   if (namedMatch?.[1]) {
-    return { source: namedMatch[1], exportedName: localName };
+    return { source: namedMatch[1], exportedName: localName, isDefault: false };
   }
 
   // Default import (including `import Name, { type X } from "..."`)
   const defaultMatch = src.match(defaultRe);
   if (defaultMatch?.[1]) {
-    return { source: defaultMatch[1], exportedName: localName };
+    return { source: defaultMatch[1], exportedName: localName, isDefault: true };
   }
 
   return null;

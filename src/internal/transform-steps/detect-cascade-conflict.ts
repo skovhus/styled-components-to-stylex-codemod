@@ -51,7 +51,14 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
     // Import paths omit extensions while prepass keys use resolved files — probe extensions.
     if (ctx.options.transformMode === "leavesOnly" && ctx.options.globalLeafKeys?.size) {
-      if (globalLeafKeyExists(ctx.options.globalLeafKeys, importedPath, importEntry.importedName)) {
+      if (
+        globalLeafKeyExists(
+          ctx.options.globalLeafKeys,
+          importedPath,
+          importEntry.importedName,
+          importEntry.importedName === "default",
+        )
+      ) {
         continue;
       }
     }
@@ -96,6 +103,7 @@ function globalLeafKeyExists(
   keys: ReadonlySet<string>,
   importedPath: string,
   bindingName: string,
+  allowDefaultFallback: boolean,
 ): boolean {
   const candidates = [importedPath, ...EXTENSIONS.map((ext) => importedPath + ext)];
   for (const c of candidates) {
@@ -103,8 +111,22 @@ function globalLeafKeyExists(
     if (keys.has(key)) {
       return true;
     }
+    if (allowDefaultFallback) {
+      const source = tryReadFile(c);
+      const defaultName = source ? findDefaultExportedLocalName(source) : undefined;
+      if (defaultName && keys.has(`${toRealPath(c)}:${defaultName}`)) {
+        return true;
+      }
+    }
   }
   return false;
+}
+
+function findDefaultExportedLocalName(source: string): string | undefined {
+  return (
+    source.match(/\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/)?.[1] ??
+    source.match(/\bexport\s*\{[^}]*\b([A-Z][A-Za-z0-9]*)\s+as\s+default\b[^}]*\}/)?.[1]
+  );
 }
 
 /**

@@ -315,7 +315,13 @@ export function computeGlobalLeafKeys(args: {
     if (!transformSet.has(defReal)) {
       return false;
     }
-    return leafKeyExists(defReal, importInfo.exportedName, cachedRead, globalLeaves);
+    return leafKeyExists(
+      defReal,
+      importInfo.exportedName,
+      importInfo.isDefault,
+      cachedRead,
+      globalLeaves,
+    );
   };
 
   const tryResolveAdapterIntrinsic = (file: string, ident: string): boolean => {
@@ -390,11 +396,15 @@ export function computeGlobalLeafKeys(args: {
 function leafKeyExists(
   defFile: string,
   exportedName: string,
+  allowDefaultFallback: boolean,
   cachedRead: (path: string) => string,
   globalLeaves: Map<string, Set<string>>,
 ): boolean {
   if (globalLeaves.get(defFile)?.has(exportedName) ?? false) {
     return true;
+  }
+  if (!allowDefaultFallback) {
+    return false;
   }
   const defaultLocalName = findDefaultExportedLocalName(cachedRead(defFile));
   return defaultLocalName ? (globalLeaves.get(defFile)?.has(defaultLocalName) ?? false) : false;

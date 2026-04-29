@@ -146,6 +146,7 @@ function isImportedLeafBinding(
     globalLeafKeys,
     toRealPath(defFile),
     importInfo.exportedName,
+    importInfo.isDefault,
     cachedRead,
   );
 }
@@ -154,10 +155,14 @@ function importedLeafKeyExists(
   globalLeafKeys: Set<string>,
   defFile: string,
   exportedName: string,
+  allowDefaultFallback: boolean,
   cachedRead: (path: string) => string,
 ): boolean {
   if (globalLeafKeys.has(`${defFile}:${exportedName}`)) {
     return true;
+  }
+  if (!allowDefaultFallback) {
+    return false;
   }
   const defaultName = findDefaultExportedLocalName(cachedRead(defFile));
   return defaultName ? globalLeafKeys.has(`${defFile}:${defaultName}`) : false;
