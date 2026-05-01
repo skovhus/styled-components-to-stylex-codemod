@@ -1927,7 +1927,7 @@ function renamePropsInWhenString(when: string, renames: Map<string, string>): st
   const sorted = [...renames.entries()].sort((a, b) => b[0].length - a[0].length);
   for (const [from, to] of sorted) {
     const escaped = escapeRegex(from);
-    result = result.replace(new RegExp(`(?<![\\w$])${escaped}(?!\\w)`, "g"), to);
+    result = result.replace(new RegExp(`(?<![\\w$])${escaped}(?=(?:True|False)?(?!\\w))`, "g"), to);
   }
   return result;
 }
@@ -1995,6 +1995,10 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       if (cv.kind === "3branch" || cv.kind === "4branch") {
         cv.outerProp = renames.get(cv.outerProp) ?? cv.outerProp;
         cv.innerProp = renames.get(cv.innerProp) ?? cv.innerProp;
+        if (cv.kind === "3branch") {
+          cv.innerTruthyWhen = renamePropsInWhenString(cv.innerTruthyWhen, renames);
+          cv.innerFalsyWhen = renamePropsInWhenString(cv.innerFalsyWhen, renames);
+        }
       }
     }
   }

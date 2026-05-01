@@ -41,6 +41,7 @@ import {
   mergeOrderedEntries,
   type OrderedStyleEntry,
 } from "./style-expr-builders.js";
+import { appendCompoundVariantStyleArgs, collectCompoundVariantKeys } from "./compound-variants.js";
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -434,6 +435,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       hasSourceOrder,
       destructureProps,
       booleanProps,
+      compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
       enableComplementaryMerging: true,
       onNewDestructureProp: (prop) => styleOnlyConditionProps.add(prop),
     });
@@ -448,6 +450,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         namespaceBooleanProps,
         orderedEntries: hasSourceOrder ? orderedEntries : undefined,
       });
+    }
+
+    if (d.compoundVariants) {
+      const prevLengthCompound = destructureProps.length;
+      appendCompoundVariantStyleArgs({
+        compoundVariants: d.compoundVariants,
+        styleArgs,
+        destructureProps,
+        j,
+        stylesIdentifier,
+      });
+      for (let i = prevLengthCompound; i < destructureProps.length; i++) {
+        styleOnlyConditionProps.add(destructureProps[i]!);
+      }
     }
 
     // Handle theme boolean conditionals (e.g., theme.isDark ? styles.boxDark : styles.boxLight)
@@ -851,6 +867,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         staticClassNameExpr,
         isIntrinsicElement: false,
         wrappedAcceptsSxProp: wrappedAcceptsSx,
+        keepStylePropSeparate: shouldKeepStylePropSeparate(renderedComponent),
       });
 
       const stmts: StatementKind[] = [declStmt];
@@ -1086,4 +1103,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   }
 
   return { emitted, needsReactTypeImport, needsUseThemeImport };
+}
+
+function shouldKeepStylePropSeparate(componentName: string): boolean {
+  return componentName.startsWith("motion.") || componentName.startsWith("animated.");
 }

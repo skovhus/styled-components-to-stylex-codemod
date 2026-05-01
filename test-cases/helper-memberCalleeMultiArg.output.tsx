@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
-import { ColorConverter } from "./lib/helpers";
+import { ColorConverter, color } from "./lib/helpers";
 
 function Toggle(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
@@ -32,10 +32,63 @@ function Box(props: BoxProps) {
   );
 }
 
+function TintedLabel(props: React.PropsWithChildren<{}>) {
+  const theme = useTheme();
+
+  return (
+    <span
+      sx={styles.tintedLabel(
+        ColorConverter.cssWithAlpha(
+          color("bgBase")({
+            ...props,
+            theme,
+          }),
+          0.8,
+        ),
+      )}
+    >
+      {props.children}
+    </span>
+  );
+}
+
+type TintedPanelProps = React.PropsWithChildren<{
+  faded: boolean;
+}>;
+
+function TintedPanel(props: TintedPanelProps) {
+  const { children, faded } = props;
+  const theme = useTheme();
+
+  return (
+    <div
+      sx={styles.tintedPanel(
+        props.faded
+          ? ColorConverter.cssWithAlpha(
+              color("bgBase")({
+                ...props,
+                theme,
+              }),
+              0.8,
+            )
+          : color("bgBase")({
+              ...props,
+              theme,
+            }),
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
     <Toggle>Toggle</Toggle>
     <Box m={8}>Box with margin</Box>
+    <TintedLabel>Label with nested color helper</TintedLabel>
+    <TintedPanel faded>Faded panel</TintedPanel>
+    <TintedPanel faded={false}>Solid panel</TintedPanel>
   </div>
 );
 
@@ -50,5 +103,14 @@ const styles = stylex.create({
   }),
   boxMargin: (margin: number) => ({
     margin: `${margin}px`,
+  }),
+  tintedLabel: (backgroundColor: string) => ({
+    paddingBlock: 2,
+    paddingInline: 6,
+    backgroundColor,
+  }),
+  tintedPanel: (backgroundColor: string) => ({
+    padding: 4,
+    backgroundColor,
   }),
 });

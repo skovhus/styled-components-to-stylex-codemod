@@ -90,6 +90,8 @@ export function emitStyleMerging(args: {
   /** Set to true when the rendered (non-intrinsic) component already accepts a
    * StyleX `sx` prop. Enables the `sx={...}` fast path for component wrappers. */
   wrappedAcceptsSxProp?: boolean;
+  /** Keep the external style prop as a JSX `style={style}` attr instead of passing it to the merger. */
+  keepStylePropSeparate?: boolean;
 }): StyleMergingResult {
   const {
     j,
@@ -104,6 +106,7 @@ export function emitStyleMerging(args: {
     staticClassNameExpr,
     isIntrinsicElement = true,
     wrappedAcceptsSxProp = false,
+    keepStylePropSeparate = false,
   } = args;
 
   const {
@@ -164,6 +167,26 @@ export function emitStyleMerging(args: {
       styleId,
       allowClassNameProp,
       allowStyleProp,
+      inlineStyleProps,
+      staticClassNameExpr,
+      emitTypes,
+    });
+  }
+
+  if (
+    keepStylePropSeparate &&
+    allowStyleProp &&
+    !wrappedAcceptsSxProp &&
+    inlineStyleProps.length === 0
+  ) {
+    return emitVerbosePattern({
+      j,
+      styleArgs,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      allowSxProp,
       inlineStyleProps,
       staticClassNameExpr,
       emitTypes,

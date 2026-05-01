@@ -7,6 +7,7 @@ import {
   type ASTNodeRecord,
   cloneAstNode,
   getArrowFnParamBindings,
+  getArrowFnSingleParamName,
   getFunctionBodyExpr,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
@@ -226,6 +227,87 @@ export function hasThemeAccessInArrowFn(expr: any): boolean {
   );
 }
 
+export function hasFunctionParamReferenceInArrowFn(expr: any): boolean {
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return false;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return false;
+  }
+  const bodyExpr = getFunctionBodyExpr(expr);
+  if (!bodyExpr) {
+    return false;
+  }
+  return findInAst(bodyExpr, (node) => node.type === "Identifier" && node.name === paramName);
+}
+
+export function rewritePropsReferencesToPropsWithTheme(
+  j: JSCodeshift,
+  node: ExpressionKind,
+): ExpressionKind {
+  return mapAst(cloneAstNode(node), (rec, recurse) => {
+    if (
+      isMemberExpression(rec) &&
+      (rec.object as ASTNodeRecord | undefined)?.type === "Identifier" &&
+      (rec.object as { name?: string }).name === "props"
+    ) {
+      if (rec.computed) {
+        rec.property = recurse(rec.property) as ASTNodeRecord;
+      }
+      return rec;
+    }
+    if (rec.type === "Identifier" && rec.name === "props") {
+      return makePropsWithThemeObject(j);
+    }
+    return recurseReferencePositionsOnly(rec, recurse);
+  }) as ExpressionKind;
+}
+
+/**
+ * Styled-components invokes functions returned from interpolation branches with
+ * the execution props. Preserve that behavior for helper families that are also
+ * used in curried form in the same runtime expression.
+ */
+export function invokeKnownCurriedHelperBranchesWithPropsTheme(
+  j: JSCodeshift,
+  node: ExpressionKind,
+): ExpressionKind {
+  const curriedRoots = collectCurriedCallRoots(node);
+  if (curriedRoots.size === 0) {
+    return node;
+  }
+
+  const invokeIfCurriedHelper = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") {
+      return value;
+    }
+    const call = value as ASTNodeRecord;
+    if (
+      call.type !== "CallExpression" ||
+      (call.callee as ASTNodeRecord | undefined)?.type === "CallExpression"
+    ) {
+      return value;
+    }
+    const root = getCallRootName(call);
+    return root && curriedRoots.has(root)
+      ? j.callExpression(call as Parameters<typeof j.callExpression>[0], [
+          makePropsWithThemeObject(j),
+        ])
+      : value;
+  };
+
+  return mapAst(cloneAstNode(node), (rec, recurse) => {
+    if (rec.type === "ConditionalExpression") {
+      rec.test = recurse(rec.test);
+      rec.consequent = invokeIfCurriedHelper(recurse(rec.consequent)) as ASTNodeRecord;
+      rec.alternate = invokeIfCurriedHelper(recurse(rec.alternate)) as ASTNodeRecord;
+      return rec;
+    }
+    return recurseReferencePositionsOnly(rec, recurse);
+  }) as ExpressionKind;
+}
+
 export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKind | null {
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return null;
@@ -379,4 +461,39 @@ function recurseReferencePositionsOnly(
     return node;
   }
   return undefined; // default traversal for all other nodes
+}
+
+function makePropsWithThemeObject(j: JSCodeshift) {
+  const themeProperty = j.property("init", j.identifier("theme"), j.identifier("theme"));
+  themeProperty.shorthand = true;
+  return j.objectExpression([j.spreadElement(j.identifier("props")), themeProperty]);
+}
+
+function collectCurriedCallRoots(node: unknown): Set<string> {
+  const roots = new Set<string>();
+  walkAst(node, (rec) => {
+    if (rec.type !== "CallExpression") {
+      return;
+    }
+    const callee = rec.callee as ASTNodeRecord | undefined;
+    if (callee?.type !== "CallExpression") {
+      return;
+    }
+    const root = getCallRootName(callee);
+    if (root) {
+      roots.add(root);
+    }
+  });
+  return roots;
+}
+
+function getCallRootName(call: ASTNodeRecord): string | null {
+  let callee = call.callee as ASTNodeRecord | undefined;
+  while (callee?.type === "CallExpression") {
+    callee = callee.callee as ASTNodeRecord | undefined;
+  }
+  while (callee && isMemberExpression(callee)) {
+    callee = callee.object as ASTNodeRecord | undefined;
+  }
+  return callee?.type === "Identifier" && typeof callee.name === "string" ? callee.name : null;
 }

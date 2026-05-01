@@ -45,9 +45,12 @@ import {
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
+  hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
+  invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
+  rewritePropsReferencesToPropsWithTheme,
   rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
@@ -263,9 +266,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const hasThemeAccess = hasThemeAccessInArrowFn(fnExpr);
-    const baseRuntimeExpr = hasThemeAccess
-      ? rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind)
-      : (inlinedExpr as ExpressionKind);
+    const usesFunctionParam = hasFunctionParamReferenceInArrowFn(fnExpr);
+    let baseRuntimeExpr = inlinedExpr as ExpressionKind;
+    if (hasThemeAccess) {
+      baseRuntimeExpr = rewritePropsThemeToThemeVar(baseRuntimeExpr);
+    }
+    if (usesFunctionParam) {
+      baseRuntimeExpr = rewritePropsReferencesToPropsWithTheme(j, baseRuntimeExpr);
+      baseRuntimeExpr = invokeKnownCurriedHelperBranchesWithPropsTheme(j, baseRuntimeExpr);
+    }
 
     // P1 fix: Wrap with static prefix/suffix and !important (same as static branch)
     const { prefix, suffix } = extractStaticPartsForDecl(d);
@@ -275,7 +284,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         ? buildTemplateWithStaticParts(j, baseRuntimeExpr, prefix, effectiveSuffix)
         : baseRuntimeExpr;
 
-    if (hasThemeAccess) {
+    if (hasThemeAccess || usesFunctionParam) {
       markDeclNeedsUseThemeHook(decl);
     }
 

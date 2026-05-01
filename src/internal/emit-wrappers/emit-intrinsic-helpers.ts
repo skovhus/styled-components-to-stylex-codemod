@@ -8,29 +8,10 @@
 import type { ASTNode, Collection, Identifier, JSCodeshift, Property } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./types.js";
+import { appendCompoundVariantStyleArgs } from "./compound-variants.js";
 import { SX_PROP_TYPE_TEXT, type WrapperEmitter } from "./wrapper-emitter.js";
 
-/**
- * Collects variant "when" keys consumed by compound variants into a Set.
- *
- * When `syntheticOnly` is true, only returns synthetic when-keys (e.g.
- * "checkedTrue", "checkedFalse") and excludes real prop names. Use this
- * for type generation where real prop names must be preserved. The default
- * (false) returns all when-keys including real prop names — use this for
- * style emission where compound variant entries must be skipped.
- */
-export function collectCompoundVariantKeys(
-  compoundVariants: StyledDecl["compoundVariants"],
-  opts?: { syntheticOnly?: boolean },
-): Set<string> {
-  const keys = new Set<string>();
-  for (const cv of compoundVariants ?? []) {
-    for (const k of getCompoundVariantWhenKeys(cv, opts?.syntheticOnly)) {
-      keys.add(k);
-    }
-  }
-  return keys;
-}
+export { collectCompoundVariantKeys } from "./compound-variants.js";
 
 type EmitIntrinsicHelpers = {
   hasForwardedAsUsage: (d: StyledDecl) => boolean;
@@ -249,43 +230,13 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     styleArgs: ExpressionKind[],
     destructureProps?: string[],
   ): void => {
-    for (const cv of compoundVariants) {
-      // Add props to destructure list
-      if (destructureProps) {
-        if (!destructureProps.includes(cv.outerProp)) {
-          destructureProps.push(cv.outerProp);
-        }
-        if (!destructureProps.includes(cv.innerProp)) {
-          destructureProps.push(cv.innerProp);
-        }
-      }
-
-      const outerPropId = j.identifier(cv.outerProp);
-      const innerPropId = j.identifier(cv.innerProp);
-      const stylesId = j.identifier(stylesIdentifier);
-
-      if (cv.kind === "4branch") {
-        // Build: outer ? (inner ? styles.OTIT : styles.OTIF) : (inner ? styles.OFIT : styles.OFIF)
-        const outerTrue = j.conditionalExpression(
-          innerPropId,
-          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerTruthyKey)),
-          j.memberExpression(stylesId, j.identifier(cv.outerTruthyInnerFalsyKey)),
-        );
-        const outerFalse = j.conditionalExpression(
-          j.identifier(cv.innerProp),
-          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerTruthyKey)),
-          j.memberExpression(stylesId, j.identifier(cv.outerFalsyInnerFalsyKey)),
-        );
-        styleArgs.push(j.conditionalExpression(outerPropId, outerTrue, outerFalse));
-      } else {
-        // 3-branch: outerProp ? styles.outerKey : innerProp ? styles.innerTrueKey : styles.innerFalseKey
-        const outerStyle = j.memberExpression(stylesId, j.identifier(cv.outerTruthyKey));
-        const innerTrueStyle = j.memberExpression(stylesId, j.identifier(cv.innerTruthyKey));
-        const innerFalseStyle = j.memberExpression(stylesId, j.identifier(cv.innerFalsyKey));
-        const innerTernary = j.conditionalExpression(innerPropId, innerTrueStyle, innerFalseStyle);
-        styleArgs.push(j.conditionalExpression(outerPropId, outerStyle, innerTernary));
-      }
-    }
+    appendCompoundVariantStyleArgs({
+      compoundVariants,
+      styleArgs,
+      destructureProps,
+      j,
+      stylesIdentifier,
+    });
   };
 
   /**
@@ -524,26 +475,3 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
 }
 
 // --- Non-exported helpers ---
-
-function getCompoundVariantWhenKeys(
-  cv: NonNullable<StyledDecl["compoundVariants"]>[number],
-  syntheticOnly?: boolean,
-): string[] {
-  if (cv.kind === "4branch") {
-    // All 4-branch when-keys are synthetic (e.g. "outer_inner", "!outer_inner")
-    return [
-      `${cv.outerProp}_${cv.innerProp}`,
-      `${cv.outerProp}_!${cv.innerProp}`,
-      `!${cv.outerProp}_${cv.innerProp}`,
-      `!${cv.outerProp}_!${cv.innerProp}`,
-    ];
-  }
-  // For 3-branch, outerProp is a real prop name (e.g. "disabled"), while
-  // the inner when-keys are synthetic.  Use the stored when-keys which
-  // may be suffixed (e.g. "checkedTrue") to avoid collisions with simple
-  // boolean variant keys.
-  if (syntheticOnly) {
-    return [cv.innerTruthyWhen, cv.innerFalsyWhen];
-  }
-  return [cv.outerProp, cv.innerTruthyWhen, cv.innerFalsyWhen];
-}

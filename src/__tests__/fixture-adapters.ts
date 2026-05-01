@@ -462,12 +462,11 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
-    // Handle ColorConverter.cssWithAlpha(theme.color.*, alpha) helper
+    // Handle ColorConverter.cssWithAlpha(...) helper
     // Keep this as a runtime helper call in the generated wrapper (no static fallback).
     if (
       ctx.calleeImportedName === "ColorConverter" &&
-      ctx.calleeMemberPath?.[0] === "cssWithAlpha" &&
-      themeColorKey
+      ctx.calleeMemberPath?.[0] === "cssWithAlpha"
     ) {
       return {
         preserveRuntimeCall: true,
