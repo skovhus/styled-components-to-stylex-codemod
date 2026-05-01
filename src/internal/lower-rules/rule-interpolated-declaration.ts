@@ -47,6 +47,7 @@ import {
   collectPropsFromArrowFn,
   hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
+  hasThemeReferenceInExpression,
   hasUnsupportedConditionalTest,
   invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
@@ -275,6 +276,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       baseRuntimeExpr = rewritePropsReferencesToPropsWithTheme(j, baseRuntimeExpr);
       baseRuntimeExpr = invokeKnownCurriedHelperBranchesWithPropsTheme(j, baseRuntimeExpr);
     }
+    const runtimeExprNeedsTheme = hasThemeReferenceInExpression(baseRuntimeExpr);
 
     // P1 fix: Wrap with static prefix/suffix and !important (same as static branch)
     const { prefix, suffix } = extractStaticPartsForDecl(d);
@@ -284,7 +286,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         ? buildTemplateWithStaticParts(j, baseRuntimeExpr, prefix, effectiveSuffix)
         : baseRuntimeExpr;
 
-    if (hasThemeAccess || usesFunctionParam) {
+    if (runtimeExprNeedsTheme) {
       markDeclNeedsUseThemeHook(decl);
     }
 

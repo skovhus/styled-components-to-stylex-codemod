@@ -242,6 +242,10 @@ export function hasFunctionParamReferenceInArrowFn(expr: any): boolean {
   return findInAst(bodyExpr, (node) => node.type === "Identifier" && node.name === paramName);
 }
 
+export function hasThemeReferenceInExpression(node: unknown): boolean {
+  return hasIdentifierReference(node, "theme");
+}
+
 export function rewritePropsReferencesToPropsWithTheme(
   j: JSCodeshift,
   node: ExpressionKind,
@@ -266,15 +270,15 @@ export function rewritePropsReferencesToPropsWithTheme(
 
 /**
  * Styled-components invokes functions returned from interpolation branches with
- * the execution props. Preserve that behavior for helper families that are also
- * used in curried form in the same runtime expression.
+ * the execution props. Preserve that behavior for branch calls that exactly
+ * match another call used in curried form in the same runtime expression.
  */
 export function invokeKnownCurriedHelperBranchesWithPropsTheme(
   j: JSCodeshift,
   node: ExpressionKind,
 ): ExpressionKind {
-  const curriedRoots = collectCurriedCallRoots(node);
-  if (curriedRoots.size === 0) {
+  const curriedCallKeys = collectCurriedCallKeys(node);
+  if (curriedCallKeys.size === 0) {
     return node;
   }
 
@@ -289,8 +293,8 @@ export function invokeKnownCurriedHelperBranchesWithPropsTheme(
     ) {
       return value;
     }
-    const root = getCallRootName(call);
-    return root && curriedRoots.has(root)
+    const callKey = getComparableAstKey(call);
+    return callKey && curriedCallKeys.has(callKey)
       ? j.callExpression(call as Parameters<typeof j.callExpression>[0], [
           makePropsWithThemeObject(j),
         ])
@@ -469,8 +473,8 @@ function makePropsWithThemeObject(j: JSCodeshift) {
   return j.objectExpression([j.spreadElement(j.identifier("props")), themeProperty]);
 }
 
-function collectCurriedCallRoots(node: unknown): Set<string> {
-  const roots = new Set<string>();
+function collectCurriedCallKeys(node: unknown): Set<string> {
+  const keys = new Set<string>();
   walkAst(node, (rec) => {
     if (rec.type !== "CallExpression") {
       return;
@@ -479,21 +483,88 @@ function collectCurriedCallRoots(node: unknown): Set<string> {
     if (callee?.type !== "CallExpression") {
       return;
     }
-    const root = getCallRootName(callee);
-    if (root) {
-      roots.add(root);
+    const key = getComparableAstKey(callee);
+    if (key) {
+      keys.add(key);
     }
   });
-  return roots;
+  return keys;
 }
 
-function getCallRootName(call: ASTNodeRecord): string | null {
-  let callee = call.callee as ASTNodeRecord | undefined;
-  while (callee?.type === "CallExpression") {
-    callee = callee.callee as ASTNodeRecord | undefined;
+function hasIdentifierReference(node: unknown, name: string): boolean {
+  let found = false;
+  const visit = (value: unknown): void => {
+    if (found || !value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+    const rec = value as ASTNodeRecord;
+    if (rec.type === "Identifier" && rec.name === name) {
+      found = true;
+      return;
+    }
+    if (isMemberExpression(rec)) {
+      visit(rec.object);
+      if (rec.computed) {
+        visit(rec.property);
+      }
+      return;
+    }
+    if (rec.type === "Property" || rec.type === "ObjectProperty") {
+      if (rec.computed) {
+        visit(rec.key);
+      }
+      visit(rec.value);
+      return;
+    }
+    for (const [key, child] of Object.entries(rec)) {
+      if (isAstMetadataKey(key)) {
+        continue;
+      }
+      visit(child);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+function getComparableAstKey(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
   }
-  while (callee && isMemberExpression(callee)) {
-    callee = callee.object as ASTNodeRecord | undefined;
+  return JSON.stringify(normalizeAstForComparison(node));
+}
+
+function normalizeAstForComparison(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
   }
-  return callee?.type === "Identifier" && typeof callee.name === "string" ? callee.name : null;
+  if (Array.isArray(value)) {
+    return value.map(normalizeAstForComparison);
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    if (isAstMetadataKey(key)) {
+      continue;
+    }
+    out[key] = normalizeAstForComparison((value as Record<string, unknown>)[key]);
+  }
+  return out;
+}
+
+function isAstMetadataKey(key: string): boolean {
+  return (
+    key === "comments" ||
+    key === "end" ||
+    key === "extra" ||
+    key === "leadingComments" ||
+    key === "loc" ||
+    key === "start" ||
+    key === "trailingComments"
+  );
 }

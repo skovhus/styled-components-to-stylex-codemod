@@ -1,6 +1,6 @@
 // Preserved runtime calls with member callee and multiple arguments
 import styled from "styled-components";
-import { ColorConverter, color } from "./lib/helpers";
+import { ColorConverter, color, mixedColor } from "./lib/helpers";
 
 const Toggle = styled.div`
   background-color: ${({ theme }) => ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)};
@@ -23,6 +23,20 @@ const TintedPanel = styled.div<{ $faded: boolean }>`
   padding: 4px;
 `;
 
+const PlainSwatch = styled.div<{ $tone: string }>`
+  background: ${(props) => ColorConverter.cssWithAlpha(props.$tone, 0.4)};
+  padding: 4px;
+`;
+
+const MixedModePanel = styled.div<{ $faded: boolean }>`
+  background: ${(props) =>
+    ColorConverter.cssWithAlpha(
+      props.$faded ? mixedColor("bgBase", "theme")(props) : mixedColor("bgSub"),
+      0.7,
+    )};
+  padding: 4px;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
     <Toggle>Toggle</Toggle>
@@ -30,5 +44,8 @@ export const App = () => (
     <TintedLabel>Label with nested color helper</TintedLabel>
     <TintedPanel $faded>Faded panel</TintedPanel>
     <TintedPanel $faded={false}>Solid panel</TintedPanel>
+    <PlainSwatch $tone="#336699">Plain swatch</PlainSwatch>
+    <MixedModePanel $faded>Faded mixed panel</MixedModePanel>
+    <MixedModePanel $faded={false}>Direct mixed panel</MixedModePanel>
   </div>
 );
