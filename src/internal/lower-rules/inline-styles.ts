@@ -7,6 +7,7 @@ import {
   type ASTNodeRecord,
   cloneAstNode,
   getArrowFnParamBindings,
+  getArrowFnSingleParamName,
   getFunctionBodyExpr,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
@@ -226,6 +227,91 @@ export function hasThemeAccessInArrowFn(expr: any): boolean {
   );
 }
 
+export function hasFunctionParamReferenceInArrowFn(expr: any): boolean {
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return false;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return false;
+  }
+  const bodyExpr = getFunctionBodyExpr(expr);
+  if (!bodyExpr) {
+    return false;
+  }
+  return findInAst(bodyExpr, (node) => node.type === "Identifier" && node.name === paramName);
+}
+
+export function hasThemeReferenceInExpression(node: unknown): boolean {
+  return hasIdentifierReference(node, "theme");
+}
+
+export function rewritePropsReferencesToPropsWithTheme(
+  j: JSCodeshift,
+  node: ExpressionKind,
+): ExpressionKind {
+  return mapAst(cloneAstNode(node), (rec, recurse) => {
+    if (
+      isMemberExpression(rec) &&
+      (rec.object as ASTNodeRecord | undefined)?.type === "Identifier" &&
+      (rec.object as { name?: string }).name === "props"
+    ) {
+      if (rec.computed) {
+        rec.property = recurse(rec.property) as ASTNodeRecord;
+      }
+      return rec;
+    }
+    if (rec.type === "Identifier" && rec.name === "props") {
+      return makePropsWithThemeObject(j);
+    }
+    return recurseReferencePositionsOnly(rec, recurse);
+  }) as ExpressionKind;
+}
+
+/**
+ * Styled-components invokes functions returned from interpolation branches with
+ * the execution props. Preserve that behavior for branch calls that exactly
+ * match another call used in curried form in the same runtime expression.
+ */
+export function invokeKnownCurriedHelperBranchesWithPropsTheme(
+  j: JSCodeshift,
+  node: ExpressionKind,
+): ExpressionKind {
+  const curriedCallKeys = collectCurriedCallKeys(node);
+  if (curriedCallKeys.size === 0) {
+    return node;
+  }
+
+  const invokeIfCurriedHelper = (value: unknown): unknown => {
+    if (!value || typeof value !== "object") {
+      return value;
+    }
+    const call = value as ASTNodeRecord;
+    if (
+      call.type !== "CallExpression" ||
+      (call.callee as ASTNodeRecord | undefined)?.type === "CallExpression"
+    ) {
+      return value;
+    }
+    const callKey = getComparableAstKey(call);
+    return callKey && curriedCallKeys.has(callKey)
+      ? j.callExpression(call as Parameters<typeof j.callExpression>[0], [
+          makePropsWithThemeObject(j),
+        ])
+      : value;
+  };
+
+  return mapAst(cloneAstNode(node), (rec, recurse) => {
+    if (rec.type === "ConditionalExpression") {
+      rec.test = recurse(rec.test);
+      rec.consequent = invokeIfCurriedHelper(recurse(rec.consequent)) as ASTNodeRecord;
+      rec.alternate = invokeIfCurriedHelper(recurse(rec.alternate)) as ASTNodeRecord;
+      return rec;
+    }
+    return recurseReferencePositionsOnly(rec, recurse);
+  }) as ExpressionKind;
+}
+
 export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKind | null {
   if (!expr || expr.type !== "ArrowFunctionExpression") {
     return null;
@@ -379,4 +465,106 @@ function recurseReferencePositionsOnly(
     return node;
   }
   return undefined; // default traversal for all other nodes
+}
+
+function makePropsWithThemeObject(j: JSCodeshift) {
+  const themeProperty = j.property("init", j.identifier("theme"), j.identifier("theme"));
+  themeProperty.shorthand = true;
+  return j.objectExpression([j.spreadElement(j.identifier("props")), themeProperty]);
+}
+
+function collectCurriedCallKeys(node: unknown): Set<string> {
+  const keys = new Set<string>();
+  walkAst(node, (rec) => {
+    if (rec.type !== "CallExpression") {
+      return;
+    }
+    const callee = rec.callee as ASTNodeRecord | undefined;
+    if (callee?.type !== "CallExpression") {
+      return;
+    }
+    const key = getComparableAstKey(callee);
+    if (key) {
+      keys.add(key);
+    }
+  });
+  return keys;
+}
+
+function hasIdentifierReference(node: unknown, name: string): boolean {
+  let found = false;
+  const visit = (value: unknown): void => {
+    if (found || !value || typeof value !== "object") {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item);
+      }
+      return;
+    }
+    const rec = value as ASTNodeRecord;
+    if (rec.type === "Identifier" && rec.name === name) {
+      found = true;
+      return;
+    }
+    if (isMemberExpression(rec)) {
+      visit(rec.object);
+      if (rec.computed) {
+        visit(rec.property);
+      }
+      return;
+    }
+    if (rec.type === "Property" || rec.type === "ObjectProperty") {
+      if (rec.computed) {
+        visit(rec.key);
+      }
+      visit(rec.value);
+      return;
+    }
+    for (const [key, child] of Object.entries(rec)) {
+      if (isAstMetadataKey(key)) {
+        continue;
+      }
+      visit(child);
+    }
+  };
+  visit(node);
+  return found;
+}
+
+function getComparableAstKey(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  return JSON.stringify(normalizeAstForComparison(node));
+}
+
+function normalizeAstForComparison(value: unknown): unknown {
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(normalizeAstForComparison);
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    if (isAstMetadataKey(key)) {
+      continue;
+    }
+    out[key] = normalizeAstForComparison((value as Record<string, unknown>)[key]);
+  }
+  return out;
+}
+
+function isAstMetadataKey(key: string): boolean {
+  return (
+    key === "comments" ||
+    key === "end" ||
+    key === "extra" ||
+    key === "leadingComments" ||
+    key === "loc" ||
+    key === "start" ||
+    key === "trailingComments"
+  );
 }

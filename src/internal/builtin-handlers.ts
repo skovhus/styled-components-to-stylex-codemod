@@ -60,6 +60,7 @@ export function resolveDynamicNode(
     tryResolveThemeAccess(node, ctx) ??
     tryResolveCallExpression(node, ctx) ??
     tryResolveArrowFnHelperCallWithThemeArg(node, ctx) ??
+    tryResolveArrowFnPreservedRuntimeCall(node, ctx) ??
     tryResolveArrowFnCallWithConditionalArgs(node, ctx) ??
     tryResolveConditionalValue(node, ctx) ??
     tryResolveIndexedThemeWithPropFallback(node, ctx) ??
@@ -292,6 +293,45 @@ function tryResolveArrowFnHelperCallWithThemeArg(
   }
 
   return null;
+}
+
+function tryResolveArrowFnPreservedRuntimeCall(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const propsParamName = getArrowFnSingleParamName(expr) ?? undefined;
+  const resolved = resolveImportedHelperCall(
+    body,
+    ctx.resolveCallOptional ? { ...ctx, resolveCall: ctx.resolveCallOptional } : ctx,
+    propsParamName,
+    node.css.property,
+  );
+  if (resolved.kind !== "resolved") {
+    return null;
+  }
+
+  const result = resolved.result;
+  if (!("preserveRuntimeCall" in result) || !result.preserveRuntimeCall || "expr" in result) {
+    return null;
+  }
+
+  return buildResolvedHandlerResult(result, node.css.property, {
+    resolveCallContext: resolved.resolveCallContext,
+    resolveCallResult: resolved.resolveCallResult,
+  });
 }
 
 /**

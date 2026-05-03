@@ -19,6 +19,21 @@ export const color =
   (props: ThemedStyledProps): string =>
     props.theme.color[colorName];
 
+export function mixedColor(
+  colorName: ThemeColor,
+  mode: "theme",
+): (props: ThemedStyledProps) => string;
+export function mixedColor(colorName: ThemeColor): string;
+export function mixedColor(
+  colorName: ThemeColor,
+  mode?: "theme",
+): string | ((props: ThemedStyledProps) => string) {
+  if (mode === "theme") {
+    return (props: ThemedStyledProps) => props.theme.color[colorName];
+  }
+  return colorName === "bgSub" ? "#009900" : "#990000";
+}
+
 // CSS snippet helper - returns a CSS string for text truncation
 export const truncate = () => `
   white-space: nowrap;
