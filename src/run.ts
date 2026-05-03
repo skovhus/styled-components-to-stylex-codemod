@@ -114,13 +114,6 @@ export interface RunTransformOptions {
   transformMode?: TransformMode;
 
   /**
-   * Same as `transformMode: "leavesOnly"`. Do not combine with `transformMode: "all"`.
-   *
-   * @default false
-   */
-  leavesOnly?: boolean;
-
-  /**
    * When true, allow the codemod to leave individual styled declarations as-is when
    * they hit an unsupported pattern while transforming the rest of the file. This
    * enables incremental migration: a file with one unconvertible component still
@@ -260,26 +253,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     );
   }
 
-  const leavesOnlyFlagRaw = (options as { leavesOnly?: unknown }).leavesOnly;
-  if (leavesOnlyFlagRaw !== undefined && typeof leavesOnlyFlagRaw !== "boolean") {
-    throw new Error(
-      [
-        "runTransform(options): `leavesOnly` must be a boolean when provided.",
-        `Received: leavesOnly=${describeValue(leavesOnlyFlagRaw)}`,
-      ].join("\n"),
-    );
-  }
-
-  if (leavesOnlyFlagRaw === true && transformModeRaw === "all") {
-    throw new Error(
-      [
-        'runTransform(options): `leavesOnly: true` conflicts with `transformMode: "all"`.',
-        'Omit `transformMode` or set `transformMode: "leavesOnly"`.',
-      ].join("\n"),
-    );
-  }
-
-  const leavesOnly = options.transformMode === "leavesOnly" || leavesOnlyFlagRaw === true;
+  const leavesOnly = options.transformMode === "leavesOnly";
 
   const {
     files,
