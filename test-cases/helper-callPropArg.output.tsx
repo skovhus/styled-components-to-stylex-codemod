@@ -21,11 +21,18 @@ export function Box(props: BoxProps) {
   );
 }
 
-export const App = () => <Box shadow="rgba(0,0,0,0.2)" />;
+export const App = () => <Box shadow="rgba(0,0,0,0.2)">Shadow</Box>;
 
 const styles = stylex.create({
   box: (boxShadow: string) => ({
+    alignItems: "center",
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#fed7aa",
+    display: "flex",
     height: 50,
+    justifyContent: "center",
     width: 50,
     boxShadow: shadow(boxShadow),
   }),
