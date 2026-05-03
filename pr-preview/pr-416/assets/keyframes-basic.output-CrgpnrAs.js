@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e}from"./index-BZzx-Jen.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`x1rg5ohu x1aerksh x1c74tu6 x1esw782 xa4qsjk xorstpt x18mflkt xnxx81d xvewgow`,children:`Rotate keyframe`});export{n as App};

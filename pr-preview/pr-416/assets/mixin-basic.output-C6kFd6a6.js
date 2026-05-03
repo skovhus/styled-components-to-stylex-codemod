@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e}from"./index-BZzx-Jen.js";var t=e(),n=()=>(0,t.jsxs)(`div`,{style:{minWidth:800,display:`grid`,gap:8},children:[(0,t.jsx)(`div`,{className:`x1e2nbdu x137v6ai`,children:`Red with mixin`}),(0,t.jsx)(`div`,{className:`x7z7khe x1e2nbdu x1t391ir`,children:`Multiple mixins`})]});export{n as App};

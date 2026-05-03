@@ -1,7 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e,s as t}from"./index-BZzx-Jen.js";var n=e(),r=t.nav`
-  color: rebeccapurple;
-
-  & a.active {
-    color: tomato;
-  }
-`,i=()=>(0,n.jsxs)(`div`,{children:[(0,n.jsx)(`div`,{className:`xc7ga6q xd10qfp`,children:`Converted`}),(0,n.jsx)(r,{children:(0,n.jsx)(`a`,{className:`active`,href:`#`,children:`Preserved`})})]});export{i as App};
