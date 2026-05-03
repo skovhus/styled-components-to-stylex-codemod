@@ -15,7 +15,9 @@ const sweep = keyframes`
 const Box = styled.div`
   display: inline-block;
   animation: ${sweep} ${DURATION_SECONDS}s linear infinite;
+  background-color: #eef2ff;
+  border: 1px solid #818cf8;
   padding: 8px 12px;
 `;
 
-export const App = () => <Box>Hi</Box>;
+export const App = () => <Box>Animated sweep</Box>;

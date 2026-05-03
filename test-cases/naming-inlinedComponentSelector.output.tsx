@@ -5,6 +5,7 @@ import * as stylex from "@stylexjs/stylex";
 export function App() {
   return (
     <div sx={[styles.container, stylex.defaultMarker()]}>
+      <div>Hover the SVG card to reveal the gradient path.</div>
       <svg viewBox="0 0 100 100">
         <path
           d="M10 80 Q 52.5 10, 95 80"

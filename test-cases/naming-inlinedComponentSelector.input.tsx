@@ -32,6 +32,7 @@ const Container = styled.div`
 export function App() {
   return (
     <Container>
+      <div>Hover the SVG card to reveal the gradient path.</div>
       <svg viewBox="0 0 100 100">
         <GradientPath d="M10 80 Q 52.5 10, 95 80" />
         <FilteredGroup>

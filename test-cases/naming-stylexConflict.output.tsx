@@ -14,7 +14,12 @@ function ChevronHandle() {
   );
 }
 
-export const App = () => <ChevronHandle />;
+export const App = () => (
+  <div style={{ color: "#1d4ed8", display: "flex", alignItems: "center", gap: 8, padding: 12 }}>
+    <ChevronHandle />
+    <span>Animated path stroke</span>
+  </div>
+);
 
 const stylexStyles = stylex.create({
   path: {

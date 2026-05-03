@@ -27,7 +27,7 @@ const MultiMixinContainer = styled.div`
 `;
 
 export const App = () => (
-  <div>
+  <div style={{ minWidth: 800, display: "grid", gap: 8 }}>
     <ElementWithMixin>Red with mixin</ElementWithMixin>
     <MultiMixinContainer>Multiple mixins</MultiMixinContainer>
   </div>

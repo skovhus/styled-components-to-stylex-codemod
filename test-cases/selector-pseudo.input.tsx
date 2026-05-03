@@ -3,6 +3,8 @@ import styled from "styled-components";
 const Thing = styled.div`
   border-right: 1px solid hotpink;
   color: blue;
+  display: inline-block;
+  padding: 12px;
 
   &:hover {
     color: red;
@@ -17,4 +19,4 @@ const Thing = styled.div`
   }
 `;
 
-export const App = () => <Thing>Hover me!</Thing>;
+export const App = () => <Thing tabIndex={0}>Hover or focus me!</Thing>;

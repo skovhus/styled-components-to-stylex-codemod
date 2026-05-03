@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div>
+  <div style={{ minWidth: 800, display: "grid", gap: 8 }}>
     <div sx={[styles.elementWithMixin, styles.hiddenOnMobile]}>Red with mixin</div>
     <div sx={[styles.multiMixinContainer, styles.colorMixin, styles.backgroundMixin]}>
       Multiple mixins

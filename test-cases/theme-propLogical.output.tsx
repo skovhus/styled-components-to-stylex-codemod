@@ -19,10 +19,10 @@ function Box(props: BoxProps) {
 }
 
 export const App = () => (
-  <>
-    <Box enabled={true} />
-    <Box enabled={false} />
-  </>
+  <div style={{ display: "flex", gap: 12 }}>
+    <Box enabled={true}>Enabled</Box>
+    <Box enabled={false}>Disabled</Box>
+  </div>
 );
 
 const styles = stylex.create({

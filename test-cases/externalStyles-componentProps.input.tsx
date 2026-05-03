@@ -7,6 +7,8 @@ function ComponentLoader(props: { content: string; ref?: React.Ref<HTMLDivElemen
 
 const Component = styled(ComponentLoader)`
   padding: 24px 0 48px;
+  background-color: #eef2ff;
+  min-width: 160px;
 `;
 
-export const App = () => <Component content="hello" />;
+export const App = () => <Component content="external component padding" />;

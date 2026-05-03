@@ -19,4 +19,9 @@ export const Container = styled.div<{ size: number }>`
   }}
 `;
 
-export const App = () => <Container size={16}>Hello World</Container>;
+export const App = () => (
+  <div style={{ display: "grid", gap: 8, padding: 12 }}>
+    <Container size={16}>16px branch text</Container>
+    <Container size={28}>28px branch text</Container>
+  </div>
+);

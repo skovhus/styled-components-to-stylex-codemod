@@ -5,6 +5,8 @@ import { zIndex } from "./lib/helpers";
 const PEEK_MAX_WIDTH = 380;
 
 const Container = styled.div`
+  background-color: #eef2ff;
+  border: 1px solid #4f46e5;
   border-radius: 8px;
   padding: 6px;
   max-width: ${PEEK_MAX_WIDTH}px;
@@ -13,5 +15,5 @@ const Container = styled.div`
 `;
 
 export function App() {
-  return <Container />;
+  return <Container>Fixed modal shell</Container>;
 }

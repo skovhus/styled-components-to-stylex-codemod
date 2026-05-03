@@ -13,7 +13,7 @@ const sweep = stylex.keyframes({
   },
 });
 
-export const App = () => <div sx={styles.box}>Hi</div>;
+export const App = () => <div sx={styles.box}>Animated sweep</div>;
 
 const styles = stylex.create({
   box: {
@@ -22,6 +22,10 @@ const styles = stylex.create({
     animationDuration: `${DURATION_SECONDS}s`,
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#818cf8",
     paddingBlock: 8,
     paddingInline: 12,
   },
