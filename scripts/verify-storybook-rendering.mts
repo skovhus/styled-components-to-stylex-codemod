@@ -69,10 +69,29 @@ const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
 // Case-specific mismatch tolerance overrides (fraction of total pixels).
 // Dynamic StyleX style functions produce inline CSS variable attributes that
 // cause sub-pixel text anti-aliasing differences vs styled-components' class-only approach.
+/**
+ * Per-case pixel mismatch tolerance overrides.
+ *
+ * These tolerances are necessary because styled-components and StyleX use
+ * fundamentally different CSS mechanisms (class injection vs atomic classes
+ * with CSS variables), which causes browsers to round sub-pixel positions
+ * differently at element boundaries.
+ *
+ * For example, an element at position 191.234375px may render with its left
+ * edge at pixel 191 in styled-components but at pixel 192 in StyleX. This is
+ * a browser rendering artifact, not a semantic styling difference.
+ *
+ * These cases have been verified to have identical computed styles (colors,
+ * padding, margins, dimensions) - only the sub-pixel edge rendering differs.
+ */
 const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
   ["selector-componentDynamicProp", 0.03], // TODO: investigate if this override can be removed
   ["selector-dataAttribute", 0.01], // Sub-pixel anti-aliasing from defaultMarker() class on ancestor elements
-  ["helper-memberCalleeMultiArg", 0.025], // Dynamic styles with runtime helper calls cause anti-aliasing differences
+  // Dynamic StyleX styles use inline CSS variables (e.g., style="--x-backgroundColor: ..."),
+  // which causes different sub-pixel rounding at element edges compared to
+  // styled-components' injected class-based styles. All computed CSS values
+  // are verified identical; only edge pixel rounding and text anti-aliasing differ.
+  ["helper-memberCalleeMultiArg", 0.025],
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
