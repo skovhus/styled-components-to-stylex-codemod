@@ -11,7 +11,7 @@ function Box(props: React.PropsWithChildren<{}>) {
 }
 
 export const App = () => (
-  <div style={{ backgroundColor: "#991b1b", padding: 16 }}>
+  <div style={{ backgroundColor: "red", opacity: 0.5 }}>
     <Box>Hello world</Box>
   </div>
 );

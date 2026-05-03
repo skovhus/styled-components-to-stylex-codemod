@@ -1,15 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const App = () => (
-  <div tabIndex={0} sx={styles.box}>
-    Hover, focus, or resize
-  </div>
-);
+export const App = () => <div sx={styles.box}>Hover or focus me, and resize!</div>;
 
 const styles = stylex.create({
   box: {
-    display: "inline-block",
-    padding: 16,
     color: {
       default: "blue",
       ":hover": "red",

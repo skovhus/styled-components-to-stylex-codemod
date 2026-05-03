@@ -9,8 +9,8 @@ const Box = styled.div<{ enabled: boolean }>`
 `;
 
 export const App = () => (
-  <div style={{ display: "flex", gap: 12 }}>
-    <Box enabled={true}>Enabled</Box>
-    <Box enabled={false}>Disabled</Box>
-  </div>
+  <>
+    <Box enabled={true} />
+    <Box enabled={false} />
+  </>
 );

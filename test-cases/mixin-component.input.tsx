@@ -36,7 +36,7 @@ const AnotherMixedElement = styled.div`
 `;
 
 export const App = () => (
-  <div style={{ display: "grid", gap: 8, minWidth: 800, padding: 8 }}>
+  <div>
     <HiddenOnMobile>Hidden on mobile (base)</HiddenOnMobile>
     <ElementWithMixin>Red with mixin</ElementWithMixin>
     <ElementWithMixinHover>Red default, blue hover mixin</ElementWithMixinHover>

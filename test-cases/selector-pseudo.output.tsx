@@ -1,10 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const App = () => (
-  <div tabIndex={0} sx={styles.thing}>
-    Hover or focus me!
-  </div>
-);
+export const App = () => <div sx={styles.thing}>Hover me!</div>;
 
 const styles = stylex.create({
   thing: {
@@ -15,8 +11,6 @@ const styles = stylex.create({
       default: "blue",
       ":hover": "red",
     },
-    display: "inline-block",
-    padding: 12,
     outline: {
       default: null,
       ":focus": "2px solid blue",

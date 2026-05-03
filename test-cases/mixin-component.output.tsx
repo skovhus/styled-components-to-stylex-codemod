@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div style={{ display: "grid", gap: 8, minWidth: 800, padding: 8 }}>
+  <div>
     <div sx={styles.hiddenOnMobileMixin}>Hidden on mobile (base)</div>
     <div sx={[styles.elementWithMixin, styles.hiddenOnMobileMixin]}>Red with mixin</div>
     <div sx={[styles.elementWithMixinHover, styles.colorMixin]}>Red default, blue hover mixin</div>

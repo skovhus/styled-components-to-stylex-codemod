@@ -20,9 +20,7 @@ const Container = styled.div`
 `;
 
 export const App = () => (
-  <div style={{ minWidth: 360 }}>
-    <Container>
-      <ResponsiveItem>Visible when container &gt; 300px</ResponsiveItem>
-    </Container>
-  </div>
+  <Container>
+    <ResponsiveItem>Visible when container &gt; 300px</ResponsiveItem>
+  </Container>
 );

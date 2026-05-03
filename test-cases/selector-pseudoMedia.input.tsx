@@ -2,8 +2,6 @@
 import styled from "styled-components";
 
 const Box = styled.div`
-  display: inline-block;
-  padding: 16px;
   color: blue;
   background-color: white;
 
@@ -23,4 +21,4 @@ const Box = styled.div`
   }
 `;
 
-export const App = () => <Box tabIndex={0}>Hover, focus, or resize</Box>;
+export const App = () => <Box>Hover or focus me, and resize!</Box>;

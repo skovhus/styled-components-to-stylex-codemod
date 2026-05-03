@@ -1,10 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div style={{ minWidth: 360 }}>
-    <div sx={styles.container}>
-      <div sx={styles.responsiveItem}>Visible when container &gt; 300px</div>
-    </div>
+  <div sx={styles.container}>
+    <div sx={styles.responsiveItem}>Visible when container &gt; 300px</div>
   </div>
 );
 

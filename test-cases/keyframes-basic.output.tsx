@@ -10,7 +10,7 @@ const rotate = stylex.keyframes({
   },
 });
 
-export const App = () => <div sx={styles.rotate}>Rotate keyframe</div>;
+export const App = () => <div sx={styles.rotate}>💅</div>;
 
 const styles = stylex.create({
   rotate: {
@@ -19,7 +19,6 @@ const styles = stylex.create({
     animationDuration: "2s",
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
-    animationPlayState: "paused",
     paddingBlock: "2rem",
     paddingInline: "1rem",
     fontSize: "1.2rem",

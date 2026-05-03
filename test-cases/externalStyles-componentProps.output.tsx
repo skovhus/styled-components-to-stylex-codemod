@@ -11,7 +11,7 @@ function Component(
   return <ComponentLoader {...props} {...stylex.props(styles.component)} />;
 }
 
-export const App = () => <Component content="external component padding" />;
+export const App = () => <Component content="hello" />;
 
 const styles = stylex.create({
   component: {
@@ -19,7 +19,5 @@ const styles = stylex.create({
     paddingRight: 0,
     paddingBottom: 48,
     paddingLeft: 0,
-    backgroundColor: "#eef2ff",
-    minWidth: 160,
   },
 });
