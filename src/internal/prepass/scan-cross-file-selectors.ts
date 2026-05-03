@@ -41,6 +41,11 @@ export interface CrossFileInfo {
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
   /** Files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
+  /**
+   * Leaves-only mode: `${realpathOfDefiningFile}:${bindingName}` for styled components
+   * classified as leaves (intrinsic base or transitive wrapper of another leaf in the run).
+   */
+  globalLeafKeys?: Set<string>;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
@@ -426,8 +431,44 @@ export function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, Imp
   return map;
 }
 
+/**
+ * Local identifiers that refer to `styled` from `"styled-components"` (default and/or
+ * `import { styled }` / `import { styled as sc }`).
+ */
+export function collectStyledLocalBindingNames(importNodes: AstNode[]): Set<string> {
+  const names = new Set<string>();
+  for (const node of importNodes) {
+    const sourceValue = (node.source as AstNode | undefined)?.value;
+    if (sourceValue !== "styled-components") {
+      continue;
+    }
+    const specifiers = node.specifiers as AstNode[] | undefined;
+    if (!specifiers) {
+      continue;
+    }
+    for (const spec of specifiers) {
+      if (spec.type === "ImportDefaultSpecifier") {
+        const name = getNodeName(spec.local as AstNode | undefined);
+        if (name) {
+          names.add(name);
+        }
+      } else if (spec.type === "ImportSpecifier") {
+        const importedName = getNodeName(spec.imported as AstNode | undefined);
+        if (importedName === "styled") {
+          const localName = getNodeName(spec.local as AstNode | undefined);
+          if (localName) {
+            names.add(localName);
+          }
+        }
+      }
+    }
+  }
+  return names;
+}
+
 /** Find the local name for the styled-components default import. */
 export function findStyledImportNameFromNodes(importNodes: AstNode[]): string | undefined {
+  let namedStyledLocal: string | undefined;
   for (const node of importNodes) {
     const sourceValue = (node.source as AstNode | undefined)?.value;
     if (sourceValue !== "styled-components") {
@@ -443,10 +484,18 @@ export function findStyledImportNameFromNodes(importNodes: AstNode[]): string | 
         if (name) {
           return name;
         }
+      } else if (spec.type === "ImportSpecifier") {
+        const importedName = getNodeName(spec.imported as AstNode | undefined);
+        if (importedName === "styled") {
+          const localName = getNodeName(spec.local as AstNode | undefined);
+          if (localName) {
+            namedStyledLocal = localName;
+          }
+        }
       }
     }
   }
-  return undefined;
+  return namedStyledLocal;
 }
 
 /**

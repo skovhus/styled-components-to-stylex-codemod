@@ -29,6 +29,7 @@ import { detectPartialCascadeConflictStep } from "./internal/transform-steps/det
 import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-string-mapping-fns.js";
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { resolveBaseComponentsStep } from "./internal/transform-steps/resolve-base-components.js";
+import { applyLeavesOnlyPolicyStep } from "./internal/transform-steps/apply-leaves-only-policy.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
 import { emitBridgeExportsStep } from "./internal/transform-steps/emit-bridge-exports.js";
@@ -143,9 +144,10 @@ export function transformWithWarnings(
     buildImportMapStep,
     extractCssHelpersStep,
     detectStringMappingFnsStep,
-    detectUnsupportedPatternsStep,
     collectStyledDeclsStep,
     resolveBaseComponentsStep,
+    applyLeavesOnlyPolicyStep,
+    detectUnsupportedPatternsStep,
     detectCascadeConflictStep,
     lowerRulesStep,
     detectPartialCascadeConflictStep,
@@ -186,6 +188,7 @@ interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
   styledDefFiles?: Map<string, Set<string>>;
+  globalLeafKeys?: Set<string>;
 }
 
 /**
@@ -215,11 +218,13 @@ function extractCrossFileInfoForFile(
   const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
+  const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&
     !bridgeComponentNames &&
-    !hasStyledDefFiles
+    !hasStyledDefFiles &&
+    !hasGlobalLeafKeys
   ) {
     return options;
   }
@@ -228,9 +233,14 @@ function extractCrossFileInfoForFile(
     selectorUsages: selectorUsages ?? [],
     bridgeComponentNames,
     styledDefFiles: prepass.styledDefFiles,
+    globalLeafKeys: prepass.globalLeafKeys,
   };
 
-  return { ...options, crossFileInfo };
+  return {
+    ...options,
+    crossFileInfo,
+    globalLeafKeys: options.globalLeafKeys ?? prepass.globalLeafKeys,
+  };
 }
 
 /**

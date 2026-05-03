@@ -169,6 +169,9 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
   }
 
   for (const decl of styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     if (decl.base.kind !== "component") {
       continue;
     }
@@ -1203,6 +1206,9 @@ function canInlineWithoutLocalCallsites(
  * Creates synthetic StyledDecl objects that flow through the existing pipeline.
  */
 function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]): void {
+  if (ctx.options.transformMode === "leavesOnly") {
+    return;
+  }
   const resolveBaseComponent = ctx.resolveBaseComponent;
   if (!resolveBaseComponent) {
     return;

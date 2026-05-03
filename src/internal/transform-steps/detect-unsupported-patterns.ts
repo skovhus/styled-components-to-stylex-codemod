@@ -3,6 +3,7 @@
  * Core concepts: selector validation and warning reporting.
  */
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
+import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { isStyledTag } from "../transform/css-helpers.js";
 import { isFunctionNode } from "../utilities/jscodeshift-utils.js";
@@ -13,6 +14,8 @@ import { isMemberExpression } from "../lower-rules/utils.js";
  */
 export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult {
   const { root, j, warnings, styledLocalNames } = ctx;
+  const activeStyledNames =
+    ctx.options?.transformMode === "leavesOnly" ? getActiveStyledNames(ctx.styledDecls) : undefined;
 
   const unwrapExpression = (expr: any): any => {
     let current = expr;
@@ -32,6 +35,9 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   };
 
   const collectStyledComponentNames = (): Set<string> => {
+    if (activeStyledNames) {
+      return activeStyledNames;
+    }
     const names = new Set<string>();
     if (!styledLocalNames || styledLocalNames.size === 0) {
       return names;
@@ -102,6 +108,9 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
       }
       const assigned = getAssignedIdentifier(p);
       if (!assigned) {
+        return;
+      }
+      if (activeStyledNames && !activeStyledNames.has(assigned.name)) {
         return;
       }
       names.set(
@@ -419,4 +428,14 @@ export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult
   }
 
   return CONTINUE;
+}
+
+function getActiveStyledNames(styledDecls: StyledDecl[] | undefined): Set<string> {
+  const names = new Set<string>();
+  for (const decl of styledDecls ?? []) {
+    if (!decl.skipTransform) {
+      names.add(decl.localName);
+    }
+  }
+  return names;
 }
