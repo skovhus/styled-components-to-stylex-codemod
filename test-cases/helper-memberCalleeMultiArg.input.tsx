@@ -39,13 +39,25 @@ const MixedModePanel = styled.div<{ $faded: boolean }>`
 
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Toggle>Toggle</Toggle>
-    <Box $m={8}>Box with margin</Box>
-    <TintedLabel>Label with nested color helper</TintedLabel>
-    <TintedPanel $faded>Faded panel</TintedPanel>
-    <TintedPanel $faded={false}>Solid panel</TintedPanel>
-    <PlainSwatch $tone="#336699">Plain swatch</PlainSwatch>
-    <MixedModePanel $faded>Faded mixed panel</MixedModePanel>
-    <MixedModePanel $faded={false}>Direct mixed panel</MixedModePanel>
+    <Toggle style={{ width: 80 }}>A</Toggle>
+    <Box $m={8} style={{ width: 80 }}>
+      B
+    </Box>
+    <TintedLabel style={{ width: 80, display: "inline-block" }}>C</TintedLabel>
+    <TintedPanel $faded style={{ width: 80 }}>
+      D
+    </TintedPanel>
+    <TintedPanel $faded={false} style={{ width: 80 }}>
+      E
+    </TintedPanel>
+    <PlainSwatch $tone="#336699" style={{ width: 80 }}>
+      F
+    </PlainSwatch>
+    <MixedModePanel $faded style={{ width: 80 }}>
+      G
+    </MixedModePanel>
+    <MixedModePanel $faded={false} style={{ width: 80 }}>
+      H
+    </MixedModePanel>
   </div>
 );
