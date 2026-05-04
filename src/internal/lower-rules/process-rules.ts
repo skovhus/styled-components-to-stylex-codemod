@@ -1868,14 +1868,14 @@ function resolveElementSelectorTarget(
   }
   const { tagName, ancestorPseudo, childPseudo } = parsed;
 
-  if (parsed.usesChildCombinator) {
-    return "bail-child-combinator";
-  }
-
   // Bail if both ancestor and child pseudos are present (e.g., `&:focus > button:disabled`)
   // — cannot represent both in a single StyleX override
   if (ancestorPseudo && childPseudo) {
     return "bail-combined-pseudo";
+  }
+
+  if (parsed.usesChildCombinator) {
+    return "bail-child-combinator";
   }
 
   // Bail if the parent component is exported — can't verify external usage
