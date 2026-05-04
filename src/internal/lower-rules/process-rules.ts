@@ -130,7 +130,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       return null;
     }
     const { childDecl, ancestorPseudo, childPseudo, directChildOnly } = elementResult;
-    const overrideStyleKey = `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
+    const overrideStyleKey = directChildOnly
+      ? `${toStyleKey(childDecl.localName)}DirectChildIn${parentDecl.localName}`
+      : `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
     ancestorSelectorParents.add(parentDecl.styleKey);
 
     // For child pseudos, record the pseudo in childPseudoMarkers

@@ -1,10 +1,7 @@
 /**
  * Test case for element child combinator selectors.
- * Demonstrates `> button { ... }` being transformed to relation overrides.
- *
- * Note: Both CSS descendant (space) and child (>) combinators map to
- * stylex.when.ancestor(). The child combinator is therefore less strict
- * in the output than the original CSS.
+ * Demonstrates `> button { ... }` being transformed to direct-child-only
+ * relation overrides.
  */
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
@@ -12,8 +9,22 @@ import * as stylex from "@stylexjs/stylex";
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
     <div sx={styles.toolbar}>
-      <button sx={[styles.actionButton, styles.actionButtonInToolbar]}>Action 1</button>
-      <button sx={[styles.actionButton, styles.actionButtonInToolbar]}>Action 2</button>
+      <button sx={[styles.actionButton, styles.actionButtonDirectChildInToolbar]}>Action 1</button>
+      <button sx={[styles.actionButton, styles.actionButtonDirectChildInToolbar]}>Action 2</button>
+    </div>
+    <div sx={styles.mixedToolbar}>
+      <button
+        sx={[
+          styles.actionButton,
+          styles.actionButtonInMixedToolbar,
+          styles.actionButtonDirectChildInMixedToolbar,
+        ]}
+      >
+        Direct mixed
+      </button>
+      <span>
+        <button sx={[styles.actionButton, styles.actionButtonInMixedToolbar]}>Nested mixed</button>
+      </span>
     </div>
   </div>
 );
@@ -35,7 +46,19 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "#f0f0f0",
   },
-  actionButtonInToolbar: {
+  mixedToolbar: {
+    display: "flex",
+    gap: 8,
+    padding: 8,
+    backgroundColor: "#eef7ff",
+  },
+  actionButtonDirectChildInToolbar: {
+    fontWeight: "bold",
+  },
+  actionButtonInMixedToolbar: {
+    textDecoration: "underline",
+  },
+  actionButtonDirectChildInMixedToolbar: {
     fontWeight: "bold",
   },
 });
