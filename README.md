@@ -4,9 +4,48 @@ Transform styled-components to StyleX.
 
 **[Try it in the online playground](https://skovhus.github.io/styled-components-to-stylex-codemod/)** — experiment with the transform in your browser.
 
+## Migration game plan
+
+A successful migration generally follows these steps. The agent prompt below automates them; this section explains the reasoning so you can supervise.
+
+### 1. Define your theme and mixins as StyleX
+
+Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
+
+```ts
+// tokens.stylex.ts — theme variables
+import * as stylex from "@stylexjs/stylex";
+
+// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
+export const colors = stylex.defineVars({ primary: "#0066cc" });
+export const spacing = stylex.defineVars({ sm: "8px" });
+```
+
+```ts
+// helpers.stylex.ts — shared mixins
+import * as stylex from "@stylexjs/stylex";
+
+// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
+export const truncate = stylex.create({
+  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+});
+```
+
+### 2. Write an adapter and run the codemod
+
+The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
+
+### 3. Convert bottom-up (leaf components first)
+
+When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
+
+### 4. Verify, iterate, clean up
+
+Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
+
 ## Run with an AI agent
 
-The fastest way to migrate a real codebase is to hand the migration to an AI coding agent (Cursor, Claude Code, Codex, etc.) and let it install the codemod, scaffold an adapter, run a dry-run, and iterate on warnings.
+The fastest way to execute the game plan above on a real codebase is to hand it to an AI coding agent (Cursor, Claude Code, Codex, etc.) and let it install the codemod, scaffold an adapter, run a dry-run, and iterate on warnings.
 
 Copy the prompt below into your agent and edit the bracketed `[…]` placeholders to match your project. Keep this README open in the agent's context so it can refer back to the API details.
 
@@ -129,45 +168,6 @@ section.
 ````
 
 </details>
-
-## Migration game plan
-
-A successful migration generally follows these steps. The agent prompt above automates them; this section explains the reasoning so you can supervise.
-
-### 1. Define your theme and mixins as StyleX
-
-Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
-
-```ts
-// tokens.stylex.ts — theme variables
-import * as stylex from "@stylexjs/stylex";
-
-// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
-export const colors = stylex.defineVars({ primary: "#0066cc" });
-export const spacing = stylex.defineVars({ sm: "8px" });
-```
-
-```ts
-// helpers.stylex.ts — shared mixins
-import * as stylex from "@stylexjs/stylex";
-
-// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
-export const truncate = stylex.create({
-  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-});
-```
-
-### 2. Write an adapter and run the codemod
-
-The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
-
-### 3. Convert bottom-up (leaf components first)
-
-When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
-
-### 4. Verify, iterate, clean up
-
-Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 
 ## Installation
 
