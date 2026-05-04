@@ -4,7 +4,153 @@ Transform styled-components to StyleX.
 
 **[Try it in the online playground](https://skovhus.github.io/styled-components-to-stylex-codemod/)** — experiment with the transform in your browser.
 
-## Installation
+## Migration game plan
+
+### 1. Define your theme and mixins as StyleX
+
+Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
+
+```ts
+// tokens.stylex.ts — theme variables
+import * as stylex from "@stylexjs/stylex";
+
+// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
+export const colors = stylex.defineVars({ primary: "#0066cc" });
+export const spacing = stylex.defineVars({ sm: "8px" });
+```
+
+```ts
+// helpers.stylex.ts — shared mixins
+import * as stylex from "@stylexjs/stylex";
+
+// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
+export const truncate = stylex.create({
+  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+});
+```
+
+### 2. Write an adapter and run the codemod
+
+The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Basic usage](#basic-usage) for the full API.
+
+### 3. Convert bottom-up (leaf components first)
+
+When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
+
+### 4. Verify, iterate, clean up
+
+Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
+
+## Agent prompt for configuring a migration
+
+Copy this into an agent working in the repository you want to migrate:
+
+````prompt
+You are helping migrate this repository from styled-components to StyleX with
+`styled-components-to-stylex-codemod`.
+
+Work in small, reviewable steps:
+
+1. Inspect the project before changing files.
+   - Identify the package manager and install command.
+   - Find styled-components usage, theme access patterns, CSS variables, helper
+     functions used inside template interpolations, shared mixins, and existing
+     StyleX setup.
+   - Identify a leaf component/file glob to migrate first. Prefer components
+     that do not wrap other styled-components.
+
+2. Install the codemod and any missing StyleX runtime/build dependencies the
+   project needs.
+   - Use the repository's package manager.
+   - Keep dependency changes separate and explain why each package is needed.
+
+3. Create a local codemod runner, for example
+   `scripts/run-styled-components-to-stylex.mts`, using this shape:
+
+   ```ts
+   import { defineAdapter, runTransform } from "styled-components-to-stylex-codemod";
+
+   const adapter = defineAdapter({
+     resolveValue(ctx) {
+       // Map props.theme.*, CSS variables, and imported constants to StyleX
+       // variables or other static StyleX-compatible expressions.
+       return undefined;
+     },
+     resolveCall(ctx) {
+       // Map helper calls used in styled template interpolations to StyleX
+       // mixins/values, or return { preserveRuntimeCall: true } when safe.
+       return undefined;
+     },
+     resolveSelector(ctx) {
+       // Map imported selector helpers such as media query or pseudo aliases.
+       return undefined;
+     },
+     externalInterface(ctx) {
+       // Return { styles: true, as: true, ref: true } for exported components
+       // that must keep accepting className/style, polymorphic `as`, or refs.
+       return { styles: false, as: false, ref: false };
+     },
+     styleMerger: null,
+     useSxProp: false,
+     wrappedComponentInterface(ctx) {
+       return undefined;
+     },
+     themeHook: {
+       functionName: "useTheme",
+       importSource: { kind: "specifier", value: "styled-components" },
+     },
+   });
+
+   await runTransform({
+     files: "src/**/*.tsx",
+     consumerPaths: "src/**/*.tsx",
+     adapter,
+     dryRun: true,
+     parser: "tsx",
+     formatterCommands: ["pnpm prettier --write"],
+   });
+   ```
+
+4. Configure the adapter for this codebase.
+   - `resolveValue`: map theme paths (`props.theme.color.primary`), CSS
+     variables (`var(--token)`), and imported values to StyleX variables.
+   - `resolveCall`: map project style helpers to StyleX mixins or values.
+   - `resolveSelector`: map imported media-query or pseudo selector helpers.
+   - `externalInterface`: preserve `className`/`style`, `as`, and `ref` support
+     for public components. Use `externalInterface: "auto"` only when
+     `consumerPaths` covers the consumers and the prepass succeeds.
+   - `styleMerger`: provide the project's helper for combining StyleX styles
+     with external `className`/`style` when public components need it.
+   - `useSxProp` and `wrappedComponentInterface`: enable only if the project
+     uses StyleX `sx` props and the Babel plugin is configured for them.
+   - `themeHook`: point wrapper theme conditionals at the project's runtime
+     theme hook if it is not `useTheme` from styled-components.
+   - `resolveBaseComponent`: add this only for base UI primitives that can be
+     safely replaced with intrinsic elements and static StyleX styles.
+
+5. Run a dry run first.
+   - Keep `dryRun: true`.
+   - Run the runner against the smallest useful file glob.
+   - Read every warning. Update the adapter instead of hand-editing output
+     when the warning describes a repeatable project pattern.
+
+6. Run the real transform only after the dry run is clean enough to review.
+   - Set `dryRun: false`.
+   - Keep the migration scoped to the selected leaf files.
+   - Run the project's formatter, typecheck, lint, tests, and Storybook or
+     visual checks if available.
+   - Inspect the diff for dropped declarations, inline-style fallbacks, public
+     component API changes, and cross-file selector bridge/marker behavior.
+
+7. Iterate bottom-up.
+   - Commit the runner/adapter and each migrated slice separately.
+   - Expand the `files` glob only after the previous slice is reviewed.
+   - Preserve warnings or TODOs for any file that needs manual follow-up.
+````
+
+## API and configuration reference
+
+### Installation
 
 ```bash
 npm install styled-components-to-stylex-codemod
@@ -12,7 +158,7 @@ npm install styled-components-to-stylex-codemod
 pnpm add styled-components-to-stylex-codemod
 ```
 
-## Usage
+### Basic usage
 
 Use `runTransform` to transform files matching a glob pattern:
 
@@ -22,15 +168,19 @@ import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod
 const adapter = defineAdapter({
   // Map theme paths and CSS variables to StyleX expressions
   resolveValue(ctx) {
-    return null;
+    return undefined;
   },
   // Map helper function calls to StyleX expressions
   resolveCall(ctx) {
-    return null;
+    return undefined;
   },
-  // Control which components accept external className/style and polymorphic `as`
+  // Map imported selector helpers such as media query or pseudo aliases
+  resolveSelector(ctx) {
+    return undefined;
+  },
+  // Control which components accept external className/style, polymorphic `as`, and refs
   externalInterface(ctx) {
-    return { style: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
   // Optional: use a helper for merging StyleX styles with external className/style
   styleMerger: null,
@@ -71,7 +221,7 @@ const adapter = defineAdapter({
   /**
    * Resolve dynamic values in styled template literals to StyleX expressions.
    * Called for theme access (`props.theme.x`), CSS variables (`var(--x)`),
-   * and imported values. Return `{ expr, imports }` or `null` to skip.
+   * and imported values. Return `{ expr, imports }` or `undefined` to skip.
    */
   resolveValue(ctx) {
     if (ctx.kind === "theme") {
@@ -102,19 +252,19 @@ const adapter = defineAdapter({
       };
     }
 
-    return null;
+    return undefined;
   },
 
   /**
    * Resolve helper function calls in template interpolations.
    * e.g. `${transitionSpeed("slow")}` → `transitionSpeedVars.slow`
-   * Return `{ expr, imports }` or `null` to bail the file with a warning.
+   * Return `{ expr, imports }` or `undefined` to bail the file with a warning.
    */
   resolveCall(ctx) {
     const arg0 = ctx.args[0];
     const key = arg0?.kind === "literal" && typeof arg0.value === "string" ? arg0.value : null;
     if (ctx.calleeImportedName !== "transitionSpeed" || !key) {
-      return null;
+      return undefined;
     }
 
     return {
@@ -126,6 +276,14 @@ const adapter = defineAdapter({
         },
       ],
     };
+  },
+
+  /**
+   * Resolve imported values used in selector position, such as media query
+   * helpers or pseudo-class aliases. Return `undefined` to bail the file.
+   */
+  resolveSelector(ctx) {
+    return undefined;
   },
 
   /**
@@ -153,14 +311,14 @@ const adapter = defineAdapter({
   },
 
   /**
-   * Control which exported components accept external className/style
-   * and/or polymorphic `as` prop. Return `{ styles, as }` flags.
+   * Control which exported components accept external className/style,
+   * polymorphic `as`, and/or refs. Return `{ styles, as, ref }` flags.
    */
   externalInterface(ctx) {
     if (ctx.filePath.includes("/shared/components/")) {
-      return { styles: true, as: true };
+      return { styles: true, as: true, ref: true };
     }
-    return { styles: false, as: false };
+    return { styles: false, as: false, ref: false };
   },
 
   /**
@@ -228,8 +386,9 @@ Adapters are the main extension point, see full example above. They let you cont
 
 - how theme paths, CSS variables, and imported values are turned into StyleX-compatible JS values (`resolveValue`)
 - what extra imports to inject into transformed files (returned from `resolveValue`)
-- how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`, or `{ preserveRuntimeCall: true }` to keep only the original helper runtime call; `null`/`undefined` bails the file)
-- which exported components should support external className/style extension and/or polymorphic `as` prop (`externalInterface`)
+- how helper calls are resolved (via `resolveCall({ ... })` returning `{ expr, imports }`, or `{ preserveRuntimeCall: true }` to keep only the original helper runtime call; `undefined` bails the file)
+- how imported media-query or pseudo selector helpers are resolved (`resolveSelector`)
+- which exported components should support external className/style extension, polymorphic `as`, and/or refs (`externalInterface`)
 - how className/style merging is handled for components accepting external styling (`styleMerger`)
 - which imported components already accept a StyleX `sx` prop (auto-detected from the imported component's prop type when `useSxProp: true`; can be overridden via `wrappedComponentInterface`). When detected, the codemod emits `sx={styles.x}` on the wrapped component instead of `{...stylex.props(styles.x)}`.
 - which runtime theme hook import/call to use for emitted wrapper theme conditionals (`themeHook`)
@@ -254,7 +413,7 @@ await runTransform({
 
 #### Auto-detecting external interface usage (experimental)
 
-Instead of manually specifying which components need `styles` or `as` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
+Instead of manually specifying which components need `styles`, `as`, or `ref` support, set `externalInterface: "auto"` to auto-detect usage by scanning consumer code.
 
 > [!NOTE]
 > Experimental. Requires `consumerPaths` and a successful prepass scan.
@@ -275,7 +434,7 @@ await runTransform({
 });
 ```
 
-When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls and `<Component as={...}>` JSX usage, resolves imports back to the component definition files, and returns the appropriate `{ styles, as }` flags automatically.
+When `externalInterface: "auto"` is set, `runTransform()` scans `files` and `consumerPaths` for `styled(Component)` calls plus JSX usage such as `<Component as={...}>`, `ref`, `className`, and `style`, resolves imports back to the component definition files, and returns the appropriate `{ styles, as, ref }` flags automatically.
 
 If that prepass scan fails, `runTransform()` stops and throws an actionable error rather than silently falling back to non-auto behavior.
 
@@ -344,7 +503,7 @@ When the codemod encounters an interpolation inside a styled template literal, i
   - Use the optional `usage: "create" | "props"` field to override the default inference
   - Use `preserveRuntimeCall: true` to keep the original helper call as a runtime style-function
     override (with or without a static fallback from `expr`)
-- if `resolveCall` returns `null` or `undefined`, the transform **bails the file** and logs a warning
+- if `resolveCall` returns `undefined`, the transform **bails the file** and logs a warning
 - helper calls applied to prop values (e.g. `shadow(props.shadow)`) by emitting a StyleX style function that calls the helper at runtime
 - conditional CSS blocks via ternary (e.g. `props.$dim ? "opacity: 0.5;" : ""`)
 
@@ -358,43 +517,6 @@ If the pipeline can't resolve an interpolation:
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
 - **Theme prop overrides**: passing a `theme` prop directly to styled components (e.g. `<Button theme={...} />`) is not supported and will bail with a warning.
-
-## Migration game plan
-
-### 1. Define your theme and mixins as StyleX
-
-Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
-
-```ts
-// tokens.stylex.ts — theme variables
-import * as stylex from "@stylexjs/stylex";
-
-// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
-export const colors = stylex.defineVars({ primary: "#0066cc" });
-export const spacing = stylex.defineVars({ sm: "8px" });
-```
-
-```ts
-// helpers.stylex.ts — shared mixins
-import * as stylex from "@stylexjs/stylex";
-
-// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
-export const truncate = stylex.create({
-  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-});
-```
-
-### 2. Write an adapter and run the codemod
-
-The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
-
-### 3. Convert bottom-up (leaf components first)
-
-When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
-
-### 4. Verify, iterate, clean up
-
-Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 
 ## License
 
