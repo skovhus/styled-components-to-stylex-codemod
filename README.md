@@ -4,6 +4,171 @@ Transform styled-components to StyleX.
 
 **[Try it in the online playground](https://skovhus.github.io/styled-components-to-stylex-codemod/)** — experiment with the transform in your browser.
 
+## Run with an AI agent
+
+The fastest way to migrate a real codebase is to hand the migration to an AI coding agent (Cursor, Claude Code, Codex, etc.) and let it install the codemod, scaffold an adapter, run a dry-run, and iterate on warnings.
+
+Copy the prompt below into your agent and edit the bracketed `[…]` placeholders to match your project. Keep this README open in the agent's context so it can refer back to the API details.
+
+<details>
+<summary>Copy-paste agent prompt</summary>
+
+````text
+You are migrating a TypeScript/React codebase from `styled-components` to StyleX using
+`styled-components-to-stylex-codemod`. The project lives at `[path/to/repo]` and uses
+`[pnpm | npm | yarn]`. Source files to migrate live under `[src/**/*.tsx]`.
+
+Work iteratively. After each step, summarize what changed and what warnings remain
+before moving on.
+
+### Step 1 — Install the codemod
+
+Add it as a dev dependency:
+
+  pnpm add -D styled-components-to-stylex-codemod
+  # or: npm install -D styled-components-to-stylex-codemod
+
+The host project also needs `@stylexjs/stylex` and the StyleX babel/bundler plugin
+configured. If StyleX isn't set up yet, follow https://stylexjs.com/docs/learn/installation
+first — the codemod assumes StyleX is already wired into the build.
+
+### Step 2 — Define theme + shared helpers as StyleX
+
+Before running the codemod, port the existing theme object and any shared
+CSS-in-JS helpers (`truncate`, `transitionSpeed`, etc.) to StyleX so the adapter
+has something to point at:
+
+  - `tokens.stylex.ts` — theme variables via `stylex.defineVars(...)`
+  - `helpers.stylex.ts` — shared mixins via `stylex.create(...)`
+
+Read the existing theme definition at `[path/to/theme.ts]` and shared helpers at
+`[path/to/helpers.ts]`, then create matching `*.stylex.ts` files. Do NOT delete
+the originals yet — components still import them until the codemod runs.
+
+### Step 3 — Scaffold the adapter and a runner script
+
+Create `scripts/run-codemod.ts` in the host project:
+
+  ```ts
+  import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";
+
+  const adapter = defineAdapter({
+    resolveValue(ctx) {
+      if (ctx.kind === "theme") {
+        // map ctx.path (e.g. "color.primary") → `tokens.color_primary` or similar
+        // return { expr, imports: [{ from: { kind: "specifier", value: "./tokens.stylex" }, names: [{ imported: "tokens" }] }] }
+        return null;
+      }
+      if (ctx.kind === "cssVariable") {
+        // map ctx.name (e.g. "--brand-color") → `vars.brandColor`
+        return null;
+      }
+      return null;
+    },
+    resolveCall(ctx) {
+      // map known helper imports (e.g. transitionSpeed) → StyleX expressions
+      // return null to bail the file with a warning
+      return null;
+    },
+    externalInterface(ctx) {
+      // start with everything off; flip to true for shared/exported components
+      return { styles: false, as: false, ref: false };
+    },
+  });
+
+  await runTransform({
+    files: "src/**/*.tsx",
+    consumerPaths: null,
+    adapter,
+    dryRun: true, // <-- flip to false once warnings are acceptable
+    parser: "tsx",
+    formatterCommands: ["pnpm prettier --write"],
+  });
+  ```
+
+### Step 4 — Dry-run and triage warnings
+
+Run `tsx scripts/run-codemod.ts` (or `node --import tsx ...`) with `dryRun: true`.
+The codemod prints per-file warnings explaining which interpolations or
+selectors it could not handle. Categorize them:
+
+  - "could not resolve theme path X" → extend `resolveValue` for `kind: "theme"`
+  - "could not resolve helper call X" → extend `resolveCall`
+  - "could not resolve imported value X" → extend `resolveValue` for `kind: "importedValue"`
+  - "createGlobalStyle is unsupported" → migrate by hand
+  - "wraps another styled component" → defer, convert leaves first
+
+### Step 5 — Iterate
+
+Extend the adapter to cover real warnings, re-run the dry-run, and repeat until
+the remaining warnings are acceptable (manual follow-ups only).
+
+### Step 6 — Run for real, bottom-up
+
+Flip `dryRun: false` and narrow `files` to a single leaf folder first. Commit.
+Build and test. Visually spot-check a few screens. Then expand `files` outward
+to consumers.
+
+For exported / shared components that other files extend with `styled(X)` or
+`<X as="...">`, set `externalInterface` to return `{ styles: true, as: true }`
+for those. If `consumerPaths` is configured, you can also use
+`externalInterface: "auto"` to detect this automatically.
+
+### Step 7 — Clean up
+
+Once a folder is fully migrated:
+  - delete the original `theme.ts` / `helpers.ts` if nothing imports them
+  - drop `styled-components` from `package.json` once the last file is converted
+
+### Reference
+
+For the full adapter API (`resolveBaseComponent`, `styleMerger`, `useSxProp`,
+`wrappedComponentInterface`, `themeHook`, cross-file selectors via
+`consumerPaths`, etc.) read the rest of this README, especially the "Adapter"
+section.
+````
+
+</details>
+
+## Migration game plan
+
+A successful migration generally follows these steps. The agent prompt above automates them; this section explains the reasoning so you can supervise.
+
+### 1. Define your theme and mixins as StyleX
+
+Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
+
+```ts
+// tokens.stylex.ts — theme variables
+import * as stylex from "@stylexjs/stylex";
+
+// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
+export const colors = stylex.defineVars({ primary: "#0066cc" });
+export const spacing = stylex.defineVars({ sm: "8px" });
+```
+
+```ts
+// helpers.stylex.ts — shared mixins
+import * as stylex from "@stylexjs/stylex";
+
+// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
+export const truncate = stylex.create({
+  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+});
+```
+
+### 2. Write an adapter and run the codemod
+
+The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
+
+### 3. Convert bottom-up (leaf components first)
+
+When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
+
+### 4. Verify, iterate, clean up
+
+Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
+
 ## Installation
 
 ```bash
@@ -358,43 +523,6 @@ If the pipeline can't resolve an interpolation:
 - **Flow** type generation is non-existing, works best with TypeScript or plain JS right now. Contributions more than welcome!
 - **createGlobalStyle**: detected usage is reported as an **unsupported-feature** warning (StyleX does not support global styles in the same way).
 - **Theme prop overrides**: passing a `theme` prop directly to styled components (e.g. `<Button theme={...} />`) is not supported and will bail with a warning.
-
-## Migration game plan
-
-### 1. Define your theme and mixins as StyleX
-
-Before running the codemod, convert your theme object and shared style helpers into StyleX equivalents:
-
-```ts
-// tokens.stylex.ts — theme variables
-import * as stylex from "@stylexjs/stylex";
-
-// Before: { colors: { primary: "#0066cc" }, spacing: { sm: "8px" } }
-export const colors = stylex.defineVars({ primary: "#0066cc" });
-export const spacing = stylex.defineVars({ sm: "8px" });
-```
-
-```ts
-// helpers.stylex.ts — shared mixins
-import * as stylex from "@stylexjs/stylex";
-
-// Before: export const truncate = () => `white-space: nowrap; overflow: hidden; ...`
-export const truncate = stylex.create({
-  base: { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-});
-```
-
-### 2. Write an adapter and run the codemod
-
-The adapter maps your project's `props.theme.*` access, CSS variables, and helper calls to the StyleX equivalents from step 1. See [Usage](#usage) for the full API.
-
-### 3. Convert bottom-up (leaf components first)
-
-When a component wraps another component that internally uses styled-components (e.g. `styled(GroupHeader)` where `GroupHeader` renders a `StyledHeader`), CSS cascade conflicts can arise after migration. Convert leaf files — the ones that don't wrap other styled-components — first, then work your way up. The codemod will bail with a warning if it detects this pattern.
-
-### 4. Verify, iterate, clean up
-
-Build and test your project. Review warnings — they tell you which files were skipped and why. Fix adapter gaps, re-run on remaining files, and repeat until done. [Report issues](https://github.com/skovhus/styled-components-to-stylex-codemod/issues) with input/output examples if the codemod produces incorrect results.
 
 ## License
 
