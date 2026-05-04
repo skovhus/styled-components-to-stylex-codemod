@@ -63,25 +63,42 @@ export function convertKeyframesStep(ctx: TransformContext): StepResult {
 
 // --- Non-exported helpers ---
 
+/**
+ * Collect identifier names bound to top-level `const <name> = stylex.keyframes(...)`
+ * declarations. Restricted to module-level (Program / ExportNamedDeclaration) bindings
+ * because nested or block-scoped declarations cannot be safely matched by name when
+ * lowering animation shorthands — animation lowering looks up identifiers by name,
+ * so collecting nested bindings risks treating an unrelated local `fade` as the
+ * module-level keyframe binding referenced by a styled template interpolation.
+ */
 function collectExistingStylexKeyframeNames(ctx: TransformContext): void {
   const { root, j } = ctx;
-  root.find(j.VariableDeclarator).forEach((p) => {
-    const id = p.node.id;
-    if (id.type !== "Identifier") {
+  root.find(j.VariableDeclaration).forEach((declPath) => {
+    const parentType = declPath.parentPath?.node?.type;
+    if (parentType !== "Program" && parentType !== "ExportNamedDeclaration") {
       return;
     }
-    const init = p.node.init;
-    if (
-      !init ||
-      init.type !== "CallExpression" ||
-      init.callee.type !== "MemberExpression" ||
-      init.callee.object.type !== "Identifier" ||
-      init.callee.object.name !== "stylex" ||
-      init.callee.property.type !== "Identifier" ||
-      init.callee.property.name !== "keyframes"
-    ) {
-      return;
+    for (const declarator of declPath.node.declarations) {
+      if (declarator.type !== "VariableDeclarator") {
+        continue;
+      }
+      const id = declarator.id;
+      if (id.type !== "Identifier") {
+        continue;
+      }
+      const init = declarator.init;
+      if (
+        !init ||
+        init.type !== "CallExpression" ||
+        init.callee.type !== "MemberExpression" ||
+        init.callee.object.type !== "Identifier" ||
+        init.callee.object.name !== "stylex" ||
+        init.callee.property.type !== "Identifier" ||
+        init.callee.property.name !== "keyframes"
+      ) {
+        continue;
+      }
+      ctx.keyframesNames.add(id.name);
     }
-    ctx.keyframesNames.add(id.name);
   });
 }

@@ -1146,6 +1146,55 @@ export const App = () => (
     const keyframesMatches = (secondPass.code ?? "").match(/stylex\.keyframes\(/g) ?? [];
     expect(keyframesMatches).toHaveLength(1);
   });
+
+  it("ignores nested stylex.keyframes bindings when collecting keyframe names", () => {
+    // A nested `const fade = stylex.keyframes(...)` inside a function body must not
+    // be added to `ctx.keyframesNames`. Animation lowering only resolves identifiers
+    // by name, so collecting nested bindings would let a module-level `fade`
+    // binding (which is NOT a keyframe) be misinterpreted as one when a styled
+    // template interpolates `${fade}` in an `animation` shorthand.
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+function Plain(props: any) {
+  return <div {...props} />;
+}
+
+// Module-level binding — a plain string, NOT a keyframe.
+const fade = "spin 1s linear";
+
+function helper() {
+  // Nested binding shadows the module-level \`fade\`. Restricted to this
+  // function — must not pollute the module-level keyframesNames set.
+  const fade = stylex.keyframes({
+    from: { opacity: 0 },
+    to: { opacity: 1 },
+  });
+  return fade;
+}
+
+const Inner = styled(Plain)\`
+  animation: \${fade} 2s linear;
+  color: navy;
+\`;
+
+export const App = () => (
+  <div>
+    <Inner>inner</Inner>
+    {helper()}
+  </div>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-nested-keyframes-binding.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    // The interpolated `${fade}` here resolves to the module-level string binding,
+    // not a keyframe. The codemod must NOT emit `animationName: fade` based on
+    // the nested keyframes binding (which is out of scope at the styled template).
+    expect(result.code ?? "").not.toMatch(/animationName:\s*fade\b/);
+  });
 });
 
 describe("test case exports", () => {
