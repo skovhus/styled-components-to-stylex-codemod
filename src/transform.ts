@@ -189,6 +189,7 @@ interface GlobalPrepassResult {
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
   styledDefFiles?: Map<string, Set<string>>;
   globalLeafKeys?: Set<string>;
+  transformedFiles?: Set<string>;
 }
 
 /**
@@ -219,12 +220,14 @@ function extractCrossFileInfoForFile(
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
+  const hasTransformedFiles = prepass.transformedFiles !== undefined;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&
     !bridgeComponentNames &&
     !hasStyledDefFiles &&
-    !hasGlobalLeafKeys
+    !hasGlobalLeafKeys &&
+    !hasTransformedFiles
   ) {
     return options;
   }
@@ -234,6 +237,7 @@ function extractCrossFileInfoForFile(
     bridgeComponentNames,
     styledDefFiles: prepass.styledDefFiles,
     globalLeafKeys: prepass.globalLeafKeys,
+    transformedFiles: prepass.transformedFiles,
   };
 
   return {

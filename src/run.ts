@@ -2,13 +2,14 @@
  * Runs the codemod over input files with an adapter.
  * Core concepts: jscodeshift execution, globs, and adapter hooks.
  */
-import { run as jscodeshiftRun } from "jscodeshift/src/Runner.js";
-import { fileURLToPath } from "node:url";
+import jscodeshift from "jscodeshift";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import type { API, FileInfo } from "jscodeshift";
 import type {
   Adapter,
   AdapterInput,
@@ -26,6 +27,11 @@ import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import type { TransformMode } from "./internal/transform-types.js";
+import {
+  resolveBarrelReExport,
+  type Resolve,
+} from "./internal/prepass/extract-external-interface.js";
+import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export { mergeMarkerDeclarations };
 
@@ -343,7 +349,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
 
   // Resolve file paths from glob patterns
   const patterns = Array.isArray(files) ? files : [files];
-  const filePaths: string[] = [];
+  let filePaths: string[] = [];
 
   const cwd = process.cwd();
   for (const pattern of patterns) {
@@ -392,6 +398,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Create shared module resolver
   const { createModuleResolver } = await import("./internal/prepass/resolve-imports.js");
   const sharedResolver = createModuleResolver();
+  filePaths = orderFilesByLocalImportDependencies(filePaths, sharedResolver, toRealPath);
 
   // Unified prepass: cross-file selectors + optional consumer analysis in a single pass.
   // Contract:
@@ -433,28 +440,74 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     };
   }
 
-  const crossFilePrepassResult = prepassResult.crossFileInfo;
+  // Populated by the per-file transform as each file successfully converts.
+  // Adapter hooks and cascade-conflict checks consult this live set so same-run
+  // wrappers only assume a base accepts StyleX props after the base actually converted.
+  const transformedFiles = new Set<string>();
+
+  const crossFilePrepassResult = {
+    ...prepassResult.crossFileInfo,
+    transformedFiles,
+  };
 
   // Resolve "auto" externalInterface → concrete function using consumer analysis
   const resolvedAdapter: Adapter = (() => {
     if (adapterInput.externalInterface === "auto" && prepassResult.consumerAnalysis) {
       const analysisMap = prepassResult.consumerAnalysis;
+      const prepassResolve: Resolve = (specifier, fromFile) => {
+        const resolved = sharedResolver.resolve(resolve(fromFile), specifier);
+        return resolved ? toRealPath(resolved) : null;
+      };
+      const cachedRead = (filePath: string): string => {
+        try {
+          return readFileSync(filePath, "utf-8");
+        } catch {
+          return "";
+        }
+      };
+      const lookupAutoExternalInterface = (filePath: string, componentName: string) =>
+        analysisMap.get(`${toRealPath(filePath)}:${componentName}`);
+
       return {
         ...adapterInput,
         externalInterface: (ctx) => {
-          let realPath: string;
-          try {
-            realPath = realpathSync(resolve(ctx.filePath));
-          } catch {
-            realPath = resolve(ctx.filePath);
-          }
           return (
-            analysisMap.get(`${realPath}:${ctx.componentName}`) ?? {
+            lookupAutoExternalInterface(ctx.filePath, ctx.componentName) ?? {
               styles: false,
               as: false,
               ref: false,
             }
           );
+        },
+        wrappedComponentInterface: (ctx) => {
+          const explicitResult = adapterInput.wrappedComponentInterface?.(ctx);
+          if (explicitResult !== undefined) {
+            return explicitResult;
+          }
+
+          if (!adapterInput.useSxProp) {
+            return undefined;
+          }
+
+          const resolvedImport = sharedResolver.resolve(resolve(ctx.filePath), ctx.importSource);
+          if (!resolvedImport) {
+            return undefined;
+          }
+
+          const resolvedPath = toRealPath(resolvedImport);
+          const definitionPath =
+            resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
+            resolvedPath;
+          if (!transformedFiles.has(toRealPath(definitionPath))) {
+            return undefined;
+          }
+
+          const autoInterfaceNames =
+            ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
+          const autoInterface = autoInterfaceNames
+            .map((name) => lookupAutoExternalInterface(definitionPath, name))
+            .find((result) => result !== undefined);
+          return autoInterface?.styles ? { acceptsSx: true } : undefined;
         },
       };
     }
@@ -480,28 +533,25 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     markerFile: resolvedAdapter.markerFile,
   };
 
-  // Path to the transform module.
+  // Module containing the per-file transform.
   // - In published builds, `dist/index.mjs` and `dist/transform.mjs` live together.
-  // - In-repo tests/dev, `src/transform.mjs` doesn't exist, but `dist/transform.mjs` usually does
-  const transformPath = (() => {
+  // - In-repo tests/dev, `src/transform.mjs` doesn't exist; use the source module fallback.
+  const transformModule = (() => {
     const adjacent = join(__dirname, "transform.mjs");
     if (existsSync(adjacent)) {
-      return adjacent;
+      return { kind: "path", value: adjacent } as const;
+    }
+
+    if (existsSync(join(__dirname, "transform.ts"))) {
+      return { kind: "source" } as const;
     }
 
     const distSibling = join(__dirname, "..", "dist", "transform.mjs");
     if (existsSync(distSibling)) {
-      return distSibling;
+      return { kind: "path", value: distSibling } as const;
     }
 
-    throw new Error(
-      [
-        "Could not locate transform module.",
-        `Tried: ${adjacent}`,
-        `       ${distSibling}`,
-        "Run `pnpm build` to generate dist artifacts.",
-      ].join("\n"),
-    );
+    return { kind: "source" } as const;
   })();
 
   // Map populated by the per-file transform to collect sidecar .stylex.ts files
@@ -513,17 +563,15 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     import("./internal/transform-types.js").BridgeComponentResult[]
   >();
 
-  // Set populated by the per-file transform to track which files were actually transformed.
-  // Used to detect consumers that were expected to transform but bailed, so they can be bridge-patched.
-  const transformedFiles = new Set<string>();
-
   // Map populated by the per-file transform: target file → transient prop renames for consumer patching
   const transientPropRenames = new Map<
     string,
     import("./internal/transform-types.js").TransientPropRenameResult[]
   >();
 
-  const result = await jscodeshiftRun(transformPath, filePaths, {
+  const transformedFileSources = new Map<string, string>();
+
+  const runnerOptions = {
     parser,
     dry: dryRun,
     print,
@@ -532,6 +580,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     sidecarFiles,
     bridgeResults,
     transformedFiles,
+    transformedFileSources,
     transientPropRenames,
     allowPartialMigration: options.allowPartialMigration ?? (leavesOnly ? true : false),
     transformMode: leavesOnly ? "leavesOnly" : (options.transformMode ?? "all"),
@@ -542,7 +591,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
     silent: options.silent ?? false,
-  });
+  };
+
+  // Worker.js processes a chunk with async.each even when jscodeshift runs in-band.
+  // Several transform decisions read the live transformedFiles set, so call the
+  // transform directly in dependency order instead of re-entering Runner per file.
+  const result = await runTransformSequentially(transformModule, filePaths, runnerOptions);
 
   // Write sidecar .stylex.ts files (defineMarker declarations)
   // Merge with existing content to avoid clobbering user-owned exports (e.g. defineVars).
@@ -673,6 +727,199 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
     return newContent;
   }
   return mergeMarkerDeclarations(existing, newContent);
+}
+
+function orderFilesByLocalImportDependencies(
+  filePaths: readonly string[],
+  resolver: { resolve(fromFile: string, specifier: string): string | undefined },
+  normalizeFilePath: (filePath: string) => string,
+): string[] {
+  const filePathByNormalized = new Map<string, string>();
+  for (const filePath of filePaths) {
+    filePathByNormalized.set(normalizeFilePath(filePath), filePath);
+  }
+
+  const dependenciesByFile = new Map<string, string[]>();
+  for (const filePath of filePaths) {
+    const dependencies: string[] = [];
+    const source = readFileForOrdering(filePath);
+    MODULE_SPECIFIER_RE.lastIndex = 0;
+    for (const match of source.matchAll(MODULE_SPECIFIER_RE)) {
+      const specifier = match[1];
+      if (!specifier) {
+        continue;
+      }
+      const resolved = resolver.resolve(resolve(filePath), specifier);
+      if (!resolved) {
+        continue;
+      }
+      const dependency = filePathByNormalized.get(normalizeFilePath(resolved));
+      if (dependency && dependency !== filePath && !dependencies.includes(dependency)) {
+        dependencies.push(dependency);
+      }
+    }
+    dependenciesByFile.set(filePath, dependencies);
+  }
+
+  const ordered: string[] = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (filePath: string): void => {
+    if (visited.has(filePath)) {
+      return;
+    }
+    if (visiting.has(filePath)) {
+      return;
+    }
+    visiting.add(filePath);
+    for (const dependency of dependenciesByFile.get(filePath) ?? []) {
+      visit(dependency);
+    }
+    visiting.delete(filePath);
+    visited.add(filePath);
+    ordered.push(filePath);
+  };
+
+  for (const filePath of filePaths) {
+    visit(filePath);
+  }
+  return ordered;
+}
+
+const MODULE_SPECIFIER_RE = /\b(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?["']([^"']+)["']/g;
+
+function readFileForOrdering(filePath: string): string {
+  try {
+    return readFileSync(resolve(filePath), "utf-8");
+  } catch {
+    return "";
+  }
+}
+
+type TransformModuleSpecifier =
+  | {
+      kind: "path";
+      value: string;
+    }
+  | {
+      kind: "source";
+    };
+
+type TransformFunction = (
+  file: FileInfo,
+  api: API,
+  options: import("./internal/transform-types.js").TransformOptions,
+) => string | null | Promise<string | null>;
+
+type SequentialRunOptions = import("./internal/transform-types.js").TransformOptions & {
+  parser: NonNullable<RunTransformOptions["parser"]>;
+  dry: boolean;
+  print: boolean;
+  silent: boolean;
+  transformedFileSources: Map<string, string>;
+};
+
+type SequentialRunResult = {
+  error: number;
+  nochange: number;
+  skip: number;
+  ok: number;
+  timeElapsed: string;
+};
+
+async function runTransformSequentially(
+  transformModule: TransformModuleSpecifier,
+  filePaths: readonly string[],
+  options: SequentialRunOptions,
+): Promise<SequentialRunResult> {
+  const transform = await loadTransformFunction(transformModule);
+  const aggregate: SequentialRunResult = {
+    error: 0,
+    nochange: 0,
+    skip: 0,
+    ok: 0,
+    timeElapsed: "0",
+  };
+  const startedAt = performance.now();
+  const j = jscodeshift.withParser(options.parser);
+  const api: API = {
+    j,
+    jscodeshift: j,
+    stats: () => {},
+    report: (msg) => {
+      if (!options.silent) {
+        process.stdout.write(`${msg}\n`);
+      }
+    },
+  };
+
+  for (const filePath of filePaths) {
+    let source: string;
+    try {
+      source = await readFile(filePath, "utf-8");
+    } catch (err) {
+      Logger.logError(`File error: ${err instanceof Error ? err.message : String(err)}`, filePath);
+      aggregate.error += 1;
+      continue;
+    }
+
+    try {
+      const output = await transform({ path: filePath, source }, api, options);
+      if (output !== null) {
+        options.transformedFileSources.set(toRealPath(filePath), output);
+      }
+      if (output === null) {
+        aggregate.skip += 1;
+        continue;
+      }
+      if (output === source) {
+        aggregate.nochange += 1;
+        continue;
+      }
+      if (options.print) {
+        process.stdout.write(`${output}\n`);
+      }
+      if (!options.dry) {
+        await writeFile(filePath, output, "utf-8");
+      }
+      aggregate.ok += 1;
+    } catch (err) {
+      if (!Logger.isErrorLogged(err)) {
+        Logger.logError(
+          `Transformation error: ${err instanceof Error ? err.message : String(err)}`,
+          filePath,
+        );
+      }
+      aggregate.error += 1;
+    }
+  }
+
+  aggregate.timeElapsed = ((performance.now() - startedAt) / 1000).toFixed(3);
+  return aggregate;
+}
+
+async function loadTransformFunction(
+  transformModule: TransformModuleSpecifier,
+): Promise<TransformFunction> {
+  const mod =
+    transformModule.kind === "path"
+      ? await import(pathToFileURL(transformModule.value).href)
+      : await import("./transform.js");
+
+  if (isTransformModule(mod)) {
+    return mod.default;
+  }
+
+  throw new Error("Could not load transform module: default export is not a function.");
+}
+
+function isTransformModule(value: unknown): value is { default: TransformFunction } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "default" in value &&
+    typeof (value as { default?: unknown }).default === "function"
+  );
 }
 
 /** Run formatter commands on a list of files, logging warnings on failure. */

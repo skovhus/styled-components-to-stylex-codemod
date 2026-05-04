@@ -121,6 +121,12 @@ export interface TransformOptions extends Options {
    * Set by runTransform.
    */
   resolveModule?: (fromFile: string, specifier: string) => string | undefined;
+
+  /**
+   * In-memory outputs for files already converted in this run. Used during dry-run
+   * so same-run dependency checks see the same source a real run would write.
+   */
+  transformedFileSources?: ReadonlyMap<string, string>;
 }
 
 /**
@@ -136,6 +142,8 @@ export interface CrossFileInfo {
   styledDefFiles?: Map<string, Set<string>>;
   /** Global leaf keys from prepass when leaves-only mode is enabled. */
   globalLeafKeys?: Set<string>;
+  /** Files successfully converted in the current transform run. Used to avoid bailing on same-run bases. */
+  transformedFiles?: Set<string>;
 }
 
 export interface CrossFileSelectorUsage {

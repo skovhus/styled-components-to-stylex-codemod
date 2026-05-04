@@ -15,14 +15,16 @@ import { existsSync, readFileSync } from "node:fs";
 import jscodeshift, { type ASTNode, type JSCodeshift } from "jscodeshift";
 import type { Adapter, ImportSource } from "../adapter.js";
 import { createModuleResolver } from "./prepass/resolve-imports.js";
+import { toRealPath } from "./utilities/path-utils.js";
 
 export function isWrappedComponentSxAware(args: {
   adapter: Pick<Adapter, "useSxProp" | "wrappedComponentInterface">;
   importMap: ReadonlyMap<string, { importedName: string; source: ImportSource }> | undefined;
   componentLocalName: string;
   filePath: string;
+  sourceOverrides?: ReadonlyMap<string, string>;
 }): boolean {
-  const { adapter, importMap, componentLocalName, filePath } = args;
+  const { adapter, importMap, componentLocalName, filePath, sourceOverrides } = args;
   if (!adapter.useSxProp || !importMap) {
     return false;
   }
@@ -33,6 +35,7 @@ export function isWrappedComponentSxAware(args: {
 
   // 1) Adapter override always wins when it returns a value.
   const adapterResult = adapter.wrappedComponentInterface?.({
+    localName: componentLocalName,
     importSource: importInfo.source.value,
     importedName: importInfo.importedName,
     filePath,
@@ -47,7 +50,7 @@ export function isWrappedComponentSxAware(args: {
   if (!absolutePath) {
     return false;
   }
-  return detectExportedSxProp(absolutePath, importInfo.importedName);
+  return detectExportedSxProp(absolutePath, importInfo.importedName, sourceOverrides);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -73,7 +76,16 @@ function resolveWrappedComponentSource(source: ImportSource, filePath: string): 
   return moduleResolver.resolve(filePath, source.value) ?? null;
 }
 
-function detectExportedSxProp(absolutePath: string, componentName: string): boolean {
+function detectExportedSxProp(
+  absolutePath: string,
+  componentName: string,
+  sourceOverrides?: ReadonlyMap<string, string>,
+): boolean {
+  const sourceOverride = readSourceOverride(absolutePath, sourceOverrides);
+  if (sourceOverride !== undefined) {
+    return computeDetectionFromSource(sourceOverride, componentName);
+  }
+
   const cacheKey = `${absolutePath}\u0000${componentName}`;
   const cached = detectionCache.get(cacheKey);
   if (cached !== undefined) {
@@ -97,6 +109,10 @@ function computeDetection(absolutePath: string, componentName: string): boolean 
     return false;
   }
 
+  return computeDetectionFromSource(source, componentName);
+}
+
+function computeDetectionFromSource(source: string, componentName: string): boolean {
   // Cheap pre-check: if the file doesn't even mention `sx` near the named
   // component, skip parsing entirely. This keeps the common no-match case fast.
   if (!source.includes(SX_PROP_NAME) || !source.includes(componentName)) {
@@ -122,13 +138,33 @@ function computeDetection(absolutePath: string, componentName: string): boolean 
 }
 
 function resolveSourcePath(absolutePath: string): string | null {
-  for (const ext of FILE_EXTENSIONS) {
-    const candidate = absolutePath + ext;
+  for (const candidate of sourcePathCandidates(absolutePath)) {
     if (existsSync(candidate)) {
       return candidate;
     }
   }
   return null;
+}
+
+function readSourceOverride(
+  absolutePath: string,
+  sourceOverrides: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  if (!sourceOverrides) {
+    return undefined;
+  }
+
+  for (const candidate of sourcePathCandidates(absolutePath)) {
+    const source = sourceOverrides.get(toRealPath(candidate));
+    if (source !== undefined) {
+      return source;
+    }
+  }
+  return undefined;
+}
+
+function sourcePathCandidates(absolutePath: string): string[] {
+  return FILE_EXTENSIONS.map((ext) => absolutePath + ext);
 }
 
 /**

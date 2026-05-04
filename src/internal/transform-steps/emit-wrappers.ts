@@ -46,6 +46,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
     useSxProp: ctx.adapter.useSxProp,
     importMap: ctx.importMap,
+    sourceOverrides: ctx.options.transformedFileSources,
     wrappedComponentInterface: ctx.adapter.wrappedComponentInterface?.bind(ctx.adapter),
   });
 

@@ -239,7 +239,7 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
         `Received: wrappedComponentInterface=${describeValue(wrappedComponentInterface)}`,
         "",
         "Expected signature:",
-        "  wrappedComponentInterface(ctx: { importSource: string; importedName: string; filePath: string })",
+        "  wrappedComponentInterface(ctx: { localName: string; importSource: string; importedName: string; filePath: string })",
         "    => { acceptsSx: boolean } | undefined",
       ].join("\n"),
     );

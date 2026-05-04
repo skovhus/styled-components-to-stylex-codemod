@@ -21,6 +21,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   }
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
+  const transformedFiles = ctx.options.crossFileInfo?.transformedFiles;
 
   // Build lookup of locally defined styled-component names for exclusion
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
@@ -47,6 +48,9 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     const importedPath = importEntry.source.value;
+    if (transformedFiles && pathSetContainsWithExtensionFallback(importedPath, transformedFiles)) {
+      continue;
+    }
 
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
@@ -181,6 +185,20 @@ function resolveStyledDefFile(
   return undefined;
 }
 
+function pathSetContainsWithExtensionFallback(filePath: string, paths: Set<string>): boolean {
+  for (const candidate of pathCandidates(filePath)) {
+    if (paths.has(candidate) || paths.has(toRealPath(candidate))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pathCandidates(filePath: string): string[] {
+  const resolved = pathResolve(filePath);
+  return [resolved, ...EXTENSIONS.map((ext) => resolved + ext)];
+}
+
 /**
  * Fallback: read an imported file and scan for styled-component definitions.
  * Used when styledDefFiles is not available (single-file mode, tests without prepass).
@@ -207,8 +225,7 @@ function scanFileForStyledDefs(importedPath: string): Set<string> | undefined {
  * Import paths may lack extensions; tries exact match then common extensions.
  */
 function tryReadFile(importedPath: string): string | undefined {
-  const candidates = [importedPath, ...EXTENSIONS.map((ext) => importedPath + ext)];
-  for (const candidate of candidates) {
+  for (const candidate of pathCandidates(importedPath)) {
     try {
       return readFileSync(candidate, "utf-8");
     } catch {

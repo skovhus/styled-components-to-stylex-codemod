@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isWrappedComponentSxAware } from "./wrapped-component-interface.js";
+import { toRealPath } from "./utilities/path-utils.js";
 
 let dir: string;
 
@@ -692,6 +693,35 @@ export const Foo = (p: { sx?: stylex.StyleXStyles }) => null as any;
         filePath: "/anywhere/consumer.tsx",
       }),
     ).toBe(false);
+  });
+
+  it("uses in-memory source overrides before reading from disk", () => {
+    const lib = writeLib("noSxOnDisk", `export const Foo = (p: { id?: string }) => null as any;`);
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map([
+          [
+            "Foo",
+            {
+              importedName: "Foo",
+              source: { kind: "absolutePath", value: lib.replace(/\.(tsx|ts|jsx|js)$/, "") },
+            },
+          ],
+        ]),
+        componentLocalName: "Foo",
+        filePath: join(dir, "consumer.tsx"),
+        sourceOverrides: new Map([
+          [
+            toRealPath(lib),
+            `
+import * as stylex from "@stylexjs/stylex";
+export function Foo(props: { id?: string } & { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+          ],
+        ]),
+      }),
+    ).toBe(true);
   });
 
   it("returns false when the local name is not in the importMap (local component)", () => {
