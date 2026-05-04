@@ -228,6 +228,21 @@ export function postProcessTransformedAst(args: {
       );
     };
 
+    const directParentHasParentKey = (ancestors: any[], parentStyleKey: string): boolean => {
+      const directParent = ancestors.at(-1);
+      if (!directParent) {
+        return false;
+      }
+      return (
+        (directParent.call && hasStyleKeyArg(directParent.call, parentStyleKey)) ||
+        (directParent.sxAttr &&
+          getSxAttrArgs(directParent.sxAttr.value.expression).some((arg: any) =>
+            isStyleKeyRef(arg, parentStyleKey),
+          )) ||
+        directParent.elementStyleKey === parentStyleKey
+      );
+    };
+
     // Track empty ancestor style keys to remove AFTER all descendant matching is done.
     // We defer removal so that ancestor matching can still find the style keys.
     const pendingEmptyKeyRemovals: Array<{ call: any; key: string }> = [];
@@ -298,7 +313,10 @@ export function postProcessTransformedAst(args: {
             continue;
           }
           for (const o of list) {
-            if (!ancestorHasParentKey(ancestors, o.parentStyleKey)) {
+            const parentMatches = o.directChildOnly
+              ? directParentHasParentKey(ancestors, o.parentStyleKey)
+              : ancestorHasParentKey(ancestors, o.parentStyleKey);
+            if (!parentMatches) {
               continue;
             }
             const alreadyHas = call

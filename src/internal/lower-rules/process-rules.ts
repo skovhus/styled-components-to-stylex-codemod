@@ -129,7 +129,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (!elementResult) {
       return null;
     }
-    const { childDecl, ancestorPseudo, childPseudo } = elementResult;
+    const { childDecl, ancestorPseudo, childPseudo, directChildOnly } = elementResult;
     const overrideStyleKey = `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
     ancestorSelectorParents.add(parentDecl.styleKey);
 
@@ -177,6 +177,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       relationOverridePseudoBuckets,
       childDecl.extraStyleKeys,
     );
+    if (directChildOnly) {
+      const override = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
+      if (override) {
+        override.directChildOnly = true;
+      }
+    }
 
     const result = processDeclarationsIntoBucket(
       rule,
@@ -1823,7 +1829,6 @@ type ElementSelectorBailReason =
   | "bail-exported"
   | "bail-ambiguous"
   | "bail-dynamic"
-  | "bail-child-combinator"
   | "bail-combined-pseudo"
   | "bail-plain-intrinsic"
   | "bail-pseudo-collision";
@@ -1835,7 +1840,6 @@ const ELEMENT_BAIL_WARNING_MAP: Record<
   "bail-exported": "Unsupported selector: element selector on exported component",
   "bail-ambiguous": "Unsupported selector: ambiguous element selector",
   "bail-dynamic": "Unsupported selector: element selector with dynamic children",
-  "bail-child-combinator": "Unsupported selector: descendant/child/sibling selector",
   "bail-combined-pseudo":
     "Unsupported selector: element selector with combined ancestor and child pseudos",
   "bail-plain-intrinsic": "Unsupported selector: element selector with plain intrinsic children",
@@ -1859,6 +1863,7 @@ function resolveElementSelectorTarget(
       childDecl: StyledDecl;
       ancestorPseudo: string | null;
       childPseudo: string | null;
+      directChildOnly: boolean;
     }
   | ElementSelectorBailReason
   | null {
@@ -1872,10 +1877,6 @@ function resolveElementSelectorTarget(
   // — cannot represent both in a single StyleX override
   if (ancestorPseudo && childPseudo) {
     return "bail-combined-pseudo";
-  }
-
-  if (parsed.usesChildCombinator) {
-    return "bail-child-combinator";
   }
 
   // Bail if the parent component is exported — can't verify external usage
@@ -1910,7 +1911,12 @@ function resolveElementSelectorTarget(
     return "bail-plain-intrinsic";
   }
 
-  return { childDecl: matches[0]!, ancestorPseudo, childPseudo };
+  return {
+    childDecl: matches[0]!,
+    ancestorPseudo,
+    childPseudo,
+    directChildOnly: parsed.usesChildCombinator,
+  };
 }
 
 /**
