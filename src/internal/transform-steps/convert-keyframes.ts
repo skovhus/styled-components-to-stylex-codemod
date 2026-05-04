@@ -9,6 +9,11 @@ import { objectToAst } from "../transform/helpers.js";
 
 /**
  * Converts styled-components keyframes usage to stylex.keyframes and tracks created names.
+ *
+ * Also collects the names of pre-existing `stylex.keyframes(...)` declarations in the
+ * file, so that incremental migrations (e.g. a leaves-only pass followed by a full
+ * migration) can still recognize keyframe identifiers when expanding `animation`
+ * shorthands in the surviving styled-components declarations.
  */
 export function convertKeyframesStep(ctx: TransformContext): StepResult {
   const { styledImports, j, root } = ctx;
@@ -45,5 +50,38 @@ export function convertKeyframesStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // Pick up names of existing `const <name> = stylex.keyframes(...)` declarations
+  // so subsequent transform passes still see them as keyframes when expanding
+  // `animation` shorthands. This matters for incremental migration flows where a
+  // previous run already converted `keyframes\`...\`` and removed the `keyframes`
+  // import, but other styled-components decls in the same file still reference
+  // the keyframe binding via interpolation.
+  collectExistingStylexKeyframeNames(ctx);
+
   return CONTINUE;
+}
+
+// --- Non-exported helpers ---
+
+function collectExistingStylexKeyframeNames(ctx: TransformContext): void {
+  const { root, j } = ctx;
+  root.find(j.VariableDeclarator).forEach((p) => {
+    const id = p.node.id;
+    if (id.type !== "Identifier") {
+      return;
+    }
+    const init = p.node.init;
+    if (
+      !init ||
+      init.type !== "CallExpression" ||
+      init.callee.type !== "MemberExpression" ||
+      init.callee.object.type !== "Identifier" ||
+      init.callee.object.name !== "stylex" ||
+      init.callee.property.type !== "Identifier" ||
+      init.callee.property.name !== "keyframes"
+    ) {
+      return;
+    }
+    ctx.keyframesNames.add(id.name);
+  });
 }
