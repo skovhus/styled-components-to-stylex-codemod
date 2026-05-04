@@ -1,6 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const App = () => <div sx={styles.thing}>Hover me!</div>;
+export const App = () => (
+  <div data-label=" after" sx={styles.thing}>
+    Hover me!
+  </div>
+);
 
 const styles = stylex.create({
   thing: {
@@ -17,6 +21,9 @@ const styles = stylex.create({
     },
     "::before": {
       content: '"🔥"',
+    },
+    "::after": {
+      content: "attr(data-label)",
     },
   },
 });

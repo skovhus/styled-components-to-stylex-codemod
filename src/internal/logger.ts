@@ -53,6 +53,7 @@ export type WarningType =
   | "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling"
   | "Local helper function returns CSS that cannot be decomposed into individual properties"
   | "Local helper function computes CSS values that cannot be statically traced to the component prop"
+  | "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand"
   | "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX"
   | "Theme-dependent block-level conditional could not be fully resolved (branches may contain dynamic interpolations)"
   | "Theme-dependant call expression could not be resolved (e.g. theme helper calls like theme.highlight() are not supported)"

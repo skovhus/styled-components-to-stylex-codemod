@@ -274,6 +274,9 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
  * CSS `content` requires quoted strings; this ensures the value is properly double-quoted.
  */
 export function normalizeCssContentValue(value: string): string {
+  if (isCssContentNonStringValue(value.trim())) {
+    return value.trim();
+  }
   const m = value.match(/^['"]([\s\S]*)['"]$/);
   if (m) {
     return `"${m[1]}"`;
@@ -282,6 +285,13 @@ export function normalizeCssContentValue(value: string): string {
     return `"${value}"`;
   }
   return value;
+}
+
+function isCssContentNonStringValue(value: string): boolean {
+  return (
+    /^(attr|counter|counters)\s*\(/i.test(value) ||
+    /^(open-quote|close-quote|no-open-quote|no-close-quote|normal|none)$/i.test(value)
+  );
 }
 
 // Re-export from style-key-naming.ts for backwards compatibility

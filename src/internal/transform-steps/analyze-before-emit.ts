@@ -29,7 +29,12 @@ import {
   isPureIdempotentExpression,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
-import { camelToKebabCase, escapeRegex, isValidIdentifierName } from "../utilities/string-utils.js";
+import {
+  camelToKebabCase,
+  escapeRegex,
+  isSingleBackgroundComponent,
+  isValidIdentifierName,
+} from "../utilities/string-utils.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
@@ -2483,39 +2488,6 @@ function expandStaticStylePropToStylex(
     result.push({ key: entry.prop, value: coerceExpandedValue(entry.value.value) });
   }
   return result.length > 0 ? result : null;
-}
-
-/**
- * Returns true when a `background` shorthand value is structurally simple
- * enough to map onto a single `background-color` or `background-image`
- * longhand: a single token, or a single function call (e.g. `rgb(…)`,
- * `linear-gradient(…)`, `url(…)`). Multi-component shorthands (color +
- * position/size, image + repeat, comma-separated layers, …) bail.
- */
-function isSingleBackgroundComponent(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return false;
-  }
-  // Top-level commas are layer separators; slashes separate <bg-position> from
-  // <bg-size>; whitespace separates multiple component values. Any of these
-  // makes the value a true shorthand we can't statically map to a longhand.
-  return !hasTopLevelMatch(trimmed, /[\s,/]/);
-}
-
-/** Returns true when `pattern` matches a character outside of any parenthesized group. */
-function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
-  let depth = 0;
-  for (const c of value) {
-    if (c === "(") {
-      depth++;
-    } else if (c === ")") {
-      depth = Math.max(0, depth - 1);
-    } else if (depth === 0 && pattern.test(c)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

@@ -1823,6 +1823,7 @@ type ElementSelectorBailReason =
   | "bail-exported"
   | "bail-ambiguous"
   | "bail-dynamic"
+  | "bail-child-combinator"
   | "bail-combined-pseudo"
   | "bail-plain-intrinsic"
   | "bail-pseudo-collision";
@@ -1834,6 +1835,7 @@ const ELEMENT_BAIL_WARNING_MAP: Record<
   "bail-exported": "Unsupported selector: element selector on exported component",
   "bail-ambiguous": "Unsupported selector: ambiguous element selector",
   "bail-dynamic": "Unsupported selector: element selector with dynamic children",
+  "bail-child-combinator": "Unsupported selector: descendant/child/sibling selector",
   "bail-combined-pseudo":
     "Unsupported selector: element selector with combined ancestor and child pseudos",
   "bail-plain-intrinsic": "Unsupported selector: element selector with plain intrinsic children",
@@ -1865,6 +1867,10 @@ function resolveElementSelectorTarget(
     return null;
   }
   const { tagName, ancestorPseudo, childPseudo } = parsed;
+
+  if (parsed.usesChildCombinator) {
+    return "bail-child-combinator";
+  }
 
   // Bail if both ancestor and child pseudos are present (e.g., `&:focus > button:disabled`)
   // — cannot represent both in a single StyleX override

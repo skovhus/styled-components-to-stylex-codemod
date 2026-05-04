@@ -4,7 +4,10 @@
  */
 import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  isUnsupportedBackgroundShorthandValue,
+} from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
@@ -121,6 +124,17 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       }
     }
 
+    if (d.property === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw)) {
+      state.bailUnsupported(
+        ctx.decl,
+        "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+      );
+      if (state.currentDecl === ctx.decl) {
+        break;
+      }
+      state.bail = true;
+      break;
+    }
     const outs = cssDeclarationToStylexDeclarations(d);
     for (let i = 0; i < outs.length; i++) {
       const out = outs[i]!;

@@ -15,6 +15,10 @@ const Thing = styled.div`
   &::before {
     content: "🔥";
   }
+
+  &::after {
+    content: attr(data-label);
+  }
 `;
 
-export const App = () => <Thing>Hover me!</Thing>;
+export const App = () => <Thing data-label=" after">Hover me!</Thing>;

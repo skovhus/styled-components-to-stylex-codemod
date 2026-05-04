@@ -1,14 +1,9 @@
-/**
- * Test case for element child combinator selectors.
- * Demonstrates `> button { ... }` being transformed to relation overrides.
- *
- * Note: Both CSS descendant (space) and child (>) combinators map to
- * stylex.when.ancestor(). The child combinator is therefore less strict
- * in the output than the original CSS.
- */
+// @expected-warning: Unsupported selector: descendant/child/sibling selector
 import * as React from "react";
 import styled from "styled-components";
 
+// Direct child combinators cannot be represented losslessly with
+// stylex.when.ancestor(), which matches any ancestor.
 const ActionButton = styled.button`
   padding: 8px 16px;
   background: #bf4f74;

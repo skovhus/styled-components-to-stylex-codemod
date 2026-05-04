@@ -1,14 +1,33 @@
-// @expected-warning: Unsupported selector: element selector on exported component
+// @expected-warning: Unsupported selector: descendant/child/sibling selector
+// Child combinator with attribute selector: `& > button[disabled]`
+// StyleX ancestor matching cannot preserve direct-child-only semantics.
 import styled from "styled-components";
 
-export const Trigger = styled.div`
+const ActionButton = styled.button`
+  padding: 8px 16px;
+  background: #bf4f74;
+  color: white;
+  border: none;
+  border-radius: 4px;
+`;
+
+const Trigger = styled.div`
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  background: #f0f0f0;
+
   & > button[disabled] {
     pointer-events: none;
+    opacity: 0.5;
   }
 `;
 
 export const App = () => (
-  <Trigger>
-    <button disabled>Click me</button>
-  </Trigger>
+  <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
+    <Trigger>
+      <ActionButton>Enabled</ActionButton>
+      <ActionButton disabled>Disabled</ActionButton>
+    </Trigger>
+  </div>
 );

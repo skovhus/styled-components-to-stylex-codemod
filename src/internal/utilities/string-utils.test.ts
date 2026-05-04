@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   looksLikeLength,
   isBackgroundImageValue,
+  isSingleBackgroundComponent,
   kebabToCamelCase,
   camelToKebabCase,
 } from "./string-utils.js";
@@ -73,6 +74,21 @@ describe("isBackgroundImageValue", () => {
     expect(isBackgroundImageValue("#fff")).toBe(false);
     expect(isBackgroundImageValue("red")).toBe(false);
     expect(isBackgroundImageValue("rgb(255, 0, 0)")).toBe(false);
+  });
+});
+
+describe("isSingleBackgroundComponent", () => {
+  it("accepts values that map to one background longhand", () => {
+    expect(isSingleBackgroundComponent("red")).toBe(true);
+    expect(isSingleBackgroundComponent("rgb(255, 0, 0)")).toBe(true);
+    expect(isSingleBackgroundComponent("linear-gradient(red, blue)")).toBe(true);
+    expect(isSingleBackgroundComponent("url('image.png')")).toBe(true);
+  });
+
+  it("rejects multi-component background shorthands", () => {
+    expect(isSingleBackgroundComponent("red url('image.png') no-repeat")).toBe(false);
+    expect(isSingleBackgroundComponent("url('image.png') center / cover")).toBe(false);
+    expect(isSingleBackgroundComponent("linear-gradient(red, blue), green")).toBe(false);
   });
 });
 
