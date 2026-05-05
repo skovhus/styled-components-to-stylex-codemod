@@ -16,10 +16,18 @@ const CollisionBox = styled.div`
   background: #dbeafe;
 `;
 
+const AlternateWidth = styled.div`
+  --menu-width: 180px;
+  width: var(--menu-width, 180px);
+  padding: 8px;
+  background: #fee2e2;
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <WidthMenu>Default width</WidthMenu>
     <WidthMenu $menuWidth={320}>Custom width</WidthMenu>
     <CollisionBox>Collision names</CollisionBox>
+    <AlternateWidth>Alternate width</AlternateWidth>
   </div>
 );

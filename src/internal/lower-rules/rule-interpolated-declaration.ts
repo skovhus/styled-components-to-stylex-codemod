@@ -146,7 +146,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     hasLocalThemeBinding,
     resolveThemeValue,
     resolveThemeValueFromFn,
-    localStylexVars,
     getOrCreateLocalStylexVar,
     resolveImportInScope,
     resolveImportForExpr,
@@ -690,7 +689,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         decl,
         expr: localVarExpr,
         getOrCreateLocalStylexVar,
-        localStylexVars,
         inlineStyleProps,
       })
     ) {
@@ -2483,10 +2481,9 @@ function tryHandleLocalCustomPropertyDefinition(args: {
     groupName: string;
     keyName: string;
   };
-  localStylexVars: Map<string, unknown>;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
 }): boolean {
-  const { j, d, decl, expr, getOrCreateLocalStylexVar, localStylexVars, inlineStyleProps } = args;
+  const { j, d, decl, expr, getOrCreateLocalStylexVar, inlineStyleProps } = args;
   if (!expr || typeof expr !== "object") {
     return false;
   }
@@ -2546,7 +2543,6 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
   }
-  localStylexVars.set(customValue.cssName, ref);
   decl.needsWrapperComponent = true;
   return true;
 }

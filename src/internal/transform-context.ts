@@ -166,12 +166,15 @@ export class TransformContext {
 
     const resolverImports = new Map<string, ImportSpec>();
     const localStylexVars = new Map<string, LocalStylexVarRef>();
+    const localStylexVarKeyFor = (cssName: string, defaultValue: string): string =>
+      `${cssName}\u0000${defaultValue}`;
     let nextLocalStylexVarOrder = 0;
     const getOrCreateLocalStylexVar = (
       cssName: string,
       defaultValue: string,
     ): LocalStylexVarRef => {
-      const existing = localStylexVars.get(cssName);
+      const mapKey = localStylexVarKeyFor(cssName, defaultValue);
+      const existing = localStylexVars.get(mapKey);
       if (existing) {
         return existing;
       }
@@ -182,13 +185,6 @@ export class TransformContext {
         .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
         .join("");
       const baseKeyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
-      const usedKeyNames = new Set([...localStylexVars.values()].map((ref) => ref.keyName));
-      let keyName = baseKeyName;
-      let suffix = 1;
-      while (usedKeyNames.has(keyName)) {
-        keyName = `${baseKeyName}${suffix}`;
-        suffix += 1;
-      }
       const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
       const filePrefix = baseName
         .split(/[^a-zA-Z0-9_$]+/)
@@ -200,6 +196,17 @@ export class TransformContext {
         )
         .join("");
       const groupName = `${filePrefix}Variables`;
+      const usedKeyNames = new Set(
+        [...localStylexVars.values()]
+          .filter((ref) => ref.groupName === groupName)
+          .map((ref) => ref.keyName),
+      );
+      let keyName = baseKeyName;
+      let suffix = 1;
+      while (usedKeyNames.has(keyName)) {
+        keyName = `${baseKeyName}${suffix}`;
+        suffix += 1;
+      }
       const ref = {
         cssName,
         groupName,
@@ -209,9 +216,14 @@ export class TransformContext {
         sidecarFileName: `${baseName}.stylex`,
       };
       nextLocalStylexVarOrder += 1;
-      localStylexVars.set(cssName, ref);
+      localStylexVars.set(mapKey, ref);
       return ref;
     };
+    const getLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef | undefined =>
+      localStylexVars.get(localStylexVarKeyFor(cssName, defaultValue));
     const {
       resolveValueSafe,
       resolveValueDirectionalSafe,
@@ -233,6 +245,7 @@ export class TransformContext {
       definedVars,
       varsToDrop,
       localStylexVars,
+      getLocalStylexVar,
       getOrCreateLocalStylexVar,
       resolveValue: resolveValueSafe,
       addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),

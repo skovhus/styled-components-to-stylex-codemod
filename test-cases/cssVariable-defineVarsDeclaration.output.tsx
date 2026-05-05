@@ -32,6 +32,7 @@ export const App = () => (
     <WidthMenu>Default width</WidthMenu>
     <WidthMenu menuWidth={320}>Custom width</WidthMenu>
     <div sx={styles.collisionBox}>Collision names</div>
+    <div sx={styles.alternateWidth}>Alternate width</div>
   </div>
 );
 
@@ -42,10 +43,16 @@ const styles = stylex.create({
     backgroundColor: "#fef3c7",
   },
   collisionBox: {
-    "--foo-bar": "100px",
-    "--fooBar": "80px",
+    [cssVariableDefineVarsDeclarationInputVariables.fooBar]: "100px",
+    [cssVariableDefineVarsDeclarationInputVariables.fooBar1]: "80px",
     width: cssVariableDefineVarsDeclarationInputVariables.fooBar,
     height: cssVariableDefineVarsDeclarationInputVariables.fooBar1,
     backgroundColor: "#dbeafe",
+  },
+  alternateWidth: {
+    [cssVariableDefineVarsDeclarationInputVariables.menuWidth1]: "180px",
+    width: cssVariableDefineVarsDeclarationInputVariables.menuWidth1,
+    padding: 8,
+    backgroundColor: "#fee2e2",
   },
 });

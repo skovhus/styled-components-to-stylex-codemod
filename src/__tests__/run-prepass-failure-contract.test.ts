@@ -63,6 +63,32 @@ describe("mergeSidecarContent", () => {
     expect(result).toContain("export const ButtonMarker = stylex.defineMarker();");
   });
 
+  it("preserves existing exports and appends generated defineVars", async () => {
+    const { mergeSidecarContent } = await import("../run.js");
+    const existing = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const ExistingMarker = stylex.defineMarker();",
+      "",
+    ].join("\n");
+    const sidecarPath = join(tmpDir, "component.stylex.ts");
+    writeFileSync(sidecarPath, existing, "utf-8");
+
+    const newContent = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const componentVariables = stylex.defineVars({",
+      '  menuWidth: "240px",',
+      "});",
+      "",
+    ].join("\n");
+    const result = mergeSidecarContent(sidecarPath, newContent);
+
+    expect(result).toContain("ExistingMarker");
+    expect(result).toContain("export const componentVariables = stylex.defineVars({");
+    expect(result).toContain('menuWidth: "240px"');
+  });
+
   it("does not duplicate markers that already exist", async () => {
     const { mergeSidecarContent } = await import("../run.js");
     const existing = [

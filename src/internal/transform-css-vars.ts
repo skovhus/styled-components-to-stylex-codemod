@@ -39,6 +39,7 @@ type CssVarRewriteContext = {
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
   localStylexVars?: Map<string, LocalStylexVarRef>;
+  getLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef | undefined;
   getOrCreateLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
@@ -69,8 +70,8 @@ function rewriteCssVarsInStyleObjectImpl(
   for (const [k, v] of Object.entries(obj)) {
     if (k.startsWith("--")) {
       const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
-      const localVar = ctx.localStylexVars?.get(k);
-      if (localVar && localVar.defaultValue !== v) {
+      const localVar = typeof v === "string" ? ctx.getLocalStylexVar?.(k, v) : undefined;
+      if (localVar) {
         delete obj[k];
         addComputedKeyForCssVar(obj, {
           keyExpr: stylexVarMemberExpression(ctx.j, localVar),
@@ -174,7 +175,7 @@ function rewriteLocalStylexVarString(
     if (!fallback) {
       continue;
     }
-    const localVar = ctx.localStylexVars?.get(call.name);
+    const localVar = ctx.getLocalStylexVar?.(call.name, fallback);
     if (!localVar || localVar.defaultValue !== fallback) {
       continue;
     }
@@ -220,13 +221,17 @@ function rewriteCssVarPropertyKeyInAstNode(
   }
   const property = node as {
     key?: { type?: string; name?: string; value?: unknown };
+    value?: { type?: string; value?: unknown };
     computed?: boolean;
   };
   const rawKey = readStaticPropertyKey(property.key);
   if (!rawKey?.startsWith("--")) {
     return;
   }
-  const localVar = ctx.localStylexVars?.get(rawKey);
+  const localVar =
+    typeof property.value?.value === "string"
+      ? ctx.getLocalStylexVar?.(rawKey, property.value.value)
+      : undefined;
   if (!localVar) {
     return;
   }
@@ -356,7 +361,9 @@ function rewriteCssVarsInTemplateLiteral(
     const cleanedFallback = call.fallback
       ? call.fallback.replace(placeholderPattern, "").trim().replace(/,\s*$/, "")
       : undefined;
-    const localVar = ctx.localStylexVars?.get(call.name);
+    const localVar = cleanedFallback
+      ? ctx.getLocalStylexVar?.(call.name, cleanedFallback)
+      : undefined;
     if (localVar && cleanedFallback === localVar.defaultValue) {
       replacements.push({
         start: call.start,
