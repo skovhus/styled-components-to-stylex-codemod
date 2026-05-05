@@ -104,27 +104,7 @@ export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
 // --- Non-exported helpers ---
 
 function collectKeyframesReferencedBySkippedDecls(ctx: TransformContext): Set<string> {
-  const keyframesNames = ctx.keyframesNames;
-  const referencedNames = new Set<string>();
-  if (!ctx.styledDecls || keyframesNames.size === 0) {
-    return referencedNames;
-  }
-
-  for (const decl of ctx.styledDecls) {
-    if (!decl.skipTransform) {
-      continue;
-    }
-    for (const expr of decl.templateExpressions ?? []) {
-      const identifiers = new Set<string>();
-      collectIdentifiers(expr, identifiers);
-      for (const name of identifiers) {
-        if (keyframesNames.has(name)) {
-          referencedNames.add(name);
-        }
-      }
-    }
-  }
-  return referencedNames;
+  return collectKeyframesReferencedByDecls(ctx, (decl) => !!decl.skipTransform);
 }
 
 function buildDuplicateKeyframesNames(
@@ -132,30 +112,51 @@ function buildDuplicateKeyframesNames(
   preservedNames: Set<string>,
 ): Map<string, string> {
   const duplicates = new Map<string, string>();
-  if (!ctx.styledDecls || preservedNames.size === 0) {
+  if (preservedNames.size === 0) {
     return duplicates;
   }
 
   const usedNames = new Set<string>(ctx.keyframesNames);
+  const transformedReferences = collectKeyframesReferencedByDecls(
+    ctx,
+    (decl) => !decl.skipTransform,
+  );
+  for (const name of transformedReferences) {
+    if (!preservedNames.has(name) || duplicates.has(name)) {
+      continue;
+    }
+    const duplicateName = makeUniqueKeyframesDuplicateName(name, usedNames);
+    duplicates.set(name, duplicateName);
+    usedNames.add(duplicateName);
+  }
+
+  return duplicates;
+}
+
+function collectKeyframesReferencedByDecls(
+  ctx: TransformContext,
+  shouldVisitDecl: (decl: NonNullable<TransformContext["styledDecls"]>[number]) => boolean,
+): Set<string> {
+  const referencedNames = new Set<string>();
+  if (!ctx.styledDecls || ctx.keyframesNames.size === 0) {
+    return referencedNames;
+  }
+
   for (const decl of ctx.styledDecls) {
-    if (decl.skipTransform) {
+    if (!shouldVisitDecl(decl)) {
       continue;
     }
     for (const expr of decl.templateExpressions ?? []) {
       const identifiers = new Set<string>();
       collectIdentifiers(expr, identifiers);
       for (const name of identifiers) {
-        if (!preservedNames.has(name) || duplicates.has(name)) {
-          continue;
+        if (ctx.keyframesNames.has(name)) {
+          referencedNames.add(name);
         }
-        const duplicateName = makeUniqueKeyframesDuplicateName(name, usedNames);
-        duplicates.set(name, duplicateName);
-        usedNames.add(duplicateName);
       }
     }
   }
-
-  return duplicates;
+  return referencedNames;
 }
 
 function makeUniqueKeyframesDuplicateName(name: string, usedNames: Set<string>): string {
