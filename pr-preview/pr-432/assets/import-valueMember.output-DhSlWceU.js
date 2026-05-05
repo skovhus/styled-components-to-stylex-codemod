@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import"./stylex-vFXG5bjz.js";import{f as e,p as t}from"./index-BhvdLn3D.js";t();var n=e();function r(){return(0,n.jsx)(`div`,{className:`xmftpkk xmkeg23 x1y0btm7 x16ib48v xur7f20 x1ruevkc x1dt7z5j xixxii4 x8ihxv3`,children:`Fixed modal shell`})}export{r as App};
