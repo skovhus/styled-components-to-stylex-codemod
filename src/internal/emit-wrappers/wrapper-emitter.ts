@@ -38,6 +38,7 @@ export const SX_PROP_TYPE_TEXT = "sx?: stylex.StyleXStyles";
 type TsTypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 type BlockStatementBody = Parameters<JSCodeshift["blockStatement"]>[0];
 type AstNodeOrNull = ASTNode | null | undefined;
+type ResolvedTypeKeyNames = Set<string> | null;
 
 type WrapperEmitterArgs = {
   root: Collection<ASTNode>;
@@ -929,54 +930,61 @@ export class WrapperEmitter {
     const literalStringNames = (
       type: AstNodeOrNull,
       visitedTypeNames = new Set<string>(),
-    ): Set<string> => {
+    ): ResolvedTypeKeyNames => {
       const names = new Set<string>();
-      const collect = (node: AstNodeOrNull): void => {
+      const collect = (node: AstNodeOrNull): boolean => {
         if (!node) {
-          return;
+          return false;
         }
         if (node.type === "TSUnionType") {
           for (const part of (node as any).types ?? []) {
-            collect(part);
+            if (!collect(part)) {
+              return false;
+            }
           }
-          return;
+          return true;
         }
         if (node.type === "TSParenthesizedType") {
-          collect((node as any).typeAnnotation);
-          return;
+          return collect((node as any).typeAnnotation);
         }
         if (node.type === "TSTypeOperator" && (node as any).operator === "keyof") {
           for (const name of extractFromType((node as any).typeAnnotation, visitedTypeNames)) {
             names.add(name);
           }
-          return;
+          return true;
         }
         const referencedTypeName = typeReferenceName(node);
         if (referencedTypeName && !referencedTypeName.includes(".")) {
           const aliasAnnotation = typeAliasAnnotationFor(referencedTypeName, visitedTypeNames);
-          if (aliasAnnotation) {
-            const nextVisitedTypeNames = new Set(visitedTypeNames);
-            nextVisitedTypeNames.add(referencedTypeName);
-            for (const name of literalStringNames(aliasAnnotation, nextVisitedTypeNames)) {
-              names.add(name);
-            }
+          if (!aliasAnnotation) {
+            return false;
           }
-          return;
+          const nextVisitedTypeNames = new Set(visitedTypeNames);
+          nextVisitedTypeNames.add(referencedTypeName);
+          const aliasNames = literalStringNames(aliasAnnotation, nextVisitedTypeNames);
+          if (!aliasNames) {
+            return false;
+          }
+          for (const name of aliasNames) {
+            names.add(name);
+          }
+          return true;
         }
         if (node.type !== "TSLiteralType") {
-          return;
+          return false;
         }
         const literal = (node as any).literal;
         const value =
           literal?.type === "StringLiteral" || literal?.type === "Literal"
             ? literal.value
             : undefined;
-        if (typeof value === "string") {
-          names.add(value);
+        if (typeof value !== "string") {
+          return false;
         }
+        names.add(value);
+        return true;
       };
-      collect(type);
-      return names;
+      return collect(type) ? names : null;
     };
 
     const extractFromLiteral = (literal: AstNodeOrNull): Set<string> => {
@@ -1042,13 +1050,16 @@ export class WrapperEmitter {
       if (typeName === "Omit" && params[0]) {
         merge(extractFromType(params[0], new Set(visitedTypeNames)));
         const omitted = literalStringNames(params[1], new Set(visitedTypeNames));
+        if (!omitted) {
+          return new Set<string>();
+        }
         for (const name of omitted) {
           names.delete(name);
         }
         return names;
       }
       if (typeName === "Pick" && params[1]) {
-        return literalStringNames(params[1], new Set(visitedTypeNames));
+        return literalStringNames(params[1], new Set(visitedTypeNames)) ?? new Set<string>();
       }
 
       if (

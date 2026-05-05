@@ -8,11 +8,14 @@ type BadgeBaseProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
-type DecorativeBadgeBaseProps = BadgeBaseProps & {
+type DecorativeBadgeBaseProps = {
+  children?: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
   tone?: "info" | "warning";
 };
 
-type RemovedDecorativeBadgeProps = keyof Pick<DecorativeBadgeBaseProps, "className" | "style">;
+type RemovedDecorativeBadgeProps = Exclude<keyof DecorativeBadgeBaseProps, "children" | "tone">;
 type DecorativeBadgeProps = Omit<DecorativeBadgeBaseProps, RemovedDecorativeBadgeProps>;
 
 function BadgeBase(props: BadgeBaseProps) {
