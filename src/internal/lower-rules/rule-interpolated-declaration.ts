@@ -1757,7 +1757,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (helperResolution === null) {
               warnings.push({
                 severity: "error",
-                type: "Adapter resolveCall returned an unparseable value expression",
+                type: "Unsupported interpolation: call expression",
                 loc,
               });
               bail = true;
@@ -2784,6 +2784,19 @@ type DynamicHelperCallResult = {
   binding: DynamicHelperCallArgument;
 };
 
+type StyledHelperCall =
+  | {
+      kind: "curried";
+      innerCall: CallExpressionLike;
+      dynamicArg: ExpressionKind;
+      outerArg: ExpressionKind;
+    }
+  | {
+      kind: "direct";
+      innerCall: CallExpressionLike;
+      dynamicArg: ExpressionKind;
+    };
+
 type ImportMeta = {
   importedName: string;
   source: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
@@ -2814,6 +2827,10 @@ function resolveHelperCallsInDynamicValue(
 
     const record = node as Record<string, unknown>;
     if (record.type === "CallExpression") {
+      if (isUnsupportedCurriedHelperCall(record as CallExpressionLike, ctx)) {
+        failed = true;
+        return node;
+      }
       const resolved = tryResolveDynamicHelperCall(record as CallExpressionLike, ctx);
       if (resolved === null) {
         failed = true;
@@ -2853,6 +2870,36 @@ function resolveHelperCallsInDynamicValue(
   return resolutions;
 }
 
+function isUnsupportedCurriedHelperCall(
+  callExpr: CallExpressionLike,
+  ctx: DynamicHelperCallContext,
+): boolean {
+  if (!callExpr.callee || typeof callExpr.callee !== "object") {
+    return false;
+  }
+  if ((callExpr.callee as { type?: string }).type !== "CallExpression") {
+    return false;
+  }
+
+  const innerCall = callExpr.callee as CallExpressionLike;
+  const calleeInfo = extractRootAndPath(innerCall.callee);
+  if (!calleeInfo) {
+    return false;
+  }
+  const imp = ctx.resolveImportForExpr(innerCall, calleeInfo.rootName);
+  if (!imp) {
+    return false;
+  }
+
+  const innerArgs = innerCall.arguments ?? [];
+  const outerArgs = callExpr.arguments ?? [];
+  return (
+    innerArgs.length !== 1 ||
+    outerArgs.length !== 1 ||
+    !isIdentifierNamed(outerArgs[0] as ExpressionKind, ctx.paramName)
+  );
+}
+
 function tryResolveDynamicHelperCall(
   callExpr: CallExpressionLike,
   ctx: DynamicHelperCallContext,
@@ -2860,6 +2907,9 @@ function tryResolveDynamicHelperCall(
   const helperCall = getStyledHelperCall(callExpr);
   if (!helperCall) {
     return false;
+  }
+  if (helperCall.kind === "curried" && !isIdentifierNamed(helperCall.outerArg, ctx.paramName)) {
+    return null;
   }
 
   const { innerCall, dynamicArg } = helperCall;
@@ -2973,23 +3023,21 @@ function tryResolveDirectHelperCall(
   };
 }
 
-function getStyledHelperCall(callExpr: CallExpressionLike): {
-  kind: "curried" | "direct";
-  innerCall: CallExpressionLike;
-  dynamicArg: ExpressionKind;
-} | null {
+function getStyledHelperCall(callExpr: CallExpressionLike): StyledHelperCall | null {
   if (callExpr.callee && typeof callExpr.callee === "object") {
     const callee = callExpr.callee as { type?: string };
     if (callee.type === "CallExpression") {
       const innerCall = callExpr.callee as CallExpressionLike;
       const innerArgs = innerCall.arguments ?? [];
-      if (innerArgs.length !== 1) {
+      const outerArgs = callExpr.arguments ?? [];
+      if (innerArgs.length !== 1 || outerArgs.length !== 1) {
         return null;
       }
       return {
         kind: "curried",
         innerCall,
         dynamicArg: innerArgs[0] as ExpressionKind,
+        outerArg: outerArgs[0] as ExpressionKind,
       };
     }
   }
@@ -3003,6 +3051,10 @@ function getStyledHelperCall(callExpr: CallExpressionLike): {
     innerCall: callExpr,
     dynamicArg: args[0] as ExpressionKind,
   };
+}
+
+function isIdentifierNamed(node: ExpressionKind, name: string): boolean {
+  return node?.type === "Identifier" && node.name === name;
 }
 
 function unwrapParamMemberArg(
