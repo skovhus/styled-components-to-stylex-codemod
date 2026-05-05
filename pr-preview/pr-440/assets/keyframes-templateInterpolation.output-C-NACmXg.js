@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{f as e}from"./index-5p_ZI8s6.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`x1rg5ohu x10fqa9y x1xixsfh x1esw782 xa4qsjk x1vvogim xaope02`,children:`Hi`});export{n as App};
