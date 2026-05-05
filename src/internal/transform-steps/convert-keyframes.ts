@@ -320,7 +320,18 @@ function isNonReferenceIdentifier(node: unknown, parent: any): boolean {
   ) {
     return true;
   }
-  return parent.type === "Property" && parent.key === node && !parent.computed;
+  return isStaticObjectPropertyKey(parent, node);
+}
+
+function isStaticObjectPropertyKey(
+  parent: { type?: string; key?: unknown; computed?: boolean },
+  node: unknown,
+): boolean {
+  return (
+    (parent.type === "Property" || parent.type === "ObjectProperty") &&
+    parent.key === node &&
+    !parent.computed
+  );
 }
 
 function replaceKeyframesAliasesInResolvedStyles(ctx: TransformContext): void {
@@ -349,10 +360,8 @@ function replaceKeyframesAliases(
 
   const typed = node as { type?: string; name?: string };
   if (typed.type === "Identifier" && typed.name) {
-    const isStaticPropertyKey =
-      parent?.type === "Property" && parent.key === node && !parent.computed;
     const alias = aliases.get(typed.name);
-    if (alias && !isStaticPropertyKey) {
+    if (alias && !isStaticObjectPropertyKey(parent ?? {}, node)) {
       typed.name = alias;
     }
   }
