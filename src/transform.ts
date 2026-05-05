@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve as pathResolve } from "node:path";
 import { realpathSync } from "node:fs";
 
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
+import { CSS_VARIABLE_SIDE_CAR_FILENAME } from "./internal/css-variable-sidecar.js";
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
@@ -72,12 +73,15 @@ export default function transform(file: FileInfo, api: API, options: Options): s
         | Map<string, string>
         | undefined;
       if (sidecarFilesMap) {
-        const defaultPath = join(
-          dirname(file.path),
-          `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`,
-        );
         for (const sidecar of result.sidecarFiles) {
-          const sidecarPath = sidecar.filePath ?? defaultPath;
+          const sidecarPath =
+            sidecar.filePath ??
+            join(
+              dirname(file.path),
+              sidecar.kind === "cssVariables"
+                ? CSS_VARIABLE_SIDE_CAR_FILENAME
+                : `${basename(file.path).replace(/\.\w+$/, "")}.stylex.ts`,
+            );
           // Merge with existing content when multiple files write to the same sidecar path
           const existing = sidecarFilesMap.get(sidecarPath);
           sidecarFilesMap.set(

@@ -1,6 +1,6 @@
 /**
  * Emits generated StyleX variables for raw CSS custom-property definitions.
- * Core concepts: stable custom-property keys, sidecar serialization, and source values.
+ * Core concepts: stable variable keys, sidecar serialization, and source values.
  */
 import type { API } from "jscodeshift";
 import type { TransformContext } from "./transform-context.js";
@@ -46,9 +46,32 @@ export function buildCssVariableSidecarContent(
 
 export function getCssVariableImportName(ctx: TransformContext): string {
   if (!ctx.cssVariableImportName) {
-    ctx.cssVariableImportName = "cssVars";
+    const usedNames = collectBoundNames(ctx);
+    ctx.cssVariableImportName = uniqueBindingName("cssVars", usedNames);
   }
   return ctx.cssVariableImportName;
+}
+
+function uniqueBindingName(base: string, used: ReadonlySet<string>): string {
+  if (!used.has(base)) {
+    return base;
+  }
+  let index = 1;
+  while (used.has(`${base}${index}`)) {
+    index += 1;
+  }
+  return `${base}${index}`;
+}
+
+function collectBoundNames(ctx: TransformContext): Set<string> {
+  const names = new Set<string>();
+  ctx.root.find(ctx.j.Identifier).forEach((path) => {
+    const name = path.node.name;
+    if (name) {
+      names.add(name);
+    }
+  });
+  return names;
 }
 
 export function normalizeCssVariableValue(value: unknown): CssVariableValue {

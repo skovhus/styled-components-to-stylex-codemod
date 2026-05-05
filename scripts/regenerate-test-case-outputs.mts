@@ -36,7 +36,7 @@ const [
   import("../src/internal/prepass/scan-cross-file-selectors.ts"),
   import("../src/internal/prepass/resolve-imports.ts"),
   import("../src/internal/logger.ts"),
-  import("../src/run.ts"),
+  import("../src/internal/merge-markers.ts"),
 ]);
 
 // Suppress diagnostic output during regeneration
@@ -115,10 +115,7 @@ async function updateFixture(name: string, ext: string) {
   // Accumulate sidecar files for merging after all fixtures are processed
   for (const [sidecarPath, content] of sidecarFiles) {
     const existing = allSidecarFiles.get(sidecarPath);
-    allSidecarFiles.set(
-      sidecarPath,
-      existing ? mergeMarkerDeclarations(existing, content) : content,
-    );
+    allSidecarFiles.set(sidecarPath, existing ? mergeStylexSidecar(existing, content) : content);
   }
 
   return outputPath;
@@ -157,10 +154,14 @@ for (const [sidecarPath, content] of allSidecarFiles) {
   if (only) {
     try {
       const existing = await readFile(sidecarPath, "utf-8");
-      merged = mergeMarkerDeclarations(content, existing);
+      merged = mergeStylexSidecar(content, existing);
     } catch {
       // File doesn't exist yet, write fresh content
     }
   }
   await writeFile(sidecarPath, merged, "utf-8");
+}
+
+function mergeStylexSidecar(base: string, incoming: string): string {
+  return mergeMarkerDeclarations(base, incoming);
 }

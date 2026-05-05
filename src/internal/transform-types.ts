@@ -12,25 +12,27 @@ import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
 import type { TransformContext } from "./transform-context.js";
 
-/** A sidecar .stylex.ts file containing defineMarker() declarations. */
+/** A sidecar .stylex.ts file containing StyleX-only declarations. */
 export interface SidecarFile {
   content: string;
   /** Absolute file path for writing. Undefined = default local sidecar next to the source file. */
   filePath?: string;
+  kind?: "markers" | "cssVariables";
 }
 
-export interface LocalStylexVarRef {
+export type CssVariableValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Record<string, unknown>;
+
+export interface CssVariableDefinition {
   cssName: string;
-  groupName: string;
-  keyName: string;
-  defaultValue: string | number | null;
-  sourceOrder: number;
-  sidecarFileName: string;
-}
-
-export interface LocalStylexVarsSidecarFile {
-  content: string;
-  importPath: string;
+  key: string;
+  exportName: string;
+  value: CssVariableValue;
 }
 
 /**
@@ -42,11 +44,11 @@ export interface TransformResult {
   /** Sidecar .stylex.ts files (defineMarker declarations). Multiple entries when a file has
    *  both cross-file markers (adapter.markerFile) and internal markers (local sidecar). */
   sidecarFiles?: SidecarFile[];
+  hasCssVariableSidecar?: boolean;
   /** Bridge components emitted for unconverted consumer selectors. */
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */
   transientPropRenames?: TransientPropRenameResult[];
-  localStylexVarsSidecarFile?: LocalStylexVarsSidecarFile;
 }
 
 /** Describes a transient prop rename on an exported component for consumer patching. */
@@ -577,12 +579,7 @@ export type StyledDecl = {
   preserveCssHelperDeclaration?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
-  inlineStyleProps?: Array<{
-    prop: string;
-    expr: ExpressionKind;
-    jsxProp?: string;
-    keyExpr?: ExpressionKind;
-  }>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
   /**
    * Static normal-property values that cannot be emitted through stylex.create()
    * (for example unresolved raw CSS var(...) expressions). Wrapper components use
