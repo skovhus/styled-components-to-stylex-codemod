@@ -27,10 +27,9 @@ const callerStyles = stylex.create({
   },
   compactButton: {
     color: "#0f172a",
-    backgroundColor: "#e2e8f0",
   },
   compactButtonCompact: {
-    padding: 2,
+    fontWeight: "bold",
   },
 });
 

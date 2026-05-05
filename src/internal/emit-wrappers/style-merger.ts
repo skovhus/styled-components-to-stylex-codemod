@@ -198,7 +198,7 @@ export function emitStyleMerging(args: {
   // handles className/style itself. The destructured className/style values are
   // forwarded to the wrapped component via the surrounding `{...rest}` spread.
   if (wrappedAcceptsSxProp && inlineStyleProps.length === 0 && !staticClassNameExpr) {
-    return buildSxOnlyResult(j, styleArgs);
+    return buildSxOnlyResult(j, styleArgs, { normalizeOptionalEntries: true });
   }
 
   // If neither className nor style merging is needed, just use stylex.props directly
@@ -599,9 +599,13 @@ function maybeCastStyleForCustomProps(
  * attributes, no merger var). Two call sites use this: the wrappedAcceptsSx
  * path and the useSxProp+intrinsic path.
  */
-function buildSxOnlyResult(j: JSCodeshift, styleArgs: ExpressionKind[]): StyleMergingResult {
-  const sxExpr =
-    styleArgs.length === 1 && styleArgs[0] ? styleArgs[0] : j.arrayExpression(styleArgs);
+function buildSxOnlyResult(
+  j: JSCodeshift,
+  styleArgs: ExpressionKind[],
+  options: { normalizeOptionalEntries?: boolean } = {},
+): StyleMergingResult {
+  const sxArgs = options.normalizeOptionalEntries ? flattenSxArrayArgs(j, styleArgs) : styleArgs;
+  const sxExpr = sxArgs.length === 1 && sxArgs[0] ? sxArgs[0] : j.arrayExpression(sxArgs);
   return {
     needsSxVar: false,
     sxDecl: null,
@@ -611,6 +615,92 @@ function buildSxOnlyResult(j: JSCodeshift, styleArgs: ExpressionKind[]): StyleMe
     classNameBeforeSpread: false,
     styleAttr: null,
   };
+}
+
+function flattenSxArrayArgs(j: JSCodeshift, styleArgs: ExpressionKind[]): ExpressionKind[] {
+  const sxArgs: ExpressionKind[] = [];
+  for (const arg of styleArgs) {
+    appendSxArrayArg(j, sxArgs, arg);
+  }
+  return sxArgs;
+}
+
+function appendSxArrayArg(j: JSCodeshift, sxArgs: ExpressionKind[], arg: ExpressionKind): void {
+  if (arg.type === "ArrayExpression" && arg.elements.every(isPlainArrayElement)) {
+    for (const element of arg.elements) {
+      appendSxArrayArg(j, sxArgs, element);
+    }
+    return;
+  }
+  sxArgs.push(normalizeOptionalSxArg(j, arg));
+}
+
+function normalizeOptionalSxArg(j: JSCodeshift, arg: ExpressionKind): ExpressionKind {
+  if (isUndefinedIdentifier(arg)) {
+    return j.nullLiteral();
+  }
+  if (isLogicalAndExpression(arg)) {
+    return j.conditionalExpression(arg.left, normalizeOptionalSxArg(j, arg.right), j.nullLiteral());
+  }
+  if (isConditionalExpression(arg)) {
+    const alternate = isUndefinedIdentifier(arg.alternate)
+      ? j.nullLiteral()
+      : normalizeOptionalSxArg(j, arg.alternate);
+    return j.conditionalExpression(arg.test, normalizeOptionalSxArg(j, arg.consequent), alternate);
+  }
+  return arg;
+}
+
+function isPlainArrayElement(node: unknown): node is ExpressionKind {
+  return !!node && typeof node === "object" && getNodeType(node) !== "SpreadElement";
+}
+
+function isLogicalAndExpression(arg: ExpressionKind): arg is ExpressionKind & {
+  type: "LogicalExpression";
+  operator: "&&";
+  left: ExpressionKind;
+  right: ExpressionKind;
+} {
+  return (
+    arg.type === "LogicalExpression" &&
+    (arg as { operator?: unknown }).operator === "&&" &&
+    isExpressionField(arg, "left") &&
+    isExpressionField(arg, "right")
+  );
+}
+
+function isConditionalExpression(arg: ExpressionKind): arg is ExpressionKind & {
+  type: "ConditionalExpression";
+  test: ExpressionKind;
+  consequent: ExpressionKind;
+  alternate: ExpressionKind;
+} {
+  return (
+    arg.type === "ConditionalExpression" &&
+    isExpressionField(arg, "test") &&
+    isExpressionField(arg, "consequent") &&
+    isExpressionField(arg, "alternate")
+  );
+}
+
+function isExpressionField(node: unknown, field: string): boolean {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    isPlainArrayElement((node as Record<string, unknown>)[field])
+  );
+}
+
+function isUndefinedIdentifier(node: unknown): node is { type: "Identifier"; name: "undefined" } {
+  return getNodeType(node) === "Identifier" && (node as { name?: unknown }).name === "undefined";
+}
+
+function getNodeType(node: unknown): string | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const type = (node as { type?: unknown }).type;
+  return typeof type === "string" ? type : undefined;
 }
 
 /**
