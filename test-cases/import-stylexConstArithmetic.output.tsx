@@ -2,8 +2,21 @@ import * as stylex from "@stylexjs/stylex";
 import { $zIndex } from "./tokens.stylex";
 
 export const App = () => (
-  <div sx={styles.toastLayer}>
-    <div sx={styles.dropIndicator} />
+  <div
+    style={{
+      position: "relative",
+      width: 180,
+      height: 96,
+      overflow: "hidden",
+      transform: "translateZ(0)",
+      border: "1px solid #cbd5e1",
+      borderRadius: 8,
+      background: "#e5e7eb",
+    }}
+  >
+    <div sx={styles.toastLayer}>
+      <div sx={styles.dropIndicator} />
+    </div>
   </div>
 );
 

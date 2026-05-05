@@ -17,7 +17,20 @@ const DropIndicator = styled.div`
 `;
 
 export const App = () => (
-  <ToastLayer>
-    <DropIndicator />
-  </ToastLayer>
+  <div
+    style={{
+      position: "relative",
+      width: 180,
+      height: 96,
+      overflow: "hidden",
+      transform: "translateZ(0)",
+      border: "1px solid #cbd5e1",
+      borderRadius: 8,
+      background: "#e5e7eb",
+    }}
+  >
+    <ToastLayer>
+      <DropIndicator />
+    </ToastLayer>
+  </div>
 );
