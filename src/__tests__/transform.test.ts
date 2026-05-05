@@ -1163,6 +1163,140 @@ export const App = () => (
     expect(keyframesMatches).toHaveLength(1);
   });
 
+  it("does not collapse user-authored stylex.keyframes bindings that look like generated aliases", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0.4 },
+  to: { opacity: 1 },
+});
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>manual</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-user-authored-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fadeStylex/);
+  });
+
+  it("does not rename nested bindings that share a keyframes alias name", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0.4 },
+  to: { opacity: 1 },
+});
+
+function readNestedAlias() {
+  const fadeStylex = "nested";
+  return fadeStylex;
+}
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <span>{readNestedAlias()}</span>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-nested-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"nested"/);
+    expect(result.code).toMatch(/return\s+fadeStylex/);
+  });
+
+  it("collapses only generated stylex keyframes alias references in the same scope", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+/* @styled-components-to-stylex generated keyframes alias */
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+function readNestedAlias() {
+  const fadeStylex = "nested";
+  return fadeStylex;
+}
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>{readNestedAlias()}</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-generated-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fade/);
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"nested"/);
+    expect(result.code).toMatch(/return\s+fadeStylex/);
+  });
+
   it("ignores nested stylex.keyframes bindings when collecting keyframe names", () => {
     // A nested `const fade = stylex.keyframes(...)` inside a function body must not
     // be added to `ctx.keyframesNames`. Animation lowering only resolves identifiers

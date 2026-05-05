@@ -2,7 +2,11 @@
  * Step: convert styled-components keyframes to stylex.keyframes.
  * Core concepts: keyframes detection and import updates.
  */
-import { collectStyledKeyframeNames, convertStyledKeyframes } from "../keyframes.js";
+import {
+  collectStyledKeyframeNames,
+  convertStyledKeyframes,
+  GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT,
+} from "../keyframes.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { objectToAst } from "../transform/helpers.js";
@@ -176,43 +180,98 @@ function collapseGeneratedKeyframesAliases(
   let changed = false;
   for (const name of convertedNames) {
     const alias = `${name}Stylex`;
-    if (!removeStylexKeyframesDeclaration(ctx, alias)) {
+    const aliasScope = getGeneratedStylexKeyframesDeclarationScope(ctx, alias);
+    if (!aliasScope) {
       continue;
     }
-    renameKeyframesAliasReferences(ctx, alias, name);
+    renameKeyframesAliasReferences(ctx, alias, name, aliasScope);
     changed = true;
   }
   return changed;
 }
 
-function removeStylexKeyframesDeclaration(ctx: TransformContext, localName: string): boolean {
-  let removed = false;
+function getGeneratedStylexKeyframesDeclarationScope(
+  ctx: TransformContext,
+  localName: string,
+): object | null {
+  let aliasScope: object | null = null;
   ctx.root
     .find(ctx.j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
     .forEach((path: any) => {
-      const init = path.node.init;
+      if (aliasScope) {
+        return;
+      }
+      const declaration = path.parentPath?.node;
       if (
-        !init ||
-        init.type !== "CallExpression" ||
-        init.callee.type !== "MemberExpression" ||
-        init.callee.object.type !== "Identifier" ||
-        init.callee.object.name !== "stylex" ||
-        init.callee.property.type !== "Identifier" ||
-        init.callee.property.name !== "keyframes"
+        !declaration ||
+        declaration.type !== "VariableDeclaration" ||
+        !isGeneratedStylexKeyframesDeclaration(path.node, declaration)
       ) {
         return;
       }
-
-      const declaration = path.parentPath?.node;
-      if (!declaration || declaration.type !== "VariableDeclaration") {
-        return;
-      }
+      const scope = path.scope?.lookup?.(localName);
+      aliasScope = scope && typeof scope === "object" ? scope : null;
       declaration.declarations = declaration.declarations.filter(
         (decl: unknown) => decl !== path.node,
       );
-      removed = true;
     });
-  return removed;
+  return aliasScope;
+}
+
+function isGeneratedStylexKeyframesDeclaration(
+  declarator: unknown,
+  declaration: { comments?: unknown[]; leadingComments?: unknown[] },
+): boolean {
+  if (!hasGeneratedAliasComment(declaration) || !isStylexKeyframesDeclarator(declarator)) {
+    return false;
+  }
+  return true;
+}
+
+function hasGeneratedAliasComment(node: {
+  comments?: unknown[];
+  leadingComments?: unknown[];
+}): boolean {
+  const comments = [...(node.comments ?? []), ...(node.leadingComments ?? [])];
+  return comments.some(
+    (comment) =>
+      typeof comment === "object" &&
+      comment !== null &&
+      "value" in comment &&
+      String(comment.value).includes(GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT),
+  );
+}
+
+function isStylexKeyframesDeclarator(declarator: unknown): boolean {
+  if (!declarator || typeof declarator !== "object" || !("type" in declarator)) {
+    return false;
+  }
+  const init = (declarator as { init?: unknown }).init;
+  return (
+    !!init &&
+    typeof init === "object" &&
+    "type" in init &&
+    init.type === "CallExpression" &&
+    "callee" in init &&
+    !!init.callee &&
+    typeof init.callee === "object" &&
+    "type" in init.callee &&
+    init.callee.type === "MemberExpression" &&
+    "object" in init.callee &&
+    !!init.callee.object &&
+    typeof init.callee.object === "object" &&
+    "type" in init.callee.object &&
+    init.callee.object.type === "Identifier" &&
+    "name" in init.callee.object &&
+    init.callee.object.name === "stylex" &&
+    "property" in init.callee &&
+    !!init.callee.property &&
+    typeof init.callee.property === "object" &&
+    "type" in init.callee.property &&
+    init.callee.property.type === "Identifier" &&
+    "name" in init.callee.property &&
+    init.callee.property.name === "keyframes"
+  );
 }
 
 function cleanupEmptyVariableDeclarations(ctx: TransformContext): void {
@@ -229,10 +288,14 @@ function renameKeyframesAliasReferences(
   ctx: TransformContext,
   fromName: string,
   toName: string,
+  aliasScope: object,
 ): void {
   ctx.root.find(ctx.j.Identifier, { name: fromName } as any).forEach((path: any) => {
     const parent = path.parentPath?.node;
     if (!parent || isNonReferenceIdentifier(path.node, parent)) {
+      return;
+    }
+    if (path.scope?.lookup?.(fromName) !== aliasScope) {
       return;
     }
     path.node.name = toName;

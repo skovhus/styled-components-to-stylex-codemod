@@ -30,6 +30,9 @@ export function collectStyledKeyframeNames(args: {
   return new Set(collectStyledKeyframeDefinitions(args).map((definition) => definition.localName));
 }
 
+export const GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT =
+  "@styled-components-to-stylex generated keyframes alias";
+
 type StyledKeyframesDefinition = {
   declaratorPath: ASTPath<ASTNode>;
   localName: string;
@@ -214,6 +217,12 @@ function insertStylexKeyframesDeclaration(args: {
   const declaration = j.variableDeclaration("const", [
     j.variableDeclarator(j.identifier(localName), init),
   ]);
+  const provenanceComment = j.commentBlock(` ${GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT} `);
+  (declaration as ASTNode & { comments?: unknown[]; leadingComments?: unknown[] }).comments = [
+    provenanceComment,
+  ];
+  (declaration as ASTNode & { comments?: unknown[]; leadingComments?: unknown[] }).leadingComments =
+    [provenanceComment];
   const targetDeclarator = afterDeclaratorPath.node;
   const statements = root.get().node.program.body as ASTNode[];
   const insertionIndex = statements.findIndex((statement) =>
