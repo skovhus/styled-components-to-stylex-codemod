@@ -18,8 +18,12 @@ import {
   type LowerRulesState,
   type RelationOverride,
 } from "../lower-rules/state.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
+import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+
+const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
 
 /**
  * Lowers CSS rules into resolvable style objects and resolves dynamic values via the adapter.
@@ -55,6 +59,11 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     if (!allowPartialMigration && ctx.styledDecls.some((d) => d.skipTransform)) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
+    for (const decl of ctx.styledDecls) {
+      if (lowered.preservedReferencedStyledDecls.has(decl.localName)) {
+        decl.skipTransform = true;
+      }
+    }
     // `css\`\`` helpers are extracted (and their source declarations removed) by
     // extractCssHelpersStep before lowering runs. Two unsafe partial-mode cases:
     //   1) A helper itself failed to lower — its source is already gone, so any
@@ -78,12 +87,16 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   }
 
   // Now that we know the file is transformable, remove any css helper functions that were inlined.
+  const removableCssHelperFunctions = collectRemovableCssHelperFunctions(
+    lowered.usedCssHelperFunctions,
+    ctx.styledDecls,
+  );
   if (
     removeInlinedCssHelperFunctions({
       root: ctx.root,
       j: ctx.j,
       cssLocal: ctx.cssLocal,
-      names: lowered.usedCssHelperFunctions,
+      names: removableCssHelperFunctions,
     })
   ) {
     ctx.markChanged();
@@ -104,12 +117,12 @@ type LowerRulesResult = {
   parentsNeedingDefaultMarker: Set<string>;
   /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
   ancestorAttrsByStyleKey: Map<string, Set<string>>;
+  preservedReferencedStyledDecls: Set<string>;
   bail: boolean;
 };
 
 function lowerRules(ctx: TransformContext): LowerRulesResult {
   const state = createLowerRulesState(ctx);
-
   // Pre-scan all declarations for inline @keyframes definitions.
   // These must be registered before rule processing so animation properties
   // can reference them.
@@ -164,6 +177,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     if (outcome === "bail") {
       break;
     }
+    recordAddedResolverImports(state, snapshot.resolverImportKeys, decl);
   }
 
   if (!state.bail) {
@@ -185,8 +199,12 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // (e.g. during postProcessAfterBaseMixins or finalizeRelationOverrides) still has
   // its styleKeys in the shared maps — prune them so emission never emits entries
   // for skipped decls.
+  let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
     pruneSkippedDeclsFromState(state);
+    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
+    prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
+    prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
 
   // Determine which parent style keys actually need markers (defaultMarker or
@@ -250,6 +268,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     parentsNeedingDefaultMarker,
     ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
+    preservedReferencedStyledDecls,
     bail: state.bail,
   };
 }
@@ -300,6 +319,7 @@ type StateSnapshot = {
   childPseudoKeys: Set<string>;
   ancestorAttrKeys: Set<string>;
   usedCssHelperFunctions: Set<string>;
+  resolverImportKeys: Set<string>;
 };
 
 function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
@@ -313,6 +333,7 @@ function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
     childPseudoKeys: new Set(state.childPseudoMarkers.keys()),
     ancestorAttrKeys: new Set(state.ancestorAttrsByStyleKey.keys()),
     usedCssHelperFunctions: new Set(state.usedCssHelperFunctions),
+    resolverImportKeys: new Set(state.resolverImports.keys()),
   };
 }
 
@@ -416,6 +437,131 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   }
 }
 
+function collectPreservedReferencedStyledDecls(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Set<string> {
+  const { styledDecls } = state;
+  const preservedNames = new Set<string>();
+  const componentNames = new Set(
+    styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
+  );
+  const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const decl of styledDecls) {
+      if ((!decl.skipTransform && !preservedNames.has(decl.localName)) || decl.isCssHelper) {
+        continue;
+      }
+      const referencedNames = collectTemplateSelectorIdentifiers(decl);
+      for (const helperName of collectTemplateExpressionIdentifiers(decl)) {
+        for (const selectorName of helperSelectorIdentifiers.get(helperName) ?? []) {
+          referencedNames.add(selectorName);
+        }
+      }
+      for (const name of referencedNames) {
+        if (componentNames.has(name) && !preservedNames.has(name)) {
+          preservedNames.add(name);
+          changed = true;
+        }
+      }
+    }
+  }
+  return preservedNames;
+}
+
+function prunePreservedReferencedDeclsFromState(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+): void {
+  if (preservedNames.size === 0) {
+    return;
+  }
+  const keysToDelete = new Set<string>();
+  for (const decl of state.styledDecls) {
+    if (!preservedNames.has(decl.localName)) {
+      continue;
+    }
+    for (const key of collectOwnedDeclStyleKeys(decl)) {
+      keysToDelete.add(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    state.resolvedStyleObjects.delete(key);
+    state.relationOverridePseudoBuckets.delete(key);
+    state.childPseudoMarkers.delete(key);
+    state.ancestorAttrsByStyleKey.delete(key);
+    state.ancestorSelectorParents.delete(key);
+    state.siblingMarkerParents.delete(key);
+    state.siblingMarkerNames.delete(key);
+  }
+  if (keysToDelete.size === 0) {
+    return;
+  }
+  const kept = state.relationOverrides.filter(
+    (o) =>
+      !keysToDelete.has(o.parentStyleKey) &&
+      !keysToDelete.has(o.childStyleKey) &&
+      !keysToDelete.has(o.overrideStyleKey),
+  );
+  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
+function recordAddedResolverImports(
+  state: LowerRulesState,
+  beforeKeys: Set<string>,
+  decl: StyledDecl,
+): void {
+  const addedKeys = new Set<string>();
+  for (const key of state.resolverImports.keys()) {
+    if (!beforeKeys.has(key)) {
+      addedKeys.add(key);
+    }
+  }
+  if (addedKeys.size > 0) {
+    appendResolverImportKeys(decl, addedKeys);
+  }
+}
+
+function prunePreservedReferencedResolverImports(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+): void {
+  if (preservedNames.size === 0) {
+    return;
+  }
+
+  const keysToDelete = new Set<string>();
+  const keysToKeep = new Set<string>();
+  for (const decl of state.styledDecls) {
+    const importKeys = decl.resolverImportKeys;
+    if (!importKeys || importKeys.size === 0) {
+      continue;
+    }
+    const target =
+      preservedNames.has(decl.localName) || decl.skipTransform ? keysToDelete : keysToKeep;
+    for (const key of importKeys) {
+      target.add(key);
+    }
+  }
+
+  for (const key of keysToDelete) {
+    if (!keysToKeep.has(key)) {
+      state.resolverImports.delete(key);
+    }
+  }
+}
+
+function appendResolverImportKeys(decl: StyledDecl, keys: Set<string>): void {
+  if (!decl.resolverImportKeys) {
+    decl.resolverImportKeys = new Set<string>();
+  }
+  for (const key of keys) {
+    decl.resolverImportKeys.add(key);
+  }
+}
+
 function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void {
   pruneMapKeysNotIn(state.resolvedStyleObjects, snap.resolvedStyleKeys);
   state.relationOverrides.length = snap.relationOverridesLength;
@@ -429,6 +575,7 @@ function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void
   pruneMapKeysNotIn(state.childPseudoMarkers, snap.childPseudoKeys);
   pruneMapKeysNotIn(state.ancestorAttrsByStyleKey, snap.ancestorAttrKeys);
   resetSet(state.usedCssHelperFunctions, snap.usedCssHelperFunctions);
+  pruneMapKeysNotIn(state.resolverImports, snap.resolverImportKeys);
 }
 
 /** Delete every key from `map` that isn't also in `allowed`. Collects first to avoid mutating during iteration. */
@@ -473,4 +620,144 @@ function skippedDeclReferencesHelper(
     }
   }
   return false;
+}
+
+function collectRemovableCssHelperFunctions(
+  usedCssHelperFunctions: Set<string>,
+  styledDecls: StyledDecl[],
+): Set<string> {
+  const removable = new Set(usedCssHelperFunctions);
+  if (removable.size === 0) {
+    return removable;
+  }
+
+  for (const decl of styledDecls) {
+    if (!decl.skipTransform) {
+      continue;
+    }
+    for (const name of collectTemplateExpressionIdentifiers(decl)) {
+      removable.delete(name);
+    }
+  }
+  return removable;
+}
+
+function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  if (!decl.rawCss) {
+    return identifiers;
+  }
+  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
+  }
+  return identifiers;
+}
+
+function isTemplatePlaceholderInSelectorContext(
+  rawCss: string,
+  pos: number,
+  length: number,
+): boolean {
+  const after = rawCss.slice(pos + length).trimStart();
+  const before = rawCss.slice(0, pos).trimEnd();
+  return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
+}
+
+function collectCssHelperFunctionSelectorIdentifiers(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Map<string, Set<string>> {
+  const selectorIdentifiers = new Map<string, Set<string>>();
+  for (const [name, helperFn] of state.cssHelperFunctions as Map<
+    string,
+    { rawCss?: string; templateExpressions?: unknown[] }
+  >) {
+    selectorIdentifiers.set(
+      name,
+      collectTemplateSelectorIdentifiersFromParts(helperFn.rawCss, helperFn.templateExpressions),
+    );
+  }
+
+  if (!cssLocal) {
+    return selectorIdentifiers;
+  }
+
+  state.root
+    .find(state.j.VariableDeclarator, {
+      init: { type: "ArrowFunctionExpression" },
+    } as object)
+    .forEach((path: any) => {
+      if (path.node.id?.type !== "Identifier") {
+        return;
+      }
+      const init = path.node.init;
+      const body = init?.body;
+      if (
+        body?.type !== "TaggedTemplateExpression" ||
+        body.tag?.type !== "Identifier" ||
+        body.tag.name !== cssLocal
+      ) {
+        return;
+      }
+      selectorIdentifiers.set(
+        path.node.id.name,
+        collectTemplateSelectorIdentifiersFromTemplate(body.quasi),
+      );
+    });
+
+  return selectorIdentifiers;
+}
+
+function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  for (const expr of decl.templateExpressions ?? []) {
+    collectIdentifiers(expr, identifiers);
+  }
+  return identifiers;
+}
+
+function collectTemplateSelectorIdentifiersFromTemplate(template: {
+  quasis?: Array<{ value?: { raw?: string } }>;
+  expressions?: unknown[];
+}): Set<string> {
+  const rawParts: string[] = [];
+  const quasis = template.quasis ?? [];
+  const expressions = template.expressions ?? [];
+  for (let i = 0; i < quasis.length; i++) {
+    rawParts.push(quasis[i]?.value?.raw ?? "");
+    if (i < expressions.length) {
+      rawParts.push(`__SC_EXPR_${i}__`);
+    }
+  }
+  return collectTemplateSelectorIdentifiersFromParts(rawParts.join(""), expressions);
+}
+
+function collectTemplateSelectorIdentifiersFromParts(
+  rawCss: string | undefined,
+  templateExpressions: readonly unknown[] | undefined,
+): Set<string> {
+  const identifiers = new Set<string>();
+  if (!rawCss) {
+    return identifiers;
+  }
+  for (const match of rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = templateExpressions?.[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
+  }
+  return identifiers;
 }

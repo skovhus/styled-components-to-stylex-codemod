@@ -646,6 +646,8 @@ export type StyledDecl = {
   bridgeClassName?: string;
   /** Local helper functions that were inlined into style functions and should be removed */
   consumedLocalHelpers?: string[];
+  /** Resolver imports added while preparing this decl for conversion. */
+  resolverImportKeys?: Set<string>;
   /**
    * When true, this declaration could not be transformed to StyleX and should be left
    * untouched in the output (original `styled\`...\`` template preserved, JSX usages

@@ -295,6 +295,212 @@ function assertExportsApp(source: string, fileLabel: string): void {
   }
 }
 
+function getPreservedComponentSelectorWithCssHelperSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  color: tomato;
+\`;
+
+const ReferencedChild = styled.span\`
+  \${hoverStyles}
+  color: navy;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
+function getPreservedComponentSelectorWithCssHelperFunctionSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const hoverStyles = (tone: "danger" | "safe") => css\`
+  font-weight: 700;
+  \${() => {
+    switch (tone) {
+      case "danger":
+        return css\`
+          color: tomato;
+        \`;
+      default:
+        return css\`
+          color: navy;
+        \`;
+    }
+  }}
+\`;
+
+const ReferencedChild = styled.span<{ tone: "danger" | "safe" }>\`
+  \${(props) => hoverStyles(props.tone)}
+  color: navy;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild tone="danger">child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
+function getPreservedComponentSelectorWithResolverImportSource(): string {
+  return `
+import styled from "styled-components";
+
+const ReferencedChild = styled.span\`
+  color: \${(props) => props.theme.color.bgBase};
+  padding: 4px;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
+function getPreservedCssHelperFunctionWithComponentSelectorSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+  padding: 4px;
+\`;
+
+const ConvertedBox = styled.div\`
+  margin: 4px;
+\`;
+
+const childHover = (tone: "danger" | "safe") => css\`
+  &:hover \${Child} {
+    color: \${tone === "danger" ? "tomato" : "navy"};
+  }
+\`;
+
+const PreservedContainer = styled.div\`
+  \${() => childHover("danger")}
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <Child>child</Child>
+    <ConvertedBox>box</ConvertedBox>
+    <a className="active">link</a>
+  </PreservedContainer>
+);
+`;
+}
+
+function getPreservedComponentSelectorWithBaseResolverImportSource(): string {
+  return `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const ReferencedChild = styled(Flex).attrs({ direction: "row" })\`
+  padding: 4px;
+\`;
+
+const ConvertedBox = styled.div\`
+  margin: 4px;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+    <ConvertedBox>box</ConvertedBox>
+  </PreservedContainer>
+);
+`;
+}
+
+function getValueInterpolationNameCollisionSource(): string {
+  return `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: navy;
+  padding: 8px;
+\`;
+
+const ConvertedBox = styled.div\`
+  background: papayawhip;
+  padding: 4px;
+\`;
+
+const PreservedContainer = styled.div<{ Button?: boolean }>\`
+  color: \${({ Button }) => (Button ? "tomato" : "navy")};
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer Button>
+    <Button>button</Button>
+    <ConvertedBox>box</ConvertedBox>
+    <a className="active">link</a>
+  </PreservedContainer>
+);
+`;
+}
+
 describe("test case file pairing", () => {
   it("should have matching input/output files for all test cases", () => {
     // This test verifies the test case structure is valid
@@ -512,6 +718,63 @@ export const App = () => (
     const result = runPartial(source, "partial-danglingHelper.input.tsx");
 
     expect(result.code).toBeNull();
+  });
+
+  it("bails when a newly preserved component references an extracted css helper", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithCssHelperSource(),
+      "partial-componentSelectorDanglingHelper.input.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("preserves css helper functions used by newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithCssHelperFunctionSource(),
+      "partial-componentSelectorHelperFunction.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /const\s+hoverStyles\s*=\s*\(\s*tone:\s*"danger"\s*\|\s*"safe"\s*\)\s*=>\s*css`/,
+    );
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span/);
+    expect(result.code).toContain("hoverStyles(props.tone)");
+  });
+
+  it("does not emit resolver imports from newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithResolverImportSource(),
+      "partial-componentSelectorResolverImport.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("./tokens.stylex");
+    expect(result.code).not.toContain("$colors");
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span`/);
+  });
+
+  it("bails when a preserved css helper function contains component selectors", () => {
+    const result = runPartial(
+      getPreservedCssHelperFunctionWithComponentSelectorSource(),
+      "partial-componentSelectorHelperFunctionSelector.input.tsx",
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("does not emit base resolver imports from newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithBaseResolverImportSource(),
+      "partial-componentSelectorBaseResolverImport.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("./lib/mixins.stylex");
+    expect(result.code).not.toContain("mixins.flex");
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\(Flex\)\.attrs/);
+    expect(result.code).toMatch(/sx=\{styles\.convertedBox\}/);
   });
 
   it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {
@@ -733,6 +996,17 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
   });
 
+  it("preserves converted candidates referenced by a skipped styled template", () => {
+    const { input, output } = readTestCase("partial-componentSelectorReference");
+
+    const result = runPartial(input, "partial-componentSelectorReference.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toBe(output);
+    expect(result.code).toMatch(/const\s+ConvertedChild\s*=\s*styled\.span`/);
+    expect(result.code).toContain("&:hover ${ConvertedChild}");
+  });
+
   it("bails the whole file by default when a decl cannot be lowered (allowPartialMigration: false)", () => {
     // Default behavior matches the pre-flag semantics: any per-decl bail
     // escalates to a whole-file bail unless `allowPartialMigration: true` is
@@ -952,6 +1226,44 @@ export const App = () => (
     expect(await normalizeCode(result.code ?? input, outputPath)).toEqual(
       await normalizeCode(output, outputPath),
     );
+  });
+
+  it("preserves leaf styled components referenced by a skipped styled template", () => {
+    const { input, output } = readTestCase("partial-componentSelectorReference");
+
+    const result = runLeavesOnly(
+      input,
+      pathResolve(join(testCasesDir, "partial-componentSelectorReference.input.tsx")),
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toBe(output);
+    expect(result.code).toMatch(/const\s+ConvertedChild\s*=\s*styled\.span`/);
+    expect(result.code).toContain("&:hover ${ConvertedChild}");
+  });
+
+  it("bails when a leaves-only preserved component selector target references an extracted css helper", () => {
+    const source = getPreservedComponentSelectorWithCssHelperSource();
+    const result = runLeavesOnly(
+      source,
+      pathResolve(join(__dirname, "virtual-leaves-referenced-helper.tsx")),
+    );
+
+    expect(result.code).toBeNull();
+  });
+
+  it("does not treat value interpolation identifiers as preserved component selector refs", () => {
+    const source = getValueInterpolationNameCollisionSource();
+    const result = runLeavesOnly(
+      source,
+      pathResolve(join(__dirname, "virtual-leaves-value-interpolation-name-collision.tsx")),
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    expect(result.code).toMatch(/function\s+Button\s*\(/);
+    expect(result.code).toMatch(/styles\.button/);
+    expect(result.code).not.toMatch(/const\s+ConvertedBox\s*=\s*styled\.div`/);
   });
 
   it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {
