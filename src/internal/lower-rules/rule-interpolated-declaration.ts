@@ -492,12 +492,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleThemeValueInPseudo()) {
       continue;
     }
+    const allowCssCalcForImportedArithmetic = isEntireInterpolatedValueSingleSlot(d, decl);
     const resolveImportedValueExpr = (
       expr: any,
+      allowCssCalc = allowCssCalcForImportedArithmetic,
     ): { resolved: any; imports?: any[] } | { bail: true } | null => {
       if (expr?.type === "BinaryExpression") {
-        const leftResult = resolveImportedValueExpr(expr.left);
-        const rightResult = resolveImportedValueExpr(expr.right);
+        const leftResult = resolveImportedValueExpr(expr.left, false);
+        const rightResult = resolveImportedValueExpr(expr.right, false);
         if (!leftResult && !rightResult) {
           return null;
         }
@@ -510,6 +512,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const resolvedLeft = leftResult ? leftResult.resolved : expr.left;
         const resolvedRight = rightResult ? rightResult.resolved : expr.right;
         const imports = [...(leftResult?.imports ?? []), ...(rightResult?.imports ?? [])];
+        if (allowCssCalc && isCssCalcOperator(expr.operator)) {
+          const calcExpr = buildCssCalcTemplateExpression({
+            j,
+            operator: expr.operator,
+            left: { node: resolvedLeft, allowExpression: Boolean(leftResult) },
+            right: { node: resolvedRight, allowExpression: Boolean(rightResult) },
+          });
+          if (calcExpr) {
+            return { resolved: calcExpr, imports };
+          }
+        }
         return {
           resolved: j.binaryExpression(expr.operator, resolvedLeft, resolvedRight),
           imports,
@@ -2451,6 +2464,91 @@ function tryResolveIndexedThemeForPseudoElement(
   } catch {
     return null;
   }
+}
+
+function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDecl): boolean {
+  if (d.value.kind !== "interpolated") {
+    return false;
+  }
+  const parts = d.value.parts ?? [];
+  if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+    return false;
+  }
+  return decl.templateExpressions[parts[0].slotId] !== undefined;
+}
+
+function isCssCalcOperator(operator: string | undefined): boolean {
+  return operator === "+" || operator === "-" || operator === "*" || operator === "/";
+}
+
+function buildCssCalcTemplateExpression(args: {
+  j: JSCodeshift;
+  operator: string;
+  left: { node: unknown; allowExpression: boolean };
+  right: { node: unknown; allowExpression: boolean };
+}): ExpressionKind | null {
+  const expressions: ExpressionKind[] = [];
+  const quasis: string[] = [];
+  let currentQuasi = "calc(";
+
+  const appendOperand = (operand: { node: unknown; allowExpression: boolean }): boolean => {
+    const staticText = expressionToCalcStaticText(operand.node);
+    if (staticText !== null) {
+      currentQuasi += staticText;
+      return true;
+    }
+    if (!operand.allowExpression || !isStylexCalcExpression(operand.node)) {
+      return false;
+    }
+    quasis.push(currentQuasi);
+    currentQuasi = "";
+    expressions.push(operand.node as ExpressionKind);
+    return true;
+  };
+
+  if (!appendOperand(args.left)) {
+    return null;
+  }
+  currentQuasi += ` ${args.operator} `;
+  if (!appendOperand(args.right)) {
+    return null;
+  }
+  currentQuasi += ")";
+
+  if (expressions.length === 0) {
+    return args.j.literal(currentQuasi);
+  }
+  quasis.push(currentQuasi);
+  if (quasis.length !== expressions.length + 1) {
+    return null;
+  }
+
+  return args.j.templateLiteral(
+    quasis.map((raw, index) =>
+      args.j.templateElement({ raw, cooked: raw }, index === quasis.length - 1),
+    ),
+    expressions,
+  ) as ExpressionKind;
+}
+
+function expressionToCalcStaticText(node: unknown): string | null {
+  const staticValue = literalToStaticValue(node);
+  if (typeof staticValue === "number") {
+    return String(staticValue);
+  }
+  return null;
+}
+
+function isStylexCalcExpression(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as { type?: string; object?: unknown; property?: unknown; computed?: boolean };
+  if (n.type !== "MemberExpression" || n.computed) {
+    return false;
+  }
+  const objectInfo = extractRootAndPath(n.object);
+  return objectInfo !== null && isMemberExpression(n);
 }
 
 /**
