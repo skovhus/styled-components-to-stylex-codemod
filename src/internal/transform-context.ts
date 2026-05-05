@@ -55,11 +55,13 @@ export class TransformContext {
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
+    cssProperty?: string,
   ) => void;
   rewriteCssVarsInAstNode: (
     node: { type: string },
     definedVars: Map<string, string>,
     varsToDrop: Set<string>,
+    cssProperty?: string,
   ) => void;
 
   preserveReactImport = false;
@@ -189,9 +191,11 @@ export class TransformContext {
       obj: Record<string, unknown>,
       definedVars: Map<string, string>,
       varsToDrop: Set<string>,
+      cssProperty?: string,
     ): void =>
       rewriteCssVarsInStyleObjectImpl({
         obj,
+        ...(cssProperty ? { cssProperty } : {}),
         ...buildCssVarRewriteContext(definedVars, varsToDrop),
       });
 
@@ -199,9 +203,11 @@ export class TransformContext {
       node: { type: string },
       definedVars: Map<string, string>,
       varsToDrop: Set<string>,
+      cssProperty?: string,
     ): void =>
       rewriteCssVarsInAstNodeRootImpl({
         node,
+        ...(cssProperty ? { cssProperty } : {}),
         ...buildCssVarRewriteContext(definedVars, varsToDrop),
       });
 

@@ -43,6 +43,12 @@ type CssVariableResolveContext = {
   fallback?: string;
   definedValue?: string;
   /**
+   * CSS property being set (when available).
+   * Useful for adapters that need to resolve CSS-variable-backed tokens to
+   * assignable literals for properties typed as literal unions (e.g. "cursor").
+   */
+  cssProperty?: string;
+  /**
    * Absolute path of the file currently being transformed.
    * Useful for adapter logic that wants to branch by caller file.
    */

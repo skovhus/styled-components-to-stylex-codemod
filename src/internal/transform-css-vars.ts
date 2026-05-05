@@ -41,6 +41,7 @@ type CssVarRewriteContext = {
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
+  cssProperty?: string;
 };
 
 type TemplateElementNode = {
@@ -66,6 +67,7 @@ function rewriteCssVarsInStyleObjectImpl(
         kind: "cssVariable",
         name: k,
         filePath: ctx.filePath,
+        ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
         ...(typeof v === "string" ? { definedValue: v } : {}),
       });
 
@@ -103,7 +105,10 @@ function rewriteCssVarsInStyleObjectImpl(
       continue;
     }
 
-    obj[k] = rewriteCssVarsInStyleObjectValue(v, ctx);
+    obj[k] = rewriteCssVarsInStyleObjectValue(v, {
+      ...ctx,
+      cssProperty: getCssVariableValueProperty(k, ctx),
+    });
   }
 }
 
@@ -121,6 +126,13 @@ function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteCont
   }
 
   return value;
+}
+
+function getCssVariableValueProperty(key: string, ctx: CssVarRewriteContext): string | undefined {
+  if (key === "default" || key.startsWith(":") || key.startsWith("@") || key.startsWith("--")) {
+    return ctx.cssProperty;
+  }
+  return key;
 }
 
 /**
@@ -268,6 +280,7 @@ function rewriteCssVarsInTemplateLiteral(
       definedValue: ctx.definedVars.get(call.name),
       filePath: ctx.filePath,
       resolveValue: ctx.resolveValue,
+      ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
     });
     if (!res) {
       continue;

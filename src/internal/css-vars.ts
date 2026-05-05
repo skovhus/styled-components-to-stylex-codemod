@@ -14,6 +14,7 @@ type CssVarCall = {
 
 export function rewriteCssVarsInString(args: {
   raw: string;
+  cssProperty?: string;
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
@@ -31,15 +32,17 @@ export function findCssVarCallsInString(raw: string): CssVarCall[] {
 
 export function resolveCssVarCall(args: {
   call: CssVarCall;
+  cssProperty?: string;
   definedValue?: string;
   filePath: string;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
 }): ResolveValueResult | undefined {
-  const { call, definedValue, filePath, resolveValue } = args;
+  const { call, cssProperty, definedValue, filePath, resolveValue } = args;
   const baseContext = {
     kind: "cssVariable" as const,
     name: call.name,
     filePath,
+    ...(cssProperty ? { cssProperty } : {}),
     ...(definedValue ? { definedValue } : {}),
   };
   const result = resolveValue({
@@ -124,6 +127,7 @@ function findCssVarCalls(raw: string): CssVarCall[] {
 
 function rewriteCssVarsInStringImpl(args: {
   raw: string;
+  cssProperty?: string;
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
@@ -132,7 +136,17 @@ function rewriteCssVarsInStringImpl(args: {
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
 }): unknown {
-  const { raw, filePath, definedVars, varsToDrop, resolveValue, addImport, parseExpr, j } = args;
+  const {
+    raw,
+    cssProperty,
+    filePath,
+    definedVars,
+    varsToDrop,
+    resolveValue,
+    addImport,
+    parseExpr,
+    j,
+  } = args;
 
   const calls = findCssVarCalls(raw);
   if (calls.length === 0) {
@@ -149,6 +163,7 @@ function rewriteCssVarsInStringImpl(args: {
     }
     const res = resolveCssVarCall({
       call: c,
+      cssProperty,
       definedValue: definedVars.get(c.name),
       filePath,
       resolveValue,
