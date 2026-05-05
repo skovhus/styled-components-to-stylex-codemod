@@ -5,6 +5,7 @@ import { useTheme } from "./lib/app-theme";
 
 function RuntimeThemeBox(props: React.PropsWithChildren<{}>) {
   const theme = useStyledTheme();
+
   return (
     <div sx={styles.runtimeThemeBox(theme.baseTheme?.color.bgBorderSolid ?? "#94a3b8")}>
       {props.children}

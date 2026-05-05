@@ -236,6 +236,7 @@ export function insertEmittedWrappers(args: {
   if (needsUseThemeImport) {
     const { functionName: themeHookFunctionName, importSource: themeHookImportSource } =
       emitter.themeHook;
+    const themeHookLocalName = emitter.themeHookLocalName;
     const themeHookModuleSpecifier = importSourceToModuleSpecifier(
       themeHookImportSource,
       emitter.filePath,
@@ -255,10 +256,7 @@ export function insertEmittedWrappers(args: {
           const importedName =
             specifierPath.node.imported?.name ?? specifierPath.node.imported?.value;
           const localName = specifierPath.node.local?.name ?? importedName;
-          // Local binding identity is what matters for wrapper calls.
-          // Aliased imports like `import { useDesignTheme as useTheme } ...`
-          // already provide the `useTheme` local symbol and should not trigger injection.
-          return localName === themeHookFunctionName;
+          return importedName === themeHookFunctionName && localName === themeHookLocalName;
         })
         .size() > 0;
 
@@ -274,11 +272,13 @@ export function insertEmittedWrappers(args: {
       if (importWithoutNamespaceSpecifier.size() > 0) {
         importWithoutNamespaceSpecifier.at(0).forEach((path: any) => {
           const specifiers = path.node.specifiers ?? [];
-          specifiers.push(j.importSpecifier(j.identifier(themeHookFunctionName)));
+          specifiers.push(
+            buildThemeHookImportSpecifier(j, themeHookFunctionName, themeHookLocalName),
+          );
         });
       } else {
         const themeHookImport = j.importDeclaration(
-          [j.importSpecifier(j.identifier(themeHookFunctionName))],
+          [buildThemeHookImportSpecifier(j, themeHookFunctionName, themeHookLocalName)],
           j.literal(themeHookModuleSpecifier),
         );
 
@@ -298,4 +298,16 @@ export function insertEmittedWrappers(args: {
       }
     }
   }
+}
+
+function buildThemeHookImportSpecifier(
+  j: WrapperEmitter["j"],
+  importedName: string,
+  localName: string,
+) {
+  const imported = j.identifier(importedName);
+  if (localName === importedName) {
+    return j.importSpecifier(imported);
+  }
+  return j.importSpecifier(imported, j.identifier(localName));
 }

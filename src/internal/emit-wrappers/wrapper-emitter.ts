@@ -50,6 +50,7 @@ type WrapperEmitterArgs = {
   stylesIdentifier: string;
   styleMerger: StyleMergerConfig | null;
   themeHook: ThemeHookConfig;
+  themeHookLocalName: string;
   emptyStyleKeys?: Set<string>;
   ancestorSelectorParents?: Set<string>;
   /** Maps styleKey → marker variable name for scoped markers (sibling + cross-file) */
@@ -84,6 +85,7 @@ export class WrapperEmitter {
   readonly stylesIdentifier: string;
   readonly styleMerger: StyleMergerConfig | null;
   readonly themeHook: ThemeHookConfig;
+  readonly themeHookLocalName: string;
   readonly emptyStyleKeys: Set<string>;
   readonly ancestorSelectorParents: Set<string>;
   readonly crossFileMarkers: Map<string, string>;
@@ -120,6 +122,7 @@ export class WrapperEmitter {
     this.stylesIdentifier = args.stylesIdentifier;
     this.styleMerger = args.styleMerger;
     this.themeHook = args.themeHook;
+    this.themeHookLocalName = args.themeHookLocalName;
     this.emptyStyleKeys = args.emptyStyleKeys ?? new Set<string>();
     this.ancestorSelectorParents = args.ancestorSelectorParents ?? new Set<string>();
     this.crossFileMarkers = args.crossFileMarkers ?? new Map<string, string>();
