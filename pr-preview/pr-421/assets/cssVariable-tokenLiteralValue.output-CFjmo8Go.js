@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e}from"./index-TM2FtbQq.js";var t=e(),n=()=>(0,t.jsx)(`button`,{className:`x1ypdohk x1vvogim xaope02 x11g1w8x xc342km`,children:`Click target`});export{n as App};
