@@ -4,6 +4,7 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
+import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
 import { SOURCE_CSS_PROPERTIES_KEY, type ComputedKeyEntry } from "./transform/helpers.js";
 import type { LocalStylexVarRef } from "./transform-types.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
