@@ -1,0 +1,4 @@
+import{f as e,s as t}from"./index-D5d_vYbK.js";import{t as n}from"./external-component-tTOnWX-w.js";var r=e(),i=t(n)`
+  color: ${e=>e.$color||`gray`};
+  padding: 10px;
+`;function a(e){return(0,r.jsx)(i,{...e})}export{a as App};
