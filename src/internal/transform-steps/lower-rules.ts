@@ -202,7 +202,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
     pruneSkippedDeclsFromState(state);
-    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state.styledDecls);
+    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state, ctx.cssLocal);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
     prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
@@ -437,11 +437,16 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   }
 }
 
-function collectPreservedReferencedStyledDecls(styledDecls: StyledDecl[]): Set<string> {
+function collectPreservedReferencedStyledDecls(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Set<string> {
+  const { styledDecls } = state;
   const preservedNames = new Set<string>();
   const componentNames = new Set(
     styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
   );
+  const helperSelectorIdentifiers = collectCssHelperFunctionSelectorIdentifiers(state, cssLocal);
   let changed = true;
   while (changed) {
     changed = false;
@@ -449,7 +454,13 @@ function collectPreservedReferencedStyledDecls(styledDecls: StyledDecl[]): Set<s
       if ((!decl.skipTransform && !preservedNames.has(decl.localName)) || decl.isCssHelper) {
         continue;
       }
-      for (const name of collectTemplateSelectorIdentifiers(decl)) {
+      const referencedNames = collectTemplateSelectorIdentifiers(decl);
+      for (const helperName of collectTemplateExpressionIdentifiers(decl)) {
+        for (const selectorName of helperSelectorIdentifiers.get(helperName) ?? []) {
+          referencedNames.add(selectorName);
+        }
+      }
+      for (const name of referencedNames) {
         if (componentNames.has(name) && !preservedNames.has(name)) {
           preservedNames.add(name);
           changed = true;
@@ -660,10 +671,93 @@ function isTemplatePlaceholderInSelectorContext(
   return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
 }
 
+function collectCssHelperFunctionSelectorIdentifiers(
+  state: LowerRulesState,
+  cssLocal: string | undefined,
+): Map<string, Set<string>> {
+  const selectorIdentifiers = new Map<string, Set<string>>();
+  for (const [name, helperFn] of state.cssHelperFunctions as Map<
+    string,
+    { rawCss?: string; templateExpressions?: unknown[] }
+  >) {
+    selectorIdentifiers.set(
+      name,
+      collectTemplateSelectorIdentifiersFromParts(helperFn.rawCss, helperFn.templateExpressions),
+    );
+  }
+
+  if (!cssLocal) {
+    return selectorIdentifiers;
+  }
+
+  state.root
+    .find(state.j.VariableDeclarator, {
+      init: { type: "ArrowFunctionExpression" },
+    } as object)
+    .forEach((path: any) => {
+      if (path.node.id?.type !== "Identifier") {
+        return;
+      }
+      const init = path.node.init;
+      const body = init?.body;
+      if (
+        body?.type !== "TaggedTemplateExpression" ||
+        body.tag?.type !== "Identifier" ||
+        body.tag.name !== cssLocal
+      ) {
+        return;
+      }
+      selectorIdentifiers.set(
+        path.node.id.name,
+        collectTemplateSelectorIdentifiersFromTemplate(body.quasi),
+      );
+    });
+
+  return selectorIdentifiers;
+}
+
 function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {
   const identifiers = new Set<string>();
   for (const expr of decl.templateExpressions ?? []) {
     collectIdentifiers(expr, identifiers);
+  }
+  return identifiers;
+}
+
+function collectTemplateSelectorIdentifiersFromTemplate(template: {
+  quasis?: Array<{ value?: { raw?: string } }>;
+  expressions?: unknown[];
+}): Set<string> {
+  const rawParts: string[] = [];
+  const quasis = template.quasis ?? [];
+  const expressions = template.expressions ?? [];
+  for (let i = 0; i < quasis.length; i++) {
+    rawParts.push(quasis[i]?.value?.raw ?? "");
+    if (i < expressions.length) {
+      rawParts.push(`__SC_EXPR_${i}__`);
+    }
+  }
+  return collectTemplateSelectorIdentifiersFromParts(rawParts.join(""), expressions);
+}
+
+function collectTemplateSelectorIdentifiersFromParts(
+  rawCss: string | undefined,
+  templateExpressions: readonly unknown[] | undefined,
+): Set<string> {
+  const identifiers = new Set<string>();
+  if (!rawCss) {
+    return identifiers;
+  }
+  for (const match of rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = templateExpressions?.[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
   }
   return identifiers;
 }

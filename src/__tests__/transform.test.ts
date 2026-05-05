@@ -381,6 +381,43 @@ export const App = () => (
 `;
 }
 
+function getPreservedCssHelperFunctionWithComponentSelectorSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const Child = styled.span\`
+  color: navy;
+  padding: 4px;
+\`;
+
+const ConvertedBox = styled.div\`
+  margin: 4px;
+\`;
+
+const childHover = (tone: "danger" | "safe") => css\`
+  &:hover \${Child} {
+    color: \${tone === "danger" ? "tomato" : "navy"};
+  }
+\`;
+
+const PreservedContainer = styled.div\`
+  \${() => childHover("danger")}
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <Child>child</Child>
+    <ConvertedBox>box</ConvertedBox>
+    <a className="active">link</a>
+  </PreservedContainer>
+);
+`;
+}
+
 function getPreservedComponentSelectorWithBaseResolverImportSource(): string {
   return `
 import styled from "styled-components";
@@ -698,6 +735,15 @@ export const App = () => (
     expect(result.code).not.toContain("./tokens.stylex");
     expect(result.code).not.toContain("$colors");
     expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span`/);
+  });
+
+  it("bails when a preserved css helper function contains component selectors", () => {
+    const result = runPartial(
+      getPreservedCssHelperFunctionWithComponentSelectorSource(),
+      "partial-componentSelectorHelperFunctionSelector.input.tsx",
+    );
+
+    expect(result.code).toBeNull();
   });
 
   it("does not emit base resolver imports from newly preserved component selector targets", () => {
