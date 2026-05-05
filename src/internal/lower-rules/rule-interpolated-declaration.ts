@@ -2539,7 +2539,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   inlineStyleProps.push({
     prop: customValue.cssName,
     expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
-    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.literal(ref.cssName), true),
+    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.literal(ref.keyName), true),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
