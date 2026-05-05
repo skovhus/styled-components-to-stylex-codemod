@@ -346,7 +346,12 @@ export const fixtureAdapter = defineAdapter({
   resolveCall(ctx) {
     const src = ctx.calleeSource.value;
     // Note: calleeSource.value may or may not include the extension
-    if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
+    const isKnownHelperSource =
+      src.includes("lib/helpers") ||
+      src.includes("lib\\helpers") ||
+      src.includes("lib/color-helper") ||
+      src.includes("lib\\color-helper");
+    if (!isKnownHelperSource) {
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
@@ -509,13 +514,21 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
-    if (!key) {
-      return undefined;
-    }
-
     // Handle color() helper from ./lib/helpers.ts
     // color("bgBase") -> $colors.bgBase
     if (ctx.calleeImportedName === "color") {
+      if (!key) {
+        return {
+          expr: "$colors",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$colors" }],
+            },
+          ],
+        };
+      }
       return {
         expr: `$colors.${key}`,
         imports: [
@@ -525,6 +538,10 @@ export const fixtureAdapter = defineAdapter({
           },
         ],
       };
+    }
+
+    if (!key) {
+      return undefined;
     }
 
     // Handle fontWeight() helper from ./lib/helpers.ts

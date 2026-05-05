@@ -1739,19 +1739,47 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             continue;
           }
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+          let helperCallArg: ExpressionKind | undefined;
           if (!styleFnDecls.has(fnKey)) {
             const valueExprRaw = cloneAstNode(bodyExpr);
+            const helperResolution = resolveHelperCallsInDynamicValue({
+              j,
+              expr: valueExprRaw,
+              cssProperty: out.prop,
+              paramName,
+              resolveImportForExpr,
+              resolveCall,
+              parseExpr,
+              filePath,
+              loc,
+              addResolverImports,
+            });
+            if (helperResolution === null) {
+              warnings.push({
+                severity: "error",
+                type: "Adapter resolveCall returned an unparseable value expression",
+                loc,
+              });
+              bail = true;
+              break;
+            }
+            helperCallArg = helperResolution.callArg;
+            const styleFnParamName = helperResolution.paramName ?? paramName;
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
             const { prefix, suffix } = extractStaticPartsForDecl(d);
             const valueExpr =
               prefix || suffix
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
                 : valueExprRaw;
-            const param = j.identifier(paramName);
+            const param = j.identifier(styleFnParamName);
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
               const isNamedTypeRef = propsTypeKind === "TSTypeReference";
-              if (!isNamedTypeRef) {
+              if (helperResolution.paramName) {
+                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                  j.tsStringKeyword(),
+                );
+              } else if (!isNamedTypeRef) {
                 const typeName = `${decl.localName}Props`;
                 (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                   j.tsTypeReference(j.identifier(typeName)),
@@ -1771,6 +1799,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             styleFnFromProps.push({
               fnKey,
               jsxProp: "__props",
+              ...(helperCallArg ? { callArg: helperCallArg } : {}),
             });
           }
         }
@@ -2690,6 +2719,208 @@ function applyThemeBooleanValue(
   // Default: camelCase the property name
   target[cssPropertyToStylexProp(cssProp)] = value;
   return true;
+}
+
+type DynamicHelperCallContext = {
+  j: JSCodeshift;
+  expr: ExpressionKind;
+  cssProperty: string;
+  paramName: string;
+  resolveImportForExpr: (expr: unknown, localName: string) => ImportMeta | null;
+  resolveCall: InterpolatedDeclarationContext["ctx"]["state"]["resolveCall"];
+  parseExpr: (expr: string) => unknown;
+  filePath: string;
+  loc: { line: number; column: number } | null;
+  addResolverImports: (imports: Iterable<unknown> | undefined | null) => void;
+};
+
+type DynamicHelperCallResolution = {
+  callArg?: ExpressionKind;
+  paramName?: string;
+};
+
+type ImportMeta = {
+  importedName: string;
+  source: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
+};
+
+type CallExpressionLike = {
+  type: "CallExpression";
+  callee?: unknown;
+  arguments?: unknown[];
+};
+
+function resolveHelperCallsInDynamicValue(
+  ctx: DynamicHelperCallContext,
+): DynamicHelperCallResolution | null {
+  if (!ctx.expr || typeof ctx.expr !== "object") {
+    return {};
+  }
+
+  let failed = false;
+  const resolutions: DynamicHelperCallResolution[] = [];
+  const visit = (node: unknown): unknown => {
+    if (!node || typeof node !== "object" || failed) {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map(visit);
+    }
+
+    const record = node as Record<string, unknown>;
+    if (record.type === "CallExpression") {
+      const resolved = tryResolveDynamicHelperCall(record as CallExpressionLike, ctx);
+      if (resolved === null) {
+        failed = true;
+        return node;
+      }
+      if (resolved) {
+        if (resolved.callArg) {
+          resolutions.push({ callArg: resolved.callArg, paramName: resolved.paramName });
+        }
+        return resolved.value;
+      }
+    }
+
+    for (const key of Object.keys(record)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const value = record[key];
+      if (value && typeof value === "object") {
+        record[key] = visit(value);
+      }
+    }
+    return node;
+  };
+
+  visit(ctx.expr);
+  if (failed) {
+    return null;
+  }
+  if (resolutions.length === 1) {
+    return resolutions[0]!;
+  }
+  return {};
+}
+
+function tryResolveDynamicHelperCall(
+  callExpr: CallExpressionLike,
+  ctx: DynamicHelperCallContext,
+): { value: ExpressionKind; callArg?: ExpressionKind; paramName?: string } | false | null {
+  const helperCall = getStyledHelperCall(callExpr);
+  if (!helperCall) {
+    return false;
+  }
+
+  const { innerCall, dynamicArg } = helperCall;
+  const calleeInfo = extractRootAndPath(innerCall.callee);
+  if (!calleeInfo) {
+    return false;
+  }
+
+  const imp = ctx.resolveImportForExpr(innerCall, calleeInfo.rootName);
+  if (!imp) {
+    return false;
+  }
+
+  const dynamicProp = unwrapParamMemberArg(dynamicArg, ctx.paramName);
+  if (!dynamicProp) {
+    return false;
+  }
+
+  const result = ctx.resolveCall({
+    callSiteFilePath: ctx.filePath,
+    calleeImportedName: imp.importedName,
+    calleeSource: imp.source,
+    args: [{ kind: "unknown" }],
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
+    ...(ctx.loc ? { loc: ctx.loc } : {}),
+    cssProperty: ctx.cssProperty,
+  });
+  if (!result || !("expr" in result)) {
+    return false;
+  }
+
+  const resolvedExpr = ctx.parseExpr(result.expr) as ExpressionKind | null;
+  if (!resolvedExpr) {
+    return null;
+  }
+
+  ctx.addResolverImports(result.imports);
+  const helperValue =
+    result.dynamicArgUsage === "memberAccess"
+      ? ctx.j.memberExpression(resolvedExpr, dynamicProp.arg, true)
+      : ctx.j.callExpression(resolvedExpr, [dynamicProp.arg]);
+
+  if (helperCall.kind === "curried") {
+    const resolvedParamName = `resolved${capitalizeIdentifier(dynamicProp.propName)}`;
+    return {
+      value: ctx.j.identifier(resolvedParamName),
+      callArg: helperValue as ExpressionKind,
+      paramName: resolvedParamName,
+    };
+  }
+
+  return { value: helperValue as ExpressionKind };
+}
+
+function getStyledHelperCall(callExpr: CallExpressionLike): {
+  kind: "curried" | "direct";
+  innerCall: CallExpressionLike;
+  dynamicArg: ExpressionKind;
+} | null {
+  if (callExpr.callee && typeof callExpr.callee === "object") {
+    const callee = callExpr.callee as { type?: string };
+    if (callee.type === "CallExpression") {
+      const innerCall = callExpr.callee as CallExpressionLike;
+      const innerArgs = innerCall.arguments ?? [];
+      if (innerArgs.length !== 1) {
+        return null;
+      }
+      return {
+        kind: "curried",
+        innerCall,
+        dynamicArg: innerArgs[0] as ExpressionKind,
+      };
+    }
+  }
+
+  const args = callExpr.arguments ?? [];
+  if (args.length !== 1) {
+    return null;
+  }
+  return {
+    kind: "direct",
+    innerCall: callExpr,
+    dynamicArg: args[0] as ExpressionKind,
+  };
+}
+
+function unwrapParamMemberArg(
+  arg: ExpressionKind,
+  paramName: string,
+): { arg: ExpressionKind; propName: string } | null {
+  if (arg?.type !== "MemberExpression" && arg?.type !== "OptionalMemberExpression") {
+    return null;
+  }
+  const parts = getMemberPathFromIdentifier(arg as any, paramName);
+  const propName = parts?.[0];
+  if (!parts || parts.length !== 1 || !propName) {
+    return null;
+  }
+  return {
+    arg: {
+      type: "Identifier",
+      name: propName,
+    } as ExpressionKind,
+    propName,
+  };
+}
+
+function capitalizeIdentifier(name: string): string {
+  const normalized = name.startsWith("$") ? name.slice(1) : name;
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 /**
