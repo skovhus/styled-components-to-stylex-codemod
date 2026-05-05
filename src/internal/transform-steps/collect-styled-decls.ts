@@ -5,7 +5,7 @@
 import { assertNoNullNodesInArrays } from "../utilities/ast-safety.js";
 import { collectStyledDecls } from "../collect-styled-decls.js";
 import { extractStyledCallArgs } from "../extract-styled-call-args.js";
-import { getNodeLocStart } from "../utilities/jscodeshift-utils.js";
+import { findUncollectedStyledTemplateLoc } from "../utilities/uncollected-styled-template.js";
 import { formatOutput } from "../utilities/format-output.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
@@ -72,7 +72,12 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   ctx.styledDecls = styledDecls;
-  const uncollectedStyledTemplateLoc = findUncollectedStyledTemplateLoc(ctx);
+  const uncollectedStyledTemplateLoc = findUncollectedStyledTemplateLoc({
+    root: ctx.root,
+    j: ctx.j,
+    isStyledTag: ctx.isStyledTag,
+    styledDecls: ctx.styledDecls,
+  });
   if (
     ctx.options.transformMode !== "leavesOnly" &&
     !(ctx.options.allowPartialMigration ?? false) &&
@@ -142,29 +147,4 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
-}
-
-function findUncollectedStyledTemplateLoc(
-  ctx: TransformContext,
-): { line: number; column: number } | null | undefined {
-  const styledDeclNames = new Set(ctx.styledDecls?.map((decl) => decl.localName) ?? []);
-  let loc: { line: number; column: number } | null | undefined;
-
-  ctx.root.find(ctx.j.TaggedTemplateExpression).forEach((path: any) => {
-    if (loc !== undefined || !ctx.isStyledTag(path.node.tag)) {
-      return;
-    }
-    const declarator = ctx.j(path).closest(ctx.j.VariableDeclarator);
-    const declaratorNode = declarator.size() > 0 ? declarator.get().node : undefined;
-    if (declaratorNode?.init !== path.node) {
-      return;
-    }
-    const id = declaratorNode.id;
-    const declaratorName = id?.type === "Identifier" ? id.name : undefined;
-    if (declaratorName && !styledDeclNames.has(declaratorName)) {
-      loc = getNodeLocStart(path.node) ?? null;
-    }
-  });
-
-  return loc;
 }

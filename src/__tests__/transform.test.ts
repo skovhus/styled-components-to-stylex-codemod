@@ -767,6 +767,38 @@ export const App = () => (
     expect(partialResult.code).not.toBeNull();
     expect(partialResult.code).toMatch(/export const Notice = styled\(\s*observe/);
   });
+
+  it("preserves styled imports for shadowed uncollected styled templates", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function observe<P extends object>(Component: React.ComponentType<P>): React.ComponentType<P> {
+  return Component;
+}
+
+export const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+export function makeNotice() {
+  const Notice = styled(
+    observe(function NoticeBase(props: { className?: string }) {
+      return <div className={props.className} />;
+    }),
+  )\`\`;
+  return Notice;
+}
+
+export const App = () => <Notice>outer</Notice>;
+`;
+
+    const result = runPartial(source, "partial-shadowedGeneratedBaseReference.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/import\s+styled\s+from\s+["']styled-components["']/);
+    expect(result.code).toMatch(/const\s+Notice\s*=\s*styled\(\s*observe/);
+  });
 });
 
 /** Mirrors prepass leaves-only extraction (regex + AST) for fixture-driven tests. */
