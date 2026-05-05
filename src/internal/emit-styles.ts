@@ -406,9 +406,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
     const ensureImportDecl = (spec: ImportSpec): void => {
       const moduleSpecifier = toModuleSpecifier(spec.from);
-      const existing = root.find(j.ImportDeclaration, {
-        source: { value: moduleSpecifier },
-      } as any);
+      const existing = root
+        .find(j.ImportDeclaration, {
+          source: { value: moduleSpecifier },
+        } as any)
+        .filter((p: any) => p.node.importKind !== "type");
 
       const toImportSpecifier = (imported: string, local?: string) => {
         // Handle default imports: { imported: "default", local: "foo" } -> import foo from "..."

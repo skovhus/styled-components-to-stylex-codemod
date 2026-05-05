@@ -126,11 +126,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       extraProps.add(cv.innerProp);
     }
     for (const p of d.styleFnFromProps ?? []) {
-      if (p?.jsxProp && p.jsxProp !== "__props") {
+      if (p?.jsxProp && p.jsxProp !== "__props" && p.jsxProp !== "__helper") {
         extraProps.add(p.jsxProp);
       }
       for (const extra of p?.extraCallArgs ?? []) {
-        if (extra.jsxProp && extra.jsxProp !== "__props") {
+        if (extra.jsxProp && extra.jsxProp !== "__props" && extra.jsxProp !== "__helper") {
           extraProps.add(extra.jsxProp);
         }
       }
@@ -467,16 +467,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const styleFnPairs = d.styleFnFromProps ?? [];
     for (const p of styleFnPairs) {
       const prefix = dropPrefix;
+      const isSyntheticStyleFnProp = p.jsxProp === "__props" || p.jsxProp === "__helper";
       const isPrefixProp =
         !!prefix &&
         typeof p.jsxProp === "string" &&
-        p.jsxProp !== "__props" &&
+        !isSyntheticStyleFnProp &&
         p.jsxProp.startsWith(prefix);
       const propExpr = isPrefixProp
         ? knownPrefixPropsSet.has(p.jsxProp)
           ? j.identifier(p.jsxProp)
           : j.memberExpression(j.identifier("props"), j.literal(p.jsxProp), true)
-        : p.jsxProp === "__props"
+        : isSyntheticStyleFnProp
           ? j.identifier("props")
           : j.identifier(p.jsxProp);
       const rawCallArg = p.callArg ?? propExpr;
@@ -486,9 +487,15 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       if (p.extraCallArgs) {
         for (const extra of p.extraCallArgs) {
           const extraPropExpr =
-            extra.jsxProp === "__props" ? j.identifier("props") : j.identifier(extra.jsxProp);
+            extra.jsxProp === "__props" || extra.jsxProp === "__helper"
+              ? j.identifier("props")
+              : j.identifier(extra.jsxProp);
           allCallArgs.push(extra.callArg ?? extraPropExpr);
-          if (extra.jsxProp !== "__props" && !destructureParts.includes(extra.jsxProp)) {
+          if (
+            extra.jsxProp !== "__props" &&
+            extra.jsxProp !== "__helper" &&
+            !destructureParts.includes(extra.jsxProp)
+          ) {
             destructureParts.push(extra.jsxProp);
           }
         }
@@ -516,7 +523,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       // Ensure the prop is destructured from props
       if (
         typeof p.jsxProp === "string" &&
-        p.jsxProp !== "__props" &&
+        !isSyntheticStyleFnProp &&
         !isPrefixProp &&
         !destructureParts.includes(p.jsxProp)
       ) {

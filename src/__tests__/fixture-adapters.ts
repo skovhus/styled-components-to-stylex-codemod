@@ -346,7 +346,12 @@ export const fixtureAdapter = defineAdapter({
   resolveCall(ctx) {
     const src = ctx.calleeSource.value;
     // Note: calleeSource.value may or may not include the extension
-    if (!src.includes("lib/helpers") && !src.includes("lib\\helpers")) {
+    const isKnownHelperSource =
+      src.includes("lib/helpers") ||
+      src.includes("lib\\helpers") ||
+      src.includes("lib/color-helper") ||
+      src.includes("lib\\color-helper");
+    if (!isKnownHelperSource) {
       throw new Error(`Unknown helper: ${src} ${ctx.calleeImportedName}`);
     }
 
@@ -496,6 +501,18 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      if (ctx.cssProperty === "text-shadow") {
+        return {
+          expr: "$shadow",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$shadow" }],
+            },
+          ],
+        };
+      }
       // Dynamic arg — return the vars object with memberAccess usage
       return {
         expr: "$shadow",
@@ -509,13 +526,83 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
-    if (!key) {
-      return undefined;
+    // Handle insetShadow() helper — used alongside shadow() to ensure helper-derived
+    // params with the same source prop keep distinct bindings.
+    if (ctx.calleeImportedName === "insetShadow") {
+      if (key) {
+        return {
+          expr: `$insetShadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$insetShadow" }],
+            },
+          ],
+        };
+      }
+      if (ctx.cssProperty === "text-shadow") {
+        return {
+          expr: "$insetShadow",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$insetShadow" }],
+            },
+          ],
+        };
+      }
+      return {
+        expr: "$insetShadow",
+        dynamicArgUsage: "memberAccess",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$insetShadow" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.calleeImportedName === "glowShadow") {
+      if (key) {
+        return {
+          expr: `$glowShadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$glowShadow" }],
+            },
+          ],
+        };
+      }
+      return {
+        expr: "$glowShadow",
+        dynamicArgUsage: "memberAccess",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$glowShadow" }],
+          },
+        ],
+      };
     }
 
     // Handle color() helper from ./lib/helpers.ts
     // color("bgBase") -> $colors.bgBase
     if (ctx.calleeImportedName === "color") {
+      if (!key) {
+        return {
+          expr: "$colors",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$colors" }],
+            },
+          ],
+        };
+      }
       return {
         expr: `$colors.${key}`,
         imports: [
@@ -525,6 +612,23 @@ export const fixtureAdapter = defineAdapter({
           },
         ],
       };
+    }
+
+    if (ctx.calleeImportedName === "borderByColor") {
+      return {
+        expr: "borderByColor",
+        dynamicArgUsage: "call",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "borderByColor" }],
+          },
+        ],
+      };
+    }
+
+    if (!key) {
+      return undefined;
     }
 
     // Handle fontWeight() helper from ./lib/helpers.ts

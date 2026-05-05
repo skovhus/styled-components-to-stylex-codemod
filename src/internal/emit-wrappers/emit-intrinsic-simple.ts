@@ -276,7 +276,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       const styleFnProps = new Set(
         (d.styleFnFromProps ?? [])
           .map((p: any) => p.jsxProp)
-          .filter((name: string) => name && name !== "__props"),
+          .filter((name: string) => name && !name.startsWith("__")),
       );
       const destructureProps = [
         ...new Set<string>([
@@ -539,7 +539,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const styleFnPropsForType = new Set(
         (d.styleFnFromProps ?? [])
           .map((p: any) => p.jsxProp)
-          .filter((name: string) => name !== "__props"),
+          .filter((name: string) => !name.startsWith("__")),
       );
       const conditionalPropsForType = new Set(
         (d.attrsInfo?.conditionalAttrs ?? []).map((c: any) => c.jsxProp),
@@ -1307,11 +1307,11 @@ function collectPropsUsedOutsideExtraStyleConditionals(
     add(cv.innerProp);
   }
   for (const pair of d.styleFnFromProps ?? []) {
-    if (pair.jsxProp !== "__props") {
+    if (!pair.jsxProp.startsWith("__")) {
       add(pair.jsxProp);
     }
     for (const extra of pair.extraCallArgs ?? []) {
-      if (extra.jsxProp !== "__props") {
+      if (!extra.jsxProp.startsWith("__")) {
         add(extra.jsxProp);
       }
     }
