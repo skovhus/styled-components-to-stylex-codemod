@@ -1,6 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { cssVariableDefineVarsDeclarationInputMenuWidthVars } from "./cssVariable-defineVarsDeclaration.input.stylex";
+import { cssVariableDefineVarsDeclarationInputVariables } from "./cssVariable-defineVarsDeclaration.input.stylex";
 
 type WidthMenuProps = React.PropsWithChildren<{
   menuWidth?: number;
@@ -16,7 +16,7 @@ function WidthMenu(props: WidthMenuProps) {
       style={
         {
           ...sx.style,
-          [cssVariableDefineVarsDeclarationInputMenuWidthVars.menuWidth]: menuWidth
+          [cssVariableDefineVarsDeclarationInputVariables.menuWidth]: menuWidth
             ? `${menuWidth}px`
             : undefined,
         } as React.CSSProperties
@@ -36,7 +36,7 @@ export const App = () => (
 
 const styles = stylex.create({
   widthMenu: {
-    width: cssVariableDefineVarsDeclarationInputMenuWidthVars.menuWidth,
+    width: cssVariableDefineVarsDeclarationInputVariables.menuWidth,
     padding: 8,
     backgroundColor: "#fef3c7",
   },

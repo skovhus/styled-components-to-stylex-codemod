@@ -192,7 +192,7 @@ export class TransformContext {
             : part.charAt(0).toUpperCase() + part.slice(1),
         )
         .join("");
-      const groupName = `${filePrefix}${keyName.charAt(0).toUpperCase()}${keyName.slice(1)}Vars`;
+      const groupName = `${filePrefix}Variables`;
       const ref = {
         cssName,
         groupName,

@@ -2,7 +2,7 @@
  * Emits StyleX style objects and required imports into the AST.
  * Core concepts: style object serialization and import management.
  */
-import type { StyledDecl, VariantDimension } from "./transform-types.js";
+import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
@@ -1097,21 +1097,34 @@ function emitLocalDefineVarsSidecars(ctx: TransformContext): void {
   }
 
   ctx.sidecarFiles ??= [];
-  const declarations = vars
-    .map(
-      (ref) =>
-        `export const ${ref.groupName} = stylex.defineVars({\n  ${ref.keyName}: ${JSON.stringify(
-          ref.defaultValue,
-        )},\n});`,
-    )
+  const groups = groupLocalStylexVars(vars);
+  const declarations = [...groups.entries()]
+    .map(([groupName, refs]) => {
+      const entries = refs
+        .map((ref) => `  ${ref.keyName}: ${JSON.stringify(ref.defaultValue)},`)
+        .join("\n");
+      return `export const ${groupName} = stylex.defineVars({\n${entries}\n});`;
+    })
     .join("\n\n");
   ctx.sidecarFiles.push({
     content: `import * as stylex from "@stylexjs/stylex";\n\n${declarations}\n`,
   });
 
-  const specifiers = vars.map((ref) => j.importSpecifier(j.identifier(ref.groupName)));
+  const specifiers = [...groups.keys()].map((groupName) =>
+    j.importSpecifier(j.identifier(groupName)),
+  );
   insertImportDeclarationNearStylex(
     ctx.root,
     j.importDeclaration(specifiers, j.literal(`./${vars[0]?.sidecarFileName ?? "vars.stylex"}`)),
   );
+}
+
+function groupLocalStylexVars(vars: LocalStylexVarRef[]): Map<string, LocalStylexVarRef[]> {
+  const groups = new Map<string, LocalStylexVarRef[]>();
+  for (const ref of vars) {
+    const refs = groups.get(ref.groupName) ?? [];
+    refs.push(ref);
+    groups.set(ref.groupName, refs);
+  }
+  return groups;
 }
