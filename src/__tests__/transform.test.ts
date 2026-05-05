@@ -5548,6 +5548,43 @@ export const App = () => (
     expect(result.code).not.toContain('forwardedAs?: BaseProps["as"]');
   });
 
+  it("should preserve component wrapper polymorphism from props type", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+type WrapperProps = BaseProps & {
+  tone?: "info" | "warning";
+};
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base)<WrapperProps>\`
+  color: red;
+\`;
+
+export const App = (props: WrapperProps) => (
+  <Wrapper {...props}>Polymorphic spread</Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("as: Component = Base");
+    expect(result.code).toContain("<Component");
+  });
+
   it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
     const source = `
 import React from "react";

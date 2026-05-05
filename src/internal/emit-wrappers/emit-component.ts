@@ -32,6 +32,7 @@ import {
   isFunctionNode,
   isIdentifierNode,
 } from "../utilities/jscodeshift-utils.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import {
   appendAllPseudoStyleArgs,
@@ -148,7 +149,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const supportsAsProp = d.supportsAsProp ?? false;
     const hasOwnAsUsage = emitter.getUsedAttrs(d.localName).has("as");
     const hasStaticAsAttr = Object.hasOwn(d.attrsInfo?.staticAttrs ?? {}, "as");
-    const shouldAllowAsProp = (hasOwnAsUsage && !hasStaticAsAttr) || supportsAsProp;
+    const propsTypeHasAs =
+      d.propsType &&
+      typeContainsPolymorphicAs({ root: emitter.root, j: emitter.j, typeNode: d.propsType });
+    const shouldAllowAsProp =
+      ((hasOwnAsUsage || Boolean(propsTypeHasAs)) && !hasStaticAsAttr) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
