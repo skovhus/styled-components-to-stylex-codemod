@@ -119,14 +119,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     ...variantBuckets.values(),
   ];
   for (const bucket of bucketsForVarRewrite) {
-    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop, undefined);
+    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop);
   }
   // styleFnDecls hold AST nodes (ArrowFunctionExpression bodies). Walking their
   // template-literal quasis lets us resolve var() calls embedded inside dynamic
   // style functions (e.g. `flexShrink: \`var(--x, ${expr})\``).
   for (const fnAst of styleFnDecls.values()) {
     if (fnAst && typeof fnAst === "object" && isAstNode(fnAst)) {
-      rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop, undefined);
+      rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
     }
   }
   // Apply `dropDefinition: true` results to every bucket that may carry a
