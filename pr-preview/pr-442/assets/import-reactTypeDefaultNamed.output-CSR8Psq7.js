@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{p as e}from"./index-DyOGc8Io.js";var t=e();function n(e){let{children:n,style:r}=e;return(0,t.jsx)(`div`,{className:`xe8ttls x1o9znd0`,style:r,children:n})}var r=()=>(0,t.jsx)(n,{style:{color:`#166534`},children:`Typed message`});export{r as App};
