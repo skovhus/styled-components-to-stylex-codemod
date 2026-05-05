@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{f as e}from"./index-D5d_vYbK.js";var t=e(),n=()=>(0,t.jsxs)(`a`,{href:`#`,className:`x78zum5 x6s0dn4 xifx94n x1awh872 xd10qfp x1c28xdg x-default-marker`,children:[(0,t.jsx)(`span`,{className:`x12ulsxz xdqyycr x5jndhl xsdx111`,children:`Label`}),`Hover me`]});export{n as App};
