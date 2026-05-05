@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-jRWAZmH_.js";import{m as t}from"./index-Bl-LV0k7.js";var n=e(t(),1);function r(e){let{variant:t,color:r,...i}=e;return n.createElement(`span`,i)}export{r as t};
