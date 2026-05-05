@@ -1,0 +1,12 @@
+import{c as e,p as t}from"./index-Dcyjd4O8.js";var n=t(),r=e.div`
+  -webkit-appearance: textfield;
+  appearance: none;
+  width: 120px;
+  height: 40px;
+  border: 1px solid #555;
+  background-color: #eef;
+`,i=e.input`
+  &::-webkit-slider-thumb {
+    width: 10px;
+  }
+`,a=()=>(0,n.jsxs)(`div`,{style:{display:`grid`,gap:12,padding:12},children:[(0,n.jsx)(r,{children:`Vendor box`}),(0,n.jsx)(i,{type:`range`})]});export{a as App};
