@@ -6,6 +6,7 @@ import type { API, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
+  isStylexStringOnlyCssProp,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import { escapeRegex } from "../utilities/string-utils.js";
@@ -27,7 +28,10 @@ export function styleFromSingleDeclaration(
   const style: Record<string, unknown> = {};
   for (const out of cssDeclarationToStylexDeclarations(decl)) {
     // Keep numbers as numbers if the source literal was numeric (e.g. opacity: 1)
-    style[out.prop] = typeof value === "number" ? value : coerceStaticCss(out.value);
+    style[out.prop] =
+      typeof value === "number" && !isStylexStringOnlyCssProp(out.prop)
+        ? value
+        : coerceStaticCss(out.value, out.prop);
   }
   return style;
 }
@@ -58,19 +62,19 @@ export function parseCssDeclarationBlock(cssText: string): Record<string, unknow
       valueRaw,
     };
     for (const out of cssDeclarationToStylexDeclarations(decl)) {
-      style[out.prop] = coerceStaticCss(out.value);
+      style[out.prop] = coerceStaticCss(out.value, out.prop);
     }
   }
   return style;
 }
 
-function coerceStaticCss(value: unknown): unknown {
+function coerceStaticCss(value: unknown, propName?: string): unknown {
   if (!value || typeof value !== "object") {
     return value;
   }
   const v = value as { kind?: string; value?: unknown };
   if (v.kind === "static" && typeof v.value === "string") {
-    if (/^-?\d*\.?\d+$/.test(v.value)) {
+    if (!isStylexStringOnlyCssProp(propName ?? "") && /^-?\d*\.?\d+$/.test(v.value)) {
       return Number(v.value);
     }
     return v.value;
@@ -160,7 +164,7 @@ export function parseCssDeclarationBlockWithTemplateExpr(
         valueRaw,
       };
       for (const out of cssDeclarationToStylexDeclarations(decl)) {
-        styleObj[out.prop] = coerceStaticCss(out.value);
+        styleObj[out.prop] = coerceStaticCss(out.value, out.prop);
       }
     }
   }

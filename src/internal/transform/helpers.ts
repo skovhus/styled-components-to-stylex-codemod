@@ -4,6 +4,7 @@
  */
 import type { API } from "jscodeshift";
 
+import { isStylexStringOnlyCssProp } from "../css-prop-mapping.js";
 import { isAstNode } from "../utilities/jscodeshift-utils.js";
 import { normalizeWhitespace } from "../utilities/string-utils.js";
 import type { WarningLog } from "../logger.js";
@@ -243,6 +244,12 @@ export function cssValueToJs(value: any, important = false, propName?: string): 
     // logic (`localVarValues`, `rewriteCssVarsInString`, `dropDefinition`)
     // relies on `typeof value === "string"`.
     if (propName?.startsWith("--")) {
+      return raw;
+    }
+
+    // Some React/CSS properties accept unitless numbers but StyleX types them
+    // as strings, so keep numeric CSS text as string literals for those props.
+    if (propName && isStylexStringOnlyCssProp(propName)) {
       return raw;
     }
 
