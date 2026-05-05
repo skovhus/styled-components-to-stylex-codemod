@@ -660,7 +660,8 @@ export function buildStyleFnExpressions(
   const booleanProps = collectBooleanPropNames(d);
 
   for (const p of styleFnPairs) {
-    const propExpr = p.jsxProp === "__props" ? propsId : propExprBuilder(p.jsxProp);
+    const propExpr =
+      p.jsxProp === "__props" || p.jsxProp === "__helper" ? propsId : propExprBuilder(p.jsxProp);
     const rawCallArg = p.callArg ?? propExpr;
     const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
     const allCallArgs: ExpressionKind[] = [callArg];
@@ -668,10 +669,13 @@ export function buildStyleFnExpressions(
     if (p.extraCallArgs) {
       for (const extra of p.extraCallArgs) {
         const extraPropExpr =
-          extra.jsxProp === "__props" ? propsId : propExprBuilder(extra.jsxProp);
+          extra.jsxProp === "__props" || extra.jsxProp === "__helper"
+            ? propsId
+            : propExprBuilder(extra.jsxProp);
         allCallArgs.push(extra.callArg ?? extraPropExpr);
         if (
           extra.jsxProp !== "__props" &&
+          extra.jsxProp !== "__helper" &&
           destructureProps &&
           !destructureProps.includes(extra.jsxProp)
         ) {
@@ -705,7 +709,12 @@ export function buildStyleFnExpressions(
     }
 
     // Track prop for destructuring
-    if (p.jsxProp !== "__props" && destructureProps && !destructureProps.includes(p.jsxProp)) {
+    if (
+      p.jsxProp !== "__props" &&
+      p.jsxProp !== "__helper" &&
+      destructureProps &&
+      !destructureProps.includes(p.jsxProp)
+    ) {
       destructureProps.push(p.jsxProp);
     }
 
@@ -730,7 +739,9 @@ export function buildStyleFnExpressions(
     }
 
     const isRequired =
-      p.jsxProp === "__props" || emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
+      p.jsxProp === "__props" ||
+      p.jsxProp === "__helper" ||
+      emitter.isPropRequiredInPropsTypeLiteral(d.propsType, p.jsxProp);
     pushExpr(
       buildStyleFnConditionExpr({
         j,
@@ -767,7 +778,12 @@ export function collectDestructurePropsFromStyleFns(
 
   // Collect jsxProp and conditionWhen props from styleFnFromProps
   for (const p of d.styleFnFromProps ?? []) {
-    if (p.jsxProp && p.jsxProp !== "__props" && !destructureProps.includes(p.jsxProp)) {
+    if (
+      p.jsxProp &&
+      p.jsxProp !== "__props" &&
+      p.jsxProp !== "__helper" &&
+      !destructureProps.includes(p.jsxProp)
+    ) {
       destructureProps.push(p.jsxProp);
     }
     if (p.conditionWhen) {
@@ -778,6 +794,7 @@ export function collectDestructurePropsFromStyleFns(
       if (
         extra.jsxProp &&
         extra.jsxProp !== "__props" &&
+        extra.jsxProp !== "__helper" &&
         !destructureProps.includes(extra.jsxProp)
       ) {
         destructureProps.push(extra.jsxProp);

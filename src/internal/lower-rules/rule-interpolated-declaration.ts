@@ -1739,7 +1739,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             continue;
           }
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
-          let helperCallArg: ExpressionKind | undefined;
+          let helperCallArgs: DynamicHelperCallArgument[] = [];
           if (!styleFnDecls.has(fnKey)) {
             const valueExprRaw = cloneAstNode(bodyExpr);
             const helperResolution = resolveHelperCallsInDynamicValue({
@@ -1763,25 +1763,30 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            helperCallArg = helperResolution.callArg;
-            const styleFnParamName = helperResolution.paramName ?? paramName;
+            helperCallArgs = helperResolution;
+            const styleFnParamNames =
+              helperCallArgs.length > 0
+                ? helperCallArgs.map((resolution) => resolution.paramName)
+                : [paramName];
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
             const { prefix, suffix } = extractStaticPartsForDecl(d);
             const valueExpr =
               prefix || suffix
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
                 : valueExprRaw;
-            const param = j.identifier(styleFnParamName);
+            const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
               const isNamedTypeRef = propsTypeKind === "TSTypeReference";
-              if (helperResolution.paramName) {
-                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-                  j.tsStringKeyword(),
-                );
+              if (helperCallArgs.length > 0) {
+                for (const param of params) {
+                  (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                    j.tsStringKeyword(),
+                  );
+                }
               } else if (!isNamedTypeRef) {
                 const typeName = `${decl.localName}Props`;
-                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                (params[0] as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                   j.tsTypeReference(j.identifier(typeName)),
                 );
               }
@@ -1793,13 +1798,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
               ),
             ]);
-            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+            styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
+            const [firstHelperCallArg, ...extraHelperCallArgs] = helperCallArgs;
             styleFnFromProps.push({
               fnKey,
               jsxProp: "__props",
-              ...(helperCallArg ? { callArg: helperCallArg } : {}),
+              ...(firstHelperCallArg ? { callArg: firstHelperCallArg.callArg } : {}),
+              ...(extraHelperCallArgs.length > 0
+                ? {
+                    extraCallArgs: extraHelperCallArgs.map((resolution) => ({
+                      jsxProp: "__props",
+                      callArg: resolution.callArg,
+                    })),
+                  }
+                : {}),
             });
           }
         }
@@ -2734,9 +2748,9 @@ type DynamicHelperCallContext = {
   addResolverImports: (imports: Iterable<unknown> | undefined | null) => void;
 };
 
-type DynamicHelperCallResolution = {
-  callArg?: ExpressionKind;
-  paramName?: string;
+type DynamicHelperCallArgument = {
+  callArg: ExpressionKind;
+  paramName: string;
 };
 
 type ImportMeta = {
@@ -2752,13 +2766,13 @@ type CallExpressionLike = {
 
 function resolveHelperCallsInDynamicValue(
   ctx: DynamicHelperCallContext,
-): DynamicHelperCallResolution | null {
+): DynamicHelperCallArgument[] | null {
   if (!ctx.expr || typeof ctx.expr !== "object") {
-    return {};
+    return [];
   }
 
   let failed = false;
-  const resolutions: DynamicHelperCallResolution[] = [];
+  const resolutions: DynamicHelperCallArgument[] = [];
   const visit = (node: unknown): unknown => {
     if (!node || typeof node !== "object" || failed) {
       return node;
@@ -2798,16 +2812,13 @@ function resolveHelperCallsInDynamicValue(
   if (failed) {
     return null;
   }
-  if (resolutions.length === 1) {
-    return resolutions[0]!;
-  }
-  return {};
+  return resolutions;
 }
 
 function tryResolveDynamicHelperCall(
   callExpr: CallExpressionLike,
   ctx: DynamicHelperCallContext,
-): { value: ExpressionKind; callArg?: ExpressionKind; paramName?: string } | false | null {
+): { value: ExpressionKind; callArg?: ExpressionKind; paramName: string } | false | null {
   const helperCall = getStyledHelperCall(callExpr);
   if (!helperCall) {
     return false;
@@ -2862,7 +2873,7 @@ function tryResolveDynamicHelperCall(
     };
   }
 
-  return { value: helperValue as ExpressionKind };
+  return { value: helperValue as ExpressionKind, paramName: dynamicProp.propName };
 }
 
 function getStyledHelperCall(callExpr: CallExpressionLike): {

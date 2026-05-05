@@ -22,9 +22,29 @@ function LoadingPlaceholder(props: LoadingPlaceholderProps) {
   );
 }
 
+type LoadingPlaceholderRangeProps = React.PropsWithChildren<{
+  startColor: ColorToken;
+  endColor: ColorToken;
+}>;
+
+function LoadingPlaceholderRange(props: LoadingPlaceholderRangeProps) {
+  const { children, startColor, endColor } = props;
+  return (
+    <div
+      sx={[
+        styles.loadingPlaceholderRange,
+        styles.loadingPlaceholderRangeBackgroundImage($colors[startColor], $colors[endColor]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
-  <div style={{ padding: 12 }}>
+  <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <LoadingPlaceholder highlightColor="accent" />
+    <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
   </div>
 );
 
@@ -36,5 +56,16 @@ const styles = stylex.create({
   },
   loadingPlaceholderBackgroundImage: (resolvedHighlightColor: string) => ({
     backgroundImage: `linear-gradient(90deg, transparent, ${resolvedHighlightColor}, transparent)`,
+  }),
+  loadingPlaceholderRange: {
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+  },
+  loadingPlaceholderRangeBackgroundImage: (
+    resolvedStartColor: string,
+    resolvedEndColor: string,
+  ) => ({
+    backgroundImage: `linear-gradient(90deg, ${resolvedStartColor}, ${resolvedEndColor})`,
   }),
 });
