@@ -19,6 +19,14 @@ export interface SidecarFile {
   filePath?: string;
 }
 
+export interface LocalStylexVarRef {
+  cssName: string;
+  groupName: string;
+  keyName: string;
+  defaultValue: string;
+  sourceOrder: number;
+}
+
 /**
  * Result of the transform including any log entries
  */
@@ -562,7 +570,11 @@ export type StyledDecl = {
   preserveCssHelperDeclaration?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
+  inlineStyleProps?: Array<{
+    prop: string;
+    expr: ExpressionKind;
+    jsxProp?: string;
+  }>;
   /**
    * Static normal-property values that cannot be emitted through stylex.create()
    * (for example unresolved raw CSS var(...) expressions). Wrapper components use

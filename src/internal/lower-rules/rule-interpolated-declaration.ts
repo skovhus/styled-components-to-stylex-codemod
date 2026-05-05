@@ -25,6 +25,7 @@ import {
   extractRootAndPath,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
+  getSinglePropFromMemberExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   staticValueToLiteral,
@@ -64,6 +65,7 @@ import {
 } from "./interpolated-variant-resolvers.js";
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
+import { findCssVarCallsInString } from "../css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
@@ -144,6 +146,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     hasLocalThemeBinding,
     resolveThemeValue,
     resolveThemeValueFromFn,
+    localStylexVars,
+    getOrCreateLocalStylexVar,
     resolveImportInScope,
     resolveImportForExpr,
   } = state;
@@ -868,6 +872,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
+
+    if (
+      tryHandleLocalCustomPropertyDefinition({
+        j,
+        d,
+        decl,
+        expr,
+        getOrCreateLocalStylexVar,
+        localStylexVars,
+        styleObj,
+        styleFnDecls,
+        styleFnFromProps,
+      })
+    ) {
+      continue;
+    }
 
     // Handle local helper function calls that return CSS strings.
     // Pattern: ${(props) => localFn(props.size)} where localFn returns multi-property CSS.
@@ -2444,6 +2464,176 @@ function isPseudoElementSelector(pseudoElement: string | null): boolean {
   return (
     pseudoElement === "::before" || pseudoElement === "::after" || pseudoElement === "::placeholder"
   );
+}
+
+function tryHandleLocalCustomPropertyDefinition(args: {
+  j: JSCodeshift;
+  d: CssDeclarationIR;
+  decl: StyledDecl;
+  expr: unknown;
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => {
+    groupName: string;
+    keyName: string;
+  };
+  localStylexVars: Map<string, unknown>;
+  styleFnDecls: Map<string, unknown>;
+  styleFnFromProps: Array<{
+    fnKey: string;
+    jsxProp: string;
+    condition?: "truthy" | "always";
+    callArg?: ExpressionKind;
+    conditionWhen?: string;
+  }>;
+}): boolean {
+  const {
+    j,
+    d,
+    decl,
+    expr,
+    getOrCreateLocalStylexVar,
+    localStylexVars,
+    styleFnDecls,
+    styleFnFromProps,
+  } = args;
+  if (!d.property?.startsWith("--") || !expr || typeof expr !== "object") {
+    return false;
+  }
+  const cssName = d.property;
+  const defaultValue = findLocalCustomPropertyFallback(cssName, decl);
+  if (!defaultValue) {
+    return false;
+  }
+  const arrow = expr as {
+    type?: string;
+    params?: unknown[];
+    body?: unknown;
+  };
+  if (arrow.type !== "ArrowFunctionExpression" && arrow.type !== "FunctionExpression") {
+    return false;
+  }
+  const paramName =
+    arrow.params?.[0] && (arrow.params[0] as { type?: string; name?: string }).type === "Identifier"
+      ? (arrow.params[0] as { name: string }).name
+      : null;
+  if (!paramName) {
+    return false;
+  }
+  const body = getFunctionBodyExpr(arrow) as
+    | {
+        type?: string;
+        test?: unknown;
+        consequent?: unknown;
+        alternate?: unknown;
+      }
+    | null;
+  if (body?.type !== "ConditionalExpression") {
+    return false;
+  }
+  const conditionProp = getSinglePropFromMemberExpr(body.test, paramName);
+  if (!conditionProp || !isEmptyCssExpression(body.alternate)) {
+    return false;
+  }
+  const customValue = parseCustomPropertyTemplateValue(cssName, body.consequent, paramName);
+  if (!customValue) {
+    return false;
+  }
+  const ref = getOrCreateLocalStylexVar(cssName, defaultValue);
+  const fnKey = styleKeyWithSuffix(decl.styleKey, cssName);
+  if (!styleFnDecls.has(fnKey)) {
+    const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
+    const paramNameForFn = cssPropertyToIdentifier(propName || ref.keyName);
+    const param = j.identifier(paramNameForFn);
+    const keyExpr = j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName));
+    const valueExpr = buildTemplateWithStaticParts(
+      j,
+      j.identifier(paramNameForFn),
+      customValue.prefix,
+      customValue.suffix,
+    );
+    const prop = j.property("init", keyExpr, valueExpr);
+    (prop as { computed?: boolean }).computed = true;
+    styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([prop])));
+  }
+  styleFnFromProps.push({
+    fnKey,
+    jsxProp: conditionProp,
+    conditionWhen: conditionProp,
+  });
+  if (conditionProp.startsWith("$")) {
+    ensureShouldForwardPropDrop(decl, conditionProp);
+  }
+  localStylexVars.set(cssName, ref);
+  delete styleObj[cssName];
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+function findLocalCustomPropertyFallback(
+  cssName: string,
+  styleObj: Record<string, unknown>,
+): string | null {
+  for (const value of Object.values(styleObj)) {
+    if (typeof value !== "string") {
+      continue;
+    }
+    for (const call of findCssVarCallsInString(value)) {
+      if (call.name === cssName && call.fallback) {
+        return call.fallback;
+      }
+    }
+  }
+  return null;
+}
+
+function parseCustomPropertyTemplateValue(
+  cssName: string,
+  node: unknown,
+  paramName: string,
+): { prefix: string; suffix: string } | null {
+  const tpl = node as {
+    type?: string;
+    quasis?: Array<{ value?: { cooked?: string; raw?: string } }>;
+    expressions?: unknown[];
+  };
+  if (tpl.type !== "TemplateLiteral" || !tpl.quasis || !tpl.expressions) {
+    return null;
+  }
+
+  if (tpl.quasis.length !== 2 || tpl.expressions.length !== 1) {
+    return null;
+  }
+  if (!getSinglePropFromMemberExpr(tpl.expressions[0], paramName)) {
+    return null;
+  }
+  const prefixText = tpl.quasis[0]?.value?.cooked ?? tpl.quasis[0]?.value?.raw ?? "";
+  const suffixWithTerminator = tpl.quasis[1]?.value?.cooked ?? tpl.quasis[1]?.value?.raw ?? "";
+  const declarationPrefix = `${cssName}:`;
+  if (!prefixText.trimStart().startsWith(declarationPrefix)) {
+    return null;
+  }
+  return {
+    prefix: prefixText
+      .slice(prefixText.indexOf(declarationPrefix) + declarationPrefix.length)
+      .trimStart(),
+    suffix: suffixWithTerminator.replace(/;\s*$/, ""),
+  };
+}
+
+function isEmptyCssExpression(node: unknown): boolean {
+  if (!node || typeof node !== "object") {
+    return node == null || node === false;
+  }
+  const typed = node as { type?: string; value?: unknown };
+  if (typed.type === "StringLiteral" || typed.type === "Literal") {
+    return typed.value === "";
+  }
+  if (typed.type === "NullLiteral") {
+    return true;
+  }
+  if (typed.type === "BooleanLiteral") {
+    return typed.value === false;
+  }
+  return false;
 }
 
 /**

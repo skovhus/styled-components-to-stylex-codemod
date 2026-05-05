@@ -25,7 +25,7 @@ import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
-import type { TransformOptions } from "./transform-types.js";
+import type { LocalStylexVarRef, TransformOptions } from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
@@ -51,6 +51,8 @@ export class TransformContext {
   patternProp: (keyName: string, valueId?: any) => any;
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
   parseExpr: (exprSource: string) => any;
+  localStylexVars: Map<string, LocalStylexVarRef>;
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
@@ -163,6 +165,34 @@ export class TransformContext {
     setUseLogicalProperties(!(adapter.usePhysicalProperties ?? false));
 
     const resolverImports = new Map<string, ImportSpec>();
+    const localStylexVars = new Map<string, LocalStylexVarRef>();
+    let nextLocalStylexVarOrder = 0;
+    const getOrCreateLocalStylexVar = (cssName: string, defaultValue: string): LocalStylexVarRef => {
+      const existing = localStylexVars.get(cssName);
+      if (existing) {
+        return existing;
+      }
+      const rawKey = cssName
+        .slice(2)
+        .split("-")
+        .filter(Boolean)
+        .map((part, index) =>
+          index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
+        )
+        .join("");
+      const keyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
+      const groupName = `${keyName}Vars`;
+      const ref = {
+        cssName,
+        groupName,
+        keyName,
+        defaultValue,
+        sourceOrder: nextLocalStylexVarOrder,
+      };
+      nextLocalStylexVarOrder += 1;
+      localStylexVars.set(cssName, ref);
+      return ref;
+    };
     const {
       resolveValueSafe,
       resolveValueDirectionalSafe,
@@ -183,6 +213,8 @@ export class TransformContext {
       filePath: file.path,
       definedVars,
       varsToDrop,
+      localStylexVars,
+      getOrCreateLocalStylexVar,
       resolveValue: resolveValueSafe,
       addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),
       parseExpr,
@@ -226,6 +258,8 @@ export class TransformContext {
     this.hasChanges = false;
     this.adapter = adapter;
     this.resolverImports = resolverImports;
+    this.localStylexVars = localStylexVars;
+    this.getOrCreateLocalStylexVar = getOrCreateLocalStylexVar;
     this.resolveValueSafe = resolveValueSafe;
     this.resolveValueDirectionalSafe = resolveValueDirectionalSafe;
     this.resolveCallSafe = resolveCallSafe;

@@ -4,8 +4,8 @@
  */
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
-import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
 import { SOURCE_CSS_PROPERTIES_KEY, type ComputedKeyEntry } from "./transform/helpers.js";
+import type { LocalStylexVarRef } from "./transform-types.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function rewriteCssVarsInStyleObject(
@@ -37,6 +37,8 @@ type CssVarRewriteContext = {
   filePath: string;
   definedVars: Map<string, string>;
   varsToDrop: Set<string>;
+  localStylexVars?: Map<string, LocalStylexVarRef>;
+  getOrCreateLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
@@ -66,6 +68,17 @@ function rewriteCssVarsInStyleObjectImpl(
   for (const [k, v] of Object.entries(obj)) {
     if (k.startsWith("--")) {
       const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
+      const localVar = ctx.localStylexVars?.get(k);
+      if (localVar && localVar.defaultValue !== v) {
+        delete obj[k];
+        addComputedKeyForCssVar(obj, {
+          keyExpr: stylexVarMemberExpression(ctx.j, localVar),
+          value: rewrittenValue,
+          originalCssVariableName: k,
+        });
+        continue;
+      }
+
       const result = ctx.resolveValue({
         kind: "cssVariable",
         name: k,
@@ -95,16 +108,11 @@ function rewriteCssVarsInStyleObjectImpl(
         ctx.addImport(imp);
       }
 
-      const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
-        ? obj.__computedKeys
-        : [];
-      computedKeys.push({
+      addComputedKeyForCssVar(obj, {
         keyExpr,
         value: rewrittenValue,
-        prepend: true,
         originalCssVariableName: k,
       });
-      obj.__computedKeys = computedKeys;
       continue;
     }
 
@@ -125,7 +133,12 @@ function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteCont
   }
 
   if (typeof value === "string") {
-    return rewriteCssVarsInString({ raw: value, ...ctx });
+    const rewritten = rewriteCssVarsInString({ raw: value, ...ctx });
+    if (rewritten !== value) {
+      return rewritten;
+    }
+    const localRewrite = rewriteLocalStylexVarString(value, ctx);
+    return localRewrite ?? value;
   }
 
   return value;
@@ -150,18 +163,28 @@ function getCssVariableValueProperty(
   return originalCssProperties[key] ?? key;
 }
 
-/**
- * Walks an AST node (e.g. TemplateLiteral, ArrowFunctionExpression) to find `var(...)`
- * calls embedded in template literal quasis and rewrites them via the adapter.
- *
- * When a `var(--name, fallback)` is fully contained within a single template element,
- * the rewrite is straightforward (similar to rewriteCssVarsInString).
- *
- * When the `var(...)` call spans multiple quasis (because `${dynamic}` is INSIDE the
- * var() call's name or fallback), the resolved adapter expression replaces the entire
- * var(...) — the dynamic expressions inside are dropped. This matches the user
- * expectation that adapter-resolved tokens supersede their default values.
- */
+function rewriteLocalStylexVarString(
+  value: string,
+  ctx: CssVarRewriteContext,
+): ExpressionKind | null {
+  const calls = findCssVarCallsInString(value).filter((call) => call.fallback);
+  for (const call of calls) {
+    const fallback = call.fallback?.trim().replace(/,\s*$/, "");
+    if (!fallback) {
+      continue;
+    }
+    const localVar =
+      ctx.localStylexVars?.get(call.name) ?? ctx.getOrCreateLocalStylexVar?.(call.name, fallback);
+    if (!localVar || localVar.defaultValue !== fallback) {
+      continue;
+    }
+    if (call.start === 0 && call.end === value.length) {
+      return stylexVarMemberExpression(ctx.j, localVar);
+    }
+  }
+  return null;
+}
+
 function rewriteCssVarsInAstNode(node: { type: string }, ctx: CssVarRewriteContext): void {
   for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
     if (Array.isArray(value)) {
@@ -269,7 +292,8 @@ function rewriteCssVarsInTemplateLiteral(
     }
   }
 
-  const calls = findCssVarCallsInString(combined);
+  const allCalls = findCssVarCallsInString(combined);
+  const calls = allCalls.filter((call) => call.fallback);
   if (calls.length === 0) {
     return false;
   }
@@ -285,6 +309,16 @@ function rewriteCssVarsInTemplateLiteral(
     const cleanedFallback = call.fallback
       ? call.fallback.replace(placeholderPattern, "").trim().replace(/,\s*$/, "")
       : undefined;
+    const localVar = ctx.localStylexVars?.get(call.name);
+    if (localVar && cleanedFallback === localVar.defaultValue) {
+      replacements.push({
+        start: call.start,
+        end: call.end,
+        expr: stylexVarMemberExpression(ctx.j, localVar),
+      });
+      continue;
+    }
+
     const res = resolveCssVarCall({
       call: {
         start: call.start,
@@ -374,4 +408,22 @@ function rewriteCssVarsInTemplateLiteral(
   node.quasis = newQuasis;
   node.expressions = newExpressions;
   return true;
+}
+
+function addComputedKeyForCssVar(
+  obj: Record<string, unknown>,
+  entry: Omit<ComputedKeyEntry, "prepend">,
+): void {
+  const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
+    ? (obj.__computedKeys as ComputedKeyEntry[])
+    : [];
+  computedKeys.push({
+    ...entry,
+    prepend: true,
+  });
+  obj.__computedKeys = computedKeys;
+}
+
+function stylexVarMemberExpression(j: JSCodeshift, ref: LocalStylexVarRef): ExpressionKind {
+  return j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName));
 }

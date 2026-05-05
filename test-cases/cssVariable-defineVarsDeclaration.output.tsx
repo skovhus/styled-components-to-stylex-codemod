@@ -6,21 +6,17 @@ const menuVars = stylex.defineVars({
 });
 
 type WidthMenuProps = React.PropsWithChildren<{
-  menuWidth?: number;
+  $menuWidth?: number;
 }>;
 
 function WidthMenu(props: WidthMenuProps) {
-  const { children, menuWidth } = props;
+  const { children, $menuWidth } = props;
   return (
     <div
-      sx={styles.widthMenu}
-      style={
-        menuWidth != null
-          ? ({
-              [menuVars.width]: `${menuWidth}px`,
-            } as React.CSSProperties)
-          : undefined
-      }
+      sx={[
+        styles.widthMenu,
+        $menuWidth ? styles.widthMenuMenuWidth($menuWidth) : undefined,
+      ]}
     >
       {children}
     </div>
@@ -30,14 +26,17 @@ function WidthMenu(props: WidthMenuProps) {
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <WidthMenu>Default width</WidthMenu>
-    <WidthMenu menuWidth={320}>Custom width</WidthMenu>
+    <WidthMenu $menuWidth={320}>Custom width</WidthMenu>
   </div>
 );
 
 const styles = stylex.create({
   widthMenu: {
-    width: `var(${menuVars.width}, 240px)`,
+    width: menuVars.width,
     padding: 8,
     backgroundColor: "#fef3c7",
   },
+  widthMenuMenuWidth: (menuWidth: number | undefined) => ({
+    [menuVars.width]: `${menuWidth}px`,
+  }),
 });

@@ -592,8 +592,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
+  const defineVarsDecls = buildDefineVarsDecls(ctx);
   const programBody = root.get().node.program.body as any[];
-  const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
+  const insertNodes = [
+    ...defineVarsDecls,
+    ...inlineKeyframeDecls,
+    ...(stylesDecl ? [stylesDecl as any] : []),
+  ];
   if (insertNodes.length > 0) {
     if (stylesInsertPosition === "afterImports") {
       const lastImportIdx = findLastImportIndex(programBody);
@@ -1084,4 +1089,25 @@ function tokenizeShorthandValue(value: string): string[] {
   }
 
   return tokens;
+}
+
+function buildDefineVarsDecls(ctx: TransformContext): unknown[] {
+  const vars = [...(ctx.localStylexVars?.values() ?? [])].sort(
+    (a, b) => a.sourceOrder - b.sourceOrder,
+  );
+  return vars.map((ref) =>
+    ctx.j.variableDeclaration("const", [
+      ctx.j.variableDeclarator(
+        ctx.j.identifier(ref.groupName),
+        ctx.j.callExpression(
+          ctx.j.memberExpression(ctx.j.identifier("stylex"), ctx.j.identifier("defineVars")),
+          [
+            ctx.j.objectExpression([
+              ctx.j.property("init", ctx.j.identifier(ref.keyName), ctx.j.literal(ref.defaultValue)),
+            ]),
+          ],
+        ),
+      ),
+    ]),
+  );
 }
