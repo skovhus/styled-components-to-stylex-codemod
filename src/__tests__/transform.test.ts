@@ -1206,6 +1206,49 @@ export function App() {
     expect(result.code).toMatch(/animation:\s*\$\{fade\}\s*2s linear/);
   });
 
+  it("does not reuse existing bindings for generated keyframes aliases", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fadeStylex = "already used";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+const Preserved = styled.span\`
+  animation: \${fade} 2s linear;
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <Card>
+    <Preserved>
+      <a className="active">{fadeStylex}</a>
+    </Preserved>
+  </Card>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-colliding-keyframes-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"already used"/);
+    expect(result.code).toMatch(/const\s+fadeStylex2\s*=\s*stylex\.keyframes/);
+    expect(result.code).toMatch(/animationName:\s*fadeStylex2/);
+    expect(result.code).toMatch(/animation:\s*\$\{fade\}\s*2s linear/);
+  });
+
   it("does not collapse user-authored stylex.keyframes bindings that look like generated aliases", () => {
     const source = `
 import * as stylex from "@stylexjs/stylex";

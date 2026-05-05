@@ -7,6 +7,7 @@ import {
   convertStyledKeyframes,
   GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT,
 } from "../keyframes.js";
+import type { ASTNode } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { objectToAst } from "../transform/helpers.js";
@@ -120,7 +121,7 @@ function buildDuplicateKeyframesNames(
     return duplicates;
   }
 
-  const usedNames = new Set<string>(ctx.keyframesNames);
+  const usedNames = collectBindingNames(ctx);
   const transformedReferences = collectKeyframesReferencedByDecls(
     ctx,
     (decl) => !decl.skipTransform,
@@ -161,6 +162,50 @@ function collectKeyframesReferencedByDecls(
     }
   }
   return referencedNames;
+}
+
+function collectBindingNames(ctx: TransformContext): Set<string> {
+  const names = new Set<string>(ctx.keyframesNames);
+  ctx.root.find(ctx.j.VariableDeclarator).forEach((path: { node: { id: ASTNode } }) => {
+    collectPatternBindingNames(path.node.id, names);
+  });
+  ctx.root.find(ctx.j.FunctionDeclaration).forEach((path: { node: { id?: ASTNode | null } }) => {
+    collectPatternBindingNames(path.node.id, names);
+  });
+  ctx.root.find(ctx.j.ClassDeclaration).forEach((path: { node: { id?: ASTNode | null } }) => {
+    collectPatternBindingNames(path.node.id, names);
+  });
+  return names;
+}
+
+function collectPatternBindingNames(node: unknown, names: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectPatternBindingNames(child, names);
+    }
+    return;
+  }
+  const typed = node as { type?: string; name?: string };
+  if (typed.type === "Identifier" && typed.name) {
+    names.add(typed.name);
+    return;
+  }
+  if (
+    typed.type === "MemberExpression" ||
+    typed.type === "OptionalMemberExpression" ||
+    typed.type === "TSQualifiedName"
+  ) {
+    return;
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    collectPatternBindingNames((node as Record<string, unknown>)[key], names);
+  }
 }
 
 function makeUniqueKeyframesDuplicateName(name: string, usedNames: Set<string>): string {
