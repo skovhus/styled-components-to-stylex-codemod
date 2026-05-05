@@ -7102,7 +7102,7 @@ export const App = () => <Box>content</Box>;
     expect(result.code).not.toContain("[vars.themeColor]");
   });
 
-  it("should preserve StyleX runtime style when raw CSS variable inline styles combine with caller style", () => {
+  it("should preserve caller style spread when raw CSS variable inline styles are emitted", () => {
     const source = `
 import styled from "styled-components";
 
@@ -7110,7 +7110,7 @@ const Box = styled.div\`
   width: var(--raw-width);
 \`;
 
-export const App = () => <Box style={{ color: "red" }}>content</Box>;
+export const App = (props: { style?: React.CSSProperties }) => <Box {...props}>content</Box>;
 `;
     const adapterWithoutSxProp = {
       ...fixtureAdapter,
@@ -7125,10 +7125,8 @@ export const App = () => <Box style={{ color: "red" }}>content</Box>;
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("const sx = stylex.props");
-    expect(result.code).toContain("...sx.style");
-    expect(result.code).toContain("...boxInlineStyle");
-    expect(result.code).toContain('...{ color: "red" }');
+    expect(result.code).toContain('width: "var(--raw-width)"');
+    expect(result.code).toContain("...style");
   });
 
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {

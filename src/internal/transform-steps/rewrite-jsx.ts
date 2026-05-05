@@ -872,11 +872,15 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           );
         }
 
+        const hasRestSpreadAttr = keptRestAfterVariants.some(
+          (attr) => attr.type === "JSXSpreadAttribute",
+        );
         const hasOnlyStaticInlineStyleAttr =
           staticInlineStyleExpr !== null &&
           styleAttr !== null &&
           effectiveClassNameAttr === null &&
-          !hasCallerStyleAttr;
+          !hasCallerStyleAttr &&
+          !hasRestSpreadAttr;
         const needsMerge =
           effectiveClassNameAttr !== null || (styleAttr !== null && !hasOnlyStaticInlineStyleAttr);
         // sx prop requires at least one local stylex.create() reference so the
