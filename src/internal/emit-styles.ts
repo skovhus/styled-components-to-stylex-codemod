@@ -8,6 +8,7 @@ import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { findUncollectedStyledTemplateLoc } from "./utilities/uncollected-styled-template.js";
 import {
   assertValidImportSource,
   importSourceToModuleSpecifier,
@@ -143,6 +144,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // imports the skipped decl still references — e.g. `css` used inside its template)
   // must be preserved so the surviving code keeps compiling.
   const hasSkippedStyledDecls = styledDecls.some((d) => d.skipTransform);
+  const hasUncollectedStyledUsage =
+    findUncollectedStyledTemplateLoc({
+      root,
+      j,
+      isStyledTag: ctx.isStyledTag,
+      styledDecls,
+    }) !== undefined;
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
@@ -163,7 +171,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       // Default import: only `styled`. Preserved whenever a decl stayed as
       // styled-components — the remaining `styled.tag` call sites need it.
       if (spec.type === "ImportDefaultSpecifier") {
-        if (hasSkippedStyledDecls && spec.local?.name) {
+        if (spec.local?.name && (hasSkippedStyledDecls || hasUncollectedStyledUsage)) {
           preservedDefaultStyled = spec.local.name;
         }
         continue;
@@ -179,7 +187,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       if (!importedName || !localName) {
         continue;
       }
-      if (!hasSkippedStyledDecls && transformedAway.includes(localName)) {
+      if (
+        !hasSkippedStyledDecls &&
+        !hasUncollectedStyledUsage &&
+        transformedAway.includes(localName)
+      ) {
         continue;
       }
       // Check if the identifier is used anywhere in the code

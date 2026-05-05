@@ -5,6 +5,7 @@
 import { assertNoNullNodesInArrays } from "../utilities/ast-safety.js";
 import { collectStyledDecls } from "../collect-styled-decls.js";
 import { extractStyledCallArgs } from "../extract-styled-call-args.js";
+import { findUncollectedStyledTemplateLoc } from "../utilities/uncollected-styled-template.js";
 import { formatOutput } from "../utilities/format-output.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
@@ -71,6 +72,25 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   }
 
   ctx.styledDecls = styledDecls;
+  const uncollectedStyledTemplateLoc = findUncollectedStyledTemplateLoc({
+    root: ctx.root,
+    j: ctx.j,
+    isStyledTag: ctx.isStyledTag,
+    styledDecls: ctx.styledDecls,
+  });
+  if (
+    ctx.options.transformMode !== "leavesOnly" &&
+    !(ctx.options.allowPartialMigration ?? false) &&
+    uncollectedStyledTemplateLoc !== undefined
+  ) {
+    ctx.warnings.push({
+      severity: "warning",
+      type: "Higher-order styled factory wrappers (e.g. hoc(styled)) are not supported",
+      loc: uncollectedStyledTemplateLoc,
+    });
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // Check for unparseable shouldForwardProp - bail to avoid semantic changes
   const unparseableSfpDecl = styledDecls.find(
     (d) => !d.skipTransform && d.hasUnparseableShouldForwardProp,

@@ -749,6 +749,56 @@ export const App = () => (
     expect(partialResult.code).not.toBeNull();
     expect(partialResult.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
   });
+
+  it("bails by default when an empty custom call wrapper must be preserved", () => {
+    const source = readFileSync(
+      join(testCasesDir, "partial-generatedBaseReference.input.tsx"),
+      "utf-8",
+    );
+
+    const defaultResult = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-generatedBaseReference.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(defaultResult.code).toBeNull();
+
+    const partialResult = runPartial(source, "partial-generatedBaseReference.input.tsx");
+    expect(partialResult.code).not.toBeNull();
+    expect(partialResult.code).toMatch(/export const Notice = styled\(\s*observe/);
+  });
+
+  it("preserves styled imports for shadowed uncollected styled templates", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function observe<P extends object>(Component: React.ComponentType<P>): React.ComponentType<P> {
+  return Component;
+}
+
+export const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+export function makeNotice() {
+  const Notice = styled(
+    observe(function NoticeBase(props: { className?: string }) {
+      return <div className={props.className} />;
+    }),
+  )\`\`;
+  return Notice;
+}
+
+export const App = () => <Notice>outer</Notice>;
+`;
+
+    const result = runPartial(source, "partial-shadowedGeneratedBaseReference.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/import\s+styled\s+from\s+["']styled-components["']/);
+    expect(result.code).toMatch(/const\s+Notice\s*=\s*styled\(\s*observe/);
+  });
 });
 
 /** Mirrors prepass leaves-only extraction (regex + AST) for fixture-driven tests. */
@@ -1013,6 +1063,19 @@ export const App = () => <Box column>adapter leaf</Box>;
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("stylex.create");
     expect(result.code).not.toMatch(/const\s+Box\s*=\s*styled\(Flex\)`/);
+  });
+
+  it("preserves empty custom call wrappers while converting intrinsic leaves", () => {
+    const fixturePath = join(testCasesDir, "partial-generatedBaseReference.input.tsx");
+    const source = readFileSync(fixturePath, "utf-8");
+
+    const result = runLeavesOnly(source, fixturePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toMatch(/convertedShell:\s*\{/);
+    expect(result.code).toMatch(/export const Notice = styled\(\s*observe\(function NoticeBase/);
+    expect(result.code).not.toContain("ObserveBase");
   });
 
   it("AST prepass classifies let + named styled import as intrinsic leaf", () => {
