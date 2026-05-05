@@ -1172,12 +1172,13 @@ function resolveRenderedAsProp(args: {
   if (!propOwnerType) {
     return null;
   }
-  const ownerTypeText = fallbackTypeName ?? emitter.stringifyTsType(propOwnerType);
-  if (ownerTypeText) {
+  const ownerTypeText = emitter.stringifyTsType(propOwnerType);
+  const baseTypeText = fallbackTypeName ?? ownerTypeText;
+  if (baseTypeText) {
     return {
       propName: "as",
-      baseTypeText: ownerTypeText,
-      typeText: `${ownerTypeText}["as"]`,
+      baseTypeText,
+      typeText: `${ownerTypeText ?? baseTypeText}["as"]`,
     };
   }
   return {
@@ -1268,7 +1269,7 @@ function isPropsWithChildrenType(type: ASTNode): boolean {
 }
 
 function resolveTypeTextFromType(emitter: WrapperEmitter, type: ASTNode | null): string | null {
-  if (type?.type !== "TSTypeReference") {
+  if (!type) {
     return null;
   }
   return emitter.stringifyTsType(type);

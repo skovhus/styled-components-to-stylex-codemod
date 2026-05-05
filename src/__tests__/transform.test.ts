@@ -5548,6 +5548,49 @@ export const App = () => (
     expect(result.code).not.toContain('forwardedAs?: BaseProps["as"]');
   });
 
+  it("should preserve intersected base props when typing forwardedAs from one member", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type AsProps = {
+  as?: React.ElementType;
+  children?: React.ReactNode;
+};
+
+type LabelProps = {
+  label: string;
+};
+
+const Base = (props: AsProps & LabelProps) => {
+  const { as: Component = "button", label, ...rest } = props;
+  return <Component {...rest}>{label}</Component>;
+};
+
+const Wrapper = styled(Base)\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" label="Link label">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain(
+      'type WrapperProps = AsProps & LabelProps & { forwardedAs?: AsProps["as"] }',
+    );
+    expect(result.code).not.toContain(
+      'type WrapperProps = AsProps & { forwardedAs?: AsProps["as"] }',
+    );
+  });
+
   it("should preserve component wrapper polymorphism from props type", () => {
     const source = `
 import React from "react";
