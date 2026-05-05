@@ -250,3 +250,14 @@ After implementing any feature or fix, agents MUST:
    - Minimize type assertions (`as Type`) and non-null assertions (`!`)
 3. **Validate again**: Run `pnpm check` after refactoring
 4. **Commit and push**: Make atomic commits with descriptive messages
+
+## Cursor Cloud specific instructions
+
+- **Node.js**: Requires v22.20.0 (per `.nvmrc`). The update script uses nvm to install and activate it.
+- **pnpm**: Requires v10.22.0 (per `packageManager` field). Activated via corepack.
+- **PATH caveat**: nvm only activates in interactive bash shells. The update script symlinks `node`, `pnpm`, `npm`, `npx`, `corepack` into `/usr/local/bin` so they're available in non-interactive `/bin/sh` contexts (e.g. git hooks via lefthook, Shell tool invocations). If you get "pnpm: command not found" errors, ensure these symlinks exist.
+- **esbuild warning**: `pnpm install` emits a warning about ignored build scripts for `esbuild`, but the platform-specific binary (`@esbuild/linux-x64`) is still installed correctly. No action needed.
+- **No external services**: This is a pure CLI/build tool — no databases, Docker, or network services required.
+- **Running the codemod**: The transform requires an `adapter` option. Use `npx vitest run -t "<case-name>"` to test individual transforms, or `node scripts/regenerate-test-case-outputs.mts --only <case>` to regenerate outputs.
+- **Key commands** are documented at the top of this file: `pnpm install`, `pnpm test:run`, `pnpm check`.
+- **`scripts/debug-test.mts`** has a loader registration issue when run with plain `node`. Use `node scripts/regenerate-test-case-outputs.mts` instead, which uses the same loader mechanism and works correctly.
