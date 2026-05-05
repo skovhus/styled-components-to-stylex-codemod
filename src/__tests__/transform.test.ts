@@ -749,6 +749,24 @@ export const App = () => (
     expect(partialResult.code).not.toBeNull();
     expect(partialResult.code).toMatch(/const\s+Complex\s*=\s*styled\.nav`/);
   });
+
+  it("bails by default when an empty custom call wrapper must be preserved", () => {
+    const source = readFileSync(
+      join(testCasesDir, "partial-generatedBaseReference.input.tsx"),
+      "utf-8",
+    );
+
+    const defaultResult = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-generatedBaseReference.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(defaultResult.code).toBeNull();
+
+    const partialResult = runPartial(source, "partial-generatedBaseReference.input.tsx");
+    expect(partialResult.code).not.toBeNull();
+    expect(partialResult.code).toMatch(/export const Notice = styled\(\s*observe/);
+  });
 });
 
 /** Mirrors prepass leaves-only extraction (regex + AST) for fixture-driven tests. */
