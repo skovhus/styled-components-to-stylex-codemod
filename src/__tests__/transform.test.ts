@@ -5417,9 +5417,12 @@ const Wrapper = styled(Base).attrs({ as: "span" })\`
 \`;
 
 export const App = () => (
-  <Wrapper forwardedAs="a" href="#">
-    Link
-  </Wrapper>
+  <>
+    <Wrapper forwardedAs="a" href="#">
+      Link
+    </Wrapper>
+    <Wrapper href="#">Fallback Link</Wrapper>
+  </>
 );
 `;
     const result = transformWithWarnings(
@@ -5429,7 +5432,7 @@ export const App = () => (
     );
     expect(result.code).not.toBeNull();
     expect(result.code).toContain('forwardedAs?: BaseProps["as"]');
-    expect(result.code).toContain("as={forwardedAs ?? rest.as}");
+    expect(result.code).toContain('as={forwardedAs ?? rest.as ?? "span"}');
     expect(result.code).not.toContain('as="span"');
   });
 

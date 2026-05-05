@@ -1052,23 +1052,32 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       );
       if (shouldLowerForwardedAs) {
         let forwardedAsValueExpr: ExpressionKind = forwardedAsId;
+        const staticForwardedAsFallbackExpr =
+          hasStaticForwardedAsFallback &&
+          (typeof staticForwardedAsFallback === "string" ||
+            typeof staticForwardedAsFallback === "number" ||
+            typeof staticForwardedAsFallback === "boolean" ||
+            staticForwardedAsFallback === null)
+            ? j.literal(staticForwardedAsFallback)
+            : null;
         if (renderedAsProp?.propName && restId) {
           forwardedAsValueExpr = j.logicalExpression(
             "??",
             forwardedAsId,
             j.memberExpression(restId, j.identifier(renderedAsProp.propName)),
           );
-        } else if (
-          hasStaticForwardedAsFallback &&
-          (typeof staticForwardedAsFallback === "string" ||
-            typeof staticForwardedAsFallback === "number" ||
-            typeof staticForwardedAsFallback === "boolean" ||
-            staticForwardedAsFallback === null)
-        ) {
+          if (staticForwardedAsFallbackExpr) {
+            forwardedAsValueExpr = j.logicalExpression(
+              "??",
+              forwardedAsValueExpr,
+              staticForwardedAsFallbackExpr,
+            );
+          }
+        } else if (staticForwardedAsFallbackExpr) {
           forwardedAsValueExpr = j.logicalExpression(
             "??",
             forwardedAsId,
-            j.literal(staticForwardedAsFallback),
+            staticForwardedAsFallbackExpr,
           );
         }
         openingAttrs.push(
