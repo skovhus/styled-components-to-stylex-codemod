@@ -353,6 +353,34 @@ export const App = () => (
 `;
 }
 
+function getPreservedComponentSelectorWithResolverImportSource(): string {
+  return `
+import styled from "styled-components";
+
+const ReferencedChild = styled.span\`
+  color: \${(props) => props.theme.color.bgBase};
+  padding: 4px;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
 function getValueInterpolationNameCollisionSource(): string {
   return `
 import styled from "styled-components";
@@ -625,6 +653,18 @@ export const App = () => (
     );
     expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span/);
     expect(result.code).toContain("hoverStyles(props.tone)");
+  });
+
+  it("does not emit resolver imports from newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithResolverImportSource(),
+      "partial-componentSelectorResolverImport.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("./tokens.stylex");
+    expect(result.code).not.toContain("$colors");
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span`/);
   });
 
   it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {

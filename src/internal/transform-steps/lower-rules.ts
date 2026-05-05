@@ -123,6 +123,7 @@ type LowerRulesResult = {
 
 function lowerRules(ctx: TransformContext): LowerRulesResult {
   const state = createLowerRulesState(ctx);
+  const resolverImportKeysByDecl = new Map<string, Set<string>>();
 
   // Pre-scan all declarations for inline @keyframes definitions.
   // These must be registered before rule processing so animation properties
@@ -178,6 +179,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     if (outcome === "bail") {
       break;
     }
+    recordAddedResolverImports(state, snapshot.resolverImportKeys, decl, resolverImportKeysByDecl);
   }
 
   if (!state.bail) {
@@ -204,6 +206,11 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     pruneSkippedDeclsFromState(state);
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state.styledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
+    prunePreservedReferencedResolverImports(
+      state,
+      preservedReferencedStyledDecls,
+      resolverImportKeysByDecl,
+    );
   }
 
   // Determine which parent style keys actually need markers (defaultMarker or
@@ -318,6 +325,7 @@ type StateSnapshot = {
   childPseudoKeys: Set<string>;
   ancestorAttrKeys: Set<string>;
   usedCssHelperFunctions: Set<string>;
+  resolverImportKeys: Set<string>;
 };
 
 function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
@@ -331,6 +339,7 @@ function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
     childPseudoKeys: new Set(state.childPseudoMarkers.keys()),
     ancestorAttrKeys: new Set(state.ancestorAttrsByStyleKey.keys()),
     usedCssHelperFunctions: new Set(state.usedCssHelperFunctions),
+    resolverImportKeys: new Set(state.resolverImports.keys()),
   };
 }
 
@@ -494,6 +503,48 @@ function prunePreservedReferencedDeclsFromState(
   state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
 }
 
+function recordAddedResolverImports(
+  state: LowerRulesState,
+  beforeKeys: Set<string>,
+  decl: StyledDecl,
+  resolverImportKeysByDecl: Map<string, Set<string>>,
+): void {
+  const addedKeys = new Set<string>();
+  for (const key of state.resolverImports.keys()) {
+    if (!beforeKeys.has(key)) {
+      addedKeys.add(key);
+    }
+  }
+  if (addedKeys.size > 0) {
+    resolverImportKeysByDecl.set(decl.localName, addedKeys);
+  }
+}
+
+function prunePreservedReferencedResolverImports(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+  resolverImportKeysByDecl: Map<string, Set<string>>,
+): void {
+  if (preservedNames.size === 0) {
+    return;
+  }
+
+  const keysToDelete = new Set<string>();
+  const keysToKeep = new Set<string>();
+  for (const [localName, importKeys] of resolverImportKeysByDecl) {
+    const target = preservedNames.has(localName) ? keysToDelete : keysToKeep;
+    for (const key of importKeys) {
+      target.add(key);
+    }
+  }
+
+  for (const key of keysToDelete) {
+    if (!keysToKeep.has(key)) {
+      state.resolverImports.delete(key);
+    }
+  }
+}
+
 function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void {
   pruneMapKeysNotIn(state.resolvedStyleObjects, snap.resolvedStyleKeys);
   state.relationOverrides.length = snap.relationOverridesLength;
@@ -507,6 +558,7 @@ function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void
   pruneMapKeysNotIn(state.childPseudoMarkers, snap.childPseudoKeys);
   pruneMapKeysNotIn(state.ancestorAttrsByStyleKey, snap.ancestorAttrKeys);
   resetSet(state.usedCssHelperFunctions, snap.usedCssHelperFunctions);
+  pruneMapKeysNotIn(state.resolverImports, snap.resolverImportKeys);
 }
 
 /** Delete every key from `map` that isn't also in `allowed`. Collects first to avoid mutating during iteration. */
