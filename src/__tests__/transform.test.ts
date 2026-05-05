@@ -2123,6 +2123,31 @@ export function App() {
     expect(out).not.toMatch(/\btype\s+CardProps\b/);
     expect(out).not.toMatch(/props:\s*CardProps/);
   });
+
+  it("should not emit TypeScript satisfies syntax for raw CSS variable inline styles in plain JS", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  width: var(--raw-width);
+  color: red;
+\`;
+
+export function App() {
+  return <Box>Hi</Box>;
+}
+`;
+    const out = applyTransform(
+      transform,
+      { adapter: fixtureAdapter },
+      { source, path: "raw-var.js" },
+      { parser: "babel" },
+    );
+
+    expect(out).toContain('const boxInlineStyle = {\n  width: "var(--raw-width)",\n};');
+    expect(out).not.toContain("satisfies React.CSSProperties");
+    expect(out).not.toContain("React.CSSProperties");
+  });
 });
 
 describe("splitVariantsResolvedValue safety", () => {
@@ -7075,6 +7100,35 @@ export const App = () => <Box>content</Box>;
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("color: vars.themeColor");
     expect(result.code).not.toContain("[vars.themeColor]");
+  });
+
+  it("should preserve StyleX runtime style when raw CSS variable inline styles combine with caller style", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  width: var(--raw-width);
+\`;
+
+export const App = () => <Box style={{ color: "red" }}>content</Box>;
+`;
+    const adapterWithoutSxProp = {
+      ...fixtureAdapter,
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-caller-style.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutSxProp },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const sx = stylex.props");
+    expect(result.code).toContain("...sx.style");
+    expect(result.code).toContain("...boxInlineStyle");
+    expect(result.code).toContain('...{ color: "red" }');
   });
 
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {

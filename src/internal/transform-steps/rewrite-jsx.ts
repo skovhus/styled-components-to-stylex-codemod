@@ -384,6 +384,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
         let styleAttr: (typeof keptAttrs)[0] | null = null;
+        let hasCallerStyleAttr = false;
         let classNameAttr: (typeof keptAttrs)[0] | null = null;
         // `sxAttr` is captured separately so the inlined `sx={...}` replacement can
         // compose the caller-supplied `sx` into the new one (avoids duplicate `sx=`
@@ -396,6 +397,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "style"
           ) {
+            hasCallerStyleAttr = true;
             if (staticInlineStyleExpr) {
               const callerStyleExpr = extractJsxAttrValueExpr(j, attr);
               styleAttr = j.jsxAttribute(
@@ -871,7 +873,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         }
 
         const hasOnlyStaticInlineStyleAttr =
-          staticInlineStyleExpr !== null && styleAttr !== null && effectiveClassNameAttr === null;
+          staticInlineStyleExpr !== null &&
+          styleAttr !== null &&
+          effectiveClassNameAttr === null &&
+          !hasCallerStyleAttr;
         const needsMerge =
           effectiveClassNameAttr !== null || (styleAttr !== null && !hasOnlyStaticInlineStyleAttr);
         // sx prop requires at least one local stylex.create() reference so the
@@ -1231,25 +1236,31 @@ function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: Styl
         j.property("init", j.identifier(prop.prop), prop.expr),
       ),
     );
-    const typedObjectExpression = {
-      type: "TSSatisfiesExpression",
-      expression: objectExpression,
-      typeAnnotation: j.tsTypeReference(
-        j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties")),
-      ),
-    } as unknown as ExpressionKind;
+    const initializer = shouldEmitTypes(ctx.file.path)
+      ? ({
+          type: "TSSatisfiesExpression",
+          expression: objectExpression,
+          typeAnnotation: j.tsTypeReference(
+            j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties")),
+          ),
+        } as unknown as ExpressionKind)
+      : objectExpression;
 
     declarations.push(
-      j.variableDeclaration("const", [
-        j.variableDeclarator(j.identifier(constName), typedObjectExpression),
-      ]),
+      j.variableDeclaration("const", [j.variableDeclarator(j.identifier(constName), initializer)]),
     );
   }
 
   programBody.splice(insertAt, 0, ...(declarations as typeof programBody));
-  ctx.needsReactImport = true;
-  ctx.needsReactNamespaceImport = true;
+  if (shouldEmitTypes(ctx.file.path)) {
+    ctx.needsReactImport = true;
+    ctx.needsReactNamespaceImport = true;
+  }
   ctx.markChanged();
+}
+
+function shouldEmitTypes(filePath: string): boolean {
+  return /\.(ts|tsx)$/.test(filePath);
 }
 
 function collectTopLevelBindingNames(
