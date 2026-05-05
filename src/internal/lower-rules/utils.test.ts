@@ -142,6 +142,54 @@ describe("resolveMediaAtRulePlaceholders", () => {
     expect(result).toEqual({ kind: "static", value: "@media (min-width: 768px)" });
   });
 
+  it("passes structured media-query context to resolveSelector for defineConsts media keys", () => {
+    const resolverImports = new Map<string, ImportSpec>();
+    const keyExpr = { type: "MemberExpression" };
+    const imports: ImportSpec[] = [
+      {
+        from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+        names: [{ imported: "breakpoints" }],
+      },
+    ];
+
+    const result = resolveMediaAtRulePlaceholders(
+      "@media (min-width: __SC_EXPR_0__px)",
+      () => screenSizeBreakpointPhoneExpr,
+      {
+        lookupImport: (localName) =>
+          localName === "screenSizeBreakPoints"
+            ? {
+                importedName: "screenSizeBreakPoints",
+                source: { kind: "specifier", value: "./lib/helpers" },
+              }
+            : null,
+        resolveValue: () => undefined,
+        resolveSelector: (ctx) => {
+          expect(ctx).toMatchObject({
+            kind: "mediaQueryInterpolation",
+            mediaQuery: {
+              atRule: "@media (min-width: __SC_EXPR_0__px)",
+              slotId: 0,
+              before: "@media (min-width: ",
+              after: "px)",
+              feature: { modifier: "min", name: "width", unit: "px" },
+            },
+          });
+          return { kind: "media", expr: "breakpoints.phoneMin", imports };
+        },
+        parseExpr: (expr) => {
+          expect(expr).toBe("breakpoints.phoneMin");
+          return keyExpr;
+        },
+        filePath: "test.tsx",
+        resolverImports,
+      },
+    );
+
+    expect(result).toEqual({ kind: "computed", keyExpr, imports });
+    expect([...resolverImports.values()]).toEqual(imports);
+  });
+
   it("returns null when slot expression is unresolvable", () => {
     const result = resolveMediaAtRulePlaceholders(
       "@media (min-width: __SC_EXPR_0__px)",
@@ -156,9 +204,8 @@ describe("resolveMediaAtRulePlaceholders", () => {
     expect(result).toBeNull();
   });
 
-  it("preserves media text when an imported placeholder resolves to an expression", () => {
+  it("returns null when an imported media placeholder only resolves to an expression", () => {
     const resolverImports = new Map<string, ImportSpec>();
-    const keyExpr = { type: "TemplateLiteral" };
     const imports: ImportSpec[] = [
       {
         from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
@@ -183,16 +230,15 @@ describe("resolveMediaAtRulePlaceholders", () => {
           ctx.path === "phone"
             ? { expr: "breakpointValues.phone", imports }
             : undefined,
-        parseExpr: (expr) => {
-          expect(expr).toBe("`@media (min-width: ${breakpointValues.phone}px)`");
-          return keyExpr;
+        parseExpr: () => {
+          throw new Error("template-literal media keys must not be parsed");
         },
         filePath: "test.tsx",
         resolverImports,
       },
     );
 
-    expect(result).toEqual({ kind: "computed", keyExpr, imports });
-    expect([...resolverImports.values()]).toEqual(imports);
+    expect(result).toBeNull();
+    expect([...resolverImports.values()]).toEqual([]);
   });
 });

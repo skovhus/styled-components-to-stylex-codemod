@@ -434,10 +434,11 @@ export interface ResolveBaseComponentResult {
  * Context for `adapter.resolveSelector(...)`.
  *
  * This handles patterns like `${screenSize.phone} { ... }` where an imported
- * value is used as a CSS selector (typically a media query helper).
+ * value is used as a CSS selector (typically a media query helper), and
+ * `@media (min-width: ${breakpoint}px)` where an imported value is used inside
+ * a media query.
  */
-export type SelectorResolveContext = {
-  kind: "selectorInterpolation";
+type BaseSelectorResolveContext = {
   /**
    * Imported name of the binding used in the interpolation.
    * Example: `import { screenSize } from "./lib"` -> importedName: "screenSize"
@@ -462,6 +463,41 @@ export type SelectorResolveContext = {
    */
   loc?: { line: number; column: number };
 };
+
+export type SelectorResolveContext =
+  | (BaseSelectorResolveContext & {
+      kind: "selectorInterpolation";
+    })
+  | (BaseSelectorResolveContext & {
+      kind: "mediaQueryInterpolation";
+      /**
+       * Context for an interpolation inside an at-rule such as
+       * `@media (min-width: ${breakpoint}px)`.
+       */
+      mediaQuery: {
+        /**
+         * Full at-rule text with interpolation slots preserved as
+         * `__SC_EXPR_N__` placeholders.
+         * Example: `@media (min-width: __SC_EXPR_0__px)`.
+         */
+        atRule: string;
+        /** Placeholder slot id for this interpolation. */
+        slotId: number;
+        /** Static at-rule text before the interpolation placeholder. */
+        before: string;
+        /** Static at-rule text after the interpolation placeholder. */
+        after: string;
+        /**
+         * Parsed media feature for common range features like
+         * `(min-width: ${value}px)` and `(max-width: ${value}px)`.
+         */
+        feature?: {
+          modifier?: "min" | "max";
+          name: string;
+          unit?: string;
+        };
+      };
+    });
 
 /**
  * Result for `adapter.resolveSelector(...)`.
@@ -716,10 +752,13 @@ export interface Adapter {
   resolveCall: (context: CallResolveContext) => CallResolveResult | undefined;
 
   /**
-   * Resolver for interpolations used in selector position.
+   * Resolver for interpolations used in selector position and media query
+   * placeholders.
    *
    * This handles patterns like `${screenSize.phone} { ... }` where an imported
-   * value is used as a CSS selector (typically a media query helper), and
+   * value is used as a CSS selector (typically a media query helper),
+   * `@media (min-width: ${breakpoint}px)` where an imported value is used inside
+   * a media query, and
    * `&:${highlight}` where an imported value picks a pseudo-class.
    *
    * Return:
@@ -947,6 +986,8 @@ export interface AdapterInput {
  *       // - { kind: "media", expr, imports } for media queries (e.g., breakpoints.phone)
  *       // - { kind: "pseudoAlias", values, styleSelectorExpr?, imports? } for pseudo-class expansion
  *       // - undefined to bail/skip the file
+ *       // For @media placeholders, check ctx.kind === "mediaQueryInterpolation" and
+ *       // use ctx.mediaQuery.feature to choose the correct defineConsts media key.
  *       void ctx;
  *     },
  *

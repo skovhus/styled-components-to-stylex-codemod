@@ -324,17 +324,6 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
-      if (ctx.importedName === "screenSizeBreakPoints" && ctx.path) {
-        return {
-          expr: `breakpointValues.${ctx.path}`,
-          imports: [
-            {
-              from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
-              names: [{ imported: "breakpointValues" }],
-            },
-          ],
-        };
-      }
       // Handle imported styled components used as mixins
       // TruncateText -> helpers.truncate (a StyleX style object)
       if (ctx.importedName === "TruncateText") {
@@ -726,6 +715,29 @@ export const fixtureAdapter = defineAdapter({
           },
         ],
       };
+    }
+    if (
+      ctx.kind === "mediaQueryInterpolation" &&
+      ctx.importedName === "screenSizeBreakPoints" &&
+      ctx.path
+    ) {
+      const feature = ctx.mediaQuery.feature;
+      if (feature?.name === "width" && feature.unit === "px") {
+        const suffix = feature.modifier === "min" ? "Min" : feature.modifier === "max" ? "" : null;
+        if (suffix === null) {
+          return undefined;
+        }
+        return {
+          kind: "media",
+          expr: `breakpoints.${ctx.path}${suffix}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+              names: [{ imported: "breakpoints" }],
+            },
+          ],
+        };
+      }
     }
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}

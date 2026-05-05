@@ -91,6 +91,7 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
         "",
         "resolveSelector(context) is called with:",
         '  - { kind: "selectorInterpolation", importedName, source, path? }',
+        '  - { kind: "mediaQueryInterpolation", importedName, source, path?, mediaQuery }',
         "",
         `Docs/examples: ${ADAPTER_DOCS_URL}`,
       ].join("\n"),
