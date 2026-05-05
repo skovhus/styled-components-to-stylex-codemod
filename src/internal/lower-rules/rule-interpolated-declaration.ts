@@ -350,6 +350,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         decl,
         d,
         keyframesNames,
+        keyframesAliases: state.keyframesAliases,
         styleObj,
         styleFnDecls,
         styleFnFromProps,

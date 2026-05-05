@@ -29,8 +29,9 @@ import { toRealPath } from "../internal/utilities/path-utils.js";
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 
-/** Test cases that intentionally test partial conversion with leftover css helpers. */
+/** Test cases that intentionally keep specific styled-components APIs after migration. */
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
+const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
 
 /**
  * Fixtures that intentionally test partial-file transforms: at least one styled
@@ -39,6 +40,21 @@ const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"])
  */
 function isPartialFixture(name: string): boolean {
   return name.startsWith("partial-");
+}
+
+function styledComponentsDisallowedImports(name: string): string[] {
+  const disallowed = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+    ? ["styled", "keyframes", "createGlobalStyle"]
+    : ["styled", "css", "keyframes", "createGlobalStyle"];
+  const allowed = new Set<string>();
+  if (isPartialFixture(name)) {
+    allowed.add("styled");
+    allowed.add("css");
+  }
+  if (KEYFRAMES_IMPORT_ALLOWED_FIXTURES.has(name)) {
+    allowed.add("keyframes");
+  }
+  return disallowed.filter((importName) => !allowed.has(importName));
 }
 
 function isBailOutFixture(filename: string): boolean {
@@ -1220,6 +1236,324 @@ export const App = () => (
     expect(keyframesMatches).toHaveLength(1);
   });
 
+  it("emits generated keyframes aliases next to local keyframes declarations", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+export function App() {
+  const fade = keyframes\`
+    from { opacity: 0; }
+    to { opacity: 1; }
+  \`;
+
+  const Card = styled.div\`
+    animation: \${fade} 1s linear;
+    padding: 8px;
+  \`;
+
+  const Preserved = styled.span\`
+    animation: \${fade} 2s linear;
+
+    & a.active {
+      color: tomato;
+    }
+  \`;
+
+  return (
+    <Card>
+      <Preserved>
+        <a className="active">preserved</a>
+      </Preserved>
+    </Card>
+  );
+}
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-local-keyframes-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fade\s*=\s*keyframes`/);
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*stylex\.keyframes/);
+    expect(result.code).toMatch(/animationName:\s*fadeStylex/);
+    expect(result.code).toMatch(/animation:\s*\$\{fade\}\s*2s linear/);
+  });
+
+  it("does not reuse existing bindings for generated keyframes aliases", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fadeStylex = "already used";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+const Preserved = styled.span\`
+  animation: \${fade} 2s linear;
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <Card>
+    <Preserved>
+      <a className="active">{fadeStylex}</a>
+    </Preserved>
+  </Card>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-colliding-keyframes-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"already used"/);
+    expect(result.code).toMatch(/const\s+fadeStylex2\s*=\s*stylex\.keyframes/);
+    expect(result.code).toMatch(/animationName:\s*fadeStylex2/);
+    expect(result.code).toMatch(/animation:\s*\$\{fade\}\s*2s linear/);
+  });
+
+  it("does not collapse user-authored stylex.keyframes bindings that look like generated aliases", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0.4 },
+  to: { opacity: 1 },
+});
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>manual</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-user-authored-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fadeStylex/);
+  });
+
+  it("does not rename nested bindings that share a keyframes alias name", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0.4 },
+  to: { opacity: 1 },
+});
+
+function readNestedAlias() {
+  const fadeStylex = "nested";
+  return fadeStylex;
+}
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <span>{readNestedAlias()}</span>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-nested-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"nested"/);
+    expect(result.code).toMatch(/return\s+fadeStylex/);
+  });
+
+  it("collapses only generated stylex keyframes alias references in the same scope", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+/* @styled-components-to-stylex generated keyframes alias */
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+function readNestedAlias() {
+  const fadeStylex = "nested";
+  return fadeStylex;
+}
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>{readNestedAlias()}</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-generated-stylex-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fade/);
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*"nested"/);
+    expect(result.code).toMatch(/return\s+fadeStylex/);
+  });
+
+  it("does not rename object property keys that match a generated keyframes alias", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+/* @styled-components-to-stylex generated keyframes alias */
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const lookup = {
+  fadeStylex: "preserve key shape",
+};
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>{lookup.fadeStylex}</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-generated-stylex-alias-key.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fade/);
+    expect(result.code).toMatch(/fadeStylex:\s*"preserve key shape"/);
+    expect(result.code).toMatch(/lookup\.fadeStylex/);
+  });
+
+  it("preserves shorthand object keys that reference a generated keyframes alias", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+/* @styled-components-to-stylex generated keyframes alias */
+const fadeStylex = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const lookup = {
+  fadeStylex,
+};
+
+const manualStyles = stylex.create({
+  manual: {
+    animationName: fadeStylex,
+    animationDuration: "3s",
+  },
+});
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <Card>card</Card>
+    <div sx={manualStyles.manual}>{lookup.fadeStylex}</div>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-generated-stylex-alias-shorthand.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toContain("const fadeStylex = stylex.keyframes");
+    expect(result.code).toMatch(/animationName:\s*fade/);
+    expect(result.code).toMatch(/fadeStylex:\s*fade/);
+    expect(result.code).toMatch(/lookup\.fadeStylex/);
+  });
+
   it("ignores nested stylex.keyframes bindings when collecting keyframe names", () => {
     // A nested `const fade = stylex.keyframes(...)` inside a function body must not
     // be added to `ctx.keyframesNames`. Animation lowering only resolves identifiers
@@ -1288,11 +1622,7 @@ describe("output invariants", () => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      const disallowedImports = isPartialFixture(name)
-        ? ["keyframes", "createGlobalStyle"]
-        : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-          ? ["styled", "keyframes", "createGlobalStyle"]
-          : ["styled", "css", "keyframes", "createGlobalStyle"];
+      const disallowedImports = styledComponentsDisallowedImports(name);
       const importMatch = output.match(
         /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
       );
@@ -1342,11 +1672,7 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    const disallowedImports = isPartialFixture(name)
-      ? ["keyframes", "createGlobalStyle"]
-      : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-        ? ["styled", "keyframes", "createGlobalStyle"]
-        : ["styled", "css", "keyframes", "createGlobalStyle"];
+    const disallowedImports = styledComponentsDisallowedImports(name);
     const importMatch = result.match(
       /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
     );

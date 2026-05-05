@@ -71,6 +71,7 @@ export class TransformContext {
   isStyledTag: (tag: any) => boolean;
   keyframesLocal?: string;
   keyframesNames: Set<string>;
+  keyframesAliases?: Map<string, string>;
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
   cssLocal?: string;
   cssHelpers?: any;
@@ -238,6 +239,7 @@ export class TransformContext {
     this.styledLocalNames = new Set<string>();
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
+    this.keyframesAliases = new Map<string, string>();
 
     // Wire cross-file info from options
     if (options.crossFileInfo) {
