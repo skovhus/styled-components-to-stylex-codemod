@@ -18,7 +18,7 @@ const CollisionBox = styled.div`
 
 const AlternateWidth = styled.div`
   --menu-width: 180px;
-  width: var(--menu-width, 180px);
+  width: var(--menu-width, 240px);
   padding: 8px;
   background: #fee2e2;
 `;
