@@ -120,7 +120,9 @@ function isEmptyTemplateLiteral(quasi: unknown): boolean {
   if ((template.expressions ?? []).length > 0) {
     return false;
   }
-  return (template.quasis ?? []).every((q) => (q.value?.raw ?? q.value?.cooked ?? "").trim() === "");
+  return (template.quasis ?? []).every(
+    (q) => (q.value?.raw ?? q.value?.cooked ?? "").trim() === "",
+  );
 }
 
 /**

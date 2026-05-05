@@ -8,6 +8,7 @@ import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { isStyledTag } from "./transform/css-helpers.js";
 import {
   assertValidImportSource,
   importSourceToModuleSpecifier,
@@ -143,6 +144,12 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // imports the skipped decl still references — e.g. `css` used inside its template)
   // must be preserved so the surviving code keeps compiling.
   const hasSkippedStyledDecls = styledDecls.some((d) => d.skipTransform);
+  const hasUncollectedStyledUsage = hasUncollectedStyledTaggedTemplate(
+    root,
+    j,
+    ctx.styledLocalNames,
+    styledDecls,
+  );
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
@@ -163,7 +170,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       // Default import: only `styled`. Preserved whenever a decl stayed as
       // styled-components — the remaining `styled.tag` call sites need it.
       if (spec.type === "ImportDefaultSpecifier") {
-        if (hasSkippedStyledDecls && spec.local?.name) {
+        if (spec.local?.name && (hasSkippedStyledDecls || hasUncollectedStyledUsage)) {
           preservedDefaultStyled = spec.local.name;
         }
         continue;
@@ -179,7 +186,11 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       if (!importedName || !localName) {
         continue;
       }
-      if (!hasSkippedStyledDecls && transformedAway.includes(localName)) {
+      if (
+        !hasSkippedStyledDecls &&
+        !hasUncollectedStyledUsage &&
+        transformedAway.includes(localName)
+      ) {
         continue;
       }
       // Check if the identifier is used anywhere in the code
@@ -1070,4 +1081,35 @@ function tokenizeShorthandValue(value: string): string[] {
   }
 
   return tokens;
+}
+
+function hasUncollectedStyledTaggedTemplate(
+  root: TransformContext["root"],
+  j: TransformContext["j"],
+  styledLocalNames: Set<string>,
+  styledDecls: StyledDecl[],
+): boolean {
+  if (styledLocalNames.size === 0) {
+    return false;
+  }
+
+  const collectedDeclNames = new Set(styledDecls.map((decl) => decl.localName));
+  let found = false;
+
+  root.find(j.TaggedTemplateExpression).forEach((path: any) => {
+    if (found || !isStyledTag(styledLocalNames, path.node.tag)) {
+      return;
+    }
+
+    const declarator = j(path).closest(j.VariableDeclarator);
+    const id = declarator.size() > 0 ? declarator.get().node.id : undefined;
+    const declaratorName = id?.type === "Identifier" ? id.name : undefined;
+    if (!declaratorName || collectedDeclNames.has(declaratorName)) {
+      return;
+    }
+
+    found = true;
+  });
+
+  return found;
 }
