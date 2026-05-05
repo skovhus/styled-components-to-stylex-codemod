@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { ImportSpec } from "../../adapter.js";
 import {
   isSupportedAtRule,
   findSupportedAtRule,
@@ -110,6 +111,13 @@ describe("mergeStyleObjects", () => {
 });
 
 describe("resolveMediaAtRulePlaceholders", () => {
+  const screenSizeBreakpointPhoneExpr = {
+    type: "MemberExpression",
+    object: { type: "Identifier", name: "screenSizeBreakPoints" },
+    property: { type: "Identifier", name: "phone" },
+    computed: false,
+  };
+
   it("returns static value for media without placeholders", () => {
     const result = resolveMediaAtRulePlaceholders("@media (min-width: 768px)", () => null, {
       lookupImport: () => null,
@@ -146,5 +154,45 @@ describe("resolveMediaAtRulePlaceholders", () => {
       },
     );
     expect(result).toBeNull();
+  });
+
+  it("preserves media text when an imported placeholder resolves to an expression", () => {
+    const resolverImports = new Map<string, ImportSpec>();
+    const keyExpr = { type: "TemplateLiteral" };
+    const imports: ImportSpec[] = [
+      {
+        from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+        names: [{ imported: "breakpointValues" }],
+      },
+    ];
+
+    const result = resolveMediaAtRulePlaceholders(
+      "@media (min-width: __SC_EXPR_0__px)",
+      () => screenSizeBreakpointPhoneExpr,
+      {
+        lookupImport: (localName) =>
+          localName === "screenSizeBreakPoints"
+            ? {
+                importedName: "screenSizeBreakPoints",
+                source: { kind: "specifier", value: "./lib/helpers" },
+              }
+            : null,
+        resolveValue: (ctx) =>
+          ctx.kind === "importedValue" &&
+          ctx.importedName === "screenSizeBreakPoints" &&
+          ctx.path === "phone"
+            ? { expr: "breakpointValues.phone", imports }
+            : undefined,
+        parseExpr: (expr) => {
+          expect(expr).toBe("`@media (min-width: ${breakpointValues.phone}px)`");
+          return keyExpr;
+        },
+        filePath: "test.tsx",
+        resolverImports,
+      },
+    );
+
+    expect(result).toEqual({ kind: "computed", keyExpr, imports });
+    expect([...resolverImports.values()]).toEqual(imports);
   });
 });

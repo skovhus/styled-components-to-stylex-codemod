@@ -324,6 +324,17 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      if (ctx.importedName === "screenSizeBreakPoints" && ctx.path) {
+        return {
+          expr: `breakpointValues.${ctx.path}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+              names: [{ imported: "breakpointValues" }],
+            },
+          ],
+        };
+      }
       // Handle imported styled components used as mixins
       // TruncateText -> helpers.truncate (a StyleX style object)
       if (ctx.importedName === "TruncateText") {
@@ -703,11 +714,8 @@ export const fixtureAdapter = defineAdapter({
       return undefined;
     }
 
-    // Handle screenSize.phone / screenSizeBreakPoints.phone, etc.
-    if (
-      (ctx.importedName === "screenSize" || ctx.importedName === "screenSizeBreakPoints") &&
-      ctx.path
-    ) {
+    // Handle screenSize.phone, etc.
+    if (ctx.importedName === "screenSize" && ctx.path) {
       return {
         kind: "media",
         expr: `breakpoints.${ctx.path}`,

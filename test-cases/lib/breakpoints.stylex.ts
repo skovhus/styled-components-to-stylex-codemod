@@ -6,3 +6,8 @@ export const breakpoints = stylex.defineConsts({
   /** Media query to target only tablet-sized screens and lower (matches helpers.ts screenSize.tablet). */
   tablet: "@media (max-width: 768px)",
 });
+
+export const breakpointValues = stylex.defineConsts({
+  phone: 640,
+  tablet: 768,
+});

@@ -1,10 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
-import { breakpoints } from "./lib/breakpoints.stylex";
+import { breakpoints, breakpointValues } from "./lib/breakpoints.stylex";
 
 export const App = () => (
   <div>
     <div sx={styles.container}>Responsive container</div>
     <div sx={styles.details}>Details column</div>
+    <div sx={styles.minWidthDetails}>Breakpoint value details</div>
   </div>
 );
 
@@ -47,6 +48,18 @@ const styles = stylex.create({
     paddingInline: {
       default: 24,
       [breakpoints.phone]: 16,
+    },
+  },
+
+  minWidthDetails: {
+    padding: {
+      default: 8,
+      [`@media (min-width: ${breakpointValues.phone}px)`]: 16,
+    },
+
+    margin: {
+      default: null,
+      [`@media (max-width: ${breakpointValues.phone}px)`]: 4,
     },
   },
 });
