@@ -1763,7 +1763,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            helperCallArgs = helperResolution;
+            helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
             const styleFnParamNames =
               helperCallArgs.length > 0
                 ? helperCallArgs.map((resolution) => resolution.paramName)
@@ -2753,6 +2753,11 @@ type DynamicHelperCallArgument = {
   paramName: string;
 };
 
+type DynamicHelperCallResult = {
+  value: ExpressionKind;
+  binding: DynamicHelperCallArgument;
+};
+
 type ImportMeta = {
   importedName: string;
   source: { kind: "absolutePath"; value: string } | { kind: "specifier"; value: string };
@@ -2789,10 +2794,17 @@ function resolveHelperCallsInDynamicValue(
         return node;
       }
       if (resolved) {
-        if (resolved.callArg) {
-          resolutions.push({ callArg: resolved.callArg, paramName: resolved.paramName });
-        }
+        resolutions.push(resolved.binding);
         return resolved.value;
+      }
+      const directResolved = tryResolveDirectHelperCall(record as CallExpressionLike, ctx);
+      if (directResolved === null) {
+        failed = true;
+        return node;
+      }
+      if (directResolved) {
+        resolutions.push(directResolved.binding);
+        return directResolved.value;
       }
     }
 
@@ -2818,7 +2830,7 @@ function resolveHelperCallsInDynamicValue(
 function tryResolveDynamicHelperCall(
   callExpr: CallExpressionLike,
   ctx: DynamicHelperCallContext,
-): { value: ExpressionKind; callArg?: ExpressionKind; paramName: string } | false | null {
+): DynamicHelperCallResult | false | null {
   const helperCall = getStyledHelperCall(callExpr);
   if (!helperCall) {
     return false;
@@ -2864,16 +2876,73 @@ function tryResolveDynamicHelperCall(
       ? ctx.j.memberExpression(resolvedExpr, dynamicProp.arg, true)
       : ctx.j.callExpression(resolvedExpr, [dynamicProp.arg]);
 
-  if (helperCall.kind === "curried") {
-    const resolvedParamName = `resolved${capitalizeIdentifier(dynamicProp.propName)}`;
-    return {
-      value: ctx.j.identifier(resolvedParamName),
+  const paramName =
+    helperCall.kind === "curried"
+      ? `resolved${capitalizeIdentifier(dynamicProp.propName)}`
+      : dynamicProp.propName;
+  return {
+    value: ctx.j.identifier(paramName),
+    binding: {
       callArg: helperValue as ExpressionKind,
-      paramName: resolvedParamName,
-    };
+      paramName,
+    },
+  };
+}
+
+function tryResolveDirectHelperCall(
+  callExpr: CallExpressionLike,
+  ctx: DynamicHelperCallContext,
+): DynamicHelperCallResult | false | null {
+  const calleeInfo = extractRootAndPath(callExpr.callee);
+  if (!calleeInfo) {
+    return false;
   }
 
-  return { value: helperValue as ExpressionKind, paramName: dynamicProp.propName };
+  const imp = ctx.resolveImportForExpr(callExpr, calleeInfo.rootName);
+  if (!imp) {
+    return false;
+  }
+
+  const args = callExpr.arguments ?? [];
+  if (args.length !== 1) {
+    return false;
+  }
+
+  const dynamicProp = unwrapParamMemberArg(args[0] as ExpressionKind, ctx.paramName);
+  if (!dynamicProp) {
+    return false;
+  }
+
+  const result = ctx.resolveCall({
+    callSiteFilePath: ctx.filePath,
+    calleeImportedName: imp.importedName,
+    calleeSource: imp.source,
+    args: [{ kind: "unknown" }],
+    ...(calleeInfo.path.length > 0 ? { calleeMemberPath: calleeInfo.path } : {}),
+    ...(ctx.loc ? { loc: ctx.loc } : {}),
+    cssProperty: ctx.cssProperty,
+  });
+  if (!result || !("expr" in result)) {
+    return false;
+  }
+
+  const resolvedExpr = ctx.parseExpr(result.expr) as ExpressionKind | null;
+  if (!resolvedExpr) {
+    return null;
+  }
+
+  ctx.addResolverImports(result.imports);
+  const paramName = dynamicProp.propName;
+  return {
+    value: ctx.j.identifier(paramName),
+    binding: {
+      callArg:
+        result.dynamicArgUsage === "memberAccess"
+          ? ctx.j.memberExpression(resolvedExpr, dynamicProp.arg, true)
+          : ctx.j.callExpression(resolvedExpr, [dynamicProp.arg]),
+      paramName,
+    },
+  };
 }
 
 function getStyledHelperCall(callExpr: CallExpressionLike): {
@@ -2927,6 +2996,22 @@ function unwrapParamMemberArg(
     } as ExpressionKind,
     propName,
   };
+}
+
+function dedupeDynamicHelperCallArguments(
+  args: DynamicHelperCallArgument[],
+): DynamicHelperCallArgument[] {
+  const result: DynamicHelperCallArgument[] = [];
+  const seen = new Set<string>();
+  for (const arg of args) {
+    const key = arg.paramName;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(arg);
+  }
+  return result;
 }
 
 function capitalizeIdentifier(name: string): string {

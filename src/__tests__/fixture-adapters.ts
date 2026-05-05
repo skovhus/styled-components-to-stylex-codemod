@@ -501,6 +501,18 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      if (ctx.cssProperty === "text-shadow") {
+        return {
+          expr: "$shadow",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$shadow" }],
+            },
+          ],
+        };
+      }
       // Dynamic arg — return the vars object with memberAccess usage
       return {
         expr: "$shadow",
