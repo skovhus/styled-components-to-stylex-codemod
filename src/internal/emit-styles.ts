@@ -218,15 +218,16 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // This must happen before inserting preserved styled-components imports so those can be placed after stylex.
   const hasStylexImport =
     root.find(j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any).size() > 0;
+  let insertedStylexImport: ReturnType<typeof j.importDeclaration> | undefined;
   if (!hasStylexImport) {
-    const stylexImport = j.importDeclaration(
+    insertedStylexImport = j.importDeclaration(
       [j.importNamespaceSpecifier(j.identifier("stylex"))],
       j.literal("@stylexjs/stylex"),
     );
     const body = root.get().node.program.body as any[];
     const insertAt =
       firstStyledImportIdx >= 0 && firstStyledImportIdx <= body.length ? firstStyledImportIdx : 0;
-    body.splice(insertAt, 0, stylexImport);
+    body.splice(insertAt, 0, insertedStylexImport);
   }
 
   // Re-add preserved imports from styled-components if any (AFTER stylex import)
@@ -651,6 +652,22 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
       const variantDecl = emitVariantDimensionDecl(j, dimension);
       programBody.push(variantDecl as any);
+    }
+  }
+
+  const hasActiveStyledDecl = styledDecls.some((decl) => !decl.skipTransform);
+  if (
+    insertedStylexImport &&
+    !hasActiveStyledDecl &&
+    !stylesDecl &&
+    inlineKeyframeDecls.length === 0 &&
+    emittedDimensions.size === 0 &&
+    resolverImports.size === 0
+  ) {
+    const body = root.get().node.program.body as any[];
+    const index = body.indexOf(insertedStylexImport);
+    if (index >= 0) {
+      body.splice(index, 1);
     }
   }
 

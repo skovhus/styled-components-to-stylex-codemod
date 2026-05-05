@@ -75,6 +75,11 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     if (unsafeSkip) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
+    for (const decl of ctx.styledDecls) {
+      if (lowered.preservedReferencedStyledDecls.has(decl.localName)) {
+        decl.skipTransform = true;
+      }
+    }
   }
 
   // Now that we know the file is transformable, remove any css helper functions that were inlined.
@@ -104,6 +109,7 @@ type LowerRulesResult = {
   parentsNeedingDefaultMarker: Set<string>;
   /** Maps style key → set of CSS attribute selector strings used in ancestor attribute conditions */
   ancestorAttrsByStyleKey: Map<string, Set<string>>;
+  preservedReferencedStyledDecls: Set<string>;
   bail: boolean;
 };
 
@@ -185,8 +191,11 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // (e.g. during postProcessAfterBaseMixins or finalizeRelationOverrides) still has
   // its styleKeys in the shared maps — prune them so emission never emits entries
   // for skipped decls.
+  let preservedReferencedStyledDecls = new Set<string>();
   if (!state.bail) {
     pruneSkippedDeclsFromState(state);
+    preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state.styledDecls);
+    prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
   }
 
   // Determine which parent style keys actually need markers (defaultMarker or
@@ -250,6 +259,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     siblingMarkerKeys: new Set(state.siblingMarkerNames.keys()),
     parentsNeedingDefaultMarker,
     ancestorAttrsByStyleKey: state.ancestorAttrsByStyleKey,
+    preservedReferencedStyledDecls,
     bail: state.bail,
   };
 }
@@ -416,6 +426,66 @@ function pruneSkippedDeclsFromState(state: LowerRulesState): void {
   }
 }
 
+function collectPreservedReferencedStyledDecls(styledDecls: StyledDecl[]): Set<string> {
+  const preservedNames = new Set<string>();
+  const componentNames = new Set(
+    styledDecls.filter((decl) => !decl.isCssHelper).map((decl) => decl.localName),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const decl of styledDecls) {
+      if ((!decl.skipTransform && !preservedNames.has(decl.localName)) || decl.isCssHelper) {
+        continue;
+      }
+      for (const name of collectTemplateExpressionIdentifiers(decl)) {
+        if (componentNames.has(name) && !preservedNames.has(name)) {
+          preservedNames.add(name);
+          changed = true;
+        }
+      }
+    }
+  }
+  return preservedNames;
+}
+
+function prunePreservedReferencedDeclsFromState(
+  state: LowerRulesState,
+  preservedNames: Set<string>,
+): void {
+  if (preservedNames.size === 0) {
+    return;
+  }
+  const keysToDelete = new Set<string>();
+  for (const decl of state.styledDecls) {
+    if (!preservedNames.has(decl.localName)) {
+      continue;
+    }
+    for (const key of collectOwnedDeclStyleKeys(decl)) {
+      keysToDelete.add(key);
+    }
+  }
+  for (const key of keysToDelete) {
+    state.resolvedStyleObjects.delete(key);
+    state.relationOverridePseudoBuckets.delete(key);
+    state.childPseudoMarkers.delete(key);
+    state.ancestorAttrsByStyleKey.delete(key);
+    state.ancestorSelectorParents.delete(key);
+    state.siblingMarkerParents.delete(key);
+    state.siblingMarkerNames.delete(key);
+  }
+  if (keysToDelete.size === 0) {
+    return;
+  }
+  const kept = state.relationOverrides.filter(
+    (o) =>
+      !keysToDelete.has(o.parentStyleKey) &&
+      !keysToDelete.has(o.childStyleKey) &&
+      !keysToDelete.has(o.overrideStyleKey),
+  );
+  state.relationOverrides.splice(0, state.relationOverrides.length, ...kept);
+}
+
 function restoreStateSnapshot(state: LowerRulesState, snap: StateSnapshot): void {
   pruneMapKeysNotIn(state.resolvedStyleObjects, snap.resolvedStyleKeys);
   state.relationOverrides.length = snap.relationOverridesLength;
@@ -473,4 +543,12 @@ function skippedDeclReferencesHelper(
     }
   }
   return false;
+}
+
+function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  for (const expr of decl.templateExpressions ?? []) {
+    collectIdentifiers(expr, identifiers);
+  }
+  return identifiers;
 }

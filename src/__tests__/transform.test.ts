@@ -715,6 +715,17 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+Derived\s*=\s*styled\(Base\)`/);
   });
 
+  it("preserves converted candidates referenced by a skipped styled template", () => {
+    const { input, output } = readTestCase("partial-componentSelectorReference");
+
+    const result = runPartial(input, "partial-componentSelectorReference.input.tsx");
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toBe(output);
+    expect(result.code).toMatch(/const\s+ConvertedChild\s*=\s*styled\.span`/);
+    expect(result.code).toContain("&:hover ${ConvertedChild}");
+  });
+
   it("bails the whole file by default when a decl cannot be lowered (allowPartialMigration: false)", () => {
     // Default behavior matches the pre-flag semantics: any per-decl bail
     // escalates to a whole-file bail unless `allowPartialMigration: true` is
@@ -884,6 +895,20 @@ export const App = () => (
     expect(await normalizeCode(result.code ?? input, outputPath)).toEqual(
       await normalizeCode(output, outputPath),
     );
+  });
+
+  it("preserves leaf styled components referenced by a skipped styled template", () => {
+    const { input, output } = readTestCase("partial-componentSelectorReference");
+
+    const result = runLeavesOnly(
+      input,
+      pathResolve(join(testCasesDir, "partial-componentSelectorReference.input.tsx")),
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toBe(output);
+    expect(result.code).toMatch(/const\s+ConvertedChild\s*=\s*styled\.span`/);
+    expect(result.code).toContain("&:hover ${ConvertedChild}");
   });
 
   it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {
