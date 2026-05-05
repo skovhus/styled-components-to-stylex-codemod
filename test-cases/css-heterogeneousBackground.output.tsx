@@ -45,6 +45,7 @@ export const App = () => (
     <NestedColorBackground color="blue">Blue</NestedColorBackground>
     <NestedColorBackground color="default">Default</NestedColorBackground>
     <div sx={styles.resetBackground}>No Background</div>
+    <button sx={styles.resetBackgroundOnHover}>Hover Reset</button>
   </div>
 );
 
@@ -65,6 +66,15 @@ const styles = stylex.create({
   resetBackground: {
     background: "none",
     padding: 8,
+  },
+  // Pattern 4: background: none in pseudo selectors should remain allowed as a reset.
+  resetBackgroundOnHover: {
+    backgroundColor: "pink",
+    padding: 8,
+    background: {
+      default: null,
+      ":hover": "none",
+    },
   },
 });
 
