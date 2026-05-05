@@ -292,10 +292,16 @@ function renameKeyframesAliasReferences(
 ): void {
   ctx.root.find(ctx.j.Identifier, { name: fromName } as any).forEach((path: any) => {
     const parent = path.parentPath?.node;
-    if (!parent || isNonReferenceIdentifier(path.node, parent)) {
+    if (
+      !parent ||
+      (!isShorthandObjectProperty(parent) && isNonReferenceIdentifier(path.node, parent))
+    ) {
       return;
     }
     if (path.scope?.lookup?.(fromName) !== aliasScope) {
+      return;
+    }
+    if (replaceShorthandObjectPropertyAlias(parent, fromName, toName, ctx.j)) {
       return;
     }
     path.node.name = toName;
@@ -328,10 +334,34 @@ function isStaticObjectPropertyKey(
   node: unknown,
 ): boolean {
   return (
-    (parent.type === "Property" || parent.type === "ObjectProperty") &&
+    isObjectPropertyNode(parent) &&
     parent.key === node &&
-    !parent.computed
+    !parent.computed &&
+    !isShorthandObjectProperty(parent)
   );
+}
+
+function replaceShorthandObjectPropertyAlias(
+  parent: any,
+  keyName: string,
+  valueName: string,
+  j: TransformContext["j"],
+): boolean {
+  if (isShorthandObjectProperty(parent)) {
+    parent.shorthand = false;
+    parent.key = j.identifier(keyName);
+    parent.value = j.identifier(valueName);
+    return true;
+  }
+  return false;
+}
+
+function isShorthandObjectProperty(parent: any): boolean {
+  return isObjectPropertyNode(parent) && parent.shorthand === true;
+}
+
+function isObjectPropertyNode(parent: { type?: string }): boolean {
+  return parent.type === "Property" || parent.type === "ObjectProperty";
 }
 
 function replaceKeyframesAliasesInResolvedStyles(ctx: TransformContext): void {
