@@ -16,9 +16,25 @@ export function convertStyledKeyframes(args: {
   styledImports: Collection<ImportDeclaration>;
   keyframesLocal: string;
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
+  preserveNames?: Set<string>;
+  duplicateNames?: Map<string, string>;
 }): { keyframesNames: Set<string>; changed: boolean } {
   return convertStyledKeyframesImpl(args);
 }
+
+export function collectStyledKeyframeNames(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  keyframesLocal: string;
+}): Set<string> {
+  return new Set(collectStyledKeyframeDefinitions(args).map((definition) => definition.localName));
+}
+
+type StyledKeyframesDefinition = {
+  declaratorPath: ASTPath<ASTNode>;
+  localName: string;
+  frames: Record<string, Record<string, unknown>>;
+};
 
 function parseKeyframesTemplate(args: {
   template: ASTNode | null | undefined;
@@ -115,11 +131,121 @@ function convertStyledKeyframesImpl(args: {
   styledImports: Collection<ImportDeclaration>;
   keyframesLocal: string;
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
+  preserveNames?: Set<string>;
+  duplicateNames?: Map<string, string>;
 }): { keyframesNames: Set<string>; changed: boolean } {
-  const { root, j, styledImports, keyframesLocal, objectToAst } = args;
+  const { root, j, styledImports, keyframesLocal, objectToAst, preserveNames, duplicateNames } =
+    args;
 
   const keyframesNames = new Set<string>();
   let changed = false;
+  let hasPreservedKeyframesDefinition = false;
+
+  for (const definition of collectStyledKeyframeDefinitions({ root, j, keyframesLocal })) {
+    if (preserveNames?.has(definition.localName)) {
+      const duplicateName = duplicateNames?.get(definition.localName);
+      if (duplicateName) {
+        insertStylexKeyframesDeclaration({
+          root,
+          j,
+          afterDeclaratorPath: definition.declaratorPath,
+          localName: duplicateName,
+          init: j.callExpression(
+            j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
+            [objectToAst(j, definition.frames)],
+          ),
+        });
+        keyframesNames.add(duplicateName);
+        changed = true;
+      } else {
+        keyframesNames.add(definition.localName);
+      }
+      hasPreservedKeyframesDefinition = true;
+      continue;
+    }
+
+    const declarator = definition.declaratorPath.node;
+    if (declarator.type !== "VariableDeclarator") {
+      continue;
+    }
+
+    declarator.init = j.callExpression(
+      j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
+      [objectToAst(j, definition.frames)],
+    );
+    keyframesNames.add(definition.localName);
+    changed = true;
+  }
+
+  if (!hasPreservedKeyframesDefinition) {
+    // Remove `keyframes` import specifier (now handled by stylex).
+    styledImports.forEach((imp) => {
+      const specs = imp.node.specifiers ?? [];
+      const next = specs.filter((s) => {
+        if (s.type !== "ImportSpecifier") {
+          return true;
+        }
+        if (s.imported.type !== "Identifier") {
+          return true;
+        }
+        return s.imported.name !== "keyframes";
+      });
+      if (next.length !== specs.length) {
+        imp.node.specifiers = next;
+        if (imp.node.specifiers.length === 0) {
+          j(imp).remove();
+        }
+        changed = true;
+      }
+    });
+  }
+
+  return { keyframesNames, changed };
+}
+
+function insertStylexKeyframesDeclaration(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  afterDeclaratorPath: ASTPath<ASTNode>;
+  localName: string;
+  init: ExpressionKind;
+}): void {
+  const { root, j, afterDeclaratorPath, localName, init } = args;
+  const declaration = j.variableDeclaration("const", [
+    j.variableDeclarator(j.identifier(localName), init),
+  ]);
+  const targetDeclarator = afterDeclaratorPath.node;
+  const statements = root.get().node.program.body as ASTNode[];
+  const insertionIndex = statements.findIndex((statement) =>
+    statementOwnsDeclarator(statement, targetDeclarator),
+  );
+  if (insertionIndex < 0) {
+    return;
+  }
+  statements.splice(insertionIndex + 1, 0, declaration);
+}
+
+function statementOwnsDeclarator(statement: ASTNode, declarator: ASTNode): boolean {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" &&
+    statement.declaration?.type === "VariableDeclaration"
+      ? statement.declaration
+      : statement.type === "VariableDeclaration"
+        ? statement
+        : null;
+  if (!declaration) {
+    return false;
+  }
+  return declaration.declarations.some((candidate) => candidate === declarator);
+}
+
+function collectStyledKeyframeDefinitions(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  keyframesLocal: string;
+}): StyledKeyframesDefinition[] {
+  const { root, j, keyframesLocal } = args;
+  const definitions: StyledKeyframesDefinition[] = [];
 
   root
     .find(j.VariableDeclarator, {
@@ -145,36 +271,14 @@ function convertStyledKeyframesImpl(args: {
         return;
       }
 
-      p.node.init = j.callExpression(
-        j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
-        [objectToAst(j, frames)],
-      );
-      keyframesNames.add(localName);
-      changed = true;
+      definitions.push({
+        declaratorPath: p as ASTPath<ASTNode>,
+        localName,
+        frames,
+      });
     });
 
-  // Remove `keyframes` import specifier (now handled by stylex).
-  styledImports.forEach((imp) => {
-    const specs = imp.node.specifiers ?? [];
-    const next = specs.filter((s) => {
-      if (s.type !== "ImportSpecifier") {
-        return true;
-      }
-      if (s.imported.type !== "Identifier") {
-        return true;
-      }
-      return s.imported.name !== "keyframes";
-    });
-    if (next.length !== specs.length) {
-      imp.node.specifiers = next;
-      if (imp.node.specifiers.length === 0) {
-        j(imp).remove();
-      }
-      changed = true;
-    }
-  });
-
-  return { keyframesNames, changed };
+  return definitions;
 }
 
 /**

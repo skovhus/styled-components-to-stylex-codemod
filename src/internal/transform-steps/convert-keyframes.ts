@@ -2,13 +2,15 @@
  * Step: convert styled-components keyframes to stylex.keyframes.
  * Core concepts: keyframes detection and import updates.
  */
-import { convertStyledKeyframes } from "../keyframes.js";
+import { collectStyledKeyframeNames, convertStyledKeyframes } from "../keyframes.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { objectToAst } from "../transform/helpers.js";
+import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 
 /**
- * Converts styled-components keyframes usage to stylex.keyframes and tracks created names.
+ * Tracks styled-components keyframes names before partial lowering decides which
+ * styled templates can be safely transformed.
  *
  * Also collects the names of pre-existing `stylex.keyframes(...)` declarations in the
  * file, so that incremental migrations (e.g. a leaves-only pass followed by a full
@@ -37,17 +39,11 @@ export function convertKeyframesStep(ctx: TransformContext): StepResult {
   ctx.keyframesLocal = keyframesLocal;
 
   if (keyframesLocal) {
-    const converted = convertStyledKeyframes({
+    ctx.keyframesNames = collectStyledKeyframeNames({
       root,
       j,
-      styledImports,
       keyframesLocal,
-      objectToAst,
     });
-    ctx.keyframesNames = converted.keyframesNames;
-    if (converted.changed) {
-      ctx.markChanged();
-    }
   }
 
   // Pick up names of existing `const <name> = stylex.keyframes(...)` declarations
@@ -61,7 +57,249 @@ export function convertKeyframesStep(ctx: TransformContext): StepResult {
   return CONTINUE;
 }
 
+/**
+ * Converts styled-components keyframes usage to stylex.keyframes after partial
+ * lowering has marked skipped declarations. Keyframes referenced by preserved
+ * styled templates must remain as styled-components `keyframes` templates so the
+ * preserved template receives the runtime animation name string it expects.
+ */
+export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
+  const { styledImports, keyframesLocal, j, root } = ctx;
+  if (!styledImports || !keyframesLocal) {
+    return CONTINUE;
+  }
+
+  const preservedNames = collectKeyframesReferencedBySkippedDecls(ctx);
+  const duplicateNames = buildDuplicateKeyframesNames(ctx, preservedNames);
+  const converted = convertStyledKeyframes({
+    root,
+    j,
+    styledImports,
+    keyframesLocal,
+    objectToAst,
+    preserveNames: preservedNames,
+    duplicateNames,
+  });
+  if (duplicateNames.size > 0) {
+    ctx.keyframesAliases = new Map([...(ctx.keyframesAliases ?? new Map()), ...duplicateNames]);
+  }
+  ctx.keyframesNames = new Set([...ctx.keyframesNames, ...converted.keyframesNames]);
+  replaceKeyframesAliasesInResolvedStyles(ctx);
+  if (
+    preservedNames.size === 0 &&
+    collapseGeneratedKeyframesAliases(ctx, converted.keyframesNames)
+  ) {
+    ctx.markChanged();
+  }
+  if (converted.changed) {
+    ctx.markChanged();
+  }
+  cleanupEmptyVariableDeclarations(ctx);
+
+  collectExistingStylexKeyframeNames(ctx);
+
+  return CONTINUE;
+}
+
 // --- Non-exported helpers ---
+
+function collectKeyframesReferencedBySkippedDecls(ctx: TransformContext): Set<string> {
+  const keyframesNames = ctx.keyframesNames;
+  const referencedNames = new Set<string>();
+  if (!ctx.styledDecls || keyframesNames.size === 0) {
+    return referencedNames;
+  }
+
+  for (const decl of ctx.styledDecls) {
+    if (!decl.skipTransform) {
+      continue;
+    }
+    for (const expr of decl.templateExpressions ?? []) {
+      const identifiers = new Set<string>();
+      collectIdentifiers(expr, identifiers);
+      for (const name of identifiers) {
+        if (keyframesNames.has(name)) {
+          referencedNames.add(name);
+        }
+      }
+    }
+  }
+  return referencedNames;
+}
+
+function buildDuplicateKeyframesNames(
+  ctx: TransformContext,
+  preservedNames: Set<string>,
+): Map<string, string> {
+  const duplicates = new Map<string, string>();
+  if (!ctx.styledDecls || preservedNames.size === 0) {
+    return duplicates;
+  }
+
+  const usedNames = new Set<string>(ctx.keyframesNames);
+  for (const decl of ctx.styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
+    for (const expr of decl.templateExpressions ?? []) {
+      const identifiers = new Set<string>();
+      collectIdentifiers(expr, identifiers);
+      for (const name of identifiers) {
+        if (!preservedNames.has(name) || duplicates.has(name)) {
+          continue;
+        }
+        const duplicateName = makeUniqueKeyframesDuplicateName(name, usedNames);
+        duplicates.set(name, duplicateName);
+        usedNames.add(duplicateName);
+      }
+    }
+  }
+
+  return duplicates;
+}
+
+function makeUniqueKeyframesDuplicateName(name: string, usedNames: Set<string>): string {
+  let candidate = `${name}Stylex`;
+  let suffix = 2;
+  while (usedNames.has(candidate)) {
+    candidate = `${name}Stylex${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+function collapseGeneratedKeyframesAliases(
+  ctx: TransformContext,
+  convertedNames: Set<string>,
+): boolean {
+  let changed = false;
+  for (const name of convertedNames) {
+    const alias = `${name}Stylex`;
+    if (!removeStylexKeyframesDeclaration(ctx, alias)) {
+      continue;
+    }
+    renameKeyframesAliasReferences(ctx, alias, name);
+    changed = true;
+  }
+  return changed;
+}
+
+function removeStylexKeyframesDeclaration(ctx: TransformContext, localName: string): boolean {
+  let removed = false;
+  ctx.root
+    .find(ctx.j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path: any) => {
+      const init = path.node.init;
+      if (
+        !init ||
+        init.type !== "CallExpression" ||
+        init.callee.type !== "MemberExpression" ||
+        init.callee.object.type !== "Identifier" ||
+        init.callee.object.name !== "stylex" ||
+        init.callee.property.type !== "Identifier" ||
+        init.callee.property.name !== "keyframes"
+      ) {
+        return;
+      }
+
+      const declaration = path.parentPath?.node;
+      if (!declaration || declaration.type !== "VariableDeclaration") {
+        return;
+      }
+      declaration.declarations = declaration.declarations.filter(
+        (decl: unknown) => decl !== path.node,
+      );
+      removed = true;
+    });
+  return removed;
+}
+
+function cleanupEmptyVariableDeclarations(ctx: TransformContext): void {
+  ctx.root.find(ctx.j.VariableDeclaration).forEach((path: any) => {
+    if (path.node.declarations.length > 0) {
+      return;
+    }
+    ctx.j(path).remove();
+    ctx.markChanged();
+  });
+}
+
+function renameKeyframesAliasReferences(
+  ctx: TransformContext,
+  fromName: string,
+  toName: string,
+): void {
+  ctx.root.find(ctx.j.Identifier, { name: fromName } as any).forEach((path: any) => {
+    const parent = path.parentPath?.node;
+    if (!parent || isNonReferenceIdentifier(path.node, parent)) {
+      return;
+    }
+    path.node.name = toName;
+  });
+}
+
+function isNonReferenceIdentifier(node: unknown, parent: any): boolean {
+  if (
+    parent.type === "ImportSpecifier" ||
+    parent.type === "ImportDefaultSpecifier" ||
+    parent.type === "ImportNamespaceSpecifier"
+  ) {
+    return true;
+  }
+  if (parent.type === "VariableDeclarator" && parent.id === node) {
+    return true;
+  }
+  if (
+    (parent.type === "MemberExpression" || parent.type === "OptionalMemberExpression") &&
+    parent.property === node &&
+    !parent.computed
+  ) {
+    return true;
+  }
+  return parent.type === "Property" && parent.key === node && !parent.computed;
+}
+
+function replaceKeyframesAliasesInResolvedStyles(ctx: TransformContext): void {
+  if (!ctx.resolvedStyleObjects || !ctx.keyframesAliases || ctx.keyframesAliases.size === 0) {
+    return;
+  }
+  for (const value of ctx.resolvedStyleObjects.values()) {
+    replaceKeyframesAliases(value, ctx.keyframesAliases);
+  }
+}
+
+function replaceKeyframesAliases(
+  node: unknown,
+  aliases: Map<string, string>,
+  parent?: { type?: string; key?: unknown; computed?: boolean },
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      replaceKeyframesAliases(child, aliases, parent);
+    }
+    return;
+  }
+
+  const typed = node as { type?: string; name?: string };
+  if (typed.type === "Identifier" && typed.name) {
+    const isStaticPropertyKey =
+      parent?.type === "Property" && parent.key === node && !parent.computed;
+    const alias = aliases.get(typed.name);
+    if (alias && !isStaticPropertyKey) {
+      typed.name = alias;
+    }
+  }
+
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    replaceKeyframesAliases((node as Record<string, unknown>)[key], aliases, typed);
+  }
+}
 
 /**
  * Collect identifier names bound to top-level `const <name> = stylex.keyframes(...)`

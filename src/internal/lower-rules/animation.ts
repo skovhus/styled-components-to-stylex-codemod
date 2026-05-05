@@ -219,6 +219,7 @@ export function tryHandleAnimation(args: {
   styleFnFromProps: StyleFnFromPropsEntry[];
   filePath: string;
   avoidNames?: Set<string>;
+  keyframesAliases?: Map<string, string>;
   applyResolvedPropValue?: (
     prop: string,
     value: unknown,
@@ -227,6 +228,7 @@ export function tryHandleAnimation(args: {
   bailUnsupportedUnknownVar?: () => void;
 }): boolean {
   const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
+  const { keyframesAliases } = args;
   const applyProp =
     args.applyResolvedPropValue ??
     ((prop: string, value: unknown) => {
@@ -249,7 +251,7 @@ export function tryHandleAnimation(args: {
   const getKeyframeFromSlot = (slotId: number): string | null => {
     const expr = (decl as any).templateExpressions[slotId] as any;
     if (expr?.type === "Identifier" && keyframesNames.has(expr.name)) {
-      return expr.name;
+      return keyframesAliases?.get(expr.name) ?? expr.name;
     }
     return null;
   };

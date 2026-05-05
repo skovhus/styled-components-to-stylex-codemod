@@ -29,8 +29,9 @@ import { toRealPath } from "../internal/utilities/path-utils.js";
 /** Test case files prefixed with these names are expected to bail out (no output file). */
 const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 
-/** Test cases that intentionally test partial conversion with leftover css helpers. */
+/** Test cases that intentionally keep specific styled-components APIs after migration. */
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
+const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
 
 /**
  * Fixtures that intentionally test partial-file transforms: at least one styled
@@ -39,6 +40,21 @@ const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"])
  */
 function isPartialFixture(name: string): boolean {
   return name.startsWith("partial-");
+}
+
+function styledComponentsDisallowedImports(name: string): string[] {
+  const disallowed = CSS_IMPORT_ALLOWED_FIXTURES.has(name)
+    ? ["styled", "keyframes", "createGlobalStyle"]
+    : ["styled", "css", "keyframes", "createGlobalStyle"];
+  const allowed = new Set<string>();
+  if (isPartialFixture(name)) {
+    allowed.add("styled");
+    allowed.add("css");
+  }
+  if (KEYFRAMES_IMPORT_ALLOWED_FIXTURES.has(name)) {
+    allowed.add("keyframes");
+  }
+  return disallowed.filter((importName) => !allowed.has(importName));
 }
 
 function isBailOutFixture(filename: string): boolean {
@@ -1215,11 +1231,7 @@ describe("output invariants", () => {
       const { output } = readTestCase("", inputPath, outputPath);
       // Allow imports of useTheme, withTheme, ThemeProvider etc. that aren't transformed
       // But disallow imports of styled, css, keyframes, createGlobalStyle
-      const disallowedImports = isPartialFixture(name)
-        ? ["keyframes", "createGlobalStyle"]
-        : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-          ? ["styled", "keyframes", "createGlobalStyle"]
-          : ["styled", "css", "keyframes", "createGlobalStyle"];
+      const disallowedImports = styledComponentsDisallowedImports(name);
       const importMatch = output.match(
         /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
       );
@@ -1269,11 +1281,7 @@ describe("transform", () => {
 
     // Result must not import styled/css/keyframes/createGlobalStyle from styled-components
     // (but useTheme, withTheme, ThemeProvider etc. are allowed)
-    const disallowedImports = isPartialFixture(name)
-      ? ["keyframes", "createGlobalStyle"]
-      : CSS_IMPORT_ALLOWED_FIXTURES.has(name)
-        ? ["styled", "keyframes", "createGlobalStyle"]
-        : ["styled", "css", "keyframes", "createGlobalStyle"];
+    const disallowedImports = styledComponentsDisallowedImports(name);
     const importMatch = result.match(
       /import\s+(?:{([^}]+)}|(\w+))\s+from\s+['"]styled-components['"]/,
     );
