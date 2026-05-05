@@ -1,0 +1,1 @@
+import{o as e}from"./chunk-jRWAZmH_.js";import"./stylex-vFXG5bjz.js";import{f as t,p as n}from"./index-Ds3kZPin.js";var r=e(n(),1),i=t(),a=()=>{let e=(0,r.useRef)(null);return(0,r.useEffect)(()=>{e.current?.focus()},[]),(0,i.jsx)(`input`,{ref:e,placeholder:`Focus me on mount!`,className:`xon2cxt x1sscd6g x1c28xdg xd10qfp xc342km xng3xce xhm8nzw x18zih8k`})};export{a as App};

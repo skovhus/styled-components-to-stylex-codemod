@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import{f as e,p as t}from"./index-Ds3kZPin.js";t();var n=e();function r(e){let{className:t,children:r,isOpen:i,...a}=e;return(0,n.jsx)(`div`,{className:t,...a,children:r??`ExternalComponent`})}export{r as t};
