@@ -1,0 +1,1 @@
+import{c as e,p as t}from"./index-ByhULgig.js";import{t as n}from"./text-CsHcQ8BA.js";var r=t(),i=e(n).attrs({variant:`title2`})``,a=()=>(0,r.jsx)(`div`,{style:{padding:`16px`},children:(0,r.jsx)(i,{children:`Hello World`})});export{a as App};
