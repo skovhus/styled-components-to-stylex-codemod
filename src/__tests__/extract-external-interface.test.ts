@@ -1251,6 +1251,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": true,
         },
+        "test-cases/wrapper-outOfScopeClassNameStyle.input.tsx:StatusBadge": {
+          "as": false,
+          "className": false,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": false,
+          "style": true,
+          "styles": true,
+        },
         "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
           "as": false,
           "className": true,

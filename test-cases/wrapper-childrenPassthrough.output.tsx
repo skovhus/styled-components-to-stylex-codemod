@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // A component that accepts children
 type FlexProps = React.PropsWithChildren<{
@@ -29,10 +30,13 @@ function Flex(props: FlexProps) {
 // When styled(Component) is used without explicit children handling,
 // the wrapper should still accept children since they are passed through via ...rest
 // Exported styled components should preserve wrapper function
-export function Container(
-  props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">,
-) {
-  return <Flex {...props} {...stylex.props(styles.container)} />;
+export function Container(props: React.ComponentPropsWithRef<typeof Flex>) {
+  const { className, children, style, ...rest } = props;
+  return (
+    <Flex {...rest} {...mergedSx(styles.container, className, style)}>
+      {children}
+    </Flex>
+  );
 }
 
 // Container should accept children since Flex accepts children

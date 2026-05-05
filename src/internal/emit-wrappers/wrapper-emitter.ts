@@ -883,12 +883,106 @@ export class WrapperEmitter {
     propsType: AstNodeOrNull,
     options?: { lookThroughPropsWithChildren?: boolean },
   ): Set<string> {
-    const names = new Set<string>();
     const { root, j } = this;
+    const typeParamsFor = (type: AstNodeOrNull): AstNodeOrNull[] => {
+      const params = (type as any)?.typeParameters?.params ?? (type as any)?.typeArguments?.params;
+      return (params ?? []) as AstNodeOrNull[];
+    };
 
-    const extractFromLiteral = (literal: AstNodeOrNull): void => {
+    const typeReferenceName = (type: AstNodeOrNull): string | null => {
+      if (!type || type.type !== "TSTypeReference") {
+        return null;
+      }
+      const stringifyName = (nameNode: AstNodeOrNull): string | null => {
+        if (!nameNode) {
+          return null;
+        }
+        if (nameNode.type === "Identifier") {
+          return nameNode.name;
+        }
+        if (nameNode.type === "TSQualifiedName") {
+          const left = stringifyName((nameNode as any).left);
+          const right = stringifyName((nameNode as any).right);
+          return left && right ? `${left}.${right}` : null;
+        }
+        return null;
+      };
+      return stringifyName((type as any).typeName);
+    };
+
+    const typeAliasAnnotationFor = (
+      typeName: string,
+      visitedTypeNames: ReadonlySet<string>,
+    ): AstNodeOrNull => {
+      if (visitedTypeNames.has(typeName)) {
+        return null;
+      }
+      const typeAlias = root
+        .find(j.TSTypeAliasDeclaration)
+        .filter((p) => (p.node as any).id?.name === typeName);
+      if (typeAlias.size() === 0) {
+        return null;
+      }
+      return typeAlias.get().node.typeAnnotation;
+    };
+
+    const literalStringNames = (
+      type: AstNodeOrNull,
+      visitedTypeNames = new Set<string>(),
+    ): Set<string> => {
+      const names = new Set<string>();
+      const collect = (node: AstNodeOrNull): void => {
+        if (!node) {
+          return;
+        }
+        if (node.type === "TSUnionType") {
+          for (const part of (node as any).types ?? []) {
+            collect(part);
+          }
+          return;
+        }
+        if (node.type === "TSParenthesizedType") {
+          collect((node as any).typeAnnotation);
+          return;
+        }
+        if (node.type === "TSTypeOperator" && (node as any).operator === "keyof") {
+          for (const name of extractFromType((node as any).typeAnnotation, visitedTypeNames)) {
+            names.add(name);
+          }
+          return;
+        }
+        const referencedTypeName = typeReferenceName(node);
+        if (referencedTypeName && !referencedTypeName.includes(".")) {
+          const aliasAnnotation = typeAliasAnnotationFor(referencedTypeName, visitedTypeNames);
+          if (aliasAnnotation) {
+            const nextVisitedTypeNames = new Set(visitedTypeNames);
+            nextVisitedTypeNames.add(referencedTypeName);
+            for (const name of literalStringNames(aliasAnnotation, nextVisitedTypeNames)) {
+              names.add(name);
+            }
+          }
+          return;
+        }
+        if (node.type !== "TSLiteralType") {
+          return;
+        }
+        const literal = (node as any).literal;
+        const value =
+          literal?.type === "StringLiteral" || literal?.type === "Literal"
+            ? literal.value
+            : undefined;
+        if (typeof value === "string") {
+          names.add(value);
+        }
+      };
+      collect(type);
+      return names;
+    };
+
+    const extractFromLiteral = (literal: AstNodeOrNull): Set<string> => {
+      const names = new Set<string>();
       if (!literal || literal.type !== "TSTypeLiteral") {
-        return;
+        return names;
       }
       for (const member of (literal as any).members ?? []) {
         if (member?.type !== "TSPropertySignature") {
@@ -907,37 +1001,83 @@ export class WrapperEmitter {
           names.add(name);
         }
       }
+      return names;
     };
 
-    const extractFromType = (type: AstNodeOrNull): void => {
+    const extractFromType = (
+      type: AstNodeOrNull,
+      visitedTypeNames = new Set<string>(),
+    ): Set<string> => {
+      const names = new Set<string>();
+      const merge = (next: Set<string>): void => {
+        for (const name of next) {
+          names.add(name);
+        }
+      };
       if (!type) {
-        return;
+        return names;
       }
       if (type.type === "TSTypeLiteral") {
-        extractFromLiteral(type);
-      } else if (type.type === "TSIntersectionType") {
+        return extractFromLiteral(type);
+      }
+      if (type.type === "TSIntersectionType" || type.type === "TSUnionType") {
         for (const t of (type as any).types ?? []) {
-          extractFromType(t);
+          merge(extractFromType(t, new Set(visitedTypeNames)));
         }
-      } else if (type.type === "TSTypeReference") {
-        const typeRef = type as {
-          typeName?: AstNodeOrNull;
-          typeParameters?: { params?: AstNodeOrNull[] };
-        };
-        const typeNameText = this.stringifyTsTypeName(typeRef.typeName);
+        return names;
+      }
+      if (type.type === "TSParenthesizedType") {
+        return extractFromType((type as any).typeAnnotation, visitedTypeNames);
+      }
+      if (type.type !== "TSTypeReference") {
+        return names;
+      }
+
+      const typeName = typeReferenceName(type);
+      const params = typeParamsFor(type);
+      if (!typeName) {
+        return names;
+      }
+
+      if (typeName === "Omit" && params[0]) {
+        merge(extractFromType(params[0], new Set(visitedTypeNames)));
+        const omitted = literalStringNames(params[1], new Set(visitedTypeNames));
+        for (const name of omitted) {
+          names.delete(name);
+        }
+        return names;
+      }
+      if (typeName === "Pick" && params[1]) {
+        return literalStringNames(params[1], new Set(visitedTypeNames));
+      }
+
+      if (
+        typeName === "React.PropsWithChildren" ||
+        typeName === "PropsWithChildren" ||
+        typeName === "Partial" ||
+        typeName === "Required" ||
+        typeName === "Readonly"
+      ) {
         if (
-          options?.lookThroughPropsWithChildren &&
-          (typeNameText === "React.PropsWithChildren" || typeNameText === "PropsWithChildren")
+          params[0] &&
+          (typeName !== "React.PropsWithChildren" && typeName !== "PropsWithChildren"
+            ? true
+            : options?.lookThroughPropsWithChildren === true)
         ) {
-          for (const param of typeRef.typeParameters?.params ?? []) {
-            extractFromType(param);
-          }
-          return;
+          merge(extractFromType(params[0], new Set(visitedTypeNames)));
         }
-        if (typeRef.typeName?.type !== "Identifier") {
-          return;
+        if (typeName === "React.PropsWithChildren" || typeName === "PropsWithChildren") {
+          names.add("children");
         }
-        const typeName = typeRef.typeName.name;
+        return names;
+      }
+
+      if (!typeName.includes(".")) {
+        if (visitedTypeNames.has(typeName)) {
+          return names;
+        }
+        const nextVisitedTypeNames = new Set(visitedTypeNames);
+        nextVisitedTypeNames.add(typeName);
         const interfaceDecl = root
           .find(j.TSInterfaceDeclaration)
           .filter((p) => (p.node as any).id?.name === typeName);
@@ -954,17 +1094,20 @@ export class WrapperEmitter {
             }
           }
         }
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          extractFromType(typeAlias.get().node.typeAnnotation);
+        const typeAliasAnnotation = typeAliasAnnotationFor(typeName, visitedTypeNames);
+        if (typeAliasAnnotation) {
+          merge(extractFromType(typeAliasAnnotation, nextVisitedTypeNames));
         }
+        return names;
       }
+
+      for (const param of params) {
+        merge(extractFromType(param, new Set(visitedTypeNames)));
+      }
+      return names;
     };
 
-    extractFromType(propsType);
-    return names;
+    return extractFromType(propsType);
   }
 
   inferredIntrinsicPropsTypeText(args: {

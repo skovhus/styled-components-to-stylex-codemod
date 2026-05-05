@@ -1,3 +1,4 @@
+// Generated wrappers must only reference className and style after binding them from props.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
@@ -16,8 +17,8 @@ function BadgeBase(props: BadgeBaseProps) {
   );
 }
 
-export function StatusBadge(props: BadgeBaseProps) {
-  const { children, className, style, ...rest } = props;
+export function StatusBadge(props: React.ComponentPropsWithRef<typeof BadgeBase>) {
+  const { className, children, style, ...rest } = props;
   return (
     <BadgeBase {...rest} {...mergedSx(styles.statusBadge, className, style)}>
       {children}
