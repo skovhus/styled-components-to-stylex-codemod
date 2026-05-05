@@ -726,7 +726,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       fnBodyStmts.push(...cleanupPrefixStmt);
     }
     if (needsUseTheme) {
-      fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
+      fnBodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHookLocalName));
     }
     if (merging.sxDecl) {
       fnBodyStmts.push(merging.sxDecl);

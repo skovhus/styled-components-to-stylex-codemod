@@ -1206,12 +1206,12 @@ export function buildAllVariantAndStyleExprs(opts: {
 /** Builds a `const theme = useTheme();` variable declaration. */
 export function buildUseThemeDeclaration(
   j: JSCodeshift,
-  themeHookFunctionName: string,
+  themeHookLocalName: string,
 ): StatementKind {
   return j.variableDeclaration("const", [
     j.variableDeclarator(
       j.identifier("theme"),
-      j.callExpression(j.identifier(themeHookFunctionName), []),
+      j.callExpression(j.identifier(themeHookLocalName), []),
     ),
   ]);
 }

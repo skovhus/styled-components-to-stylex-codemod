@@ -403,7 +403,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (needsUseThemeWithConfig) {
-      bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
+      bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHookLocalName));
     }
     if (merging.sxDecl) {
       bodyStmts.push(merging.sxDecl);
@@ -1154,7 +1154,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         bodyStmts.push(declStmt);
       }
       if (needsUseTheme) {
-        bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHook.functionName));
+        bodyStmts.push(buildUseThemeDeclaration(j, emitter.themeHookLocalName));
       }
       if (merging.sxDecl) {
         bodyStmts.push(merging.sxDecl);
