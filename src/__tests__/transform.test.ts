@@ -1005,6 +1005,19 @@ export const App = () => <Box column>adapter leaf</Box>;
     expect(result.code).not.toMatch(/const\s+Box\s*=\s*styled\(Flex\)`/);
   });
 
+  it("preserves empty custom call wrappers while converting intrinsic leaves", () => {
+    const fixturePath = join(testCasesDir, "partial-generatedBaseReference.input.tsx");
+    const source = readFileSync(fixturePath, "utf-8");
+
+    const result = runLeavesOnly(source, fixturePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("stylex.create");
+    expect(result.code).toMatch(/convertedShell:\s*\{/);
+    expect(result.code).toMatch(/export const Notice = styled\(\s*observe\(function NoticeBase/);
+    expect(result.code).not.toContain("ObserveBase");
+  });
+
   it("AST prepass classifies let + named styled import as intrinsic leaf", () => {
     const source = `
 import { styled as sc } from "styled-components";

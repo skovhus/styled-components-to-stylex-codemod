@@ -55,6 +55,10 @@ export function extractStyledCallArgs(args: {
       ) {
         return;
       }
+      if (isEmptyTemplateLiteral(init.quasi)) {
+        return;
+      }
+
       const callArg = tag.arguments[0];
       if (callArg?.type !== "CallExpression") {
         return;
@@ -94,6 +98,29 @@ export function extractStyledCallArgs(args: {
     });
 
   return hasChanges;
+}
+
+function isEmptyTemplateLiteral(quasi: unknown): boolean {
+  const template = quasi as
+    | {
+        expressions?: unknown[];
+        quasis?: Array<{
+          value?: {
+            raw?: string;
+            cooked?: string;
+          };
+        }>;
+      }
+    | null
+    | undefined;
+
+  if (!template) {
+    return false;
+  }
+  if ((template.expressions ?? []).length > 0) {
+    return false;
+  }
+  return (template.quasis ?? []).every((q) => (q.value?.raw ?? q.value?.cooked ?? "").trim() === "");
 }
 
 /**
