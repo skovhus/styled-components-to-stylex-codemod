@@ -516,17 +516,6 @@ function collectStyledDeclsImpl(args: {
         readFirstTypeArg(cur?.typeParameters) ?? readFirstTypeArg(cur?.typeArguments) ?? undefined;
     }
 
-    // If we consumed type params from a direct attachment, strip them from the expr so downstream
-    // tag/callee matching is stable.
-    if (cur && (cur.typeParameters || cur.typeArguments)) {
-      try {
-        delete cur.typeParameters;
-        delete cur.typeArguments;
-      } catch {
-        // ignore (non-extensible nodes)
-      }
-    }
-
     return { expr: cur, propsType };
   };
 
@@ -790,14 +779,6 @@ function collectStyledDeclsImpl(args: {
       let { expr: tag, propsType } = unwrapTypeInstantiation(init.tag);
       if (!propsType) {
         propsType = readFirstTypeArgFromNode(init);
-        if (propsType) {
-          try {
-            delete (init as any).typeParameters;
-            delete (init as any).typeArguments;
-          } catch {
-            // ignore
-          }
-        }
       }
       // styled.h1
       if (

@@ -876,6 +876,16 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+External\s*=\s*styled\(Plain\)`/);
   });
 
+  it("preserves transient prop generics on styled declarations skipped in leaves-only mode", async () => {
+    const { input, output, inputPath, outputPath } = readTestCase("partial-transientProps");
+    const result = runLeavesOnly(input, inputPath);
+
+    expect(result.code).not.toBeNull();
+    expect(await normalizeCode(result.code ?? input, outputPath)).toEqual(
+      await normalizeCode(output, outputPath),
+    );
+  });
+
   it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {
     const { globalLeafKeys, requirePath, resolver } = collectLeafKeys([
       leavesCrossBox,
