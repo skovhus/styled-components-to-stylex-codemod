@@ -58,6 +58,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     attrBuckets,
     inlineStyleProps,
     localVarValues,
+    cssHelperPropValues,
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
@@ -144,7 +145,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj,
     inlineStyleProps,
     staticInlineStyleProps,
-    unsafeProps: collectStyleOverrideProps(variantBuckets, styleFnDecls),
+    unsafeProps: collectStyleOverrideProps({
+      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+      cssHelperPropValues,
+      extraStyleObjects,
+      resolvedStyleObjects,
+      variantBuckets,
+      styleFnDecls,
+    }),
     j: state.j,
   });
 
@@ -635,22 +643,50 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
   }
 }
 
-function collectStyleOverrideProps(
-  variantBuckets: Map<string, Record<string, unknown>>,
-  styleFnDecls: Map<string, unknown>,
-): Set<string> {
+function collectStyleOverrideProps(args: {
+  afterBaseStyleKeys: readonly string[];
+  cssHelperPropValues: Map<string, unknown>;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
+  resolvedStyleObjects: Map<string, unknown>;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  styleFnDecls: Map<string, unknown>;
+}): Set<string> {
+  const {
+    afterBaseStyleKeys,
+    cssHelperPropValues,
+    extraStyleObjects,
+    resolvedStyleObjects,
+    variantBuckets,
+    styleFnDecls,
+  } = args;
   const props = new Set<string>();
-  for (const bucket of variantBuckets.values()) {
-    for (const prop of Object.keys(bucket)) {
-      if (!prop.startsWith("__")) {
-        props.add(prop);
-      }
+  for (const prop of cssHelperPropValues.keys()) {
+    props.add(prop);
+  }
+  for (const styleKey of afterBaseStyleKeys) {
+    const styleObject = resolvedStyleObjects.get(styleKey);
+    if (isStyleObjectForCssVarDrop(styleObject)) {
+      addBucketProps(styleObject, props);
     }
+  }
+  for (const bucket of extraStyleObjects.values()) {
+    addBucketProps(bucket, props);
+  }
+  for (const bucket of variantBuckets.values()) {
+    addBucketProps(bucket, props);
   }
   for (const fnAst of styleFnDecls.values()) {
     collectObjectExpressionPropertyNames(fnAst, props);
   }
   return props;
+}
+
+function addBucketProps(bucket: Record<string, unknown>, props: Set<string>): void {
+  for (const prop of Object.keys(bucket)) {
+    if (!prop.startsWith("__")) {
+      props.add(prop);
+    }
+  }
 }
 
 function collectObjectExpressionPropertyNames(node: unknown, props: Set<string>): void {

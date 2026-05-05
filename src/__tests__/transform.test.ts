@@ -7154,6 +7154,36 @@ export const App = () => <Box $active>content</Box>;
     expect(result.code).not.toContain('color: "var(--raw-color)",\n      }}');
   });
 
+  it("should not inline raw CSS variable values that are overridden by later css mixins", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const overrideColor = css\`
+  color: red;
+\`;
+
+const Box = styled.div\`
+  color: var(--raw-color);
+  \${overrideColor}
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-mixin-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('color: "var(--raw-color)"');
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("styles.box");
+    expect(result.code).toContain("styles.overrideColor");
+    expect(result.code).not.toContain('color: "var(--raw-color)",\n      }}');
+  });
+
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
     const source = `
 import styled from "styled-components";
