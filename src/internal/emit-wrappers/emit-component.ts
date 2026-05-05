@@ -141,7 +141,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       propsType: renderedComponentPropsType,
       fallbackTypeName:
         renderedComponent === wrappedComponent && !wrappedComponentIsLocalStyledWrapper
-          ? resolveTypeNameFromType(renderedComponentPropsType)
+          ? resolveTypeTextFromType(emitter, renderedComponentPropsType)
           : null,
     });
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
@@ -1215,7 +1215,7 @@ function findTypeOwningProp(
         }
       }
     }
-    const typeName = resolveTypeNameFromType(type);
+    const typeName = resolveTypeIdentifierName(type);
     if (!typeName) {
       return null;
     }
@@ -1262,7 +1262,14 @@ function isPropsWithChildrenType(type: ASTNode): boolean {
   );
 }
 
-function resolveTypeNameFromType(type: ASTNode | null): string | null {
+function resolveTypeTextFromType(emitter: WrapperEmitter, type: ASTNode | null): string | null {
+  if (type?.type !== "TSTypeReference") {
+    return null;
+  }
+  return emitter.stringifyTsType(type);
+}
+
+function resolveTypeIdentifierName(type: ASTNode | null): string | null {
   if (type?.type !== "TSTypeReference") {
     return null;
   }

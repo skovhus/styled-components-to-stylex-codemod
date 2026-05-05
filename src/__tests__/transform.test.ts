@@ -5512,6 +5512,42 @@ export const App = () => (
     expect(result.code).not.toContain("rest.as");
   });
 
+  it("should preserve generic props arguments when typing forwardedAs", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps<C extends React.ElementType> = {
+  as?: C;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+const Base = (props: BaseProps<"button">) => {
+  const { as: Component = "button", ...rest } = props;
+  return <Component {...rest} />;
+};
+
+const Wrapper = styled(Base)\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="button">
+    Button
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('forwardedAs?: BaseProps<"button">["as"]');
+    expect(result.code).not.toContain('forwardedAs?: BaseProps["as"]');
+  });
+
   it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
     const source = `
 import React from "react";
