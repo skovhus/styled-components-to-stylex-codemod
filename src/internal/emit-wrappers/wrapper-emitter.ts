@@ -1219,6 +1219,7 @@ export class WrapperEmitter {
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
+    forwardedAsPropTypeText?: string;
   }): string {
     const {
       d,
@@ -1229,6 +1230,7 @@ export class WrapperEmitter {
       hasExplicitPropsType,
       forceClassNameOptional,
       forceStyleOptional,
+      forwardedAsPropTypeText = "React.ElementType",
     } = args;
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
@@ -1254,7 +1256,7 @@ export class WrapperEmitter {
       lines.push(SX_PROP_TYPE_TEXT);
     }
     if (this.hasForwardedAsUsage(d.localName)) {
-      lines.push("forwardedAs?: React.ElementType");
+      lines.push(`forwardedAs?: ${forwardedAsPropTypeText}`);
     }
     const propsTarget = d.attrsInfo?.attrsAsTag ?? (d.base as any).ident;
     const base = this.componentPropsBaseType(propsTarget);

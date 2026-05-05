@@ -5428,8 +5428,8 @@ export const App = () => (
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("forwardedAs?: React.ElementType");
-    expect(result.code).toContain('as={forwardedAs ?? "span"}');
+    expect(result.code).toContain('forwardedAs?: BaseProps["as"]');
+    expect(result.code).toContain("as={forwardedAs ?? rest.as}");
     expect(result.code).not.toContain('as="span"');
   });
 
@@ -5509,7 +5509,7 @@ export const App = () => (
     expect(result.code).not.toBeNull();
     expect(result.code).toContain('<Outer forwardedAs="a" href="#">');
     expect(result.code).toContain("function Base");
-    expect(result.code).toContain("as={forwardedAs}");
+    expect(result.code).toContain("as={forwardedAs ?? rest.as}");
   });
 });
 

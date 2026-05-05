@@ -132,9 +132,22 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // When .attrs({ as: ComponentRef }) is present, render and type against that component
     const renderedComponent = d.attrsInfo?.attrsAsTag ?? wrappedComponent;
     const baseComponentPropsType = findComponentPropsType(wrappedComponent);
+    const renderedComponentPropsType = findComponentPropsType(renderedComponent);
+    const wrappedComponentIsLocalStyledWrapper = wrapperDecls.some(
+      (decl) => decl.localName === wrappedComponent,
+    );
+    const renderedAsProp = resolveRenderedAsProp({
+      emitter,
+      propsType: renderedComponentPropsType,
+      fallbackTypeName:
+        renderedComponent === wrappedComponent && !wrappedComponentIsLocalStyledWrapper
+          ? resolveTypeNameFromType(renderedComponentPropsType)
+          : null,
+    });
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
     const supportsAsProp = d.supportsAsProp ?? false;
-    const shouldAllowAsProp = wrapperNames.has(d.localName) || supportsAsProp;
+    const hasOwnAsUsage = emitter.getUsedAttrs(d.localName).has("as");
+    const shouldAllowAsProp = hasOwnAsUsage || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
@@ -143,6 +156,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
     const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
+    const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
+    const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
@@ -168,8 +183,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style");
     const forceClassNameOptional = !!wrappedClassNameRequired;
     const forceStyleOptional = !!wrappedStyleRequired;
-    const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
-    const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
+    const forwardedAsPropTypeText = renderedAsProp?.typeText ?? "React.ElementType";
     const propsIdForExpr = j.identifier("props");
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
@@ -227,7 +241,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           optionalProps.push(SX_PROP_TYPE_TEXT);
         }
         if (hasForwardedAsUsage) {
-          optionalProps.push("forwardedAs?: React.ElementType");
+          optionalProps.push(`forwardedAs?: ${forwardedAsPropTypeText}`);
         }
         // Extend the existing type in-place so the wrapper can reuse it.
         // For interfaces, use `extends` for the base type and inject optional props
@@ -268,7 +282,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           optionalProps.push(SX_PROP_TYPE_TEXT);
         }
         if (hasForwardedAsUsage) {
-          optionalProps.push("forwardedAs?: React.ElementType");
+          optionalProps.push(`forwardedAs?: ${forwardedAsPropTypeText}`);
         }
         // Build inline type for the function parameter (don't modify SharedProps)
         inlineTypeText = emitter.joinIntersection(
@@ -312,7 +326,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             baseProps,
             `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsRaw} | "className" | "style">`,
             "{\n  as?: C;\n}",
-            ...(hasForwardedAsUsage ? ["{ forwardedAs?: React.ElementType }"] : []),
+            ...(hasForwardedAsUsage ? [`{ forwardedAs?: ${forwardedAsPropTypeText} }`] : []),
             ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
             // Include user's explicit props type if it exists
             ...(explicit ? [explicit] : []),
@@ -340,6 +354,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             hasExplicitPropsType,
             forceClassNameOptional,
             forceStyleOptional,
+            forwardedAsPropTypeText,
           });
           // Add ref support when .attrs({ as: "element" }) is used
           const attrsAs = getAttrsAsString(d);
@@ -374,7 +389,22 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             : inferred;
           // When there are no custom props, skip emitting named type and use inline type instead
           const hasNoCustomProps = !explicitWithRef;
-          if (hasNoCustomProps) {
+          if (
+            hasNoCustomProps &&
+            shouldLowerForwardedAs &&
+            renderedAsProp?.baseTypeText &&
+            !allowSxProp &&
+            !forceClassNameOptional &&
+            !forceStyleOptional
+          ) {
+            emitNamedPropsType(
+              d.localName,
+              emitter.joinIntersection(
+                renderedAsProp.baseTypeText,
+                `{ forwardedAs?: ${renderedAsProp.typeText} }`,
+              ),
+            );
+          } else if (hasNoCustomProps) {
             inlineTypeText = typeText;
           } else {
             emitNamedPropsType(d.localName, typeText);
@@ -1021,14 +1051,26 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }),
       );
       if (shouldLowerForwardedAs) {
-        const forwardedAsValueExpr =
+        let forwardedAsValueExpr: ExpressionKind = forwardedAsId;
+        if (renderedAsProp?.propName && restId) {
+          forwardedAsValueExpr = j.logicalExpression(
+            "??",
+            forwardedAsId,
+            j.memberExpression(restId, j.identifier(renderedAsProp.propName)),
+          );
+        } else if (
           hasStaticForwardedAsFallback &&
           (typeof staticForwardedAsFallback === "string" ||
             typeof staticForwardedAsFallback === "number" ||
             typeof staticForwardedAsFallback === "boolean" ||
             staticForwardedAsFallback === null)
-            ? j.logicalExpression("??", forwardedAsId, j.literal(staticForwardedAsFallback))
-            : forwardedAsId;
+        ) {
+          forwardedAsValueExpr = j.logicalExpression(
+            "??",
+            forwardedAsId,
+            j.literal(staticForwardedAsFallback),
+          );
+        }
         openingAttrs.push(
           j.jsxAttribute(j.jsxIdentifier("as"), j.jsxExpressionContainer(forwardedAsValueExpr)),
         );
@@ -1107,4 +1149,101 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
 function shouldKeepStylePropSeparate(componentName: string): boolean {
   return componentName.startsWith("motion.") || componentName.startsWith("animated.");
+}
+
+function resolveRenderedAsProp(args: {
+  emitter: WrapperEmitter;
+  propsType: ASTNode | null;
+  fallbackTypeName?: string | null;
+}): { propName: "as"; baseTypeText?: string; typeText: string } | null {
+  const { emitter, fallbackTypeName, propsType } = args;
+  if (!propsType) {
+    return null;
+  }
+  const propOwnerType = findTypeOwningProp(emitter, propsType, "as");
+  if (!propOwnerType) {
+    return null;
+  }
+  const ownerTypeText = fallbackTypeName ?? emitter.stringifyTsType(propOwnerType);
+  if (ownerTypeText) {
+    return {
+      propName: "as",
+      baseTypeText: ownerTypeText,
+      typeText: `${ownerTypeText}["as"]`,
+    };
+  }
+  return {
+    propName: "as",
+    typeText: "React.ElementType",
+  };
+}
+
+function findTypeOwningProp(
+  emitter: WrapperEmitter,
+  type: ASTNode,
+  propName: string,
+): ASTNode | null {
+  if (type.type === "TSTypeLiteral") {
+    const hasProp = ((type as { members?: unknown[] }).members ?? []).some((member) => {
+      const typed = member as { type?: string; key?: { type?: string; name?: string } };
+      return (
+        typed.type === "TSPropertySignature" &&
+        typed.key?.type === "Identifier" &&
+        typed.key.name === propName
+      );
+    });
+    return hasProp ? type : null;
+  }
+  if (type.type === "TSIntersectionType") {
+    for (const memberType of (type as { types?: ASTNode[] }).types ?? []) {
+      const found = findTypeOwningProp(emitter, memberType, propName);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+  if (type.type === "TSTypeReference") {
+    for (const param of (type as { typeParameters?: { params?: ASTNode[] } }).typeParameters
+      ?.params ?? []) {
+      if (findTypeOwningProp(emitter, param, propName)) {
+        return type;
+      }
+    }
+    const typeName = resolveTypeNameFromType(type);
+    if (!typeName) {
+      return null;
+    }
+    const typeAlias = emitter.root
+      .find(emitter.j.TSTypeAliasDeclaration)
+      .filter((p) => (p.node as { id?: { name?: string } }).id?.name === typeName);
+    if (typeAlias.size() > 0) {
+      const aliasType = typeAlias.get().node.typeAnnotation as ASTNode;
+      return findTypeOwningProp(emitter, aliasType, propName) ? type : null;
+    }
+    const iface = emitter.root
+      .find(emitter.j.TSInterfaceDeclaration)
+      .filter((p) => (p.node as { id?: { name?: string } }).id?.name === typeName);
+    if (iface.size() > 0) {
+      const body = iface.get().node.body?.body ?? [];
+      const hasProp = body.some((member: unknown) => {
+        const typed = member as { type?: string; key?: { type?: string; name?: string } };
+        return (
+          typed.type === "TSPropertySignature" &&
+          typed.key?.type === "Identifier" &&
+          typed.key.name === propName
+        );
+      });
+      return hasProp ? type : null;
+    }
+  }
+  return null;
+}
+
+function resolveTypeNameFromType(type: ASTNode | null): string | null {
+  if (type?.type !== "TSTypeReference") {
+    return null;
+  }
+  const typeName = (type as { typeName?: { type?: string; name?: string } }).typeName;
+  return typeName?.type === "Identifier" ? (typeName.name ?? null) : null;
 }
