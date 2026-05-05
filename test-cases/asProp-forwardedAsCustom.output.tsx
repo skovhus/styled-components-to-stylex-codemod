@@ -1,6 +1,6 @@
+// styled-components forwardedAs must be consumed by the generated wrapper, not forwarded to custom components.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 type TextProps = React.PropsWithChildren<{
   as?: "span" | "strong";
@@ -17,18 +17,12 @@ function Text(props: TextProps) {
   );
 }
 
-type EmphasisLabelProps = TextProps & {
-  forwardedAs?: TextProps["as"];
-};
+type EmphasisLabelProps = TextProps & { forwardedAs?: TextProps["as"] };
 
 function EmphasisLabel(props: EmphasisLabelProps) {
-  const { children, className, forwardedAs, style, ...rest } = props;
+  const { children, forwardedAs, ...rest } = props;
   return (
-    <Text
-      {...rest}
-      as={forwardedAs ?? rest.as}
-      {...mergedSx(styles.emphasisLabel, className, style)}
-    >
+    <Text {...rest} as={forwardedAs ?? rest.as} {...stylex.props(styles.emphasisLabel)}>
       {children}
     </Text>
   );
