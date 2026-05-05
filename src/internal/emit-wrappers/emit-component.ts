@@ -111,8 +111,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   // Uses findComponentPropsType (which returns null for imported components) and
   // emitter.getExplicitPropNames (which extracts prop names from type literals, interfaces,
   // and type aliases, including through intersections).
-  const localComponentHasProp = (componentName: string, propName: string): boolean => {
-    const propsType = findComponentPropsType(componentName);
+  const localComponentHasProp = (
+    componentName: string,
+    propName: string,
+    propsType = findComponentPropsType(componentName),
+  ): boolean => {
     if (!propsType) {
       // Component is not defined locally or has no typed props - assume it doesn't have the prop
       return false;
@@ -139,8 +142,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
     // component's className/style are not silently dropped by the styled() layer.
-    const wrappedHasClassName = localComponentHasProp(wrappedComponent, "className");
-    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style");
+    const wrappedHasClassName = localComponentHasProp(
+      wrappedComponent,
+      "className",
+      baseComponentPropsType,
+    );
+    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style", baseComponentPropsType);
     const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
@@ -151,7 +158,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // wrapped component merges them with its `sx` itself. The wrapper still
     // accepts className/style in its type, but does not destructure them.
     const wrappedAcceptsSx =
-      emitter.useSxProp && emitter.wrappedComponentAcceptsSxProp(wrappedComponent);
+      emitter.useSxProp &&
+      (emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
+        localComponentHasProp(wrappedComponent, "sx", baseComponentPropsType));
     // When the wrapped component has className/style as REQUIRED props, we must
     // force them to be optional in the wrapper's type. Otherwise, the wrapper would
     // inherit the requiredness, breaking call sites that don't pass className/style
