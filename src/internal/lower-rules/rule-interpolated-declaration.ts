@@ -772,7 +772,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
     // Apply to base declarations and pseudo/attr selectors (not media).
     if (!media && !attrTarget) {
-      if (tryHandleCssHelperConditionalBlock(d, pseudos ?? null)) {
+      if (tryHandleCssHelperConditionalBlock(d, pseudos ?? null, pseudoElement)) {
         continue;
       }
     }
