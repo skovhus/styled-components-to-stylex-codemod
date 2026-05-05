@@ -5,12 +5,11 @@ import { SxAwareButton } from "./lib/sx-aware-component";
 
 const CompactButton = styled(SxAwareButton)<{ $compact?: boolean }>`
   color: #0f172a;
-  background: #e2e8f0;
 
   ${(props) =>
     props.$compact
       ? `
-          padding: 2px;
+          font-weight: bold;
         `
       : ""}
 `;
