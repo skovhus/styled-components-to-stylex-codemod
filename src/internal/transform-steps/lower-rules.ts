@@ -18,8 +18,12 @@ import {
   type LowerRulesState,
   type RelationOverride,
 } from "../lower-rules/state.js";
+import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
+import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+
+const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
 
 /**
  * Lowers CSS rules into resolvable style objects and resolves dynamic values via the adapter.
@@ -83,12 +87,16 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
   }
 
   // Now that we know the file is transformable, remove any css helper functions that were inlined.
+  const removableCssHelperFunctions = collectRemovableCssHelperFunctions(
+    lowered.usedCssHelperFunctions,
+    ctx.styledDecls,
+  );
   if (
     removeInlinedCssHelperFunctions({
       root: ctx.root,
       j: ctx.j,
       cssLocal: ctx.cssLocal,
-      names: lowered.usedCssHelperFunctions,
+      names: removableCssHelperFunctions,
     })
   ) {
     ctx.markChanged();
@@ -438,7 +446,7 @@ function collectPreservedReferencedStyledDecls(styledDecls: StyledDecl[]): Set<s
       if ((!decl.skipTransform && !preservedNames.has(decl.localName)) || decl.isCssHelper) {
         continue;
       }
-      for (const name of collectTemplateExpressionIdentifiers(decl)) {
+      for (const name of collectTemplateSelectorIdentifiers(decl)) {
         if (componentNames.has(name) && !preservedNames.has(name)) {
           preservedNames.add(name);
           changed = true;
@@ -543,6 +551,55 @@ function skippedDeclReferencesHelper(
     }
   }
   return false;
+}
+
+function collectRemovableCssHelperFunctions(
+  usedCssHelperFunctions: Set<string>,
+  styledDecls: StyledDecl[],
+): Set<string> {
+  const removable = new Set(usedCssHelperFunctions);
+  if (removable.size === 0) {
+    return removable;
+  }
+
+  for (const decl of styledDecls) {
+    if (!decl.skipTransform) {
+      continue;
+    }
+    for (const name of collectTemplateExpressionIdentifiers(decl)) {
+      removable.delete(name);
+    }
+  }
+  return removable;
+}
+
+function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
+  const identifiers = new Set<string>();
+  if (!decl.rawCss) {
+    return identifiers;
+  }
+  for (const match of decl.rawCss.matchAll(PLACEHOLDER_RE_G)) {
+    const slotId = Number(match[1]);
+    const expr = decl.templateExpressions[slotId] as { type?: string; name?: string } | undefined;
+    if (
+      expr?.type === "Identifier" &&
+      expr.name &&
+      isTemplatePlaceholderInSelectorContext(decl.rawCss, match.index, match[0].length)
+    ) {
+      identifiers.add(expr.name);
+    }
+  }
+  return identifiers;
+}
+
+function isTemplatePlaceholderInSelectorContext(
+  rawCss: string,
+  pos: number,
+  length: number,
+): boolean {
+  const after = rawCss.slice(pos + length).trimStart();
+  const before = rawCss.slice(0, pos).trimEnd();
+  return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
 }
 
 function collectTemplateExpressionIdentifiers(decl: StyledDecl): Set<string> {

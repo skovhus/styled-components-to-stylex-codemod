@@ -309,6 +309,82 @@ export const App = () => (
 `;
 }
 
+function getPreservedComponentSelectorWithCssHelperFunctionSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const hoverStyles = (tone: "danger" | "safe") => css\`
+  font-weight: 700;
+  \${() => {
+    switch (tone) {
+      case "danger":
+        return css\`
+          color: tomato;
+        \`;
+      default:
+        return css\`
+          color: navy;
+        \`;
+    }
+  }}
+\`;
+
+const ReferencedChild = styled.span<{ tone: "danger" | "safe" }>\`
+  \${(props) => hoverStyles(props.tone)}
+  color: navy;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild tone="danger">child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
+function getValueInterpolationNameCollisionSource(): string {
+  return `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  color: navy;
+  padding: 8px;
+\`;
+
+const ConvertedBox = styled.div\`
+  background: papayawhip;
+  padding: 4px;
+\`;
+
+const PreservedContainer = styled.div<{ Button?: boolean }>\`
+  color: \${({ Button }) => (Button ? "tomato" : "navy")};
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer Button>
+    <Button>button</Button>
+    <ConvertedBox>box</ConvertedBox>
+    <a className="active">link</a>
+  </PreservedContainer>
+);
+`;
+}
+
 describe("test case file pairing", () => {
   it("should have matching input/output files for all test cases", () => {
     // This test verifies the test case structure is valid
@@ -535,6 +611,20 @@ export const App = () => (
     );
 
     expect(result.code).toBeNull();
+  });
+
+  it("preserves css helper functions used by newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithCssHelperFunctionSource(),
+      "partial-componentSelectorHelperFunction.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /const\s+hoverStyles\s*=\s*\(\s*tone:\s*"danger"\s*\|\s*"safe"\s*\)\s*=>\s*css`/,
+    );
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span/);
+    expect(result.code).toContain("hoverStyles(props.tone)");
   });
 
   it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {
@@ -960,6 +1050,20 @@ export const App = () => (
     );
 
     expect(result.code).toBeNull();
+  });
+
+  it("does not treat value interpolation identifiers as preserved component selector refs", () => {
+    const source = getValueInterpolationNameCollisionSource();
+    const result = runLeavesOnly(
+      source,
+      pathResolve(join(__dirname, "virtual-leaves-value-interpolation-name-collision.tsx")),
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const\s+Button\s*=\s*styled\.button`/);
+    expect(result.code).toMatch(/function\s+Button\s*\(/);
+    expect(result.code).toMatch(/styles\.button/);
+    expect(result.code).not.toMatch(/const\s+ConvertedBox\s*=\s*styled\.div`/);
   });
 
   it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {
