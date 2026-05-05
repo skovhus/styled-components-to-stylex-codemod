@@ -2,7 +2,7 @@
  * Step: emit wrapper components for eligible styled declarations.
  * Core concepts: intrinsic vs component wrappers and insertion ordering.
  */
-import type { ASTNode } from "jscodeshift";
+import type { ASTNode, JSCodeshift } from "jscodeshift";
 import { DEFAULT_THEME_HOOK } from "../../adapter.js";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
@@ -111,8 +111,34 @@ function resolveThemeHookLocalName(
 function hasValueBinding(ctx: TransformContext, localName: string): boolean {
   const { root, j } = ctx;
   return (
-    root.find(j.Identifier, { name: localName } as any).size() > 0 ||
-    root.find(j.JSXIdentifier, { name: localName } as any).size() > 0
+    hasImportBinding(j, root, localName) ||
+    root.find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any).size() >
+      0 ||
+    root
+      .find(j.FunctionDeclaration, { id: { type: "Identifier", name: localName } } as any)
+      .size() > 0 ||
+    root.find(j.ClassDeclaration, { id: { type: "Identifier", name: localName } } as any).size() > 0
+  );
+}
+
+function hasImportBinding(
+  j: JSCodeshift,
+  root: TransformContext["root"],
+  localName: string,
+): boolean {
+  return (
+    root
+      .find(j.ImportDeclaration)
+      .filter((path: any) => path.node.importKind !== "type")
+      .filter((path: any) =>
+        ((path.node.specifiers ?? []) as any[]).some((specifier: any) => {
+          if (specifier?.importKind === "type") {
+            return false;
+          }
+          return specifier.local?.type === "Identifier" && specifier.local.name === localName;
+        }),
+      )
+      .size() > 0
   );
 }
 
