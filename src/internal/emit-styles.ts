@@ -2,7 +2,7 @@
  * Emits StyleX style objects and required imports into the AST.
  * Core concepts: style object serialization and import management.
  */
-import type { StyledDecl, VariantDimension } from "./transform-types.js";
+import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { lowerFirst } from "./utilities/string-utils.js";
@@ -593,6 +593,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
+  emitLocalDefineVarsSidecars(ctx);
   const programBody = root.get().node.program.body as any[];
   const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
   if (insertNodes.length > 0) {
@@ -1101,4 +1102,46 @@ function tokenizeShorthandValue(value: string): string[] {
   }
 
   return tokens;
+}
+
+function emitLocalDefineVarsSidecars(ctx: TransformContext): void {
+  const j = ctx.j;
+  const vars = [...(ctx.localStylexVars?.values() ?? [])].sort(
+    (a, b) => a.sourceOrder - b.sourceOrder,
+  );
+  if (vars.length === 0) {
+    return;
+  }
+
+  ctx.sidecarFiles ??= [];
+  const groups = groupLocalStylexVars(vars);
+  const declarations = [...groups.entries()]
+    .map(([groupName, refs]) => {
+      const entries = refs
+        .map((ref) => `  ${ref.keyName}: ${JSON.stringify(ref.defaultValue)},`)
+        .join("\n");
+      return `export const ${groupName} = stylex.defineVars({\n${entries}\n});`;
+    })
+    .join("\n\n");
+  ctx.sidecarFiles.push({
+    content: `import * as stylex from "@stylexjs/stylex";\n\n${declarations}\n`,
+  });
+
+  const specifiers = [...groups.keys()].map((groupName) =>
+    j.importSpecifier(j.identifier(groupName)),
+  );
+  insertImportDeclarationNearStylex(
+    ctx.root,
+    j.importDeclaration(specifiers, j.literal(`./${vars[0]?.sidecarFileName ?? "vars.stylex"}`)),
+  );
+}
+
+function groupLocalStylexVars(vars: LocalStylexVarRef[]): Map<string, LocalStylexVarRef[]> {
+  const groups = new Map<string, LocalStylexVarRef[]>();
+  for (const ref of vars) {
+    const refs = groups.get(ref.groupName) ?? [];
+    refs.push(ref);
+    groups.set(ref.groupName, refs);
+  }
+  return groups;
 }

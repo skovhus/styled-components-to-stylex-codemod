@@ -25,7 +25,7 @@ import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
-import type { TransformOptions } from "./transform-types.js";
+import type { LocalStylexVarRef, TransformOptions } from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
@@ -51,6 +51,8 @@ export class TransformContext {
   patternProp: (keyName: string, valueId?: any) => any;
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
   parseExpr: (exprSource: string) => any;
+  localStylexVars: Map<string, LocalStylexVarRef>;
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
@@ -163,6 +165,65 @@ export class TransformContext {
     setUseLogicalProperties(!(adapter.usePhysicalProperties ?? false));
 
     const resolverImports = new Map<string, ImportSpec>();
+    const localStylexVars = new Map<string, LocalStylexVarRef>();
+    const localStylexVarKeyFor = (cssName: string, defaultValue: string): string =>
+      `${cssName}\u0000${defaultValue}`;
+    let nextLocalStylexVarOrder = 0;
+    const getOrCreateLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef => {
+      const mapKey = localStylexVarKeyFor(cssName, defaultValue);
+      const existing = localStylexVars.get(mapKey);
+      if (existing) {
+        return existing;
+      }
+      const rawKey = cssName
+        .slice(2)
+        .split("-")
+        .filter(Boolean)
+        .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
+        .join("");
+      const baseKeyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
+      const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
+      const filePrefix = baseName
+        .split(/[^a-zA-Z0-9_$]+/)
+        .filter(Boolean)
+        .map((part, index) =>
+          index === 0
+            ? part.charAt(0).toLowerCase() + part.slice(1)
+            : part.charAt(0).toUpperCase() + part.slice(1),
+        )
+        .join("");
+      const groupName = `${filePrefix}Variables`;
+      const usedKeyNames = new Set(
+        [...localStylexVars.values()]
+          .filter((ref) => ref.groupName === groupName)
+          .map((ref) => ref.keyName),
+      );
+      let keyName = baseKeyName;
+      let suffix = 1;
+      while (usedKeyNames.has(keyName)) {
+        keyName = `${baseKeyName}${suffix}`;
+        suffix += 1;
+      }
+      const ref = {
+        cssName,
+        groupName,
+        keyName,
+        defaultValue,
+        sourceOrder: nextLocalStylexVarOrder,
+        sidecarFileName: `${baseName}.stylex`,
+      };
+      nextLocalStylexVarOrder += 1;
+      localStylexVars.set(mapKey, ref);
+      return ref;
+    };
+    const getLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef | undefined =>
+      localStylexVars.get(localStylexVarKeyFor(cssName, defaultValue));
     const {
       resolveValueSafe,
       resolveValueDirectionalSafe,
@@ -183,6 +244,9 @@ export class TransformContext {
       filePath: file.path,
       definedVars,
       varsToDrop,
+      localStylexVars,
+      getLocalStylexVar,
+      getOrCreateLocalStylexVar,
       resolveValue: resolveValueSafe,
       addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),
       parseExpr,
@@ -226,6 +290,8 @@ export class TransformContext {
     this.hasChanges = false;
     this.adapter = adapter;
     this.resolverImports = resolverImports;
+    this.localStylexVars = localStylexVars;
+    this.getOrCreateLocalStylexVar = getOrCreateLocalStylexVar;
     this.resolveValueSafe = resolveValueSafe;
     this.resolveValueDirectionalSafe = resolveValueDirectionalSafe;
     this.resolveCallSafe = resolveCallSafe;

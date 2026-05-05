@@ -19,6 +19,20 @@ export interface SidecarFile {
   filePath?: string;
 }
 
+export interface LocalStylexVarRef {
+  cssName: string;
+  groupName: string;
+  keyName: string;
+  defaultValue: string;
+  sourceOrder: number;
+  sidecarFileName: string;
+}
+
+export interface LocalStylexVarsSidecarFile {
+  content: string;
+  importPath: string;
+}
+
 /**
  * Result of the transform including any log entries
  */
@@ -32,6 +46,7 @@ export interface TransformResult {
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */
   transientPropRenames?: TransientPropRenameResult[];
+  localStylexVarsSidecarFile?: LocalStylexVarsSidecarFile;
 }
 
 /** Describes a transient prop rename on an exported component for consumer patching. */
@@ -562,7 +577,12 @@ export type StyledDecl = {
   preserveCssHelperDeclaration?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
+  inlineStyleProps?: Array<{
+    prop: string;
+    expr: ExpressionKind;
+    jsxProp?: string;
+    keyExpr?: ExpressionKind;
+  }>;
   /**
    * Static normal-property values that cannot be emitted through stylex.create()
    * (for example unresolved raw CSS var(...) expressions). Wrapper components use

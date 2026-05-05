@@ -82,7 +82,7 @@ export function emitStyleMerging(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   allowSxProp?: boolean;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
   staticClassNameExpr?: ExpressionKind;
   /** Set to true when the rendered tag is an intrinsic HTML element (lowercase).
    * The sx prop is only valid on intrinsic elements (processed by the StyleX babel plugin). */
@@ -323,7 +323,7 @@ function emitWithoutStylex(args: {
       styleAttr = maybeCastStyleForCustomProps(
         j,
         j.objectExpression([
-          ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+          ...inlineStyleProps.map((p) => inlineStyleProperty(j, p)),
           j.spreadElement(styleId),
         ]),
         inlineStyleProps,
@@ -335,9 +335,7 @@ function emitWithoutStylex(args: {
   } else if (inlineStyleProps.length > 0) {
     styleAttr = maybeCastStyleForCustomProps(
       j,
-      j.objectExpression(
-        inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
-      ),
+      j.objectExpression(inlineStyleProps.map((p) => inlineStyleProperty(j, p))),
       inlineStyleProps,
       emitTypes,
     );
@@ -415,9 +413,7 @@ function emitWithMerger(args: {
           maybeCastStyleForCustomProps(
             j,
             j.objectExpression([
-              ...inlineStyleProps.map((p) =>
-                j.property("init", inlineStylePropKey(j, p.prop), p.expr),
-              ),
+              ...inlineStyleProps.map((p) => inlineStyleProperty(j, p)),
               j.spreadElement(styleId),
             ]),
             inlineStyleProps,
@@ -433,9 +429,7 @@ function emitWithMerger(args: {
       mergerArgs.push(
         maybeCastStyleForCustomProps(
           j,
-          j.objectExpression(
-            inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
-          ),
+          j.objectExpression(inlineStyleProps.map((p) => inlineStyleProperty(j, p))),
           inlineStyleProps,
           emitTypes,
         ),
@@ -548,7 +542,7 @@ function emitVerbosePattern(args: {
   if (allowStyleProp || inlineStyleProps.length > 0) {
     const spreads: any[] = [
       j.spreadElement(j.memberExpression(j.identifier(sxVarName), j.identifier("style"))),
-      ...inlineStyleProps.map((p) => j.property("init", inlineStylePropKey(j, p.prop), p.expr)),
+      ...inlineStyleProps.map((p) => inlineStyleProperty(j, p)),
       ...(allowStyleProp ? [j.spreadElement(styleId)] : []),
     ];
     styleAttr = maybeCastStyleForCustomProps(
@@ -576,6 +570,17 @@ function emitVerbosePattern(args: {
 /** Returns a string literal key for CSS custom properties (--foo), identifier otherwise. */
 function inlineStylePropKey(j: JSCodeshift, prop: string): ExpressionKind {
   return prop.startsWith("--") ? j.literal(prop) : j.identifier(prop);
+}
+
+function inlineStyleProperty(
+  j: JSCodeshift,
+  prop: { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind },
+): ReturnType<JSCodeshift["property"]> {
+  const property = j.property("init", prop.keyExpr ?? inlineStylePropKey(j, prop.prop), prop.expr);
+  if (prop.keyExpr) {
+    (property as { computed?: boolean }).computed = true;
+  }
+  return property;
 }
 
 /** Wraps an object expression with `as React.CSSProperties` when it contains CSS custom properties (TypeScript only). */
