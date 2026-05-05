@@ -1207,10 +1207,12 @@ function findTypeOwningProp(
     return null;
   }
   if (type.type === "TSTypeReference") {
-    for (const param of (type as { typeParameters?: { params?: ASTNode[] } }).typeParameters
-      ?.params ?? []) {
-      if (findTypeOwningProp(emitter, param, propName)) {
-        return type;
+    if (isPropsWithChildrenType(type)) {
+      for (const param of (type as { typeParameters?: { params?: ASTNode[] } }).typeParameters
+        ?.params ?? []) {
+        if (findTypeOwningProp(emitter, param, propName)) {
+          return type;
+        }
       }
     }
     const typeName = resolveTypeNameFromType(type);
@@ -1243,6 +1245,23 @@ function findTypeOwningProp(
   return null;
 }
 
+function isPropsWithChildrenType(type: ASTNode): boolean {
+  if (type.type !== "TSTypeReference") {
+    return false;
+  }
+  const typeName = (type as { typeName?: AstNodeOrQualifiedName }).typeName;
+  if (typeName?.type === "Identifier") {
+    return typeName.name === "PropsWithChildren";
+  }
+  return (
+    typeName?.type === "TSQualifiedName" &&
+    typeName.left.type === "Identifier" &&
+    typeName.left.name === "React" &&
+    typeName.right.type === "Identifier" &&
+    typeName.right.name === "PropsWithChildren"
+  );
+}
+
 function resolveTypeNameFromType(type: ASTNode | null): string | null {
   if (type?.type !== "TSTypeReference") {
     return null;
@@ -1250,3 +1269,11 @@ function resolveTypeNameFromType(type: ASTNode | null): string | null {
   const typeName = (type as { typeName?: { type?: string; name?: string } }).typeName;
   return typeName?.type === "Identifier" ? (typeName.name ?? null) : null;
 }
+
+type AstNodeOrQualifiedName =
+  | (ASTNode & { type: "Identifier"; name?: string })
+  | {
+      type: "TSQualifiedName";
+      left: AstNodeOrQualifiedName;
+      right: AstNodeOrQualifiedName;
+    };

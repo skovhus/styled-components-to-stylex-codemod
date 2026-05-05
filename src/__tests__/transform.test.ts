@@ -5469,6 +5469,49 @@ export const App = () => (
     expect(result.code).toContain("as={forwardedAs}");
   });
 
+  it("should not infer rendered as support from erased generic type arguments", () => {
+    const source = `
+import React from "react";
+import styled from "styled-components";
+
+type BaseProps = {
+  as?: React.ElementType;
+  href?: string;
+  children?: React.ReactNode;
+};
+
+type LinkOnlyProps = Omit<BaseProps, "as">;
+
+const Base = ({ as: Component = "button", ...rest }: BaseProps) => {
+  return <Component {...rest} />;
+};
+
+const LinkOnly = (props: LinkOnlyProps) => {
+  return <Base {...props} />;
+};
+
+const Wrapper = styled(LinkOnly)\`
+  color: red;
+\`;
+
+export const App = () => (
+  <Wrapper forwardedAs="a" href="#">
+    Link
+  </Wrapper>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("forwardedAs?: React.ElementType");
+    expect(result.code).toContain("as={forwardedAs}");
+    expect(result.code).not.toContain('LinkOnlyProps["as"]');
+    expect(result.code).not.toContain("rest.as");
+  });
+
   it("should propagate forwardedAs through multi-level styled(Component) wrapper chains", () => {
     const source = `
 import React from "react";
