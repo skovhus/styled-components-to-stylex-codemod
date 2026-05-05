@@ -1,4 +1,4 @@
-// Preserve this styled component until pseudo-element conditional values can be emitted in a valid StyleX shape.
+// Conditional pseudo-element values must not be emitted in a StyleX shape that the compiler rejects.
 import styled, { css } from "styled-components";
 
 const ExpandableItem = styled.div<{ $expanded?: boolean }>`

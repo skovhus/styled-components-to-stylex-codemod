@@ -171,7 +171,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
   };
 
-  return (d: any, pseudos?: string[] | null): boolean => {
+  return (d: any, pseudos?: string[] | null, pseudoElement?: string | null): boolean => {
     if (d.value.kind !== "interpolated") {
       return false;
     }
@@ -194,6 +194,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const paramName = bindings.kind === "simple" ? bindings.paramName : null;
 
     const { parseChainedTestInfo } = createPropTestHelpers(bindings);
+
+    const bailPseudoElementConditional = (): true => {
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: conditional css block inside pseudo-element selector",
+        loc: getNodeLocStart(expr) ?? decl.loc,
+        context: { selector: pseudoElement },
+      });
+      markBail();
+      return true;
+    };
 
     const readReturnExpr = (stmt: ASTNode | null | undefined): ExpressionKind | null => {
       if (!stmt || typeof stmt !== "object") {
@@ -609,6 +620,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     // Handle LogicalExpression: props.$x && css`...` or chained: props.$x && props.$y && css`...`
     const body = expr.body;
     if (body?.type === "LogicalExpression" && body.operator === "&&") {
+      if (
+        pseudoElement &&
+        (isCssHelperTaggedTemplate(body.right) ||
+          body.right?.type === "TemplateLiteral" ||
+          body.right?.type === "StringLiteral" ||
+          (body.right?.type === "Literal" && typeof body.right.value === "string"))
+      ) {
+        return bailPseudoElementConditional();
+      }
       // Use parseChainedTestInfo to handle both simple and chained && conditions
       const testInfo = parseChainedTestInfo(body.left);
       if (!testInfo) {
@@ -1044,6 +1064,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return false;
     }
 
+    if (pseudoElement) {
+      return bailPseudoElementConditional();
+    }
+
     const testInfo = parseChainedTestInfo(conditional.test);
 
     // Handle block-level theme conditionals (e.g., props.theme.isDark ? "color: white;" : "color: black;")
@@ -1087,7 +1111,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return true;
     }
 
-    // Inside pseudo selectors, only theme conditionals are handled here.
+    // Inside pseudo-class selectors, only theme conditionals are handled here.
     // Non-theme cases (call expressions, css blocks, template literals) fall
     // through to the existing pseudo-aware resolution paths.
     if (pseudos?.length) {

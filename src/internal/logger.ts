@@ -81,6 +81,7 @@ export type WarningType =
   | "Unsupported selector: descendant pseudo selector (space before pseudo)"
   | "Unsupported selector: adjacent sibling combinator"
   | "Unsupported selector: descendant/child/sibling selector"
+  | "Unsupported selector: conditional css block inside pseudo-element selector"
   | "Unsupported selector: interpolated pseudo selector"
   | "Unsupported selector: sibling combinator"
   | "Unsupported selector: unresolved interpolation in sibling selector"

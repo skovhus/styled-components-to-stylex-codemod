@@ -33,13 +33,15 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
 
+const PRESERVED_FIXTURES = new Set(["selector-pseudoElementConditionalValue"]);
+
 /**
  * Fixtures that intentionally test partial-file transforms: at least one styled
  * declaration cannot be transformed and remains as `styled\`...\`` in the output,
  * so the `styled` default import must be preserved.
  */
 function isPartialFixture(name: string): boolean {
-  return name.startsWith("partial-");
+  return name.startsWith("partial-") || PRESERVED_FIXTURES.has(name);
 }
 
 function styledComponentsDisallowedImports(name: string): string[] {
@@ -1661,7 +1663,7 @@ describe("transform", () => {
     // If it fails, show any warnings to help diagnose the issue (e.g., adapter not resolving)
     const normalizedResult = await normalizeCode(result, outputPath);
     const normalizedInput = await normalizeCode(input, inputPath);
-    if (normalizedResult === normalizedInput) {
+    if (normalizedResult === normalizedInput && !PRESERVED_FIXTURES.has(name)) {
       const warningsInfo = diagnostics.warnings.length
         ? `\n\nTransform warnings that may explain the failure:\n${diagnostics.warnings.map((w) => `  - ${w.type}`).join("\n")}`
         : "";
