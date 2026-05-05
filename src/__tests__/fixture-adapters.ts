@@ -280,12 +280,6 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
-      if (name === "--pointer" && ctx.cssProperty === "cursor") {
-        return {
-          expr: JSON.stringify("pointer"),
-          imports: [],
-        };
-      }
       const f = fontWeightVarsMap[name];
       if (f) {
         return {
