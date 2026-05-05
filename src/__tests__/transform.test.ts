@@ -381,6 +381,39 @@ export const App = () => (
 `;
 }
 
+function getPreservedComponentSelectorWithBaseResolverImportSource(): string {
+  return `
+import styled from "styled-components";
+import { Flex } from "./lib/inline-base-flex";
+
+const ReferencedChild = styled(Flex).attrs({ direction: "row" })\`
+  padding: 4px;
+\`;
+
+const ConvertedBox = styled.div\`
+  margin: 4px;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+    <ConvertedBox>box</ConvertedBox>
+  </PreservedContainer>
+);
+`;
+}
+
 function getValueInterpolationNameCollisionSource(): string {
   return `
 import styled from "styled-components";
@@ -665,6 +698,19 @@ export const App = () => (
     expect(result.code).not.toContain("./tokens.stylex");
     expect(result.code).not.toContain("$colors");
     expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\.span`/);
+  });
+
+  it("does not emit base resolver imports from newly preserved component selector targets", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithBaseResolverImportSource(),
+      "partial-componentSelectorBaseResolverImport.input.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toContain("./lib/mixins.stylex");
+    expect(result.code).not.toContain("mixins.flex");
+    expect(result.code).toMatch(/const\s+ReferencedChild\s*=\s*styled\(Flex\)\.attrs/);
+    expect(result.code).toMatch(/sx=\{styles\.convertedBox\}/);
   });
 
   it("preserves shared mixin style keys when one of the mixin's consumers is skipped", () => {

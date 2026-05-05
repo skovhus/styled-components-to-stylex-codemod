@@ -216,6 +216,7 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       continue;
     }
 
+    const resolverImportKeysBeforeInline = new Set(ctx.resolverImports.keys());
     inlineResolvedBaseComponent({
       ctx,
       decl,
@@ -232,6 +233,21 @@ function applyBaseComponentResolution(ctx: TransformContext, styledDecls: Styled
       staticBooleanVariants: variantOutcome.staticBooleanVariants,
       callSiteCombinedStyles: variantOutcome.callSiteCombinedStyles,
     });
+    recordResolverImportsAddedToDecl(decl, ctx.resolverImports, resolverImportKeysBeforeInline);
+  }
+}
+
+function recordResolverImportsAddedToDecl(
+  decl: StyledDecl,
+  resolverImports: Map<string, unknown>,
+  beforeKeys: Set<string>,
+): void {
+  for (const key of resolverImports.keys()) {
+    if (beforeKeys.has(key)) {
+      continue;
+    }
+    decl.resolverImportKeys ??= new Set<string>();
+    decl.resolverImportKeys.add(key);
   }
 }
 

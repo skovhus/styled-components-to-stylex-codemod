@@ -123,8 +123,6 @@ type LowerRulesResult = {
 
 function lowerRules(ctx: TransformContext): LowerRulesResult {
   const state = createLowerRulesState(ctx);
-  const resolverImportKeysByDecl = new Map<string, Set<string>>();
-
   // Pre-scan all declarations for inline @keyframes definitions.
   // These must be registered before rule processing so animation properties
   // can reference them.
@@ -179,7 +177,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     if (outcome === "bail") {
       break;
     }
-    recordAddedResolverImports(state, snapshot.resolverImportKeys, decl, resolverImportKeysByDecl);
+    recordAddedResolverImports(state, snapshot.resolverImportKeys, decl);
   }
 
   if (!state.bail) {
@@ -206,11 +204,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
     pruneSkippedDeclsFromState(state);
     preservedReferencedStyledDecls = collectPreservedReferencedStyledDecls(state.styledDecls);
     prunePreservedReferencedDeclsFromState(state, preservedReferencedStyledDecls);
-    prunePreservedReferencedResolverImports(
-      state,
-      preservedReferencedStyledDecls,
-      resolverImportKeysByDecl,
-    );
+    prunePreservedReferencedResolverImports(state, preservedReferencedStyledDecls);
   }
 
   // Determine which parent style keys actually need markers (defaultMarker or
@@ -507,7 +501,6 @@ function recordAddedResolverImports(
   state: LowerRulesState,
   beforeKeys: Set<string>,
   decl: StyledDecl,
-  resolverImportKeysByDecl: Map<string, Set<string>>,
 ): void {
   const addedKeys = new Set<string>();
   for (const key of state.resolverImports.keys()) {
@@ -516,14 +509,13 @@ function recordAddedResolverImports(
     }
   }
   if (addedKeys.size > 0) {
-    resolverImportKeysByDecl.set(decl.localName, addedKeys);
+    appendResolverImportKeys(decl, addedKeys);
   }
 }
 
 function prunePreservedReferencedResolverImports(
   state: LowerRulesState,
   preservedNames: Set<string>,
-  resolverImportKeysByDecl: Map<string, Set<string>>,
 ): void {
   if (preservedNames.size === 0) {
     return;
@@ -531,8 +523,13 @@ function prunePreservedReferencedResolverImports(
 
   const keysToDelete = new Set<string>();
   const keysToKeep = new Set<string>();
-  for (const [localName, importKeys] of resolverImportKeysByDecl) {
-    const target = preservedNames.has(localName) ? keysToDelete : keysToKeep;
+  for (const decl of state.styledDecls) {
+    const importKeys = decl.resolverImportKeys;
+    if (!importKeys || importKeys.size === 0) {
+      continue;
+    }
+    const target =
+      preservedNames.has(decl.localName) || decl.skipTransform ? keysToDelete : keysToKeep;
     for (const key of importKeys) {
       target.add(key);
     }
@@ -542,6 +539,15 @@ function prunePreservedReferencedResolverImports(
     if (!keysToKeep.has(key)) {
       state.resolverImports.delete(key);
     }
+  }
+}
+
+function appendResolverImportKeys(decl: StyledDecl, keys: Set<string>): void {
+  if (!decl.resolverImportKeys) {
+    decl.resolverImportKeys = new Set<string>();
+  }
+  for (const key of keys) {
+    decl.resolverImportKeys.add(key);
   }
 }
 
