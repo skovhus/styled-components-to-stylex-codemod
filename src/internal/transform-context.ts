@@ -181,7 +181,14 @@ export class TransformContext {
         .filter(Boolean)
         .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
         .join("");
-      const keyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
+      const baseKeyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
+      const usedKeyNames = new Set([...localStylexVars.values()].map((ref) => ref.keyName));
+      let keyName = baseKeyName;
+      let suffix = 1;
+      while (usedKeyNames.has(keyName)) {
+        keyName = `${baseKeyName}${suffix}`;
+        suffix += 1;
+      }
       const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
       const filePrefix = baseName
         .split(/[^a-zA-Z0-9_$]+/)

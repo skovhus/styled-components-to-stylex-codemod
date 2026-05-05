@@ -11,7 +11,17 @@ type TaggedSpanProps = React.PropsWithChildren<{
 // (the resolved StyleX token supersedes the runtime fallback).
 function TaggedSpan(props: TaggedSpanProps) {
   const { children, tone } = props;
-  return <span sx={[styles.taggedSpan, styles.taggedSpanBackgroundColor(props)]}>{children}</span>;
+  return (
+    <span
+      sx={[
+        styles.taggedSpan,
+        styles.taggedSpanBackgroundColor(props),
+        styles.taggedSpanOutline(props),
+      ]}
+    >
+      {children}
+    </span>
+  );
 }
 
 export const App = () => (
@@ -55,5 +65,8 @@ const styles = stylex.create({
   },
   taggedSpanBackgroundColor: (props: TaggedSpanProps) => ({
     backgroundColor: vars.colorSecondary,
+  }),
+  taggedSpanOutline: (props) => ({
+    outline: `2px solid ${vars.colorSecondary}`,
   }),
 });

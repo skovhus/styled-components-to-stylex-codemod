@@ -8,9 +8,18 @@ const WidthMenu = styled.div<{ $menuWidth?: number }>`
   background: #fef3c7;
 `;
 
+const CollisionBox = styled.div`
+  --foo-bar: 100px;
+  --fooBar: 80px;
+  width: var(--foo-bar, 100px);
+  height: var(--fooBar, 80px);
+  background: #dbeafe;
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <WidthMenu>Default width</WidthMenu>
     <WidthMenu $menuWidth={320}>Custom width</WidthMenu>
+    <CollisionBox>Collision names</CollisionBox>
   </div>
 );

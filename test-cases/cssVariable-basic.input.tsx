@@ -32,6 +32,7 @@ const Text = styled.p`
 const TaggedSpan = styled.span<{ $tone: string }>`
   color: var(--color-primary, "tomato");
   background: ${(props) => `var(--color-secondary, ${props.$tone})`};
+  outline: 2px solid ${(props) => `var(--color-secondary)`};
 `;
 
 export const App = () => (

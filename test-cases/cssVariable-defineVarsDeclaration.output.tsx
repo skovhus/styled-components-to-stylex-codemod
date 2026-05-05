@@ -31,6 +31,7 @@ export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <WidthMenu>Default width</WidthMenu>
     <WidthMenu menuWidth={320}>Custom width</WidthMenu>
+    <div sx={styles.collisionBox}>Collision names</div>
   </div>
 );
 
@@ -39,5 +40,12 @@ const styles = stylex.create({
     width: cssVariableDefineVarsDeclarationInputVariables.menuWidth,
     padding: 8,
     backgroundColor: "#fef3c7",
+  },
+  collisionBox: {
+    "--foo-bar": "100px",
+    "--fooBar": "80px",
+    width: cssVariableDefineVarsDeclarationInputVariables.fooBar,
+    height: cssVariableDefineVarsDeclarationInputVariables.fooBar1,
+    backgroundColor: "#dbeafe",
   },
 });

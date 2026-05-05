@@ -258,6 +258,14 @@ function rewriteCssVarsInAstNodeAndMaybeSimplify(
   node: { type: string },
   ctx: CssVarRewriteContext,
 ): ExpressionKind | null {
+  if (node.type === "StringLiteral" || node.type === "Literal") {
+    const literal = node as { value?: unknown };
+    if (typeof literal.value !== "string") {
+      return null;
+    }
+    const rewritten = rewriteCssVarsInString({ raw: literal.value, ...ctx });
+    return rewritten === literal.value ? null : (rewritten as ExpressionKind);
+  }
   if (node.type === "TemplateLiteral") {
     const tpl = node as TemplateLiteralNode;
     const modified = rewriteCssVarsInTemplateLiteral(tpl, ctx);
@@ -332,8 +340,7 @@ function rewriteCssVarsInTemplateLiteral(
     }
   }
 
-  const allCalls = findCssVarCallsInString(combined);
-  const calls = allCalls.filter((call) => call.fallback);
+  const calls = findCssVarCallsInString(combined);
   if (calls.length === 0) {
     return false;
   }
