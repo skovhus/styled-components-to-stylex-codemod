@@ -1258,8 +1258,9 @@ function collectTopLevelBindingNames(
 ): Set<string> {
   const names = new Set<string>();
   root.find(j.Identifier).forEach((path) => {
-    if (typeof path.node.name === "string") {
-      names.add(path.node.name);
+    const node = path.node as { name?: unknown };
+    if (typeof node.name === "string") {
+      names.add(node.name);
     }
   });
   return names;
