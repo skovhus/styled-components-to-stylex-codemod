@@ -1,1 +1,0 @@
-import"./chunk-jRWAZmH_.js";import{t as e}from"./stylex-vFXG5bjz.js";import{f as t,p as n}from"./index-xhxDhZ8Y.js";import{t as r}from"./colorMixins.stylex-g_e7GgvC.js";n();var i=t();function a(t){let{children:n,colors:a}=t;return(0,i.jsx)(`div`,{...e(r.backgroundColor[a]),children:n})}var o=()=>(0,i.jsx)(a,{colors:`labelBase`,children:`Hello`});export{o as App};
