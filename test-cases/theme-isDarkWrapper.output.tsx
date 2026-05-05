@@ -2,7 +2,6 @@
 import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import { $colors } from "./tokens.stylex";
 
 function InnerList(
@@ -11,21 +10,16 @@ function InnerList(
   return <div role="tablist" {...props} />;
 }
 
-function StyledList(props: React.ComponentPropsWithRef<typeof InnerList>) {
-  const { className, children, style, ...rest } = props;
+function StyledList(
+  props: Omit<React.ComponentPropsWithRef<typeof InnerList>, "className" | "style">,
+) {
   const theme = useTheme();
 
   return (
     <InnerList
-      {...rest}
-      {...mergedSx(
-        [styles.list, theme.isDark ? styles.listDark : styles.listLight],
-        className,
-        style,
-      )}
-    >
-      {children}
-    </InnerList>
+      {...props}
+      {...stylex.props(styles.list, theme.isDark ? styles.listDark : styles.listLight)}
+    />
   );
 }
 

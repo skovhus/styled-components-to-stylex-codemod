@@ -29,10 +29,12 @@ function DecorativeBadgeBase(props: DecorativeBadgeProps) {
   return <strong data-tone={tone}>{children}</strong>;
 }
 
-export function StatusBadge(props: React.ComponentPropsWithRef<typeof BadgeBase>) {
-  const { className, children, style, ...rest } = props;
+export function StatusBadge(
+  props: Omit<React.ComponentPropsWithRef<typeof BadgeBase>, "className">,
+) {
+  const { children, style, ...rest } = props;
   return (
-    <BadgeBase {...rest} {...mergedSx(styles.statusBadge, className, style)}>
+    <BadgeBase {...rest} {...mergedSx(styles.statusBadge, undefined, style)}>
       {children}
     </BadgeBase>
   );

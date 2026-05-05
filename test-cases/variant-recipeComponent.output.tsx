@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 // Test case for component wrappers with namespace variant dimensions
 // (boolean prop overlapping with enum prop on the same CSS properties)
@@ -19,18 +18,17 @@ function BaseButton(props: BaseButtonProps) {
 type ButtonProps = {
   color?: "primary" | "secondary";
   disabled?: boolean;
-} & React.ComponentPropsWithRef<typeof BaseButton>;
+} & Omit<React.ComponentPropsWithRef<typeof BaseButton>, "className" | "style">;
 
 function Button(props: ButtonProps) {
-  const { className, children, style, color = "secondary", disabled, ...rest } = props;
+  const { children, color = "secondary", disabled, ...rest } = props;
   return (
     <BaseButton
       disabled={disabled}
       {...rest}
-      {...mergedSx(
-        [styles.button, disabled ? colorDisabledVariants[color] : colorEnabledVariants[color]],
-        className,
-        style,
+      {...stylex.props(
+        styles.button,
+        disabled ? colorDisabledVariants[color] : colorEnabledVariants[color],
       )}
     >
       {children}
