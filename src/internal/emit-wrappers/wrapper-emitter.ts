@@ -43,6 +43,7 @@ type WrapperEmitterArgs = {
   root: Collection<ASTNode>;
   j: JSCodeshift;
   filePath: string;
+  localSource: string;
   wrapperDecls: StyledDecl[];
   wrapperNames: Set<string>;
   patternProp: (keyName: string, valueId?: ASTNode) => Property;
@@ -78,6 +79,7 @@ export class WrapperEmitter {
   readonly root: Collection<ASTNode>;
   readonly j: JSCodeshift;
   readonly filePath: string;
+  readonly localSource: string;
   readonly wrapperDecls: StyledDecl[];
   readonly wrapperNames: Set<string>;
   readonly patternProp: (keyName: string, valueId?: ASTNode) => Property;
@@ -115,6 +117,7 @@ export class WrapperEmitter {
     this.root = args.root;
     this.j = args.j;
     this.filePath = args.filePath;
+    this.localSource = args.localSource;
     this.wrapperDecls = args.wrapperDecls;
     this.wrapperNames = args.wrapperNames;
     this.patternProp = args.patternProp;
@@ -150,6 +153,7 @@ export class WrapperEmitter {
       importMap: this.importMap,
       componentLocalName,
       filePath: this.filePath,
+      localSource: this.localSource,
       sourceOverrides: this.sourceOverrides,
     });
   }

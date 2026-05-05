@@ -6,7 +6,8 @@
  * Two signals are consulted, in order:
  *   1. The adapter `wrappedComponentInterface` hook — explicit override.
  *   2. Static auto-detection of an `sx?: …` member on the imported
- *      component's props type.
+ *      component's props type, or on a same-file component's props type when
+ *      the current source is provided.
  *
  * Used by both the wrapper-emitter (full wrapper components) and the
  * JSX-rewrite step (inlined re-styles).
@@ -22,15 +23,18 @@ export function isWrappedComponentSxAware(args: {
   importMap: ReadonlyMap<string, { importedName: string; source: ImportSource }> | undefined;
   componentLocalName: string;
   filePath: string;
+  localSource?: string;
   sourceOverrides?: ReadonlyMap<string, string>;
 }): boolean {
-  const { adapter, importMap, componentLocalName, filePath, sourceOverrides } = args;
-  if (!adapter.useSxProp || !importMap) {
+  const { adapter, importMap, componentLocalName, filePath, localSource, sourceOverrides } = args;
+  if (!adapter.useSxProp) {
     return false;
   }
-  const importInfo = importMap.get(componentLocalName);
+
+  const importInfo = importMap?.get(componentLocalName);
   if (!importInfo) {
-    return false;
+    const source = readSourceOverride(filePath, sourceOverrides) ?? localSource;
+    return source ? computeDetectionFromSource(source, componentLocalName) : false;
   }
 
   // 1) Adapter override always wins when it returns a value.
@@ -54,8 +58,8 @@ export function isWrappedComponentSxAware(args: {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Auto-detection: check whether `componentName` exported from `absolutePath`
-// declares an `sx?` member on its props type.
+// Auto-detection: check whether `componentName` declares an `sx?` member on
+// its props type.
 // ────────────────────────────────────────────────────────────────────────────
 
 const FILE_EXTENSIONS = ["", ".tsx", ".ts", ".jsx", ".js"];
@@ -130,7 +134,7 @@ function computeDetectionFromSource(source: string, componentName: string): bool
     return false;
   }
 
-  const propsTypeNode = findExportedComponentPropsType(j, root, componentName);
+  const propsTypeNode = findComponentPropsType(root, componentName);
   if (!propsTypeNode) {
     return false;
   }
@@ -168,15 +172,14 @@ function sourcePathCandidates(absolutePath: string): string[] {
 }
 
 /**
- * Locate `componentName` exported from `root` and return the TS type
- * annotation of its first parameter, or null.
+ * Locate a top-level `componentName` declaration in `root` and return the TS
+ * type annotation of its first parameter, or null.
  *
  * Handles:
  *   - `export function Name(props: T)` and `export default function Name(...)`.
  *   - `export const Name = (props: T) => …` / arrow function variants.
  */
-function findExportedComponentPropsType(
-  j: JSCodeshift,
+function findComponentPropsType(
   root: ReturnType<JSCodeshift>,
   componentName: string,
 ): ASTNode | null {
@@ -193,26 +196,36 @@ function findExportedComponentPropsType(
     }
   };
 
-  root
-    .find(j.FunctionDeclaration)
-    .filter((p) => {
-      const id = p.node.id as { name?: string } | null | undefined;
-      return id?.name === componentName;
-    })
-    .forEach((p) => recordFromParam(p.node.params));
-
-  root
-    .find(j.VariableDeclarator)
-    .filter((p) => {
-      const id = p.node.id as { type?: string; name?: string };
-      return id.type === "Identifier" && id.name === componentName;
-    })
-    .forEach((p) => {
-      const init = p.node.init as { type?: string; params?: unknown } | null | undefined;
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration" || statement.type === "ExportDefaultDeclaration"
+        ? statement.declaration
+        : statement;
+    if (!declaration) {
+      continue;
+    }
+    if (declaration.type === "FunctionDeclaration") {
+      const id = declaration.id as { name?: string } | null | undefined;
+      if (id?.name === componentName) {
+        recordFromParam(declaration.params);
+      }
+      continue;
+    }
+    if (declaration.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of declaration.declarations) {
+      const id = declarator.id as { type?: string; name?: string };
+      if (id.type !== "Identifier" || id.name !== componentName) {
+        continue;
+      }
+      const init = declarator.init as { type?: string; params?: unknown } | null | undefined;
       if (init && (init.type === "ArrowFunctionExpression" || init.type === "FunctionExpression")) {
         recordFromParam(init.params);
       }
-    });
+    }
+  }
 
   return propsType;
 }

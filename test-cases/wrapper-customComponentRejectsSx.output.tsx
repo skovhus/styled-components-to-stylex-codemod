@@ -1,3 +1,4 @@
+// Custom components that do not accept sx must receive className/style rather than an sx prop.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
@@ -19,7 +20,7 @@ function PlainField(props: PlainFieldProps) {
   );
 }
 
-function InlineField(props: PlainFieldProps) {
+function InlineField(props: React.ComponentPropsWithRef<typeof PlainField>) {
   const { className, style, ...rest } = props;
   return <PlainField {...rest} {...mergedSx(styles.inlineField, className, style)} />;
 }

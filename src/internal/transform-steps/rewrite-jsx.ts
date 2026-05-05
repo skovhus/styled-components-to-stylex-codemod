@@ -825,6 +825,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             importMap: ctx.importMap,
             componentLocalName: finalTag,
             filePath: ctx.file.path,
+            localSource: ctx.file.source,
             sourceOverrides: ctx.options.transformedFileSources,
           });
 

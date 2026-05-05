@@ -734,6 +734,71 @@ export function Foo(props: { id?: string } & { sx?: stylex.StyleXStyles }) { ret
       }),
     ).toBe(false);
   });
+
+  it("detects sx on a same-file local component when source is provided", () => {
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map(),
+        componentLocalName: "LocalThing",
+        filePath: "/anywhere/consumer.tsx",
+        localSource: `
+import * as stylex from "@stylexjs/stylex";
+
+function LocalThing(props: { sx?: stylex.StyleXStyles; label: string }) {
+  return null as any;
+}
+`,
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for a same-file local component without sx", () => {
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map(),
+        componentLocalName: "PlainField",
+        filePath: "/anywhere/consumer.tsx",
+        localSource: `
+type PlainFieldProps = {
+  className?: string;
+  style?: React.CSSProperties;
+  label: string;
+};
+
+function PlainField(props: PlainFieldProps) {
+  return null as any;
+}
+`,
+      }),
+    ).toBe(false);
+  });
+
+  it("ignores nested same-file declarations that shadow the wrapped component name", () => {
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map(),
+        componentLocalName: "PlainField",
+        filePath: "/anywhere/consumer.tsx",
+        localSource: `
+import * as stylex from "@stylexjs/stylex";
+
+function Example() {
+  function PlainField(props: { sx?: stylex.StyleXStyles }) {
+    return null as any;
+  }
+  return <PlainField sx={{}} />;
+}
+
+function PlainField(props: { className?: string; style?: React.CSSProperties }) {
+  return null as any;
+}
+`,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("isWrappedComponentSxAware — caching", () => {
