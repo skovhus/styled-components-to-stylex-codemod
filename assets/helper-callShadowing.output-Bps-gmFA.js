@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import{f as e,p as t}from"./index-CZO7-ssw.js";import"./helpers-DoWKJShV.js";t();var n=e();function r(){let e=e=>`#${e}`;function t(t){let{className:r,children:i,style:a}=t;return(0,n.jsx)(`div`,{className:r,style:{backgroundColor:e(`ff0000`),...a},children:i})}return t}var i=()=>(0,n.jsx)(r(),{children:`Colored text`});export{i as App};
