@@ -5,7 +5,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { ImportSpec, ResolveValueContext, ResolveValueResult } from "../adapter.js";
 import { findCssVarCallsInString, resolveCssVarCall, rewriteCssVarsInString } from "./css-vars.js";
-import type { ComputedKeyEntry } from "./transform/helpers.js";
+import { SOURCE_CSS_PROPERTIES_KEY, type ComputedKeyEntry } from "./transform/helpers.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
 export function rewriteCssVarsInStyleObject(
@@ -41,6 +41,7 @@ type CssVarRewriteContext = {
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
   j: JSCodeshift;
+  cssProperty?: string;
 };
 
 type TemplateElementNode = {
@@ -55,10 +56,13 @@ type TemplateLiteralNode = {
   expressions: ExpressionKind[];
 };
 
+type OriginalCssProperties = Record<string, string>;
+
 function rewriteCssVarsInStyleObjectImpl(
   obj: Record<string, unknown>,
   ctx: CssVarRewriteContext,
 ): void {
+  const originalCssProperties = readOriginalCssProperties(obj);
   for (const [k, v] of Object.entries(obj)) {
     if (k.startsWith("--")) {
       const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
@@ -66,6 +70,7 @@ function rewriteCssVarsInStyleObjectImpl(
         kind: "cssVariable",
         name: k,
         filePath: ctx.filePath,
+        ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
         ...(typeof v === "string" ? { definedValue: v } : {}),
       });
 
@@ -103,7 +108,10 @@ function rewriteCssVarsInStyleObjectImpl(
       continue;
     }
 
-    obj[k] = rewriteCssVarsInStyleObjectValue(v, ctx);
+    obj[k] = rewriteCssVarsInStyleObjectValue(v, {
+      ...ctx,
+      cssProperty: getCssVariableValueProperty(k, ctx, originalCssProperties),
+    });
   }
 }
 
@@ -121,6 +129,25 @@ function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteCont
   }
 
   return value;
+}
+
+function readOriginalCssProperties(obj: Record<string, unknown>): OriginalCssProperties {
+  const raw = obj[SOURCE_CSS_PROPERTIES_KEY];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || isAstNode(raw)) {
+    return {};
+  }
+  return raw as OriginalCssProperties;
+}
+
+function getCssVariableValueProperty(
+  key: string,
+  ctx: CssVarRewriteContext,
+  originalCssProperties: OriginalCssProperties,
+): string | undefined {
+  if (key === "default" || key.startsWith(":") || key.startsWith("@") || key.startsWith("--")) {
+    return ctx.cssProperty;
+  }
+  return originalCssProperties[key] ?? key;
 }
 
 /**
@@ -268,6 +295,7 @@ function rewriteCssVarsInTemplateLiteral(
       definedValue: ctx.definedVars.get(call.name),
       filePath: ctx.filePath,
       resolveValue: ctx.resolveValue,
+      ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
     });
     if (!res) {
       continue;

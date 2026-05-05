@@ -59,6 +59,8 @@ export type ComputedKeyEntry = {
   prepend?: boolean;
 };
 
+export const SOURCE_CSS_PROPERTIES_KEY = "__sourceCssProperties";
+
 export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   const spreadsRaw = obj.__spreads;
   const propCommentsRaw = (obj as any).__propComments;
@@ -99,6 +101,9 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
       continue;
     }
     if (key === "__computedKeys") {
+      continue;
+    }
+    if (key === SOURCE_CSS_PROPERTIES_KEY) {
       continue;
     }
     const keyNode =

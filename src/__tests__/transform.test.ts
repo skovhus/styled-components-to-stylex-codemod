@@ -7135,4 +7135,83 @@ export const App = () => (
     // that holds the local definition, not just the base styleObj.
     expect(result.code).not.toContain("--variant-color");
   });
+
+  it("should pass the owning CSS property when resolving var() values", () => {
+    const source = `
+import styled from "styled-components";
+
+const ClickTarget = styled.button\`
+  cursor: var(--pointer);
+\`;
+
+export const App = () => <ClickTarget>Click target</ClickTarget>;
+`;
+
+    const cssPropertiesSeen: Array<string | undefined> = [];
+    const recordingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--pointer") {
+          cssPropertiesSeen.push(ctx.cssProperty);
+          return undefined;
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: recordingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(cssPropertiesSeen).toEqual(["cursor"]);
+    expect(result.code).toContain('cursor: "var(--pointer)"');
+  });
+
+  it("should pass the original CSS property when resolving var() values from mapped properties", () => {
+    const source = `
+import styled from "styled-components";
+
+const Panel = styled.section\`
+  background-color: var(--surface);
+\`;
+
+export const App = () => <Panel>Panel</Panel>;
+`;
+
+    const cssPropertiesSeen: Array<string | undefined> = [];
+    const recordingAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "cssVariable" && ctx.name === "--surface") {
+          cssPropertiesSeen.push(ctx.cssProperty);
+          if (ctx.cssProperty === "background-color") {
+            return {
+              expr: "vars.surface",
+              imports: [
+                {
+                  from: { kind: "specifier" as const, value: "./vars.stylex" },
+                  names: [{ imported: "vars" }],
+                },
+              ],
+            };
+          }
+          return undefined;
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: recordingAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(cssPropertiesSeen).toEqual(["background-color"]);
+    expect(result.code).toContain("backgroundColor: vars.surface");
+  });
 });

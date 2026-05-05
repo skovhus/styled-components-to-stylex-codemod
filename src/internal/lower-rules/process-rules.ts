@@ -25,6 +25,7 @@ import {
   getNodeLocStart,
 } from "../utilities/jscodeshift-utils.js";
 import {
+  SOURCE_CSS_PROPERTIES_KEY,
   cssValueToJs,
   literalToAst,
   toStyleKey,
@@ -1161,12 +1162,28 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       prop: string,
       value: unknown,
       commentSource: { leading?: string; trailingLine?: string } | null,
+      sourceCssProperty?: string,
     ): void => {
+      const noteSourceCssProperty = (target: Record<string, unknown>): void => {
+        if (sourceCssProperty) {
+          if (!Object.hasOwn(target, SOURCE_CSS_PROPERTIES_KEY)) {
+            Object.defineProperty(target, SOURCE_CSS_PROPERTIES_KEY, {
+              value: {},
+              enumerable: false,
+              configurable: true,
+              writable: true,
+            });
+          }
+          const sourceProperties = target[SOURCE_CSS_PROPERTIES_KEY] as Record<string, string>;
+          sourceProperties[prop] = sourceCssProperty;
+        }
+      };
       if (attrTarget) {
         if (attrPseudoElement) {
           const nested = (attrTarget[attrPseudoElement] as any) ?? {};
           nested[prop] = value;
           attrTarget[attrPseudoElement] = nested;
+          noteSourceCssProperty(nested);
           if (commentSource) {
             addPropComments(nested, prop, {
               leading: commentSource.leading,
@@ -1176,6 +1193,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           return;
         }
         attrTarget[prop] = value;
+        noteSourceCssProperty(attrTarget);
         if (commentSource) {
           addPropComments(attrTarget, prop, {
             leading: commentSource.leading,
@@ -1194,6 +1212,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (media && pseudos?.length) {
         perPropPseudo[prop] ??= {};
         const existing = perPropPseudo[prop]!;
+        noteSourceCssProperty(existing);
         if (!("default" in existing)) {
           const existingVal = (styleObj as Record<string, unknown>)[prop];
           if (existingVal !== undefined) {
@@ -1274,6 +1293,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (media) {
         perPropMedia[prop] ??= {};
         const existing = perPropMedia[prop]!;
+        noteSourceCssProperty(existing);
         if (!("default" in existing)) {
           const existingVal = (styleObj as Record<string, unknown>)[prop];
           if (existingVal !== undefined) {
@@ -1301,6 +1321,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (pseudos?.length && pseudoElement) {
         nestedSelectors[pseudoElement] ??= {};
         const peTarget = nestedSelectors[pseudoElement]!;
+        noteSourceCssProperty(peTarget);
         const existingVal = peTarget[prop];
         // Check if the existing value is already a pseudo map (plain object with "default" key),
         // not an AST node or other object. AST nodes should be wrapped in a new pseudo map.
@@ -1327,6 +1348,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (pseudos?.length) {
         perPropPseudo[prop] ??= {};
         const existing = perPropPseudo[prop]!;
+        noteSourceCssProperty(existing);
         if (!("default" in existing)) {
           const existingVal = (styleObj as Record<string, unknown>)[prop];
           if (existingVal !== undefined) {
@@ -1350,6 +1372,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const pseudoSelector = nestedSelectors[pe];
           if (pseudoSelector) {
             pseudoSelector[prop] = value;
+            noteSourceCssProperty(pseudoSelector);
             if (commentSource) {
               addPropComments(pseudoSelector, prop, {
                 leading: commentSource.leading,
@@ -1365,6 +1388,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // resolvedStyles helpers, preserving CSS cascade order.
       const target = ctx.getBaseStyleTarget();
       target[prop] = value;
+      noteSourceCssProperty(target);
       if (commentSource) {
         addPropComments(target, prop, {
           leading: commentSource.leading,

@@ -28,7 +28,12 @@ type RuleDeclarationContext = {
   pseudoElement: string | null;
   attrTarget: Record<string, unknown> | null;
   resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
-  applyResolvedPropValue: (prop: string, value: unknown, commentSource: CommentSource) => void;
+  applyResolvedPropValue: (
+    prop: string,
+    value: unknown,
+    commentSource: CommentSource,
+    sourceCssProperty?: string,
+  ) => void;
 };
 
 export function processRuleDeclarations(args: RuleDeclarationContext): void {
@@ -149,7 +154,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
               trailingLine: (d as any).trailingLineComment,
             }
           : null;
-      applyResolvedPropValue(out.prop, value, commentSource);
+      applyResolvedPropValue(out.prop, value, commentSource, d.property);
     }
   }
 }
