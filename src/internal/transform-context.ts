@@ -116,6 +116,7 @@ export class TransformContext {
   newImportLocalNames?: Set<string>;
   newImportSourcesByLocal?: Map<string, Set<string>>;
   needsReactImport?: boolean;
+  needsReactNamespaceImport?: boolean;
   /** Cross-file selector usages where this file is the consumer */
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className */

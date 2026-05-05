@@ -12,6 +12,7 @@ import {
 } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
+import { findCssVarCallsInString } from "../css-vars.js";
 import {
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -137,6 +138,12 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       dropCssVariableDefinitionsFromBucket(bucket, name);
     }
   }
+  moveUnsafeRawCssVarPropsToInlineStyles({
+    styleObj,
+    inlineStyleProps,
+    staticInlineStyleProps: (decl.staticInlineStyleProps ??= []),
+    j: state.j,
+  });
 
   // Check for interpolations in pseudo selectors that can't be safely transformed
   const hasPseudoBlockInterpolation = (() => {
@@ -598,6 +605,28 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+function moveUnsafeRawCssVarPropsToInlineStyles(args: {
+  styleObj: Record<string, unknown>;
+  inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
+  staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  j: Parameters<typeof literalToAst>[0];
+}): void {
+  const { styleObj, inlineStyleProps, staticInlineStyleProps, j } = args;
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (prop.startsWith("__") || prop.startsWith("--")) {
+      continue;
+    }
+    if (typeof value !== "string" || findCssVarCallsInString(value).length === 0) {
+      continue;
+    }
+
+    delete styleObj[prop];
+    const expr = j.stringLiteral(value);
+    inlineStyleProps.push({ prop, expr });
+    staticInlineStyleProps.push({ prop, expr });
+  }
+}
 
 function dropCssVariableDefinitionsFromBucket(bucket: Record<string, unknown>, name: string): void {
   delete bucket[name];
