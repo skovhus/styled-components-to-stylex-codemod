@@ -224,14 +224,74 @@ function insertStylexKeyframesDeclaration(args: {
   (declaration as ASTNode & { comments?: unknown[]; leadingComments?: unknown[] }).leadingComments =
     [provenanceComment];
   const targetDeclarator = afterDeclaratorPath.node;
-  const statements = root.get().node.program.body as ASTNode[];
-  const insertionIndex = statements.findIndex((statement) =>
-    statementOwnsDeclarator(statement, targetDeclarator),
-  );
-  if (insertionIndex < 0) {
+  const owner = findStatementListOwningDeclarator(root, targetDeclarator);
+  if (!owner) {
     return;
   }
+  const { statements, insertionIndex } = owner;
   statements.splice(insertionIndex + 1, 0, declaration);
+}
+
+function findStatementListOwningDeclarator(
+  root: Collection<ASTNode>,
+  targetDeclarator: ASTNode,
+): { statements: ASTNode[]; insertionIndex: number } | null {
+  let owner: { statements: ASTNode[]; insertionIndex: number } | null = null;
+
+  const visit = (node: unknown): void => {
+    if (owner || !node || typeof node !== "object") {
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        visit(child);
+      }
+      return;
+    }
+    const statements = getStatementList(node);
+    if (statements) {
+      const insertionIndex = statements.findIndex((statement) =>
+        statementOwnsDeclarator(statement, targetDeclarator),
+      );
+      if (insertionIndex >= 0) {
+        owner = { statements, insertionIndex };
+        return;
+      }
+    }
+    for (const key of Object.keys(node as Record<string, unknown>)) {
+      if (key === "loc" || key === "comments" || key === "leadingComments") {
+        continue;
+      }
+      visit((node as Record<string, unknown>)[key]);
+    }
+  };
+
+  visit(root.get().node.program);
+  return owner;
+}
+
+function getStatementList(node: unknown): ASTNode[] | null {
+  if (!node || typeof node !== "object" || !("type" in node)) {
+    return null;
+  }
+  const typed = node as {
+    type?: string;
+    body?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  };
+  if (
+    (typed.type === "Program" ||
+      typed.type === "BlockStatement" ||
+      typed.type === "TSModuleBlock") &&
+    Array.isArray(typed.body)
+  ) {
+    return typed.body as ASTNode[];
+  }
+  if (typed.type === "SwitchCase" && Array.isArray(typed.consequent)) {
+    return typed.consequent as ASTNode[];
+  }
+  return null;
 }
 
 function statementOwnsDeclarator(statement: ASTNode, declarator: ASTNode): boolean {

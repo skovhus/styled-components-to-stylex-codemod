@@ -1163,6 +1163,49 @@ export const App = () => (
     expect(keyframesMatches).toHaveLength(1);
   });
 
+  it("emits generated keyframes aliases next to local keyframes declarations", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+export function App() {
+  const fade = keyframes\`
+    from { opacity: 0; }
+    to { opacity: 1; }
+  \`;
+
+  const Card = styled.div\`
+    animation: \${fade} 1s linear;
+    padding: 8px;
+  \`;
+
+  const Preserved = styled.span\`
+    animation: \${fade} 2s linear;
+
+    & a.active {
+      color: tomato;
+    }
+  \`;
+
+  return (
+    <Card>
+      <Preserved>
+        <a className="active">preserved</a>
+      </Preserved>
+    </Card>
+  );
+}
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-local-keyframes-alias.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/const\s+fade\s*=\s*keyframes`/);
+    expect(result.code).toMatch(/const\s+fadeStylex\s*=\s*stylex\.keyframes/);
+    expect(result.code).toMatch(/animationName:\s*fadeStylex/);
+    expect(result.code).toMatch(/animation:\s*\$\{fade\}\s*2s linear/);
+  });
+
   it("does not collapse user-authored stylex.keyframes bindings that look like generated aliases", () => {
     const source = `
 import * as stylex from "@stylexjs/stylex";
