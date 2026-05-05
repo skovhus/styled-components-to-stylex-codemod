@@ -14,11 +14,23 @@ const Button = styled.button`
   }
 `;
 
+const ResetButton = styled.button`
+  padding: 8px 16px;
+  background-color: #f8c8dc;
+  color: #333;
+
+  &:${highlight} {
+    background: none;
+    color: #111;
+  }
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
+      <ResetButton>Reset background</ResetButton>
     </div>
   );
 }

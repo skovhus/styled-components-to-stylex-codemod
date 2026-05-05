@@ -830,13 +830,10 @@ function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>
     for (const prop of Object.keys(style as Record<string, unknown>)) {
       if (FORBIDDEN_STYLEX_SHORTHANDS.has(prop)) {
         // Allow `background: "none"` — this is a CSS reset value that StyleX accepts
-        // as-is; expanding to `backgroundColor: "none"` would be invalid CSS.
+        // as-is; expanding to `backgroundColor: "none"` would be invalid CSS. The value
+        // may be wrapped in pseudo/media maps, e.g. `{ default: null, ":hover": "none" }`.
         const val = (style as Record<string, unknown>)[prop];
-        if (
-          prop === "background" &&
-          typeof val === "string" &&
-          val.replace(/ !important$/, "") === "none"
-        ) {
+        if (prop === "background" && isBackgroundNoneResetValue(val)) {
           continue;
         }
         throw new Error(
@@ -847,6 +844,20 @@ function assertNoUnexpandedShorthands(resolvedStyleObjects: Map<string, unknown>
       }
     }
   }
+}
+
+function isBackgroundNoneResetValue(value: unknown): boolean {
+  if (value == null) {
+    return true;
+  }
+  if (typeof value === "string") {
+    return value.replace(/ !important$/, "") === "none";
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value) || isAstNode(value)) {
+    return false;
+  }
+  const nestedValues = Object.values(value);
+  return nestedValues.length > 0 && nestedValues.every(isBackgroundNoneResetValue);
 }
 
 /**

@@ -19,11 +19,28 @@ function Button(props: React.PropsWithChildren<{}>) {
   );
 }
 
+function ResetButton(props: React.PropsWithChildren<{}>) {
+  return (
+    <button
+      sx={[
+        styles.resetButton,
+        highlightStyles({
+          active: styles.resetButtonPseudoActive,
+          hover: styles.resetButtonPseudoHover,
+        }),
+      ]}
+    >
+      {props.children}
+    </button>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
+      <ResetButton>Reset background</ResetButton>
     </div>
   );
 }
@@ -49,6 +66,32 @@ const styles = stylex.create({
     backgroundColor: {
       default: "#f0f0f0",
       ":hover": "#e0e0e0",
+    },
+    color: {
+      default: "#333",
+      ":hover": "#111",
+    },
+  },
+  resetButton: {
+    paddingBlock: 8,
+    paddingInline: 16,
+    backgroundColor: "#f8c8dc",
+    color: "#333",
+  },
+  resetButtonPseudoActive: {
+    background: {
+      default: null,
+      ":active": "none",
+    },
+    color: {
+      default: "#333",
+      ":active": "#111",
+    },
+  },
+  resetButtonPseudoHover: {
+    background: {
+      default: null,
+      ":hover": "none",
     },
     color: {
       default: "#333",

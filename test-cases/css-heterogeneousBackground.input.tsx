@@ -22,6 +22,16 @@ const ResetBackground = styled.div`
   padding: 8px;
 `;
 
+// Pattern 4: background: none in pseudo selectors should remain allowed as a reset.
+const ResetBackgroundOnHover = styled.button`
+  background: pink;
+  padding: 8px;
+
+  &:hover {
+    background: none;
+  }
+`;
+
 export const App = () => (
   <div>
     <MixedBackground $useGradient={false}>Solid Color</MixedBackground>
@@ -30,5 +40,6 @@ export const App = () => (
     <NestedColorBackground $color="blue">Blue</NestedColorBackground>
     <NestedColorBackground $color="default">Default</NestedColorBackground>
     <ResetBackground>No Background</ResetBackground>
+    <ResetBackgroundOnHover>Hover Reset</ResetBackgroundOnHover>
   </div>
 );
