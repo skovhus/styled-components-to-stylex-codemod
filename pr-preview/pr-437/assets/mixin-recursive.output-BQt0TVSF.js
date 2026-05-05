@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{p as e}from"./index-1I8JrSsK.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`x7z7khe x1t391ir x1e2nbdu`,children:`Recursive mixins`});export{n as App};
