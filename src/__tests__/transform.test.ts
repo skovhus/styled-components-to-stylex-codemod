@@ -7129,6 +7129,31 @@ export const App = (props: { style?: React.CSSProperties }) => <Box {...props}>c
     expect(result.code).toContain("...style");
   });
 
+  it("should not inline raw CSS variable values that are overridden by variants", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  color: var(--raw-color);
+  \${(props) => (props.$active ? "color: red;" : "")}
+\`;
+
+export const App = () => <Box $active>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-variant-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('color: "var(--raw-color)"');
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("styles.box, active && styles.boxActive");
+    expect(result.code).not.toContain('color: "var(--raw-color)",\n      }}');
+  });
+
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
     const source = `
 import styled from "styled-components";

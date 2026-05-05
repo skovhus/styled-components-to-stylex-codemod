@@ -144,6 +144,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj,
     inlineStyleProps,
     staticInlineStyleProps,
+    unsafeProps: collectStyleOverrideProps(variantBuckets, styleFnDecls),
     j: state.j,
   });
 
@@ -612,11 +613,15 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
   styleObj: Record<string, unknown>;
   inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
   staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  unsafeProps: ReadonlySet<string>;
   j: Parameters<typeof literalToAst>[0];
 }): void {
-  const { styleObj, inlineStyleProps, staticInlineStyleProps, j } = args;
+  const { styleObj, inlineStyleProps, staticInlineStyleProps, unsafeProps, j } = args;
   for (const [prop, value] of Object.entries(styleObj)) {
     if (prop.startsWith("__") || prop.startsWith("--")) {
+      continue;
+    }
+    if (unsafeProps.has(prop)) {
       continue;
     }
     if (typeof value !== "string" || findCssVarCallsInString(value).length === 0) {
@@ -628,6 +633,77 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
     inlineStyleProps.push({ prop, expr });
     staticInlineStyleProps.push({ prop, expr });
   }
+}
+
+function collectStyleOverrideProps(
+  variantBuckets: Map<string, Record<string, unknown>>,
+  styleFnDecls: Map<string, unknown>,
+): Set<string> {
+  const props = new Set<string>();
+  for (const bucket of variantBuckets.values()) {
+    for (const prop of Object.keys(bucket)) {
+      if (!prop.startsWith("__")) {
+        props.add(prop);
+      }
+    }
+  }
+  for (const fnAst of styleFnDecls.values()) {
+    collectObjectExpressionPropertyNames(fnAst, props);
+  }
+  return props;
+}
+
+function collectObjectExpressionPropertyNames(node: unknown, props: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectObjectExpressionPropertyNames(child, props);
+    }
+    return;
+  }
+
+  const record = node as Record<string, unknown>;
+  if (record.type === "ObjectExpression" && Array.isArray(record.properties)) {
+    for (const property of record.properties) {
+      const propName = readObjectPropertyName(property);
+      if (propName && !propName.startsWith("__")) {
+        props.add(propName);
+      }
+    }
+  }
+
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    collectObjectExpressionPropertyNames(child, props);
+  }
+}
+
+function readObjectPropertyName(property: unknown): string | null {
+  if (!property || typeof property !== "object") {
+    return null;
+  }
+  const record = property as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string; value?: unknown };
+  };
+  if (record.type !== "Property" || record.computed) {
+    return null;
+  }
+  if (record.key?.type === "Identifier") {
+    return record.key.name ?? null;
+  }
+  if (
+    (record.key?.type === "Literal" || record.key?.type === "StringLiteral") &&
+    typeof record.key.value === "string"
+  ) {
+    return record.key.value;
+  }
+  return null;
 }
 
 function dropCssVariableDefinitionsFromBucket(bucket: Record<string, unknown>, name: string): void {
