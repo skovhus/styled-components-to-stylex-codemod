@@ -4606,16 +4606,19 @@ export const App = () => <Box>Hello</Box>;
     expect(result.code).toContain("const theme = useDesignTheme();");
   });
 
-  it("should alias configured hook import when local useTheme binding is occupied by another export", () => {
+  it("should alias configured hook import when local useTheme binding is occupied by another module", () => {
     const source = `
 import styled from "styled-components";
-import { useDesignTheme as useTheme } from "@company/theme-hooks";
+import { useTheme } from "@company/app-theme";
 
 const Box = styled.div\`
   opacity: \${(props) => props.theme.isDark ? 1 : 0.8};
 \`;
 
-export const App = () => <Box>Hello</Box>;
+export const App = () => {
+  const appTheme = useTheme();
+  return <Box>{appTheme.name}</Box>;
+};
 `;
 
     const adapterWithAliasedThemeHookImport = {
@@ -4652,28 +4655,26 @@ export const App = () => <Box>Hello</Box>;
     expect(result.code).toContain(
       'import { useTheme as useStyledTheme } from "@company/theme-hooks";',
     );
+    expect(result.code).toContain('import { useTheme } from "@company/app-theme";');
     expect(result.code).toContain("const theme = useStyledTheme();");
+    expect(result.code).toContain("const appTheme = useTheme();");
     const outputRoot = j(result.code ?? "");
     let useThemeLocalBindingCount = 0;
     let useStyledThemeLocalBindingCount = 0;
-    outputRoot
-      .find(j.ImportDeclaration, {
-        source: { value: "@company/theme-hooks" },
-      } as any)
-      .forEach((importPath: any) => {
-        for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
-          if (specifier.type !== "ImportSpecifier") {
-            continue;
-          }
-          const localName = specifier.local?.name ?? specifier.imported?.name;
-          if (localName === "useTheme") {
-            useThemeLocalBindingCount++;
-          }
-          if (localName === "useStyledTheme") {
-            useStyledThemeLocalBindingCount++;
-          }
+    outputRoot.find(j.ImportDeclaration).forEach((importPath: any) => {
+      for (const specifier of (importPath.node.specifiers ?? []) as any[]) {
+        if (specifier.type !== "ImportSpecifier") {
+          continue;
         }
-      });
+        const localName = specifier.local?.name ?? specifier.imported?.name;
+        if (localName === "useTheme") {
+          useThemeLocalBindingCount++;
+        }
+        if (localName === "useStyledTheme") {
+          useStyledThemeLocalBindingCount++;
+        }
+      }
+    });
     expect(useThemeLocalBindingCount).toBe(1);
     expect(useStyledThemeLocalBindingCount).toBe(1);
   });
