@@ -4606,7 +4606,7 @@ export const App = () => <Box>Hello</Box>;
     expect(result.code).toContain("const theme = useDesignTheme();");
   });
 
-  it("should not inject duplicate local binding when configured hook is already imported via alias", () => {
+  it("should alias configured hook import when local useTheme binding is occupied by another export", () => {
     const source = `
 import styled from "styled-components";
 import { useDesignTheme as useTheme } from "@company/theme-hooks";
@@ -4649,9 +4649,13 @@ export const App = () => <Box>Hello</Box>;
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("const theme = useTheme();");
+    expect(result.code).toContain(
+      'import { useTheme as useStyledTheme } from "@company/theme-hooks";',
+    );
+    expect(result.code).toContain("const theme = useStyledTheme();");
     const outputRoot = j(result.code ?? "");
     let useThemeLocalBindingCount = 0;
+    let useStyledThemeLocalBindingCount = 0;
     outputRoot
       .find(j.ImportDeclaration, {
         source: { value: "@company/theme-hooks" },
@@ -4665,9 +4669,13 @@ export const App = () => <Box>Hello</Box>;
           if (localName === "useTheme") {
             useThemeLocalBindingCount++;
           }
+          if (localName === "useStyledTheme") {
+            useStyledThemeLocalBindingCount++;
+          }
         }
       });
     expect(useThemeLocalBindingCount).toBe(1);
+    expect(useStyledThemeLocalBindingCount).toBe(1);
   });
 
   it("should handle negated !theme.isDark conditional", () => {
