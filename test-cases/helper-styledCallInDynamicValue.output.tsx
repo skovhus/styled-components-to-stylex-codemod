@@ -1,7 +1,7 @@
 // Styled helper calls must be resolved before emitting StyleX dynamic values.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { $colors, $shadow } from "./tokens.stylex";
+import { $colors, $shadow, $glowShadow } from "./tokens.stylex";
 import type { ColorToken } from "./tokens.stylex";
 
 type ShadowToken = "dark" | "light";
@@ -61,12 +61,51 @@ function LoadingPlaceholderRepeat(props: LoadingPlaceholderRepeatProps) {
   );
 }
 
+type LoadingPlaceholderWithSizeProps = React.PropsWithChildren<{
+  highlightColor: ColorToken;
+  size: number;
+}>;
+
+function LoadingPlaceholderWithSize(props: LoadingPlaceholderWithSizeProps) {
+  const { children, highlightColor, size } = props;
+  return (
+    <div
+      sx={[
+        styles.loadingPlaceholderWithSize,
+        styles.loadingPlaceholderWithSizeBackgroundImage(props, $colors[highlightColor]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type LayeredShadowPlaceholderProps = React.PropsWithChildren<{
+  shadowTone: ShadowToken;
+}>;
+
+function LayeredShadowPlaceholder(props: LayeredShadowPlaceholderProps) {
+  const { children, shadowTone } = props;
+  return (
+    <div
+      sx={[
+        styles.layeredShadowPlaceholder,
+        styles.layeredShadowPlaceholderTextShadow($shadow[shadowTone], $glowShadow[shadowTone]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <LoadingPlaceholder highlightColor="accent" />
     <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
     <LoadingPlaceholderRepeat highlightColor="accent" />
+    <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
     <div sx={styles.shadowPlaceholder("dark")} />
+    <LayeredShadowPlaceholder shadowTone="light" />
   </div>
 );
 
@@ -76,8 +115,8 @@ const styles = stylex.create({
     height: 20,
     borderRadius: 6,
   },
-  loadingPlaceholderBackgroundImage: (resolvedHighlightColor: string) => ({
-    backgroundImage: `linear-gradient(90deg, transparent, ${resolvedHighlightColor}, transparent)`,
+  loadingPlaceholderBackgroundImage: (resolvedColorHighlightColor: string) => ({
+    backgroundImage: `linear-gradient(90deg, transparent, ${resolvedColorHighlightColor}, transparent)`,
   }),
   loadingPlaceholderRange: {
     width: 160,
@@ -85,18 +124,29 @@ const styles = stylex.create({
     borderRadius: 6,
   },
   loadingPlaceholderRangeBackgroundImage: (
-    resolvedStartColor: string,
-    resolvedEndColor: string,
+    resolvedColorStartColor: string,
+    resolvedColorEndColor: string,
   ) => ({
-    backgroundImage: `linear-gradient(90deg, ${resolvedStartColor}, ${resolvedEndColor})`,
+    backgroundImage: `linear-gradient(90deg, ${resolvedColorStartColor}, ${resolvedColorEndColor})`,
   }),
   loadingPlaceholderRepeat: {
     width: 160,
     height: 20,
     borderRadius: 6,
   },
-  loadingPlaceholderRepeatBackgroundImage: (resolvedHighlightColor: string) => ({
-    backgroundImage: `linear-gradient(90deg, ${resolvedHighlightColor}, ${resolvedHighlightColor})`,
+  loadingPlaceholderRepeatBackgroundImage: (resolvedColorHighlightColor: string) => ({
+    backgroundImage: `linear-gradient(90deg, ${resolvedColorHighlightColor}, ${resolvedColorHighlightColor})`,
+  }),
+  loadingPlaceholderWithSize: {
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+  },
+  loadingPlaceholderWithSizeBackgroundImage: (
+    props: LoadingPlaceholderWithSizeProps,
+    resolvedColorHighlightColor: string,
+  ) => ({
+    backgroundImage: `linear-gradient(90deg, ${resolvedColorHighlightColor} ${props.size}px, transparent)`,
   }),
   shadowPlaceholder: (textShadow: ShadowToken) => ({
     width: 160,
@@ -104,5 +154,14 @@ const styles = stylex.create({
     borderRadius: 6,
     backgroundColor: "white",
     textShadow: $shadow[textShadow],
+  }),
+  layeredShadowPlaceholder: {
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+    backgroundColor: "white",
+  },
+  layeredShadowPlaceholderTextShadow: (shadowShadowTone: string, glowShadowShadowTone: string) => ({
+    textShadow: `${shadowShadowTone}, ${glowShadowShadowTone}`,
   }),
 });

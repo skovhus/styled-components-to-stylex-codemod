@@ -1764,10 +1764,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               break;
             }
             helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
+            const needsOriginalParam =
+              helperCallArgs.length > 0 && containsIdentifier(valueExprRaw, paramName);
             const styleFnParamNames =
               helperCallArgs.length > 0
                 ? helperCallArgs.map((resolution) => resolution.paramName)
                 : [paramName];
+            if (needsOriginalParam) {
+              styleFnParamNames.unshift(paramName);
+            }
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
             const { prefix, suffix } = extractStaticPartsForDecl(d);
             const valueExpr =
@@ -1779,9 +1784,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
               const isNamedTypeRef = propsTypeKind === "TSTypeReference";
               if (helperCallArgs.length > 0) {
-                for (const param of params) {
+                for (
+                  let paramIndex = needsOriginalParam ? 1 : 0;
+                  paramIndex < params.length;
+                  paramIndex++
+                ) {
+                  const param = params[paramIndex];
+                  if (!param) {
+                    continue;
+                  }
                   (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                     j.tsStringKeyword(),
+                  );
+                }
+                if (needsOriginalParam && !isNamedTypeRef) {
+                  const typeName = `${decl.localName}Props`;
+                  (params[0] as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                    j.tsTypeReference(j.identifier(typeName)),
                   );
                 }
               } else if (!isNamedTypeRef) {
@@ -1801,7 +1820,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-            const [firstHelperCallArg, ...extraHelperCallArgs] = helperCallArgs;
+            const needsOriginalParam =
+              helperCallArgs.length > 0 &&
+              styleFnDecls.has(fnKey) &&
+              containsIdentifier(styleFnDecls.get(fnKey), paramName);
+            const firstHelperCallArg = needsOriginalParam ? undefined : helperCallArgs[0];
+            const extraHelperCallArgs = needsOriginalParam
+              ? helperCallArgs
+              : helperCallArgs.slice(1);
             styleFnFromProps.push({
               fnKey,
               jsxProp: "__props",
@@ -2878,8 +2904,8 @@ function tryResolveDynamicHelperCall(
 
   const paramName =
     helperCall.kind === "curried"
-      ? `resolved${capitalizeIdentifier(dynamicProp.propName)}`
-      : dynamicProp.propName;
+      ? `resolved${helperNameSuffix(calleeInfo)}${capitalizeIdentifier(dynamicProp.propName)}`
+      : `${helperNameSuffix(calleeInfo, { lowerFirst: true })}${capitalizeIdentifier(dynamicProp.propName)}`;
   return {
     value: ctx.j.identifier(paramName),
     binding: {
@@ -2932,7 +2958,9 @@ function tryResolveDirectHelperCall(
   }
 
   ctx.addResolverImports(result.imports);
-  const paramName = dynamicProp.propName;
+  const paramName = `${helperNameSuffix(calleeInfo, {
+    lowerFirst: true,
+  })}${capitalizeIdentifier(dynamicProp.propName)}`;
   return {
     value: ctx.j.identifier(paramName),
     binding: {
@@ -3012,6 +3040,40 @@ function dedupeDynamicHelperCallArguments(
     result.push(arg);
   }
   return result;
+}
+
+function containsIdentifier(node: unknown, name: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (Array.isArray(node)) {
+    return node.some((item) => containsIdentifier(item, name));
+  }
+  const record = node as Record<string, unknown>;
+  if (record.type === "Identifier" && record.name === name) {
+    return true;
+  }
+  for (const key of Object.keys(record)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    if (containsIdentifier(record[key], name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function helperNameSuffix(
+  calleeInfo: { rootName: string; path: string[] },
+  opts: { lowerFirst?: boolean } = {},
+): string {
+  const parts = [calleeInfo.rootName, ...calleeInfo.path].filter(Boolean);
+  const suffix = parts.map(capitalizeIdentifier).join("");
+  if (!opts.lowerFirst || !suffix) {
+    return suffix;
+  }
+  return suffix.charAt(0).toLowerCase() + suffix.slice(1);
 }
 
 function capitalizeIdentifier(name: string): string {

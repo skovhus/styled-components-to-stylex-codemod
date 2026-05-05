@@ -130,3 +130,8 @@ export const $shadow = stylex.defineVars({
   dark: "0 4px 12px rgba(0,0,0,0.3)",
   light: "0 2px 4px rgba(0,0,0,0.1)",
 });
+
+export const $glowShadow = stylex.defineVars({
+  dark: "0 0 16px rgba(0,0,0,0.45)",
+  light: "0 0 16px rgba(255,255,255,0.45)",
+});

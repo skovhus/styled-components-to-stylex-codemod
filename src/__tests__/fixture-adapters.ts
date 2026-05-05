@@ -526,6 +526,68 @@ export const fixtureAdapter = defineAdapter({
       };
     }
 
+    // Handle insetShadow() helper — used alongside shadow() to ensure helper-derived
+    // params with the same source prop keep distinct bindings.
+    if (ctx.calleeImportedName === "insetShadow") {
+      if (key) {
+        return {
+          expr: `$insetShadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$insetShadow" }],
+            },
+          ],
+        };
+      }
+      if (ctx.cssProperty === "text-shadow") {
+        return {
+          expr: "$insetShadow",
+          dynamicArgUsage: "memberAccess",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$insetShadow" }],
+            },
+          ],
+        };
+      }
+      return {
+        expr: "$insetShadow",
+        dynamicArgUsage: "memberAccess",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$insetShadow" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.calleeImportedName === "glowShadow") {
+      if (key) {
+        return {
+          expr: `$glowShadow.${key}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./tokens.stylex" },
+              names: [{ imported: "$glowShadow" }],
+            },
+          ],
+        };
+      }
+      return {
+        expr: "$glowShadow",
+        dynamicArgUsage: "memberAccess",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./tokens.stylex" },
+            names: [{ imported: "$glowShadow" }],
+          },
+        ],
+      };
+    }
+
     // Handle color() helper from ./lib/helpers.ts
     // color("bgBase") -> $colors.bgBase
     if (ctx.calleeImportedName === "color") {
@@ -547,6 +609,19 @@ export const fixtureAdapter = defineAdapter({
           {
             from: { kind: "specifier", value: "./tokens.stylex" },
             names: [{ imported: "$colors" }],
+          },
+        ],
+      };
+    }
+
+    if (ctx.calleeImportedName === "borderByColor") {
+      return {
+        expr: "borderByColor",
+        dynamicArgUsage: "call",
+        imports: [
+          {
+            from: { kind: "specifier", value: "./lib/helpers" },
+            names: [{ imported: "borderByColor" }],
           },
         ],
       };

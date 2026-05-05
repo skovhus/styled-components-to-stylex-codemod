@@ -258,3 +258,6 @@ export const shadow = (level: string): string => {
   };
   return shadows[level] ?? "none";
 };
+
+export const glowShadow = (level: string): string =>
+  level === "dark" ? "0 0 16px rgba(0,0,0,0.45)" : "0 0 16px rgba(255,255,255,0.45)";
