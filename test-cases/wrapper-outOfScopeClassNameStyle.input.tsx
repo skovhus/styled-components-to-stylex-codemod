@@ -14,7 +14,10 @@ type DecorativeBadgeBaseProps = {
   tone?: "info" | "warning";
 };
 
-type RemovedDecorativeBadgeProps = Exclude<keyof DecorativeBadgeBaseProps, "children" | "tone">;
+type HiddenPresentationProps<T> = keyof T;
+type RemovedDecorativeBadgeProps = HiddenPresentationProps<
+  Pick<DecorativeBadgeBaseProps, "className" | "style">
+>;
 type DecorativeBadgeProps = Omit<DecorativeBadgeBaseProps, RemovedDecorativeBadgeProps>;
 
 function BadgeBase(props: BadgeBaseProps) {

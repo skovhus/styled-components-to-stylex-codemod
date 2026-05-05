@@ -911,10 +911,10 @@ export class WrapperEmitter {
       return stringifyName((type as any).typeName);
     };
 
-    const typeAliasAnnotationFor = (
+    const typeAliasInfoFor = (
       typeName: string,
       visitedTypeNames: ReadonlySet<string>,
-    ): AstNodeOrNull => {
+    ): { typeAnnotation: AstNodeOrNull; typeParamNames: string[] } | null => {
       if (visitedTypeNames.has(typeName)) {
         return null;
       }
@@ -924,12 +924,46 @@ export class WrapperEmitter {
       if (typeAlias.size() === 0) {
         return null;
       }
-      return typeAlias.get().node.typeAnnotation;
+      const node = typeAlias.get().node as {
+        typeAnnotation: AstNodeOrNull;
+        typeParameters?: { params?: Array<{ name?: string }> };
+      };
+      const typeParamNames = (node.typeParameters?.params ?? [])
+        .map((param) => param.name)
+        .filter((name): name is string => typeof name === "string");
+      return { typeAnnotation: node.typeAnnotation, typeParamNames };
+    };
+
+    const bindTypeParams = (
+      typeParamNames: readonly string[],
+      typeArgs: readonly AstNodeOrNull[],
+      parentBindings: ReadonlyMap<string, AstNodeOrNull>,
+    ): Map<string, AstNodeOrNull> => {
+      const bindings = new Map(parentBindings);
+      for (let i = 0; i < typeParamNames.length; i++) {
+        const typeArg = typeArgs[i];
+        if (typeArg) {
+          bindings.set(typeParamNames[i]!, typeArg);
+        }
+      }
+      return bindings;
+    };
+
+    const resolveBoundTypeParam = (
+      type: AstNodeOrNull,
+      typeParamBindings: ReadonlyMap<string, AstNodeOrNull>,
+    ): AstNodeOrNull => {
+      const typeName = typeReferenceName(type);
+      if (!typeName || typeName.includes(".")) {
+        return type;
+      }
+      return typeParamBindings.get(typeName) ?? type;
     };
 
     const literalStringNames = (
       type: AstNodeOrNull,
       visitedTypeNames = new Set<string>(),
+      typeParamBindings = new Map<string, AstNodeOrNull>(),
     ): ResolvedTypeKeyNames => {
       const names = new Set<string>();
       const collect = (node: AstNodeOrNull): boolean => {
@@ -948,20 +982,38 @@ export class WrapperEmitter {
           return collect((node as any).typeAnnotation);
         }
         if (node.type === "TSTypeOperator" && (node as any).operator === "keyof") {
-          for (const name of extractFromType((node as any).typeAnnotation, visitedTypeNames)) {
+          const targetType = resolveBoundTypeParam((node as any).typeAnnotation, typeParamBindings);
+          const targetNames = extractFromType(targetType, visitedTypeNames, typeParamBindings);
+          if (targetNames.size === 0) {
+            return false;
+          }
+          for (const name of targetNames) {
             names.add(name);
           }
           return true;
         }
+        const boundTypeParam = resolveBoundTypeParam(node, typeParamBindings);
+        if (boundTypeParam !== node) {
+          return collect(boundTypeParam);
+        }
         const referencedTypeName = typeReferenceName(node);
         if (referencedTypeName && !referencedTypeName.includes(".")) {
-          const aliasAnnotation = typeAliasAnnotationFor(referencedTypeName, visitedTypeNames);
-          if (!aliasAnnotation) {
+          const aliasInfo = typeAliasInfoFor(referencedTypeName, visitedTypeNames);
+          if (!aliasInfo) {
             return false;
           }
           const nextVisitedTypeNames = new Set(visitedTypeNames);
           nextVisitedTypeNames.add(referencedTypeName);
-          const aliasNames = literalStringNames(aliasAnnotation, nextVisitedTypeNames);
+          const aliasBindings = bindTypeParams(
+            aliasInfo.typeParamNames,
+            typeParamsFor(node),
+            typeParamBindings,
+          );
+          const aliasNames = literalStringNames(
+            aliasInfo.typeAnnotation,
+            nextVisitedTypeNames,
+            aliasBindings,
+          );
           if (!aliasNames) {
             return false;
           }
@@ -1015,6 +1067,7 @@ export class WrapperEmitter {
     const extractFromType = (
       type: AstNodeOrNull,
       visitedTypeNames = new Set<string>(),
+      typeParamBindings = new Map<string, AstNodeOrNull>(),
     ): Set<string> => {
       const names = new Set<string>();
       const merge = (next: Set<string>): void => {
@@ -1022,6 +1075,7 @@ export class WrapperEmitter {
           names.add(name);
         }
       };
+      type = resolveBoundTypeParam(type, typeParamBindings);
       if (!type) {
         return names;
       }
@@ -1030,12 +1084,12 @@ export class WrapperEmitter {
       }
       if (type.type === "TSIntersectionType" || type.type === "TSUnionType") {
         for (const t of (type as any).types ?? []) {
-          merge(extractFromType(t, new Set(visitedTypeNames)));
+          merge(extractFromType(t, new Set(visitedTypeNames), typeParamBindings));
         }
         return names;
       }
       if (type.type === "TSParenthesizedType") {
-        return extractFromType((type as any).typeAnnotation, visitedTypeNames);
+        return extractFromType((type as any).typeAnnotation, visitedTypeNames, typeParamBindings);
       }
       if (type.type !== "TSTypeReference") {
         return names;
@@ -1048,8 +1102,8 @@ export class WrapperEmitter {
       }
 
       if (typeName === "Omit" && params[0]) {
-        merge(extractFromType(params[0], new Set(visitedTypeNames)));
-        const omitted = literalStringNames(params[1], new Set(visitedTypeNames));
+        merge(extractFromType(params[0], new Set(visitedTypeNames), typeParamBindings));
+        const omitted = literalStringNames(params[1], new Set(visitedTypeNames), typeParamBindings);
         if (!omitted) {
           return new Set<string>();
         }
@@ -1059,7 +1113,10 @@ export class WrapperEmitter {
         return names;
       }
       if (typeName === "Pick" && params[1]) {
-        return literalStringNames(params[1], new Set(visitedTypeNames)) ?? new Set<string>();
+        return (
+          literalStringNames(params[1], new Set(visitedTypeNames), typeParamBindings) ??
+          new Set<string>()
+        );
       }
 
       if (
@@ -1075,7 +1132,7 @@ export class WrapperEmitter {
             ? true
             : options?.lookThroughPropsWithChildren === true)
         ) {
-          merge(extractFromType(params[0], new Set(visitedTypeNames)));
+          merge(extractFromType(params[0], new Set(visitedTypeNames), typeParamBindings));
         }
         if (typeName === "React.PropsWithChildren" || typeName === "PropsWithChildren") {
           names.add("children");
@@ -1105,15 +1162,20 @@ export class WrapperEmitter {
             }
           }
         }
-        const typeAliasAnnotation = typeAliasAnnotationFor(typeName, visitedTypeNames);
-        if (typeAliasAnnotation) {
-          merge(extractFromType(typeAliasAnnotation, nextVisitedTypeNames));
+        const typeAliasInfo = typeAliasInfoFor(typeName, visitedTypeNames);
+        if (typeAliasInfo) {
+          const aliasBindings = bindTypeParams(
+            typeAliasInfo.typeParamNames,
+            params,
+            typeParamBindings,
+          );
+          merge(extractFromType(typeAliasInfo.typeAnnotation, nextVisitedTypeNames, aliasBindings));
         }
         return names;
       }
 
       for (const param of params) {
-        merge(extractFromType(param, new Set(visitedTypeNames)));
+        merge(extractFromType(param, new Set(visitedTypeNames), typeParamBindings));
       }
       return names;
     };
