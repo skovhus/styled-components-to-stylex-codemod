@@ -1082,11 +1082,27 @@ export class WrapperEmitter {
       if (type.type === "TSTypeLiteral") {
         return extractFromLiteral(type);
       }
-      if (type.type === "TSIntersectionType" || type.type === "TSUnionType") {
+      if (type.type === "TSIntersectionType") {
         for (const t of (type as any).types ?? []) {
           merge(extractFromType(t, new Set(visitedTypeNames), typeParamBindings));
         }
         return names;
+      }
+      if (type.type === "TSUnionType") {
+        let sharedNames: Set<string> | null = null;
+        for (const t of (type as any).types ?? []) {
+          const branchNames = extractFromType(t, new Set(visitedTypeNames), typeParamBindings);
+          if (sharedNames === null) {
+            sharedNames = new Set(branchNames);
+          } else {
+            for (const name of sharedNames) {
+              if (!branchNames.has(name)) {
+                sharedNames.delete(name);
+              }
+            }
+          }
+        }
+        return sharedNames ?? names;
       }
       if (type.type === "TSParenthesizedType") {
         return extractFromType((type as any).typeAnnotation, visitedTypeNames, typeParamBindings);

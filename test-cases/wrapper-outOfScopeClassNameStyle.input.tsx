@@ -20,6 +20,18 @@ type RemovedDecorativeBadgeProps = HiddenPresentationProps<
 >;
 type DecorativeBadgeProps = Omit<DecorativeBadgeBaseProps, RemovedDecorativeBadgeProps>;
 
+type UnionBadgeProps =
+  | {
+      children?: React.ReactNode;
+      className?: string;
+      kind: "classy";
+    }
+  | {
+      children?: React.ReactNode;
+      kind: "styled";
+      style?: React.CSSProperties;
+    };
+
 function BadgeBase(props: BadgeBaseProps) {
   const { children, className, style } = props;
   return (
@@ -32,6 +44,10 @@ function BadgeBase(props: BadgeBaseProps) {
 function DecorativeBadgeBase(props: DecorativeBadgeProps) {
   const { children, tone } = props;
   return <strong data-tone={tone}>{children}</strong>;
+}
+
+function UnionBadgeBase(props: UnionBadgeProps) {
+  return <em>{props.children}</em>;
 }
 
 export const StatusBadge = styled(BadgeBase)`
@@ -50,9 +66,18 @@ const DecorativeBadge = styled(DecorativeBadgeBase)`
   background-color: #fde68a;
 `;
 
+const UnionBadge = styled(UnionBadgeBase)`
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #1e3a8a;
+  background-color: #bfdbfe;
+`;
+
 export const App = () => (
   <div style={{ padding: 12 }}>
     <StatusBadge style={{ border: "1px solid #0369a1" }}>Available</StatusBadge>
     <DecorativeBadge tone="warning">Decorative</DecorativeBadge>
+    <UnionBadge kind="classy">Union</UnionBadge>
   </div>
 );
