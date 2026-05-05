@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import{m as e,p as t}from"./index-Bjkq5Iw9.js";e();var n=t();function r({style:e,size:t=`medium`,text:r=`Loading…`}){return(0,n.jsx)(`div`,{style:e,children:(0,n.jsx)(`div`,{className:`spinner spinner-${t}`,children:r})})}export{r as t};
