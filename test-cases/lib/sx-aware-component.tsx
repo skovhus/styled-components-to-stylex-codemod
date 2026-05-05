@@ -13,13 +13,15 @@ export function SxAwareButton(
     sx?: stylex.StyleXStyles;
     className?: string;
     style?: React.CSSProperties;
+    active?: boolean;
   } & React.ComponentPropsWithRef<"button">,
 ) {
-  const { sx, className, style, ...rest } = props;
+  const { sx, className, style, active, ...rest } = props;
   const sp = stylex.props(styles.base, sx);
   return (
     <button
       {...rest}
+      data-active={active ? "true" : undefined}
       className={[sp.className, className].filter(Boolean).join(" ")}
       style={{ ...sp.style, ...style }}
     />
