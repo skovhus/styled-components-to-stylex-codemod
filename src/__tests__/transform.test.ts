@@ -277,6 +277,38 @@ function assertExportsApp(source: string, fileLabel: string): void {
   }
 }
 
+function getPreservedComponentSelectorWithCssHelperSource(): string {
+  return `
+import styled, { css } from "styled-components";
+
+const hoverStyles = css\`
+  color: tomato;
+\`;
+
+const ReferencedChild = styled.span\`
+  \${hoverStyles}
+  color: navy;
+\`;
+
+const PreservedContainer = styled.div\`
+  &:hover \${ReferencedChild} {
+    opacity: 1;
+  }
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <PreservedContainer>
+    <a className="active">link</a>
+    <ReferencedChild>child</ReferencedChild>
+  </PreservedContainer>
+);
+`;
+}
+
 describe("test case file pairing", () => {
   it("should have matching input/output files for all test cases", () => {
     // This test verifies the test case structure is valid
@@ -492,6 +524,15 @@ export const App = () => (
 );
 `;
     const result = runPartial(source, "partial-danglingHelper.input.tsx");
+
+    expect(result.code).toBeNull();
+  });
+
+  it("bails when a newly preserved component references an extracted css helper", () => {
+    const result = runPartial(
+      getPreservedComponentSelectorWithCssHelperSource(),
+      "partial-componentSelectorDanglingHelper.input.tsx",
+    );
 
     expect(result.code).toBeNull();
   });
@@ -909,6 +950,16 @@ export const App = () => (
     expect(result.code).toBe(output);
     expect(result.code).toMatch(/const\s+ConvertedChild\s*=\s*styled\.span`/);
     expect(result.code).toContain("&:hover ${ConvertedChild}");
+  });
+
+  it("bails when a leaves-only preserved component selector target references an extracted css helper", () => {
+    const source = getPreservedComponentSelectorWithCssHelperSource();
+    const result = runLeavesOnly(
+      source,
+      pathResolve(join(__dirname, "virtual-leaves-referenced-helper.tsx")),
+    );
+
+    expect(result.code).toBeNull();
   });
 
   it("computes cross-file leaf keys and transforms wrapped import from leaf Box", () => {

@@ -55,6 +55,11 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     if (!allowPartialMigration && ctx.styledDecls.some((d) => d.skipTransform)) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
     }
+    for (const decl of ctx.styledDecls) {
+      if (lowered.preservedReferencedStyledDecls.has(decl.localName)) {
+        decl.skipTransform = true;
+      }
+    }
     // `css\`\`` helpers are extracted (and their source declarations removed) by
     // extractCssHelpersStep before lowering runs. Two unsafe partial-mode cases:
     //   1) A helper itself failed to lower — its source is already gone, so any
@@ -74,11 +79,6 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     );
     if (unsafeSkip) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");
-    }
-    for (const decl of ctx.styledDecls) {
-      if (lowered.preservedReferencedStyledDecls.has(decl.localName)) {
-        decl.skipTransform = true;
-      }
     }
   }
 
