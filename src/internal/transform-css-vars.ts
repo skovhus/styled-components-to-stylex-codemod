@@ -173,8 +173,7 @@ function rewriteLocalStylexVarString(
     if (!fallback) {
       continue;
     }
-    const localVar =
-      ctx.localStylexVars?.get(call.name) ?? ctx.getOrCreateLocalStylexVar?.(call.name, fallback);
+    const localVar = ctx.localStylexVars?.get(call.name);
     if (!localVar || localVar.defaultValue !== fallback) {
       continue;
     }
@@ -186,6 +185,8 @@ function rewriteLocalStylexVarString(
 }
 
 function rewriteCssVarsInAstNode(node: { type: string }, ctx: CssVarRewriteContext): void {
+  rewriteCssVarPropertyKeyInAstNode(node, ctx);
+
   for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
@@ -207,6 +208,44 @@ function rewriteCssVarsInAstNode(node: { type: string }, ctx: CssVarRewriteConte
       }
     }
   }
+}
+
+function rewriteCssVarPropertyKeyInAstNode(
+  node: { type: string },
+  ctx: CssVarRewriteContext,
+): void {
+  if (node.type !== "Property" && node.type !== "ObjectProperty") {
+    return;
+  }
+  const property = node as {
+    key?: { type?: string; name?: string; value?: unknown };
+    computed?: boolean;
+  };
+  const rawKey = readStaticPropertyKey(property.key);
+  if (!rawKey?.startsWith("--")) {
+    return;
+  }
+  const localVar = ctx.localStylexVars?.get(rawKey);
+  if (!localVar) {
+    return;
+  }
+  property.key = stylexVarMemberExpression(ctx.j, localVar) as typeof property.key;
+  property.computed = true;
+}
+
+function readStaticPropertyKey(
+  key: { type?: string; name?: string; value?: unknown } | undefined,
+): string | null {
+  if (!key) {
+    return null;
+  }
+  if (key.type === "Identifier") {
+    return key.name ?? null;
+  }
+  if (typeof key.value === "string") {
+    return key.value;
+  }
+  return null;
 }
 
 /**

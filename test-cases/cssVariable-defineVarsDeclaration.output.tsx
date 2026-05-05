@@ -1,22 +1,26 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-
-const menuVars = stylex.defineVars({
-  width: "240px",
-});
+import { cssVariableDefineVarsDeclarationInputMenuWidthVars } from "./cssVariable-defineVarsDeclaration.input.stylex";
 
 type WidthMenuProps = React.PropsWithChildren<{
-  $menuWidth?: number;
+  menuWidth?: number;
 }>;
 
 function WidthMenu(props: WidthMenuProps) {
-  const { children, $menuWidth } = props;
+  const { children, menuWidth } = props;
+  const sx = stylex.props(styles.widthMenu);
+
   return (
     <div
-      sx={[
-        styles.widthMenu,
-        $menuWidth ? styles.widthMenuMenuWidth($menuWidth) : undefined,
-      ]}
+      {...sx}
+      style={
+        {
+          ...sx.style,
+          [cssVariableDefineVarsDeclarationInputMenuWidthVars.menuWidth]: menuWidth
+            ? `${menuWidth}px`
+            : undefined,
+        } as React.CSSProperties
+      }
     >
       {children}
     </div>
@@ -26,17 +30,14 @@ function WidthMenu(props: WidthMenuProps) {
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <WidthMenu>Default width</WidthMenu>
-    <WidthMenu $menuWidth={320}>Custom width</WidthMenu>
+    <WidthMenu menuWidth={320}>Custom width</WidthMenu>
   </div>
 );
 
 const styles = stylex.create({
   widthMenu: {
-    width: menuVars.width,
+    width: cssVariableDefineVarsDeclarationInputMenuWidthVars.menuWidth,
     padding: 8,
     backgroundColor: "#fef3c7",
   },
-  widthMenuMenuWidth: (menuWidth: number | undefined) => ({
-    [menuVars.width]: `${menuWidth}px`,
-  }),
 });

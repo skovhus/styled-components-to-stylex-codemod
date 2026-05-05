@@ -675,6 +675,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         continue;
       }
     }
+    const localVarSlotPart =
+      d.value.parts.find((p: any) => p.kind === "slot" && d.property?.startsWith("--")) ??
+      d.value.parts.find(
+        (p: any) => p.kind === "slot" && d.valueRaw.includes(`__SC_EXPR_${p.slotId}__`),
+      );
+    const localVarSlotId =
+      localVarSlotPart && localVarSlotPart.kind === "slot" ? localVarSlotPart.slotId : 0;
+    const localVarExpr = decl.templateExpressions[localVarSlotId];
+    if (
+      tryHandleLocalCustomPropertyDefinition({
+        j,
+        d,
+        decl,
+        expr: localVarExpr,
+        getOrCreateLocalStylexVar,
+        localStylexVars,
+        inlineStyleProps,
+      })
+    ) {
+      continue;
+    }
     if (
       tryHandleInterpolatedStringValue({
         j,
@@ -872,22 +893,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const slotId = slotPart && slotPart.kind === "slot" ? slotPart.slotId : 0;
     const expr = decl.templateExpressions[slotId];
     const loc = getNodeLocStart(expr as any);
-
-    if (
-      tryHandleLocalCustomPropertyDefinition({
-        j,
-        d,
-        decl,
-        expr,
-        getOrCreateLocalStylexVar,
-        localStylexVars,
-        styleObj,
-        styleFnDecls,
-        styleFnFromProps,
-      })
-    ) {
-      continue;
-    }
 
     // Handle local helper function calls that return CSS strings.
     // Pattern: ${(props) => localFn(props.size)} where localFn returns multi-property CSS.
@@ -2471,36 +2476,18 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   d: CssDeclarationIR;
   decl: StyledDecl;
   expr: unknown;
-  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => {
+  getOrCreateLocalStylexVar: (
+    cssName: string,
+    defaultValue: string,
+  ) => {
     groupName: string;
     keyName: string;
   };
   localStylexVars: Map<string, unknown>;
-  styleFnDecls: Map<string, unknown>;
-  styleFnFromProps: Array<{
-    fnKey: string;
-    jsxProp: string;
-    condition?: "truthy" | "always";
-    callArg?: ExpressionKind;
-    conditionWhen?: string;
-  }>;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
 }): boolean {
-  const {
-    j,
-    d,
-    decl,
-    expr,
-    getOrCreateLocalStylexVar,
-    localStylexVars,
-    styleFnDecls,
-    styleFnFromProps,
-  } = args;
-  if (!d.property?.startsWith("--") || !expr || typeof expr !== "object") {
-    return false;
-  }
-  const cssName = d.property;
-  const defaultValue = findLocalCustomPropertyFallback(cssName, decl);
-  if (!defaultValue) {
+  const { j, d, decl, expr, getOrCreateLocalStylexVar, localStylexVars, inlineStyleProps } = args;
+  if (!expr || typeof expr !== "object") {
     return false;
   }
   const arrow = expr as {
@@ -2518,14 +2505,12 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (!paramName) {
     return false;
   }
-  const body = getFunctionBodyExpr(arrow) as
-    | {
-        type?: string;
-        test?: unknown;
-        consequent?: unknown;
-        alternate?: unknown;
-      }
-    | null;
+  const body = getFunctionBodyExpr(arrow) as {
+    type?: string;
+    test?: unknown;
+    consequent?: unknown;
+    alternate?: unknown;
+  } | null;
   if (body?.type !== "ConditionalExpression") {
     return false;
   }
@@ -2533,52 +2518,61 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (!conditionProp || !isEmptyCssExpression(body.alternate)) {
     return false;
   }
-  const customValue = parseCustomPropertyTemplateValue(cssName, body.consequent, paramName);
+  const customValue = parseCustomPropertyTemplateValue(
+    d.property ?? null,
+    body.consequent,
+    paramName,
+  );
   if (!customValue) {
     return false;
   }
-  const ref = getOrCreateLocalStylexVar(cssName, defaultValue);
-  const fnKey = styleKeyWithSuffix(decl.styleKey, cssName);
-  if (!styleFnDecls.has(fnKey)) {
-    const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
-    const paramNameForFn = cssPropertyToIdentifier(propName || ref.keyName);
-    const param = j.identifier(paramNameForFn);
-    const keyExpr = j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName));
-    const valueExpr = buildTemplateWithStaticParts(
-      j,
-      j.identifier(paramNameForFn),
-      customValue.prefix,
-      customValue.suffix,
-    );
-    const prop = j.property("init", keyExpr, valueExpr);
-    (prop as { computed?: boolean }).computed = true;
-    styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([prop])));
+  const defaultValue = findLocalCustomPropertyFallback(customValue.cssName, decl);
+  if (!defaultValue) {
+    return false;
   }
-  styleFnFromProps.push({
-    fnKey,
-    jsxProp: conditionProp,
-    conditionWhen: conditionProp,
+  const ref = getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
+  const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
+  const valueExpr = buildTemplateWithStaticParts(
+    j,
+    j.identifier(propName),
+    customValue.prefix,
+    customValue.suffix,
+  );
+  inlineStyleProps.push({
+    prop: customValue.cssName,
+    expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
+    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName)),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
   }
-  localStylexVars.set(cssName, ref);
-  delete styleObj[cssName];
+  localStylexVars.set(customValue.cssName, ref);
   decl.needsWrapperComponent = true;
   return true;
 }
 
-function findLocalCustomPropertyFallback(
-  cssName: string,
-  styleObj: Record<string, unknown>,
-): string | null {
-  for (const value of Object.values(styleObj)) {
-    if (typeof value !== "string") {
-      continue;
+function findLocalCustomPropertyFallback(cssName: string, decl: StyledDecl): string | null {
+  for (const rule of decl.rules) {
+    for (const candidate of rule.declarations) {
+      if (candidate.property !== cssName || candidate.value.kind !== "static") {
+        continue;
+      }
+      const staticValue = String(candidate.value.value);
+      if (staticValue) {
+        return staticValue;
+      }
     }
-    for (const call of findCssVarCallsInString(value)) {
-      if (call.name === cssName && call.fallback) {
-        return call.fallback;
+  }
+  for (const rule of decl.rules) {
+    for (const candidate of rule.declarations) {
+      const value = candidate.value.kind === "static" ? String(candidate.value.value) : null;
+      if (value === null) {
+        continue;
+      }
+      for (const call of findCssVarCallsInString(value)) {
+        if (call.name === cssName && call.fallback) {
+          return call.fallback;
+        }
       }
     }
   }
@@ -2586,10 +2580,10 @@ function findLocalCustomPropertyFallback(
 }
 
 function parseCustomPropertyTemplateValue(
-  cssName: string,
+  expectedCssName: string | null,
   node: unknown,
   paramName: string,
-): { prefix: string; suffix: string } | null {
+): { cssName: string; prefix: string; suffix: string } | null {
   const tpl = node as {
     type?: string;
     quasis?: Array<{ value?: { cooked?: string; raw?: string } }>;
@@ -2607,11 +2601,14 @@ function parseCustomPropertyTemplateValue(
   }
   const prefixText = tpl.quasis[0]?.value?.cooked ?? tpl.quasis[0]?.value?.raw ?? "";
   const suffixWithTerminator = tpl.quasis[1]?.value?.cooked ?? tpl.quasis[1]?.value?.raw ?? "";
-  const declarationPrefix = `${cssName}:`;
-  if (!prefixText.trimStart().startsWith(declarationPrefix)) {
+  const declarationMatch = prefixText.trimStart().match(/^(--[-_a-zA-Z0-9]+)\s*:/);
+  const cssName = declarationMatch?.[1] ?? null;
+  if (!cssName || (expectedCssName && cssName !== expectedCssName)) {
     return null;
   }
+  const declarationPrefix = `${cssName}:`;
   return {
+    cssName,
     prefix: prefixText
       .slice(prefixText.indexOf(declarationPrefix) + declarationPrefix.length)
       .trimStart(),

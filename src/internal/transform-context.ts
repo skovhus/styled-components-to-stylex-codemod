@@ -167,7 +167,10 @@ export class TransformContext {
     const resolverImports = new Map<string, ImportSpec>();
     const localStylexVars = new Map<string, LocalStylexVarRef>();
     let nextLocalStylexVarOrder = 0;
-    const getOrCreateLocalStylexVar = (cssName: string, defaultValue: string): LocalStylexVarRef => {
+    const getOrCreateLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef => {
       const existing = localStylexVars.get(cssName);
       if (existing) {
         return existing;
@@ -176,18 +179,27 @@ export class TransformContext {
         .slice(2)
         .split("-")
         .filter(Boolean)
-        .map((part, index) =>
-          index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1),
-        )
+        .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
         .join("");
       const keyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
-      const groupName = `${keyName}Vars`;
+      const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
+      const filePrefix = baseName
+        .split(/[^a-zA-Z0-9_$]+/)
+        .filter(Boolean)
+        .map((part, index) =>
+          index === 0
+            ? part.charAt(0).toLowerCase() + part.slice(1)
+            : part.charAt(0).toUpperCase() + part.slice(1),
+        )
+        .join("");
+      const groupName = `${filePrefix}${keyName.charAt(0).toUpperCase()}${keyName.slice(1)}Vars`;
       const ref = {
         cssName,
         groupName,
         keyName,
         defaultValue,
         sourceOrder: nextLocalStylexVarOrder,
+        sidecarFileName: `${baseName}.stylex`,
       };
       nextLocalStylexVarOrder += 1;
       localStylexVars.set(cssName, ref);

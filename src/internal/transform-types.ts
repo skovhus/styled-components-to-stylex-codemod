@@ -25,6 +25,12 @@ export interface LocalStylexVarRef {
   keyName: string;
   defaultValue: string;
   sourceOrder: number;
+  sidecarFileName: string;
+}
+
+export interface LocalStylexVarsSidecarFile {
+  content: string;
+  importPath: string;
 }
 
 /**
@@ -40,6 +46,7 @@ export interface TransformResult {
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */
   transientPropRenames?: TransientPropRenameResult[];
+  localStylexVarsSidecarFile?: LocalStylexVarsSidecarFile;
 }
 
 /** Describes a transient prop rename on an exported component for consumer patching. */
@@ -574,6 +581,7 @@ export type StyledDecl = {
     prop: string;
     expr: ExpressionKind;
     jsxProp?: string;
+    keyExpr?: ExpressionKind;
   }>;
   /**
    * Static normal-property values that cannot be emitted through stylex.create()

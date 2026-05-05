@@ -114,6 +114,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   resolveDirectionalConflicts(styleObj);
   warnOpaqueShorthands(styleObj, decl, warnings);
 
+  registerLocalStylexVarFallbacks(state, decl, styleObj);
+
   const varsToDrop = new Set<string>();
   const staticInlineStyleProps = decl.staticInlineStyleProps ?? [];
   decl.staticInlineStyleProps = staticInlineStyleProps;
@@ -131,6 +133,24 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   for (const fnAst of styleFnDecls.values()) {
     if (fnAst && typeof fnAst === "object" && isAstNode(fnAst)) {
       rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
+    }
+  }
+  for (const inlineStyleProp of inlineStyleProps) {
+    const { prop, expr } = inlineStyleProp;
+    if (!prop.startsWith("--")) {
+      continue;
+    }
+    const defaultValue = findLocalCustomPropertyFallbackFromRules(prop, decl);
+    if (!defaultValue) {
+      continue;
+    }
+    const localVar = state.getOrCreateLocalStylexVar(prop, defaultValue);
+    inlineStyleProp.keyExpr = state.j.memberExpression(
+      state.j.identifier(localVar.groupName),
+      state.j.identifier(localVar.keyName),
+    );
+    if (expr && typeof expr === "object" && isAstNode(expr)) {
+      rewriteCssVarsInAstNode(expr as { type: string }, localVarValues, varsToDrop);
     }
   }
   // Apply `dropDefinition: true` results to every bucket that may carry a
@@ -689,6 +709,24 @@ function addBucketProps(bucket: Record<string, unknown>, props: Set<string>): vo
   }
 }
 
+function registerLocalStylexVarFallbacks(
+  state: DeclProcessingState["state"],
+  decl: StyledDecl,
+  styleObj: Record<string, unknown>,
+): void {
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (prop.startsWith("--") || typeof value !== "string") {
+      continue;
+    }
+    for (const call of findCssVarCallsInString(value)) {
+      if (!call.fallback || !hasCustomPropertyDefinition(decl, call.name)) {
+        continue;
+      }
+      state.getOrCreateLocalStylexVar(call.name, call.fallback);
+    }
+  }
+}
+
 function collectObjectExpressionPropertyNames(node: unknown, props: Set<string>): void {
   if (!node || typeof node !== "object") {
     return;
@@ -740,6 +778,30 @@ function readObjectPropertyName(property: unknown): string | null {
     return record.key.value;
   }
   return null;
+}
+
+function findLocalCustomPropertyFallbackFromRules(
+  cssName: string,
+  decl: StyledDecl,
+): string | null {
+  for (const rule of decl.rules) {
+    for (const candidate of rule.declarations) {
+      if (candidate.property !== cssName || candidate.value.kind !== "static") {
+        continue;
+      }
+      const staticValue = String(candidate.value.value);
+      if (staticValue) {
+        return staticValue;
+      }
+    }
+  }
+  return null;
+}
+
+function hasCustomPropertyDefinition(decl: StyledDecl, cssName: string): boolean {
+  return decl.rules.some((rule) =>
+    rule.declarations.some((candidate) => candidate.property === cssName),
+  );
 }
 
 function dropCssVariableDefinitionsFromBucket(bucket: Record<string, unknown>, name: string): void {
