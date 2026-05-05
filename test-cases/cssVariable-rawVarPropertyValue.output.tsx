@@ -1,12 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const columnTrackInlineStyle = {
-  gridTemplateColumns: "var(--column-width)",
-  minWidth: "var(--column-min-width, min-content, 0)",
-  width: "min(var(--column-width), var(--column-max-width))",
-} satisfies React.CSSProperties;
-
 export const App = () => (
   <div style={{ padding: 12 }}>
     <div sx={styles.columnTrack} style={columnTrackInlineStyle}>
@@ -14,6 +8,12 @@ export const App = () => (
     </div>
   </div>
 );
+
+const columnTrackInlineStyle = {
+  gridTemplateColumns: "var(--column-width)",
+  minWidth: "var(--column-min-width, min-content, 0)",
+  width: "min(var(--column-width), var(--column-max-width))",
+} satisfies React.CSSProperties;
 
 const styles = stylex.create({
   columnTrack: {

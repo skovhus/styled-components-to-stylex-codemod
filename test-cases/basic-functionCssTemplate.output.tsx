@@ -10,8 +10,16 @@ type FlexContainerProps = React.PropsWithChildren<{
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {
   const { children, align } = props;
+  const sx = stylex.props(styles.flexContainer, align === "left" && styles.flexContainerAlignLeft);
+
   return (
-    <div sx={[styles.flexContainer, align === "left" && styles.flexContainerAlignLeft]}>
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        gap: "var(--spacing-xxs)",
+      }}
+    >
       {children}
     </div>
   );
@@ -50,7 +58,6 @@ export const App = () => (
 const styles = stylex.create({
   flexContainer: {
     display: "flex",
-    gap: "var(--spacing-xxs)",
     overflow: "hidden",
     whiteSpace: "nowrap",
     position: "relative",

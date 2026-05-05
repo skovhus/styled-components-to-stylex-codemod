@@ -22,8 +22,19 @@ function Box(props: React.PropsWithChildren<{}>) {
 function DayPicker(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
 
+  const sx = stylex.props(
+    styles.dayPicker,
+    theme.isDark ? styles.dayPickerDark : styles.dayPickerLight,
+  );
+
   return (
-    <div sx={[styles.dayPicker, theme.isDark ? styles.dayPickerDark : styles.dayPickerLight]}>
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        backgroundColor: "var(--highlighted-color)",
+      }}
+    >
       {props.children}
     </div>
   );
@@ -53,7 +64,6 @@ const styles = stylex.create({
     padding: pixelVars.thin,
   },
   dayPicker: {
-    backgroundColor: "var(--highlighted-color)",
     padding: 16,
   },
   dayPickerDark: {

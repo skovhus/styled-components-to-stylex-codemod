@@ -114,6 +114,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   warnOpaqueShorthands(styleObj, decl, warnings);
 
   const varsToDrop = new Set<string>();
+  const staticInlineStyleProps = decl.staticInlineStyleProps ?? [];
+  decl.staticInlineStyleProps = staticInlineStyleProps;
   const bucketsForVarRewrite: Array<Record<string, unknown>> = [
     styleObj,
     ...extraStyleObjects.values(),
@@ -141,7 +143,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   moveUnsafeRawCssVarPropsToInlineStyles({
     styleObj,
     inlineStyleProps,
-    staticInlineStyleProps: (decl.staticInlineStyleProps ??= []),
+    staticInlineStyleProps,
     j: state.j,
   });
 

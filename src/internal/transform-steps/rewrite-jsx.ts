@@ -216,8 +216,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
+        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
         const staticInlineStyleExpr =
-          decl.staticInlineStyleConstName && /^[a-z]/.test(finalTag) && !finalTag.includes(".")
+          decl.staticInlineStyleConstName && isIntrinsicTag
             ? (j.identifier(decl.staticInlineStyleConstName) as ExpressionKind)
             : null;
 
@@ -835,7 +836,6 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).
-        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
         if (staticInlineStyleExpr && !styleAttr) {
           styleAttr = j.jsxAttribute(
             j.jsxIdentifier("style"),
@@ -1204,7 +1204,11 @@ function buildExtraClassNameExpr(
 function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: StyledDecl[]): void {
   const { root, j } = ctx;
   const decls = styledDecls.filter(
-    (decl) => !decl.skipTransform && (decl.staticInlineStyleProps?.length ?? 0) > 0,
+    (decl) =>
+      !decl.skipTransform &&
+      !decl.needsWrapperComponent &&
+      decl.base.kind === "intrinsic" &&
+      (decl.staticInlineStyleProps?.length ?? 0) > 0,
   );
   if (decls.length === 0) {
     return;

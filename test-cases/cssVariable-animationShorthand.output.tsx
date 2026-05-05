@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const shimmer = stylex.keyframes({
@@ -27,10 +28,23 @@ const pulse = stylex.keyframes({
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
     <div sx={styles.progressFill}>Progress</div>
-    <div sx={styles.pulser}>Pulse</div>
-    <div sx={styles.delayed}>Delay</div>
+    <div sx={styles.pulser} style={pulserInlineStyle}>
+      Pulse
+    </div>
+    <div sx={styles.delayed} style={delayedInlineStyle}>
+      Delay
+    </div>
   </div>
 );
+
+const pulserInlineStyle = {
+  animationTimingFunction: "var(--easing, ease-in-out)",
+} satisfies React.CSSProperties;
+
+const delayedInlineStyle = {
+  animationDuration: "var(--dur, 0.8s)",
+  animationDelay: "var(--delay, 0.2s)",
+} satisfies React.CSSProperties;
 
 const styles = stylex.create({
   // var() with a time fallback → animationDuration
@@ -56,7 +70,6 @@ const styles = stylex.create({
     backgroundColor: "tomato",
     animationName: pulse,
     animationDuration: "2s",
-    animationTimingFunction: "var(--easing, ease-in-out)",
     animationIterationCount: "infinite",
   },
   // Two var() time values → duration then delay
@@ -65,9 +78,7 @@ const styles = stylex.create({
     height: 40,
     backgroundColor: "gold",
     animationName: pulse,
-    animationDuration: "var(--dur, 0.8s)",
     animationTimingFunction: "ease-out",
-    animationDelay: "var(--delay, 0.2s)",
     animationIterationCount: "infinite",
   },
 });

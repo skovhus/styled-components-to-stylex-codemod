@@ -13,17 +13,22 @@ function CheckMark(props: CheckMarkProps) {
 
 export const App = () => (
   <div>
-    <div sx={[styles.groupHeaderRow, styles.rowBase]}>Group</div>
+    <div sx={[styles.groupHeaderRow, styles.rowBase]} style={groupHeaderRowInlineStyle}>
+      Group
+    </div>
     <div sx={[styles.projectRow, styles.rowBase]}>Project</div>
     <CheckMark opaque={true} />
     <CheckMark opaque={false} />
   </div>
 );
 
+const groupHeaderRowInlineStyle = {
+  top: "var(--sticky-top, 0px)",
+} satisfies React.CSSProperties;
+
 const styles = stylex.create({
   groupHeaderRow: {
     position: "sticky",
-    top: "var(--sticky-top, 0px)",
     // above regular rows
     zIndex: 3,
     borderTopWidth: "1px",
