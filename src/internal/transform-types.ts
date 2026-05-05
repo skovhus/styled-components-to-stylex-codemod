@@ -564,6 +564,14 @@ export type StyledDecl = {
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; jsxProp?: string }>;
   /**
+   * Static normal-property values that cannot be emitted through stylex.create()
+   * (for example unresolved raw CSS var(...) expressions). Wrapper components use
+   * inlineStyleProps directly; inlined intrinsic elements use this to emit a shared
+   * React.CSSProperties object and attach it as a JSX style attribute.
+   */
+  staticInlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
+  staticInlineStyleConstName?: string;
+  /**
    * Static conditional style entries from base-component resolution for boolean props
    * where only some call sites pass the prop. Instead of a separate `stylex.create`
    * lookup object (VariantDimension), these are injected into `resolvedStyleObjects`

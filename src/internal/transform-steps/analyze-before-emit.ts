@@ -518,6 +518,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
   // Exception: single-use intrinsic components can be inlined with adapter merge handling instead.
   // Exception: components with all promotable style props (no className) can be inlined.
+  // Components with static inline fallback styles also stay inline for a single callsite so
+  // the JSX rewriter can attach the generated style object directly.
   // Also track which components receive className/style in JSX for merger import determination.
   for (const decl of styledDecls) {
     if (decl.isDirectJsxResolution) {

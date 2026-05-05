@@ -16,11 +16,17 @@ function TaggedSpan(props: TaggedSpanProps) {
 
 export const App = () => (
   <div sx={styles.card}>
-    <p sx={styles.text}>Some text content</p>
+    <p style={textInlineStyle}>Some text content</p>
     <button sx={styles.button}>Click me</button>
     <TaggedSpan tone="papayawhip">Tagged</TaggedSpan>
   </div>
 );
+
+const textInlineStyle = {
+  color: "var(--text-color, #333)",
+  fontSize: "var(--font-size, 16px)",
+  lineHeight: "var(--line-height, 1.5)",
+} satisfies React.CSSProperties;
 
 const styles = stylex.create({
   button: {
@@ -43,12 +49,6 @@ const styles = stylex.create({
     borderColor: vars.colorSecondary,
     borderRadius: vars.borderRadius,
     margin: vars.spacingMd,
-  },
-  // Using CSS variables with fallbacks
-  text: {
-    color: "var(--text-color, #333)",
-    fontSize: "var(--font-size, 16px)",
-    lineHeight: "var(--line-height, 1.5)",
   },
   taggedSpan: {
     color: vars.colorPrimary,

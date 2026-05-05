@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Gutter(props: React.PropsWithChildren<{}>) {
@@ -10,7 +10,7 @@ function Code(props: React.PropsWithChildren<{}>) {
 }
 
 export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
-  <div sx={styles.container}>
+  <div sx={styles.container} style={containerInlineStyle}>
     <Gutter>1</Gutter>
     <Code>const answer = 42;</Code>
     <Gutter>2</Gutter>
@@ -24,11 +24,14 @@ export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (
   </div>
 );
 
+const containerInlineStyle = {
+  gridTemplateColumns: "[gutter] var(--line-number-width, 50px) [code] minmax(0, 1fr)",
+} satisfies React.CSSProperties;
+
 const styles = stylex.create({
   container: {
     display: "grid",
     position: "relative",
-    gridTemplateColumns: "[gutter] var(--line-number-width, 50px) [code] minmax(0, 1fr)",
     gridAutoRows: "minmax(0px, auto)",
     gap: "4px 8px",
     padding: 8,

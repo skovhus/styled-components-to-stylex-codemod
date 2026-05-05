@@ -13,7 +13,7 @@ export function ensureReactImportStep(ctx: TransformContext): StepResult {
   const { root, j } = ctx;
 
   if (ctx.needsReactImport) {
-    ensureReactBinding({ root, j });
+    ensureReactBinding({ root, j, useNamespaceStyle: ctx.needsReactNamespaceImport });
     ctx.markChanged();
   }
 

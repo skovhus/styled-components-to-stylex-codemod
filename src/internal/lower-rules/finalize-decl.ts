@@ -12,6 +12,7 @@ import {
 } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
 import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
+import { findCssVarCallsInString } from "../css-vars.js";
 import {
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
@@ -57,6 +58,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     attrBuckets,
     inlineStyleProps,
     localVarValues,
+    cssHelperPropValues,
   } = ctx;
   const {
     rewriteCssVarsInStyleObject,
@@ -113,6 +115,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   warnOpaqueShorthands(styleObj, decl, warnings);
 
   const varsToDrop = new Set<string>();
+  const staticInlineStyleProps = decl.staticInlineStyleProps ?? [];
+  decl.staticInlineStyleProps = staticInlineStyleProps;
   const bucketsForVarRewrite: Array<Record<string, unknown>> = [
     styleObj,
     ...extraStyleObjects.values(),
@@ -137,6 +141,20 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       dropCssVariableDefinitionsFromBucket(bucket, name);
     }
   }
+  moveUnsafeRawCssVarPropsToInlineStyles({
+    styleObj,
+    inlineStyleProps,
+    staticInlineStyleProps,
+    unsafeProps: collectStyleOverrideProps({
+      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+      cssHelperPropValues,
+      extraStyleObjects,
+      resolvedStyleObjects,
+      variantBuckets,
+      styleFnDecls,
+    }),
+    j: state.j,
+  });
 
   // Check for interpolations in pseudo selectors that can't be safely transformed
   const hasPseudoBlockInterpolation = (() => {
@@ -598,6 +616,131 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
 }
 
 // --- Non-exported helpers ---
+
+function moveUnsafeRawCssVarPropsToInlineStyles(args: {
+  styleObj: Record<string, unknown>;
+  inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
+  staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  unsafeProps: ReadonlySet<string>;
+  j: Parameters<typeof literalToAst>[0];
+}): void {
+  const { styleObj, inlineStyleProps, staticInlineStyleProps, unsafeProps, j } = args;
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (prop.startsWith("__") || prop.startsWith("--")) {
+      continue;
+    }
+    if (unsafeProps.has(prop)) {
+      continue;
+    }
+    if (typeof value !== "string" || findCssVarCallsInString(value).length === 0) {
+      continue;
+    }
+
+    delete styleObj[prop];
+    const expr = j.stringLiteral(value);
+    inlineStyleProps.push({ prop, expr });
+    staticInlineStyleProps.push({ prop, expr });
+  }
+}
+
+function collectStyleOverrideProps(args: {
+  afterBaseStyleKeys: readonly string[];
+  cssHelperPropValues: Map<string, unknown>;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
+  resolvedStyleObjects: Map<string, unknown>;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  styleFnDecls: Map<string, unknown>;
+}): Set<string> {
+  const {
+    afterBaseStyleKeys,
+    cssHelperPropValues,
+    extraStyleObjects,
+    resolvedStyleObjects,
+    variantBuckets,
+    styleFnDecls,
+  } = args;
+  const props = new Set<string>();
+  for (const prop of cssHelperPropValues.keys()) {
+    props.add(prop);
+  }
+  for (const styleKey of afterBaseStyleKeys) {
+    const styleObject = resolvedStyleObjects.get(styleKey);
+    if (isStyleObjectForCssVarDrop(styleObject)) {
+      addBucketProps(styleObject, props);
+    }
+  }
+  for (const bucket of extraStyleObjects.values()) {
+    addBucketProps(bucket, props);
+  }
+  for (const bucket of variantBuckets.values()) {
+    addBucketProps(bucket, props);
+  }
+  for (const fnAst of styleFnDecls.values()) {
+    collectObjectExpressionPropertyNames(fnAst, props);
+  }
+  return props;
+}
+
+function addBucketProps(bucket: Record<string, unknown>, props: Set<string>): void {
+  for (const prop of Object.keys(bucket)) {
+    if (!prop.startsWith("__")) {
+      props.add(prop);
+    }
+  }
+}
+
+function collectObjectExpressionPropertyNames(node: unknown, props: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectObjectExpressionPropertyNames(child, props);
+    }
+    return;
+  }
+
+  const record = node as Record<string, unknown>;
+  if (record.type === "ObjectExpression" && Array.isArray(record.properties)) {
+    for (const property of record.properties) {
+      const propName = readObjectPropertyName(property);
+      if (propName && !propName.startsWith("__")) {
+        props.add(propName);
+      }
+    }
+  }
+
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    collectObjectExpressionPropertyNames(child, props);
+  }
+}
+
+function readObjectPropertyName(property: unknown): string | null {
+  if (!property || typeof property !== "object") {
+    return null;
+  }
+  const record = property as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string; value?: unknown };
+  };
+  if (record.type !== "Property" || record.computed) {
+    return null;
+  }
+  if (record.key?.type === "Identifier") {
+    return record.key.name ?? null;
+  }
+  if (
+    (record.key?.type === "Literal" || record.key?.type === "StringLiteral") &&
+    typeof record.key.value === "string"
+  ) {
+    return record.key.value;
+  }
+  return null;
+}
 
 function dropCssVariableDefinitionsFromBucket(bucket: Record<string, unknown>, name: string): void {
   delete bucket[name];

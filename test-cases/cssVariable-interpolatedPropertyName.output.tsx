@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 const ITEM_MIN_WIDTH_VAR = "--item-min-width";
@@ -5,7 +6,9 @@ const ITEM_MIN_WIDTH_VAR = "--item-min-width";
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <div sx={styles.container}>Sets --item-min-width: 100%</div>
-    <div sx={styles.consumer}>Reads var(--item-min-width)</div>
+    <div sx={styles.consumer} style={consumerInlineStyle}>
+      Reads var(--item-min-width)
+    </div>
     <div sx={styles.importedSetter}>Sets --item-min-width via imported constant</div>
     <div sx={styles.barrelMinSetter}>Sets --item-min-width via barrel re-export</div>
     <div sx={styles.barrelMaxSetter}>Sets --item-max-width via barrel star re-export</div>
@@ -13,6 +16,10 @@ export const App = () => (
     <div sx={styles.specifierExportSetter}>Sets --item-padding via local-const re-export</div>
   </div>
 );
+
+const consumerInlineStyle = {
+  width: "var(--item-min-width)",
+} satisfies React.CSSProperties;
 
 const styles = stylex.create({
   container: {
@@ -23,7 +30,6 @@ const styles = stylex.create({
   },
 
   consumer: {
-    width: "var(--item-min-width)",
     backgroundColor: "teal",
     color: "white",
     padding: 8,

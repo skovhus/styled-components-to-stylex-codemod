@@ -22,7 +22,19 @@ function ContainerWrapper(props: ContainerWrapperProps) {
 
 // A container that uses the CSS custom property with calc()
 function Container(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.container}>{props.children}</div>;
+  const sx = stylex.props(styles.container);
+
+  return (
+    <div
+      {...sx}
+      style={{
+        ...sx.style,
+        width: "calc(var(--component-width) + 60px)",
+      }}
+    >
+      {props.children}
+    </div>
+  );
 }
 
 export const App = () => (
@@ -48,7 +60,6 @@ const styles = stylex.create({
   }),
   container: {
     backgroundColor: "coral",
-    width: "calc(var(--component-width) + 60px)",
     height: 100,
     display: "flex",
     alignItems: "center",

@@ -6,6 +6,7 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { toStyleKey } from "../transform/helpers.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { readStaticJsxLiteral } from "./jsx-static-literal.js";
@@ -33,6 +34,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
   if (!styledDecls || !ctx.wrapperNames) {
     return CONTINUE;
   }
+
+  emitStaticInlineStyleConstants(ctx, styledDecls);
 
   for (const decl of styledDecls) {
     if (decl.skipTransform) {
@@ -213,6 +216,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
         const styleFnPairs = decl.styleFnFromProps ?? [];
         const styleFnProps = new Set(styleFnPairs.map((p) => p.jsxProp));
+        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
+        const staticInlineStyleExpr =
+          decl.staticInlineStyleConstName && isIntrinsicTag
+            ? (j.identifier(decl.staticInlineStyleConstName) as ExpressionKind)
+            : null;
 
         const keptAttrs = (opening.attributes ?? []).filter((attr) => {
           if (attr.type !== "JSXAttribute") {
@@ -376,6 +384,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const leading: typeof keptAttrs = [];
         const rest: typeof keptAttrs = [];
         let styleAttr: (typeof keptAttrs)[0] | null = null;
+        let hasCallerStyleAttr = false;
         let classNameAttr: (typeof keptAttrs)[0] | null = null;
         // `sxAttr` is captured separately so the inlined `sx={...}` replacement can
         // compose the caller-supplied `sx` into the new one (avoids duplicate `sx=`
@@ -388,7 +397,23 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "style"
           ) {
-            styleAttr = attr;
+            hasCallerStyleAttr = true;
+            if (staticInlineStyleExpr) {
+              const callerStyleExpr = extractJsxAttrValueExpr(j, attr);
+              styleAttr = j.jsxAttribute(
+                j.jsxIdentifier("style"),
+                j.jsxExpressionContainer(
+                  callerStyleExpr
+                    ? j.objectExpression([
+                        j.spreadElement(staticInlineStyleExpr),
+                        j.spreadElement(callerStyleExpr),
+                      ])
+                    : staticInlineStyleExpr,
+                ),
+              );
+            } else {
+              styleAttr = attr;
+            }
           } else if (
             attr.type === "JSXAttribute" &&
             attr.name.type === "JSXIdentifier" &&
@@ -813,7 +838,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).
-        const isIntrinsicTag = /^[a-z]/.test(finalTag) && !finalTag.includes(".");
+        if (staticInlineStyleExpr && !styleAttr) {
+          styleAttr = j.jsxAttribute(
+            j.jsxIdentifier("style"),
+            j.jsxExpressionContainer(staticInlineStyleExpr),
+          );
+        }
 
         // The adapter may declare that an imported component accepts a StyleX `sx`
         // prop (already migrated to StyleX). When wrapping such a component, emit
@@ -843,7 +873,17 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           );
         }
 
-        const needsMerge = effectiveClassNameAttr !== null || styleAttr !== null;
+        const hasRestSpreadAttr = keptRestAfterVariants.some(
+          (attr) => attr.type === "JSXSpreadAttribute",
+        );
+        const hasOnlyStaticInlineStyleAttr =
+          staticInlineStyleExpr !== null &&
+          styleAttr !== null &&
+          effectiveClassNameAttr === null &&
+          !hasCallerStyleAttr &&
+          !hasRestSpreadAttr;
+        const needsMerge =
+          effectiveClassNameAttr !== null || (styleAttr !== null && !hasOnlyStaticInlineStyleAttr);
         // sx prop requires at least one local stylex.create() reference so the
         // StyleX compiler can verify and transform it. When all styles are external
         // (e.g. only extraStylexPropsArgs mixin lookups), fall back to stylex.props().
@@ -1169,6 +1209,118 @@ function buildExtraClassNameExpr(
     qs.push(j.templateElement({ raw, cooked: raw }, isLast));
   }
   return j.templateLiteral(qs, exprs);
+}
+
+function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: StyledDecl[]): void {
+  const { root, j } = ctx;
+  const decls = styledDecls.filter(
+    (decl) =>
+      !decl.skipTransform &&
+      !decl.needsWrapperComponent &&
+      decl.base.kind === "intrinsic" &&
+      (decl.staticInlineStyleProps?.length ?? 0) > 0,
+  );
+  if (decls.length === 0) {
+    return;
+  }
+
+  const existingNames = collectTopLevelBindingNames(root, j);
+  const programBody = root.get().node.program.body as unknown[];
+  const stylesIndex = programBody.findIndex(isStylexCreateStylesDeclaration);
+  const insertAt = stylesIndex >= 0 ? stylesIndex : programBody.length;
+  const declarations: unknown[] = [];
+
+  for (const decl of decls) {
+    const baseName = `${toStyleKey(decl.localName)}InlineStyle`;
+    const constName = uniqueBindingName(baseName, existingNames);
+    existingNames.add(constName);
+    decl.staticInlineStyleConstName = constName;
+
+    const objectExpression = j.objectExpression(
+      (decl.staticInlineStyleProps ?? []).map((prop) =>
+        j.property("init", j.identifier(prop.prop), prop.expr),
+      ),
+    );
+    const initializer = shouldEmitTypes(ctx.file.path)
+      ? ({
+          type: "TSSatisfiesExpression",
+          expression: objectExpression,
+          typeAnnotation: j.tsTypeReference(
+            j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties")),
+          ),
+        } as unknown as ExpressionKind)
+      : objectExpression;
+
+    declarations.push(
+      j.variableDeclaration("const", [j.variableDeclarator(j.identifier(constName), initializer)]),
+    );
+  }
+
+  programBody.splice(insertAt, 0, ...(declarations as typeof programBody));
+  if (shouldEmitTypes(ctx.file.path)) {
+    ctx.needsReactImport = true;
+    ctx.needsReactNamespaceImport = true;
+  }
+  ctx.markChanged();
+}
+
+function shouldEmitTypes(filePath: string): boolean {
+  return /\.(ts|tsx)$/.test(filePath);
+}
+
+function collectTopLevelBindingNames(
+  root: TransformContext["root"],
+  j: TransformContext["j"]["jscodeshift"],
+): Set<string> {
+  const names = new Set<string>();
+  root.find(j.Identifier).forEach((path) => {
+    const node = path.node as { name?: unknown };
+    if (typeof node.name === "string") {
+      names.add(node.name);
+    }
+  });
+  return names;
+}
+
+function uniqueBindingName(baseName: string, usedNames: ReadonlySet<string>): string {
+  if (!usedNames.has(baseName)) {
+    return baseName;
+  }
+  let suffix = 2;
+  while (usedNames.has(`${baseName}${suffix}`)) {
+    suffix++;
+  }
+  return `${baseName}${suffix}`;
+}
+
+function isStylexCreateStylesDeclaration(node: unknown): boolean {
+  const declaration = node as {
+    type?: string;
+    declarations?: Array<{
+      init?: {
+        type?: string;
+        callee?: {
+          type?: string;
+          object?: { type?: string; name?: string };
+          property?: { type?: string; name?: string };
+        };
+      };
+    }>;
+  };
+  if (declaration.type !== "VariableDeclaration") {
+    return false;
+  }
+  return (declaration.declarations ?? []).some((decl) => {
+    const callee = decl.init?.callee;
+    return (
+      decl.init?.type === "CallExpression" &&
+      callee?.type === "MemberExpression" &&
+      callee.object?.type === "Identifier" &&
+      callee.object.name === "stylex" &&
+      callee.property?.type === "Identifier" &&
+      callee.property.name === "create"
+    );
+  });
 }
 
 /**

@@ -2524,6 +2524,31 @@ export function App() {
     expect(out).not.toMatch(/\btype\s+CardProps\b/);
     expect(out).not.toMatch(/props:\s*CardProps/);
   });
+
+  it("should not emit TypeScript satisfies syntax for raw CSS variable inline styles in plain JS", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  width: var(--raw-width);
+  color: red;
+\`;
+
+export function App() {
+  return <Box>Hi</Box>;
+}
+`;
+    const out = applyTransform(
+      transform,
+      { adapter: fixtureAdapter },
+      { source, path: "raw-var.js" },
+      { parser: "babel" },
+    );
+
+    expect(out).toContain('const boxInlineStyle = {\n  width: "var(--raw-width)",\n};');
+    expect(out).not.toContain("satisfies React.CSSProperties");
+    expect(out).not.toContain("React.CSSProperties");
+  });
 });
 
 describe("splitVariantsResolvedValue safety", () => {
@@ -7648,6 +7673,88 @@ export const App = () => <Box>content</Box>;
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("color: vars.themeColor");
     expect(result.code).not.toContain("[vars.themeColor]");
+  });
+
+  it("should preserve caller style spread when raw CSS variable inline styles are emitted", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  width: var(--raw-width);
+\`;
+
+export const App = (props: { style?: React.CSSProperties }) => <Box {...props}>content</Box>;
+`;
+    const adapterWithoutSxProp = {
+      ...fixtureAdapter,
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-caller-style.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutSxProp },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('width: "var(--raw-width)"');
+    expect(result.code).toContain("...style");
+  });
+
+  it("should not inline raw CSS variable values that are overridden by variants", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  color: var(--raw-color);
+  \${(props) => (props.$active ? "color: red;" : "")}
+\`;
+
+export const App = () => <Box $active>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-variant-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('color: "var(--raw-color)"');
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("styles.box, active && styles.boxActive");
+    expect(result.code).not.toContain('color: "var(--raw-color)",\n      }}');
+  });
+
+  it("should not inline raw CSS variable values that are overridden by later css mixins", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const overrideColor = css\`
+  color: red;
+\`;
+
+const Box = styled.div\`
+  color: var(--raw-color);
+  \${overrideColor}
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-mixin-override.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('color: "var(--raw-color)"');
+    expect(result.code).toContain('color: "red"');
+    expect(result.code).toContain("styles.box");
+    expect(result.code).toContain("styles.overrideColor");
+    expect(result.code).not.toContain('color: "var(--raw-color)",\n      }}');
   });
 
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
