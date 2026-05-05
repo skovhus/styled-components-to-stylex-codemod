@@ -172,8 +172,8 @@ function sourcePathCandidates(absolutePath: string): string[] {
 }
 
 /**
- * Locate `componentName` in `root` and return the TS type annotation of its
- * first parameter, or null.
+ * Locate a top-level `componentName` declaration in `root` and return the TS
+ * type annotation of its first parameter, or null.
  *
  * Handles:
  *   - `export function Name(props: T)` and `export default function Name(...)`.
@@ -197,26 +197,36 @@ function findComponentPropsType(
     }
   };
 
-  root
-    .find(j.FunctionDeclaration)
-    .filter((p) => {
-      const id = p.node.id as { name?: string } | null | undefined;
-      return id?.name === componentName;
-    })
-    .forEach((p) => recordFromParam(p.node.params));
-
-  root
-    .find(j.VariableDeclarator)
-    .filter((p) => {
-      const id = p.node.id as { type?: string; name?: string };
-      return id.type === "Identifier" && id.name === componentName;
-    })
-    .forEach((p) => {
-      const init = p.node.init as { type?: string; params?: unknown } | null | undefined;
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    const declaration =
+      statement.type === "ExportNamedDeclaration" || statement.type === "ExportDefaultDeclaration"
+        ? statement.declaration
+        : statement;
+    if (!declaration) {
+      continue;
+    }
+    if (declaration.type === "FunctionDeclaration") {
+      const id = declaration.id as { name?: string } | null | undefined;
+      if (id?.name === componentName) {
+        recordFromParam(declaration.params);
+      }
+      continue;
+    }
+    if (declaration.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declarator of declaration.declarations) {
+      const id = declarator.id as { type?: string; name?: string };
+      if (id.type !== "Identifier" || id.name !== componentName) {
+        continue;
+      }
+      const init = declarator.init as { type?: string; params?: unknown } | null | undefined;
       if (init && (init.type === "ArrowFunctionExpression" || init.type === "FunctionExpression")) {
         recordFromParam(init.params);
       }
-    });
+    }
+  }
 
   return propsType;
 }

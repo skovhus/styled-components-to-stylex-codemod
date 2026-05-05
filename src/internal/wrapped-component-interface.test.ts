@@ -774,6 +774,31 @@ function PlainField(props: PlainFieldProps) {
       }),
     ).toBe(false);
   });
+
+  it("ignores nested same-file declarations that shadow the wrapped component name", () => {
+    expect(
+      isWrappedComponentSxAware({
+        adapter: { useSxProp: true },
+        importMap: new Map(),
+        componentLocalName: "PlainField",
+        filePath: "/anywhere/consumer.tsx",
+        localSource: `
+import * as stylex from "@stylexjs/stylex";
+
+function Example() {
+  function PlainField(props: { sx?: stylex.StyleXStyles }) {
+    return null as any;
+  }
+  return <PlainField sx={{}} />;
+}
+
+function PlainField(props: { className?: string; style?: React.CSSProperties }) {
+  return null as any;
+}
+`,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("isWrappedComponentSxAware — caching", () => {
