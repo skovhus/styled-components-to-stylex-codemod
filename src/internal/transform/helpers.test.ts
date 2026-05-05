@@ -4,6 +4,7 @@ import {
   objectToAst,
   literalToAst,
   cssValueToJs,
+  normalizeCssContentValue,
   buildUnsupportedCssWarnings,
   toStyleKey,
   stripStyledPrefix,
@@ -184,6 +185,19 @@ describe("cssValueToJs", () => {
 
   it("returns empty string for non-static (interpolated) values", () => {
     expect(cssValueToJs({ kind: "interpolated" })).toBe("");
+  });
+});
+
+describe("normalizeCssContentValue", () => {
+  it("quotes literal strings for CSS content", () => {
+    expect(normalizeCssContentValue("hello")).toBe('"hello"');
+    expect(normalizeCssContentValue("'hello'")).toBe('"hello"');
+  });
+
+  it("preserves non-string content functions and keywords", () => {
+    expect(normalizeCssContentValue("attr(data-label)")).toBe("attr(data-label)");
+    expect(normalizeCssContentValue("counter(item)")).toBe("counter(item)");
+    expect(normalizeCssContentValue("open-quote")).toBe("open-quote");
   });
 });
 

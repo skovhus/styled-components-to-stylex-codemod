@@ -418,6 +418,7 @@ export function parseElementSelectorPattern(selector: string): {
   tagName: string;
   ancestorPseudo: string | null;
   childPseudo: string | null;
+  usesChildCombinator: boolean;
 } | null {
   const trimmed = selector.trim();
 
@@ -439,6 +440,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName,
       ancestorPseudo: ancestorPseudoRaw || null,
       childPseudo,
+      usesChildCombinator: (m[2] ?? "").includes(">"),
     };
   }
 
@@ -460,6 +462,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName: bareTagName,
       ancestorPseudo: null,
       childPseudo,
+      usesChildCombinator: false,
     };
   }
 
@@ -480,6 +483,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName: combTagName,
       ancestorPseudo: null,
       childPseudo,
+      usesChildCombinator: true,
     };
   }
 

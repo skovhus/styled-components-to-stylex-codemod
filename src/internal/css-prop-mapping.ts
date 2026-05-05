@@ -4,9 +4,18 @@
  */
 import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
-import { isBackgroundImageValue, looksLikeLength } from "./utilities/string-utils.js";
+import {
+  isBackgroundImageValue,
+  isSingleBackgroundComponent,
+  looksLikeLength,
+} from "./utilities/string-utils.js";
 
-export { isCssShorthandProperty, setUseLogicalProperties, getUseLogicalProperties };
+export {
+  isCssShorthandProperty,
+  isUnsupportedBackgroundShorthandValue,
+  setUseLogicalProperties,
+  getUseLogicalProperties,
+};
 
 type StylexPropDecl = { prop: string; value: CssValue };
 
@@ -41,6 +50,11 @@ function isCssShorthandProperty(cssProp: string): boolean {
     /^border-(top|right|bottom|left)$/.test(cssProp) ||
     cssProp === "background"
   );
+}
+
+function isUnsupportedBackgroundShorthandValue(rawValue: string): boolean {
+  const value = rawValue.trim();
+  return value !== "none" && !isSingleBackgroundComponent(value);
 }
 
 /**

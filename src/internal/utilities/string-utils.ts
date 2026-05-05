@@ -91,6 +91,25 @@ export function isBackgroundImageValue(value: string): boolean {
 }
 
 /**
+ * Returns true when a `background` shorthand value is structurally simple
+ * enough to map onto a single `background-color` or `background-image`
+ * longhand: a single token, or a single function call (e.g. `rgb(...)`,
+ * `linear-gradient(...)`, `url(...)`). Multi-component shorthands (color +
+ * position/size, image + repeat, comma-separated layers, etc.) must stay
+ * unsupported because a single StyleX longhand would change semantics.
+ */
+export function isSingleBackgroundComponent(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  // Top-level commas are layer separators; slashes separate <bg-position> from
+  // <bg-size>; whitespace separates multiple component values. Any of these
+  // makes the value a true shorthand we can't statically map to a longhand.
+  return !hasTopLevelMatch(trimmed, /[\s,/]/);
+}
+
+/**
  * Escapes special regex characters in a string so it can be safely used in a RegExp.
  * @example escapeRegex("foo.bar") => "foo\\.bar"
  * @example escapeRegex("$test") => "\\$test"
@@ -120,4 +139,18 @@ export function isPrettierIgnoreComment(body: string): boolean {
  */
 export function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
+}
+
+function hasTopLevelMatch(value: string, pattern: RegExp): boolean {
+  let depth = 0;
+  for (const c of value) {
+    if (c === "(") {
+      depth++;
+    } else if (c === ")") {
+      depth = Math.max(0, depth - 1);
+    } else if (depth === 0 && pattern.test(c)) {
+      return true;
+    }
+  }
+  return false;
 }

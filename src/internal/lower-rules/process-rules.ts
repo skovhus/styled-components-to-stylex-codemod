@@ -129,8 +129,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (!elementResult) {
       return null;
     }
-    const { childDecl, ancestorPseudo, childPseudo } = elementResult;
-    const overrideStyleKey = `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
+    const { childDecl, ancestorPseudo, childPseudo, directChildOnly } = elementResult;
+    const overrideStyleKey = directChildOnly
+      ? `${toStyleKey(childDecl.localName)}DirectChildIn${parentDecl.localName}`
+      : `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
     ancestorSelectorParents.add(parentDecl.styleKey);
 
     // For child pseudos, record the pseudo in childPseudoMarkers
@@ -177,6 +179,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       relationOverridePseudoBuckets,
       childDecl.extraStyleKeys,
     );
+    if (directChildOnly) {
+      const override = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
+      if (override) {
+        override.directChildOnly = true;
+      }
+    }
 
     const result = processDeclarationsIntoBucket(
       rule,
@@ -1857,6 +1865,7 @@ function resolveElementSelectorTarget(
       childDecl: StyledDecl;
       ancestorPseudo: string | null;
       childPseudo: string | null;
+      directChildOnly: boolean;
     }
   | ElementSelectorBailReason
   | null {
@@ -1904,7 +1913,12 @@ function resolveElementSelectorTarget(
     return "bail-plain-intrinsic";
   }
 
-  return { childDecl: matches[0]!, ancestorPseudo, childPseudo };
+  return {
+    childDecl: matches[0]!,
+    ancestorPseudo,
+    childPseudo,
+    directChildOnly: parsed.usesChildCombinator,
+  };
 }
 
 /**
