@@ -343,10 +343,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Note: Specificity hacks (&&, &&&) bail early in transform.ts
 
       // Check for descendant pseudo selectors BEFORE normalization collapses them.
-      // "& :not(:disabled)" (with space) targets descendants, not the component itself.
+      // "& :not(:disabled)" and the equivalent "& *:not(:disabled)" target descendants,
+      // not the component itself.
       // normalizeInterpolatedSelector would collapse this to "&:not(:disabled)" which
       // has completely different semantics. We must bail on these patterns.
-      if (/&\s+:/.test(rule.selector)) {
+      if (/&\s+(?:\*:|:)/.test(rule.selector)) {
         state.markBail();
         warnings.push({
           severity: "warning",

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compile } from "stylis";
 import {
   findUniversalSelectorLineOffset,
+  hasMeaningfulUniversalSelector,
   findSelectorLineOffset,
   normalizeStylisAstToIR,
 } from "../internal/css-ir.js";
@@ -84,6 +85,34 @@ height: 100px;
   it("returns 0 when no universal selector found", () => {
     const css = "div { color: red; }";
     expect(findUniversalSelectorLineOffset(css)).toBe(0);
+  });
+});
+
+describe("hasMeaningfulUniversalSelector", () => {
+  it("keeps meaningful universal selectors", () => {
+    expect(hasMeaningfulUniversalSelector("& > *")).toBe(true);
+    expect(hasMeaningfulUniversalSelector("& *")).toBe(true);
+    expect(hasMeaningfulUniversalSelector("* + *")).toBe(true);
+    expect(hasMeaningfulUniversalSelector("&:is(*)")).toBe(true);
+  });
+
+  it("ignores redundant universal selectors before pseudo-classes and attributes", () => {
+    expect(hasMeaningfulUniversalSelector("& > *:first-child")).toBe(false);
+    expect(hasMeaningfulUniversalSelector("& *:first-child")).toBe(false);
+    expect(hasMeaningfulUniversalSelector("*:not(.skip)")).toBe(false);
+    expect(hasMeaningfulUniversalSelector("& > *[data-active]")).toBe(false);
+    expect(hasMeaningfulUniversalSelector("*[data-active]")).toBe(false);
+  });
+
+  it("finds the first meaningful universal after redundant universal selectors", () => {
+    const css = `& > *:first-child {
+  color: red;
+}
+
+& > * {
+  color: blue;
+}`;
+    expect(findUniversalSelectorLineOffset(css)).toBe(4);
   });
 });
 

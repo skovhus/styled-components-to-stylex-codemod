@@ -545,10 +545,30 @@ function sameArray(a: readonly string[], b: readonly string[]): boolean {
 }
 
 /**
- * Check if any rule has a universal selector (`*`) in its selector string.
+ * Check if any rule has a meaningful universal selector (`*`) in its selector string.
+ *
+ * A universal selector immediately followed by a pseudo-class or attribute selector is
+ * redundant (`*:first-child` is equivalent to `:first-child`, `*[disabled]` is equivalent
+ * to `[disabled]`) and should be categorized by the remaining selector shape instead.
  */
 export function hasUniversalSelectorInRules(rules: CssRuleIR[]): boolean {
-  return rules.some((r) => typeof r.selector === "string" && r.selector.includes("*"));
+  return rules.some(
+    (r) => typeof r.selector === "string" && hasMeaningfulUniversalSelector(r.selector),
+  );
+}
+
+/**
+ * Check whether a selector string contains a universal selector that changes selector shape.
+ *
+ * @internal Exported for testing
+ */
+export function hasMeaningfulUniversalSelector(selector: string): boolean {
+  for (let i = 0; i < selector.length; i++) {
+    if (selector[i] === "*" && isMeaningfulUniversalAt(selector, i)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -592,15 +612,6 @@ export function findUniversalSelectorLineOffset(rawCss: string): number {
     }
     return "";
   };
-  const findNonWhitespaceAfter = (pos: number): string => {
-    for (let j = pos + 1; j < rawCss.length; j++) {
-      if (!/\s/.test(rawCss[j]!)) {
-        return rawCss[j]!;
-      }
-    }
-    return "";
-  };
-
   // Find all occurrences of `*` and check if they're in a selector context
   for (let i = 0; i < rawCss.length; i++) {
     const char = rawCss[i];
@@ -613,12 +624,9 @@ export function findUniversalSelectorLineOffset(rawCss: string): number {
     // - NOT preceded by value tokens like `%`, digits (which indicate calc/multiplication)
     // - followed by whitespace, `{`, `:`, `[`, or end of string
     // - NOT followed by digits (which indicate multiplication like `2 * 3`)
-    const prevChar = i > 0 ? rawCss[i - 1]! : " ";
-    const nextChar = i < rawCss.length - 1 ? rawCss[i + 1]! : " ";
-
     // Look at non-whitespace chars to detect value context (e.g., `calc(100% * 2)`)
     const prevNonWs = findNonWhitespaceBefore(i);
-    const nextNonWs = findNonWhitespaceAfter(i);
+    const nextNonWs = findNonWhitespaceAfter(rawCss, i);
 
     // Exclude `*` that appears to be multiplication in calc() or other expressions:
     // - `%` before (even with spaces): calc(100% * 2)
@@ -629,10 +637,7 @@ export function findUniversalSelectorLineOffset(rawCss: string): number {
       continue;
     }
 
-    const validPrev = /[\s>&+~(,]/.test(prevChar) || i === 0;
-    const validNext = /[\s{:[\],)]/.test(nextChar) || i === rawCss.length - 1;
-
-    if (validPrev && validNext) {
+    if (isMeaningfulUniversalAt(rawCss, i)) {
       // Found a universal selector - count newlines before this position
       return countNewlinesBefore(rawCss, i);
     }
@@ -742,6 +747,29 @@ function countNewlinesBefore(str: string, position: number): number {
     }
   }
   return count;
+}
+
+function isMeaningfulUniversalAt(source: string, index: number): boolean {
+  const prevChar = index > 0 ? source[index - 1]! : " ";
+  const nextChar = index < source.length - 1 ? source[index + 1]! : " ";
+  const validPrev = /[\s>&+~(,]/.test(prevChar) || index === 0;
+  const validNext = /[\s{:[\],)]/.test(nextChar) || index === source.length - 1;
+  if (!validPrev || !validNext) {
+    return false;
+  }
+
+  const nextNonWs = findNonWhitespaceAfter(source, index);
+  return nextNonWs !== ":" && nextNonWs !== "[";
+}
+
+function findNonWhitespaceAfter(source: string, index: number): string {
+  for (let i = index + 1; i < source.length; i++) {
+    const char = source[i]!;
+    if (!/\s/.test(char)) {
+      return char;
+    }
+  }
+  return "";
 }
 
 function escapeRegExp(str: string): string {

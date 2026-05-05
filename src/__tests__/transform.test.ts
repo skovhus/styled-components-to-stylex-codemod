@@ -1474,6 +1474,53 @@ export const App = () => <Container />;
     expect(warning?.loc?.line).toBe(8);
   });
 
+  it.each([
+    {
+      selector: "& > *:first-child",
+      equivalentSelector: "& > :first-child",
+      expectedWarning: "Unsupported selector: descendant/child/sibling selector",
+    },
+    {
+      selector: "& > *[data-active]",
+      equivalentSelector: "& > [data-active]",
+      expectedWarning: "Unsupported selector: descendant/child/sibling selector",
+    },
+    {
+      selector: "& *:first-child",
+      equivalentSelector: "& :first-child",
+      expectedWarning: "Unsupported selector: descendant pseudo selector (space before pseudo)",
+    },
+  ])(
+    "should classify redundant universal selector in $selector like $equivalentSelector",
+    ({ selector, expectedWarning }) => {
+      const source = `
+import styled from 'styled-components';
+
+const Box = styled.div\`
+  padding: 8px;
+
+  ${selector} {
+    color: red;
+  }
+\`;
+
+export const App = () => <Box><span>First</span><span>Second</span></Box>;
+`;
+
+      const result = transformWithWarnings(
+        { source, path: "test.tsx" },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: fixtureAdapter },
+      );
+
+      expect(result.code).toBeNull();
+      expect(result.warnings.map((w) => w.type)).toContain(expectedWarning);
+      expect(result.warnings.map((w) => w.type)).not.toContain(
+        "Universal selectors (`*`) are currently unsupported",
+      );
+    },
+  );
+
   it("should bail on unsupported conditional with theme access in test expressions in shouldForwardProp wrappers", () => {
     const source = [
       'import styled from "styled-components";',
