@@ -1,3 +1,4 @@
+// Transient props used for styles must be renamed consistently at wrapper callsites.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
@@ -21,19 +22,19 @@ type ResponsivePanelProps = {
   asCard?: boolean;
   columnCount?: number;
   floatingOffset?: number;
-} & PanelBaseProps;
+} & React.ComponentPropsWithRef<typeof PanelBase>;
 
 function ResponsivePanel(props: ResponsivePanelProps) {
-  const { asCard, children, className, columnCount, floatingOffset, style, ...rest } = props;
+  const { className, children, style, asCard, columnCount, floatingOffset, ...rest } = props;
   return (
     <PanelBase
       {...rest}
       {...mergedSx(
         [
           styles.responsivePanel,
-          styles.responsivePanelGridTemplateColumns(columnCount ?? 1),
-          styles.responsivePanelTop(floatingOffset ?? 0),
-          asCard ? styles.responsivePanelAsCard : styles.responsivePanelNotAsCard,
+          styles.responsivePanelGridTemplateColumns(`repeat(${columnCount ?? 1}, minmax(0, 1fr))`),
+          styles.responsivePanelTop(`${floatingOffset ?? 0}px`),
+          asCard && styles.responsivePanelAsCard,
         ],
         className,
         style,
@@ -55,18 +56,18 @@ export const App = () => (
 const styles = stylex.create({
   responsivePanel: {
     display: "grid",
+    gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
+    top: "0px",
+    padding: "8px",
     backgroundColor: "#eef2ff",
   },
-  responsivePanelGridTemplateColumns: (columnCount: number) => ({
-    gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-  }),
-  responsivePanelTop: (floatingOffset: number) => ({
-    top: `${floatingOffset}px`,
-  }),
   responsivePanelAsCard: {
-    padding: 16,
+    padding: "16px",
   },
-  responsivePanelNotAsCard: {
-    padding: 8,
-  },
+  responsivePanelGridTemplateColumns: (gridTemplateColumns: string) => ({
+    gridTemplateColumns,
+  }),
+  responsivePanelTop: (top: string) => ({
+    top,
+  }),
 });

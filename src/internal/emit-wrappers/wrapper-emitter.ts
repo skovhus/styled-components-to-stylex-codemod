@@ -876,7 +876,10 @@ export class WrapperEmitter {
     return keys.length > 0 ? keys : null;
   }
 
-  getExplicitPropNames(propsType: AstNodeOrNull): Set<string> {
+  getExplicitPropNames(
+    propsType: AstNodeOrNull,
+    options?: { lookThroughPropsWithChildren?: boolean },
+  ): Set<string> {
     const names = new Set<string>();
     const { root, j } = this;
 
@@ -913,8 +916,25 @@ export class WrapperEmitter {
         for (const t of (type as any).types ?? []) {
           extractFromType(t);
         }
-      } else if (type.type === "TSTypeReference" && (type as any).typeName?.type === "Identifier") {
-        const typeName = (type as any).typeName.name;
+      } else if (type.type === "TSTypeReference") {
+        const typeRef = type as {
+          typeName?: AstNodeOrNull;
+          typeParameters?: { params?: AstNodeOrNull[] };
+        };
+        const typeNameText = this.stringifyTsTypeName(typeRef.typeName);
+        if (
+          options?.lookThroughPropsWithChildren &&
+          (typeNameText === "React.PropsWithChildren" || typeNameText === "PropsWithChildren")
+        ) {
+          for (const param of typeRef.typeParameters?.params ?? []) {
+            extractFromType(param);
+          }
+          return;
+        }
+        if (typeRef.typeName?.type !== "Identifier") {
+          return;
+        }
+        const typeName = typeRef.typeName.name;
         const interfaceDecl = root
           .find(j.TSInterfaceDeclaration)
           .filter((p) => (p.node as any).id?.name === typeName);

@@ -111,16 +111,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
   // Uses findComponentPropsType (which returns null for imported components) and
   // emitter.getExplicitPropNames (which extracts prop names from type literals, interfaces,
   // and type aliases, including through intersections).
-  const localComponentHasProp = (
-    componentName: string,
-    propName: string,
-    propsType = findComponentPropsType(componentName),
-  ): boolean => {
+  const localComponentHasProp = (args: {
+    componentName: string;
+    propName: string;
+    propsType?: ASTNode | null;
+    lookThroughPropsWithChildren?: boolean;
+  }): boolean => {
+    const { componentName, propName, lookThroughPropsWithChildren } = args;
+    const propsType = args.propsType ?? findComponentPropsType(componentName);
     if (!propsType) {
       // Component is not defined locally or has no typed props - assume it doesn't have the prop
       return false;
     }
-    const explicitProps = emitter.getExplicitPropNames(propsType);
+    const explicitProps = emitter.getExplicitPropNames(propsType, { lookThroughPropsWithChildren });
     return explicitProps.has(propName);
   };
 
@@ -142,16 +145,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
     // component's className/style are not silently dropped by the styled() layer.
-    const wrappedHasClassName = localComponentHasProp(
-      wrappedComponent,
-      "className",
-      baseComponentPropsType,
-    );
-    const wrappedHasStyle = localComponentHasProp(
-      wrappedComponent,
-      "style",
-      baseComponentPropsType,
-    );
+    const shouldLookThroughWrappedPropsWithChildren =
+      !!d.transientPropRenames && d.transientPropRenames.size > 0;
+    const wrappedHasClassName = localComponentHasProp({
+      componentName: wrappedComponent,
+      propName: "className",
+      propsType: baseComponentPropsType,
+      lookThroughPropsWithChildren: shouldLookThroughWrappedPropsWithChildren,
+    });
+    const wrappedHasStyle = localComponentHasProp({
+      componentName: wrappedComponent,
+      propName: "style",
+      propsType: baseComponentPropsType,
+      lookThroughPropsWithChildren: shouldLookThroughWrappedPropsWithChildren,
+    });
     const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
@@ -164,7 +171,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const wrappedAcceptsSx =
       emitter.useSxProp &&
       (emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
-        localComponentHasProp(wrappedComponent, "sx", baseComponentPropsType));
+        localComponentHasProp({
+          componentName: wrappedComponent,
+          propName: "sx",
+          propsType: baseComponentPropsType,
+        }));
     // When the wrapped component has className/style as REQUIRED props, we must
     // force them to be optional in the wrapper's type. Otherwise, the wrapper would
     // inherit the requiredness, breaking call sites that don't pass className/style
