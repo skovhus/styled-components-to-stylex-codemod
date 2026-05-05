@@ -9,7 +9,7 @@ export function App() {
 
 const styles = stylex.create({
   dialogContainer: {
-    zIndex: $zIndex.dialog + 1,
+    zIndex: `calc(${$zIndex.dialog} + 1)`,
     padding: 16,
     backgroundColor: "white",
   },

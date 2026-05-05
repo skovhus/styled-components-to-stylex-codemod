@@ -1,4 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
+import { $zIndex } from "./tokens.stylex";
 
 export const App = () => (
   <div sx={styles.toastLayer}>
@@ -8,13 +9,13 @@ export const App = () => (
 
 const styles = stylex.create({
   toastLayer: {
-    zIndex: 801,
+    zIndex: `calc(${$zIndex.dialog} + 1)`,
     position: "fixed",
     inset: 16,
     backgroundColor: "white",
   },
   dropIndicator: {
-    zIndex: 899,
+    zIndex: `calc(${$zIndex.popover} - 1)`,
     position: "relative",
     height: 8,
     backgroundColor: "#60a5fa",
