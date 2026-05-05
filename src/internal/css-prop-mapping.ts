@@ -13,6 +13,7 @@ import {
 export {
   isCssShorthandProperty,
   isUnsupportedBackgroundShorthandValue,
+  isStylexStringOnlyCssProp,
   setUseLogicalProperties,
   getUseLogicalProperties,
 };
@@ -30,6 +31,10 @@ function getUseLogicalProperties(): boolean {
   return useLogicalProperties;
 }
 
+function isStylexStringOnlyCssProp(prop: string): boolean {
+  return STYLEX_STRING_ONLY_CSS_PROPS.has(prop);
+}
+
 type DirectionalProp = "padding" | "margin" | "scrollMargin" | "scrollPadding";
 
 const DIRECTIONAL_SHORTHAND_MAP: Record<string, DirectionalProp> = {
@@ -38,6 +43,19 @@ const DIRECTIONAL_SHORTHAND_MAP: Record<string, DirectionalProp> = {
   "scroll-margin": "scrollMargin",
   "scroll-padding": "scrollPadding",
 };
+
+/**
+ * CSS properties that accept numeric values in standard CSS / React inline styles
+ * but are typed as `string` in StyleX. Numeric values must be emitted as strings.
+ */
+const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
+  "gridRow",
+  "gridColumn",
+  "gridRowStart",
+  "gridRowEnd",
+  "gridColumnStart",
+  "gridColumnEnd",
+]);
 
 /**
  * Returns true if the CSS property is a shorthand that StyleX cannot express directly

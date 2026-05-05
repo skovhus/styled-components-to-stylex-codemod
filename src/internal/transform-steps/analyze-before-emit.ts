@@ -35,7 +35,10 @@ import {
   isSingleBackgroundComponent,
   isValidIdentifierName,
 } from "../utilities/string-utils.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  isStylexStringOnlyCssProp,
+} from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
@@ -2485,7 +2488,7 @@ function expandStaticStylePropToStylex(
     if (entry.value.kind !== "static") {
       return null;
     }
-    result.push({ key: entry.prop, value: coerceExpandedValue(entry.value.value) });
+    result.push({ key: entry.prop, value: coerceExpandedValue(entry.prop, entry.value.value) });
   }
   return result.length > 0 ? result : null;
 }
@@ -2496,8 +2499,11 @@ function expandStaticStylePropToStylex(
  * numbers keeps emitted StyleX entries consistent with handwritten code (e.g.
  * `paddingInline: 0` instead of `paddingInline: "0"`).
  */
-function coerceExpandedValue(raw: string): string | number {
+function coerceExpandedValue(prop: string, raw: string): string | number {
   if (raw === "") {
+    return raw;
+  }
+  if (isStylexStringOnlyCssProp(prop)) {
     return raw;
   }
   if (!/^-?\d+(\.\d+)?$/.test(raw)) {
@@ -2548,22 +2554,13 @@ const NUMERIC_CSS_PROPS = new Set([
  * CSS properties that accept numeric values in standard CSS / React inline styles
  * but are typed as `string` in StyleX. Numeric values must be coerced to strings.
  */
-const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
-  "gridRow",
-  "gridColumn",
-  "gridRowStart",
-  "gridRowEnd",
-  "gridColumnStart",
-  "gridColumnEnd",
-]);
-
 type PromotedParamType = "number" | "string" | "numberOrString";
 
 const LENGTH_LIKE_CSS_PROP_RE =
   /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/;
 
 function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
-  if (STYLEX_STRING_ONLY_CSS_PROPS.has(cssProp) && typeof value === "number") {
+  if (isStylexStringOnlyCssProp(cssProp) && typeof value === "number") {
     return String(value);
   }
   return value;
@@ -2572,10 +2569,10 @@ function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
 /**
  * Infers a TS type keyword for a dynamic expression based on the CSS property it's assigned to.
  * Numeric-only properties get `number`; ambiguous length-like values get `number | string`.
- * Properties in STYLEX_STRING_ONLY_CSS_PROPS always get `string` even when the value is numeric.
+ * StyleX string-only properties always get `string` even when the value is numeric.
  */
 function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType {
-  if (STYLEX_STRING_ONLY_CSS_PROPS.has(cssProp)) {
+  if (isStylexStringOnlyCssProp(cssProp)) {
     return "string";
   }
   const staticVal = literalToStaticValue(expr);
@@ -3022,7 +3019,7 @@ function analyzePromotableStyleProps(
           // Tag JSX: merge consumes the style attr, and the base key becomes a fn call.
           (site.opening as any).__promotedMergeIntoBase = true;
           (site.opening as any).__promotedMergeArgs = dynamicParams.map((dp) =>
-            STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+            isStylexStringOnlyCssProp(dp.cssProp)
               ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
               : dp.expr,
           );
@@ -3038,7 +3035,7 @@ function analyzePromotableStyleProps(
           // The call args are the actual expressions from the style object.
           // For string-only CSS props (e.g. gridRow), wrap in String() to coerce numeric values.
           const callArgs = dynamicParams.map((dp) =>
-            STYLEX_STRING_ONLY_CSS_PROPS.has(dp.cssProp)
+            isStylexStringOnlyCssProp(dp.cssProp)
               ? j.callExpression(j.identifier("String"), [dp.expr as ExpressionKind])
               : dp.expr,
           );

@@ -4,7 +4,11 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry } from "./decl-types.js";
-import { cssDeclarationToStylexDeclarations, isCssShorthandProperty } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  isCssShorthandProperty,
+  isStylexStringOnlyCssProp,
+} from "../css-prop-mapping.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import { buildTemplateWithStaticParts } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
@@ -519,7 +523,9 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       const out: Record<string, unknown> = {};
       for (const mapped of cssDeclarationToStylexDeclarations(irDecl as any)) {
         out[mapped.prop] =
-          typeof value === "number" ? value : cssValueToJs(mapped.value, false, mapped.prop);
+          typeof value === "number" && !isStylexStringOnlyCssProp(mapped.prop)
+            ? value
+            : cssValueToJs(mapped.value, false, mapped.prop);
       }
       return out;
     };
