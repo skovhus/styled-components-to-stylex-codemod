@@ -22,15 +22,10 @@ import {
   rewriteCssVarsInStyleObject as rewriteCssVarsInStyleObjectImpl,
 } from "./transform-css-vars.js";
 import {
-  getCssVariableImportName,
-  mergeCssVariableValue,
-  normalizeCssVariableValue,
-} from "./css-variable-sidecar.js";
-import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
-import type { CssVariableDefinition, TransformOptions } from "./transform-types.js";
+import type { LocalStylexVarRef, TransformOptions } from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
@@ -56,6 +51,8 @@ export class TransformContext {
   patternProp: (keyName: string, valueId?: any) => any;
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
   parseExpr: (exprSource: string) => any;
+  localStylexVars: Map<string, LocalStylexVarRef>;
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
@@ -153,9 +150,6 @@ export class TransformContext {
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
   inlineKeyframeNameMap?: Map<string, string>;
-  /** Raw CSS custom-property definitions that must be emitted via stylex.defineVars(). */
-  cssVariableDefinitions?: Map<string, CssVariableDefinition>;
-  cssVariableImportName?: string;
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;
@@ -171,6 +165,59 @@ export class TransformContext {
     setUseLogicalProperties(!(adapter.usePhysicalProperties ?? false));
 
     const resolverImports = new Map<string, ImportSpec>();
+    const localStylexVars = new Map<string, LocalStylexVarRef>();
+    const localStylexVarKeyFor = (cssName: string, defaultValue: string): string =>
+      `${cssName}\u0000${defaultValue}`;
+    let nextLocalStylexVarOrder = 0;
+    const getOrCreateLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef => {
+      const mapKey = localStylexVarKeyFor(cssName, defaultValue);
+      const existing = localStylexVars.get(mapKey);
+      if (existing) {
+        return existing;
+      }
+      const baseKeyName = cssName;
+      const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
+      const filePrefix = baseName
+        .split(/[^a-zA-Z0-9_$]+/)
+        .filter(Boolean)
+        .map((part, index) =>
+          index === 0
+            ? part.charAt(0).toLowerCase() + part.slice(1)
+            : part.charAt(0).toUpperCase() + part.slice(1),
+        )
+        .join("");
+      const groupName = `${filePrefix}Variables`;
+      const usedKeyNames = new Set(
+        [...localStylexVars.values()]
+          .filter((ref) => ref.groupName === groupName)
+          .map((ref) => ref.keyName),
+      );
+      let keyName = baseKeyName;
+      let suffix = 1;
+      while (usedKeyNames.has(keyName)) {
+        keyName = `${baseKeyName}${suffix}`;
+        suffix += 1;
+      }
+      const ref = {
+        cssName,
+        groupName,
+        keyName,
+        defaultValue,
+        sourceOrder: nextLocalStylexVarOrder,
+        sidecarFileName: `${baseName}.stylex`,
+      };
+      nextLocalStylexVarOrder += 1;
+      localStylexVars.set(mapKey, ref);
+      return ref;
+    };
+    const getLocalStylexVar = (
+      cssName: string,
+      defaultValue: string,
+    ): LocalStylexVarRef | undefined =>
+      localStylexVars.get(localStylexVarKeyFor(cssName, defaultValue));
     const {
       resolveValueSafe,
       resolveValueDirectionalSafe,
@@ -183,25 +230,6 @@ export class TransformContext {
     });
 
     const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
-    const cssVariableDefinitions = new Map<string, CssVariableDefinition>();
-    const registerCssVariableDefinition = (
-      cssName: string,
-      value: unknown,
-    ): CssVariableDefinition => {
-      const existing = cssVariableDefinitions.get(cssName);
-      if (existing) {
-        existing.value = mergeCssVariableValue(existing.value, normalizeCssVariableValue(value));
-        return existing;
-      }
-      const definition = {
-        cssName,
-        key: cssName,
-        exportName: getCssVariableImportName(this),
-        value: normalizeCssVariableValue(value),
-      };
-      cssVariableDefinitions.set(cssName, definition);
-      return definition;
-    };
 
     const buildCssVarRewriteContext = (
       definedVars: Map<string, string>,
@@ -210,6 +238,9 @@ export class TransformContext {
       filePath: file.path,
       definedVars,
       varsToDrop,
+      localStylexVars,
+      getLocalStylexVar,
+      getOrCreateLocalStylexVar,
       resolveValue: resolveValueSafe,
       addImport: (imp: ImportSpec) => resolverImports.set(JSON.stringify(imp), imp),
       parseExpr,
@@ -226,8 +257,6 @@ export class TransformContext {
         obj,
         ...(cssProperty ? { cssProperty } : {}),
         ...buildCssVarRewriteContext(definedVars, varsToDrop),
-        localCssVars: cssVariableDefinitions,
-        registerCssVariableDefinition,
       });
 
     const rewriteCssVarsInAstNode = (
@@ -240,8 +269,6 @@ export class TransformContext {
         node,
         ...(cssProperty ? { cssProperty } : {}),
         ...buildCssVarRewriteContext(definedVars, varsToDrop),
-        localCssVars: cssVariableDefinitions,
-        registerCssVariableDefinition,
       });
 
     const patternProp = (keyName: string, valueId?: any) => patternPropImpl(j, keyName, valueId);
@@ -257,6 +284,8 @@ export class TransformContext {
     this.hasChanges = false;
     this.adapter = adapter;
     this.resolverImports = resolverImports;
+    this.localStylexVars = localStylexVars;
+    this.getOrCreateLocalStylexVar = getOrCreateLocalStylexVar;
     this.resolveValueSafe = resolveValueSafe;
     this.resolveValueDirectionalSafe = resolveValueDirectionalSafe;
     this.resolveCallSafe = resolveCallSafe;
@@ -272,7 +301,6 @@ export class TransformContext {
     this.isStyledTag = () => false;
     this.keyframesNames = new Set<string>();
     this.keyframesAliases = new Map<string, string>();
-    this.cssVariableDefinitions = cssVariableDefinitions;
 
     // Wire cross-file info from options
     if (options.crossFileInfo) {

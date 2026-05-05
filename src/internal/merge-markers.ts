@@ -1,6 +1,6 @@
 /**
- * Shared utility for merging StyleX sidecar content.
- * Core concepts: preserving defineVars exports and deduplicating defineMarker declarations.
+ * Shared utility for merging marker sidecar content.
+ * Core concepts: deduplication of defineMarker declarations across files.
  */
 
 /** Regex matching a marker block: optional JSDoc comment followed by the export line. */
@@ -9,40 +9,37 @@ const MARKER_BLOCK_RE = /(?:\/\*\*[^]*?\*\/\n)?export const \w+ = stylex\.define
 /** Regex matching just the export line (used for dedup checks). */
 const MARKER_EXPORT_RE = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
 
-/** Regex matching generated defineVars blocks. */
+/** Regex matching a generated defineVars export block. */
 const DEFINE_VARS_BLOCK_RE = /export const \w+ = stylex\.defineVars\(\{\n[\s\S]*?\n\}\);/gm;
+
+/** Regex matching just the defineVars export line (used for dedup checks). */
+const DEFINE_VARS_EXPORT_RE = /^export const \w+ = stylex\.defineVars\(\{$/gm;
 
 /**
  * Merge marker declarations from `incoming` into `base`, appending only new
  * marker blocks (JSDoc + export). Returns `base` unchanged if all markers already exist.
  */
 export function mergeMarkerDeclarations(base: string, incoming: string): string {
-  const withVars = mergeDefineVarsDeclarations(base, incoming);
-  return mergeMarkerOnlyDeclarations(withVars, incoming);
-}
-
-function mergeMarkerOnlyDeclarations(base: string, incoming: string): string {
-  // Extract export lines from incoming to check which are new
-  const incomingExports = [...incoming.matchAll(MARKER_EXPORT_RE)].map((m) => m[0]);
-  if (incomingExports.length === 0) {
-    return base;
-  }
-  const newExportLines = incomingExports.filter((line) => !base.includes(line));
-  if (newExportLines.length === 0) {
-    return base;
-  }
-  // Extract full blocks (JSDoc + export) for the new markers
-  const newExportSet = new Set(newExportLines);
-  const incomingBlocks = [...incoming.matchAll(MARKER_BLOCK_RE)].map((m) => m[0]);
-  const blocksToAdd = incomingBlocks.filter((block) => {
-    const exportLine = block.match(MARKER_EXPORT_RE);
-    return exportLine && newExportSet.has(exportLine[0]);
+  const mergedDefineVars = mergeDefineVarsBlocks(base, incoming);
+  const markerBlocks = getNewBlocks({
+    base: mergedDefineVars,
+    incoming,
+    blockRegex: MARKER_BLOCK_RE,
+    exportRegex: MARKER_EXPORT_RE,
   });
+  const defineVarsBlocks = getNewBlocks({
+    base: mergedDefineVars,
+    incoming,
+    blockRegex: DEFINE_VARS_BLOCK_RE,
+    exportRegex: DEFINE_VARS_EXPORT_RE,
+  });
+  const blocksToAdd = [...markerBlocks, ...defineVarsBlocks];
   if (blocksToAdd.length === 0) {
-    return base;
+    return mergedDefineVars;
   }
+
   // Ensure the stylex import exists
-  let merged = base;
+  let merged = mergedDefineVars;
   if (!merged.includes("@stylexjs/stylex")) {
     merged = `import * as stylex from "@stylexjs/stylex";\n\n${merged}`;
   }
@@ -51,106 +48,94 @@ function mergeMarkerOnlyDeclarations(base: string, incoming: string): string {
   return trimmed + "\n\n" + blocksToAdd.join("\n\n") + "\n";
 }
 
-function mergeDefineVarsDeclarations(base: string, incoming: string): string {
-  const incomingBlocks = [...incoming.matchAll(DEFINE_VARS_BLOCK_RE)].map((match) => match[0]);
-  if (incomingBlocks.length === 0) {
-    return base;
+function getNewBlocks(args: {
+  base: string;
+  incoming: string;
+  blockRegex: RegExp;
+  exportRegex: RegExp;
+}): string[] {
+  const { base, incoming, blockRegex, exportRegex } = args;
+  const incomingExports = [...incoming.matchAll(exportRegex)].map((m) => m[0]);
+  if (incomingExports.length === 0) {
+    return [];
   }
+  const newExportLines = incomingExports.filter((line) => !base.includes(line));
+  if (newExportLines.length === 0) {
+    return [];
+  }
+  const newExportSet = new Set(newExportLines);
+  return [...incoming.matchAll(blockRegex)]
+    .map((m) => m[0])
+    .filter((block) => {
+      const exportLine = block.match(exportRegex);
+      return exportLine && newExportSet.has(exportLine[0]);
+    });
+}
 
-  let merged = ensureStylexImport(base);
-  for (const incomingBlock of incomingBlocks) {
-    const exportName = readDefineVarsExportName(incomingBlock);
+function mergeDefineVarsBlocks(base: string, incoming: string): string {
+  let merged = base;
+  for (const incomingBlock of incoming.matchAll(DEFINE_VARS_BLOCK_RE)) {
+    const incomingText = incomingBlock[0];
+    const exportName = readDefineVarsExportName(incomingText);
     if (!exportName) {
       continue;
     }
-    const existingBlock = findDefineVarsBlock(merged, exportName);
+    const existingBlock = findDefineVarsBlockByExportName(merged, exportName);
     if (!existingBlock) {
-      merged = `${merged.trimEnd()}\n\n${incomingBlock}\n`;
       continue;
     }
-    const mergedBlock = mergeDefineVarsBlock(existingBlock.text, incomingBlock);
-    merged =
-      merged.slice(0, existingBlock.start) +
-      mergedBlock +
-      merged.slice(existingBlock.start + existingBlock.text.length);
+    const entriesToAdd = getMissingDefineVarsEntries({
+      existingBlock: existingBlock.text,
+      incomingBlock: incomingText,
+    });
+    if (entriesToAdd.length === 0) {
+      continue;
+    }
+    const insertionPoint = existingBlock.start + existingBlock.text.lastIndexOf("\n});");
+    const linesToAdd = entriesToAdd.map((entry) => entry.line);
+    merged = `${merged.slice(0, insertionPoint)}\n${linesToAdd.join("\n")}${merged.slice(insertionPoint)}`;
   }
   return merged;
 }
 
-function ensureStylexImport(source: string): string {
-  if (source.includes("@stylexjs/stylex")) {
-    return source;
-  }
-  return `import * as stylex from "@stylexjs/stylex";\n\n${source}`;
-}
-
 function readDefineVarsExportName(block: string): string | null {
-  return block.match(/export const (\w+) = stylex\.defineVars/)?.[1] ?? null;
+  const match = /^export const ([A-Za-z_$][\w$]*) = stylex\.defineVars\(\{/m.exec(block);
+  return match?.[1] ?? null;
 }
 
-function findDefineVarsBlock(
+function findDefineVarsBlockByExportName(
   source: string,
   exportName: string,
-): { start: number; text: string } | null {
-  const escaped = escapeRegExp(exportName);
-  const re = new RegExp(
-    `export const ${escaped} = stylex\\.defineVars\\(\\{\\n[\\s\\S]*?\\n\\}\\);`,
-    "m",
-  );
-  const match = re.exec(source);
-  if (!match) {
-    return null;
-  }
-  return { start: match.index, text: match[0] };
-}
-
-function mergeDefineVarsBlock(baseBlock: string, incomingBlock: string): string {
-  const existing = new Set(readDefineVarsEntries(baseBlock).map((entry) => entry.key));
-  const additions = readDefineVarsEntries(incomingBlock).filter(
-    (entry) => !existing.has(entry.key),
-  );
-  if (additions.length === 0) {
-    return baseBlock;
-  }
-  const text = additions.map((entry) => entry.text).join("\n");
-  return baseBlock.replace(/\n\}\);$/, `\n${text}\n});`);
-}
-
-function readDefineVarsEntries(block: string): Array<{ key: string; text: string }> {
-  const lines = block.split("\n");
-  const entryStarts: Array<{ index: number; key: string; indent: number }> = [];
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index] ?? "";
-    const match = line.match(/^(\s*)["'](--[^"']+)["']\s*:/);
-    if (!match) {
-      continue;
+): { text: string; start: number } | null {
+  for (const match of source.matchAll(DEFINE_VARS_BLOCK_RE)) {
+    const text = match[0];
+    if (readDefineVarsExportName(text) === exportName && match.index !== undefined) {
+      return { text, start: match.index };
     }
-    const indent = match[1];
-    const key = match[2];
-    if (!indent || !key) {
-      continue;
-    }
-    entryStarts.push({ index, key, indent: indent.length });
   }
-  if (entryStarts.length === 0) {
-    return [];
-  }
-  const topLevelIndent = Math.min(...entryStarts.map((entry) => entry.indent));
-  const topLevelEntries = entryStarts.filter((entry) => entry.indent === topLevelIndent);
-  const closeIndex = lines.reduce(
-    (lastIndex, line, index) => (line.trim() === "});" ? index : lastIndex),
-    lines.length,
-  );
-  return topLevelEntries.map((entry, position) => {
-    const next = topLevelEntries[position + 1];
-    const end = next ? next.index : closeIndex;
-    return {
-      key: entry.key,
-      text: lines.slice(entry.index, end).join("\n"),
-    };
-  });
+  return null;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function getMissingDefineVarsEntries(args: {
+  existingBlock: string;
+  incomingBlock: string;
+}): Array<{ key: string; line: string }> {
+  const { existingBlock, incomingBlock } = args;
+  const existingKeys = new Set(readDefineVarsEntryKeys(existingBlock));
+  return readDefineVarsEntries(incomingBlock).filter((entry) => !existingKeys.has(entry.key));
+}
+
+function readDefineVarsEntryKeys(block: string): string[] {
+  return readDefineVarsEntries(block).map((entry) => entry.key);
+}
+
+function readDefineVarsEntries(block: string): Array<{ key: string; line: string }> {
+  return block
+    .split("\n")
+    .map((line) => ({
+      line,
+      match: /^\s*(?:(["']--[^"']+["'])|([A-Za-z_$][\w$]*))\s*:/.exec(line),
+    }))
+    .filter((entry): entry is { line: string; match: RegExpExecArray } => Boolean(entry.match))
+    .map(({ line, match }) => ({ key: match[1] ?? match[2]!, line }));
 }

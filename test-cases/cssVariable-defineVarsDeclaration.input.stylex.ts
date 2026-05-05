@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const cssVariableDefineVarsDeclarationInputVariables = stylex.defineVars({
-  menuWidth: "240px",
-  fooBar: "100px",
-  fooBar1: "80px",
+  "--menu-width": "240px",
+  "--foo-bar": "100px",
+  "--fooBar": "80px",
 });

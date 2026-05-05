@@ -16,7 +16,7 @@ function WidthMenu(props: WidthMenuProps) {
       style={
         {
           ...sx.style,
-          [cssVariableDefineVarsDeclarationInputVariables.menuWidth]: menuWidth
+          [cssVariableDefineVarsDeclarationInputVariables["--menu-width"]]: menuWidth
             ? `${menuWidth}px`
             : undefined,
         } as React.CSSProperties
@@ -38,20 +38,20 @@ export const App = () => (
 
 const styles = stylex.create({
   widthMenu: {
-    width: cssVariableDefineVarsDeclarationInputVariables.menuWidth,
+    width: cssVariableDefineVarsDeclarationInputVariables["--menu-width"],
     padding: 8,
     backgroundColor: "#fef3c7",
   },
   collisionBox: {
-    [cssVariableDefineVarsDeclarationInputVariables.fooBar]: "100px",
-    [cssVariableDefineVarsDeclarationInputVariables.fooBar1]: "80px",
-    width: cssVariableDefineVarsDeclarationInputVariables.fooBar,
-    height: cssVariableDefineVarsDeclarationInputVariables.fooBar1,
+    [cssVariableDefineVarsDeclarationInputVariables["--foo-bar"]]: "100px",
+    [cssVariableDefineVarsDeclarationInputVariables["--fooBar"]]: "80px",
+    width: cssVariableDefineVarsDeclarationInputVariables["--foo-bar"],
+    height: cssVariableDefineVarsDeclarationInputVariables["--fooBar"],
     backgroundColor: "#dbeafe",
   },
   alternateWidth: {
     "--menu-width": "180px",
-    width: cssVariableDefineVarsDeclarationInputVariables.menuWidth,
+    width: cssVariableDefineVarsDeclarationInputVariables["--menu-width"],
     padding: 8,
     backgroundColor: "#fee2e2",
   },

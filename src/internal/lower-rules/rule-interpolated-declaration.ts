@@ -2478,6 +2478,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
     cssName: string,
     defaultValue: string,
   ) => {
+    cssName: string;
     groupName: string;
     keyName: string;
   };
@@ -2538,7 +2539,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   inlineStyleProps.push({
     prop: customValue.cssName,
     expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
-    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName)),
+    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.literal(ref.cssName), true),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
