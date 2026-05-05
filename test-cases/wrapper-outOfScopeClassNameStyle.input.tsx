@@ -7,6 +7,13 @@ type BadgeBaseProps = React.PropsWithChildren<{
   style?: React.CSSProperties;
 }>;
 
+type DecorativeBadgeBaseProps = BadgeBaseProps & {
+  tone?: "info" | "warning";
+};
+
+type RemovedDecorativeBadgeProps = keyof Pick<DecorativeBadgeBaseProps, "className" | "style">;
+type DecorativeBadgeProps = Omit<DecorativeBadgeBaseProps, RemovedDecorativeBadgeProps>;
+
 function BadgeBase(props: BadgeBaseProps) {
   const { children, className, style } = props;
   return (
@@ -14,6 +21,11 @@ function BadgeBase(props: BadgeBaseProps) {
       {children}
     </span>
   );
+}
+
+function DecorativeBadgeBase(props: DecorativeBadgeProps) {
+  const { children, tone } = props;
+  return <strong data-tone={tone}>{children}</strong>;
 }
 
 export const StatusBadge = styled(BadgeBase)`
@@ -24,8 +36,17 @@ export const StatusBadge = styled(BadgeBase)`
   background-color: #bae6fd;
 `;
 
+const DecorativeBadge = styled(DecorativeBadgeBase)`
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #713f12;
+  background-color: #fde68a;
+`;
+
 export const App = () => (
   <div style={{ padding: 12 }}>
     <StatusBadge style={{ border: "1px solid #0369a1" }}>Available</StatusBadge>
+    <DecorativeBadge tone="warning">Decorative</DecorativeBadge>
   </div>
 );
