@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{f as e}from"./index-DPQ-OPOF.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`xrvj5dj x7sv70a x1kfr4me x11g1w8x xe8ttls`,children:`Chart cell`});export{n as App};

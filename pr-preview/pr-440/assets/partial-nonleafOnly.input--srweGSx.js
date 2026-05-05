@@ -1,0 +1,10 @@
+import{f as e,s as t}from"./index-DPQ-OPOF.js";var n=e(),r=t.div`
+  color: navy;
+  padding: 8px;
+`,i=t(r)`
+  color: tomato;
+
+  & a.active {
+    color: gold;
+  }
+`,a=()=>(0,n.jsxs)(`div`,{children:[(0,n.jsx)(r,{children:`base`}),(0,n.jsx)(i,{children:(0,n.jsx)(`a`,{className:`active`,href:`#`,children:`derived`})})]});export{a as App};
