@@ -134,7 +134,7 @@ function computeDetectionFromSource(source: string, componentName: string): bool
     return false;
   }
 
-  const propsTypeNode = findComponentPropsType(j, root, componentName);
+  const propsTypeNode = findComponentPropsType(root, componentName);
   if (!propsTypeNode) {
     return false;
   }
@@ -180,7 +180,6 @@ function sourcePathCandidates(absolutePath: string): string[] {
  *   - `export const Name = (props: T) => …` / arrow function variants.
  */
 function findComponentPropsType(
-  j: JSCodeshift,
   root: ReturnType<JSCodeshift>,
   componentName: string,
 ): ASTNode | null {
