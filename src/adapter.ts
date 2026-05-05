@@ -690,7 +690,8 @@ export interface Adapter {
    * - `{ directional: [...] }` for shorthand properties (e.g., `padding`) whose token
    *   resolves to a multi-value string. Each entry specifies a longhand property and expression.
    * - Optionally return `{ dropDefinition: true }` for css variables to remove the local `--x: ...` definition.
-   * - `undefined` to bail/skip the file (for cssVariable: keeps the original `var(...)` unchanged)
+   * - `undefined` to bail/skip the file (for cssVariable: keeps the original
+   *   custom property declaration or `var(...)` unchanged)
    */
   resolveValue: (
     context: ResolveValueContext,

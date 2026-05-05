@@ -23,7 +23,7 @@ const consumerInlineStyle = {
 
 const styles = stylex.create({
   container: {
-    "--item-min-width": "100%",
+    ["--item-min-width"]: "100%",
     backgroundColor: "orange",
     color: "white",
     padding: 8,
@@ -38,7 +38,7 @@ const styles = stylex.create({
   // The CSS-variable name comes from another module. The codemod follows the
   // import to its `export const ... = "..."` declaration and substitutes it.
   importedSetter: {
-    "--item-min-width": "50%",
+    ["--item-min-width"]: "50%",
     backgroundColor: "indigo",
     color: "white",
     padding: 8,
@@ -47,7 +47,7 @@ const styles = stylex.create({
   // Barrel-resolved: the codemod follows the named re-export through
   // `lib/css-vars-barrel.ts` to `lib/item-min-width.ts`.
   barrelMinSetter: {
-    "--item-min-width": "75%",
+    ["--item-min-width"]: "75%",
     backgroundColor: "crimson",
     color: "white",
     padding: 8,
@@ -56,7 +56,7 @@ const styles = stylex.create({
   // Star-re-export-resolved: the codemod follows `export * from` through
   // `lib/css-vars-barrel.ts` to `lib/item-max-width.ts`.
   barrelMaxSetter: {
-    "--item-max-width": "90%",
+    ["--item-max-width"]: "90%",
     backgroundColor: "darkslateblue",
     color: "white",
     padding: 8,
@@ -65,7 +65,7 @@ const styles = stylex.create({
   // Directory-barrel-resolved: imported from `./lib/css-vars` which has no
   // extension on disk and points at `lib/css-vars/index.ts`.
   directoryBarrelSetter: {
-    "--item-gap": "12px",
+    ["--item-gap"]: "12px",
     backgroundColor: "seagreen",
     color: "white",
     padding: 8,
@@ -75,7 +75,7 @@ const styles = stylex.create({
   // plain `const` and exports it via `export { ... };` at the bottom of the
   // file rather than the `export const ...` form.
   specifierExportSetter: {
-    "--item-padding": "16px",
+    ["--item-padding"]: "16px",
     backgroundColor: "chocolate",
     color: "white",
     padding: 8,

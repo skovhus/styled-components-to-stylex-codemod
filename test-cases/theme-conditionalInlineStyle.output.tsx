@@ -33,7 +33,7 @@ function DayPicker(props: React.PropsWithChildren<{}>) {
       style={
         {
           ...sx.style,
-          "--highlighted-color": theme.isDark ? theme.baseTheme?.color.bgBorderSolid : undefined,
+          ["--highlighted-color"]: theme.isDark ? theme.baseTheme?.color.bgBorderSolid : undefined,
           backgroundColor: "var(--highlighted-color)",
         } as React.CSSProperties
       }
@@ -57,7 +57,7 @@ const styles = stylex.create({
     backgroundColor: $colors.bgFocus,
   },
   dayPicker: {
-    "--highlighted-color": $colors.bgBorderFaint,
+    ["--highlighted-color"]: $colors.bgBorderFaint,
     padding: 16,
   },
 });

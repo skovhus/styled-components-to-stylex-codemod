@@ -67,9 +67,9 @@ const styles = stylex.create({
     padding: 16,
   },
   dayPickerDark: {
-    "--highlighted-color": $colors.bgBorderSolid,
+    ["--highlighted-color"]: $colors.bgBorderSolid,
   },
   dayPickerLight: {
-    "--highlighted-color": $colors.bgBorderFaint,
+    ["--highlighted-color"]: $colors.bgBorderFaint,
   },
 });

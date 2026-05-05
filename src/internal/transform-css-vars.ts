@@ -90,7 +90,20 @@ function rewriteCssVarsInStyleObjectImpl(
       });
 
       if (!result) {
-        obj[k] = rewrittenValue;
+        const keyExpr = ctx.parseExpr(JSON.stringify(k));
+        if (keyExpr) {
+          const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
+            ? obj.__computedKeys
+            : [];
+          computedKeys.push({
+            keyExpr,
+            value: rewrittenValue,
+            prepend: true,
+            originalCssVariableName: k,
+          });
+          obj.__computedKeys = computedKeys;
+        }
+        delete obj[k];
         continue;
       }
 
@@ -115,6 +128,10 @@ function rewriteCssVarsInStyleObjectImpl(
         value: rewrittenValue,
         originalCssVariableName: k,
       });
+      continue;
+    }
+
+    if (k.startsWith("__")) {
       continue;
     }
 

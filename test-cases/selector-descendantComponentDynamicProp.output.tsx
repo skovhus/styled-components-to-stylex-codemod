@@ -17,7 +17,7 @@ function Button(props: ButtonProps) {
       style={
         {
           ...sx.style,
-          "--iconInButton-hover-color": props.color ?? "red",
+          ["--iconInButton-hover-color"]: props.color ?? "red",
         } as React.CSSProperties
       }
     >
@@ -40,7 +40,7 @@ function Card(props: CardProps) {
       style={
         {
           ...sx.style,
-          "--badgeInCard-hover-boxShadow": props.shadow ?? "rgba(0,0,0,0.2)",
+          ["--badgeInCard-hover-boxShadow"]: props.shadow ?? "rgba(0,0,0,0.2)",
         } as React.CSSProperties
       }
     >
@@ -63,7 +63,7 @@ function Toolbar(props: ToolbarProps) {
       style={
         {
           ...sx.style,
-          "--tagInToolbar-hover-border": props.accent ?? "gray",
+          ["--tagInToolbar-hover-border"]: props.accent ?? "gray",
         } as React.CSSProperties
       }
     >
@@ -87,8 +87,8 @@ function Toggle(props: ToggleProps) {
       style={
         {
           ...sx.style,
-          "--dotInToggle-hover-color": props.hoverColor ?? "blue",
-          "--dotInToggle-focus-color": props.focusColor ?? "green",
+          ["--dotInToggle-hover-color"]: props.hoverColor ?? "blue",
+          ["--dotInToggle-focus-color"]: props.focusColor ?? "green",
         } as React.CSSProperties
       }
     >
@@ -111,7 +111,7 @@ function ChipGroup(props: ChipGroupProps) {
       style={
         {
           ...sx.style,
-          "--chipInChipGroup-hover-color": props.chipColor ?? "purple",
+          ["--chipInChipGroup-hover-color"]: props.chipColor ?? "purple",
         } as React.CSSProperties
       }
     >
@@ -134,8 +134,8 @@ function GroupedPanel(props: GroupedPanelProps) {
       style={
         {
           ...sx.style,
-          "--groupedLabelInGroupedPanel-hover-color": props.tone ?? "darkgreen",
-          "--groupedLabelInGroupedPanel-focusWithin-color": props.tone ?? "darkgreen",
+          ["--groupedLabelInGroupedPanel-hover-color"]: props.tone ?? "darkgreen",
+          ["--groupedLabelInGroupedPanel-focusWithin-color"]: props.tone ?? "darkgreen",
         } as React.CSSProperties
       }
     >

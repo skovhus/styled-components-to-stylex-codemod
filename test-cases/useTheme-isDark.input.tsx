@@ -17,6 +17,7 @@ const Box = styled.div`
 
 // theme.isDark setting a CSS custom property value (with optional chaining)
 const DayPicker = styled.div`
+  /* @keep-definition */
   --highlighted-color: ${(p) =>
     p.theme.isDark ? p.theme.color?.bgBorderSolid : p.theme.color?.bgBorderFaint};
   background-color: var(--highlighted-color);
