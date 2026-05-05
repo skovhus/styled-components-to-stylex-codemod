@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import"./stylex-vFXG5bjz.js";import{m as e,p as t}from"./index-CfqqTe6M.js";e();var n=t();function r({children:e}){return(0,n.jsx)(`div`,{className:`xh8yej3 x17apdc0 x1odjw0f`,children:e})}var i=()=>(0,n.jsx)(r,{children:(0,n.jsx)(`div`,{children:`Scrollable content`})});export{i as App,r as ScrollableArea};
