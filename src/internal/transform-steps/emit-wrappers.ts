@@ -32,6 +32,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     root: ctx.root,
     j: ctx.j,
     filePath: ctx.file.path,
+    localSource: ctx.file.source,
     wrapperDecls,
     wrapperNames: ctx.wrapperNames,
     patternProp: ctx.patternProp,
