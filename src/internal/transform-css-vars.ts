@@ -70,48 +70,29 @@ function rewriteCssVarsInStyleObjectImpl(
   for (const [k, v] of Object.entries(obj)) {
     if (k.startsWith("--")) {
       const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
-      const localVar = typeof v === "string" ? ctx.getLocalStylexVar?.(k, v) : undefined;
-      if (localVar) {
+      const adapterResult = resolveCssVariableDefinitionWithAdapter(k, v, ctx);
+      if (adapterResult === "drop") {
+        delete obj[k];
+        continue;
+      }
+      if (adapterResult) {
         delete obj[k];
         addComputedKeyForCssVar(obj, {
-          keyExpr: stylexVarMemberExpression(ctx.j, localVar),
+          keyExpr: adapterResult,
           value: rewrittenValue,
           originalCssVariableName: k,
         });
         continue;
       }
-
-      const result = ctx.resolveValue({
-        kind: "cssVariable",
-        name: k,
-        filePath: ctx.filePath,
-        ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
-        ...(typeof v === "string" ? { definedValue: v } : {}),
-      });
-
-      if (!result) {
+      const localStylexVar = typeof v === "string" ? ctx.getLocalStylexVar?.(k, v) : undefined;
+      const localKeyExpr = localStylexVar ? stylexVarMemberExpression(ctx.j, localStylexVar) : null;
+      if (!localKeyExpr) {
         obj[k] = rewrittenValue;
         continue;
       }
-
       delete obj[k];
-
-      if (result.dropDefinition) {
-        continue;
-      }
-
-      const keyExpr = ctx.parseExpr(result.expr);
-      if (!keyExpr) {
-        obj[k] = rewrittenValue;
-        continue;
-      }
-
-      for (const imp of result.imports ?? []) {
-        ctx.addImport(imp);
-      }
-
       addComputedKeyForCssVar(obj, {
-        keyExpr,
+        keyExpr: localKeyExpr,
         value: rewrittenValue,
         originalCssVariableName: k,
       });
@@ -123,6 +104,34 @@ function rewriteCssVarsInStyleObjectImpl(
       cssProperty: getCssVariableValueProperty(k, ctx, originalCssProperties),
     });
   }
+}
+
+function resolveCssVariableDefinitionWithAdapter(
+  cssName: string,
+  value: unknown,
+  ctx: CssVarRewriteContext,
+): ExpressionKind | "drop" | null {
+  const result = ctx.resolveValue({
+    kind: "cssVariable",
+    name: cssName,
+    filePath: ctx.filePath,
+    ...(ctx.cssProperty ? { cssProperty: ctx.cssProperty } : {}),
+    ...(typeof value === "string" ? { definedValue: value } : {}),
+  });
+  if (!result) {
+    return null;
+  }
+  if (result.dropDefinition) {
+    return "drop";
+  }
+  const keyExpr = ctx.parseExpr(result.expr);
+  if (!keyExpr) {
+    return null;
+  }
+  for (const imp of result.imports ?? []) {
+    ctx.addImport(imp);
+  }
+  return keyExpr;
 }
 
 function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteContext): unknown {

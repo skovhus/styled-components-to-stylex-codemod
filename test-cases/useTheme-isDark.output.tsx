@@ -2,6 +2,7 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $colors, pixelVars } from "./tokens.stylex";
+import { cssVars } from "./stylex-vars.stylex";
 
 function Text(props: React.PropsWithChildren<{}>) {
   const theme = useTheme();
@@ -67,9 +68,9 @@ const styles = stylex.create({
     padding: 16,
   },
   dayPickerDark: {
-    "--highlighted-color": $colors.bgBorderSolid,
+    [cssVars["--highlighted-color"]]: $colors.bgBorderSolid,
   },
   dayPickerLight: {
-    "--highlighted-color": $colors.bgBorderFaint,
+    [cssVars["--highlighted-color"]]: $colors.bgBorderFaint,
   },
 });

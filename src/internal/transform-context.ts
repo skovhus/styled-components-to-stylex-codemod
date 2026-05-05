@@ -150,7 +150,6 @@ export class TransformContext {
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
   inlineKeyframeNameMap?: Map<string, string>;
-
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;
     const root = j(file.source);
@@ -236,7 +235,6 @@ export class TransformContext {
     });
 
     const parseExpr = (exprSource: string): any => parseExprImpl(api, exprSource);
-
     const buildCssVarRewriteContext = (
       definedVars: Map<string, string>,
       varsToDrop: Set<string>,

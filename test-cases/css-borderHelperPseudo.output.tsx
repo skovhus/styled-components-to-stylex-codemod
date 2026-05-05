@@ -1,6 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars } from "./tokens.stylex";
+import { cssVars } from "./stylex-vars.stylex";
 
 export function StyledHeader(props: Pick<React.ComponentProps<"header">, "ref" | "children">) {
   const { children, ...rest } = props;
@@ -40,7 +41,7 @@ const styles = stylex.create({
     },
   },
   container: {
-    "--settings-list-view-border-color": "#bf4f74",
+    [cssVars["--settings-list-view-border-color"]]: "#bf4f74",
     display: "flex",
     flexDirection: "column",
     gap: 8,
