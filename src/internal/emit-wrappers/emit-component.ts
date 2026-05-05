@@ -147,7 +147,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       "className",
       baseComponentPropsType,
     );
-    const wrappedHasStyle = localComponentHasProp(wrappedComponent, "style", baseComponentPropsType);
+    const wrappedHasStyle = localComponentHasProp(
+      wrappedComponent,
+      "style",
+      baseComponentPropsType,
+    );
     const shouldAllowClassName = emitter.shouldAllowClassNameProp(d);
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
@@ -785,7 +789,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
     const staticAttrs = attrsInfo?.staticAttrs ?? {};
     const needsSxVar =
-      allowClassNameProp || allowStyleProp || !!d.inlineStyleProps?.length || !!staticClassNameExpr;
+      allowClassNameProp ||
+      allowStyleProp ||
+      wrappedAcceptsSx ||
+      !!d.inlineStyleProps?.length ||
+      !!staticClassNameExpr;
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
     // Attrs are handled separately (added as JSX attributes before/after the props spread)
