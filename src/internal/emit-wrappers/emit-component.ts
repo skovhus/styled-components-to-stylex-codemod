@@ -147,7 +147,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const wrappedComponentHasAs = wrapperNames.has(wrappedComponent);
     const supportsAsProp = d.supportsAsProp ?? false;
     const hasOwnAsUsage = emitter.getUsedAttrs(d.localName).has("as");
-    const shouldAllowAsProp = hasOwnAsUsage || supportsAsProp;
+    const hasStaticAsAttr = Object.hasOwn(d.attrsInfo?.staticAttrs ?? {}, "as");
+    const shouldAllowAsProp = (hasOwnAsUsage && !hasStaticAsAttr) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     // Check if the wrapped component's props explicitly include className/style.
     // When true, the wrapper should accept and forward these props so the wrapped
@@ -1060,24 +1061,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             staticForwardedAsFallback === null)
             ? j.literal(staticForwardedAsFallback)
             : null;
-        if (renderedAsProp?.propName && restId) {
-          forwardedAsValueExpr = j.logicalExpression(
-            "??",
-            forwardedAsId,
-            j.memberExpression(restId, j.identifier(renderedAsProp.propName)),
-          );
-          if (staticForwardedAsFallbackExpr) {
-            forwardedAsValueExpr = j.logicalExpression(
-              "??",
-              forwardedAsValueExpr,
-              staticForwardedAsFallbackExpr,
-            );
-          }
-        } else if (staticForwardedAsFallbackExpr) {
+        if (staticForwardedAsFallbackExpr) {
           forwardedAsValueExpr = j.logicalExpression(
             "??",
             forwardedAsId,
             staticForwardedAsFallbackExpr,
+          );
+        } else if (renderedAsProp?.propName && restId) {
+          forwardedAsValueExpr = j.logicalExpression(
+            "??",
+            forwardedAsId,
+            j.memberExpression(restId, j.identifier(renderedAsProp.propName)),
           );
         }
         openingAttrs.push(

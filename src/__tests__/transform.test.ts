@@ -5422,6 +5422,7 @@ export const App = () => (
       Link
     </Wrapper>
     <Wrapper href="#">Fallback Link</Wrapper>
+    <Wrapper as="section" href="#">Attrs Wins</Wrapper>
   </>
 );
 `;
@@ -5432,7 +5433,7 @@ export const App = () => (
     );
     expect(result.code).not.toBeNull();
     expect(result.code).toContain('forwardedAs?: BaseProps["as"]');
-    expect(result.code).toContain('as={forwardedAs ?? rest.as ?? "span"}');
+    expect(result.code).toContain('as={forwardedAs ?? "span"}');
     expect(result.code).not.toContain('as="span"');
   });
 
