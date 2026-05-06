@@ -16,6 +16,11 @@ export const helpers = stylex.create({
     backgroundImage: "linear-gradient(90deg, #ff6b6b, #5f6cff)",
     color: "transparent",
   },
+  focusOutline: {
+    outlineWidth: "2px",
+    outlineStyle: "solid",
+    outlineColor: "#4f46e5",
+  },
   truncateMultiline: (lines: number) => ({
     display: "-webkit-box" as const,
     WebkitLineClamp: lines,

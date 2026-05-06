@@ -341,9 +341,17 @@ const styles = stylex.create({
     position: "absolute",
     minHeight: 1,
     backgroundColor: "#eef2ff",
-    outline: {
+    outlineWidth: {
       default: null,
-      ":focus-visible": "2px solid #4f46e5",
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#4f46e5",
     },
     outlineOffset: {
       default: null,

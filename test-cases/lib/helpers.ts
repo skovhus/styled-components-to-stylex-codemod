@@ -77,6 +77,10 @@ export const gradient = () => `
   color: transparent;
 `;
 
+export const focusOutline = css`
+  outline: 2px solid #4f46e5;
+`;
+
 // Thin pixel helper - returns a CSS string for a thin pixel
 export const thinPixel = () => {
   // This would do some runtime lookup, etc.

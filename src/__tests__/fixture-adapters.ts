@@ -379,6 +379,19 @@ export const fixtureAdapter = defineAdapter({
           ],
         };
       }
+      if (ctx.importedName === "focusOutline") {
+        return {
+          usage: "props",
+          expr: "helpers.focusOutline",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers.stylex" },
+              names: [{ imported: "helpers" }],
+            },
+          ],
+          cssText: "outline-width: 2px; outline-style: solid; outline-color: #4f46e5;",
+        };
+      }
     }
 
     // Return undefined to bail/skip the file

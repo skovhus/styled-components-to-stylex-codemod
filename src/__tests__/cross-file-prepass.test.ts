@@ -68,6 +68,31 @@ describe("scanCrossFileSelectors", () => {
     expect(bridge!.has("CollapseArrowIcon")).toBe(true);
   });
 
+  it("resolves component selector targets through barrel re-exports", () => {
+    const info: CrossFileInfo = scanCrossFileSelectors(
+      [fixture("consumer-barrel-selector.tsx"), fixture("lib/collapse-arrow-icon.tsx")],
+      [],
+      resolver,
+    );
+
+    const usages = info.selectorUsages.get(fixture("consumer-barrel-selector.tsx"));
+    expect(usages).toBeDefined();
+    expect(usages).toHaveLength(1);
+    expect(usages![0]).toMatchObject({
+      localName: "CollapseArrowIcon",
+      importSource: "./lib/icon-barrel",
+      importedName: "CollapseArrowIcon",
+      resolvedPath: fixture("lib/collapse-arrow-icon.tsx"),
+      consumerIsTransformed: true,
+    });
+
+    const bridge = info.componentsNeedingGlobalSelectorBridge.get(
+      fixture("lib/collapse-arrow-icon.tsx"),
+    );
+    expect(bridge).toBeDefined();
+    expect(bridge!.has("CollapseArrowIcon")).toBe(true);
+  });
+
   it("flags bridge when consumer is NOT in the transform set", () => {
     const info = scanCrossFileSelectors(
       [fixture("lib/collapse-arrow-icon.tsx")], // only the target

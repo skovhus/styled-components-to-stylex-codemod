@@ -1,5 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
+import { focusOutline } from "./lib/helpers";
 
 // Simulated imported component
 const Flex = (
@@ -148,7 +149,7 @@ const PositionedTile = styled.div.attrs<{ height: number }>((props) => ({
   background-color: #eef2ff;
 
   &:focus-visible {
-    outline: 2px solid #4f46e5;
+    ${focusOutline}
     outline-offset: 3px;
   }
 `;
