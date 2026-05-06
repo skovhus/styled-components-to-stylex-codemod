@@ -163,6 +163,15 @@ const SeparatorLine = styled.div.attrs<{ $height?: number }>((props) => ({
   background-color: #94a3b8;
 `;
 
+const FallbackSeparatorLine = styled.div.attrs<{ $height?: number }>(({ $height }) => ({
+  style: {
+    height: $height ? `${$height}px` : "16px",
+  },
+}))`
+  width: 100%;
+  background-color: #16a34a;
+`;
+
 function HeaderSeparator(props: {
   className?: string;
   height?: number;
@@ -217,6 +226,7 @@ export const App = () => (
     <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
     <PositionedTile height={64}>Tile with attrs height</PositionedTile>
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
+    <FallbackSeparatorLine $height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
   </>
 );

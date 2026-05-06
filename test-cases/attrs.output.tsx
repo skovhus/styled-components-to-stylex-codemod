@@ -192,6 +192,15 @@ function SeparatorLine(props: SeparatorLineProps) {
   return <div {...mergedSx(styles.separatorLine(height ?? 1), className, style)}>{children}</div>;
 }
 
+type FallbackSeparatorLineProps = React.PropsWithChildren<{
+  height?: number;
+}>;
+
+function FallbackSeparatorLine(props: FallbackSeparatorLineProps) {
+  const { children, height } = props;
+  return <div sx={styles.fallbackSeparatorLine(height ? `${height}px` : "16px")}>{children}</div>;
+}
+
 function HeaderSeparator(props: {
   className?: string;
   height?: number;
@@ -260,6 +269,7 @@ export const App = () => (
     <DynamicHeightBox height={50}>Dynamic height</DynamicHeightBox>
     <PositionedTile height={64}>Tile with attrs height</PositionedTile>
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
+    <FallbackSeparatorLine height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
   </>
 );
@@ -344,6 +354,11 @@ const styles = stylex.create({
   separatorLine: (height: string | number) => ({
     width: "100%",
     backgroundColor: "#94a3b8",
+    height,
+  }),
+  fallbackSeparatorLine: (height: string | number) => ({
+    width: "100%",
+    backgroundColor: "#16a34a",
     height,
   }),
   baseToolbarButton: {
