@@ -1,1 +1,0 @@
-var e=e=>t=>t.theme.color[e];export{e as t};
