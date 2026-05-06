@@ -5,6 +5,7 @@
 // wrapped component.
 import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -42,6 +43,11 @@ export const ExportedToggleButton = styled(SxAwareButton).attrs({ type: "button"
   background-color: ${(props) => (props.$open ? "#dbeafe" : "#f8fafc")};
 `;
 
+export const DraggableSxButton = styled(SxAwareButton)`
+  color: #14532d;
+  ${draggableRegion(true)};
+`;
+
 // Wrapping the generic Text component — auto-detection has to walk
 // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
 // find the `sx` member.
@@ -70,6 +76,7 @@ export const App = () => (
     <ExportedToggleButton $open sx={callerStyles.caller}>
       Exported toggle
     </ExportedToggleButton>
+    <DraggableSxButton sx={callerStyles.caller}>Draggable sx</DraggableSxButton>
     <StyledText size="md">Generic Text</StyledText>
   </div>
 );
