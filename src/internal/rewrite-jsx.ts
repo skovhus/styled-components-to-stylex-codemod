@@ -696,13 +696,28 @@ export function postProcessTransformedAst(args: {
       return;
     }
 
-    const usedOutsideImports = (localName: string): boolean => {
+    const usedOutsideImports = (localName: string, importLocalNode: unknown): boolean => {
       const isProbablyJsxBindingName = (name: string): boolean => {
         // In JSX, lowercase tag names like `<div />` are treated as intrinsic elements, not scope bindings.
         // We only treat JSX identifiers as usage of an import when they look like component names.
         // (Uppercase is the conventional signal, and matches React/TSX binding semantics.)
         const first = name[0] ?? "";
         return first.toUpperCase() === first && first.toLowerCase() !== first;
+      };
+
+      const resolvesToImportBinding = (idPath: any): boolean => {
+        try {
+          const scope = idPath.scope?.lookup?.(localName);
+          const bindings = scope?.getBindings?.()?.[localName];
+          if (!Array.isArray(bindings)) {
+            return true;
+          }
+          return bindings.some((bindingPath: any) => bindingPath?.node === importLocalNode);
+        } catch {
+          // Some TS/JSX AST patterns are not fully supported by ast-types scope scanning.
+          // Keep the import when we cannot prove the reference resolves elsewhere.
+          return true;
+        }
       };
 
       const usedByIdentifier =
@@ -732,8 +747,16 @@ export function postProcessTransformedAst(args: {
             ) {
               return false;
             }
+            // Ignore identifiers that are declaration-only property names, not value references.
+            if (parent?.type === "TSPropertySignature" && parent.key === idPath.node) {
+              return false;
+            }
+            // Ignore JSX attribute names: `<Box color="accent" />` does not reference an import.
+            if (parent?.type === "JSXAttribute" && parent.name === idPath.node) {
+              return false;
+            }
 
-            return true;
+            return resolvesToImportBinding(idPath);
           })
           .size() > 0;
 
@@ -787,7 +810,8 @@ export function postProcessTransformedAst(args: {
           return false;
         }
       }
-      return usedOutsideImports(local);
+      const importLocalNode = s.local?.type === "Identifier" ? s.local : null;
+      return usedOutsideImports(local, importLocalNode);
     });
 
     if (nextSpecs.length !== specs.length) {

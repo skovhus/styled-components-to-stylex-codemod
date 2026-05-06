@@ -694,8 +694,11 @@ function tryResolveArrowFnCurriedHelperCallWithPropFallback(
     return null;
   }
 
-  const calleeInfo = extractRootAndPath(innerCall.callee);
-  if (!calleeInfo || !ctx.resolveImport(calleeInfo.rootName, calleeInfo.rootNode)) {
+  const helperResolution = resolveImportedHelperCall(innerCall, ctx, undefined, node.css.property);
+  if (helperResolution.kind === "unresolved") {
+    return buildUnresolvedHelperResult(innerCall.callee, ctx);
+  }
+  if (helperResolution.kind !== "resolved" || !("expr" in helperResolution.result)) {
     return null;
   }
 

@@ -1,7 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
-import { truncate } from "./lib/helpers";
 
 type TextProps = React.PropsWithChildren<{
   truncate?: boolean;

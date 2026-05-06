@@ -1,7 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $shadow } from "./tokens.stylex";
-import { shadow } from "./lib/helpers";
 
 type BoxProps = React.PropsWithChildren<{
   shadow: "dark" | "light";

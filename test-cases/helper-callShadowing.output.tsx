@@ -1,5 +1,4 @@
 import React from "react";
-import { color } from "./lib/helpers";
 
 // Test: When a local function shadows an imported helper inside a nested scope,
 // the codemod should NOT resolve the local function call to the import.

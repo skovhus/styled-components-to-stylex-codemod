@@ -2,7 +2,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors, $shadow, $glowShadow } from "./tokens.stylex";
-import { color } from "./lib/color-helper";
 import type { ColorToken } from "./tokens.stylex";
 
 type ShadowToken = "dark" | "light";
