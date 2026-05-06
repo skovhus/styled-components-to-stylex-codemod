@@ -7,6 +7,7 @@ export const $colors = stylex.defineVars({
   primaryColor: "#BF4F74",
   secondaryColor: "#4F74BF",
   labelBase: "#111827",
+  labelFaint: "#9CA3AF",
   labelMuted: "#6B7280",
   labelTitle: "#111827",
   greenBase: "#22C55E",
@@ -40,6 +41,7 @@ export const testCaseTheme = {
   color: {
     labelBase: "#111827",
     accent: "#8B5CF6",
+    labelFaint: "#9CA3AF",
     labelMuted: "#6B7280",
     labelTitle: "#111827",
     greenBase: "#22C55E",

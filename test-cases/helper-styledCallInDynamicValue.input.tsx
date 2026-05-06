@@ -36,6 +36,15 @@ const LoadingPlaceholderRepeat = styled.div<{ $highlightColor: ColorToken }>`
     )})`};
 `;
 
+const OptionalColorPanel = styled.div<{ $color?: ColorToken }>`
+  width: 160px;
+  min-height: 40px;
+  border-radius: 6px;
+  padding: 8px;
+  color: white;
+  background-color: ${(p) => color(p.$color ?? "labelFaint")(p)} !important;
+`;
+
 const LoadingPlaceholderWithSize = styled.div<{
   $highlightColor: ColorToken;
   $size: number;
@@ -68,6 +77,8 @@ export const App = () => (
     <LoadingPlaceholder $highlightColor="accent" />
     <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
     <LoadingPlaceholderRepeat $highlightColor="accent" />
+    <OptionalColorPanel>Default faint panel</OptionalColorPanel>
+    <OptionalColorPanel $color="accent">Accent panel</OptionalColorPanel>
     <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
     <ShadowPlaceholder $shadow="dark" />
     <LayeredShadowPlaceholder $shadowTone="light" />

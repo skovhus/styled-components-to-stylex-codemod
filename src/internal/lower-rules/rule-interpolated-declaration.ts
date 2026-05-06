@@ -1778,10 +1778,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           let helperCallArgs: DynamicHelperCallArgument[] = [];
           if (!styleFnDecls.has(fnKey)) {
-            const valueExprRaw = cloneAstNode(bodyExpr);
+            const originalValueExpr = cloneAstNode(bodyExpr);
             const helperResolution = resolveHelperCallsInDynamicValue({
               j,
-              expr: valueExprRaw,
+              expr: originalValueExpr,
               cssProperty: out.prop,
               paramName,
               resolveImportForExpr,
@@ -1800,7 +1800,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
+            helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution.args);
+            const valueExprRaw = helperResolution.expr;
             const needsOriginalParam =
               helperCallArgs.length > 0 && containsIdentifier(valueExprRaw, paramName);
             const styleFnParamNames =
@@ -1812,9 +1813,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             }
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
             const { prefix, suffix } = extractStaticPartsForDecl(d);
+            const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
             const valueExpr =
-              prefix || suffix
-                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
+              prefix || effectiveSuffix
+                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, effectiveSuffix)
                 : valueExprRaw;
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
@@ -3067,6 +3069,11 @@ type DynamicHelperCallResult = {
   binding: DynamicHelperCallArgument;
 };
 
+type DynamicHelperCallResolution = {
+  expr: ExpressionKind;
+  args: DynamicHelperCallArgument[];
+};
+
 type StyledHelperCall =
   | {
       kind: "curried";
@@ -3093,9 +3100,9 @@ type CallExpressionLike = {
 
 function resolveHelperCallsInDynamicValue(
   ctx: DynamicHelperCallContext,
-): DynamicHelperCallArgument[] | null {
+): DynamicHelperCallResolution | null {
   if (!ctx.expr || typeof ctx.expr !== "object") {
-    return [];
+    return { expr: ctx.expr, args: [] };
   }
 
   let failed = false;
@@ -3146,11 +3153,11 @@ function resolveHelperCallsInDynamicValue(
     return node;
   };
 
-  visit(ctx.expr);
+  const expr = visit(ctx.expr) as ExpressionKind;
   if (failed) {
     return null;
   }
-  return resolutions;
+  return { expr, args: resolutions };
 }
 
 function isUnsupportedCurriedHelperCall(
@@ -3344,6 +3351,21 @@ function unwrapParamMemberArg(
   arg: ExpressionKind,
   paramName: string,
 ): { arg: ExpressionKind; propName: string } | null {
+  if (arg?.type === "LogicalExpression" && arg.operator === "??") {
+    const left = unwrapParamMemberArg(arg.left as ExpressionKind, paramName);
+    if (!left || literalToStaticValue(arg.right) === null) {
+      return null;
+    }
+    return {
+      arg: {
+        type: "LogicalExpression",
+        operator: "??",
+        left: left.arg,
+        right: cloneAstNode(arg.right),
+      } as ExpressionKind,
+      propName: left.propName,
+    };
+  }
   if (arg?.type !== "MemberExpression" && arg?.type !== "OptionalMemberExpression") {
     return null;
   }
