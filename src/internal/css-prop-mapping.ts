@@ -55,6 +55,7 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "gridRowEnd",
   "gridColumnStart",
   "gridColumnEnd",
+  "outlineOffset",
 ]);
 
 /**
@@ -198,6 +199,14 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     }
     const stylexProp = resolveBackgroundStylexProp(rawVal);
     return [{ prop: stylexProp, value: decl.value }];
+  }
+
+  if (prop === "display" && decl.value.kind === "static" && decl.valueRaw.trim() === "wrap") {
+    return [];
+  }
+
+  if (prop === "animation" && decl.value.kind === "static" && decl.valueRaw.trim() === "none") {
+    return [{ prop: "animationName", value: decl.value }];
   }
 
   if (prop === "border") {

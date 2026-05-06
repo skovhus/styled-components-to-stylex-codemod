@@ -1,7 +1,5 @@
 import styled from "styled-components";
 
-const elevated = 10;
-
 const Thing = styled.div`
   border-right: 1px solid hotpink;
   color: blue;
@@ -25,10 +23,10 @@ const Thing = styled.div`
 
 const FocusableCell = styled.div<{ $isAnimating?: boolean }>`
   position: relative;
-  z-index: ${(props) => (props.$isAnimating ? elevated : undefined)};
+  z-index: ${(props) => (props.$isAnimating ? 10 : undefined)};
 
   &:focus-within {
-    z-index: ${elevated + 2};
+    z-index: 12;
   }
 `;
 

@@ -183,6 +183,47 @@ export const fixtureAdapter = defineAdapter({
           ],
         } satisfies ResolveValueDirectionalResult;
       }
+      if (
+        (ctx.cssProperty === "border" ||
+          ctx.cssProperty === "borderColor" ||
+          ctx.cssProperty === "border-color") &&
+        ctx.path.endsWith("inputBorder")
+      ) {
+        return {
+          directional: [
+            {
+              prop: "borderWidth",
+              expr: "$input.inputBorderWidth",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+            {
+              prop: "borderStyle",
+              expr: "$input.inputBorderStyle",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+            {
+              prop: "borderColor",
+              expr: "$input.inputBorderColor",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+          ],
+        } satisfies ResolveValueDirectionalResult;
+      }
 
       // Nested theme objects (e.g. theme.baseTheme?.color.X) are not resolvable
       // to static tokens — return undefined so the codemod falls back to runtime.

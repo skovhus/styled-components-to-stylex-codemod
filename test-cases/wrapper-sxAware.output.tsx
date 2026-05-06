@@ -40,22 +40,22 @@ export function ExportedAccentButton(
   );
 }
 
-export function ExportedToggleButton(
-  props: {
-    className?: string;
-    open?: boolean;
-    style?: React.CSSProperties;
-    sx?: stylex.StyleXStyles;
-  } & React.ComponentPropsWithRef<typeof SxAwareButton>,
-) {
-  const { children, open, sx, ...rest } = props;
+type ExportedToggleButtonProps = {
+  className?: string;
+  style?: React.CSSProperties;
+  sx?: stylex.StyleXStyles;
+  open?: boolean;
+} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "$open">;
+
+export function ExportedToggleButton(props: ExportedToggleButtonProps) {
+  const { children, sx, open, ...rest } = props;
   return (
     <SxAwareButton
-      type="button"
       {...rest}
+      type="button"
       sx={[
         callerStyles.exportedToggleButton,
-        open ? callerStyles.exportedToggleButtonOpen : undefined,
+        open ? callerStyles.exportedToggleButtonOpen : null,
         sx,
       ]}
     >

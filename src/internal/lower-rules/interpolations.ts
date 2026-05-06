@@ -114,8 +114,16 @@ export function tryHandleInterpolatedStringValue(args: {
   ) => { resolved: any; imports?: any[] } | { bail: true } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
+  setStyleValue?: (prop: string, value: unknown) => void;
 }): boolean {
   const { j, decl, d, styleObj, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
+  const setValue = (prop: string, value: unknown): void => {
+    if (args.setStyleValue) {
+      args.setStyleValue(prop, value);
+    } else {
+      (styleObj as any)[prop] = value;
+    }
+  };
   // Handle common “string interpolation” cases:
   //  - background: ${dynamicColor}
   //  - padding: ${spacing}px
@@ -156,7 +164,7 @@ export function tryHandleInterpolatedStringValue(args: {
       }
       for (const entry of entries) {
         const usesExpr = entry.value.includes(`__SC_EXPR_${slotId}__`);
-        (styleObj as any)[entry.prop] = usesExpr ? (tl as any) : 0;
+        setValue(entry.prop, usesExpr ? (tl as any) : 0);
       }
       return true;
     }
@@ -178,7 +186,7 @@ export function tryHandleInterpolatedStringValue(args: {
         // Normalize whitespace for multiline template literals used for formatting convenience
         const normalizedValue = normalizeWhitespace(staticValue);
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          (styleObj as any)[out.prop] = normalizedValue;
+          setValue(out.prop, normalizedValue);
         }
         return true;
       }
@@ -200,7 +208,7 @@ export function tryHandleInterpolatedStringValue(args: {
         addImport?.(imp);
       }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
-        (styleObj as any)[out.prop] = resolved.resolved;
+        setValue(out.prop, resolved.resolved);
       }
       return true;
     }
@@ -209,7 +217,7 @@ export function tryHandleInterpolatedStringValue(args: {
     // Handle directional theme results: adapter returned separate longhand entries
     if (isDirectionalThemeResult(themeResolved)) {
       for (const entry of themeResolved.__directional) {
-        (styleObj as any)[entry.prop] = entry.expr;
+        setValue(entry.prop, entry.expr);
       }
       return true;
     }
@@ -229,7 +237,7 @@ export function tryHandleInterpolatedStringValue(args: {
     const outputs = cssDeclarationToStylexDeclarations(d);
     for (let i = 0; i < outputs.length; i++) {
       const out = outputs[i]!;
-      (styleObj as any)[out.prop] = themeResolved ?? wrappedExpr;
+      setValue(out.prop, themeResolved ?? wrappedExpr);
       // Add leading comment if present (e.g., for inlined static member expressions)
       if (i === 0 && (d as any).leadingComment) {
         addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
@@ -253,7 +261,7 @@ export function tryHandleInterpolatedStringValue(args: {
   const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
     const out = outputs[i]!;
-    (styleObj as any)[out.prop] = tl as any;
+    setValue(out.prop, tl as any);
     // Add leading comment if present (e.g., for inlined static member expressions)
     if (i === 0 && (d as any).leadingComment) {
       addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });

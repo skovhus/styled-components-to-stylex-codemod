@@ -1,34 +1,23 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type FadingContentProps = React.PropsWithChildren<{
+  isLoading?: boolean;
+}>;
+
+function FadingContent(props: FadingContentProps) {
+  const { children, isLoading } = props;
+  return (
+    <div sx={[styles.fadingContent, isLoading && styles.fadingContentLoading]}>{children}</div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <div sx={styles.loadingContainer}>Loading</div>
     <FadingContent isLoading>Fading</FadingContent>
   </div>
 );
-
-type FadingContentProps = {
-  children?: React.ReactNode;
-  isLoading?: boolean;
-};
-
-function FadingContent(props: FadingContentProps) {
-  const { children, isLoading } = props;
-  return (
-    <div
-      sx={[
-        styles.fadingContent,
-        isLoading ? styles.fadingContentIsLoading : undefined,
-        isLoading
-          ? styles.fadingContentTransition("100ms 500ms")
-          : styles.fadingContentTransition("0ms 0ms"),
-      ]}
-    >
-      {children}
-    </div>
-  );
-}
 
 const styles = stylex.create({
   loadingContainer: {
@@ -53,6 +42,7 @@ const styles = stylex.create({
       default: "auto",
       "@media print": "auto",
     },
+    transition: "opacity 0ms 0ms ease-in",
     display: {
       default: "flex",
       "@media print": "block",
@@ -70,11 +60,9 @@ const styles = stylex.create({
       "@media print": 0,
     },
   },
-  fadingContentIsLoading: {
+  fadingContentLoading: {
     opacity: 0,
     pointerEvents: "none",
+    transition: "opacity 100ms 500ms ease-in",
   },
-  fadingContentTransition: (durationAndDelay: string) => ({
-    transition: `opacity ${durationAndDelay} ease-in`,
-  }),
 });

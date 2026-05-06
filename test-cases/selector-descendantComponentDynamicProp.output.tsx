@@ -150,7 +150,7 @@ type ScrollerProps = React.PropsWithChildren<{
 
 function Scroller(props: ScrollerProps) {
   const { children, minContentWidth } = props;
-  const sx = stylex.props(styles.scroller, stylex.defaultMarker());
+  const sx = stylex.props(styles.scroller);
 
   return (
     <div
@@ -158,7 +158,7 @@ function Scroller(props: ScrollerProps) {
       style={
         {
           ...sx.style,
-          "--stickyHeaderInScroller-minWidth": `${minContentWidth}px`,
+          "--stickyHeaderInScroller-minWidth": props.minContentWidth,
         } as React.CSSProperties
       }
     >
@@ -308,9 +308,6 @@ const styles = stylex.create({
     },
   },
   stickyHeaderInScroller: {
-    minWidth: {
-      default: null,
-      [stylex.when.ancestor(":is(*)")]: "var(--stickyHeaderInScroller-minWidth)",
-    },
+    minWidth: "var(--stickyHeaderInScroller-minWidth)px",
   },
 });

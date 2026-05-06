@@ -43,14 +43,13 @@ export const App = () => (
     </div>
     <br />
     <br />
-    <div sx={stylex.defaultMarker()}>
+    <div>
       <a href="#" sx={[styles.nestedLink, styles.nestedLinkInNestedRow]}>
         Nested link
       </a>
     </div>
-    <div sx={stylex.defaultMarker()}>
-      <div sx={[styles.boundaryItem, styles.boundaryItemInBoundaryList]}>Boundary one</div>
-      <div sx={[styles.boundaryItem, styles.boundaryItemInBoundaryList]}>Boundary two</div>
+    <div sx={styles.boundaryList}>
+      <div sx={styles.boundaryItem}>Boundary one</div>
     </div>
   </div>
 );
@@ -113,6 +112,24 @@ const styles = stylex.create({
   boundaryItem: {
     padding: 6,
   },
+  boundaryList: {
+    marginBottom: {
+      default: null,
+      ":not(:last-child)": 8,
+    },
+    borderBottomWidth: {
+      default: null,
+      ":not(:last-child)": 1,
+    },
+    borderBottomStyle: {
+      default: null,
+      ":not(:last-child)": "solid",
+    },
+    borderBottomColor: {
+      default: null,
+      ":not(:last-child)": "#cbd5e1",
+    },
+  },
   contentInContainerLink: {
     outline: {
       default: null,
@@ -120,7 +137,7 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: 5,
+      [stylex.when.ancestor(":focus-visible")]: "5px",
     },
   },
   shadowBoxInShadowContainer: {
@@ -150,27 +167,6 @@ const styles = stylex.create({
     },
   },
   nestedLinkInNestedRow: {
-    display: {
-      default: null,
-      [stylex.when.ancestor(":is(*)")]: "flex",
-    },
-  },
-  boundaryItemInBoundaryList: {
-    marginBottom: {
-      default: null,
-      ":not(:last-child)": 8,
-    },
-    borderBottomWidth: {
-      default: null,
-      ":not(:last-child)": 1,
-    },
-    borderBottomStyle: {
-      default: null,
-      ":not(:last-child)": "solid",
-    },
-    borderBottomColor: {
-      default: null,
-      ":not(:last-child)": "#cbd5e1",
-    },
+    display: "flex",
   },
 });

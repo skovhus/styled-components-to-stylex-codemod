@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Simulated imported component
 const Flex = (
@@ -176,17 +177,19 @@ type PositionedTileProps = React.PropsWithChildren<{
 // Pattern 11: dynamic attrs style must be applied as style, not leaked as an inert DOM prop
 function PositionedTile(props: PositionedTileProps) {
   const { children, height } = props;
-  return <div sx={[styles.positionedTile, styles.positionedTileHeight(height)]}>{children}</div>;
+  return <div sx={styles.positionedTile(height)}>{children}</div>;
 }
 
-type SeparatorLineProps = {
+type SeparatorLineProps = React.PropsWithChildren<{
   height?: number;
-} & React.ComponentProps<"div">;
+  className?: string;
+  style?: React.CSSProperties;
+}>;
 
 // Pattern 12: dynamic attrs style should merge with caller style, with caller style last
 function SeparatorLine(props: SeparatorLineProps) {
-  const { height, style, ...rest } = props;
-  return <div {...rest} sx={styles.separatorLine} style={{ height: height ?? 1, ...style }} />;
+  const { className, children, style, height } = props;
+  return <div {...mergedSx(styles.separatorLine(height ?? 1), className, style)}>{children}</div>;
 }
 
 function HeaderSeparator(props: {
@@ -215,22 +218,27 @@ function ButtonLike(props: ButtonLikeProps) {
   );
 }
 
-type ActiveToolbarButtonProps = Omit<
-  React.ComponentPropsWithRef<typeof ButtonLike>,
-  "className" | "style"
->;
-
-function ActiveToolbarButton(props: ActiveToolbarButtonProps) {
-  const { children, ...rest } = props;
+function BaseToolbarButton(
+  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+) {
   return (
     <ButtonLike
+      {...props}
       size="small"
       variant="borderless"
-      {...rest}
+      {...stylex.props(styles.baseToolbarButton)}
+    />
+  );
+}
+
+function ActiveToolbarButton(
+  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+) {
+  return (
+    <ButtonLike
+      {...props}
       {...stylex.props(styles.baseToolbarButton, styles.activeToolbarButton)}
-    >
-      {children}
-    </ButtonLike>
+    />
   );
 }
 
@@ -317,7 +325,7 @@ const styles = stylex.create({
   dynamicHeightBoxHeight: (height: string) => ({
     height,
   }),
-  positionedTile: {
+  positionedTile: (height: string | number) => ({
     position: "absolute",
     minHeight: 1,
     backgroundColor: "#eef2ff",
@@ -329,14 +337,13 @@ const styles = stylex.create({
       default: null,
       ":focus-visible": "3px",
     },
-  },
-  positionedTileHeight: (height: number) => ({
     height,
   }),
-  separatorLine: {
+  separatorLine: (height: string | number) => ({
     width: "100%",
     backgroundColor: "#94a3b8",
-  },
+    height,
+  }),
   baseToolbarButton: {
     paddingBlock: 4,
     paddingInline: 8,

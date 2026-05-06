@@ -1,5 +1,6 @@
 // Type-only named React imports must not be merged into invalid default-plus-named type syntax.
 import type React from "react";
+
 import type { CSSProperties, ReactNode } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
@@ -20,9 +21,7 @@ function BaseButton(props: BaseButtonProps) {
   );
 }
 
-type ToolbarButtonProps = React.ComponentPropsWithRef<typeof BaseButton>;
-
-export function ToolbarButton(props: ToolbarButtonProps) {
+export function ToolbarButton(props: React.ComponentPropsWithRef<typeof BaseButton>) {
   const { className, children, style, ...rest } = props;
   return (
     <BaseButton {...rest} {...mergedSx(styles.toolbarButton, className, style)}>

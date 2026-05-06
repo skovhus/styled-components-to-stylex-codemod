@@ -11,14 +11,15 @@ export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children"
   );
 }
 
-type MoveIconProps = {
-  animated?: boolean;
-} & Omit<React.ComponentProps<"svg">, "className" | "style">;
+type MoveIconProps = { animated?: boolean } & Omit<
+  React.ComponentProps<"svg">,
+  "className" | "style"
+>;
 
 export function MoveIcon(props: MoveIconProps) {
-  const { animated, children, ...rest } = props;
+  const { children, animated, ...rest } = props;
   return (
-    <svg {...rest} sx={[styles.moveIcon, animated ? styles.moveIconAnimated : undefined]}>
+    <svg {...rest} sx={[styles.moveIcon, animated && styles.moveIconAnimated]}>
       {children}
     </svg>
   );

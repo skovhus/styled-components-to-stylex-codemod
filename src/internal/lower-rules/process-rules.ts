@@ -1290,6 +1290,26 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
+      if (media && (pseudoElement || pseudoElementsList)) {
+        const pseudoElementsToApply = pseudoElement ? [pseudoElement] : pseudoElementsList;
+        for (const pe of pseudoElementsToApply ?? []) {
+          nestedSelectors[pe] ??= {};
+          const peTarget = nestedSelectors[pe]!;
+          noteSourceCssProperty(peTarget);
+          const current = peTarget[prop];
+          if (!current || typeof current !== "object") {
+            peTarget[prop] = { default: current ?? null, [media]: value };
+          } else {
+            const map = current as Record<string, unknown>;
+            if (!("default" in map)) {
+              map.default = null;
+            }
+            map[media] = value;
+          }
+        }
+        return;
+      }
+
       if (media) {
         perPropMedia[prop] ??= {};
         const existing = perPropMedia[prop]!;
@@ -3121,14 +3141,18 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
       const fnKey = styleKeyWithSuffix(decl.styleKey, entry.cssProp);
       const paramName = cssPropertyToIdentifier(entry.cssProp);
       const param = j.identifier(paramName);
-      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      (param as any).typeAnnotation = j.tsTypeAnnotation(
+        entry.condition === "always"
+          ? j.tsUnionType([j.tsStringKeyword(), j.tsNumberKeyword()])
+          : j.tsStringKeyword(),
+      );
       const p = makeCssProperty(j, entry.cssProp, paramName);
       const body = j.objectExpression([p]);
       ctx.styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
       ctx.styleFnFromProps.push({
         fnKey,
         jsxProp: entry.jsxProp,
-        condition: "truthy",
+        condition: entry.condition ?? "truthy",
         callArg: entry.callArgExpr as any,
       });
       ensureShouldForwardPropDrop(decl, entry.jsxProp);

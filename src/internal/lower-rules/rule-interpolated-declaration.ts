@@ -704,6 +704,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
+        setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {
       continue;
@@ -1812,10 +1813,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             }
             // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
             const { prefix, suffix } = extractStaticPartsForDecl(d);
+            const fullTemplateValueExpr =
+              d.property === "transition"
+                ? buildFullInterpolatedDeclarationValueExpr(j, decl, d)
+                : null;
             const valueExpr =
-              prefix || suffix
+              fullTemplateValueExpr ??
+              (prefix || suffix
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
-                : valueExprRaw;
+                : valueExprRaw);
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
@@ -2230,18 +2236,36 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const expr =
           prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+        const shouldPassComputedCallArg =
+          jsxProp !== "__props" &&
+          (Boolean(prefix || suffix) ||
+            baseExpr.type !== "Identifier" ||
+            (baseExpr as { name?: string }).name !== jsxProp);
+        const finalParam = shouldPassComputedCallArg
+          ? j.identifier(cssPropertyToIdentifier(out.prop, avoidNames))
+          : propsParam;
+        if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
+          (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            j.tsStringKeyword(),
+          );
+        }
+        const valueExpr = shouldPassComputedCallArg ? j.identifier(finalParam.name) : expr;
         if (!styleFnDecls.has(fnKey)) {
           const body = j.objectExpression([
             j.property(
               "init",
               makeCssPropKey(j, out.prop),
-              buildPseudoMediaPropValue({ j, valueExpr: expr, pseudos, media }),
+              buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
             ),
           ]);
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+          styleFnDecls.set(fnKey, j.arrowFunctionExpression([finalParam], body));
         }
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-          styleFnFromProps.push({ fnKey, jsxProp });
+          styleFnFromProps.push({
+            fnKey,
+            jsxProp,
+            ...(shouldPassComputedCallArg ? { callArg: expr } : {}),
+          });
         }
       }
       if (bail) {
@@ -2729,6 +2753,54 @@ function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDe
     return false;
   }
   return decl.templateExpressions[parts[0].slotId] !== undefined;
+}
+
+function buildFullInterpolatedDeclarationValueExpr(
+  j: JSCodeshift,
+  decl: StyledDecl,
+  d: CssDeclarationIR,
+): ExpressionKind | null {
+  if (d.value.kind !== "interpolated") {
+    return null;
+  }
+  const parts = d.value.parts ?? [];
+  const slotCount = parts.filter((p) => p.kind === "slot").length;
+  if (slotCount <= 1) {
+    return null;
+  }
+
+  const quasis: any[] = [];
+  const expressions: any[] = [];
+  let raw = "";
+
+  for (const part of parts) {
+    if (part.kind === "static") {
+      raw += String(part.value ?? "");
+      continue;
+    }
+    if (part.kind !== "slot") {
+      continue;
+    }
+
+    const expr = decl.templateExpressions[part.slotId] as any;
+    if (!expr) {
+      return null;
+    }
+    const valueExpr =
+      expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression"
+        ? inlineArrowFunctionBody(j, expr)
+        : cloneAstNode(expr);
+    if (!valueExpr) {
+      return null;
+    }
+
+    quasis.push(j.templateElement({ raw, cooked: raw }, false));
+    expressions.push(valueExpr);
+    raw = "";
+  }
+
+  quasis.push(j.templateElement({ raw, cooked: raw }, true));
+  return j.templateLiteral(quasis, expressions);
 }
 
 function isCssCalcOperator(operator: string | undefined): boolean {

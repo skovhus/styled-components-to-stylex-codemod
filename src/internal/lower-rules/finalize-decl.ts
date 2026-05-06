@@ -622,6 +622,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // (i.e., merged base). Separate derived keys like `boxBoxShadow` already
   // encode the parameter name, so positional args are clearer there.
   convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
+  alignComputedCallArgStyleFnParams(styleFnDecls, styleFnFromProps);
 
   insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
     styleKey: decl.styleKey,
@@ -638,6 +639,28 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   }
   if (inlineStyleProps.length) {
     decl.inlineStyleProps = inlineStyleProps;
+  }
+}
+
+function alignComputedCallArgStyleFnParams(
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+): void {
+  for (const entry of styleFnFromProps) {
+    if (!entry.callArg || entry.jsxProp === "__props") {
+      continue;
+    }
+    const fnAst = styleFnDecls.get(entry.fnKey);
+    if (!fnAst || typeof fnAst !== "object") {
+      continue;
+    }
+    const paramName = getArrowFnSingleParamName(
+      fnAst as Parameters<typeof getArrowFnSingleParamName>[0],
+    );
+    if (!paramName || paramName === entry.jsxProp) {
+      continue;
+    }
+    renameIdentifierInAst(fnAst, entry.jsxProp, paramName);
   }
 }
 
@@ -2012,8 +2035,13 @@ function consolidateSameJsxPropStyleFns(args: {
     let firstFnAst: object | undefined;
 
     let canMerge = true;
+    const firstCallArgKey = astShapeKey(firstEntry.callArg);
     for (const idx of indices) {
       const entry = styleFnFromProps[idx]!;
+      if (astShapeKey(entry.callArg) !== firstCallArgKey) {
+        canMerge = false;
+        break;
+      }
       const fnAst = styleFnDecls.get(entry.fnKey);
       if (!fnAst || typeof fnAst !== "object") {
         canMerge = false;
@@ -2030,6 +2058,13 @@ function consolidateSameJsxPropStyleFns(args: {
       // Get the original parameter name for this function
       const origParam = getArrowFnSingleParamName(fnAst as any);
       const bodyProps = (body as { properties?: unknown[] }).properties ?? [];
+      if (
+        origParam &&
+        !bodyProps.every((prop) => objectPropertyValueIsIdentifier(prop, origParam))
+      ) {
+        canMerge = false;
+        break;
+      }
       if (origParam && origParam !== unifiedParamName) {
         // Rename all identifier references from the original param to the unified name
         for (const prop of bodyProps) {
@@ -2089,6 +2124,19 @@ function consolidateSameJsxPropStyleFns(args: {
   for (const idx of sortedRemoveIndices) {
     styleFnFromProps.splice(idx, 1);
   }
+}
+
+function objectPropertyValueIsIdentifier(prop: unknown, name: string): boolean {
+  const p = prop as { type?: string; value?: { type?: string; name?: string } };
+  return (
+    (p.type === "ObjectProperty" || p.type === "Property") &&
+    p.value?.type === "Identifier" &&
+    p.value.name === name
+  );
+}
+
+function astShapeKey(node: unknown): string {
+  return node === undefined ? "" : JSON.stringify(node);
 }
 
 /** Recursively renames all Identifier nodes with `oldName` to `newName` in an AST subtree.

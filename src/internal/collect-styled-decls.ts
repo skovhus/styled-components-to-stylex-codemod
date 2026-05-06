@@ -88,7 +88,12 @@ function collectStyledDeclsImpl(args: {
     > & {
       attrsAsTag?: string;
       attrsStaticStyles?: Record<string, unknown>;
-      attrsDynamicStyles?: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }>;
+      attrsDynamicStyles?: Array<{
+        cssProp: string;
+        jsxProp: string;
+        callArgExpr: unknown;
+        condition?: "truthy" | "always";
+      }>;
     } = {
       staticAttrs: {},
       sourceKind: "unknown",
@@ -1396,11 +1401,21 @@ function tryExtractStyleObject(
   styleObj: { properties?: unknown[] },
   out: {
     attrsStaticStyles?: Record<string, unknown>;
-    attrsDynamicStyles?: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }>;
+    attrsDynamicStyles?: Array<{
+      cssProp: string;
+      jsxProp: string;
+      callArgExpr: unknown;
+      condition?: "truthy" | "always";
+    }>;
   },
 ): boolean {
   const staticStyles: Record<string, unknown> = {};
-  const dynamicStyles: Array<{ cssProp: string; jsxProp: string; callArgExpr: unknown }> = [];
+  const dynamicStyles: Array<{
+    cssProp: string;
+    jsxProp: string;
+    callArgExpr: unknown;
+    condition?: "truthy" | "always";
+  }> = [];
 
   for (const prop of styleObj.properties ?? []) {
     const p = prop as { type?: string; key?: any; value?: any };
@@ -1428,9 +1443,20 @@ function tryExtractStyleObject(
     if (v?.type === "ConditionalExpression") {
       const jsxProp = extractTernaryJsxProp(v);
       if (jsxProp && isUndefinedNode(v.alternate)) {
-        dynamicStyles.push({ cssProp, jsxProp, callArgExpr: v.consequent });
+        dynamicStyles.push({
+          cssProp,
+          jsxProp,
+          callArgExpr: v.consequent,
+          condition: "truthy",
+        });
         continue;
       }
+    }
+
+    const directDynamic = extractDynamicStyleValue(v);
+    if (directDynamic) {
+      dynamicStyles.push({ cssProp, ...directDynamic, condition: "always" });
+      continue;
     }
 
     return false;
@@ -1469,6 +1495,51 @@ function extractTernaryJsxProp(ternary: { test?: any }): string | null {
     return test.property.name;
   }
   return null;
+}
+
+function extractDynamicStyleValue(value: any): { jsxProp: string; callArgExpr: unknown } | null {
+  const propName = extractPropName(value);
+  if (propName) {
+    return { jsxProp: propName, callArgExpr: identifierNode(propName) };
+  }
+
+  if (
+    (value?.type === "LogicalExpression" && value.operator === "??") ||
+    value?.type === "TSNullishCoalescingExpression"
+  ) {
+    const leftPropName = extractPropName(value.left);
+    if (leftPropName) {
+      return {
+        jsxProp: leftPropName,
+        callArgExpr: {
+          ...value,
+          left: identifierNode(leftPropName),
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
+function extractPropName(value: any): string | null {
+  if (value?.type === "Identifier" && typeof value.name === "string") {
+    return value.name;
+  }
+  if (
+    value?.type === "MemberExpression" &&
+    value.object?.type === "Identifier" &&
+    (value.object.name === "props" || value.object.name === "p") &&
+    value.property?.type === "Identifier" &&
+    typeof value.property.name === "string"
+  ) {
+    return value.property.name;
+  }
+  return null;
+}
+
+function identifierNode(name: string): unknown {
+  return { type: "Identifier", name };
 }
 
 /** Checks if a node represents `undefined`. */

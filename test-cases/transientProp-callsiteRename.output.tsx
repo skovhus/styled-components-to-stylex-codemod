@@ -19,13 +19,14 @@ function PanelBase(props: PanelBaseProps) {
 }
 
 type ResponsivePanelProps = {
+  sx?: stylex.StyleXStyles;
   asCard?: boolean;
   columnCount?: number;
   floatingOffset?: number;
 } & React.ComponentPropsWithRef<typeof PanelBase>;
 
 function ResponsivePanel(props: ResponsivePanelProps) {
-  const { className, children, style, asCard, columnCount, floatingOffset, ...rest } = props;
+  const { className, children, style, sx, asCard, columnCount, floatingOffset, ...rest } = props;
   return (
     <PanelBase
       {...rest}
@@ -35,6 +36,7 @@ function ResponsivePanel(props: ResponsivePanelProps) {
           styles.responsivePanelGridTemplateColumns(`repeat(${columnCount ?? 1}, minmax(0, 1fr))`),
           styles.responsivePanelTop(`${floatingOffset ?? 0}px`),
           asCard && styles.responsivePanelAsCard,
+          sx,
         ],
         className,
         style,
@@ -45,15 +47,13 @@ function ResponsivePanel(props: ResponsivePanelProps) {
   );
 }
 
-type CompactPanelProps = Omit<ResponsivePanelProps, "asCard" | "floatingOffset">;
-
-function CompactPanel(props: CompactPanelProps) {
+function CompactPanel(props: React.ComponentPropsWithRef<typeof ResponsivePanel>) {
   const { className, children, style, ...rest } = props;
   return (
     <ResponsivePanel
+      {...rest}
       asCard={true}
       floatingOffset={4}
-      {...rest}
       {...mergedSx(styles.compactPanel, className, style)}
     >
       {children}

@@ -43,10 +43,7 @@ const styles = stylex.create({
       inset: 0,
       transform: "translateX(-100%)",
       backgroundImage: "linear-gradient(90deg, transparent, #f8fafc, transparent)",
-      animationName: {
-        default: shimmer,
-        "@media (prefers-reduced-motion: reduce)": "none",
-      },
+      animationName: shimmer,
       animationDuration: "3s",
       animationIterationCount: "infinite",
     },

@@ -33,9 +33,7 @@ const chromaticSweep = keyframes`
 
 const ShimmerText = styled.span<{ $imageUrl: string }>`
   color: transparent;
-  background-image:
-    url("${(props) => props.$imageUrl}"),
-    linear-gradient(${(props) => props.theme.color.labelMuted}, ${(props) => props.theme.color.labelMuted});
+  background-image: url("${(props) => props.$imageUrl}");
   background-clip: text;
   animation: ${chromaticSweep} ${DURATION_SECONDS}s linear infinite;
 `;

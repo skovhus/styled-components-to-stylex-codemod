@@ -1012,7 +1012,11 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
   // Falling through to emitStyleFunctionFromPropsObject handles pseudo/media correctly.
   const hasPseudoOrMedia =
     node.css.selector !== "&" || node.css.atRuleStack.some((a) => a.startsWith("@"));
-  if (!hasPseudoOrMedia) {
+  // Shorthand declarations with static text around the dynamic branch must be
+  // emitted as one computed value. Decomposing `transition: opacity ${...}ms ease`
+  // treats the branch number as the whole shorthand and drops the static pieces.
+  const isDynamicShorthand = node.css.property === "transition";
+  if (!hasPseudoOrMedia && !isDynamicShorthand) {
     const decomposed = tryDecomposeConditionalBranches(condBody, paramName);
     if (decomposed) {
       return decomposed;

@@ -42,18 +42,7 @@ type HighlightCardProps = React.PropsWithChildren<{
 function HighlightCard(props: HighlightCardProps) {
   const { children, interactive } = props;
   return (
-    <div
-      sx={[
-        styles.highlightCard,
-        interactive ? styles.highlightCardInteractive : undefined,
-        interactive
-          ? highlightStyles({
-              active: styles.highlightCardPseudoActive,
-              hover: styles.highlightCardPseudoHover,
-            })
-          : undefined,
-      ]}
-    >
+    <div sx={[styles.highlightCard, interactive && styles.highlightCardInteractive]}>
       {children}
     </div>
   );
@@ -130,17 +119,9 @@ const styles = stylex.create({
   },
   highlightCardInteractive: {
     cursor: "pointer",
-  },
-  highlightCardPseudoActive: {
     backgroundColor: {
-      default: "#f8fafc",
-      ":active": "#e0f2fe",
-    },
-  },
-  highlightCardPseudoHover: {
-    backgroundColor: {
-      default: "#f8fafc",
-      ":hover": "#e0f2fe",
+      default: null,
+      ":__SC_EXPR_0__": "#e0f2fe",
     },
   },
 });

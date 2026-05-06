@@ -147,7 +147,6 @@ export const App = () => (
     </NestedRow>
     <BoundaryList>
       <BoundaryItem>Boundary one</BoundaryItem>
-      <BoundaryItem>Boundary two</BoundaryItem>
     </BoundaryList>
   </div>
 );

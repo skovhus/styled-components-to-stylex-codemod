@@ -54,6 +54,9 @@ export function tryResolveConditionalValue(
   if (!node.css.property) {
     return null;
   }
+  if (node.css.property === "transition") {
+    return null;
+  }
   const expr = node.expr;
   if (!isArrowFunctionExpression(expr)) {
     return null;

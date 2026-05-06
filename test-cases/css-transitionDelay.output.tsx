@@ -37,10 +37,9 @@ function Container(props: ContainerProps & React.ComponentProps<"div">) {
   );
 }
 
-type DynamicTransitionPanelProps = {
-  children?: React.ReactNode;
+type DynamicTransitionPanelProps = React.PropsWithChildren<{
   visible?: boolean;
-};
+}>;
 
 function DynamicTransitionPanel(props: DynamicTransitionPanelProps) {
   const { children, visible } = props;
@@ -48,8 +47,8 @@ function DynamicTransitionPanel(props: DynamicTransitionPanelProps) {
     <div
       sx={[
         styles.dynamicTransitionPanel,
-        visible ? styles.dynamicTransitionPanelVisible : undefined,
-        styles.dynamicTransitionPanelTransition(`opacity ${visible ? 400 : 100}ms ${EASING}`),
+        visible && styles.dynamicTransitionPanelVisible,
+        styles.dynamicTransitionPanelTransition(props),
       ]}
     >
       {children}
@@ -109,7 +108,7 @@ const styles = stylex.create({
   dynamicTransitionPanelVisible: {
     opacity: 1,
   },
-  dynamicTransitionPanelTransition: (transition: string) => ({
-    transition,
+  dynamicTransitionPanelTransition: (props: DynamicTransitionPanelProps) => ({
+    transition: `opacity ${props.visible ? 400 : 100}ms ${EASING}`,
   }),
 });

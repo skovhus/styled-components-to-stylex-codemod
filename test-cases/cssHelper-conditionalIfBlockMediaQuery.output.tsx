@@ -14,9 +14,10 @@ export function EmojiContainer(props: EmojiContainerProps) {
     <div
       {...rest}
       sx={[
-        styles.emojiContainer({
-          size,
-        }),
+        styles.emojiContainer,
+        styles.emojiContainerWidth(size),
+        styles.emojiContainerMaxWidth(size),
+        styles.emojiContainerMaxHeight(size),
         Browser.isSafari
           ? styles.emojiContainerBrowserIsSafari(size)
           : styles.emojiContainerDefault(size),
@@ -36,16 +37,22 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  emojiContainer: (props: { size: number }) => ({
+  emojiContainer: {
     display: "inline-flex",
     justifyContent: "center",
     alignItems: "center",
     flexShrink: 0,
     wordBreak: "keep-all",
     height: "auto",
-    width: `${props.size}px`,
-    maxWidth: `${props.size}px`,
-    maxHeight: `${props.size}px`,
+  },
+  emojiContainerWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  emojiContainerMaxWidth: (maxWidth: number) => ({
+    maxWidth: `${maxWidth}px`,
+  }),
+  emojiContainerMaxHeight: (maxHeight: number) => ({
+    maxHeight: `${maxHeight}px`,
   }),
   emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {

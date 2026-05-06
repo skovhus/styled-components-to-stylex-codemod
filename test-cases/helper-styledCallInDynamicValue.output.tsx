@@ -24,24 +24,6 @@ function LoadingPlaceholder(props: LoadingPlaceholderProps) {
   );
 }
 
-type LoadingPlaceholderWithHelperReturnProps = React.PropsWithChildren<{
-  highlightColor: ColorToken;
-}>;
-
-function LoadingPlaceholderWithHelperReturn(props: LoadingPlaceholderWithHelperReturnProps) {
-  const { children, highlightColor } = props;
-  return (
-    <div
-      sx={[
-        styles.loadingPlaceholderWithHelperReturn,
-        styles.loadingPlaceholderWithHelperReturnBackgroundImage($colors[highlightColor]),
-      ]}
-    >
-      {children}
-    </div>
-  );
-}
-
 type LoadingPlaceholderRangeProps = React.PropsWithChildren<{
   startColor: ColorToken;
   endColor: ColorToken;
@@ -119,7 +101,7 @@ function LayeredShadowPlaceholder(props: LayeredShadowPlaceholderProps) {
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <LoadingPlaceholder highlightColor="accent" />
-    <LoadingPlaceholderWithHelperReturn highlightColor="accent" />
+    <div sx={styles.loadingPlaceholderWithHelperReturn("accent")} />
     <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
     <LoadingPlaceholderRepeat highlightColor="accent" />
     <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
@@ -137,13 +119,16 @@ const styles = stylex.create({
   loadingPlaceholderBackgroundImage: (resolvedColorHighlightColor: string) => ({
     backgroundImage: `linear-gradient(90deg, transparent, ${resolvedColorHighlightColor}, transparent)`,
   }),
-  loadingPlaceholderWithHelperReturn: {
+  loadingPlaceholderWithHelperReturn: (backgroundImage: ColorToken) => ({
     width: 160,
     height: 20,
     borderRadius: 6,
-  },
-  loadingPlaceholderWithHelperReturnBackgroundImage: (resolvedColorHighlightColor: string) => ({
-    backgroundImage: `linear-gradient(90deg, transparent, ${resolvedColorHighlightColor}, transparent)`,
+    backgroundImage: `linear-gradient(
+    90deg,
+    transparent,
+    ${$colors[backgroundImage]},
+    transparent
+  )`,
   }),
   loadingPlaceholderRange: {
     width: 160,

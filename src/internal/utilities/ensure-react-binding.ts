@@ -47,6 +47,32 @@ export function ensureReactBinding(args: {
 
   if (existingReactImport.size() > 0) {
     const importNode = existingReactImport.get().node;
+    if (importNode.importKind === "type") {
+      const reactImport = j.importDeclaration(
+        [j.importDefaultSpecifier(j.identifier("React"))],
+        j.literal("react"),
+      );
+      if (useNamespaceStyle) {
+        reactImport.importKind = "type";
+      }
+      existingReactImport.forEach((path) => {
+        const commentable = path.node as ASTNode & {
+          comments?: unknown;
+          leadingComments?: unknown;
+        };
+        const newCommentable = reactImport as ASTNode & {
+          comments?: unknown;
+          leadingComments?: unknown;
+        };
+        newCommentable.comments = commentable.comments;
+        newCommentable.leadingComments = commentable.leadingComments;
+        commentable.comments = undefined;
+        commentable.leadingComments = undefined;
+      });
+      existingReactImport.insertBefore(reactImport);
+      return;
+    }
+
     const specifiers = importNode.specifiers ?? [];
     // Check if there's already a default specifier (e.g., `import ReactAlias from "react"`)
     const hasDefaultSpecifier = specifiers.some(

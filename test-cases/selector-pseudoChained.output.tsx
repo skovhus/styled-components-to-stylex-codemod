@@ -1,4 +1,4 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
@@ -22,15 +22,8 @@ function ListItem(props: React.PropsWithChildren<{}>) {
   return <div sx={styles.listItem}>{props.children}</div>;
 }
 
-type DialogRowProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
-
-function DialogRow(props: DialogRowProps) {
-  const { children, ...rest } = props;
-  return (
-    <Flex gap={6} shrink={0} {...rest} {...stylex.props(styles.dialogRow)}>
-      {children}
-    </Flex>
-  );
+function DialogRow(props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">) {
+  return <Flex {...props} gap={6} shrink={0} {...stylex.props(styles.dialogRow)} />;
 }
 
 export const App = () => (
@@ -86,7 +79,7 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      ":focus:not(:disabled)": 2,
+      ":focus:not(:disabled)": "2px",
     },
   },
   listItem: {

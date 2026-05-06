@@ -189,6 +189,19 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.isDirectJsxResolution) {
       continue;
     }
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      if (
+        baseDecl?.attrsInfo &&
+        ((baseDecl.attrsInfo.defaultAttrs?.length ?? 0) > 0 ||
+          Object.keys(baseDecl.attrsInfo.staticAttrs ?? {}).length > 0 ||
+          (baseDecl.attrsInfo.attrsDynamicStyles?.length ?? 0) > 0 ||
+          (baseDecl.attrsInfo.attrsStaticStyles &&
+            Object.keys(baseDecl.attrsInfo.attrsStaticStyles).length > 0))
+      ) {
+        decl.needsWrapperComponent = true;
+      }
+    }
     const hadWrapperBeforePrepass = decl.needsWrapperComponent;
     // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
     // tend to produce very noisy inline substitutions when there are multiple callsite variations.
@@ -670,6 +683,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         if (baseDecl?.transientPropRenames && baseDecl.transientPropRenames.size > 0) {
           decl.transientPropRenames = new Map(baseDecl.transientPropRenames);
           decl.transientPropRenamesInherited = true;
+          applyTransientPropRenames(decl, decl.transientPropRenames);
           // Note: we intentionally do NOT set transientOmitFromBase here because
           // the base component's type has already been renamed ($prop → prop).
           // The Omit+remap approach only works when the base type still has the
@@ -2052,16 +2066,28 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
   if (decl.attrsInfo?.defaultAttrs) {
     for (const attr of decl.attrsInfo.defaultAttrs) {
       attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
     }
   }
   if (decl.attrsInfo?.conditionalAttrs) {
     for (const attr of decl.attrsInfo.conditionalAttrs) {
       attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
     }
+  }
+  if (decl.attrsInfo?.invertedBoolAttrs) {
+    for (const attr of decl.attrsInfo.invertedBoolAttrs) {
+      attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
+    }
+  }
+  if (decl.attrsInfo?.staticAttrs) {
+    decl.attrsInfo.staticAttrs = renameStaticAttrKeys(decl.attrsInfo.staticAttrs, renames);
   }
   if (decl.attrsInfo?.attrsDynamicStyles) {
     for (const ds of decl.attrsInfo.attrsDynamicStyles) {
       ds.jsxProp = renames.get(ds.jsxProp) ?? ds.jsxProp;
+      renameIdentifiersInAst(ds.callArgExpr, renames);
     }
   }
 
@@ -2093,6 +2119,22 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       cs.propNames = cs.propNames.map((p) => renames.get(p) ?? p);
     }
   }
+}
+
+function renameStaticAttrKeys(
+  attrs: Record<string, unknown>,
+  renames: Map<string, string>,
+): Record<string, unknown> {
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    const renamed = renames.get(key) ?? key;
+    if (renamed !== key) {
+      changed = true;
+    }
+    out[renamed] = value;
+  }
+  return changed ? out : attrs;
 }
 
 /**

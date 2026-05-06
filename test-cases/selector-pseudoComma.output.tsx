@@ -41,8 +41,8 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      ":active": 2,
-      ":focus-visible": 2,
+      ":active": "2px",
+      ":focus-visible": "2px",
     },
   },
   // Three pseudo-selectors combined

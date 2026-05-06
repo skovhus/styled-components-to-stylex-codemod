@@ -11,20 +11,13 @@ const styles = stylex.create({
     overflow: "hidden",
     height: {
       default: 0,
-      ':is([data-open="true"])': "auto",
-      "@supports (interpolate-size: allow-keywords) and (height: calc-size(auto, size))": {
-        default: "calc-size(auto, size * 0)",
-        ':is([data-open="true"])': "calc-size(auto, size)",
-      },
+      ':is([data-open="true"])': "calc-size(auto, size)",
     },
     opacity: {
       default: 0,
       ':is([data-open="true"])': 1,
     },
     transitionProperty: "opacity,height",
-    interpolateSize: {
-      default: null,
-      "@supports (interpolate-size: allow-keywords)": "allow-keywords",
-    },
+    interpolateSize: "allow-keywords",
   },
 });
