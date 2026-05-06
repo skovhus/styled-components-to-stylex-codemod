@@ -284,8 +284,30 @@ export class Logger {
     if (typeof context === "undefined") {
       return null;
     }
-    return JSON.stringify(context, null, 2);
+    return JSON.stringify(context, createContextReplacer(), 2);
   }
+}
+
+function createContextReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (key, value) => {
+    if (
+      key === "loc" ||
+      key === "tokens" ||
+      key === "comments" ||
+      key === "start" ||
+      key === "end"
+    ) {
+      return undefined;
+    }
+    if (value && typeof value === "object") {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
