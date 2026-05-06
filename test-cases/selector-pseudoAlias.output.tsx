@@ -120,8 +120,9 @@ const styles = stylex.create({
   highlightCardInteractive: {
     cursor: "pointer",
     backgroundColor: {
-      default: null,
-      ":__SC_EXPR_0__": "#e0f2fe",
+      default: "#f8fafc",
+      ":active": "#e0f2fe",
+      ":hover": "#e0f2fe",
     },
   },
 });
