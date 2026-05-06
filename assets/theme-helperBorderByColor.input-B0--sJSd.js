@@ -1,0 +1,4 @@
+import{c as e,p as t}from"./index-D0DHFbrA.js";import{i as n}from"./helpers-V4B0d3L4.js";var r=t(),i=e.div`
+  padding: 12px;
+  border-bottom: ${e=>n(e.theme.color.bgSub)};
+`,a=()=>(0,r.jsx)(i,{children:`Themed helper border`});export{a as App};
