@@ -35,6 +35,31 @@ const LoadingPlaceholderWithDestructuredTemplate = styled.div<{ $shimmerColor: C
     `linear-gradient(90deg, transparent 0, ${paletteColor($shimmerColor)} 50%, transparent)`};
 `;
 
+const LoadingPlaceholderWithPseudoHelper = styled.div<{ $shimmerColor: ColorToken }>`
+  position: relative;
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #e2e8f0;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0,
+      ${(props) => color(props.$shimmerColor)}
+      50%,
+      transparent
+    );
+  }
+`;
+
 const LoadingPlaceholderRange = styled.div<{
   $startColor: ColorToken;
   $endColor: ColorToken;
@@ -91,6 +116,7 @@ export const App = () => {
       <LoadingPlaceholder $highlightColor="accent" />
       <LoadingPlaceholderWithHelperReturn $highlightColor={runtimeHighlightColor} />
       <LoadingPlaceholderWithDestructuredTemplate $shimmerColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithPseudoHelper $shimmerColor={runtimeHighlightColor} />
       <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
       <LoadingPlaceholderRepeat $highlightColor="accent" />
       <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
