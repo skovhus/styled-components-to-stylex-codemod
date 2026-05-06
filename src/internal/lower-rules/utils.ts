@@ -10,6 +10,9 @@ import { literalToStaticValue } from "./types.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
+type MediaSlotResolution =
+  | { kind: "static"; value: string | number; imports: ImportSpec[] }
+  | { kind: "expression"; expr: string; imports: ImportSpec[] };
 
 /** Context needed to resolve imported function calls via the adapter's `resolveCall`. */
 export type AdapterCallResolver = {
@@ -130,6 +133,7 @@ export function resolveMediaAtRulePlaceholders(
   // Single placeholder: try resolveSelector for a defineConsts-backed computed key
   if (matches.length === 1 && ctx.resolveSelector && ctx.parseExpr) {
     const slotId = Number(matches[0]![1]);
+    const match = matches[0]!;
     const expr = getSlotExpr(slotId);
     if (expr && typeof expr === "object") {
       const info = extractRootAndPath(expr);
@@ -137,11 +141,12 @@ export function resolveMediaAtRulePlaceholders(
         const imp = ctx.lookupImport(info.rootName, info.rootNode);
         if (imp) {
           const result = ctx.resolveSelector({
-            kind: "selectorInterpolation",
+            kind: "mediaQueryInterpolation",
             importedName: imp.importedName,
             source: imp.source,
             path: info.path.length > 0 ? info.path.join(".") : undefined,
             filePath: ctx.filePath,
+            mediaQuery: getMediaQueryInterpolationContext(media, slotId, match),
           });
           if (result?.kind === "media") {
             const keyExpr = ctx.parseExpr(result.expr);
@@ -155,20 +160,63 @@ export function resolveMediaAtRulePlaceholders(
     }
   }
 
-  // Fall back to static substitution
-  const resolved = resolveMediaQueryPlaceholders(media, (slotId) =>
-    resolveSlotExprToStaticValue(
-      getSlotExpr(slotId),
-      ctx.lookupImport,
-      ctx.resolveValue,
-      ctx.filePath,
-      ctx.resolverImports,
-    ),
+  // Fall back to preserving the at-rule text and resolving slots inline.
+  return resolveMediaQueryPlaceholders(
+    media,
+    (slotId) =>
+      resolveSlotExprForMedia(
+        getSlotExpr(slotId),
+        ctx.lookupImport,
+        ctx.resolveValue,
+        ctx.filePath,
+      ),
+    ctx.resolverImports,
   );
-  if (resolved === null) {
-    return null;
+}
+
+function getMediaQueryInterpolationContext(
+  atRule: string,
+  slotId: number,
+  match: RegExpMatchArray,
+): {
+  atRule: string;
+  slotId: number;
+  before: string;
+  after: string;
+  feature?: { modifier?: "min" | "max"; name: string; unit?: string };
+} {
+  const matchStart = match.index ?? 0;
+  const matchEnd = matchStart + match[0].length;
+  const before = atRule.slice(0, matchStart);
+  const after = atRule.slice(matchEnd);
+  return {
+    atRule,
+    slotId,
+    before,
+    after,
+    ...getMediaFeatureContext(before, after),
+  };
+}
+
+function getMediaFeatureContext(
+  before: string,
+  after: string,
+): { feature?: { modifier?: "min" | "max"; name: string; unit?: string } } {
+  const featureMatch = before.match(/\((?:(min|max)-)?([a-zA-Z-]+)\s*:\s*$/);
+  if (!featureMatch) {
+    return {};
   }
-  return { kind: "static", value: resolved };
+
+  const unitMatch = after.match(/^\s*([a-zA-Z%]+)/);
+  const modifier =
+    featureMatch[1] === "min" || featureMatch[1] === "max" ? featureMatch[1] : undefined;
+  return {
+    feature: {
+      ...(modifier ? { modifier } : {}),
+      name: featureMatch[2]!,
+      ...(unitMatch ? { unit: unitMatch[1] } : {}),
+    },
+  };
 }
 
 /** Returns true if the key looks like a StyleX style condition (pseudo, media, container). */
@@ -233,50 +281,73 @@ export function mergeStyleObjects(
 // Non-exported helpers
 // ---------------------------------------------------------------------------
 
-/** Resolves `__SC_EXPR_N__` placeholders in a string to static values via a callback. */
+/** Resolves `__SC_EXPR_N__` placeholders in a media string. */
 function resolveMediaQueryPlaceholders(
   mediaQuery: string,
-  resolveSlot: (slotId: number) => string | number | null,
-): string | null {
+  resolveSlot: (slotId: number) => MediaSlotResolution | null,
+  resolverImports: Map<string, ImportSpec>,
+): ResolvedMedia | null {
   if (!mediaQuery.includes("__SC_EXPR_")) {
-    return mediaQuery;
+    return { kind: "static", value: mediaQuery };
   }
 
   const globalRe = new RegExp(PLACEHOLDER_RE.source, "g");
-  const matches: Array<{ full: string; slotId: number }> = [];
+  let staticValue = "";
+  let hasExpression = false;
+  const imports: ImportSpec[] = [];
+  let lastIndex = 0;
   let match;
 
   while ((match = globalRe.exec(mediaQuery)) !== null) {
-    matches.push({ full: match[0], slotId: Number(match[1]) });
-  }
-
-  let resolved = mediaQuery;
-  for (const m of matches) {
-    const staticVal = resolveSlot(m.slotId);
-    if (staticVal === null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const before = mediaQuery.slice(lastIndex, start);
+    const slot = resolveSlot(Number(match[1]));
+    if (!slot) {
       return null;
     }
-    resolved = resolved.replace(m.full, String(staticVal));
+
+    staticValue += before;
+    imports.push(...slot.imports);
+
+    if (slot.kind === "static") {
+      const value = String(slot.value);
+      staticValue += value;
+    } else {
+      hasExpression = true;
+    }
+
+    lastIndex = end;
   }
 
-  return resolved;
+  const after = mediaQuery.slice(lastIndex);
+  staticValue += after;
+
+  if (!hasExpression) {
+    registerImports(imports, resolverImports);
+    return { kind: "static", value: staticValue };
+  }
+
+  // StyleX only accepts static media condition keys or direct defineConsts keys.
+  // A computed template literal like [`@media (... ${token} ...)`] is rejected by
+  // the StyleX compiler, so unresolved expression placeholders must bail.
+  return null;
 }
 
-/** Resolves a slot expression AST node to a static string or number via the adapter. */
-function resolveSlotExprToStaticValue(
+/** Resolves a slot expression AST node to either a static value or adapter expression. */
+function resolveSlotExprForMedia(
   expr: unknown,
   lookupImport: ImportLookup,
   resolveValue: Adapter["resolveValue"],
   filePath: string,
-  resolverImports: Map<string, ImportSpec>,
-): string | number | null {
+): MediaSlotResolution | null {
   if (!expr || typeof expr !== "object") {
     return null;
   }
 
   const staticVal = literalToStaticValue(expr);
   if (typeof staticVal === "string" || typeof staticVal === "number") {
-    return staticVal;
+    return { kind: "static", value: staticVal, imports: [] };
   }
 
   const info = extractRootAndPath(expr);
@@ -300,9 +371,12 @@ function resolveSlotExprToStaticValue(
     return null;
   }
 
-  registerImports(result.imports, resolverImports);
+  const staticResult = parseStaticExprString(result.expr);
+  if (staticResult !== null) {
+    return { kind: "static", value: staticResult, imports: result.imports ?? [] };
+  }
 
-  return parseStaticExprString(result.expr);
+  return { kind: "expression", expr: result.expr, imports: result.imports ?? [] };
 }
 
 /** Parses a JS expression string as a static numeric or quoted string value. */

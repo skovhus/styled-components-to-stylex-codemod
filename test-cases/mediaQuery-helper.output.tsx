@@ -5,6 +5,7 @@ export const App = () => (
   <div>
     <div sx={styles.container}>Responsive container</div>
     <div sx={styles.details}>Details column</div>
+    <div sx={styles.minWidthDetails}>Breakpoint value details</div>
   </div>
 );
 
@@ -47,6 +48,18 @@ const styles = stylex.create({
     paddingInline: {
       default: 24,
       [breakpoints.phone]: 16,
+    },
+  },
+
+  minWidthDetails: {
+    padding: {
+      default: 8,
+      [breakpoints.phoneMin]: 16,
+    },
+
+    margin: {
+      default: null,
+      [breakpoints.phone]: 4,
     },
   },
 });

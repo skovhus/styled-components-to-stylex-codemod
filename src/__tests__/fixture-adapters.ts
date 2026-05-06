@@ -703,11 +703,8 @@ export const fixtureAdapter = defineAdapter({
       return undefined;
     }
 
-    // Handle screenSize.phone / screenSizeBreakPoints.phone, etc.
-    if (
-      (ctx.importedName === "screenSize" || ctx.importedName === "screenSizeBreakPoints") &&
-      ctx.path
-    ) {
+    // Handle screenSize.phone, etc.
+    if (ctx.importedName === "screenSize" && ctx.path) {
       return {
         kind: "media",
         expr: `breakpoints.${ctx.path}`,
@@ -718,6 +715,29 @@ export const fixtureAdapter = defineAdapter({
           },
         ],
       };
+    }
+    if (
+      ctx.kind === "mediaQueryInterpolation" &&
+      ctx.importedName === "screenSizeBreakPoints" &&
+      ctx.path
+    ) {
+      const feature = ctx.mediaQuery.feature;
+      if (feature?.name === "width" && feature.unit === "px") {
+        const suffix = feature.modifier === "min" ? "Min" : feature.modifier === "max" ? "" : null;
+        if (suffix === null) {
+          return undefined;
+        }
+        return {
+          kind: "media",
+          expr: `breakpoints.${ctx.path}${suffix}`,
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/breakpoints.stylex" },
+              names: [{ imported: "breakpoints" }],
+            },
+          ],
+        };
+      }
     }
 
     // Handle `highlight` pseudo-class interpolation: &:${highlight}

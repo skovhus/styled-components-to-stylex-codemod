@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { screenSize } from "./lib/helpers";
+import { screenSize, screenSizeBreakPoints } from "./lib/helpers";
 
 /**
  * This test case uses a media query helper (screenSize.phone) that resolves
@@ -39,9 +39,22 @@ const Details = styled.div`
   }
 `;
 
+const MinWidthDetails = styled.div`
+  padding: 8px;
+
+  @media (min-width: ${screenSizeBreakPoints.phone}px) {
+    padding: 16px;
+  }
+
+  @media (max-width: ${screenSizeBreakPoints.phone}px) {
+    margin: 4px;
+  }
+`;
+
 export const App = () => (
   <div>
     <Container>Responsive container</Container>
     <Details>Details column</Details>
+    <MinWidthDetails>Breakpoint value details</MinWidthDetails>
   </div>
 );
