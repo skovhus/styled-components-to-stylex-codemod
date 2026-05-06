@@ -8046,6 +8046,31 @@ export const App = () => <Box $width={320}>content</Box>;
     `);
   });
 
+  it("should rewrite local CSS variable values under computed media keys", () => {
+    const source = `
+import styled from "styled-components";
+import { screenSize } from "./lib/helpers";
+
+const Box = styled.div\`
+  --gap: 12px;
+  \${screenSize.phone} {
+    margin-left: var(--gap, 4px);
+  }
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toContain('breakpoints.phone]: "var(--gap, 4px)"');
+    expect(result.code).toContain("[breakpoints.phone]: testVariables.gap");
+  });
+
   it("should drop rewritten local CSS variable definitions when usage requests dropDefinition", () => {
     const source = `
 import styled from "styled-components";

@@ -131,6 +131,11 @@ function rewriteCssVarsInStyleObjectImpl(
       continue;
     }
 
+    if (k === "__computedKeys") {
+      rewriteComputedKeyValues(v, ctx);
+      continue;
+    }
+
     if (k.startsWith("__")) {
       continue;
     }
@@ -192,7 +197,11 @@ function rewriteLocalStylexVarString(
     if (!fallback) {
       continue;
     }
-    const localVar = ctx.getLocalStylexVar?.(call.name, fallback);
+    const localVar =
+      ctx.getLocalStylexVar?.(call.name, fallback) ??
+      (ctx.definedVars.has(call.name)
+        ? ctx.getOrCreateLocalStylexVar?.(call.name, fallback)
+        : undefined);
     if (!localVar || localVar.defaultValue !== fallback) {
       continue;
     }
@@ -201,6 +210,19 @@ function rewriteLocalStylexVarString(
     }
   }
   return null;
+}
+
+function rewriteComputedKeyValues(value: unknown, ctx: CssVarRewriteContext): void {
+  if (!Array.isArray(value)) {
+    return;
+  }
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || isAstNode(entry)) {
+      continue;
+    }
+    const record = entry as { value?: unknown };
+    record.value = rewriteCssVarsInStyleObjectValue(record.value, ctx);
+  }
 }
 
 function rewriteCssVarsInAstNode(node: { type: string }, ctx: CssVarRewriteContext): void {
