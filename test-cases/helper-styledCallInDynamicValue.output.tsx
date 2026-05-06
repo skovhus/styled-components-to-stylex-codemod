@@ -166,7 +166,8 @@ const styles = stylex.create({
     color: "white",
   },
   optionalColorPanelBackgroundColor: (resolvedColorColor: string) => ({
-    backgroundColor: `${resolvedColorColor} !important`,
+    "--optional-color-panel-background-color": resolvedColorColor,
+    backgroundColor: "var(--optional-color-panel-background-color) !important",
   }),
   loadingPlaceholderWithSize: {
     width: 160,

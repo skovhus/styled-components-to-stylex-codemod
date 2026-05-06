@@ -19,6 +19,7 @@ import {
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
+import { camelToKebabCase } from "../utilities/string-utils.js";
 import {
   cloneAstNode,
   collectIdentifiers,
@@ -1811,12 +1812,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (needsOriginalParam) {
               styleFnParamNames.unshift(paramName);
             }
-            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
+            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression.
+            // Keep !important on the actual CSS property rather than in the dynamic value:
+            // StyleX emits dynamic values through CSS variables, and values like
+            // `${value} !important` do not get assigned as runtime variables.
             const { prefix, suffix } = extractStaticPartsForDecl(d);
-            const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
             const valueExpr =
-              prefix || effectiveSuffix
-                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, effectiveSuffix)
+              prefix || suffix
+                ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
                 : valueExprRaw;
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
@@ -1849,13 +1852,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 );
               }
             }
-            const body = j.objectExpression([
-              j.property(
-                "init",
-                makeCssPropKey(j, out.prop),
-                buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
-              ),
-            ]);
+            const body = j.objectExpression(
+              buildDynamicStyleFunctionProperties({
+                j,
+                fnKey,
+                prop: out.prop,
+                valueExpr,
+                important: d.important,
+                pseudos,
+                media,
+              }),
+            );
             styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
@@ -3097,6 +3104,38 @@ type CallExpressionLike = {
   callee?: unknown;
   arguments?: unknown[];
 };
+
+function buildDynamicStyleFunctionProperties(args: {
+  j: JSCodeshift;
+  fnKey: string;
+  prop: string;
+  valueExpr: ExpressionKind;
+  important: boolean;
+  pseudos?: string[] | null;
+  media?: string | null;
+}) {
+  const { j, fnKey, prop, valueExpr, important, pseudos, media } = args;
+  if (!important) {
+    return [
+      j.property(
+        "init",
+        makeCssPropKey(j, prop),
+        buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+      ),
+    ];
+  }
+
+  const cssVariableName = `--${camelToKebabCase(fnKey)}`;
+  const importantValueExpr = j.literal(`var(${cssVariableName}) !important`) as ExpressionKind;
+  return [
+    j.property("init", makeCssPropKey(j, cssVariableName), valueExpr),
+    j.property(
+      "init",
+      makeCssPropKey(j, prop),
+      buildPseudoMediaPropValue({ j, valueExpr: importantValueExpr, pseudos, media }),
+    ),
+  ];
+}
 
 function resolveHelperCallsInDynamicValue(
   ctx: DynamicHelperCallContext,
