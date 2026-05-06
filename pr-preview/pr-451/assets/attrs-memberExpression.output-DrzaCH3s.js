@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{p as e}from"./index-DF_Xmkb7.js";import{t}from"./react-spring-BlP090LL.js";var n=e(),r=()=>(0,n.jsx)(`div`,{className:`x1lliihq`,children:(0,n.jsx)(t.div,{role:`region`,className:`x78zum5 x6s0dn4`,children:`Hello`})});export{r as App};
