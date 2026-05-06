@@ -33,6 +33,7 @@ export const paletteColor = (colorName: ThemeColor): string => {
     controlPrimaryHover: "#2563EB",
     greenBase: "#22C55E",
     labelBase: "#111827",
+    labelFaint: "#9CA3AF",
     labelMuted: "#6B7280",
     labelTitle: "#111827",
     primaryColor: "#BF4F74",
