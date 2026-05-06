@@ -914,6 +914,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               loc: getNodeLocStart(expr) ?? undefined,
             });
             if (resolved?.usage === "props") {
+              if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+                if (resolved.cssText) {
+                  const parsedStyle = parseCssDeclarationBlock(resolved.cssText);
+                  if (parsedStyle) {
+                    for (const [prop, value] of Object.entries(parsedStyle)) {
+                      applyResolvedPropValue(prop, value, null);
+                    }
+                    continue;
+                  }
+                }
+                warnings.push({
+                  severity: "warning",
+                  type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                  loc: getNodeLocStart(expr) ?? decl.loc,
+                  context: {
+                    selector: rule.selector,
+                    importedName: importEntry.importedName,
+                    source: importEntry.source.value,
+                  },
+                });
+                bail = true;
+                break;
+              }
               // Add as an extra stylex.props argument
               const extras = decl.extraStylexPropsArgs ?? [];
               const order = decl.mixinOrder ?? [];

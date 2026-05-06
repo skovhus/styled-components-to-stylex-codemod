@@ -21,6 +21,7 @@ import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js"
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
+import { resolveBarrelReExport } from "./extract-external-interface.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -340,11 +341,18 @@ function scanFile(
     }
 
     const absResolved = pathResolve(resolvedPath);
+    const resolvedTarget =
+      resolveBarrelReExport(
+        absResolved,
+        imp.importedName,
+        (specifier, fromFile) => resolver.resolve(fromFile, specifier) ?? null,
+        readFile,
+      ) ?? absResolved;
     const usage: CrossFileSelectorUsage = {
       localName,
       importSource: imp.source,
       importedName: imp.importedName,
-      resolvedPath: absResolved,
+      resolvedPath: pathResolve(resolvedTarget),
       consumerPath: filePath,
       consumerIsTransformed,
     };
