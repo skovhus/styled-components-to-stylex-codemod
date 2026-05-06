@@ -191,13 +191,16 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
+      if (baseDecl?.attrsInfo) {
+        decl.attrsInfo = mergeInheritedAttrsInfo(baseDecl.attrsInfo, decl.attrsInfo);
+      }
       if (
-        baseDecl?.attrsInfo &&
-        ((baseDecl.attrsInfo.defaultAttrs?.length ?? 0) > 0 ||
-          Object.keys(baseDecl.attrsInfo.staticAttrs ?? {}).length > 0 ||
-          (baseDecl.attrsInfo.attrsDynamicStyles?.length ?? 0) > 0 ||
-          (baseDecl.attrsInfo.attrsStaticStyles &&
-            Object.keys(baseDecl.attrsInfo.attrsStaticStyles).length > 0))
+        decl.attrsInfo &&
+        ((decl.attrsInfo.defaultAttrs?.length ?? 0) > 0 ||
+          Object.keys(decl.attrsInfo.staticAttrs ?? {}).length > 0 ||
+          (decl.attrsInfo.attrsDynamicStyles?.length ?? 0) > 0 ||
+          (decl.attrsInfo.attrsStaticStyles &&
+            Object.keys(decl.attrsInfo.attrsStaticStyles).length > 0))
       ) {
         decl.needsWrapperComponent = true;
       }
@@ -3587,4 +3590,38 @@ function isPlainStyleObject(value: unknown): value is Record<string, unknown> {
         typeof v === "string" || typeof v === "number" || typeof v === "boolean" || isAstNode(v),
     )
   );
+}
+
+function mergeInheritedAttrsInfo(
+  baseAttrsInfo: NonNullable<StyledDecl["attrsInfo"]>,
+  ownAttrsInfo: StyledDecl["attrsInfo"],
+): NonNullable<StyledDecl["attrsInfo"]> {
+  return {
+    staticAttrs: {
+      ...baseAttrsInfo.staticAttrs,
+      ...ownAttrsInfo?.staticAttrs,
+    },
+    sourceKind: ownAttrsInfo?.sourceKind ?? baseAttrsInfo.sourceKind,
+    hasUnsupportedValues:
+      (baseAttrsInfo.hasUnsupportedValues ?? false) ||
+      (ownAttrsInfo?.hasUnsupportedValues ?? false),
+    attrsAsTag: ownAttrsInfo?.attrsAsTag ?? baseAttrsInfo.attrsAsTag,
+    defaultAttrs: [...(baseAttrsInfo.defaultAttrs ?? []), ...(ownAttrsInfo?.defaultAttrs ?? [])],
+    conditionalAttrs: [
+      ...(baseAttrsInfo.conditionalAttrs ?? []),
+      ...(ownAttrsInfo?.conditionalAttrs ?? []),
+    ],
+    invertedBoolAttrs: [
+      ...(baseAttrsInfo.invertedBoolAttrs ?? []),
+      ...(ownAttrsInfo?.invertedBoolAttrs ?? []),
+    ],
+    attrsStaticStyles: {
+      ...baseAttrsInfo.attrsStaticStyles,
+      ...ownAttrsInfo?.attrsStaticStyles,
+    },
+    attrsDynamicStyles: [
+      ...(baseAttrsInfo.attrsDynamicStyles ?? []),
+      ...(ownAttrsInfo?.attrsDynamicStyles ?? []),
+    ],
+  };
 }
