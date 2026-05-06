@@ -2269,6 +2269,80 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(7);
   });
 
+  it("should warn with correct line number for imported css helper mixin interpolation", () => {
+    const source = [
+      'import styled from "styled-components";',
+      'import { surfaceMixin } from "./mixins";',
+      "",
+      "const Box = styled.div`",
+      "  color: red;",
+      "  ${surfaceMixin};",
+      "  &:hover {",
+      "    color: blue;",
+      "  }",
+      "`;",
+      "",
+      "export const App = () => <Box />;",
+      "",
+    ].join("\n");
+
+    const unresolvedImportAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "importedValue") {
+          return undefined;
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: unresolvedImportAdapter },
+    );
+
+    const warning = result.warnings.find(
+      (w) =>
+        w.type ===
+        "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling",
+    );
+    expect(warning).toBeDefined();
+    expect(warning?.loc?.line).toBe(6);
+  });
+
+  it("should warn with correct line number for unsupported selectors inside conditional css blocks", () => {
+    const source = [
+      'import styled, { css } from "styled-components";',
+      "",
+      "const Box = styled.div<{ $active?: boolean }>`",
+      "  color: blue;",
+      "  ${(props) =>",
+      "    props.$active &&",
+      "    css`",
+      "      a {",
+      "        color: red;",
+      "      }",
+      "    `}",
+      "`;",
+      "",
+      "export const App = () => <Box $active />;",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    const warning = result.warnings.find(
+      (w) => w.type === "Conditional `css` block: unsupported selector",
+    );
+    expect(warning).toBeDefined();
+    expect(warning?.loc?.line).toBe(8);
+  });
+
   it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";

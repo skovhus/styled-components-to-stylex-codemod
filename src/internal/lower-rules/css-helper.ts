@@ -11,7 +11,7 @@ import type {
   ResolveValueContext,
   ResolveValueResult,
 } from "../../adapter.js";
-import { normalizeStylisAstToIR } from "../css-ir.js";
+import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import {
   extractRootAndPath,
@@ -318,7 +318,8 @@ export function createCssHelperResolver(args: {
       return null;
     };
 
-    const { rules, slotExprById } = parseCssTemplateToRules(template);
+    const templateLoc = getNodeLocStart(template) ?? loc;
+    const { rules, slotExprById, rawCss } = parseCssTemplateToRules(template);
 
     const out: Record<string, unknown> = {};
     const dynamicProps: Array<{ jsxProp: string; stylexProp: string }> = [];
@@ -399,7 +400,11 @@ export function createCssHelperResolver(args: {
           // { prop: { default: null, ":hover": value } }
           currentPseudoClass = simplePseudo;
         } else {
-          return bail("Conditional `css` block: unsupported selector");
+          return bail(
+            "Conditional `css` block: unsupported selector",
+            undefined,
+            computeSelectorWarningLoc(templateLoc ?? undefined, rawCss, selector) ?? templateLoc,
+          );
         }
       }
 
