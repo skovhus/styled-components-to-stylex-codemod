@@ -753,7 +753,18 @@ function evaluateStaticMathCall(
     }
     args.push(value);
   }
-  return Math[method](...args);
+  switch (method) {
+    case "min":
+      return Math.min(...args);
+    case "max":
+      return Math.max(...args);
+    case "round":
+      return args.length === 1 ? Math.round(args[0]!) : null;
+    case "floor":
+      return args.length === 1 ? Math.floor(args[0]!) : null;
+    case "ceil":
+      return args.length === 1 ? Math.ceil(args[0]!) : null;
+  }
 }
 
 function getSupportedMathMethod(

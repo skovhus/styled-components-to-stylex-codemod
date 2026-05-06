@@ -83,7 +83,7 @@ export function findImportedRenamedComponents(
 ): TransientPropConsumerEntry[] {
   const entries: TransientPropConsumerEntry[] = [];
   for (const { exportName, renames } of componentRenames) {
-    const localName = findLocalImportName(consumerSource, targetImportSources, exportName);
+    const localName = findLocalImportNameForExport(consumerSource, targetImportSources, exportName);
     if (localName) {
       entries.push({ localComponentName: localName, renames });
     }
@@ -210,6 +210,19 @@ function findLocalImportName(
   }
 
   return null;
+}
+
+function findLocalImportNameForExport(
+  source: string,
+  targetImportSources: ReadonlySet<string>,
+  exportName: string,
+): string | null {
+  const [rootExport, ...memberPath] = exportName.split(".");
+  if (!rootExport || memberPath.length === 0) {
+    return findLocalImportName(source, targetImportSources, exportName);
+  }
+  const rootLocalName = findLocalImportName(source, targetImportSources, rootExport);
+  return rootLocalName ? [rootLocalName, ...memberPath].join(".") : null;
 }
 
 /**

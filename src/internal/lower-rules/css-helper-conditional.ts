@@ -614,16 +614,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
 
         // Convert expanded animation values (mix of AST nodes and primitives) to ExpressionKind
-        const applyExpandedAnimation = (expanded: Record<string, unknown>): void => {
+        const applyExpandedAnimation = (expanded: Record<string, unknown>): boolean => {
           for (const [prop, value] of Object.entries(expanded)) {
             const exprValue =
               typeof value === "string" || typeof value === "number"
                 ? (staticValueToLiteral(j, value) as ExpressionKind)
                 : (value as ExpressionKind);
             if (!setValueForProp(prop, exprValue, media, computedMediaKeyExpr, pseudoEntries)) {
-              return null;
+              return false;
             }
           }
+          return true;
         };
 
         for (const d of rule.declarations) {
@@ -650,7 +651,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                   ctx.inlineKeyframeNameMap,
                 )
               ) {
-                applyExpandedAnimation(expanded);
+                if (!applyExpandedAnimation(expanded)) {
+                  return null;
+                }
                 continue;
               }
             }
@@ -699,7 +702,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
               inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
             });
             if (expanded) {
-              applyExpandedAnimation(expanded);
+              if (!applyExpandedAnimation(expanded)) {
+                return null;
+              }
               continue;
             }
           }
@@ -1864,7 +1869,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
 
     if (consIsCss && altIsEmpty) {
-      const consMap = resolveCssBranchToInlineMap(cons, { requireResolvedPseudoSelector: true });
+      const consMap = resolveCssBranchToInlineMap(cons as ExpressionKind, {
+        requireResolvedPseudoSelector: true,
+      });
       if (consMap) {
         applyVariant(testInfo, Object.fromEntries(consMap));
         return true;

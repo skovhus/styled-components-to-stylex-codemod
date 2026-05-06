@@ -106,6 +106,8 @@ export type WarningType =
   | "Unsupported selector: cross-file :has() component selector not yet supported"
   | "Unsupported selector: unresolved interpolation in :has() component selector"
   | "Unsupported selector: unknown component selector"
+  | "Unsupported selector: component selector with child pseudo"
+  | "Unsupported selector: component selector target has no patchable JSX usage under selector parent"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
