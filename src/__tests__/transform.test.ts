@@ -2286,10 +2286,20 @@ export const App = () => <Box><span /></Box>;
       "",
     ].join("\n");
 
+    const unresolvedImportAdapter = {
+      ...fixtureAdapter,
+      resolveValue(ctx: ResolveValueContext) {
+        if (ctx.kind === "importedValue") {
+          return undefined;
+        }
+        return fixtureAdapter.resolveValue(ctx);
+      },
+    } satisfies Adapter;
+
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
+      { adapter: unresolvedImportAdapter },
     );
 
     const warning = result.warnings.find(
