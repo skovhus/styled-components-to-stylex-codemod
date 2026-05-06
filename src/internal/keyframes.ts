@@ -529,6 +529,10 @@ function isStaticSafeKeyframesSlotExpression(
     return isStaticSafeIdentifierBinding(expr.name, scopePath, seenIdentifiers);
   }
 
+  if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+    return isStaticSafeMemberExpressionBinding(expr, scopePath, seenIdentifiers);
+  }
+
   if (expr.type === "UnaryExpression") {
     return isStaticSafeKeyframesSlotExpression(
       expr.argument as ExpressionKind,
@@ -669,6 +673,98 @@ function isStaticSafeIdentifierBinding(
   );
   seenIdentifiers.delete(name);
   return isStatic;
+}
+
+function isStaticSafeMemberExpressionBinding(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): boolean {
+  const member = expr as {
+    object?: ExpressionKind;
+    property?: ExpressionKind;
+    computed?: boolean;
+  };
+  if (!member.object || member.object.type !== "Identifier" || !member.property) {
+    return false;
+  }
+  const propertyName =
+    !member.computed && member.property.type === "Identifier"
+      ? member.property.name
+      : member.computed && member.property.type === "StringLiteral"
+        ? String(member.property.value)
+        : member.computed && member.property.type === "Literal"
+          ? String(member.property.value)
+          : null;
+  if (!propertyName) {
+    return false;
+  }
+
+  const objectInit = getConstIdentifierInitializer(member.object.name, scopePath, seenIdentifiers);
+  if (!objectInit || objectInit.type !== "ObjectExpression") {
+    return false;
+  }
+
+  for (const property of objectInit.properties ?? []) {
+    if (!property || (property.type !== "Property" && property.type !== "ObjectProperty")) {
+      continue;
+    }
+    const key = property.key as { type?: string; name?: string; value?: unknown };
+    const keyName =
+      key.type === "Identifier"
+        ? key.name
+        : key.type === "StringLiteral" || key.type === "Literal"
+          ? String(key.value)
+          : null;
+    if (keyName !== propertyName) {
+      continue;
+    }
+    return isStaticSafeKeyframesSlotExpression(
+      property.value as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  return false;
+}
+
+function getConstIdentifierInitializer(
+  name: string,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): ExpressionKind | null {
+  if (seenIdentifiers.has(name)) {
+    return null;
+  }
+  seenIdentifiers.add(name);
+
+  const scope = (scopePath as any).scope?.lookup?.(name);
+  if (!scope || typeof scope.getBindings !== "function") {
+    seenIdentifiers.delete(name);
+    return null;
+  }
+
+  const bindings = scope.getBindings();
+  const refs = bindings?.[name];
+  if (!Array.isArray(refs) || refs.length !== 1) {
+    seenIdentifiers.delete(name);
+    return null;
+  }
+
+  const idPath = refs[0];
+  const declarator = idPath?.parent?.value;
+  const declaration = idPath?.parent?.parent?.value;
+  const init =
+    declarator &&
+    declarator.type === "VariableDeclarator" &&
+    declarator.id === idPath.value &&
+    declaration?.type === "VariableDeclaration" &&
+    declaration.kind === "const"
+      ? ((declarator.init as ExpressionKind | null | undefined) ?? null)
+      : null;
+  seenIdentifiers.delete(name);
+  return init;
 }
 
 /**
