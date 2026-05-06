@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{p as e}from"./index-_yDQEE3f.js";var t={draggableRegionDisableChildren:`_draggableRegionDisableChildren_sqf4h_1`},n=e();function r(){return(0,n.jsx)(`div`,{className:`x71s49j`,className:t.draggableRegionDisableChildren,children:`Draggable`})}export{r as App};
