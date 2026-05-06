@@ -48,9 +48,6 @@ export const App = () => (
         Nested link
       </a>
     </div>
-    <div sx={styles.boundaryList}>
-      <div sx={styles.boundaryItem}>Boundary one</div>
-    </div>
   </div>
 );
 
@@ -108,27 +105,6 @@ const styles = stylex.create({
   },
   nestedLink: {
     color: "#2563eb",
-  },
-  boundaryItem: {
-    padding: 6,
-  },
-  boundaryList: {
-    marginBottom: {
-      default: null,
-      ":not(:last-child)": 8,
-    },
-    borderBottomWidth: {
-      default: null,
-      ":not(:last-child)": 1,
-    },
-    borderBottomStyle: {
-      default: null,
-      ":not(:last-child)": "solid",
-    },
-    borderBottomColor: {
-      default: null,
-      ":not(:last-child)": "#cbd5e1",
-    },
   },
   contentInContainerLink: {
     outline: {

@@ -107,17 +107,6 @@ const NestedRow = styled.div`
   }
 `;
 
-const BoundaryItem = styled.div`
-  padding: 6px;
-`;
-
-const BoundaryList = styled.div`
-  ${BoundaryItem}:not(:last-child) {
-    margin-bottom: 8px;
-    border-bottom: 1px solid #cbd5e1;
-  }
-`;
-
 export const App = () => (
   <div>
     <Button>
@@ -145,8 +134,5 @@ export const App = () => (
     <NestedRow>
       <NestedLink href="#">Nested link</NestedLink>
     </NestedRow>
-    <BoundaryList>
-      <BoundaryItem>Boundary one</BoundaryItem>
-    </BoundaryList>
   </div>
 );
