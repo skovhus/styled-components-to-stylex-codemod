@@ -75,14 +75,18 @@ const LayeredShadowPlaceholder = styled.div<{ $shadowTone: ShadowToken }>`
   text-shadow: ${(props) => `${shadow(props.$shadowTone)}, ${glowShadow(props.$shadowTone)}`};
 `;
 
-export const App = () => (
-  <div style={{ display: "grid", gap: 8, padding: 12 }}>
-    <LoadingPlaceholder $highlightColor="accent" />
-    <LoadingPlaceholderWithHelperReturn $highlightColor="accent" />
-    <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
-    <LoadingPlaceholderRepeat $highlightColor="accent" />
-    <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
-    <ShadowPlaceholder $shadow="dark" />
-    <LayeredShadowPlaceholder $shadowTone="light" />
-  </div>
-);
+export const App = () => {
+  const runtimeHighlightColor: ColorToken = "accent";
+
+  return (
+    <div style={{ display: "grid", gap: 8, padding: 12 }}>
+      <LoadingPlaceholder $highlightColor="accent" />
+      <LoadingPlaceholderWithHelperReturn $highlightColor={runtimeHighlightColor} />
+      <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
+      <LoadingPlaceholderRepeat $highlightColor="accent" />
+      <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
+      <ShadowPlaceholder $shadow="dark" />
+      <LayeredShadowPlaceholder $shadowTone="light" />
+    </div>
+  );
+};
