@@ -1,5 +1,6 @@
 // Pseudo-element declarations must stay scoped to the pseudo-element, not the parent.
 import styled from "styled-components";
+import { thinBorder } from "./lib/helpers";
 
 const FramedCard = styled.div`
   position: relative;
@@ -37,9 +38,28 @@ const DividerRow = styled.div`
   }
 `;
 
+const HelperDividerRow = styled.div`
+  position: relative;
+  min-height: 48px;
+  padding: 12px 16px;
+  background: #ecfdf5;
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 32px;
+    right: 0;
+    height: 0;
+    border-top: ${thinBorder("#16a34a")};
+    pointer-events: none;
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12, padding: 16 }}>
     <FramedCard>Framed card</FramedCard>
     <DividerRow>Divider row</DividerRow>
+    <HelperDividerRow>Helper divider row</HelperDividerRow>
   </div>
 );
