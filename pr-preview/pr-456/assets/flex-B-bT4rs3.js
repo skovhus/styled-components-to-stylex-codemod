@@ -1,1 +1,0 @@
-import{o as e}from"./chunk-jRWAZmH_.js";import{m as t}from"./index-zo-_EXaa.js";var n=e(t(),1);function r(e){let{align:t,gap:r,direction:i,...a}=e;return n.createElement(`div`,a)}export{r as t};
