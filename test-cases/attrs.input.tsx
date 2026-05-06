@@ -211,6 +211,27 @@ const ActiveToolbarButton = styled(BaseToolbarButton)`
   background-color: #e0e7ff;
 `;
 
+// Pattern 14: attrs style identifiers from module scope must not be treated as props
+const MODULE_SCOPE_TEXT_COLOR = "#0f766e";
+
+const ModuleScopeStyleText = styled.span.attrs({
+  style: {
+    color: MODULE_SCOPE_TEXT_COLOR,
+  },
+})`
+  font-weight: 600;
+`;
+
+const CALLBACK_SCOPE_TEXT_COLOR = "#7c3aed";
+
+const CallbackScopeStyleText = styled.span.attrs(() => ({
+  style: {
+    color: CALLBACK_SCOPE_TEXT_COLOR,
+  },
+}))`
+  font-style: italic;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -229,5 +250,7 @@ export const App = () => (
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
     <FallbackSeparatorLine $height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
+    <ModuleScopeStyleText>Module scope style</ModuleScopeStyleText>
+    <CallbackScopeStyleText>Callback scope style</CallbackScopeStyleText>
   </>
 );

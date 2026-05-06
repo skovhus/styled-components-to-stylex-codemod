@@ -103,7 +103,7 @@ function collectStyledDeclsImpl(args: {
       invertedBoolAttrs: [],
     };
 
-    const fillFromObject = (obj: any) => {
+    const fillFromObject = (obj: any, attrsParamPropNames: ReadonlySet<string> = new Set()) => {
       for (const prop of obj.properties ?? []) {
         if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
           continue;
@@ -209,7 +209,11 @@ function collectStyledDeclsImpl(args: {
         }
 
         // Support: style: { whiteSpace: "nowrap" } or style: { height: $prop ? value : undefined }
-        if (key === "style" && v.type === "ObjectExpression" && tryExtractStyleObject(v, out)) {
+        if (
+          key === "style" &&
+          v.type === "ObjectExpression" &&
+          tryExtractStyleObject(v, out, attrsParamPropNames, resolveModuleScopeStaticValue)
+        ) {
           continue;
         }
 
@@ -225,15 +229,16 @@ function collectStyledDeclsImpl(args: {
 
     if (arg0.type === "ArrowFunctionExpression") {
       out.sourceKind = "function";
+      const attrsParamPropNames = getAttrsParamPropNames(arg0.params);
       const body = arg0.body as any;
       if (body?.type === "ObjectExpression") {
-        fillFromObject(body);
+        fillFromObject(body, attrsParamPropNames);
         return out;
       }
       if (body?.type === "BlockStatement") {
         const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;
         if (ret?.argument?.type === "ObjectExpression") {
-          fillFromObject(ret.argument);
+          fillFromObject(ret.argument, attrsParamPropNames);
           return out;
         }
       }
@@ -294,6 +299,20 @@ function collectStyledDeclsImpl(args: {
       cur = cur.parentPath;
     }
     return false;
+  };
+
+  const resolveModuleScopeStaticValue = (name: string): string | number | undefined => {
+    const decls = root.find(j.VariableDeclarator).filter((path) => {
+      const idNode = (path.node as any).id;
+      if (idNode?.type !== "Identifier" || idNode.name !== name) {
+        return false;
+      }
+      return isModuleScopeDeclarator(path);
+    });
+    if (decls.length !== 1) {
+      return undefined;
+    }
+    return literalStaticValueFromNode((decls.get().node as any).init);
   };
 
   const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
@@ -1408,6 +1427,8 @@ function tryExtractStyleObject(
       condition?: "truthy" | "always";
     }>;
   },
+  attrsParamPropNames: ReadonlySet<string>,
+  resolveModuleScopeStaticValue: (name: string) => string | number | undefined,
 ): boolean {
   const staticStyles: Record<string, unknown> = {};
   const dynamicStyles: Array<{
@@ -1441,7 +1462,7 @@ function tryExtractStyleObject(
 
     // Dynamic ternary: `$prop ? expr : undefined`
     if (v?.type === "ConditionalExpression") {
-      const jsxProp = extractTernaryJsxProp(v);
+      const jsxProp = extractTernaryJsxProp(v, attrsParamPropNames);
       if (jsxProp) {
         dynamicStyles.push({
           cssProp,
@@ -1453,10 +1474,22 @@ function tryExtractStyleObject(
       }
     }
 
-    const directDynamic = extractDynamicStyleValue(v);
+    const directDynamic = extractDynamicStyleValue(v, attrsParamPropNames);
     if (directDynamic) {
       dynamicStyles.push({ cssProp, ...directDynamic, condition: "always" });
       continue;
+    }
+
+    if (
+      v?.type === "Identifier" &&
+      typeof v.name === "string" &&
+      !attrsParamPropNames.has(v.name)
+    ) {
+      const staticValue = resolveModuleScopeStaticValue(v.name);
+      if (staticValue !== undefined) {
+        staticStyles[cssProp] = staticValue;
+        continue;
+      }
     }
 
     return false;
@@ -1477,13 +1510,20 @@ function tryExtractStyleObject(
  * - Bare identifier (destructured param): `$height` → "$height"
  * - Member access: `props.$height` → "$height"
  */
-function extractTernaryJsxProp(ternary: { test?: any }): string | null {
+function extractTernaryJsxProp(
+  ternary: { test?: any },
+  attrsParamPropNames: ReadonlySet<string>,
+): string | null {
   const test = ternary.test;
   if (!test) {
     return null;
   }
   // Bare identifier from destructured param: ({ $height }) => $height ? ...
-  if (test.type === "Identifier" && typeof test.name === "string") {
+  if (
+    test.type === "Identifier" &&
+    typeof test.name === "string" &&
+    attrsParamPropNames.has(test.name)
+  ) {
     return test.name;
   }
   // Member expression: (props) => props.$height ? ...
@@ -1497,8 +1537,11 @@ function extractTernaryJsxProp(ternary: { test?: any }): string | null {
   return null;
 }
 
-function extractDynamicStyleValue(value: any): { jsxProp: string; callArgExpr: unknown } | null {
-  const propName = extractPropName(value);
+function extractDynamicStyleValue(
+  value: any,
+  attrsParamPropNames: ReadonlySet<string>,
+): { jsxProp: string; callArgExpr: unknown } | null {
+  const propName = extractPropName(value, attrsParamPropNames);
   if (propName) {
     return { jsxProp: propName, callArgExpr: identifierNode(propName) };
   }
@@ -1507,7 +1550,7 @@ function extractDynamicStyleValue(value: any): { jsxProp: string; callArgExpr: u
     (value?.type === "LogicalExpression" && value.operator === "??") ||
     value?.type === "TSNullishCoalescingExpression"
   ) {
-    const leftPropName = extractPropName(value.left);
+    const leftPropName = extractPropName(value.left, attrsParamPropNames);
     if (leftPropName) {
       return {
         jsxProp: leftPropName,
@@ -1522,8 +1565,12 @@ function extractDynamicStyleValue(value: any): { jsxProp: string; callArgExpr: u
   return null;
 }
 
-function extractPropName(value: any): string | null {
-  if (value?.type === "Identifier" && typeof value.name === "string") {
+function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {
+  if (
+    value?.type === "Identifier" &&
+    typeof value.name === "string" &&
+    attrsParamPropNames.has(value.name)
+  ) {
     return value.name;
   }
   if (
@@ -1536,6 +1583,50 @@ function extractPropName(value: any): string | null {
     return value.property.name;
   }
   return null;
+}
+
+function getAttrsParamPropNames(params: any[] | undefined): ReadonlySet<string> {
+  const names = new Set<string>();
+  const firstParam = params?.[0];
+  if (firstParam?.type !== "ObjectPattern") {
+    return names;
+  }
+
+  for (const prop of firstParam.properties ?? []) {
+    if (!prop || prop.type === "RestElement") {
+      continue;
+    }
+    const value = prop.value ?? prop.argument;
+    if (value?.type === "Identifier" && typeof value.name === "string") {
+      names.add(value.name);
+      continue;
+    }
+    if (
+      value?.type === "AssignmentPattern" &&
+      value.left?.type === "Identifier" &&
+      typeof value.left.name === "string"
+    ) {
+      names.add(value.left.name);
+    }
+  }
+
+  return names;
+}
+
+function literalStaticValueFromNode(node: any): string | number | undefined {
+  if (node?.type === "StringLiteral" || node?.type === "NumericLiteral") {
+    return node.value;
+  }
+  if (
+    node?.type === "Literal" &&
+    (typeof node.value === "string" || typeof node.value === "number")
+  ) {
+    return node.value;
+  }
+  if (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+    return literalStaticValueFromNode(node.expression);
+  }
+  return undefined;
 }
 
 function identifierNode(name: string): unknown {
