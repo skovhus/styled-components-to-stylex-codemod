@@ -8069,7 +8069,7 @@ export const App = () => <Box>content</Box>;
     );
 
     expect(result.code).not.toContain('breakpoints.phone]: "var(--gap, 4px)"');
-    expect(result.code).toContain("[breakpoints.phone]: testVariables.gap");
+    expect(result.code).toContain('[breakpoints.phone]: testVariables["--gap"]');
   });
 
   it("should drop rewritten local CSS variable definitions when usage requests dropDefinition", () => {
