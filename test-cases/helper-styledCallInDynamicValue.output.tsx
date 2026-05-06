@@ -61,6 +61,24 @@ function LoadingPlaceholderRepeat(props: LoadingPlaceholderRepeatProps) {
   );
 }
 
+type OptionalColorPanelProps = React.PropsWithChildren<{
+  color?: ColorToken;
+}>;
+
+function OptionalColorPanel(props: OptionalColorPanelProps) {
+  const { children, color } = props;
+  return (
+    <div
+      sx={[
+        styles.optionalColorPanel,
+        styles.optionalColorPanelBackgroundColor($colors[color ?? "labelFaint"]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 type LoadingPlaceholderWithSizeProps = React.PropsWithChildren<{
   highlightColor: ColorToken;
   size: number;
@@ -103,6 +121,8 @@ export const App = () => (
     <LoadingPlaceholder highlightColor="accent" />
     <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
     <LoadingPlaceholderRepeat highlightColor="accent" />
+    <OptionalColorPanel>Default faint panel</OptionalColorPanel>
+    <OptionalColorPanel color="accent">Accent panel</OptionalColorPanel>
     <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
     <div sx={styles.shadowPlaceholder("dark")} />
     <LayeredShadowPlaceholder shadowTone="light" />
@@ -136,6 +156,17 @@ const styles = stylex.create({
   },
   loadingPlaceholderRepeatBackgroundImage: (resolvedColorHighlightColor: string) => ({
     backgroundImage: `linear-gradient(90deg, ${resolvedColorHighlightColor}, ${resolvedColorHighlightColor})`,
+  }),
+  optionalColorPanel: {
+    width: 160,
+    minHeight: 40,
+    borderRadius: 6,
+    padding: 8,
+    color: "white",
+  },
+  optionalColorPanelBackgroundColor: (resolvedColorColor: string) => ({
+    "--optional-color-panel-background-color": resolvedColorColor,
+    backgroundColor: "var(--optional-color-panel-background-color) !important",
   }),
   loadingPlaceholderWithSize: {
     width: 160,
