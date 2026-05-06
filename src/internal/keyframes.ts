@@ -180,7 +180,13 @@ function convertStyledKeyframesImpl(args: {
     changed = true;
   }
 
-  if (!hasPreservedKeyframesDefinition) {
+  const hasUnconvertedKeyframesDefinition = hasStyledKeyframesTemplate({
+    root,
+    j,
+    keyframesLocal,
+  });
+
+  if (!hasPreservedKeyframesDefinition && !hasUnconvertedKeyframesDefinition) {
     // Remove `keyframes` import specifier (now handled by stylex).
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
@@ -204,6 +210,23 @@ function convertStyledKeyframesImpl(args: {
   }
 
   return { keyframesNames, changed };
+}
+
+function hasStyledKeyframesTemplate(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  keyframesLocal: string;
+}): boolean {
+  const { root, j, keyframesLocal } = args;
+  let hasTemplate = false;
+  root
+    .find(j.TaggedTemplateExpression, {
+      tag: { type: "Identifier", name: keyframesLocal },
+    } as any)
+    .forEach(() => {
+      hasTemplate = true;
+    });
+  return hasTemplate;
 }
 
 function insertStylexKeyframesDeclaration(args: {
@@ -541,6 +564,26 @@ function isStaticSafeKeyframesSlotExpression(
         expr.alternate as ExpressionKind,
         scopePath,
         seenIdentifiers,
+      )
+    );
+  }
+
+  if (expr.type === "CallExpression") {
+    const callee = expr.callee as ExpressionKind | undefined;
+    const isSupportedMathCall =
+      callee?.type === "MemberExpression" &&
+      (callee.object as { type?: string; name?: string } | undefined)?.type === "Identifier" &&
+      (callee.object as { name?: string }).name === "Math" &&
+      (callee.property as { type?: string; name?: string } | undefined)?.type === "Identifier" &&
+      ["min", "max", "round", "floor", "ceil"].includes(
+        (callee.property as { name?: string }).name ?? "",
+      );
+    return (
+      isSupportedMathCall &&
+      expr.arguments.every(
+        (arg) =>
+          arg.type !== "SpreadElement" &&
+          isStaticSafeKeyframesSlotExpression(arg as ExpressionKind, scopePath, seenIdentifiers),
       )
     );
   }

@@ -151,6 +151,13 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       isStyledTag: ctx.isStyledTag,
       styledDecls,
     }) !== undefined;
+  const hasRemainingStyledKeyframesUsage =
+    !!ctx.keyframesLocal &&
+    root
+      .find(j.TaggedTemplateExpression, {
+        tag: { type: "Identifier", name: ctx.keyframesLocal },
+      } as any)
+      .size() > 0;
 
   // Remove styled-components import(s), but preserve any named imports that are still referenced
   // (e.g. useTheme, withTheme, ThemeProvider if they're still used in the code)
@@ -161,7 +168,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   // matters, so we skip the fast-path and fall through to the reference check.
   const transformedAway = [
     "styled",
-    "keyframes",
+    ...(hasRemainingStyledKeyframesUsage ? [] : ["keyframes"]),
     "createGlobalStyle",
     ...(hasExportedCssHelper ? [] : ["css"]),
   ];
