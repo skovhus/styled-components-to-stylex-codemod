@@ -55,6 +55,7 @@ import {
   hasUnsupportedConditionalTest,
   invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
+  normalizeDollarProps,
   rewritePropsReferencesToPropsWithTheme,
   rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
@@ -190,6 +191,147 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         decl.extraClassNames.push({ expr: cnExpr as any });
       }
     }
+  };
+
+  const tryHandleMultiSlotRuntimeValue = (): boolean => {
+    if (!d.property || d.value.kind !== "interpolated") {
+      return false;
+    }
+    const cssProperty = d.property.trim();
+    if (cssProperty !== "background" && cssProperty !== "background-image") {
+      return false;
+    }
+    if (media || attrTarget || pseudos?.length || pseudoElement || resolvedSelectorMedia) {
+      return false;
+    }
+
+    const parts = d.value.parts ?? [];
+    const slotParts = parts.filter(
+      (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
+    );
+    if (slotParts.length < 2) {
+      return false;
+    }
+
+    const propsUsed = new Set<string>();
+    const expressions: ExpressionKind[] = [];
+    const quasis: Array<ReturnType<JSCodeshift["templateElement"]>> = [];
+    let currentStaticPart = "";
+    let needsTheme = false;
+
+    for (const part of parts) {
+      if (part.kind === "static") {
+        currentStaticPart += part.value ?? "";
+        continue;
+      }
+      if (part.kind !== "slot") {
+        return false;
+      }
+
+      const rawExpr = decl.templateExpressions[part.slotId] as ExpressionKind | undefined;
+      if (!rawExpr || rawExpr.type === "FunctionExpression") {
+        return false;
+      }
+
+      let slotExpr: ExpressionKind | null =
+        rawExpr.type === "ArrowFunctionExpression"
+          ? inlineArrowFunctionBody(j, rawExpr)
+          : (cloneAstNode(rawExpr) as ExpressionKind);
+      if (!slotExpr) {
+        return false;
+      }
+
+      if (rawExpr.type === "ArrowFunctionExpression") {
+        for (const propName of collectPropsFromArrowFn(rawExpr)) {
+          if (propName !== "theme") {
+            propsUsed.add(propName);
+          }
+        }
+        if (hasThemeAccessInArrowFn(rawExpr)) {
+          needsTheme = true;
+          slotExpr = rewritePropsThemeToThemeVar(slotExpr);
+        }
+      } else if (hasThemeReferenceInExpression(slotExpr)) {
+        needsTheme = true;
+      }
+
+      quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
+      currentStaticPart = "";
+      expressions.push(normalizeDollarProps(j, slotExpr));
+    }
+
+    quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
+
+    const valueExpr = j.templateLiteral(quasis, expressions) as ExpressionKind;
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+    if (stylexDecls.length === 0) {
+      return false;
+    }
+    const normalizedPropNames = [...propsUsed].map((propName) =>
+      propName.startsWith("$") ? propName.slice(1) : propName,
+    );
+    const propsCallArg =
+      normalizedPropNames.length > 0
+        ? (j.objectExpression(
+            normalizedPropNames.map((propName) => {
+              const id = j.identifier(propName);
+              const prop = j.property("init", id, id) as ReturnType<typeof j.property> & {
+                shorthand?: boolean;
+              };
+              prop.shorthand = true;
+              return prop;
+            }),
+          ) as ExpressionKind)
+        : undefined;
+
+    for (const out of stylexDecls) {
+      if (!out.prop) {
+        continue;
+      }
+      const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+      if (!styleFnDecls.has(fnKey)) {
+        const params = [j.identifier("props")];
+        if (needsTheme) {
+          params.push(j.identifier("theme"));
+        }
+        const body = j.objectExpression([
+          j.property("init", makeCssPropKey(j, out.prop), valueExpr),
+        ]);
+        styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
+      }
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp: "__props" as const,
+        condition: "always" as const,
+        ...(propsCallArg ? { callArg: propsCallArg } : {}),
+        ...(needsTheme
+          ? {
+              extraCallArgs: [
+                {
+                  jsxProp: "__helper" as const,
+                  callArg: j.identifier("theme") as ExpressionKind,
+                },
+              ],
+            }
+          : {}),
+      });
+    }
+
+    for (const propName of propsUsed) {
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+    if (needsTheme) {
+      decl.needsUseThemeHook ??= [];
+      if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtime")) {
+        decl.needsUseThemeHook.push({
+          themeProp: "__runtime",
+          trueStyleKey: null,
+          falseStyleKey: null,
+        });
+      }
+    }
+    decl.needsWrapperComponent = true;
+    return true;
   };
 
   /**
@@ -888,6 +1030,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // When all slots are ternaries on the same condition with literal branches, produce
     // two static variant styles by evaluating each branch direction.
     if (d.property && d.value.kind === "interpolated" && tryHandleMultiSlotTernary(ctx, d)) {
+      continue;
+    }
+    if (tryHandleMultiSlotRuntimeValue()) {
       continue;
     }
 
