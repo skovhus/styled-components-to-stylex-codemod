@@ -2136,7 +2136,28 @@ function objectPropertyValueIsIdentifier(prop: unknown, name: string): boolean {
 }
 
 function astShapeKey(node: unknown): string {
-  return node === undefined ? "" : JSON.stringify(node);
+  if (node === undefined) {
+    return "";
+  }
+  const seen = new WeakSet<object>();
+  return JSON.stringify(node, (key, value) => {
+    if (
+      key === "loc" ||
+      key === "tokens" ||
+      key === "comments" ||
+      key === "start" ||
+      key === "end"
+    ) {
+      return undefined;
+    }
+    if (value && typeof value === "object") {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  });
 }
 
 /** Recursively renames all Identifier nodes with `oldName` to `newName` in an AST subtree.
