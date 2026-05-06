@@ -1,8 +1,17 @@
 import * as stylex from "@stylexjs/stylex";
 
 const OFFSET_PX = 40;
-const DURATION_SECONDS = 1.8;
-const RUN_PERCENT = Math.min(99.999, (DURATION_SECONDS / (DURATION_SECONDS + 0.45)) * 100);
+const SETTINGS = {
+  travelDurationSeconds: 1.8,
+  pauseDurationSeconds: 0.45,
+};
+const DURATION_SECONDS = SETTINGS.travelDurationSeconds;
+const RUN_PERCENT = Math.min(
+  99.999,
+  (SETTINGS.travelDurationSeconds /
+    (SETTINGS.travelDurationSeconds + SETTINGS.pauseDurationSeconds)) *
+    100,
+);
 
 const sweep = stylex.keyframes({
   from: {
