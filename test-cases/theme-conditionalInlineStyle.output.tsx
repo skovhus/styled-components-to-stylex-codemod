@@ -57,7 +57,7 @@ const styles = stylex.create({
     backgroundColor: $colors.bgFocus,
   },
   dayPicker: {
-    ["--highlighted-color"]: $colors.bgBorderFaint,
+    "--highlighted-color": $colors.bgBorderFaint,
     padding: 16,
   },
 });

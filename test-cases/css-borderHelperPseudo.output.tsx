@@ -40,7 +40,7 @@ const styles = stylex.create({
     },
   },
   container: {
-    ["--settings-list-view-border-color"]: "#bf4f74",
+    "--settings-list-view-border-color": "#bf4f74",
     display: "flex",
     flexDirection: "column",
     gap: 8,

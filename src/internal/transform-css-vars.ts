@@ -90,20 +90,7 @@ function rewriteCssVarsInStyleObjectImpl(
       });
 
       if (!result) {
-        const keyExpr = ctx.parseExpr(JSON.stringify(k));
-        if (keyExpr) {
-          const computedKeys: ComputedKeyEntry[] = Array.isArray(obj.__computedKeys)
-            ? obj.__computedKeys
-            : [];
-          computedKeys.push({
-            keyExpr,
-            value: rewrittenValue,
-            prepend: true,
-            originalCssVariableName: k,
-          });
-          obj.__computedKeys = computedKeys;
-        }
-        delete obj[k];
+        obj[k] = rewrittenValue;
         continue;
       }
 

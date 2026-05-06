@@ -50,7 +50,7 @@ const styles = stylex.create({
     backgroundColor: "#dbeafe",
   },
   alternateWidth: {
-    ["--menu-width"]: "180px",
+    "--menu-width": "180px",
     width: cssVariableDefineVarsDeclarationInputVariables.menuWidth,
     padding: 8,
     backgroundColor: "#fee2e2",

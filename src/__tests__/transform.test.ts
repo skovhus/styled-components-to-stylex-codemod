@@ -7945,7 +7945,7 @@ export const App = () => <Box>content</Box>;
     `);
   });
 
-  it("should drop unresolved static custom property declarations from stylex.create", () => {
+  it("should keep unresolved static custom property declarations as string keys", () => {
     const source = `
 import styled from "styled-components";
 
@@ -7980,15 +7980,16 @@ export const App = () => <Box>content</Box>;
 
       const styles = stylex.create({
         box: {
-          ["--local-gap"]: "12px",
+          "--local-gap": "12px",
           "::before": {
-            ["--local-gap"]: "4px",
+            "--local-gap": "4px",
             marginLeft: "var(--local-gap)",
           },
         },
       });
       "
     `);
+    expect(result.code).not.toContain('["--local-gap"]');
   });
 
   it("should keep unresolved dynamic custom property declarations out of stylex.create", () => {
