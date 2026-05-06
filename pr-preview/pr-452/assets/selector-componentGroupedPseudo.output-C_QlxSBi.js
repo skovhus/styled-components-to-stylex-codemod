@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{p as e}from"./index-Cp4ZDml8.js";var t=e(),n=()=>(0,t.jsx)(`a`,{href:`#`,className:`x78zum5 xe8ttls xd10qfp x-default-marker`,children:(0,t.jsx)(`span`,{className:`x12ulsxz xdqyycr xkn7p67 xtn4b6r x1y0dsa4`,children:`Badge (blue on focus-visible OR active)`})});export{n as App};
