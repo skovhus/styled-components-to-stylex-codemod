@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{p as e}from"./index-B2EMh0Uz.js";var t=e(),n=()=>(0,t.jsx)(`div`,{className:`xso031l x1q0q8m5 x1f3p4rf xc7ga6q`,children:`Themed helper border`});export{n as App};

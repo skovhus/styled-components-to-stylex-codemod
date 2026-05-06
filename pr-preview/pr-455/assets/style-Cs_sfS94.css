@@ -1,5 +1,10 @@
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif}.cm-gutterElement{color:#bbb!important}:root{--color-primary:#bf4f74;--color-secondary:#4f74bf;--spacing-sm:8px;--spacing-md:16px;--spacing-lg:24px;--border-radius:4px;--text-color:#333;--font-size:16px;--line-height:1.5;--speed-slow:1s;--speed-normal:.25s;--speed-fast:.1s}._draggableRegionDisableChildren_sqf4h_1{-webkit-app-region:drag}._draggableRegionDisableChildren_sqf4h_1>*{-webkit-app-region:no-drag}
 /*$vite$:1*/
+@property --x-backgroundColor {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-color {
   syntax: "*";
   inherits: false
@@ -25,17 +30,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-backgroundColor {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-scrollbarGutter {
   syntax: "*";
   inherits: false
 }
 
-@property --x-width {
+@property --x-maxWidth {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-transitionDelay {
   syntax: "*";
   inherits: false
 }
@@ -45,12 +50,52 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-borderColor {
+@property --x-lineHeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x---component-width {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-flexShrink {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-flexGrow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-alignSelf {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-columnGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-rowGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-width {
   syntax: "*";
   inherits: false
 }
 
 @property --x-boxShadow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderColor {
   syntax: "*";
   inherits: false
 }
@@ -75,12 +120,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-maxWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-gridRow {
+@property --x-transition {
   syntax: "*";
   inherits: false
 }
@@ -90,17 +130,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-transitionDelay {
+@property --x-gridRow {
   syntax: "*";
   inherits: false
 }
 
-@property --x-lineHeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-transition {
+@property --x-marginTop {
   syntax: "*";
   inherits: false
 }
@@ -130,57 +165,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-columnGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-marginTop {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-rowGap {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-outline {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x---component-width {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-flexShrink {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-flexGrow {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-alignSelf {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-borderRightColor {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-margin {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-strokeWidth {
   syntax: "*";
   inherits: false
 }
@@ -190,22 +175,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x---optional-color-panel-background-color {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-textShadow {
   syntax: "*";
   inherits: false
 }
 
+@property --x-borderRightColor {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-strokeWidth {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-margin {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-paddingLeft {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontWeight {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bf5hz0 {
   syntax: "*";
   inherits: false
 }
@@ -220,12 +215,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-fontWeight {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bf5hz0 {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-animationDuration {
   syntax: "*";
   inherits: false
 }
 
 @property --x-animationDelay {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-borderWidth {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-1hogkkd {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-qdiqoo {
   syntax: "*";
   inherits: false
 }
@@ -246,21 +266,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-gridTemplateColumns {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-borderWidth {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-1hogkkd {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-qdiqoo {
   syntax: "*";
   inherits: false
 }
@@ -620,6 +625,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1uxx2rz {
   --menu-width: 180px;
+}
+
+.xzhvuo9 {
+  --optional-color-panel-background-color: var(--x---optional-color-panel-background-color);
 }
 
 .xfxf9ic {
@@ -2312,6 +2321,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #0000;
 }
 
+.xceogoq:not(#\#):not(#\#):not(#\#) {
+  background-color: var(--optional-color-panel-background-color) !important;
+}
+
 .xl8spv7:not(#\#):not(#\#):not(#\#) {
   background-color: var(--x-backgroundColor);
 }
@@ -3580,7 +3593,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   font-weight: 700;
 }
 
-.x6om7h5.x6om7h5:where(.x1iknuys:hover *):not(#\#):not(#\#):not(#\#), .x5b7970.x5b7970:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#) {
+.x5b7970.x5b7970:where(.x-default-marker:hover *):not(#\#):not(#\#):not(#\#), .x6om7h5.x6om7h5:where(.x1iknuys:hover *):not(#\#):not(#\#):not(#\#) {
   opacity: 1;
 }
 
