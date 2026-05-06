@@ -124,12 +124,12 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     ...extraStyleObjects.values(),
     ...variantBuckets.values(),
   ];
-  for (const bucket of bucketsForVarRewrite) {
-    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop);
-  }
   // styleFnDecls hold AST nodes (ArrowFunctionExpression bodies). Walking their
   // template-literal quasis lets us resolve var() calls embedded inside dynamic
   // style functions (e.g. `flexShrink: \`var(--x, ${expr})\``).
+  // Rewrite these before static buckets so generated local CSS vars from dynamic
+  // `--x` definitions are available when static `var(--x, fallback)` values are
+  // lowered.
   for (const fnAst of styleFnDecls.values()) {
     if (fnAst && typeof fnAst === "object" && isAstNode(fnAst)) {
       rewriteCssVarsInAstNode(fnAst, localVarValues, varsToDrop);
@@ -155,6 +155,9 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     if (expr && typeof expr === "object" && isAstNode(expr)) {
       rewriteCssVarsInAstNode(expr as { type: string }, localVarValues, varsToDrop);
     }
+  }
+  for (const bucket of bucketsForVarRewrite) {
+    rewriteCssVarsInStyleObject(bucket, localVarValues, varsToDrop);
   }
   // Apply `dropDefinition: true` results to every bucket that may carry a
   // `--name: ...` definition for the resolved variable. Otherwise, the local

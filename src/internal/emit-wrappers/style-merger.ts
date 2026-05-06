@@ -11,6 +11,7 @@ import type { WrapperEmitter } from "./wrapper-emitter.js";
  */
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
+type InlineStyleProp = { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind };
 
 export interface StyleMergingResult {
   /**
@@ -300,7 +301,7 @@ function emitWithoutStylex(args: {
   styleId: Identifier;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
-  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  inlineStyleProps: InlineStyleProp[];
   staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
 }): StyleMergingResult {
@@ -363,7 +364,7 @@ function emitWithMerger(args: {
   styleId: Identifier;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
-  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  inlineStyleProps: InlineStyleProp[];
   staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
 }): StyleMergingResult {
@@ -486,7 +487,7 @@ function emitVerbosePattern(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   allowSxProp?: boolean;
-  inlineStyleProps: Array<{ prop: string; expr: any }>;
+  inlineStyleProps: InlineStyleProp[];
   staticClassNameExpr?: ExpressionKind;
   emitTypes: boolean;
 }): StyleMergingResult {
@@ -569,7 +570,25 @@ function emitVerbosePattern(args: {
 
 /** Returns a string literal key for CSS custom properties (--foo), identifier otherwise. */
 function inlineStylePropKey(j: JSCodeshift, prop: string): ExpressionKind {
-  return prop.startsWith("--") ? j.literal(prop) : j.identifier(prop);
+  if (prop.startsWith("--")) {
+    return j.literal(prop);
+  }
+  return prop.includes(".") ? parseMemberExpressionKey(j, prop) : j.identifier(prop);
+}
+
+function parseMemberExpressionKey(j: JSCodeshift, prop: string): ExpressionKind {
+  if (!prop.includes(".")) {
+    return j.literal(prop);
+  }
+  const [root, member] = prop.split(".");
+  if (!root || !member || prop.split(".").length !== 2) {
+    return j.literal(prop);
+  }
+  return j.memberExpression(j.identifier(root), j.identifier(member));
+}
+
+function isCustomPropertyKey(prop: string): boolean {
+  return prop.startsWith("--") || prop.includes(".");
 }
 
 function inlineStyleProperty(
@@ -590,7 +609,7 @@ function maybeCastStyleForCustomProps(
   inlineStyleProps: Array<{ prop: string }>,
   emitTypes: boolean,
 ): ExpressionKind {
-  if (!emitTypes || !inlineStyleProps.some((p) => p.prop.startsWith("--"))) {
+  if (!emitTypes || !inlineStyleProps.some((p) => isCustomPropertyKey(p.prop))) {
     return styleExpr;
   }
   return j.tsAsExpression(

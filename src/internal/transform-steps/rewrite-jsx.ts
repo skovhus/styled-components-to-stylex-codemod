@@ -1237,9 +1237,7 @@ function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: Styl
     decl.staticInlineStyleConstName = constName;
 
     const objectExpression = j.objectExpression(
-      (decl.staticInlineStyleProps ?? []).map((prop) =>
-        j.property("init", j.identifier(prop.prop), prop.expr),
-      ),
+      (decl.staticInlineStyleProps ?? []).map((prop) => staticInlineStylePropToProperty(j, prop)),
     );
     const initializer = shouldEmitTypes(ctx.file.path)
       ? ({
@@ -1266,6 +1264,31 @@ function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: Styl
 
 function shouldEmitTypes(filePath: string): boolean {
   return /\.(ts|tsx)$/.test(filePath);
+}
+
+function staticInlineStylePropToProperty(
+  j: TransformContext["j"]["jscodeshift"],
+  prop: { prop: string; expr: ExpressionKind },
+): ReturnType<TransformContext["j"]["jscodeshift"]["property"]> {
+  const key = prop.prop.includes(".")
+    ? parseStyleKeyExpression(j, prop.prop)
+    : j.identifier(prop.prop);
+  const property = j.property("init", key, prop.expr);
+  if (prop.prop.includes(".")) {
+    (property as { computed?: boolean }).computed = true;
+  }
+  return property;
+}
+
+function parseStyleKeyExpression(
+  j: TransformContext["j"]["jscodeshift"],
+  prop: string,
+): ExpressionKind {
+  const [root, member] = prop.split(".");
+  if (!root || !member || prop.split(".").length !== 2) {
+    return j.identifier(prop);
+  }
+  return j.memberExpression(j.identifier(root), j.identifier(member));
 }
 
 function collectTopLevelBindingNames(

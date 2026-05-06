@@ -7945,6 +7945,133 @@ export const App = () => <Box>content</Box>;
     `);
   });
 
+  it("should keep unresolved static custom property declarations as string keys", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --local-gap: 12px;
+  gap: var(--local-gap);
+  &::before {
+    --local-gap: 4px;
+    margin-left: var(--local-gap);
+  }
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import * as React from "react";
+      import * as stylex from "@stylexjs/stylex";
+
+      export const App = () => <div sx={styles.box} style={boxInlineStyle}>content</div>;
+
+      const boxInlineStyle = {
+        gap: "var(--local-gap)",
+      } satisfies React.CSSProperties;
+
+      const styles = stylex.create({
+        box: {
+          "--local-gap": "12px",
+          "::before": {
+            "--local-gap": "4px",
+            marginLeft: "var(--local-gap)",
+          },
+        },
+      });
+      "
+    `);
+    expect(result.code).not.toContain('["--local-gap"]');
+  });
+
+  it("should keep unresolved dynamic custom property declarations out of stylex.create", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $width?: number }>\`
+  \${(props) => (props.$width != null ? \`--panel-width: \${props.$width}px\` : "")};
+  width: var(--panel-width, 200px);
+\`;
+
+export const App = () => <Box $width={320}>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toMatchInlineSnapshot(`
+      "
+      import * as React from "react";
+      import * as stylex from "@stylexjs/stylex";
+
+      type BoxProps = React.PropsWithChildren<{
+        $width?: number;
+      }>;
+
+      function Box(props: BoxProps) {
+        const {
+          children,
+          $width,
+        } = props;
+        const sx = stylex.props($width != null ? styles.boxWithPanelWidth($width) : undefined);
+
+        return (
+          <div
+            {...sx}
+            style={{
+              ...sx.style,
+              width: "var(--panel-width, 200px)",
+            }}>{children}</div>
+        );
+      }
+
+      export const App = () => <Box $width={320}>content</Box>;
+
+      const styles = stylex.create({
+        boxWithPanelWidth: (width: number | undefined) => ({
+          "--panel-width": \`\${width}px\`,
+        }),
+      });
+      "
+    `);
+  });
+
+  it("should rewrite local CSS variable values under computed media keys", () => {
+    const source = `
+import styled from "styled-components";
+import { screenSize } from "./lib/helpers";
+
+const Box = styled.div\`
+  --gap: 12px;
+  \${screenSize.phone} {
+    margin-left: var(--gap, 4px);
+  }
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toContain('breakpoints.phone]: "var(--gap, 4px)"');
+    expect(result.code).toContain("[breakpoints.phone]: testVariables.gap");
+  });
+
   it("should drop rewritten local CSS variable definitions when usage requests dropDefinition", () => {
     const source = `
 import styled from "styled-components";
