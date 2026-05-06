@@ -2915,8 +2915,19 @@ function isStylexCalcExpression(node: unknown): boolean {
 function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclarationContext): boolean {
   const { ctx, d, pseudoElement, pseudos, media } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
-  const { j, filePath } = state;
+  const { j, filePath, parseExpr, resolveCall, resolveImportForExpr, resolverImports } = state;
   const avoidNames = new Set(state.importMap.keys());
+  const addResolverImports = (imports: Iterable<unknown> | undefined | null) => {
+    if (!imports) {
+      return;
+    }
+    for (const imp of imports) {
+      resolverImports.set(
+        JSON.stringify(imp),
+        imp as typeof resolverImports extends Map<string, infer V> ? V : never,
+      );
+    }
+  };
 
   if (!d.property || d.value.kind !== "interpolated" || !pseudoElement) {
     return false;
@@ -2993,21 +3004,61 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
 
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
+  const bindings =
+    expr.type === "ArrowFunctionExpression"
+      ? getArrowFnParamBindings(expr as Parameters<typeof getArrowFnParamBindings>[0])
+      : null;
+  const paramName = bindings?.kind === "simple" ? bindings.paramName : "props";
 
   for (const out of stylexDecls) {
     if (!out.prop) {
       continue;
     }
     const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
+    let helperCallArgs: DynamicHelperCallArgument[] = [];
+    let needsOriginalParam = false;
     if (!styleFnDecls.has(fnKey)) {
+      const styleValueExpr = cloneAstNode(valueExpr) as ExpressionKind;
+      if (!indexedTheme && bindings) {
+        const helperResolution = resolveHelperCallsInDynamicValue({
+          j,
+          expr: styleValueExpr,
+          cssProperty: out.prop,
+          paramName,
+          bindings,
+          allowedPropIdentifiers: propsUsed,
+          resolveImportForExpr,
+          resolveCall,
+          parseExpr,
+          filePath,
+          loc: null,
+          addResolverImports,
+        });
+        if (helperResolution === null) {
+          return false;
+        }
+        helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
+      }
+      needsOriginalParam =
+        helperCallArgs.length > 0 && containsIdentifier(styleValueExpr, paramName);
       // Build parameter name — for indexed theme use the resolved param name,
       // for simple identity use the prop name (without $) for cleaner call sites.
       const outParamName = indexedTheme
         ? indexedTheme.paramName
-        : isSimpleIdentity && jsxProp.startsWith("$")
-          ? jsxProp.slice(1)
-          : cssPropertyToIdentifier(out.prop, avoidNames);
-      const param = j.identifier(outParamName);
+        : helperCallArgs.length > 0
+          ? helperCallArgs[0]!.paramName
+          : isSimpleIdentity && jsxProp.startsWith("$")
+            ? jsxProp.slice(1)
+            : cssPropertyToIdentifier(out.prop, avoidNames);
+      const paramNames =
+        helperCallArgs.length > 0
+          ? [
+              ...(needsOriginalParam ? [paramName] : []),
+              ...helperCallArgs.map((resolution) => resolution.paramName),
+            ]
+          : [outParamName];
+      const params = paramNames.map((name) => j.identifier(name));
+      const param = params[0]!;
 
       if (indexedTheme) {
         // Use the JSX prop's own type annotation (e.g., Color) when available.
@@ -3017,6 +3068,14 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
             ? (propTsType as ReturnType<typeof j.tsStringKeyword>)
             : j.tsStringKeyword(),
         );
+      } else if (helperCallArgs.length > 0) {
+        for (const helperParam of params.slice(needsOriginalParam ? 1 : 0)) {
+          if (/\.(ts|tsx)$/.test(filePath)) {
+            (helperParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+              j.tsStringKeyword(),
+            );
+          }
+        }
       } else if (isSimpleIdentity && jsxProp !== "__props") {
         ctx.annotateParamFromJsxProp(param, jsxProp);
       } else if (/\.(ts|tsx)$/.test(filePath)) {
@@ -3029,7 +3088,9 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       // For other cases, use the parameter name (potentially wrapped with pseudo/media).
       const innerValueExpr = indexedTheme
         ? (cloneAstNode(indexedTheme.valueExpr) as ExpressionKind)
-        : j.identifier(outParamName);
+        : helperCallArgs.length > 0
+          ? styleValueExpr
+          : j.identifier(outParamName);
       const innerValue = buildPseudoMediaPropValue({
         j,
         valueExpr: innerValueExpr,
@@ -3050,7 +3111,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       const innerObj = j.objectExpression([innerProp]);
       const outerProp = j.property("init", j.literal(pseudoElement), innerObj);
       const body = j.objectExpression([outerProp]);
-      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
     }
 
     if (isSimpleIdentity) {
@@ -3061,11 +3122,26 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
         ...(isOptional ? {} : { condition: "always" as const }),
       });
     } else {
+      if (helperCallArgs.length > 0 && !needsOriginalParam) {
+        needsOriginalParam = containsIdentifier(styleFnDecls.get(fnKey), paramName);
+      }
+      const firstHelperCallArg = needsOriginalParam ? undefined : helperCallArgs[0];
+      const extraHelperCallArgs = needsOriginalParam ? helperCallArgs : helperCallArgs.slice(1);
       styleFnFromProps.push({
         fnKey,
         jsxProp: "__props" as const,
         condition: "always" as const,
-        callArg: cloneAstNode(valueExpr) as ExpressionKind,
+        callArg: firstHelperCallArg
+          ? firstHelperCallArg.callArg
+          : (cloneAstNode(valueExpr) as ExpressionKind),
+        ...(extraHelperCallArgs.length > 0
+          ? {
+              extraCallArgs: extraHelperCallArgs.map((resolution) => ({
+                jsxProp: "__props" as const,
+                callArg: resolution.callArg,
+              })),
+            }
+          : {}),
       });
     }
   }
@@ -3141,6 +3217,7 @@ type DynamicHelperCallContext = {
   cssProperty: string;
   paramName: string;
   bindings?: ArrowFnParamBindings;
+  allowedPropIdentifiers?: ReadonlySet<string>;
   resolveImportForExpr: (expr: unknown, localName: string) => ImportMeta | null;
   resolveCall: InterpolatedDeclarationContext["ctx"]["state"]["resolveCall"];
   parseExpr: (expr: string) => unknown;
@@ -3298,7 +3375,12 @@ function tryResolveDynamicHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(dynamicArg, ctx.paramName, ctx.bindings);
+  const dynamicProp = unwrapParamMemberArg(
+    dynamicArg,
+    ctx.paramName,
+    ctx.bindings,
+    ctx.allowedPropIdentifiers,
+  );
   if (!dynamicProp) {
     return false;
   }
@@ -3359,7 +3441,12 @@ function tryResolveDirectHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(args[0] as ExpressionKind, ctx.paramName, ctx.bindings);
+  const dynamicProp = unwrapParamMemberArg(
+    args[0] as ExpressionKind,
+    ctx.paramName,
+    ctx.bindings,
+    ctx.allowedPropIdentifiers,
+  );
   if (!dynamicProp) {
     return false;
   }
@@ -3436,6 +3523,7 @@ function unwrapParamMemberArg(
   arg: ExpressionKind,
   paramName: string,
   bindings?: ArrowFnParamBindings,
+  allowedPropIdentifiers?: ReadonlySet<string>,
 ): { arg: ExpressionKind; propName: string } | null {
   if (bindings?.kind === "destructured") {
     const propName = resolveIdentifierToPropName(arg, bindings);
@@ -3448,6 +3536,16 @@ function unwrapParamMemberArg(
         propName,
       };
     }
+  }
+  if (
+    arg?.type === "Identifier" &&
+    arg.name !== paramName &&
+    (allowedPropIdentifiers?.has(arg.name) ?? false)
+  ) {
+    return {
+      arg: cloneAstNode(arg) as ExpressionKind,
+      propName: arg.name,
+    };
   }
   if (arg?.type !== "MemberExpression" && arg?.type !== "OptionalMemberExpression") {
     return null;
