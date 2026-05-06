@@ -1,15 +1,5 @@
 body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,sans-serif}.cm-gutterElement{color:#bbb!important}:root{--color-primary:#bf4f74;--color-secondary:#4f74bf;--spacing-sm:8px;--spacing-md:16px;--spacing-lg:24px;--border-radius:4px;--text-color:#333;--font-size:16px;--line-height:1.5;--speed-slow:1s;--speed-normal:.25s;--speed-fast:.1s}._draggableRegionDisableChildren_sqf4h_1{-webkit-app-region:drag}._draggableRegionDisableChildren_sqf4h_1>*{-webkit-app-region:no-drag}
 /*$vite$:1*/
-@property --x-color {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-backgroundColor {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-scrollbarGutter {
   syntax: "*";
   inherits: false
@@ -20,42 +10,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-fontSize {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-zIndex {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-top {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-right {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bottom {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-left {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-height {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-backgroundColor {
   syntax: "*";
   inherits: false
 }
@@ -75,12 +35,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-maxWidth {
+@property --x-color {
   syntax: "*";
   inherits: false
 }
 
-@property --x-transition {
+@property --x-left {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-top {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-right {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-bottom {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-zIndex {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-maxWidth {
   syntax: "*";
   inherits: false
 }
@@ -90,7 +75,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-transition {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-fill {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-columnGap {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-marginTop {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-rowGap {
   syntax: "*";
   inherits: false
 }
@@ -101,6 +106,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-gridRow {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-fontSize {
   syntax: "*";
   inherits: false
 }
@@ -140,27 +150,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-flexShrink {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-columnGap {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-marginTop {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-rowGap {
+@property --x-gap {
   syntax: "*";
   inherits: false
 }
 
 @property --x---component-width {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-flexShrink {
   syntax: "*";
   inherits: false
 }
@@ -185,11 +185,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-margin {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-backgroundImage {
   syntax: "*";
   inherits: false
@@ -205,6 +200,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-margin {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-paddingLeft {
   syntax: "*";
   inherits: false
@@ -215,17 +215,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-bf5hz0 {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-1113oo7 {
   syntax: "*";
   inherits: false
 }
 
 @property --x-64unvl {
-  syntax: "*";
-  inherits: false
-}
-
-@property --x-bf5hz0 {
   syntax: "*";
   inherits: false
 }
@@ -260,11 +260,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
-@property --x-gridTemplateColumns {
-  syntax: "*";
-  inherits: false
-}
-
 @property --x-textAlign {
   syntax: "*";
   inherits: false
@@ -276,6 +271,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @property --x-1e2mv7m {
+  syntax: "*";
+  inherits: false
+}
+
+@property --x-gridTemplateColumns {
   syntax: "*";
   inherits: false
 }
@@ -353,13 +353,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes x2t3rfm-B {
+@keyframes xekv6nw-B {
   0% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: .55;
+    opacity: 0;
   }
 
   100% {
@@ -367,9 +363,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
-@keyframes xekv6nw-B {
+@keyframes x2t3rfm-B {
   0% {
-    opacity: 0;
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .55;
   }
 
   100% {
@@ -1565,7 +1565,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #ddd;
 }
 
-.xxs78ni:focus:not(:disabled):not(#\#):not(#\#), .x10bewyo:focus-visible:not(#\#):not(#\#) {
+.x10bewyo:focus-visible:not(#\#):not(#\#), .xxs78ni:focus:not(:disabled):not(#\#):not(#\#) {
   outline: 2px solid #4f74bf;
 }
 
@@ -2682,6 +2682,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #0f172a;
 }
 
+.x1mmawto:not(#\#):not(#\#):not(#\#) {
+  color: #0f766e;
+}
+
 .x1votaj3:not(#\#):not(#\#):not(#\#) {
   color: #111;
 }
@@ -2768,6 +2772,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x11ee0xa:not(#\#):not(#\#):not(#\#) {
   color: #7c2d12;
+}
+
+.x15ami61:not(#\#):not(#\#):not(#\#) {
+  color: #7c3aed;
 }
 
 .x1g3taxb:not(#\#):not(#\#):not(#\#) {
@@ -3216,6 +3224,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1b3o5uz:not(#\#):not(#\#):not(#\#) {
   font-size: var(--xxcdnn2);
+}
+
+.x1k4tb9n:not(#\#):not(#\#):not(#\#) {
+  font-style: italic;
 }
 
 .x1j61x8r:not(#\#):not(#\#):not(#\#) {
@@ -3702,7 +3714,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 5px;
 }
 
-.xdtcm48.xdtcm48:where(.xom8gq6:hover *):not(#\#):not(#\#):not(#\#), .xvvk187.xvvk187:where(.xfcainh:hover *):not(#\#):not(#\#):not(#\#) {
+.xvvk187.xvvk187:where(.xfcainh:hover *):not(#\#):not(#\#):not(#\#), .xdtcm48.xdtcm48:where(.xom8gq6:hover *):not(#\#):not(#\#):not(#\#) {
   background-color: #639;
 }
 
@@ -3890,7 +3902,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-color: #4f46e5;
 }
 
-.xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#), .x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#) {
+.x7s97pk:focus-visible:not(#\#):not(#\#):not(#\#), .xohtw7w:focus:not(:disabled):not(#\#):not(#\#):not(#\#) {
   outline-offset: 2px;
 }
 
@@ -5738,7 +5750,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: var(--animation-enabled, 0);
 }
 
-.xkk1bqk:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before, .x2q1x1w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+.x2q1x1w:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after, .xkk1bqk:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):before {
   pointer-events: none;
 }
 

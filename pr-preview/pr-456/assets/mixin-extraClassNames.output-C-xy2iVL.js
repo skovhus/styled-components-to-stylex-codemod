@@ -1,1 +1,0 @@
-import"./stylex-vFXG5bjz.js";import{p as e}from"./index-FoycHDhT.js";import{t}from"./electronMixins.module-Af5y8lPg.js";var n=e();function r(){return(0,n.jsx)(`div`,{className:`x71s49j`,className:t.draggableRegionDisableChildren,children:`Draggable`})}export{r as App};
