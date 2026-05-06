@@ -1,0 +1,11 @@
+import{c as e,p as t}from"./index-CAZQsAq0.js";import{O as n}from"./helpers-DaFGcBsd.js";var r=t(),i=e.p`
+  font-size: 14px;
+  ${e=>e.$truncate?n():``}
+`,a=e.p`
+  font-size: 14px;
+  ${e=>e.$noTruncate?``:n()}
+`,o=e(`div`)`
+  font-size: 50px;
+  ${e=>e.$truncateTitle?n():``}
+  ${e=>e.maxWidth&&`max-width: ${e.maxWidth}px;`}
+`,s=()=>(0,r.jsxs)(`div`,{style:{width:200,border:`1px solid #ccc`,padding:8},children:[(0,r.jsx)(o,{$truncateTitle:!0,maxWidth:200,children:`Truncated title`}),(0,r.jsx)(i,{children:`Normal text without truncation that can wrap to multiple lines`}),(0,r.jsx)(i,{$truncate:!0,children:`Truncated text that will have ellipsis when it overflows the container width`}),(0,r.jsx)(a,{$noTruncate:!0,children:`Normal text without truncation that can wrap to multiple lines`}),(0,r.jsx)(a,{children:`Truncated text that will have ellipsis when it overflows`})]});export{s as App};
