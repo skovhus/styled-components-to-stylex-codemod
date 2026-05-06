@@ -2,20 +2,34 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type FadingContentProps = React.PropsWithChildren<{
+  gutter?: "auto" | "stable";
   isLoading?: boolean;
+  overflow?: "auto" | "hidden" | "visible";
 }>;
 
 function FadingContent(props: FadingContentProps) {
-  const { children, isLoading } = props;
+  const { children, isLoading, gutter, overflow } = props;
   return (
-    <div sx={[styles.fadingContent, isLoading && styles.fadingContentLoading]}>{children}</div>
+    <div
+      sx={[
+        styles.fadingContent,
+        isLoading && styles.fadingContentLoading,
+        gutter != null && gutterVariants[gutter],
+        overflow ? styles.fadingContentOverflow(overflow) : undefined,
+      ]}
+    >
+      {children}
+    </div>
   );
 }
 
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <div sx={styles.loadingContainer}>Loading</div>
-    <FadingContent isLoading>Fading</FadingContent>
+    <FadingContent gutter="stable" isLoading overflow="hidden">
+      Fading
+    </FadingContent>
+    <FadingContent>Idle</FadingContent>
   </div>
 );
 
@@ -47,6 +61,7 @@ const styles = stylex.create({
       default: "flex",
       "@media print": "block",
     },
+    flexDirection: "column",
     overflow: {
       default: "auto",
       "@media print": "visible",
@@ -61,8 +76,31 @@ const styles = stylex.create({
     },
   },
   fadingContentLoading: {
-    opacity: 0,
-    pointerEvents: "none",
+    opacity: {
+      default: 0,
+      "@media print": 1,
+    },
+    pointerEvents: {
+      default: "none",
+      "@media print": "auto",
+    },
     transition: "opacity 100ms 500ms ease-in",
+    willChange: "opacity",
+    backfaceVisibility: "hidden",
+  },
+  fadingContentOverflow: (overflow: "auto" | "hidden" | "visible") => ({
+    overflow: {
+      default: overflow,
+      "@media print": "visible",
+    },
+  }),
+});
+
+const gutterVariants = stylex.create({
+  auto: {
+    scrollbarGutter: "auto",
+  },
+  stable: {
+    scrollbarGutter: "stable",
   },
 });

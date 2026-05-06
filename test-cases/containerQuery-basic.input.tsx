@@ -1,5 +1,6 @@
 // @container query with static container name and breakpoint
 import styled from "styled-components";
+import { flexCenter } from "./lib/helpers";
 
 // Show/hide based on container width
 const ResponsiveItem = styled.div`
@@ -12,6 +13,17 @@ const ResponsiveItem = styled.div`
 
 const WrappingRow = styled.div`
   display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+
+  @container sidebar (max-width: 240px) {
+    flex-wrap: wrap;
+  }
+`;
+
+const WrappingRowAfterHelper = styled.div`
+  display: flex;
+  ${flexCenter()}
   flex-wrap: nowrap;
   gap: 8px;
 
@@ -36,5 +48,9 @@ export const App = () => (
       <span>Container</span>
       <span>wraps</span>
     </WrappingRow>
+    <WrappingRowAfterHelper>
+      <span>Helper</span>
+      <span>wraps</span>
+    </WrappingRowAfterHelper>
   </Container>
 );
