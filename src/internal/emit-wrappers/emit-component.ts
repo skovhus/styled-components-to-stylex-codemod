@@ -249,6 +249,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         !isPolymorphicComponentWrapper &&
         !isSelfReferentialPropsType
       ) {
+        renameTransientMembersInExistingType(emitter, explicitTypeName, d.transientPropRenames);
         // Pass explicitTypeName to avoid self-referential types when wrapper and wrapped
         // component share the same props type name (P1 fix)
         const base = emitter.componentPropsBaseType(renderedComponent, explicitTypeName);
@@ -1005,6 +1006,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       for (const propName of destructureProps) {
         const originalTransientName = renamedFromTransient.get(propName);
         if (originalTransientName) {
+          if (wrappedAcceptsSx) {
+            continue;
+          }
           // Renamed transient prop: forward with original $-prefixed attribute name
           // e.g., <BaseComp $isOpen={isOpen} /> where $isOpen was renamed to isOpen
           if (
@@ -1026,7 +1030,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (
           propName.startsWith("$") &&
           !filterOnlyTransientProps.includes(propName) &&
-          !wrapperOnlyTransientProps.includes(propName)
+          !wrapperOnlyTransientProps.includes(propName) &&
+          !wrappedAcceptsSx
         ) {
           pushForwardedProp(propName);
         }
@@ -1299,6 +1304,60 @@ function resolveTypeTextFromType(emitter: WrapperEmitter, type: ASTNode | null):
     return null;
   }
   return emitter.stringifyTsType(type);
+}
+
+function renameTransientMembersInExistingType(
+  emitter: WrapperEmitter,
+  typeName: string,
+  renames: ReadonlyMap<string, string> | undefined,
+): void {
+  if (!renames || renames.size === 0) {
+    return;
+  }
+  const { root, j } = emitter;
+  const renameKey = (key: unknown): void => {
+    const keyNode = key as { type?: string; name?: string; value?: unknown };
+    const current =
+      keyNode.type === "Identifier"
+        ? keyNode.name
+        : typeof keyNode.value === "string"
+          ? keyNode.value
+          : undefined;
+    const renamed = current ? renames.get(current) : undefined;
+    if (!renamed) {
+      return;
+    }
+    if (keyNode.type === "Identifier") {
+      keyNode.name = renamed;
+    } else {
+      keyNode.value = renamed;
+    }
+  };
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    const typedNode = node as { type?: string; key?: unknown };
+    if (typedNode.type === "TSPropertySignature") {
+      renameKey(typedNode.key);
+    }
+    for (const [field, child] of Object.entries(node)) {
+      if (field === "loc" || field === "comments" || field === "parentPath") {
+        continue;
+      }
+      if (Array.isArray(child)) {
+        child.forEach(visit);
+      } else if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  root
+    .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => visit(path.node.typeAnnotation));
+  root
+    .find(j.TSInterfaceDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => visit(path.node.body));
 }
 
 function resolveTypeIdentifierName(type: ASTNode | null): string | null {

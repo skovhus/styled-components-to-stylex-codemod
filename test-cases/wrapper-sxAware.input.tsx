@@ -27,6 +27,12 @@ const InlinedAccent = styled(SxAwareButton)`
   background-color: #fef3c7;
 `;
 
+// Non-transient props used for styling must still be forwarded to sx-aware wrapped components
+// when the wrapped component explicitly accepts them.
+const StyledActive = styled(SxAwareButton)<{ active?: boolean }>`
+  color: ${(props) => (props.active ? "green" : "gray")};
+`;
+
 // Exported wrapper with external `sx` support (per fixture adapter
 // externalInterface). Even when the wrapped component accepts `sx`, the
 // wrapper itself accepts an external `sx` prop and must compose it with the
@@ -58,6 +64,8 @@ export const App = () => (
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>
+    <StyledActive active>Active forwarded</StyledActive>
+    <StyledActive>Inactive forwarded</StyledActive>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
     <StyledText size="md">Generic Text</StyledText>
