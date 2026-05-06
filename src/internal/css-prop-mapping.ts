@@ -192,10 +192,13 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
 
   if (prop === "background") {
     const rawVal = (decl.valueRaw ?? "").trim();
-    // `background: none` resets all background layers — keep as the shorthand
-    // since `none` is not a valid `background-color` value.
+    // `background: none` resets the image layer and color. StyleX cannot emit
+    // the shorthand, so preserve the visible reset with longhands.
     if (rawVal === "none") {
-      return [{ prop: "background", value: decl.value }];
+      return [
+        { prop: "backgroundImage", value: decl.value },
+        { prop: "backgroundColor", value: { kind: "static", value: "transparent" } },
+      ];
     }
     const stylexProp = resolveBackgroundStylexProp(rawVal);
     return [{ prop: stylexProp, value: decl.value }];
