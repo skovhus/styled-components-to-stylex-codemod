@@ -235,6 +235,40 @@ export function normalizeStylisAstToIR(
               }
             } else if (child?.type === "comm") {
               handleCommentNode(String(child.value ?? ""));
+            } else if (typeof child?.type === "string" && child.type.startsWith("@")) {
+              const atType = String(child.type);
+              const atValue =
+                child.value !== undefined && child.value !== null ? String(child.value) : "";
+              const at =
+                atValue && !atValue.trim().startsWith(atType)
+                  ? `${atType} ${atValue}`.trim()
+                  : atValue || atType;
+              atRuleStack.push(at);
+              const nestedRule = ensureRule(selector, atRuleStack);
+              const atChildren = child.children;
+              if (Array.isArray(atChildren)) {
+                for (const atChild of atChildren) {
+                  if (atChild?.type === "decl") {
+                    const decls = parseDeclarations(String(atChild.value ?? ""), slotByPlaceholder);
+                    const firstDeclInner = decls[0];
+                    if (decls.length && firstDeclInner) {
+                      if (pendingComment) {
+                        firstDeclInner.leadingComment = pendingComment;
+                        pendingComment = null;
+                      }
+                      nestedRule.declarations.push(...decls);
+                      lastDecl = decls[decls.length - 1] ?? null;
+                    }
+                  } else if (atChild?.type === "comm") {
+                    handleCommentNode(String(atChild.value ?? ""));
+                  } else {
+                    visit(atChild as Element);
+                  }
+                }
+              } else {
+                visit(atChildren as unknown as Element);
+              }
+              atRuleStack.pop();
             } else {
               visit(child as Element);
             }

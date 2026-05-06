@@ -23,6 +23,7 @@ import {
   extractRootAndPath,
   getArrowFnParamBindings,
   getNodeLocStart,
+  isAstNode,
 } from "../utilities/jscodeshift-utils.js";
 import {
   SOURCE_CSS_PROPERTIES_KEY,
@@ -1307,7 +1308,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const peTarget = nestedSelectors[pe]!;
           noteSourceCssProperty(peTarget);
           const current = peTarget[prop];
-          if (!current || typeof current !== "object") {
+          if (!current || typeof current !== "object" || isAstNode(current)) {
             peTarget[prop] = { default: current ?? null, [media]: value };
           } else {
             const map = current as Record<string, unknown>;
@@ -1401,7 +1402,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           nestedSelectors[pe] ??= {};
           const pseudoSelector = nestedSelectors[pe];
           if (pseudoSelector) {
-            pseudoSelector[prop] = value;
+            const existing = pseudoSelector[prop];
+            if (
+              existing &&
+              typeof existing === "object" &&
+              !Array.isArray(existing) &&
+              "default" in (existing as Record<string, unknown>)
+            ) {
+              (existing as Record<string, unknown>).default = value;
+            } else {
+              pseudoSelector[prop] = value;
+            }
             noteSourceCssProperty(pseudoSelector);
             if (commentSource) {
               addPropComments(pseudoSelector, prop, {
