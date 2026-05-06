@@ -1,11 +1,17 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { animated } from "./lib/react-spring";
 
+// styled(Component.sub).attrs() - MemberExpression with attrs
+function AnimatedBox(
+  props: Omit<React.ComponentPropsWithRef<typeof animated.div>, "className" | "style">,
+) {
+  return <animated.div {...props} role="region" {...stylex.props(styles.animatedBox)} />;
+}
+
 export const App = () => (
   <div sx={styles.simpleBox}>
-    <animated.div role="region" {...stylex.props(styles.animatedBox)}>
-      Hello
-    </animated.div>
+    <AnimatedBox>Hello</AnimatedBox>
   </div>
 );
 
@@ -18,7 +24,6 @@ const styles = stylex.create({
   simpleBox: {
     display: "block",
   },
-  // styled(Component.sub).attrs() - MemberExpression with attrs
   animatedBox: {
     display: "flex",
     alignItems: "center",

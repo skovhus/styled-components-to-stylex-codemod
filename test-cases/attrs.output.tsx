@@ -237,6 +237,8 @@ function ActiveToolbarButton(
   return (
     <ButtonLike
       {...props}
+      size="small"
+      variant="borderless"
       {...stylex.props(styles.baseToolbarButton, styles.activeToolbarButton)}
     />
   );
