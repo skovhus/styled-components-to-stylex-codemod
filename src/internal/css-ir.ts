@@ -370,10 +370,11 @@ export function normalizeStylisAstToIR(
         recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       } else if (selectorStack.length > 0) {
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
-        // Skip simple pseudo-class selectors (&:hover, &:focus, etc.) since those are already
-        // handled by tryResolveConditionalHelperCallInPseudo in finalize-decl.ts via rawCss regex.
+        // Simple pseudo-class selectors without a user-authored semicolon are handled later
+        // from rawCss. With an explicit semicolon, Stylis drops the placeholder entirely,
+        // so recover it here.
         const currentSelector = selectorStack[selectorStack.length - 1]!;
-        if (!/^&:[a-z]/i.test(currentSelector)) {
+        if (!/^&:[a-z]/i.test(currentSelector) || /;\s*$/.test(trimmed)) {
           recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
       }
