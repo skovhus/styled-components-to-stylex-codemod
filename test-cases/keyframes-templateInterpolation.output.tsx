@@ -2,7 +2,7 @@ import * as stylex from "@stylexjs/stylex";
 
 const OFFSET_PX = 40;
 const DURATION_SECONDS = 1.8;
-const RUN_PERCENT = 80;
+const RUN_PERCENT = Math.min(99.999, (DURATION_SECONDS / (DURATION_SECONDS + 0.45)) * 100);
 
 const sweep = stylex.keyframes({
   from: {
