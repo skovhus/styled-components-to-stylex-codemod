@@ -265,7 +265,7 @@ describe("runTransform (e2e)", () => {
     expect(result.skipped).toBe(0);
     expect(container).toContain("function ContentViewContainer(props: ContentViewContainerProps)");
     expect(container).not.toContain("sx?: stylex.StyleXStyles");
-    expect(consumer).toContain("{...mergedSx(styles.body)}");
+    expect(consumer).toContain("{...stylex.props(styles.body)}");
     expect(consumer).not.toContain("sx={styles.body}");
   });
 

@@ -31,6 +31,10 @@ import {
   resolveBarrelReExport,
   type Resolve,
 } from "./internal/prepass/extract-external-interface.js";
+import {
+  extractStyledDefBasesFromSource,
+  type StyledDefBasesMap,
+} from "./internal/prepass/compute-leaf-set.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 
 export { mergeMarkerDeclarations };
@@ -467,6 +471,34 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       };
       const lookupAutoExternalInterface = (filePath: string, componentName: string) =>
         analysisMap.get(`${toRealPath(filePath)}:${componentName}`);
+      const styledDefinitionNamesByFile = new Map<string, Set<string>>();
+      const resolveExistingSourcePath = (filePath: string): string => {
+        for (const ext of ["", ".tsx", ".ts", ".jsx", ".js"]) {
+          const candidate = `${filePath}${ext}`;
+          if (existsSync(candidate)) {
+            return candidate;
+          }
+        }
+        return filePath;
+      };
+      const getStyledDefinitionNames = (filePath: string): Set<string> => {
+        const realPath = toRealPath(resolveExistingSourcePath(filePath));
+        const cached = styledDefinitionNamesByFile.get(realPath);
+        if (cached) {
+          return cached;
+        }
+        const extracted: StyledDefBasesMap = new Map();
+        extractStyledDefBasesFromSource(realPath, cachedRead(realPath), extracted);
+        const names = new Set(extracted.get(realPath)?.keys() ?? []);
+        styledDefinitionNamesByFile.set(realPath, names);
+        return names;
+      };
+      const getDefaultExportedName = (filePath: string): string | null => {
+        const match = cachedRead(toRealPath(resolveExistingSourcePath(filePath))).match(
+          /\bexport\s+default\s+([A-Z][A-Za-z0-9]*)\b/,
+        );
+        return match?.[1] ?? null;
+      };
 
       return {
         ...adapterInput,
@@ -498,14 +530,32 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           const definitionPath =
             resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
             resolvedPath;
-          if (!transformedFiles.has(toRealPath(definitionPath))) {
+          const definitionSourcePath = resolveExistingSourcePath(definitionPath);
+          if (!transformedFiles.has(toRealPath(definitionSourcePath))) {
             return undefined;
           }
 
           const autoInterfaceNames =
             ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
+          const styledDefinitionNames = getStyledDefinitionNames(definitionSourcePath);
+          const sourceComponentNames =
+            ctx.importedName === "default"
+              ? [ctx.localName, getDefaultExportedName(definitionSourcePath)].filter(
+                  (name): name is string => typeof name === "string",
+                )
+              : [ctx.importedName];
+          const definitionSource = cachedRead(definitionSourcePath);
+          const hasTransformedSxSurface =
+            definitionSource.includes("sx?: stylex.StyleXStyles") &&
+            sourceComponentNames.some((name) => definitionSource.includes(name));
+          if (
+            !hasTransformedSxSurface &&
+            !sourceComponentNames.some((name) => styledDefinitionNames.has(name))
+          ) {
+            return undefined;
+          }
           const autoInterface = autoInterfaceNames
-            .map((name) => lookupAutoExternalInterface(definitionPath, name))
+            .map((name) => lookupAutoExternalInterface(definitionSourcePath, name))
             .find((result) => result !== undefined);
           return autoInterface?.styles ? { acceptsSx: true } : undefined;
         },
