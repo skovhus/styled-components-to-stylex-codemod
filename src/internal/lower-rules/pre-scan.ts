@@ -26,6 +26,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
   // BEFORE processing any pseudo selectors that might reference those properties.
   // Also detect imported css helpers (identifiers that aren't in cssHelperNames) and bail.
   let hasImportedCssHelper = false;
+  let importedCssHelperLoc: { line: number; column: number } | null | undefined;
   for (const rule of decl.rules) {
     for (const d of rule.declarations) {
       if (!d.property && d.value.kind === "interpolated") {
@@ -72,6 +73,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
               // This might be an imported css helper - we can't determine its properties.
               // Mark for bail to avoid generating incorrect default values.
               hasImportedCssHelper = true;
+              importedCssHelperLoc ??= getNodeLocStart(expr as ASTNode);
             }
           }
           // Check for css helper function calls: ${getPrimaryStyles()}
@@ -113,6 +115,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
                 if (!resolved || !("expr" in resolved)) {
                   // Can't resolve this imported function call - bail for safety
                   hasImportedCssHelper = true;
+                  importedCssHelperLoc ??= getNodeLocStart(expr as ASTNode);
                 }
               }
             }
@@ -146,7 +149,7 @@ export function preScanCssHelperPlaceholders(ctx: DeclProcessingState): boolean 
     warnings.push({
       severity: "error",
       type: "Imported CSS helper mixins: cannot determine inherited properties for correct pseudo selector handling",
-      loc: decl.loc,
+      loc: importedCssHelperLoc ?? decl.loc,
     });
     markBail();
     return false;
