@@ -687,25 +687,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // bridge import and a local component of the same canonical name exist in one file.
         const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
 
-        // For cross-file bridge selectors, the target component (e.g., Text) must
-        // have JSX usage in this file so the override styles can be applied to it.
-        // Without JSX usage, the override styles would be orphaned dead code.
-        if (crossFileUsage?.bridgeComponentLocalName) {
-          const hasJsxUsage =
-            root
-              .find(j.JSXOpeningElement, {
-                name: { type: "JSXIdentifier", name: jsxLocalName },
-              })
-              .size() > 0;
-          if (!hasJsxUsage) {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: cross-file component selector target has no JSX usage in this file",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        // The JSX rewrite step can only apply descendant/component selector overrides
+        // when the selected child JSX appears under this styled parent in the same file.
+        // Otherwise the generated override style object is dead code.
+        if (
+          !decl.isCssHelper &&
+          !hasPatchableDescendantJsx(root, j, decl.localName, jsxLocalName)
+        ) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: component selector target has no patchable JSX usage under selector parent",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
 
         const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(jsxLocalName);
@@ -3248,6 +3243,45 @@ function buildAncestorPseudoMap(
     j.property("init", j.identifier("default"), j.literal(null)),
     ...pseudoEntries,
   ]);
+}
+
+function hasPatchableDescendantJsx(
+  root: { find: (...args: any[]) => { forEach: (callback: (path: any) => void) => void } },
+  j: JSCodeshift,
+  parentLocalName: string,
+  childLocalName: string,
+): boolean {
+  let found = false;
+  root
+    .find(j.JSXOpeningElement, {
+      name: { type: "JSXIdentifier", name: childLocalName },
+    } as any)
+    .forEach((path: any) => {
+      if (found) {
+        return;
+      }
+      let current = path.parent;
+      while (current) {
+        const value = current.value;
+        if (
+          value?.type === "JSXElement" &&
+          jsxElementName(value.openingElement?.name) === parentLocalName
+        ) {
+          found = true;
+          return;
+        }
+        current = current.parent;
+      }
+    });
+  return found;
+}
+
+function jsxElementName(name: unknown): string | null {
+  if (!name || typeof name !== "object") {
+    return null;
+  }
+  const node = name as { type?: string; name?: string };
+  return node.type === "JSXIdentifier" ? (node.name ?? null) : null;
 }
 
 /**
