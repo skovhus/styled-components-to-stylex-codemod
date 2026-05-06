@@ -40,6 +40,30 @@ export function ExportedAccentButton(
   );
 }
 
+export function ExportedToggleButton(
+  props: {
+    className?: string;
+    open?: boolean;
+    style?: React.CSSProperties;
+    sx?: stylex.StyleXStyles;
+  } & React.ComponentPropsWithRef<typeof SxAwareButton>,
+) {
+  const { children, open, sx, ...rest } = props;
+  return (
+    <SxAwareButton
+      type="button"
+      {...rest}
+      sx={[
+        callerStyles.exportedToggleButton,
+        open ? callerStyles.exportedToggleButtonOpen : undefined,
+        sx,
+      ]}
+    >
+      {children}
+    </SxAwareButton>
+  );
+}
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
   button: {
@@ -57,6 +81,13 @@ const callerStyles = stylex.create({
   },
   exportedAccentButton: {
     color: "red",
+  },
+  exportedToggleButton: {
+    display: "inline-flex",
+    backgroundColor: "#f8fafc",
+  },
+  exportedToggleButtonOpen: {
+    backgroundColor: "#dbeafe",
   },
   // Wrapping the generic Text component — auto-detection has to walk
   // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
@@ -82,6 +113,9 @@ export const App = () => (
     </SxAwareButton>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
+    <ExportedToggleButton open sx={callerStyles.caller}>
+      Exported toggle
+    </ExportedToggleButton>
     <Text size="md" sx={callerStyles.text}>
       Generic Text
     </Text>

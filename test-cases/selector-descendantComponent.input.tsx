@@ -97,6 +97,27 @@ const HoverFocusContainer = styled.div`
   }
 `;
 
+const NestedLink = styled.a`
+  color: #2563eb;
+`;
+
+const NestedRow = styled.div`
+  ${NestedLink} {
+    display: flex;
+  }
+`;
+
+const BoundaryItem = styled.div`
+  padding: 6px;
+`;
+
+const BoundaryList = styled.div`
+  ${BoundaryItem}:not(:last-child) {
+    margin-bottom: 8px;
+    border-bottom: 1px solid #cbd5e1;
+  }
+`;
+
 export const App = () => (
   <div>
     <Button>
@@ -119,5 +140,14 @@ export const App = () => (
       Grouped parent pseudos
       <MoreActionsIcon />
     </HoverFocusContainer>
+    <br />
+    <br />
+    <NestedRow>
+      <NestedLink href="#">Nested link</NestedLink>
+    </NestedRow>
+    <BoundaryList>
+      <BoundaryItem>Boundary one</BoundaryItem>
+      <BoundaryItem>Boundary two</BoundaryItem>
+    </BoundaryList>
   </div>
 );

@@ -45,11 +45,44 @@ function ResponsivePanel(props: ResponsivePanelProps) {
   );
 }
 
+type CompactPanelProps = Omit<ResponsivePanelProps, "asCard" | "floatingOffset">;
+
+function CompactPanel(props: CompactPanelProps) {
+  const { className, children, style, ...rest } = props;
+  return (
+    <ResponsivePanel
+      asCard={true}
+      floatingOffset={4}
+      {...rest}
+      {...mergedSx(styles.compactPanel, className, style)}
+    >
+      {children}
+    </ResponsivePanel>
+  );
+}
+
+const WidgetKit = {
+  Panel: ResponsivePanel,
+  Legend: {
+    Grid: ResponsivePanel,
+  },
+};
+
+const SelectedPanel = Math.random() > 0.5 ? ResponsivePanel : CompactPanel;
+
 export const App = () => (
   <div style={{ padding: 12 }}>
     <ResponsivePanel asCard columnCount={3} floatingOffset={24} role="region">
       Renamed transient props
     </ResponsivePanel>
+    <WidgetKit.Panel asCard columnCount={2}>
+      Member transient prop
+    </WidgetKit.Panel>
+    <WidgetKit.Legend.Grid columnCount={4}>Nested member transient prop</WidgetKit.Legend.Grid>
+    <CompactPanel columnCount={1}>Attrs transient defaults</CompactPanel>
+    <SelectedPanel asCard floatingOffset={12}>
+      Alias transient prop
+    </SelectedPanel>
   </div>
 );
 
@@ -70,4 +103,7 @@ const styles = stylex.create({
   responsivePanelTop: (top: string) => ({
     top,
   }),
+  compactPanel: {
+    borderRadius: 8,
+  },
 });

@@ -47,6 +47,12 @@ const WithCssFunctions = styled.div<{
   background-color: lightblue;
 `;
 
+const NegativeOffset = styled.div<{ $size?: number }>`
+  height: ${(props) => props.$size ?? 44}px;
+  margin-bottom: -${(props) => props.$size ?? 44}px;
+  background-color: lavender;
+`;
+
 export const App = () => (
   <Container>
     <Grid>
@@ -57,5 +63,6 @@ export const App = () => (
     <ComplexCalc>Complex calc</ComplexCalc>
     <WithVariables>With variables</WithVariables>
     <WithCssFunctions $dynamicHeight="300px">CSS functions</WithCssFunctions>
+    <NegativeOffset $size={32}>Negative offset</NegativeOffset>
   </Container>
 );

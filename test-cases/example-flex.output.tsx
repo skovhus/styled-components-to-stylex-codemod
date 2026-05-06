@@ -325,6 +325,12 @@ export const App = () => (
       Padded content
     </Flex>
 
+    {/* styled(Flex) must preserve Flex prop behavior and ignore invalid wrapper CSS */}
+    <Flex wrap gap={4} sx={styles.nameRow}>
+      <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Name</div>
+      <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Value</div>
+    </Flex>
+
     {/* FlexSpacer pushes items apart */}
     <div style={{ display: "flex", gap: 8, backgroundColor: "#e0e0e0", padding: 8 }}>
       <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Before</div>
@@ -397,6 +403,9 @@ const styles = stylex.create({
   },
   padded: {
     padding: 16,
+  },
+  nameRow: {
+    minWidth: 0,
   },
 });
 

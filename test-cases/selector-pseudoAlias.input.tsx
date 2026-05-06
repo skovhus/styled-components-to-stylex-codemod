@@ -1,6 +1,6 @@
 // Pseudo-alias: separate pseudo style objects with runtime selector function
 import * as React from "react";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { highlight } from "./lib/helpers";
 
 const Button = styled.button`
@@ -25,12 +25,30 @@ const ResetButton = styled.button`
   }
 `;
 
+const HighlightCard = styled.div<{ $interactive?: boolean }>`
+  padding: 12px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+
+  ${(props) =>
+    props.$interactive
+      ? css`
+          cursor: pointer;
+
+          &:${highlight} {
+            background-color: #e0f2fe;
+          }
+        `
+      : undefined}
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
       <ResetButton>Reset background</ResetButton>
+      <HighlightCard $interactive>Interactive card</HighlightCard>
     </div>
   );
 }

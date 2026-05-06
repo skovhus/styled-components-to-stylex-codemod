@@ -169,6 +169,71 @@ function DynamicHeightBox(props: DynamicHeightBoxProps) {
   );
 }
 
+type PositionedTileProps = React.PropsWithChildren<{
+  height: number;
+}>;
+
+// Pattern 11: dynamic attrs style must be applied as style, not leaked as an inert DOM prop
+function PositionedTile(props: PositionedTileProps) {
+  const { children, height } = props;
+  return <div sx={[styles.positionedTile, styles.positionedTileHeight(height)]}>{children}</div>;
+}
+
+type SeparatorLineProps = {
+  height?: number;
+} & React.ComponentProps<"div">;
+
+// Pattern 12: dynamic attrs style should merge with caller style, with caller style last
+function SeparatorLine(props: SeparatorLineProps) {
+  const { height, style, ...rest } = props;
+  return <div {...rest} sx={styles.separatorLine} style={{ height: height ?? 1, ...style }} />;
+}
+
+function HeaderSeparator(props: {
+  className?: string;
+  height?: number;
+  style?: React.CSSProperties;
+}) {
+  const { className, height, style } = props;
+  return <SeparatorLine height={height} className={className} style={style} />;
+}
+
+// Pattern 13: attrs on a base wrapper must be inherited by styled extensions
+type ButtonLikeProps = React.PropsWithChildren<{
+  className?: string;
+  size?: "small" | "medium";
+  style?: React.CSSProperties;
+  variant?: "borderless" | "solid";
+}>;
+
+function ButtonLike(props: ButtonLikeProps) {
+  const { children, className, size, style, variant } = props;
+  return (
+    <button className={className} data-size={size} data-variant={variant} style={style}>
+      {children}
+    </button>
+  );
+}
+
+type ActiveToolbarButtonProps = Omit<
+  React.ComponentPropsWithRef<typeof ButtonLike>,
+  "className" | "style"
+>;
+
+function ActiveToolbarButton(props: ActiveToolbarButtonProps) {
+  const { children, ...rest } = props;
+  return (
+    <ButtonLike
+      size="small"
+      variant="borderless"
+      {...rest}
+      {...stylex.props(styles.baseToolbarButton, styles.activeToolbarButton)}
+    >
+      {children}
+    </ButtonLike>
+  );
+}
+
 export const App = () => (
   <>
     <Input small placeholder="Small" />
@@ -183,6 +248,9 @@ export const App = () => (
     <AlignedFlex>Aligned content</AlignedFlex>
     <span sx={styles.noWrapText}>No wrapping text</span>
     <DynamicHeightBox height={50}>Dynamic height</DynamicHeightBox>
+    <PositionedTile height={64}>Tile with attrs height</PositionedTile>
+    <HeaderSeparator height={2} style={{ opacity: 1 }} />
+    <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
   </>
 );
 
@@ -249,4 +317,32 @@ const styles = stylex.create({
   dynamicHeightBoxHeight: (height: string) => ({
     height,
   }),
+  positionedTile: {
+    position: "absolute",
+    minHeight: 1,
+    backgroundColor: "#eef2ff",
+    outline: {
+      default: null,
+      ":focus-visible": "2px solid #4f46e5",
+    },
+    outlineOffset: {
+      default: null,
+      ":focus-visible": "3px",
+    },
+  },
+  positionedTileHeight: (height: number) => ({
+    height,
+  }),
+  separatorLine: {
+    width: "100%",
+    backgroundColor: "#94a3b8",
+  },
+  baseToolbarButton: {
+    paddingBlock: 4,
+    paddingInline: 8,
+  },
+  activeToolbarButton: {
+    color: "#4338ca",
+    backgroundColor: "#e0e7ff",
+  },
 });

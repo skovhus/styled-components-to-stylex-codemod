@@ -3,6 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 export const App = () => (
   <div sx={styles.container}>
     <div sx={styles.responsiveItem}>Visible when container &gt; 300px</div>
+    <div sx={styles.wrappingRow}>
+      <span>Container</span>
+      <span>wraps</span>
+    </div>
   </div>
 );
 
@@ -13,6 +17,14 @@ const styles = stylex.create({
       default: "none",
       "@container sidebar (min-width: 300px)": "flex",
     },
+  },
+  wrappingRow: {
+    display: "flex",
+    flexWrap: {
+      default: "nowrap",
+      "@container sidebar (max-width: 240px)": "wrap",
+    },
+    gap: 8,
   },
   // Container context
   container: {

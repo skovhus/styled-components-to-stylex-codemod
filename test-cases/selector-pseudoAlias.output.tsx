@@ -35,12 +35,37 @@ function ResetButton(props: React.PropsWithChildren<{}>) {
   );
 }
 
+type HighlightCardProps = React.PropsWithChildren<{
+  interactive?: boolean;
+}>;
+
+function HighlightCard(props: HighlightCardProps) {
+  const { children, interactive } = props;
+  return (
+    <div
+      sx={[
+        styles.highlightCard,
+        interactive ? styles.highlightCardInteractive : undefined,
+        interactive
+          ? highlightStyles({
+              active: styles.highlightCardPseudoActive,
+              hover: styles.highlightCardPseudoHover,
+            })
+          : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Button>Default</Button>
       <Button>Hover me</Button>
       <ResetButton>Reset background</ResetButton>
+      <HighlightCard interactive>Interactive card</HighlightCard>
     </div>
   );
 }
@@ -96,6 +121,26 @@ const styles = stylex.create({
     color: {
       default: "#333",
       ":hover": "#111",
+    },
+  },
+  highlightCard: {
+    padding: 12,
+    borderRadius: 6,
+    backgroundColor: "#f8fafc",
+  },
+  highlightCardInteractive: {
+    cursor: "pointer",
+  },
+  highlightCardPseudoActive: {
+    backgroundColor: {
+      default: "#f8fafc",
+      ":active": "#e0f2fe",
+    },
+  },
+  highlightCardPseudoHover: {
+    backgroundColor: {
+      default: "#f8fafc",
+      ":hover": "#e0f2fe",
     },
   },
 });

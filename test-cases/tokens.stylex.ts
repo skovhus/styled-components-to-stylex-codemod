@@ -75,6 +75,7 @@ export const testCaseTheme = {
   },
   isDark: true as boolean,
   mode: "light" as "light" | "dark",
+  inputBorder: "1px solid #94A3B8",
   inputPadding: "6px 12px",
 } as const;
 
@@ -121,6 +122,9 @@ export const $config = stylex.defineVars({
 
 // Input padding variables — used by interpolation-opaqueShorthand test case
 export const $input = stylex.defineVars({
+  inputBorderColor: "#94A3B8",
+  inputBorderStyle: "solid",
+  inputBorderWidth: "1px",
   inputPaddingBlock: "6px",
   inputPaddingInline: "12px",
 });

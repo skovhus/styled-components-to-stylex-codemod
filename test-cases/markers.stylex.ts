@@ -29,3 +29,9 @@ export const ThingThemedMarker = stylex.defineMarker();
 
 /** Custom marker for Row */
 export const RowMarker = stylex.defineMarker();
+
+/** Custom marker for CloneButton */
+export const CloneButtonMarker = stylex.defineMarker();
+
+/** Custom marker for LabelButton */
+export const LabelButtonMarker = stylex.defineMarker();

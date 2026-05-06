@@ -4,6 +4,7 @@ import { $input } from "./tokens.stylex";
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
     <input placeholder="With directional padding" sx={styles.input} />
+    <input placeholder="With token border" sx={styles.tokenBorderInput} />
   </div>
 );
 
@@ -16,5 +17,12 @@ const styles = stylex.create({
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
+  },
+  tokenBorderInput: {
+    borderWidth: $input.inputBorderWidth,
+    borderStyle: $input.inputBorderStyle,
+    borderColor: $input.inputBorderColor,
+    borderRadius: 4,
+    backgroundColor: "white",
   },
 });

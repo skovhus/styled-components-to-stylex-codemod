@@ -35,6 +35,13 @@ export const ExportedAccentButton = styled(SxAwareButton)`
   color: red;
 `;
 
+export const ExportedToggleButton = styled(SxAwareButton).attrs({ type: "button" })<{
+  $open?: boolean;
+}>`
+  display: inline-flex;
+  background-color: ${(props) => (props.$open ? "#dbeafe" : "#f8fafc")};
+`;
+
 // Wrapping the generic Text component — auto-detection has to walk
 // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
 // find the `sx` member.
@@ -60,6 +67,9 @@ export const App = () => (
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
+    <ExportedToggleButton $open sx={callerStyles.caller}>
+      Exported toggle
+    </ExportedToggleButton>
     <StyledText size="md">Generic Text</StyledText>
   </div>
 );

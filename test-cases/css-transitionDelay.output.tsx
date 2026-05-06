@@ -8,6 +8,8 @@ type ContainerProps = {
   children?: React.ReactNode;
 };
 
+const EASING = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+
 /**
  * Test case for transitionDelay with number value.
  * The codemod should convert number 0 to "0ms" string for CSS properties.
@@ -29,6 +31,26 @@ function Container(props: ContainerProps & React.ComponentProps<"div">) {
         className,
         style,
       )}
+    >
+      {children}
+    </div>
+  );
+}
+
+type DynamicTransitionPanelProps = {
+  children?: React.ReactNode;
+  visible?: boolean;
+};
+
+function DynamicTransitionPanel(props: DynamicTransitionPanelProps) {
+  const { children, visible } = props;
+  return (
+    <div
+      sx={[
+        styles.dynamicTransitionPanel,
+        visible ? styles.dynamicTransitionPanelVisible : undefined,
+        styles.dynamicTransitionPanelTransition(`opacity ${visible ? 400 : 100}ms ${EASING}`),
+      ]}
     >
       {children}
     </div>
@@ -59,6 +81,7 @@ export const App = () => {
       <AutoFadingContainer $open={open} $delay={600}>
         600ms delay
       </AutoFadingContainer>
+      <DynamicTransitionPanel visible={open}>Dynamic shorthand</DynamicTransitionPanel>
     </div>
   );
 };
@@ -77,5 +100,16 @@ const styles = stylex.create({
   containerOpen: (props) => ({
     opacity: 1,
     transitionDelay: `${props.$delay}ms`,
+  }),
+  dynamicTransitionPanel: {
+    opacity: 0,
+    padding: 12,
+    backgroundColor: "#fef3c7",
+  },
+  dynamicTransitionPanelVisible: {
+    opacity: 1,
+  },
+  dynamicTransitionPanelTransition: (transition: string) => ({
+    transition,
   }),
 });

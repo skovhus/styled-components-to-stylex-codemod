@@ -16,6 +16,7 @@ export const App = () => (
     <div sx={styles.complexCalc}>Complex calc</div>
     <div sx={styles.withVariables}>With variables</div>
     <div sx={styles.withCssFunctions("300px")}>CSS functions</div>
+    <div sx={styles.negativeOffset("32px")}>Negative offset</div>
   </div>
 );
 
@@ -57,5 +58,10 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "lightblue",
     height: `max(100px, ${height})`,
+  }),
+  negativeOffset: (size: string) => ({
+    height: size,
+    marginBottom: `-${size}`,
+    backgroundColor: "lavender",
   }),
 });

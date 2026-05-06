@@ -137,6 +137,70 @@ const DynamicHeightBox = styled.div.attrs<{ $height: number }>(({ $height }) => 
   align-items: center;
 `;
 
+// Pattern 11: dynamic attrs style must be applied as style, not leaked as an inert DOM prop
+const PositionedTile = styled.div.attrs<{ height: number }>((props) => ({
+  style: {
+    height: props.height,
+  },
+}))`
+  position: absolute;
+  min-height: 1px;
+  background-color: #eef2ff;
+
+  &:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 3px;
+  }
+`;
+
+// Pattern 12: dynamic attrs style should merge with caller style, with caller style last
+const SeparatorLine = styled.div.attrs<{ $height?: number }>((props) => ({
+  style: {
+    height: props.$height ?? 1,
+  },
+}))`
+  width: 100%;
+  background-color: #94a3b8;
+`;
+
+function HeaderSeparator(props: {
+  className?: string;
+  height?: number;
+  style?: React.CSSProperties;
+}) {
+  const { className, height, style } = props;
+  return <SeparatorLine $height={height} className={className} style={style} />;
+}
+
+// Pattern 13: attrs on a base wrapper must be inherited by styled extensions
+type ButtonLikeProps = React.PropsWithChildren<{
+  className?: string;
+  size?: "small" | "medium";
+  style?: React.CSSProperties;
+  variant?: "borderless" | "solid";
+}>;
+
+function ButtonLike(props: ButtonLikeProps) {
+  const { children, className, size, style, variant } = props;
+  return (
+    <button className={className} data-size={size} data-variant={variant} style={style}>
+      {children}
+    </button>
+  );
+}
+
+const BaseToolbarButton = styled(ButtonLike).attrs({
+  size: "small",
+  variant: "borderless",
+})`
+  padding: 4px 8px;
+`;
+
+const ActiveToolbarButton = styled(BaseToolbarButton)`
+  color: #4338ca;
+  background-color: #e0e7ff;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -151,5 +215,8 @@ export const App = () => (
     <AlignedFlex>Aligned content</AlignedFlex>
     <NoWrapText>No wrapping text</NoWrapText>
     <DynamicHeightBox $height={50}>Dynamic height</DynamicHeightBox>
+    <PositionedTile height={64}>Tile with attrs height</PositionedTile>
+    <HeaderSeparator height={2} style={{ opacity: 1 }} />
+    <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
   </>
 );

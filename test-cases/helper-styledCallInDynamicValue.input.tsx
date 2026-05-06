@@ -15,6 +15,18 @@ const LoadingPlaceholder = styled.div<{ $highlightColor: ColorToken }>`
     `linear-gradient(90deg, transparent, ${color(props.$highlightColor)(props)}, transparent)`};
 `;
 
+const LoadingPlaceholderWithHelperReturn = styled.div<{ $highlightColor: ColorToken }>`
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    ${(props) => color(props.$highlightColor)},
+    transparent
+  );
+`;
+
 const LoadingPlaceholderRange = styled.div<{
   $startColor: ColorToken;
   $endColor: ColorToken;
@@ -66,6 +78,7 @@ const LayeredShadowPlaceholder = styled.div<{ $shadowTone: ShadowToken }>`
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
     <LoadingPlaceholder $highlightColor="accent" />
+    <LoadingPlaceholderWithHelperReturn $highlightColor="accent" />
     <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
     <LoadingPlaceholderRepeat $highlightColor="accent" />
     <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />

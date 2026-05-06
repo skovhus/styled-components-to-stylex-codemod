@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { CrossFileIcon } from "./lib/cross-file-icon.styled";
+import { CrossFileIcon, TruncatedLabel } from "./lib/cross-file-icon.styled";
 
 const Button = styled.button`
   display: inline-flex;
@@ -40,9 +40,26 @@ const HoverFocusButton = styled(Button)`
   }
 `;
 
+const CloneButton = styled(Button)`
+  ${CrossFileIcon} {
+    background-color: transparent !important;
+  }
+`;
+
+const LabelButton = styled(Button)`
+  ${TruncatedLabel} {
+    color: #475569;
+  }
+
+  &:hover ${TruncatedLabel} {
+    color: #0f172a;
+    text-decoration: underline;
+  }
+`;
+
 export function App() {
   return (
-    <div style={{ display: "flex", gap: 16, padding: 16 }}>
+    <div style={{ display: "flex", gap: 16, padding: 16, width: 620 }}>
       <CrossFileIcon />
       <IconButton>
         <CrossFileIcon />
@@ -52,6 +69,13 @@ export function App() {
         <CrossFileIcon />
         Hover or focus
       </HoverFocusButton>
+      <CloneButton>
+        <CrossFileIcon />
+        Clone
+      </CloneButton>
+      <LabelButton>
+        <TruncatedLabel>Exported selector label</TruncatedLabel>
+      </LabelButton>
     </div>
   );
 }

@@ -2,6 +2,11 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
+const Flex = (props: React.ComponentProps<"div"> & { gap?: number; shrink?: number }) => {
+  const { gap, shrink, style, ...rest } = props;
+  return <div {...rest} style={{ gap, flexShrink: shrink, ...style }} />;
+};
+
 // Chained pseudo-selectors with :not()
 function Input(props: React.ComponentProps<"input">) {
   return <input {...props} sx={styles.input} />;
@@ -17,6 +22,17 @@ function ListItem(props: React.PropsWithChildren<{}>) {
   return <div sx={styles.listItem}>{props.children}</div>;
 }
 
+type DialogRowProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
+
+function DialogRow(props: DialogRowProps) {
+  const { children, ...rest } = props;
+  return (
+    <Flex gap={6} shrink={0} {...rest} {...stylex.props(styles.dialogRow)}>
+      {children}
+    </Flex>
+  );
+}
+
 export const App = () => (
   <div>
     <Input placeholder="Focus me..." />
@@ -26,6 +42,8 @@ export const App = () => (
     <ListItem>Item 1</ListItem>
     <ListItem>Item 2</ListItem>
     <ListItem>Item 3 (no border)</ListItem>
+    <DialogRow>Row 1</DialogRow>
+    <DialogRow>Row 2</DialogRow>
   </div>
 );
 
@@ -84,6 +102,27 @@ const styles = stylex.create({
     borderBottomColor: {
       default: null,
       ":not(:last-child)": $colors.bgBorderSolid,
+    },
+  },
+  dialogRow: {
+    display: "inline-flex",
+    alignItems: "center",
+    height: 32,
+    paddingTop: 0,
+    paddingRight: 10,
+    paddingBottom: 0,
+    paddingLeft: 6,
+    borderBottomWidth: {
+      default: null,
+      ":not(:last-child)": 1,
+    },
+    borderBottomStyle: {
+      default: null,
+      ":not(:last-child)": "solid",
+    },
+    borderBottomColor: {
+      default: null,
+      ":not(:last-child)": "#cbd5e1",
     },
   },
 });

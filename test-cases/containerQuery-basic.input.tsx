@@ -10,6 +10,16 @@ const ResponsiveItem = styled.div`
   }
 `;
 
+const WrappingRow = styled.div`
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+
+  @container sidebar (max-width: 240px) {
+    flex-wrap: wrap;
+  }
+`;
+
 // Container context
 const Container = styled.div`
   container-name: sidebar;
@@ -22,5 +32,9 @@ const Container = styled.div`
 export const App = () => (
   <Container>
     <ResponsiveItem>Visible when container &gt; 300px</ResponsiveItem>
+    <WrappingRow>
+      <span>Container</span>
+      <span>wraps</span>
+    </WrappingRow>
   </Container>
 );
