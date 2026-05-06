@@ -140,6 +140,27 @@ describe("Logger", () => {
       expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("Unsupported selector"));
     });
 
+    it("prints circular warning context without throwing", () => {
+      const context: { node?: unknown; tokens?: unknown[] } = {};
+      context.node = { type: "Identifier", loc: { tokens: [context] }, parent: context };
+      context.tokens = [context.node];
+
+      expect(() =>
+        Logger.logWarnings(
+          [
+            {
+              severity: "warning",
+              type: "Unsupported selector: class selector",
+              loc: null,
+              context,
+            },
+          ],
+          "/path/a.tsx",
+        ),
+      ).not.toThrow();
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("[Circular]"));
+    });
+
     it("suppresses inline warnings when fileCount > 10", () => {
       Logger.setFileCount(15);
       Logger.logWarnings(
