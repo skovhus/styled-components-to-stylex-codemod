@@ -1,0 +1,24 @@
+import{c as e,p as t}from"./index-B2EMh0Uz.js";import{t as n}from"./flex-CCckuGOF.js";var r=t(),i=e(n).attrs(e=>({tabIndex:e.tabIndex??0}))`
+  overflow-y: auto;
+  position: relative;
+  flex-grow: 1;
+  background-color: ${e=>e.$applyBackground?e.theme.color.bgBase:`inherit`};
+  scrollbar-gutter: ${e=>e.gutter||`auto`};
+  &:focus-visible {
+    outline: none;
+  }
+`,a=e.div.attrs(e=>({tabIndex:e.tabIndex??0}))`
+  overflow-y: auto;
+  position: relative;
+  background-color: ${e=>e.$applyBackground?e.theme.color.bgBase:`inherit`};
+  scrollbar-gutter: ${e=>e.gutter||`auto`};
+  &:focus-visible {
+    outline: none;
+  }
+`,o=e.div.attrs(e=>({tabIndex:e.tabIndex??0}))`
+  overflow-y: auto;
+  position: relative;
+  flex-grow: 1;
+  background-color: ${e=>e.$applyBackground?e.theme.color.bgBase:`inherit`};
+  outline: ${e=>e.tabIndex===0?`none`:`auto`};
+`,s=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:`8px`,height:`200px`},children:[(0,r.jsx)(i,{gutter:`stable`,$applyBackground:!0,children:(0,r.jsx)(`div`,{style:{height:`400px`,padding:`8px`},children:`Flex: Tab me! (scrollable with stable gutter)`})}),(0,r.jsx)(a,{gutter:`stable`,children:(0,r.jsx)(`div`,{style:{height:`400px`,padding:`8px`},children:`Div: Tab me! (scrollable with stable gutter)`})}),(0,r.jsx)(o,{children:`Tab index in style`})]});export{s as App,a as ScrollableDiv,i as ScrollableFlex,o as TabIndexInStyle};

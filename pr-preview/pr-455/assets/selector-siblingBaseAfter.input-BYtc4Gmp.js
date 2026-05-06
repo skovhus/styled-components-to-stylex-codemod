@@ -1,0 +1,8 @@
+import{c as e,p as t}from"./index-B2EMh0Uz.js";var n=t(),r=e.div`
+  & ~ & {
+    color: red;
+  }
+
+  color: blue;
+  padding: 8px 16px;
+`,i=()=>(0,n.jsxs)(`div`,{style:{display:`flex`,flexDirection:`column`,gap:4,padding:16},children:[(0,n.jsx)(r,{children:`First (blue)`}),(0,n.jsx)(r,{children:`Second (red - general sibling)`})]});export{i as App};
