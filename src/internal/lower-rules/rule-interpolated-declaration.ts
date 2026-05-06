@@ -3076,6 +3076,8 @@ type DynamicHelperCallResult = {
   binding: DynamicHelperCallArgument;
 };
 
+type StyleObjectProperty = ReturnType<JSCodeshift["property"]>;
+
 type DynamicHelperCallResolution = {
   expr: ExpressionKind;
   args: DynamicHelperCallArgument[];
@@ -3113,7 +3115,7 @@ function buildDynamicStyleFunctionProperties(args: {
   important: boolean;
   pseudos?: string[] | null;
   media?: string | null;
-}) {
+}): StyleObjectProperty[] {
   const { j, fnKey, prop, valueExpr, important, pseudos, media } = args;
   if (!important) {
     return [
@@ -3126,7 +3128,7 @@ function buildDynamicStyleFunctionProperties(args: {
   }
 
   const cssVariableName = `--${camelToKebabCase(fnKey)}`;
-  const importantValueExpr = j.literal(`var(${cssVariableName}) !important`) as ExpressionKind;
+  const importantValueExpr = j.literal(`var(${cssVariableName}) !important`);
   return [
     j.property("init", makeCssPropKey(j, cssVariableName), valueExpr),
     j.property(
@@ -3252,7 +3254,7 @@ function tryResolveDynamicHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(dynamicArg, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(ctx.j, dynamicArg, ctx.paramName);
   if (!dynamicProp) {
     return false;
   }
@@ -3313,7 +3315,7 @@ function tryResolveDirectHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(args[0] as ExpressionKind, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(ctx.j, args[0] as ExpressionKind, ctx.paramName);
   if (!dynamicProp) {
     return false;
   }
@@ -3386,22 +3388,29 @@ function isIdentifierNamed(node: ExpressionKind, name: string): boolean {
   return node?.type === "Identifier" && node.name === name;
 }
 
+type NullishLogicalExpression = ExpressionKind & {
+  type: "LogicalExpression";
+  operator: "??";
+  left: ExpressionKind;
+  right: ExpressionKind;
+};
+
+function isNullishLogicalExpression(arg: ExpressionKind): arg is NullishLogicalExpression {
+  return arg?.type === "LogicalExpression" && (arg as { operator?: unknown }).operator === "??";
+}
+
 function unwrapParamMemberArg(
+  j: JSCodeshift,
   arg: ExpressionKind,
   paramName: string,
 ): { arg: ExpressionKind; propName: string } | null {
-  if (arg?.type === "LogicalExpression" && arg.operator === "??") {
-    const left = unwrapParamMemberArg(arg.left as ExpressionKind, paramName);
+  if (isNullishLogicalExpression(arg)) {
+    const left = unwrapParamMemberArg(j, arg.left, paramName);
     if (!left || literalToStaticValue(arg.right) === null) {
       return null;
     }
     return {
-      arg: {
-        type: "LogicalExpression",
-        operator: "??",
-        left: left.arg,
-        right: cloneAstNode(arg.right),
-      } as ExpressionKind,
+      arg: j.logicalExpression("??", left.arg, cloneAstNode(arg.right)),
       propName: left.propName,
     };
   }
@@ -3414,10 +3423,7 @@ function unwrapParamMemberArg(
     return null;
   }
   return {
-    arg: {
-      type: "Identifier",
-      name: propName,
-    } as ExpressionKind,
+    arg: j.identifier(propName),
     propName,
   };
 }
