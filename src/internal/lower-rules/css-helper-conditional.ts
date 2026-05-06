@@ -544,11 +544,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         value: ExpressionKind,
         pseudoEntries: ResolvedPseudoEntry[],
       ): ExpressionKind => {
-        const defaultValue =
+        const properties =
           styleObj[prop] !== undefined
-            ? staticValueToLiteral(j, styleObj[prop] as string | number | boolean)
-            : j.literal(null);
-        const properties = [j.property("init", j.identifier("default"), defaultValue as any)];
+            ? [
+                j.property(
+                  "init",
+                  j.identifier("default"),
+                  styleValueToExpression(j, styleObj[prop]) as any,
+                ),
+              ]
+            : [];
         for (const entry of pseudoEntries) {
           let entryValue = value;
           if (entry.conditionExpr) {
@@ -2362,6 +2367,13 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+function styleValueToExpression(j: any, value: unknown): ExpressionKind {
+  if (value !== null && typeof value === "object" && "type" in value) {
+    return cloneAstNode(value) as ExpressionKind;
+  }
+  return staticValueToLiteral(j, value as string | number | boolean) as ExpressionKind;
 }
 
 /**
