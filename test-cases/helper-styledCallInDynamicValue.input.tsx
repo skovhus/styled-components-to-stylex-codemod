@@ -27,6 +27,14 @@ const LoadingPlaceholderWithHelperReturn = styled.div<{ $highlightColor: ColorTo
   );
 `;
 
+const LoadingPlaceholderWithDestructuredTemplate = styled.div<{ $shimmerColor: ColorToken }>`
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  background-image: ${({ $shimmerColor }) =>
+    `linear-gradient(90deg, transparent 0, ${color($shimmerColor)} 50%, transparent)`};
+`;
+
 const LoadingPlaceholderRange = styled.div<{
   $startColor: ColorToken;
   $endColor: ColorToken;
@@ -82,6 +90,7 @@ export const App = () => {
     <div style={{ display: "grid", gap: 8, padding: 12 }}>
       <LoadingPlaceholder $highlightColor="accent" />
       <LoadingPlaceholderWithHelperReturn $highlightColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithDestructuredTemplate $shimmerColor={runtimeHighlightColor} />
       <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
       <LoadingPlaceholderRepeat $highlightColor="accent" />
       <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />

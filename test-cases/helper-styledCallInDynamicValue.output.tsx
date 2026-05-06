@@ -42,6 +42,26 @@ function LoadingPlaceholderWithHelperReturn(props: LoadingPlaceholderWithHelperR
   );
 }
 
+type LoadingPlaceholderWithDestructuredTemplateProps = React.PropsWithChildren<{
+  shimmerColor: ColorToken;
+}>;
+
+function LoadingPlaceholderWithDestructuredTemplate(
+  props: LoadingPlaceholderWithDestructuredTemplateProps,
+) {
+  const { children, shimmerColor } = props;
+  return (
+    <div
+      sx={[
+        styles.loadingPlaceholderWithDestructuredTemplate,
+        styles.loadingPlaceholderWithDestructuredTemplateBackgroundImage($colors[shimmerColor]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 type LoadingPlaceholderRangeProps = React.PropsWithChildren<{
   startColor: ColorToken;
   endColor: ColorToken;
@@ -123,6 +143,7 @@ export const App = () => {
     <div style={{ display: "grid", gap: 8, padding: 12 }}>
       <LoadingPlaceholder highlightColor="accent" />
       <LoadingPlaceholderWithHelperReturn highlightColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithDestructuredTemplate shimmerColor={runtimeHighlightColor} />
       <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
       <LoadingPlaceholderRepeat highlightColor="accent" />
       <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
@@ -153,6 +174,16 @@ const styles = stylex.create({
     ${resolvedColorHighlightColor},
     transparent
   )`,
+  }),
+  loadingPlaceholderWithDestructuredTemplate: {
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+  },
+  loadingPlaceholderWithDestructuredTemplateBackgroundImage: (
+    resolvedColorShimmerColor: string,
+  ) => ({
+    backgroundImage: `linear-gradient(90deg, transparent 0, ${resolvedColorShimmerColor} 50%, transparent)`,
   }),
   loadingPlaceholderRange: {
     width: 160,
