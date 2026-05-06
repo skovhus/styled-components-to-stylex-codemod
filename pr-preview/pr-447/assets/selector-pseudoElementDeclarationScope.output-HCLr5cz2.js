@@ -1,0 +1,1 @@
+import"./stylex-vFXG5bjz.js";import{p as e}from"./index-B4IKwpAR.js";var t=e(),n=()=>(0,t.jsx)(`div`,{style:{padding:16},children:(0,t.jsx)(`div`,{className:`x1n2onr6 x1tamke2 x12peec7 x4pepcl x1cpjm7i x1hmns74 xxx281p xxyica1 x1x8z7p6 xube4r8 x16bpdk5 xkk1bqk`,children:`Framed card`})});export{n as App};
