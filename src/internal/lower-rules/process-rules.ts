@@ -79,6 +79,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropPseudo,
     perPropMedia,
     nestedSelectors,
+    variantBuckets,
+    styleFnDecls,
     attrBuckets,
     localVarValues,
     cssHelperPropValues,
@@ -1169,6 +1171,83 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
+    const wrapStyleConditionValue = (
+      target: Record<string, unknown>,
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      const current = target[prop];
+      if (
+        current &&
+        typeof current === "object" &&
+        !Array.isArray(current) &&
+        !isAstNode(current)
+      ) {
+        const map = current as Record<string, unknown>;
+        if (!("default" in map)) {
+          map.default = null;
+        }
+        map[conditionKey] = conditionValue;
+        return;
+      }
+      target[prop] = { default: current ?? null, [conditionKey]: conditionValue };
+    };
+
+    const patchStyleFnConditionValue = (
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      for (const fn of styleFnDecls.values()) {
+        const body = (fn as { body?: unknown }).body;
+        if (
+          !body ||
+          typeof body !== "object" ||
+          (body as { type?: string }).type !== "ObjectExpression"
+        ) {
+          continue;
+        }
+        const properties = (body as { properties?: unknown[] }).properties ?? [];
+        for (const property of properties) {
+          if (!property || typeof property !== "object") {
+            continue;
+          }
+          const propNode = property as {
+            key?: { type?: string; name?: string; value?: unknown };
+            value?: unknown;
+          };
+          const key = propNode.key;
+          const keyName =
+            key?.type === "Identifier"
+              ? key.name
+              : key?.type === "Literal" || key?.type === "StringLiteral"
+                ? String(key.value)
+                : null;
+          if (keyName !== prop || propNode.value === undefined) {
+            continue;
+          }
+          propNode.value = j.objectExpression([
+            j.property("init", j.identifier("default"), propNode.value as any),
+            j.property("init", j.literal(conditionKey), literalToAst(j, conditionValue)),
+          ]);
+        }
+      }
+    };
+
+    const patchEarlierDynamicConditionValues = (
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      for (const bucket of variantBuckets.values()) {
+        if (Object.hasOwn(bucket, prop)) {
+          wrapStyleConditionValue(bucket, prop, conditionKey, conditionValue);
+        }
+      }
+      patchStyleFnConditionValue(prop, conditionKey, conditionValue);
+    };
+
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
@@ -1322,6 +1401,19 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (media) {
+        const target = ctx.getBaseStyleTarget();
+        if (target !== styleObj) {
+          wrapStyleConditionValue(target, prop, media, value);
+          noteSourceCssProperty(target);
+          if (commentSource) {
+            addPropComments(target, prop, {
+              leading: commentSource.leading,
+              trailingLine: commentSource.trailingLine,
+            });
+          }
+          patchEarlierDynamicConditionValues(prop, media, value);
+          return;
+        }
         perPropMedia[prop] ??= {};
         const existing = perPropMedia[prop]!;
         noteSourceCssProperty(existing);
@@ -1336,6 +1428,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           }
         }
         existing[media] = value;
+        patchEarlierDynamicConditionValues(prop, media, value);
         return;
       }
 

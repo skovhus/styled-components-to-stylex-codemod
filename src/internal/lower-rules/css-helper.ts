@@ -20,7 +20,10 @@ import {
   isAstNode,
 } from "../utilities/jscodeshift-utils.js";
 import type { WarningLog, WarningType } from "../logger.js";
-import { parseStyledTemplateLiteral } from "../styled-css.js";
+import {
+  parseStyledTemplateLiteral,
+  terminateStandaloneInterpolationStatements,
+} from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -64,7 +67,8 @@ export function parseCssTemplateToRules(template: any): {
 } {
   const parsed = parseStyledTemplateLiteral(template);
   const rawCss = parsed.rawCss;
-  const wrappedRawCss = `& { ${rawCss} }`;
+  const stylisRawCss = terminateStandaloneInterpolationStatements(rawCss);
+  const wrappedRawCss = `& { ${stylisRawCss} }`;
   const stylisAst = compile(wrappedRawCss);
   const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss: wrappedRawCss });
   const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));

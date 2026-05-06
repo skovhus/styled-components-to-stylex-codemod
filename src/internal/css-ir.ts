@@ -489,6 +489,17 @@ function parseDeclarations(
   if (leadingSlot && leadingSlot[1]) {
     const slotId = Number(leadingSlot[2]);
     const rest = leadingSlot[3] ?? "";
+    const restTrimmed = rest.trim();
+    if (restTrimmed.startsWith("@")) {
+      return [
+        {
+          property: "",
+          value: { kind: "interpolated", parts: [{ kind: "slot", slotId }] },
+          important: false,
+          valueRaw: leadingSlot[1],
+        },
+      ];
+    }
     return [
       {
         property: "",
