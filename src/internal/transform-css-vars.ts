@@ -40,7 +40,10 @@ type CssVarRewriteContext = {
   varsToDrop: Set<string>;
   localStylexVars?: Map<string, LocalStylexVarRef>;
   getLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef | undefined;
-  getOrCreateLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef;
+  getOrCreateLocalStylexVar?: (
+    cssName: string,
+    defaultValue: string | number | null,
+  ) => LocalStylexVarRef;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
@@ -70,17 +73,6 @@ function rewriteCssVarsInStyleObjectImpl(
   for (const [k, v] of Object.entries(obj)) {
     if (k.startsWith("--")) {
       const rewrittenValue = rewriteCssVarsInStyleObjectValue(v, ctx);
-      const localVar = typeof v === "string" ? ctx.getLocalStylexVar?.(k, v) : undefined;
-      if (localVar) {
-        delete obj[k];
-        addComputedKeyForCssVar(obj, {
-          keyExpr: stylexVarMemberExpression(ctx.j, localVar),
-          value: rewrittenValue,
-          originalCssVariableName: k,
-        });
-        continue;
-      }
-
       const result = ctx.resolveValue({
         kind: "cssVariable",
         name: k,
@@ -90,6 +82,21 @@ function rewriteCssVarsInStyleObjectImpl(
       });
 
       if (!result) {
+        const localVar =
+          typeof v === "string"
+            ? ctx.getLocalStylexVar?.(k, v)
+            : isSupportedDefineVarsDefault(rewrittenValue) && ctx.getOrCreateLocalStylexVar
+              ? ctx.getOrCreateLocalStylexVar(k, rewrittenValue)
+              : undefined;
+        if (localVar) {
+          delete obj[k];
+          addComputedKeyForCssVar(obj, {
+            keyExpr: stylexVarMemberExpression(ctx.j, localVar),
+            value: rewrittenValue,
+            originalCssVariableName: k,
+          });
+          continue;
+        }
         obj[k] = rewrittenValue;
         continue;
       }
@@ -123,6 +130,10 @@ function rewriteCssVarsInStyleObjectImpl(
       cssProperty: getCssVariableValueProperty(k, ctx, originalCssProperties),
     });
   }
+}
+
+function isSupportedDefineVarsDefault(value: unknown): value is string | number | null {
+  return value === null || typeof value === "string" || typeof value === "number";
 }
 
 function rewriteCssVarsInStyleObjectValue(value: unknown, ctx: CssVarRewriteContext): unknown {
@@ -479,5 +490,6 @@ function addComputedKeyForCssVar(
 }
 
 function stylexVarMemberExpression(j: JSCodeshift, ref: LocalStylexVarRef): ExpressionKind {
-  return j.memberExpression(j.identifier(ref.groupName), j.identifier(ref.keyName));
+  const keyExpr = ref.keyName.startsWith("--") ? j.literal(ref.keyName) : j.identifier(ref.keyName);
+  return j.memberExpression(j.identifier(ref.groupName), keyExpr, ref.keyName.startsWith("--"));
 }

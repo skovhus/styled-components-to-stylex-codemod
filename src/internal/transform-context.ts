@@ -52,7 +52,10 @@ export class TransformContext {
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
   parseExpr: (exprSource: string) => any;
   localStylexVars: Map<string, LocalStylexVarRef>;
-  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
+  getOrCreateLocalStylexVar: (
+    cssName: string,
+    defaultValue: string | number | null,
+  ) => LocalStylexVarRef;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
@@ -166,25 +169,19 @@ export class TransformContext {
 
     const resolverImports = new Map<string, ImportSpec>();
     const localStylexVars = new Map<string, LocalStylexVarRef>();
-    const localStylexVarKeyFor = (cssName: string, defaultValue: string): string =>
+    const localStylexVarKeyFor = (cssName: string, defaultValue: string | number | null): string =>
       `${cssName}\u0000${defaultValue}`;
     let nextLocalStylexVarOrder = 0;
     const getOrCreateLocalStylexVar = (
       cssName: string,
-      defaultValue: string,
+      defaultValue: string | number | null,
     ): LocalStylexVarRef => {
       const mapKey = localStylexVarKeyFor(cssName, defaultValue);
       const existing = localStylexVars.get(mapKey);
       if (existing) {
         return existing;
       }
-      const rawKey = cssName
-        .slice(2)
-        .split("-")
-        .filter(Boolean)
-        .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-        .join("");
-      const baseKeyName = rawKey && /^[a-zA-Z_$]/.test(rawKey) ? rawKey : "value";
+      const baseKeyName = cssName;
       const baseName = file.path.replace(/^.*[\\/]/, "").replace(/\.\w+$/, "");
       const filePrefix = baseName
         .split(/[^a-zA-Z0-9_$]+/)

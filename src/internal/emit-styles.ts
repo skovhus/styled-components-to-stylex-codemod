@@ -1129,7 +1129,7 @@ function emitLocalDefineVarsSidecars(ctx: TransformContext): void {
   const declarations = [...groups.entries()]
     .map(([groupName, refs]) => {
       const entries = refs
-        .map((ref) => `  ${ref.keyName}: ${JSON.stringify(ref.defaultValue)},`)
+        .map((ref) => `  ${JSON.stringify(ref.keyName)}: ${JSON.stringify(ref.defaultValue)},`)
         .join("\n");
       return `export const ${groupName} = stylex.defineVars({\n${entries}\n});`;
     })

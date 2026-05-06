@@ -10,7 +10,7 @@ const MARKER_BLOCK_RE = /(?:\/\*\*[^]*?\*\/\n)?export const \w+ = stylex\.define
 const MARKER_EXPORT_RE = /^export const \w+ = stylex\.defineMarker\(\);$/gm;
 
 /** Regex matching a generated defineVars export block. */
-const DEFINE_VARS_BLOCK_RE = /export const \w+ = stylex\.defineVars\(\{\n(?:  .+\n)*\}\);/gm;
+const DEFINE_VARS_BLOCK_RE = /export const \w+ = stylex\.defineVars\(\{\n[\s\S]*?\n\}\);/gm;
 
 /** Regex matching just the defineVars export line (used for dedup checks). */
 const DEFINE_VARS_EXPORT_RE = /^export const \w+ = stylex\.defineVars\(\{$/gm;
@@ -132,7 +132,20 @@ function readDefineVarsEntryKeys(block: string): string[] {
 function readDefineVarsEntries(block: string): Array<{ key: string; line: string }> {
   return block
     .split("\n")
-    .map((line) => ({ line, match: /^\s*([A-Za-z_$][\w$]*)\s*:/.exec(line) }))
+    .map((line) => ({
+      line,
+      match: /^\s*(?:(["']--[^"']+["'])|([A-Za-z_$][\w$]*))\s*:/.exec(line),
+    }))
     .filter((entry): entry is { line: string; match: RegExpExecArray } => Boolean(entry.match))
-    .map(({ line, match }) => ({ key: match[1]!, line }));
+    .map(({ line, match }) => ({ key: normalizeDefineVarsEntryKey(match[1] ?? match[2]!), line }));
+}
+
+function normalizeDefineVarsEntryKey(key: string): string {
+  if (
+    key.length >= 2 &&
+    ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")))
+  ) {
+    return key.slice(1, -1);
+  }
+  return key;
 }

@@ -23,7 +23,7 @@ export interface LocalStylexVarRef {
   cssName: string;
   groupName: string;
   keyName: string;
-  defaultValue: string;
+  defaultValue: string | number | null;
   sourceOrder: number;
   sidecarFileName: string;
 }
