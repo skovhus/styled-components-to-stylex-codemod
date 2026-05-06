@@ -31,14 +31,7 @@ type LoadingPlaceholderWithHelperReturnProps = React.PropsWithChildren<{
 function LoadingPlaceholderWithHelperReturn(props: LoadingPlaceholderWithHelperReturnProps) {
   const { children, highlightColor } = props;
   return (
-    <div
-      sx={[
-        styles.loadingPlaceholderWithHelperReturn,
-        styles.loadingPlaceholderWithHelperReturnBackgroundImage($colors[highlightColor]),
-      ]}
-    >
-      {children}
-    </div>
+    <div sx={styles.loadingPlaceholderWithHelperReturn($colors[highlightColor])}>{children}</div>
   );
 }
 
@@ -162,16 +155,14 @@ const styles = stylex.create({
   loadingPlaceholderBackgroundImage: (resolvedColorHighlightColor: string) => ({
     backgroundImage: `linear-gradient(90deg, transparent, ${resolvedColorHighlightColor}, transparent)`,
   }),
-  loadingPlaceholderWithHelperReturn: {
+  loadingPlaceholderWithHelperReturn: (backgroundImage: string) => ({
     width: 160,
     height: 20,
     borderRadius: 6,
-  },
-  loadingPlaceholderWithHelperReturnBackgroundImage: (resolvedColorHighlightColor: string) => ({
     backgroundImage: `linear-gradient(
     90deg,
     transparent,
-    ${resolvedColorHighlightColor},
+    ${backgroundImage},
     transparent
   )`,
   }),
@@ -181,9 +172,9 @@ const styles = stylex.create({
     borderRadius: 6,
   },
   loadingPlaceholderWithDestructuredTemplateBackgroundImage: (
-    resolvedColorShimmerColor: string,
+    paletteColorShimmerColor: string,
   ) => ({
-    backgroundImage: `linear-gradient(90deg, transparent 0, ${resolvedColorShimmerColor} 50%, transparent)`,
+    backgroundImage: `linear-gradient(90deg, transparent 0, ${paletteColorShimmerColor} 50%, transparent)`,
   }),
   loadingPlaceholderRange: {
     width: 160,

@@ -2,7 +2,7 @@
 import * as React from "react";
 import styled from "styled-components";
 import { color } from "./lib/color-helper";
-import { glowShadow, shadow } from "./lib/helpers";
+import { glowShadow, paletteColor, shadow } from "./lib/helpers";
 import type { ColorToken } from "./tokens.stylex";
 
 type ShadowToken = "dark" | "light";
@@ -32,7 +32,7 @@ const LoadingPlaceholderWithDestructuredTemplate = styled.div<{ $shimmerColor: C
   height: 20px;
   border-radius: 6px;
   background-image: ${({ $shimmerColor }) =>
-    `linear-gradient(90deg, transparent 0, ${color($shimmerColor)} 50%, transparent)`};
+    `linear-gradient(90deg, transparent 0, ${paletteColor($shimmerColor)} 50%, transparent)`};
 `;
 
 const LoadingPlaceholderRange = styled.div<{

@@ -5,7 +5,7 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { cloneAstNode, type ExpressionKind } from "../utilities/jscodeshift-utils.js";
 import { toStyleKey } from "../transform/helpers.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
@@ -23,6 +23,40 @@ function shouldDropProp(decl: StyledDecl, propName: string): boolean {
     return true;
   }
   return false;
+}
+
+function substituteStyleFnCallArg(
+  callArg: ExpressionKind | undefined,
+  propNames: string[],
+  valueExpr: ExpressionKind,
+): ExpressionKind {
+  if (!callArg) {
+    return valueExpr;
+  }
+  const names = new Set(propNames);
+  const visit = (node: unknown): unknown => {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map(visit);
+    }
+    const record = node as Record<string, unknown>;
+    if (record.type === "Identifier" && typeof record.name === "string" && names.has(record.name)) {
+      return cloneAstNode(valueExpr);
+    }
+    for (const key of Object.keys(record)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = record[key];
+      if (child && typeof child === "object") {
+        record[key] = visit(child);
+      }
+    }
+    return node;
+  };
+  return visit(cloneAstNode(callArg)) as ExpressionKind;
 }
 
 /**
@@ -597,7 +631,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                     : null;
             if (valueExpr) {
               for (const p of pairs) {
-                const callArg = wrapCallArgForPropsObject(j, valueExpr, p.propsObjectKey);
+                const rawCallArg = substituteStyleFnCallArg(p.callArg, [n, p.jsxProp], valueExpr);
+                const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
                 const fnCallExpr = j.callExpression(
                   j.memberExpression(
                     j.identifier(ctx.stylesIdentifier ?? "styles"),

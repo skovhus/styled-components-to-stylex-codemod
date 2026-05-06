@@ -631,7 +631,7 @@ export const fixtureAdapter = defineAdapter({
 
     // Handle color() helper from ./lib/helpers.ts
     // color("bgBase") -> $colors.bgBase
-    if (ctx.calleeImportedName === "color") {
+    if (ctx.calleeImportedName === "color" || ctx.calleeImportedName === "paletteColor") {
       if (!key) {
         return {
           expr: "$colors",

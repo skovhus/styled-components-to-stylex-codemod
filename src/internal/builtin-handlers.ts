@@ -618,6 +618,10 @@ function tryResolveArrowFnCallWithSinglePropArg(
   if (!paramName) {
     return null;
   }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
   const body = expr.body as any;
   if (!body || body.type !== "CallExpression") {
     return null;
@@ -837,8 +841,11 @@ function tryResolveThemeDependentTemplateLiteral(
  */
 function collectPropsFromExprTree(
   nodes: Iterable<unknown>,
-  paramName: string,
+  bindings: ReturnType<typeof getArrowFnParamBindings>,
 ): { hasUsableProps: boolean; hasNonTransientProps: boolean; props: string[] } {
+  if (!bindings) {
+    return { hasUsableProps: false, hasNonTransientProps: false, props: [] };
+  }
   const seen = new Set<string>();
   const props: string[] = [];
   const addProp = (name: string): void => {
@@ -859,8 +866,16 @@ function collectPropsFromExprTree(
       return;
     }
     const n = node as { type?: string };
+    const destructuredProp = resolveIdentifierToPropName(node, bindings);
+    if (destructuredProp) {
+      addProp(destructuredProp);
+      return;
+    }
     if (isMemberExpression(n)) {
-      const path = getMemberPathFromIdentifier(node as any, paramName);
+      const path =
+        bindings.kind === "simple"
+          ? getMemberPathFromIdentifier(node as any, bindings.paramName)
+          : null;
       const firstPathPart = path?.[0];
       if (path && path.length > 0 && firstPathPart) {
         addProp(firstPathPart);
@@ -932,8 +947,8 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
   if (!isArrowFunctionExpression(expr)) {
     return null;
   }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
     return null;
   }
   const body = getFunctionBodyExpr(expr) as {
@@ -949,7 +964,7 @@ function tryResolveStyleFunctionFromTemplateLiteral(node: DynamicNode): HandlerR
   }
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
     expressions,
-    paramName,
+    bindings,
   );
   if (!hasUsableProps) {
     return null;
@@ -983,6 +998,10 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
   // Only support simple Identifier params — bail on destructured ObjectPattern
   const paramName = getArrowFnSingleParamName(expr);
   if (!paramName) {
+    return null;
+  }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
     return null;
   }
   const body = getFunctionBodyExpr(expr);
@@ -1025,7 +1044,7 @@ function tryResolveConditionalPropStyleFunction(node: DynamicNode): HandlerResul
 
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
     [body],
-    paramName,
+    bindings,
   );
   if (!hasUsableProps) {
     return null;
@@ -1091,10 +1110,10 @@ function tryDecomposeConditionalBranches(
   }
 
   // Collect props from the dynamic branch (excluding the condition prop)
-  const { hasUsableProps, props: dynamicProps } = collectPropsFromExprTree(
-    [dynamicBranch],
+  const { hasUsableProps, props: dynamicProps } = collectPropsFromExprTree([dynamicBranch], {
+    kind: "simple",
     paramName,
-  );
+  });
   if (!hasUsableProps) {
     return null;
   }
@@ -1137,6 +1156,10 @@ function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | nul
   if (!paramName) {
     return null;
   }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings) {
+    return null;
+  }
   const body = getFunctionBodyExpr(expr);
   if (!body) {
     return null;
@@ -1153,7 +1176,7 @@ function tryResolveArrowFnPropExpression(node: DynamicNode): HandlerResult | nul
   }
   const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree(
     [body],
-    paramName,
+    bindings,
   );
   if (!hasUsableProps) {
     return null;

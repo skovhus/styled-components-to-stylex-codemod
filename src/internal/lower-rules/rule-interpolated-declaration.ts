@@ -21,13 +21,16 @@ import {
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
+  type ArrowFnParamBindings,
   collectIdentifiers,
   extractRootAndPath,
+  getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getSinglePropFromMemberExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  resolveIdentifierToPropName,
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
@@ -1771,7 +1774,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           ensureShouldForwardPropDrop(decl, propName);
         }
         decl.needsWrapperComponent = true;
-        const paramName = e.params?.[0]?.type === "Identifier" ? e.params[0].name : "props";
+        const bindings = getArrowFnParamBindings(e);
+        const paramName = bindings?.kind === "simple" ? bindings.paramName : "props";
         for (const out of cssDeclarationToStylexDeclarations(d)) {
           if (!out.prop) {
             continue;
@@ -1791,6 +1795,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               filePath,
               loc,
               addResolverImports,
+              ...(bindings ? { bindings } : {}),
             });
             if (helperResolution === null) {
               warnings.push({
@@ -1997,6 +2002,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+          const valueTransform = (res as { valueTransform?: CallValueTransform }).valueTransform;
+          const callArg = buildResolvedValueTransformCallArg({
+            j,
+            jsxProp,
+            valueTransform,
+            parseExpr,
+            addResolverImports,
+          });
           // Only mark as "always" (no null guard) when we can prove the prop
           // is required via an explicit type annotation.  Without propsType,
           // isJsxPropOptional returns false by default, but the prop may still
@@ -2006,6 +2019,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           styleFnFromProps.push({
             fnKey,
             jsxProp,
+            ...(callArg ? { callArg } : {}),
             ...(hasExplicitType && !isOptional ? { condition: "always" as const } : {}),
           });
 
@@ -2021,6 +2035,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (jsxProp !== "__props") {
               annotateParamFromJsxProp(param, jsxProp);
             }
+            if (callArg && /\.(ts|tsx)$/.test(filePath)) {
+              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                j.tsStringKeyword(),
+              );
+            }
             if (jsxProp?.startsWith?.("$")) {
               ensureShouldForwardPropDrop(decl, jsxProp);
             }
@@ -2030,7 +2049,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // prop value, e.g. `${value}px`, `opacity ${value}ms`.
             const buildValueExpr = (): any => {
               const transformed = (() => {
-                const vt = (res as { valueTransform?: CallValueTransform }).valueTransform;
+                const vt = callArg ? undefined : valueTransform;
                 if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
                   // Add adapter-resolved imports if present
                   addResolverImports(vt.resolvedImports);
@@ -3121,6 +3140,7 @@ type DynamicHelperCallContext = {
   expr: ExpressionKind;
   cssProperty: string;
   paramName: string;
+  bindings?: ArrowFnParamBindings;
   resolveImportForExpr: (expr: unknown, localName: string) => ImportMeta | null;
   resolveCall: InterpolatedDeclarationContext["ctx"]["state"]["resolveCall"];
   parseExpr: (expr: string) => unknown;
@@ -3278,7 +3298,7 @@ function tryResolveDynamicHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(dynamicArg, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(dynamicArg, ctx.paramName, ctx.bindings);
   if (!dynamicProp) {
     return false;
   }
@@ -3339,7 +3359,7 @@ function tryResolveDirectHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(args[0] as ExpressionKind, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(args[0] as ExpressionKind, ctx.paramName, ctx.bindings);
   if (!dynamicProp) {
     return false;
   }
@@ -3415,7 +3435,20 @@ function isIdentifierNamed(node: ExpressionKind, name: string): boolean {
 function unwrapParamMemberArg(
   arg: ExpressionKind,
   paramName: string,
+  bindings?: ArrowFnParamBindings,
 ): { arg: ExpressionKind; propName: string } | null {
+  if (bindings?.kind === "destructured") {
+    const propName = resolveIdentifierToPropName(arg, bindings);
+    if (propName) {
+      return {
+        arg: {
+          type: "Identifier",
+          name: propName,
+        } as ExpressionKind,
+        propName,
+      };
+    }
+  }
   if (arg?.type !== "MemberExpression" && arg?.type !== "OptionalMemberExpression") {
     return null;
   }
@@ -3431,6 +3464,35 @@ function unwrapParamMemberArg(
     } as ExpressionKind,
     propName,
   };
+}
+
+function buildResolvedValueTransformCallArg(args: {
+  j: JSCodeshift;
+  jsxProp: string;
+  valueTransform: CallValueTransform | undefined;
+  parseExpr: (expr: string) => unknown;
+  addResolverImports: (imports: Iterable<unknown> | undefined | null) => void;
+}): ExpressionKind | null {
+  const { j, jsxProp, valueTransform, parseExpr, addResolverImports } = args;
+  if (!valueTransform?.resolvedExpr) {
+    return null;
+  }
+  if (!/^[A-Za-z_$][\w$]*$/.test(jsxProp)) {
+    return null;
+  }
+  const resolvedCallee = parseExpr(valueTransform.resolvedExpr) as ExpressionKind | null;
+  if (!resolvedCallee) {
+    return null;
+  }
+  const resolvedRoot = extractRootAndPath(resolvedCallee)?.rootName;
+  if (resolvedRoot === jsxProp) {
+    return null;
+  }
+  addResolverImports(valueTransform.resolvedImports);
+  const propArg = j.identifier(jsxProp);
+  return valueTransform.resolvedUsage === "memberAccess"
+    ? (j.memberExpression(resolvedCallee, propArg, true) as ExpressionKind)
+    : (j.callExpression(resolvedCallee, [propArg]) as ExpressionKind);
 }
 
 function dedupeDynamicHelperCallArguments(
