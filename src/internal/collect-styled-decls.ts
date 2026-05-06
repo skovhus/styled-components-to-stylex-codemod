@@ -1442,12 +1442,12 @@ function tryExtractStyleObject(
     // Dynamic ternary: `$prop ? expr : undefined`
     if (v?.type === "ConditionalExpression") {
       const jsxProp = extractTernaryJsxProp(v);
-      if (jsxProp && isUndefinedNode(v.alternate)) {
+      if (jsxProp) {
         dynamicStyles.push({
           cssProp,
           jsxProp,
-          callArgExpr: v.consequent,
-          condition: "truthy",
+          callArgExpr: isUndefinedNode(v.alternate) ? v.consequent : v,
+          condition: isUndefinedNode(v.alternate) ? "truthy" : "always",
         });
         continue;
       }
