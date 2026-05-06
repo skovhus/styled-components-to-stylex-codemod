@@ -149,7 +149,7 @@ const PositionedTile = styled.div.attrs<{ height: number }>((props) => ({
   background-color: #eef2ff;
 
   &:focus-visible {
-    ${focusOutline}
+    ${focusOutline};
     outline-offset: 3px;
   }
 `;
