@@ -36,6 +36,20 @@ describe("findImportedRenamedComponents", () => {
     ]);
   });
 
+  it("finds styled wrappers around dotted member imports", () => {
+    const memberRenames = [{ exportName: "Section.Container", renames: { $asCard: "asCard" } }];
+    const source = [
+      `import { Section } from "./Toggle";`,
+      `const LocalContainer = styled(Section.Container)\`margin: 0;\`;`,
+      `<LocalContainer $asCard />`,
+    ].join("\n");
+    const result = findImportedRenamedComponents(source, sources, memberRenames);
+    expect(result).toEqual([
+      { localComponentName: "Section.Container", renames: { $asCard: "asCard" } },
+      { localComponentName: "LocalContainer", renames: { $asCard: "asCard" } },
+    ]);
+  });
+
   it("returns empty for non-matching import source", () => {
     const source = `import { Toggle } from "./other-file";\n<Toggle $active />`;
     const result = findImportedRenamedComponents(source, sources, renames);

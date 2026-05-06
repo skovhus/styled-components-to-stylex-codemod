@@ -2421,6 +2421,10 @@ function collectDottedExportedComponents(
     if (!declByLocal.has(localName)) {
       return;
     }
+    const existing = exportedComponents.get(localName)?.exportName;
+    if (existing && existing.split(".").length > exportName.split(".").length) {
+      return;
+    }
     exportedComponents.set(localName, {
       exportName,
       isDefault: false,
@@ -2506,6 +2510,10 @@ function collectDottedExportedComponents(
       declarations?: unknown[];
     } | null;
     if (!declaration) {
+      return;
+    }
+    if (declaration.type === "TSModuleDeclaration") {
+      collectNamespaceExports(declaration, namespacePath);
       return;
     }
     if (declaration.type === "FunctionDeclaration") {
