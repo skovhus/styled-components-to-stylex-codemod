@@ -15,6 +15,7 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   isCssShorthandProperty,
+  isUnsupportedBackgroundShorthandValue,
   parseBorderShorthandParts,
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
@@ -212,6 +213,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     );
     if (slotParts.length < 2) {
       return false;
+    }
+    if (cssProperty === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")) {
+      state.bailUnsupported(
+        decl,
+        "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+      );
+      return true;
     }
 
     const propsUsed = new Set<string>();
