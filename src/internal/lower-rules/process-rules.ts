@@ -652,6 +652,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (Parent styling a descendant child)
       // Also handle standalone `__SC_EXPR_N__` selectors (no `&` prefix) which Stylis
       // produces when the component selector is used without `&` in the template.
+      if (
+        otherLocal &&
+        !isCssHelperPlaceholder &&
+        !/[+~]\s*&/.test(selTrim2) &&
+        /__SC_EXPR_\d+__:[a-z-]+(?:\([^)]*\))?/i.test(selTrim2)
+      ) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: component selector with child pseudo",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
       const isComponentSelectorPattern =
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern && !isHasPattern) {
