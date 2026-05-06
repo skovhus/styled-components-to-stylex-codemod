@@ -40,6 +40,7 @@ import type { ExpressionKind } from "./decl-types.js";
 import type { WarningLog } from "../logger.js";
 import {
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   mergeMediaIntoStyles,
   registerImports,
   resolveMediaAtRulePlaceholders,
@@ -132,8 +133,10 @@ export function resolveTemplateLiteralBranch(
 
   for (const rule of rules) {
     let media = findSupportedAtRule(rule.atRuleStack);
-    // Only support @media and @container at-rules; bail on others (@supports, etc.)
-    if (rule.atRuleStack.length > 0 && !media) {
+    // Only support @media and @container at-rules; bail on others (@supports, etc.).
+    // Mixed stacks such as @supports { @media { ... } } must also bail because
+    // preserving only the media query would make the guarded declarations too broad.
+    if (hasUnsupportedAtRule(rule.atRuleStack)) {
       ctx.warnings?.push({
         severity: "warning",
         type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",

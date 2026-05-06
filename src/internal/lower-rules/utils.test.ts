@@ -3,6 +3,7 @@ import type { ImportSpec } from "../../adapter.js";
 import {
   isSupportedAtRule,
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isStyleConditionKey,
   mergeMediaIntoStyles,
   mergeStyleObjects,
@@ -32,6 +33,22 @@ describe("findSupportedAtRule", () => {
   it("returns undefined when no supported rules exist", () => {
     expect(findSupportedAtRule(["@supports (display: grid)"])).toBeUndefined();
     expect(findSupportedAtRule([])).toBeUndefined();
+  });
+});
+
+describe("hasUnsupportedAtRule", () => {
+  it("returns false for empty and supported-only stacks", () => {
+    expect(hasUnsupportedAtRule([])).toBe(false);
+    expect(
+      hasUnsupportedAtRule(["@media (min-width: 768px)", "@container (min-width: 500px)"]),
+    ).toBe(false);
+  });
+
+  it("returns true for unsupported or mixed stacks", () => {
+    expect(hasUnsupportedAtRule(["@supports (height: calc-size(auto, size))"])).toBe(true);
+    expect(hasUnsupportedAtRule(["@supports (display: grid)", "@media (min-width: 768px)"])).toBe(
+      true,
+    );
   });
 });
 

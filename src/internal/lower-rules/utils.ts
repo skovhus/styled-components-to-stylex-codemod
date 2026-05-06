@@ -98,6 +98,11 @@ export function findSupportedAtRule(atRuleStack: string[]): string | undefined {
   return atRuleStack.find(isSupportedAtRule);
 }
 
+/** Returns true when any at-rule in the stack cannot be represented by StyleX. */
+export function hasUnsupportedAtRule(atRuleStack: string[]): boolean {
+  return atRuleStack.some((atRule) => !isSupportedAtRule(atRule));
+}
+
 /** Result of resolving a media/container at-rule that may contain placeholders. */
 export type ResolvedMedia =
   | { kind: "static"; value: string }

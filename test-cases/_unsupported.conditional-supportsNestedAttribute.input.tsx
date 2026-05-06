@@ -1,3 +1,4 @@
+// @expected-warning: CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)
 // Attribute fallbacks outside @supports must not be dropped or replaced by guarded enhanced values.
 import styled from "styled-components";
 

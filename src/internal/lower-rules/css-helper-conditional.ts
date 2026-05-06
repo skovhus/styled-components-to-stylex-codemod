@@ -52,6 +52,7 @@ import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 import {
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
@@ -442,8 +443,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       for (const rule of rules) {
         const rawMedia = findSupportedAtRule(rule.atRuleStack);
-        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
-        if (rule.atRuleStack.length > 0 && !rawMedia) {
+        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.).
+        // Mixed stacks must also bail because preserving only the supported rule would be too broad.
+        if (hasUnsupportedAtRule(rule.atRuleStack)) {
           return null;
         }
 

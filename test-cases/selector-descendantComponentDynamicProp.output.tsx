@@ -308,6 +308,6 @@ const styles = stylex.create({
     },
   },
   stickyHeaderInScroller: {
-    minWidth: "var(--stickyHeaderInScroller-minWidth)px",
+    minWidth: "calc(var(--stickyHeaderInScroller-minWidth) * 1px)",
   },
 });

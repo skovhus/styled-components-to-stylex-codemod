@@ -61,6 +61,7 @@ import {
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isMemberExpression,
   isSupportedAtRule,
   registerImports,
@@ -980,6 +981,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
 
     let media = findSupportedAtRule(rule.atRuleStack);
+    if (hasUnsupportedAtRule(rule.atRuleStack)) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
 
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
@@ -1664,7 +1674,31 @@ function tryForwardCssVarBridge(
  * Preserves static prefixes/suffixes around the interpolation slot.
  */
 function composeVarReference(parts: CssValuePart[], varName: string): string {
+  if (
+    parts.length === 2 &&
+    parts[0]?.kind === "slot" &&
+    parts[1]?.kind === "static" &&
+    isCssUnitSuffix(parts[1].value)
+  ) {
+    return `calc(var(${varName}) * 1${parts[1].value.trim()})`;
+  }
+  if (
+    parts.length === 3 &&
+    parts[0]?.kind === "static" &&
+    parts[0].value.trim() === "-" &&
+    parts[1]?.kind === "slot" &&
+    parts[2]?.kind === "static" &&
+    isCssUnitSuffix(parts[2].value)
+  ) {
+    return `calc(-1 * var(${varName}) * 1${parts[2].value.trim()})`;
+  }
   return parts.map((p) => (p.kind === "static" ? p.value : `var(${varName})`)).join("");
+}
+
+function isCssUnitSuffix(value: string): boolean {
+  return /^(?:px|r?em|%|vh|vw|vmin|vmax|cqw|cqh|cqi|cqb|cqmin|cqmax|ch|ex|lh|rlh|svh|lvh|dvh|svw|lvw|dvw)$/.test(
+    value.trim(),
+  );
 }
 
 /**
