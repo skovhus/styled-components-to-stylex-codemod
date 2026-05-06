@@ -1,0 +1,6 @@
+import{c as e,p as t}from"./index-CJ4i1huR.js";import{t as n}from"./flex-DGpACoMt.js";var r=t(),i=e(n)`
+  opacity: ${e=>+!!e.$open};
+  transition: opacity ${e=>e.$duration}ms;
+  transition-delay: ${e=>e.$open?e.$delay:0}ms;
+  pointer-events: ${e=>e.$open?`inherit`:`none`};
+`,a=()=>(0,r.jsxs)(`div`,{style:{display:`flex`,gap:`16px`},children:[(0,r.jsx)(i,{$open:!0,$delay:100,$duration:300,children:(0,r.jsx)(`button`,{style:{padding:`8px 16px`},children:`Visible and clickable`})}),(0,r.jsx)(i,{$open:!1,$delay:0,$duration:200,children:(0,r.jsx)(`button`,{style:{padding:`8px 16px`},children:`Hidden and not clickable`})})]});export{a as App};
