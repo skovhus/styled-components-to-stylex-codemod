@@ -118,6 +118,35 @@ describe("mergeSidecarContent", () => {
     expect(result.match(/export const componentVariables/g)).toHaveLength(1);
   });
 
+  it("does not duplicate quoted custom-property defineVars entries with different quote styles", async () => {
+    const { mergeSidecarContent } = await import("../run.js");
+    const existing = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const componentVariables = stylex.defineVars({",
+      "  '--menu-width': \"240px\",",
+      "});",
+      "",
+    ].join("\n");
+    const sidecarPath = join(tmpDir, "component.stylex.ts");
+    writeFileSync(sidecarPath, existing, "utf-8");
+
+    const newContent = [
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export const componentVariables = stylex.defineVars({",
+      '  "--menu-width": "240px",',
+      '  "--panel-width": "320px",',
+      "});",
+      "",
+    ].join("\n");
+    const result = mergeSidecarContent(sidecarPath, newContent);
+
+    expect(result.match(/--menu-width/g)).toHaveLength(1);
+    expect(result).toContain('"--panel-width": "320px"');
+    expect(result.match(/export const componentVariables/g)).toHaveLength(1);
+  });
+
   it("does not duplicate markers that already exist", async () => {
     const { mergeSidecarContent } = await import("../run.js");
     const existing = [

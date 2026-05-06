@@ -40,7 +40,10 @@ type CssVarRewriteContext = {
   varsToDrop: Set<string>;
   localStylexVars?: Map<string, LocalStylexVarRef>;
   getLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef | undefined;
-  getOrCreateLocalStylexVar?: (cssName: string, defaultValue: string) => LocalStylexVarRef;
+  getOrCreateLocalStylexVar?: (
+    cssName: string,
+    defaultValue: string | number | null,
+  ) => LocalStylexVarRef;
   resolveValue: (ctx: ResolveValueContext) => ResolveValueResult | undefined;
   addImport: (imp: ImportSpec) => void;
   parseExpr: (exprSource: string) => ExpressionKind | null;
@@ -83,7 +86,7 @@ function rewriteCssVarsInStyleObjectImpl(
           typeof v === "string"
             ? ctx.getLocalStylexVar?.(k, v)
             : isSupportedDefineVarsDefault(rewrittenValue) && ctx.getOrCreateLocalStylexVar
-              ? ctx.getOrCreateLocalStylexVar(k, String(rewrittenValue))
+              ? ctx.getOrCreateLocalStylexVar(k, rewrittenValue)
               : undefined;
         if (localVar) {
           delete obj[k];

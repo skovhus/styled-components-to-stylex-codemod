@@ -52,7 +52,10 @@ export class TransformContext {
   getStaticPropertiesFromImport: (source: ImportSource, componentName: string) => string[];
   parseExpr: (exprSource: string) => any;
   localStylexVars: Map<string, LocalStylexVarRef>;
-  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
+  getOrCreateLocalStylexVar: (
+    cssName: string,
+    defaultValue: string | number | null,
+  ) => LocalStylexVarRef;
   rewriteCssVarsInStyleObject: (
     obj: Record<string, unknown>,
     definedVars: Map<string, string>,
@@ -166,12 +169,12 @@ export class TransformContext {
 
     const resolverImports = new Map<string, ImportSpec>();
     const localStylexVars = new Map<string, LocalStylexVarRef>();
-    const localStylexVarKeyFor = (cssName: string, defaultValue: string): string =>
+    const localStylexVarKeyFor = (cssName: string, defaultValue: string | number | null): string =>
       `${cssName}\u0000${defaultValue}`;
     let nextLocalStylexVarOrder = 0;
     const getOrCreateLocalStylexVar = (
       cssName: string,
-      defaultValue: string,
+      defaultValue: string | number | null,
     ): LocalStylexVarRef => {
       const mapKey = localStylexVarKeyFor(cssName, defaultValue);
       const existing = localStylexVars.get(mapKey);

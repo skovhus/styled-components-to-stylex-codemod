@@ -137,5 +137,15 @@ function readDefineVarsEntries(block: string): Array<{ key: string; line: string
       match: /^\s*(?:(["']--[^"']+["'])|([A-Za-z_$][\w$]*))\s*:/.exec(line),
     }))
     .filter((entry): entry is { line: string; match: RegExpExecArray } => Boolean(entry.match))
-    .map(({ line, match }) => ({ key: match[1] ?? match[2]!, line }));
+    .map(({ line, match }) => ({ key: normalizeDefineVarsEntryKey(match[1] ?? match[2]!), line }));
+}
+
+function normalizeDefineVarsEntryKey(key: string): string {
+  if (
+    key.length >= 2 &&
+    ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'")))
+  ) {
+    return key.slice(1, -1);
+  }
+  return key;
 }
