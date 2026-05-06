@@ -93,9 +93,13 @@ const styles = stylex.create({
     color: "#333",
   },
   resetButtonPseudoActive: {
-    background: {
+    backgroundImage: {
       default: null,
       ":active": "none",
+    },
+    backgroundColor: {
+      default: "#f8c8dc",
+      ":active": "transparent",
     },
     color: {
       default: "#333",
@@ -103,9 +107,13 @@ const styles = stylex.create({
     },
   },
   resetButtonPseudoHover: {
-    background: {
+    backgroundImage: {
       default: null,
       ":hover": "none",
+    },
+    backgroundColor: {
+      default: "#f8c8dc",
+      ":hover": "transparent",
     },
     color: {
       default: "#333",
