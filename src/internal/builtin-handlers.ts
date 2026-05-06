@@ -67,6 +67,7 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlockTernary(node, ctx) ??
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node, ctx) ??
+    tryResolveArrowFnCurriedHelperCallWithPropFallback(node, ctx) ??
     // Resolve or detect theme-dependent template literals before trying to emit style functions
     tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
@@ -662,6 +663,62 @@ function tryResolveArrowFnCallWithSinglePropArg(
   };
 }
 
+function tryResolveArrowFnCurriedHelperCallWithPropFallback(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body) || !isCallExpressionNode(body.callee)) {
+    return null;
+  }
+
+  const outerArgs = body.arguments ?? [];
+  if (
+    outerArgs.length !== 1 ||
+    outerArgs[0]?.type !== "Identifier" ||
+    outerArgs[0].name !== paramName
+  ) {
+    return null;
+  }
+
+  const innerCall = body.callee;
+  const innerArgs = innerCall.arguments ?? [];
+  if (innerArgs.length !== 1 || !isPropAccessWithLiteralFallback(innerArgs[0], paramName)) {
+    return null;
+  }
+
+  const helperResolution = resolveImportedHelperCall(innerCall, ctx, undefined, node.css.property);
+  if (helperResolution.kind === "unresolved") {
+    return buildUnresolvedHelperResult(innerCall.callee, ctx);
+  }
+  if (helperResolution.kind !== "resolved" || !("expr" in helperResolution.result)) {
+    return null;
+  }
+
+  const { hasUsableProps, hasNonTransientProps, props } = collectPropsFromExprTree([innerArgs[0]], {
+    kind: "simple",
+    paramName,
+  });
+  if (!hasUsableProps) {
+    return null;
+  }
+  if (hasNonTransientProps && node.component.withConfig?.shouldForwardProp) {
+    return null;
+  }
+  return { type: "emitStyleFunctionFromPropsObject", props };
+}
+
 /**
  * Attempts to resolve a callee identifier through the adapter's resolveCall hook.
  * Uses `resolveCallOptional` (non-bailing) so that an unhandled helper does NOT
@@ -708,6 +765,20 @@ function tryResolveCalleeViaAdapter(
     // Adapter threw — fall back to preserving the original call
   }
   return {};
+}
+
+function isPropAccessWithLiteralFallback(node: unknown, paramName: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (!isLogicalExpressionNode(node) || node.operator !== "??") {
+    return false;
+  }
+  const propName = getSinglePropFromMemberExpr(node.left, paramName);
+  if (!propName || propName === "theme") {
+    return false;
+  }
+  return literalToStaticValue(node.right) !== null;
 }
 
 function tryResolveInlineStyleValueForConditionalExpression(

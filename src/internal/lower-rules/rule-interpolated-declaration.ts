@@ -19,6 +19,7 @@ import {
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
+import { camelToKebabCase } from "../utilities/string-utils.js";
 import {
   cloneAstNode,
   type ArrowFnParamBindings,
@@ -1951,10 +1952,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           let helperCallArgs: DynamicHelperCallArgument[] = [];
           if (!styleFnDecls.has(fnKey)) {
-            const valueExprRaw = cloneAstNode(bodyExpr);
+            const originalValueExpr = cloneAstNode(bodyExpr);
             const helperResolution = resolveHelperCallsInDynamicValue({
               j,
-              expr: valueExprRaw,
+              expr: originalValueExpr,
               cssProperty: out.prop,
               paramName,
               resolveImportForExpr,
@@ -1974,7 +1975,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               bail = true;
               break;
             }
-            helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
+            helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution.args);
+            const valueExprRaw = helperResolution.expr;
             const needsOriginalParam =
               helperCallArgs.length > 0 && containsIdentifier(valueExprRaw, paramName);
             const styleFnParamNames =
@@ -1984,7 +1986,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (needsOriginalParam) {
               styleFnParamNames.unshift(paramName);
             }
-            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression
+            // Apply CSS value prefix/suffix (e.g., `${...}ms`) to the expression.
+            // Keep !important on the actual CSS property rather than in the dynamic value:
+            // StyleX emits dynamic values through CSS variables, and values like
+            // `${value} !important` do not get assigned as runtime variables.
             const { prefix, suffix } = extractStaticPartsForDecl(d);
             const fullTemplateValueExpr =
               d.property === "transition"
@@ -2026,13 +2031,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 );
               }
             }
-            const body = j.objectExpression([
-              j.property(
-                "init",
-                makeCssPropKey(j, out.prop),
-                buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
-              ),
-            ]);
+            const body = j.objectExpression(
+              buildDynamicStyleFunctionProperties({
+                j,
+                fnKey,
+                prop: out.prop,
+                valueExpr,
+                important: d.important,
+                pseudos,
+                media,
+              }),
+            );
             styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
@@ -3205,7 +3214,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
         if (helperResolution === null) {
           return false;
         }
-        helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution);
+        helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution.args);
       }
       needsOriginalParam =
         helperCallArgs.length > 0 && containsIdentifier(styleValueExpr, paramName);
@@ -3404,6 +3413,13 @@ type DynamicHelperCallResult = {
   binding: DynamicHelperCallArgument;
 };
 
+type StyleObjectProperty = ReturnType<JSCodeshift["property"]>;
+
+type DynamicHelperCallResolution = {
+  expr: ExpressionKind;
+  args: DynamicHelperCallArgument[];
+};
+
 type StyledHelperCall =
   | {
       kind: "curried";
@@ -3428,11 +3444,43 @@ type CallExpressionLike = {
   arguments?: unknown[];
 };
 
+function buildDynamicStyleFunctionProperties(args: {
+  j: JSCodeshift;
+  fnKey: string;
+  prop: string;
+  valueExpr: ExpressionKind;
+  important: boolean;
+  pseudos?: string[] | null;
+  media?: string | null;
+}): StyleObjectProperty[] {
+  const { j, fnKey, prop, valueExpr, important, pseudos, media } = args;
+  if (!important) {
+    return [
+      j.property(
+        "init",
+        makeCssPropKey(j, prop),
+        buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+      ),
+    ];
+  }
+
+  const cssVariableName = `--${camelToKebabCase(fnKey)}`;
+  const importantValueExpr = j.literal(`var(${cssVariableName}) !important`);
+  return [
+    j.property("init", makeCssPropKey(j, cssVariableName), valueExpr),
+    j.property(
+      "init",
+      makeCssPropKey(j, prop),
+      buildPseudoMediaPropValue({ j, valueExpr: importantValueExpr, pseudos, media }),
+    ),
+  ];
+}
+
 function resolveHelperCallsInDynamicValue(
   ctx: DynamicHelperCallContext,
-): DynamicHelperCallArgument[] | null {
+): DynamicHelperCallResolution | null {
   if (!ctx.expr || typeof ctx.expr !== "object") {
-    return [];
+    return { expr: ctx.expr, args: [] };
   }
 
   let failed = false;
@@ -3483,11 +3531,11 @@ function resolveHelperCallsInDynamicValue(
     return node;
   };
 
-  visit(ctx.expr);
+  const expr = visit(ctx.expr) as ExpressionKind;
   if (failed) {
     return null;
   }
-  return resolutions;
+  return { expr, args: resolutions };
 }
 
 function isUnsupportedCurriedHelperCall(
@@ -3544,6 +3592,7 @@ function tryResolveDynamicHelperCall(
   }
 
   const dynamicProp = unwrapParamMemberArg(
+    ctx.j,
     dynamicArg,
     ctx.paramName,
     ctx.bindings,
@@ -3610,6 +3659,7 @@ function tryResolveDirectHelperCall(
   }
 
   const dynamicProp = unwrapParamMemberArg(
+    ctx.j,
     args[0] as ExpressionKind,
     ctx.paramName,
     ctx.bindings,
@@ -3687,12 +3737,34 @@ function isIdentifierNamed(node: ExpressionKind, name: string): boolean {
   return node?.type === "Identifier" && node.name === name;
 }
 
+type NullishLogicalExpression = ExpressionKind & {
+  type: "LogicalExpression";
+  operator: "??";
+  left: ExpressionKind;
+  right: ExpressionKind;
+};
+
+function isNullishLogicalExpression(arg: ExpressionKind): arg is NullishLogicalExpression {
+  return arg?.type === "LogicalExpression" && (arg as { operator?: unknown }).operator === "??";
+}
+
 function unwrapParamMemberArg(
+  j: JSCodeshift,
   arg: ExpressionKind,
   paramName: string,
   bindings?: ArrowFnParamBindings,
   allowedPropIdentifiers?: ReadonlySet<string>,
 ): { arg: ExpressionKind; propName: string } | null {
+  if (isNullishLogicalExpression(arg)) {
+    const left = unwrapParamMemberArg(j, arg.left, paramName, bindings, allowedPropIdentifiers);
+    if (!left || literalToStaticValue(arg.right) === null) {
+      return null;
+    }
+    return {
+      arg: j.logicalExpression("??", left.arg, cloneAstNode(arg.right)),
+      propName: left.propName,
+    };
+  }
   if (bindings?.kind === "destructured") {
     const propName = resolveIdentifierToPropName(arg, bindings);
     if (propName) {
@@ -3724,10 +3796,7 @@ function unwrapParamMemberArg(
     return null;
   }
   return {
-    arg: {
-      type: "Identifier",
-      name: propName,
-    } as ExpressionKind,
+    arg: j.identifier(propName),
     propName,
   };
 }

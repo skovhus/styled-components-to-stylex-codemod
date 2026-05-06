@@ -59,6 +59,10 @@ const FLAKINESS_EXPECTED = new Set<string>([
   "keyframes-multiAnimationInterpolatedDuration",
   "keyframes-unionComplexity",
   "cssVariable-animationShorthand",
+  // This fixture asserts sx prop composition/codegen. In Storybook, the input
+  // styled-components wrapper class loses to the already-migrated wrapped
+  // StyleX component's base styles, while the output composes through `sx`.
+  "wrapper-sxRedeclaration",
 ]);
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.

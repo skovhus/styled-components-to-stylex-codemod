@@ -3156,6 +3156,76 @@ export const App = () => <Box tone="muted">Hello</Box>;
     expect(code).toContain("color(");
   });
 
+  it("should bail when a defaulted curried helper call cannot be resolved", () => {
+    const source = `
+import styled from "styled-components";
+import { color } from "./lib/helpers.ts";
+
+const Box = styled.div<{ $color?: string }>\`
+  background-color: \${(props) => color(props.$color ?? "labelFaint")(props)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Hello</Box>;
+`;
+
+    const adapterWithNoColorResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-defaultedCurriedNoResolution.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoColorResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Adapter resolveCall returned undefined for helper call",
+    );
+  });
+
+  it("should remove resolved helper imports even when generated prop bindings share the name", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { color } from "./lib/color-helper";
+import type { ColorToken } from "./tokens.stylex";
+
+const Box = styled.div<{ $color?: ColorToken }>\`
+  background-color: \${(props) => color(props.$color ?? "labelFaint")(props)};
+  padding: 8px;
+\`;
+
+export const App = () => <Box $color="accent">Accent</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "helper-resolvedImportShadow.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).not.toContain('import { color } from "./lib/color-helper";');
+    expect(code).not.toContain("color(");
+    expect(code).toContain('$colors[color ?? "labelFaint"]');
+  });
+
   it("should keep static helper resolution when preserveRuntimeCall is not set", () => {
     const source = `
 import styled from "styled-components";
