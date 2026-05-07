@@ -234,6 +234,41 @@ describe("runTransform (e2e)", () => {
     expect(consumer).not.toContain("stylex.props(styles.body)");
   });
 
+  it("does not infer sx for plain components in files transformed by the same run", async () => {
+    const { result, container, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-plain-component-no-sx-",
+      componentLines: [
+        'import * as React from "react";',
+        'import styled from "styled-components";',
+        "",
+        "type ContentViewContainerProps = {",
+        "  className?: string;",
+        "  style?: React.CSSProperties;",
+        "};",
+        "",
+        "export function ContentViewContainer(props: ContentViewContainerProps) {",
+        "  const { className, style } = props;",
+        "  return <section className={className} style={style} />;",
+        "}",
+        "",
+        "export const ConvertedSibling = styled.div`",
+        "  display: flex;",
+        "`;",
+        "",
+      ],
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(container).toContain("function ContentViewContainer(props: ContentViewContainerProps)");
+    expect(container).not.toContain("sx?: stylex.StyleXStyles");
+    expect(consumer).toContain("{...stylex.props(styles.body)}");
+    expect(consumer).not.toContain("sx={styles.body}");
+  });
+
   it("does not false-bail same-run wrappers when sx prop emission is disabled", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sequential-manual-interface-",

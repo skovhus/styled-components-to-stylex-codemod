@@ -557,6 +557,7 @@ export type StyledDecl = {
       cssProp: string;
       jsxProp: string;
       callArgExpr: unknown;
+      condition?: "truthy" | "always";
     }>;
   };
   attrWrapper?: {

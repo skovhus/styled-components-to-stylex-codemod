@@ -31,6 +31,9 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   collapseArrowIconInStyledCollapseButton: {
+    width: 18,
+    height: 18,
+    margin: 0,
     backgroundColor: {
       default: null,
       [stylex.when.ancestor(":hover", StyledCollapseButtonMarker)]: "rebeccapurple",

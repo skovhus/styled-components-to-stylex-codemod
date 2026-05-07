@@ -60,18 +60,22 @@ const styles = stylex.create({
   nestedColorBackground: {
     backgroundColor: "gray",
   },
-  // Pattern 3: background: none should become background: "none", not backgroundColor: "none"
-  // "none" is a valid CSS value for `background` shorthand (resets all background layers)
+  // Pattern 3: background: none should expand to longhands, not backgroundColor: "none"
+  // "none" is a valid CSS value for `background` shorthand and background-image
   // but is NOT a valid value for `background-color` (which only accepts <color> values)
   resetBackground: {
-    background: "none",
+    backgroundImage: "none",
+    backgroundColor: "transparent",
     padding: 8,
   },
-  // Pattern 4: background: none in pseudo selectors should remain allowed as a reset.
+  // Pattern 4: background: none in pseudo selectors should reset the image and color longhands.
   resetBackgroundOnHover: {
-    backgroundColor: "pink",
+    backgroundColor: {
+      default: "pink",
+      ":hover": "transparent",
+    },
     padding: 8,
-    background: {
+    backgroundImage: {
       default: null,
       ":hover": "none",
     },

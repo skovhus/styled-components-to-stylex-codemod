@@ -918,7 +918,15 @@ function scanFileForSelectorsAst(
     if (!resolvedPath) {
       continue;
     }
-    const realResolved = toRealPath(resolvedPath);
+    const initialResolved = toRealPath(resolvedPath);
+    const realResolved = toRealPath(
+      resolveBarrelReExport(
+        initialResolved,
+        imp.importedName,
+        (specifier, fromFile) => resolver.resolve(fromFile, specifier) ?? null,
+        readFile,
+      ) ?? initialResolved,
+    );
     if (realResolved === filePath) {
       continue;
     }

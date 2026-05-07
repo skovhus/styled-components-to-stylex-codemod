@@ -6,6 +6,8 @@ import * as React from "react";
 // `sx={styles.x}` instead of `{...stylex.props(styles.x)}` on the rendered
 // wrapped component.
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
+import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -60,6 +62,52 @@ export function ExportedAccentButton(
   );
 }
 
+type ExportedToggleButtonProps = {
+  className?: string;
+  style?: React.CSSProperties;
+  sx?: stylex.StyleXStyles;
+  open?: boolean;
+} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "$open">;
+
+export function ExportedToggleButton(props: ExportedToggleButtonProps) {
+  const { children, sx, open, ...rest } = props;
+  return (
+    <SxAwareButton
+      {...rest}
+      type="button"
+      sx={[
+        callerStyles.exportedToggleButton,
+        open ? callerStyles.exportedToggleButtonOpen : null,
+        sx,
+      ]}
+    >
+      {children}
+    </SxAwareButton>
+  );
+}
+
+export function DraggableSxButton(
+  props: {
+    className?: string;
+    style?: React.CSSProperties;
+    sx?: stylex.StyleXStyles;
+  } & React.ComponentPropsWithRef<typeof SxAwareButton>,
+) {
+  const { className, children, style, sx, ...rest } = props;
+  return (
+    <SxAwareButton
+      {...rest}
+      {...mergedSx(
+        [callerStyles.draggableSxButton, sx],
+        [`${electronStyles.draggableRegionDisableChildren}`, className],
+        style,
+      )}
+    >
+      {children}
+    </SxAwareButton>
+  );
+}
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
   button: {
@@ -83,6 +131,16 @@ const callerStyles = stylex.create({
   },
   exportedAccentButton: {
     color: "red",
+  },
+  exportedToggleButton: {
+    display: "inline-flex",
+    backgroundColor: "#f8fafc",
+  },
+  exportedToggleButtonOpen: {
+    backgroundColor: "#dbeafe",
+  },
+  draggableSxButton: {
+    color: "#14532d",
   },
   // Wrapping the generic Text component — auto-detection has to walk
   // `TextComponentProps`'s intersection (TextProps & Omit<…> & { sx?: … }) to
@@ -110,6 +168,10 @@ export const App = () => (
     <StyledActive>Inactive forwarded</StyledActive>
     <ExportedAccentButton>Exported</ExportedAccentButton>
     <ExportedAccentButton sx={callerStyles.caller}>Exported with caller sx</ExportedAccentButton>
+    <ExportedToggleButton open sx={callerStyles.caller}>
+      Exported toggle
+    </ExportedToggleButton>
+    <DraggableSxButton sx={callerStyles.caller}>Draggable sx</DraggableSxButton>
     <Text size="md" sx={callerStyles.text}>
       Generic Text
     </Text>

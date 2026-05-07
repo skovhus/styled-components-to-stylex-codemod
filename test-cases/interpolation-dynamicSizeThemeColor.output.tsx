@@ -44,7 +44,10 @@ function Container(props: ContainerProps) {
         [
           styles.container,
           theme.isDark ? styles.containerDark : styles.containerLight,
-          styles.containerSize(size),
+          styles.containerWidth(size),
+          styles.containerHeight(size),
+          styles.containerFontSize(`${Math.round(size * (2 / 3))}px`),
+          styles.containerLineHeight(size),
         ],
         className,
         style,
@@ -69,10 +72,16 @@ const styles = stylex.create({
   containerLight: {
     color: $colors.bgBase,
   },
-  containerSize: (size: number) => ({
-    width: `${size}px`,
-    height: `${size}px`,
-    fontSize: `${Math.round(size * (2 / 3))}px`,
-    lineHeight: `${size}px`,
+  containerWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  containerHeight: (height: number) => ({
+    height: `${height}px`,
+  }),
+  containerFontSize: (fontSize: string) => ({
+    fontSize: fontSize,
+  }),
+  containerLineHeight: (lineHeight: number) => ({
+    lineHeight: `${lineHeight}px`,
   }),
 });

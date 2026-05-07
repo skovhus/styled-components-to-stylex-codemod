@@ -116,6 +116,11 @@ const Padded = styled(Flex)`
   padding: 16px;
 `;
 
+const NameRow = styled(Flex)`
+  min-width: 0;
+  display: wrap;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 16 }}>
     {/* Basic row (default) */}
@@ -275,6 +280,12 @@ export const App = () => (
 
     {/* Non-polymorphic wrapper around generic Flex */}
     <Padded onContextMenu={(e) => e.stopPropagation()}>Padded content</Padded>
+
+    {/* styled(Flex) must preserve Flex prop behavior and ignore invalid wrapper CSS */}
+    <NameRow wrap gap={4}>
+      <div style={{ padding: 8, backgroundColor: "#bf4f74", color: "white" }}>Name</div>
+      <div style={{ padding: 8, backgroundColor: "#4f74bf", color: "white" }}>Value</div>
+    </NameRow>
 
     {/* FlexSpacer pushes items apart */}
     <div style={{ display: "flex", gap: 8, backgroundColor: "#e0e0e0", padding: 8 }}>

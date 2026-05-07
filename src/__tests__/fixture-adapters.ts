@@ -183,6 +183,47 @@ export const fixtureAdapter = defineAdapter({
           ],
         } satisfies ResolveValueDirectionalResult;
       }
+      if (
+        (ctx.cssProperty === "border" ||
+          ctx.cssProperty === "borderColor" ||
+          ctx.cssProperty === "border-color") &&
+        ctx.path.endsWith("inputBorder")
+      ) {
+        return {
+          directional: [
+            {
+              prop: "borderWidth",
+              expr: "$input.inputBorderWidth",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+            {
+              prop: "borderStyle",
+              expr: "$input.inputBorderStyle",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+            {
+              prop: "borderColor",
+              expr: "$input.inputBorderColor",
+              imports: [
+                {
+                  from: { kind: "specifier", value: "./tokens.stylex" },
+                  names: [{ imported: "$input" }],
+                },
+              ],
+            },
+          ],
+        } satisfies ResolveValueDirectionalResult;
+      }
 
       // Nested theme objects (e.g. theme.baseTheme?.color.X) are not resolvable
       // to static tokens — return undefined so the codemod falls back to runtime.
@@ -336,6 +377,19 @@ export const fixtureAdapter = defineAdapter({
               names: [{ imported: "helpers" }],
             },
           ],
+        };
+      }
+      if (ctx.importedName === "focusOutline") {
+        return {
+          usage: "props",
+          expr: "helpers.focusOutline",
+          imports: [
+            {
+              from: { kind: "specifier", value: "./lib/helpers.stylex" },
+              names: [{ imported: "helpers" }],
+            },
+          ],
+          cssText: "outline-width: 2px; outline-style: solid; outline-color: #4f46e5;",
         };
       }
     }
@@ -590,7 +644,7 @@ export const fixtureAdapter = defineAdapter({
 
     // Handle color() helper from ./lib/helpers.ts
     // color("bgBase") -> $colors.bgBase
-    if (ctx.calleeImportedName === "color") {
+    if (ctx.calleeImportedName === "color" || ctx.calleeImportedName === "paletteColor") {
       if (!key) {
         return {
           expr: "$colors",

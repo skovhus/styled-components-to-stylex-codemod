@@ -21,4 +21,20 @@ const Thing = styled.div`
   }
 `;
 
-export const App = () => <Thing data-label=" after">Hover me!</Thing>;
+const FocusableCell = styled.div<{ $isAnimating?: boolean }>`
+  position: relative;
+  z-index: ${(props) => (props.$isAnimating ? 10 : undefined)};
+
+  &:focus-within {
+    z-index: 12;
+  }
+`;
+
+export const App = () => (
+  <div style={{ display: "grid", gap: 12 }}>
+    <Thing data-label=" after">Hover me!</Thing>
+    <FocusableCell $isAnimating>
+      <button type="button">Focusable cell</button>
+    </FocusableCell>
+  </div>
+);

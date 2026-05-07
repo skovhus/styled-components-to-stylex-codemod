@@ -1,9 +1,28 @@
-import React from "react";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
 
 function FlexItem(props: React.PropsWithChildren<{}>) {
   return <div sx={styles.flexItem}>{props.children}</div>;
+}
+
+type NegativeOffsetProps = React.PropsWithChildren<{
+  size?: number;
+}>;
+
+function NegativeOffset(props: NegativeOffsetProps) {
+  const { children, size } = props;
+  return (
+    <div
+      sx={[
+        styles.negativeOffset,
+        styles.negativeOffsetHeight(`${size ?? 44}px`),
+        styles.negativeOffsetMarginBottom(`-${size ?? 44}px`),
+      ]}
+    >
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (
@@ -16,6 +35,7 @@ export const App = () => (
     <div sx={styles.complexCalc}>Complex calc</div>
     <div sx={styles.withVariables}>With variables</div>
     <div sx={styles.withCssFunctions("300px")}>CSS functions</div>
+    <NegativeOffset size={32}>Negative offset</NegativeOffset>
   </div>
 );
 
@@ -57,5 +77,16 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "lightblue",
     height: `max(100px, ${height})`,
+  }),
+  negativeOffset: {
+    height: "44px",
+    marginBottom: "-44px",
+    backgroundColor: "lavender",
+  },
+  negativeOffsetHeight: (height: string) => ({
+    height,
+  }),
+  negativeOffsetMarginBottom: (marginBottom: string) => ({
+    marginBottom,
   }),
 });

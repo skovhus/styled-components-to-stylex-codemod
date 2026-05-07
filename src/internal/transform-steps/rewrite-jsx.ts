@@ -5,7 +5,7 @@
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import type { ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import { cloneAstNode, type ExpressionKind } from "../utilities/jscodeshift-utils.js";
 import { toStyleKey } from "../transform/helpers.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
@@ -23,6 +23,40 @@ function shouldDropProp(decl: StyledDecl, propName: string): boolean {
     return true;
   }
   return false;
+}
+
+function substituteStyleFnCallArg(
+  callArg: ExpressionKind | undefined,
+  propNames: string[],
+  valueExpr: ExpressionKind,
+): ExpressionKind {
+  if (!callArg) {
+    return valueExpr;
+  }
+  const names = new Set(propNames);
+  const visit = (node: unknown): unknown => {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+    if (Array.isArray(node)) {
+      return node.map(visit);
+    }
+    const record = node as Record<string, unknown>;
+    if (record.type === "Identifier" && typeof record.name === "string" && names.has(record.name)) {
+      return cloneAstNode(valueExpr);
+    }
+    for (const key of Object.keys(record)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      const child = record[key];
+      if (child && typeof child === "object") {
+        record[key] = visit(child);
+      }
+    }
+    return node;
+  };
+  return visit(cloneAstNode(callArg)) as ExpressionKind;
 }
 
 /**
@@ -93,11 +127,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
       // whose transient props were stripped of the $ prefix.
       if (decl.transientPropRenames && decl.transientPropRenames.size > 0) {
         root
-          .find(j.JSXElement, {
-            openingElement: {
-              name: { type: "JSXIdentifier", name: decl.localName },
-            },
-          })
+          .find(j.JSXElement)
+          .filter((p: any) =>
+            jsxNameReferencesStyledLocal(p.node.openingElement.name, decl.localName, root, j),
+          )
           .forEach((p) => {
             for (const attr of p.node.openingElement.attributes ?? []) {
               if (attr.type !== "JSXAttribute" || attr.name.type !== "JSXIdentifier") {
@@ -598,7 +631,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                     : null;
             if (valueExpr) {
               for (const p of pairs) {
-                const callArg = wrapCallArgForPropsObject(j, valueExpr, p.propsObjectKey);
+                const rawCallArg = substituteStyleFnCallArg(p.callArg, [n, p.jsxProp], valueExpr);
+                const callArg = wrapCallArgForPropsObject(j, rawCallArg, p.propsObjectKey);
                 const fnCallExpr = j.callExpression(
                   j.memberExpression(
                     j.identifier(ctx.stylesIdentifier ?? "styles"),
@@ -1314,6 +1348,125 @@ function uniqueBindingName(baseName: string, usedNames: ReadonlySet<string>): st
     suffix++;
   }
   return `${baseName}${suffix}`;
+}
+
+function jsxNameReferencesStyledLocal(
+  name: unknown,
+  localName: string,
+  root: TransformContext["root"],
+  j: TransformContext["j"]["jscodeshift"],
+): boolean {
+  const path = jsxNamePath(name);
+  if (path.length === 0) {
+    return false;
+  }
+  if (path.length === 1) {
+    const identifier = path[0]!;
+    return (
+      identifier === localName || identifierAliasReferencesLocal(identifier, localName, root, j)
+    );
+  }
+  return memberPathReferencesLocal(path, localName, root, j);
+}
+
+function jsxNamePath(name: unknown): string[] {
+  const n = name as { type?: string; name?: string; object?: unknown; property?: unknown };
+  if (n?.type === "JSXIdentifier" && typeof n.name === "string") {
+    return [n.name];
+  }
+  if (n?.type === "JSXMemberExpression") {
+    return [...jsxNamePath(n.object), ...jsxNamePath(n.property)];
+  }
+  return [];
+}
+
+function identifierAliasReferencesLocal(
+  identifier: string,
+  localName: string,
+  root: TransformContext["root"],
+  j: TransformContext["j"]["jscodeshift"],
+): boolean {
+  let references = false;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: identifier } } as any)
+    .forEach((p: any) => {
+      if (expressionReferencesLocal(p.node.init, localName)) {
+        references = true;
+      }
+    });
+  return references;
+}
+
+function memberPathReferencesLocal(
+  path: string[],
+  localName: string,
+  root: TransformContext["root"],
+  j: TransformContext["j"]["jscodeshift"],
+): boolean {
+  const [rootName, ...properties] = path;
+  if (!rootName || properties.length === 0) {
+    return false;
+  }
+
+  let references = false;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: rootName } } as any)
+    .forEach((p: any) => {
+      const value = objectPathValue(p.node.init, properties);
+      if (expressionReferencesLocal(value, localName)) {
+        references = true;
+      }
+    });
+  return references;
+}
+
+function objectPathValue(expr: unknown, path: readonly string[]): unknown {
+  let current = expr;
+  for (const part of path) {
+    const obj = current as { type?: string; properties?: unknown[] };
+    if (obj?.type !== "ObjectExpression") {
+      return null;
+    }
+    const prop = (obj.properties ?? []).find((entry) => {
+      const p = entry as { type?: string; key?: { type?: string; name?: string; value?: string } };
+      if (p?.type !== "ObjectProperty" && p?.type !== "Property") {
+        return false;
+      }
+      return p.key?.type === "Identifier" ? p.key.name === part : p.key?.value === part;
+    }) as { value?: unknown } | undefined;
+    current = prop?.value;
+  }
+  return current;
+}
+
+function expressionReferencesLocal(expr: unknown, localName: string): boolean {
+  const node = expr as {
+    type?: string;
+    name?: string;
+    consequent?: unknown;
+    alternate?: unknown;
+    left?: unknown;
+    right?: unknown;
+  };
+  if (!node) {
+    return false;
+  }
+  if (node.type === "Identifier") {
+    return node.name === localName;
+  }
+  if (node.type === "ConditionalExpression") {
+    return (
+      expressionReferencesLocal(node.consequent, localName) ||
+      expressionReferencesLocal(node.alternate, localName)
+    );
+  }
+  if (node.type === "LogicalExpression") {
+    return (
+      expressionReferencesLocal(node.left, localName) ||
+      expressionReferencesLocal(node.right, localName)
+    );
+  }
+  return false;
 }
 
 function isStylexCreateStylesDeclaration(node: unknown): boolean {

@@ -15,6 +15,7 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   isCssShorthandProperty,
+  isUnsupportedBackgroundShorthandValue,
   parseBorderShorthandParts,
   resolveBackgroundStylexProp,
 } from "../css-prop-mapping.js";
@@ -22,13 +23,16 @@ import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { camelToKebabCase } from "../utilities/string-utils.js";
 import {
   cloneAstNode,
+  type ArrowFnParamBindings,
   collectIdentifiers,
   extractRootAndPath,
+  getArrowFnParamBindings,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getSinglePropFromMemberExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
+  resolveIdentifierToPropName,
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
@@ -53,6 +57,7 @@ import {
   hasUnsupportedConditionalTest,
   invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
+  normalizeDollarProps,
   rewritePropsReferencesToPropsWithTheme,
   rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
@@ -188,6 +193,154 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         decl.extraClassNames.push({ expr: cnExpr as any });
       }
     }
+  };
+
+  const tryHandleMultiSlotRuntimeValue = (): boolean => {
+    if (!d.property || d.value.kind !== "interpolated") {
+      return false;
+    }
+    const cssProperty = d.property.trim();
+    if (cssProperty !== "background" && cssProperty !== "background-image") {
+      return false;
+    }
+    if (media || attrTarget || pseudos?.length || pseudoElement || resolvedSelectorMedia) {
+      return false;
+    }
+
+    const parts = d.value.parts ?? [];
+    const slotParts = parts.filter(
+      (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
+    );
+    if (slotParts.length < 2) {
+      return false;
+    }
+    if (cssProperty === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")) {
+      state.bailUnsupported(
+        decl,
+        "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+      );
+      return true;
+    }
+
+    const propsUsed = new Set<string>();
+    const expressions: ExpressionKind[] = [];
+    const quasis: Array<ReturnType<JSCodeshift["templateElement"]>> = [];
+    let currentStaticPart = "";
+    let needsTheme = false;
+
+    for (const part of parts) {
+      if (part.kind === "static") {
+        currentStaticPart += part.value ?? "";
+        continue;
+      }
+      if (part.kind !== "slot") {
+        return false;
+      }
+
+      const rawExpr = decl.templateExpressions[part.slotId] as ExpressionKind | undefined;
+      if (!rawExpr || rawExpr.type === "FunctionExpression") {
+        return false;
+      }
+
+      let slotExpr: ExpressionKind | null =
+        rawExpr.type === "ArrowFunctionExpression"
+          ? inlineArrowFunctionBody(j, rawExpr)
+          : (cloneAstNode(rawExpr) as ExpressionKind);
+      if (!slotExpr) {
+        return false;
+      }
+
+      if (rawExpr.type === "ArrowFunctionExpression") {
+        for (const propName of collectPropsFromArrowFn(rawExpr)) {
+          if (propName !== "theme") {
+            propsUsed.add(propName);
+          }
+        }
+        if (hasThemeAccessInArrowFn(rawExpr)) {
+          needsTheme = true;
+          slotExpr = rewritePropsThemeToThemeVar(slotExpr);
+        }
+      } else if (hasThemeReferenceInExpression(slotExpr)) {
+        needsTheme = true;
+      }
+
+      quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
+      currentStaticPart = "";
+      expressions.push(normalizeDollarProps(j, slotExpr));
+    }
+
+    quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
+
+    const valueExpr = j.templateLiteral(quasis, expressions) as ExpressionKind;
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+    if (stylexDecls.length === 0) {
+      return false;
+    }
+    const normalizedPropNames = [...propsUsed].map((propName) =>
+      propName.startsWith("$") ? propName.slice(1) : propName,
+    );
+    const propsCallArg =
+      normalizedPropNames.length > 0
+        ? (j.objectExpression(
+            normalizedPropNames.map((propName) => {
+              const id = j.identifier(propName);
+              const prop = j.property("init", id, id) as ReturnType<typeof j.property> & {
+                shorthand?: boolean;
+              };
+              prop.shorthand = true;
+              return prop;
+            }),
+          ) as ExpressionKind)
+        : undefined;
+
+    for (const out of stylexDecls) {
+      if (!out.prop) {
+        continue;
+      }
+      const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+      if (!styleFnDecls.has(fnKey)) {
+        const params = [j.identifier("props")];
+        if (needsTheme) {
+          params.push(j.identifier("theme"));
+        }
+        const body = j.objectExpression([
+          j.property("init", makeCssPropKey(j, out.prop), valueExpr),
+        ]);
+        styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
+      }
+      styleFnFromProps.push({
+        fnKey,
+        jsxProp: "__props" as const,
+        condition: "always" as const,
+        ...(propsCallArg ? { callArg: propsCallArg } : {}),
+        ...(needsTheme
+          ? {
+              extraCallArgs: [
+                {
+                  jsxProp: "__helper" as const,
+                  callArg: j.identifier("theme") as ExpressionKind,
+                },
+              ],
+            }
+          : {}),
+      });
+    }
+
+    for (const propName of propsUsed) {
+      ensureShouldForwardPropDrop(decl, propName);
+    }
+    if (needsTheme) {
+      decl.needsUseThemeHook ??= [];
+      if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtime")) {
+        decl.needsUseThemeHook.push({
+          themeProp: "__runtime",
+          trueStyleKey: null,
+          falseStyleKey: null,
+        });
+      }
+    }
+    decl.needsWrapperComponent = true;
+    return true;
   };
 
   /**
@@ -705,6 +858,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
+        setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {
       continue;
@@ -769,6 +923,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               loc: getNodeLocStart(expr) ?? undefined,
             });
             if (resolved?.usage === "props") {
+              if (rule.selector.trim() !== "&" || (rule.atRuleStack ?? []).length) {
+                if (resolved.cssText) {
+                  const parsedStyle = parseCssDeclarationBlock(resolved.cssText);
+                  if (parsedStyle) {
+                    for (const [prop, value] of Object.entries(parsedStyle)) {
+                      applyResolvedPropValue(prop, value, null);
+                    }
+                    continue;
+                  }
+                }
+                warnings.push({
+                  severity: "warning",
+                  type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                  loc: getNodeLocStart(expr) ?? decl.loc,
+                  context: {
+                    selector: rule.selector,
+                    importedName: importEntry.importedName,
+                    source: importEntry.source.value,
+                  },
+                });
+                bail = true;
+                break;
+              }
               // Add as an extra stylex.props argument
               const extras = decl.extraStylexPropsArgs ?? [];
               const order = decl.mixinOrder ?? [];
@@ -885,6 +1062,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // When all slots are ternaries on the same condition with literal branches, produce
     // two static variant styles by evaluating each branch direction.
     if (d.property && d.value.kind === "interpolated" && tryHandleMultiSlotTernary(ctx, d)) {
+      continue;
+    }
+    if (tryHandleMultiSlotRuntimeValue()) {
       continue;
     }
 
@@ -1771,7 +1951,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           ensureShouldForwardPropDrop(decl, propName);
         }
         decl.needsWrapperComponent = true;
-        const paramName = e.params?.[0]?.type === "Identifier" ? e.params[0].name : "props";
+        const bindings = getArrowFnParamBindings(e);
+        const paramName = bindings?.kind === "simple" ? bindings.paramName : "props";
         for (const out of cssDeclarationToStylexDeclarations(d)) {
           if (!out.prop) {
             continue;
@@ -1791,6 +1972,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               filePath,
               loc,
               addResolverImports,
+              ...(bindings ? { bindings } : {}),
             });
             if (helperResolution === null) {
               warnings.push({
@@ -1817,10 +1999,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // StyleX emits dynamic values through CSS variables, and values like
             // `${value} !important` do not get assigned as runtime variables.
             const { prefix, suffix } = extractStaticPartsForDecl(d);
+            const fullTemplateValueExpr =
+              d.property === "transition"
+                ? buildFullInterpolatedDeclarationValueExpr(j, decl, d)
+                : null;
             const valueExpr =
-              prefix || suffix
+              fullTemplateValueExpr ??
+              (prefix || suffix
                 ? buildTemplateWithStaticParts(j, valueExprRaw, prefix, suffix)
-                : valueExprRaw;
+                : valueExprRaw);
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
@@ -2000,6 +2187,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+          const valueTransform = (res as { valueTransform?: CallValueTransform }).valueTransform;
+          const callArg = buildResolvedValueTransformCallArg({
+            j,
+            jsxProp,
+            valueTransform,
+            parseExpr,
+            addResolverImports,
+          });
           // Only mark as "always" (no null guard) when we can prove the prop
           // is required via an explicit type annotation.  Without propsType,
           // isJsxPropOptional returns false by default, but the prop may still
@@ -2009,6 +2204,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           styleFnFromProps.push({
             fnKey,
             jsxProp,
+            ...(callArg ? { callArg } : {}),
             ...(hasExplicitType && !isOptional ? { condition: "always" as const } : {}),
           });
 
@@ -2024,6 +2220,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (jsxProp !== "__props") {
               annotateParamFromJsxProp(param, jsxProp);
             }
+            if (callArg && /\.(ts|tsx)$/.test(filePath)) {
+              (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                j.tsStringKeyword(),
+              );
+            }
             if (jsxProp?.startsWith?.("$")) {
               ensureShouldForwardPropDrop(decl, jsxProp);
             }
@@ -2033,7 +2234,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // prop value, e.g. `${value}px`, `opacity ${value}ms`.
             const buildValueExpr = (): any => {
               const transformed = (() => {
-                const vt = (res as { valueTransform?: CallValueTransform }).valueTransform;
+                const vt = callArg ? undefined : valueTransform;
                 if (vt?.kind === "call" && typeof vt.calleeIdent === "string") {
                   // Add adapter-resolved imports if present
                   addResolverImports(vt.resolvedImports);
@@ -2239,18 +2440,36 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const expr =
           prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
+        const shouldPassComputedCallArg =
+          jsxProp !== "__props" &&
+          (Boolean(prefix || suffix) ||
+            baseExpr.type !== "Identifier" ||
+            (baseExpr as { name?: string }).name !== jsxProp);
+        const finalParam = shouldPassComputedCallArg
+          ? j.identifier(cssPropertyToIdentifier(out.prop, avoidNames))
+          : propsParam;
+        if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
+          (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+            j.tsStringKeyword(),
+          );
+        }
+        const valueExpr = shouldPassComputedCallArg ? j.identifier(finalParam.name) : expr;
         if (!styleFnDecls.has(fnKey)) {
           const body = j.objectExpression([
             j.property(
               "init",
               makeCssPropKey(j, out.prop),
-              buildPseudoMediaPropValue({ j, valueExpr: expr, pseudos, media }),
+              buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
             ),
           ]);
-          styleFnDecls.set(fnKey, j.arrowFunctionExpression([propsParam], body));
+          styleFnDecls.set(fnKey, j.arrowFunctionExpression([finalParam], body));
         }
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-          styleFnFromProps.push({ fnKey, jsxProp });
+          styleFnFromProps.push({
+            fnKey,
+            jsxProp,
+            ...(shouldPassComputedCallArg ? { callArg: expr } : {}),
+          });
         }
       }
       if (bail) {
@@ -2740,6 +2959,54 @@ function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDe
   return decl.templateExpressions[parts[0].slotId] !== undefined;
 }
 
+function buildFullInterpolatedDeclarationValueExpr(
+  j: JSCodeshift,
+  decl: StyledDecl,
+  d: CssDeclarationIR,
+): ExpressionKind | null {
+  if (d.value.kind !== "interpolated") {
+    return null;
+  }
+  const parts = d.value.parts ?? [];
+  const slotCount = parts.filter((p) => p.kind === "slot").length;
+  if (slotCount <= 1) {
+    return null;
+  }
+
+  const quasis: any[] = [];
+  const expressions: any[] = [];
+  let raw = "";
+
+  for (const part of parts) {
+    if (part.kind === "static") {
+      raw += String(part.value ?? "");
+      continue;
+    }
+    if (part.kind !== "slot") {
+      continue;
+    }
+
+    const expr = decl.templateExpressions[part.slotId] as any;
+    if (!expr) {
+      return null;
+    }
+    const valueExpr =
+      expr.type === "ArrowFunctionExpression" || expr.type === "FunctionExpression"
+        ? inlineArrowFunctionBody(j, expr)
+        : cloneAstNode(expr);
+    if (!valueExpr) {
+      return null;
+    }
+
+    quasis.push(j.templateElement({ raw, cooked: raw }, false));
+    expressions.push(valueExpr);
+    raw = "";
+  }
+
+  quasis.push(j.templateElement({ raw, cooked: raw }, true));
+  return j.templateLiteral(quasis, expressions);
+}
+
 function isCssCalcOperator(operator: string | undefined): boolean {
   return operator === "+" || operator === "-" || operator === "*" || operator === "/";
 }
@@ -2833,8 +3100,19 @@ function isStylexCalcExpression(node: unknown): boolean {
 function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclarationContext): boolean {
   const { ctx, d, pseudoElement, pseudos, media } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
-  const { j, filePath } = state;
+  const { j, filePath, parseExpr, resolveCall, resolveImportForExpr, resolverImports } = state;
   const avoidNames = new Set(state.importMap.keys());
+  const addResolverImports = (imports: Iterable<unknown> | undefined | null) => {
+    if (!imports) {
+      return;
+    }
+    for (const imp of imports) {
+      resolverImports.set(
+        JSON.stringify(imp),
+        imp as typeof resolverImports extends Map<string, infer V> ? V : never,
+      );
+    }
+  };
 
   if (!d.property || d.value.kind !== "interpolated" || !pseudoElement) {
     return false;
@@ -2911,21 +3189,61 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
 
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
+  const bindings =
+    expr.type === "ArrowFunctionExpression"
+      ? getArrowFnParamBindings(expr as Parameters<typeof getArrowFnParamBindings>[0])
+      : null;
+  const paramName = bindings?.kind === "simple" ? bindings.paramName : "props";
 
   for (const out of stylexDecls) {
     if (!out.prop) {
       continue;
     }
     const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
+    let helperCallArgs: DynamicHelperCallArgument[] = [];
+    let needsOriginalParam = false;
     if (!styleFnDecls.has(fnKey)) {
+      const styleValueExpr = cloneAstNode(valueExpr) as ExpressionKind;
+      if (!indexedTheme && bindings) {
+        const helperResolution = resolveHelperCallsInDynamicValue({
+          j,
+          expr: styleValueExpr,
+          cssProperty: out.prop,
+          paramName,
+          bindings,
+          allowedPropIdentifiers: propsUsed,
+          resolveImportForExpr,
+          resolveCall,
+          parseExpr,
+          filePath,
+          loc: null,
+          addResolverImports,
+        });
+        if (helperResolution === null) {
+          return false;
+        }
+        helperCallArgs = dedupeDynamicHelperCallArguments(helperResolution.args);
+      }
+      needsOriginalParam =
+        helperCallArgs.length > 0 && containsIdentifier(styleValueExpr, paramName);
       // Build parameter name — for indexed theme use the resolved param name,
       // for simple identity use the prop name (without $) for cleaner call sites.
       const outParamName = indexedTheme
         ? indexedTheme.paramName
-        : isSimpleIdentity && jsxProp.startsWith("$")
-          ? jsxProp.slice(1)
-          : cssPropertyToIdentifier(out.prop, avoidNames);
-      const param = j.identifier(outParamName);
+        : helperCallArgs.length > 0
+          ? helperCallArgs[0]!.paramName
+          : isSimpleIdentity && jsxProp.startsWith("$")
+            ? jsxProp.slice(1)
+            : cssPropertyToIdentifier(out.prop, avoidNames);
+      const paramNames =
+        helperCallArgs.length > 0
+          ? [
+              ...(needsOriginalParam ? [paramName] : []),
+              ...helperCallArgs.map((resolution) => resolution.paramName),
+            ]
+          : [outParamName];
+      const params = paramNames.map((name) => j.identifier(name));
+      const param = params[0]!;
 
       if (indexedTheme) {
         // Use the JSX prop's own type annotation (e.g., Color) when available.
@@ -2935,6 +3253,14 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
             ? (propTsType as ReturnType<typeof j.tsStringKeyword>)
             : j.tsStringKeyword(),
         );
+      } else if (helperCallArgs.length > 0) {
+        for (const helperParam of params.slice(needsOriginalParam ? 1 : 0)) {
+          if (/\.(ts|tsx)$/.test(filePath)) {
+            (helperParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+              j.tsStringKeyword(),
+            );
+          }
+        }
       } else if (isSimpleIdentity && jsxProp !== "__props") {
         ctx.annotateParamFromJsxProp(param, jsxProp);
       } else if (/\.(ts|tsx)$/.test(filePath)) {
@@ -2947,7 +3273,9 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       // For other cases, use the parameter name (potentially wrapped with pseudo/media).
       const innerValueExpr = indexedTheme
         ? (cloneAstNode(indexedTheme.valueExpr) as ExpressionKind)
-        : j.identifier(outParamName);
+        : helperCallArgs.length > 0
+          ? styleValueExpr
+          : j.identifier(outParamName);
       const innerValue = buildPseudoMediaPropValue({
         j,
         valueExpr: innerValueExpr,
@@ -2968,7 +3296,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
       const innerObj = j.objectExpression([innerProp]);
       const outerProp = j.property("init", j.literal(pseudoElement), innerObj);
       const body = j.objectExpression([outerProp]);
-      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
     }
 
     if (isSimpleIdentity) {
@@ -2979,11 +3307,26 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
         ...(isOptional ? {} : { condition: "always" as const }),
       });
     } else {
+      if (helperCallArgs.length > 0 && !needsOriginalParam) {
+        needsOriginalParam = containsIdentifier(styleFnDecls.get(fnKey), paramName);
+      }
+      const firstHelperCallArg = needsOriginalParam ? undefined : helperCallArgs[0];
+      const extraHelperCallArgs = needsOriginalParam ? helperCallArgs : helperCallArgs.slice(1);
       styleFnFromProps.push({
         fnKey,
         jsxProp: "__props" as const,
         condition: "always" as const,
-        callArg: cloneAstNode(valueExpr) as ExpressionKind,
+        callArg: firstHelperCallArg
+          ? firstHelperCallArg.callArg
+          : (cloneAstNode(valueExpr) as ExpressionKind),
+        ...(extraHelperCallArgs.length > 0
+          ? {
+              extraCallArgs: extraHelperCallArgs.map((resolution) => ({
+                jsxProp: "__props" as const,
+                callArg: resolution.callArg,
+              })),
+            }
+          : {}),
       });
     }
   }
@@ -3058,6 +3401,8 @@ type DynamicHelperCallContext = {
   expr: ExpressionKind;
   cssProperty: string;
   paramName: string;
+  bindings?: ArrowFnParamBindings;
+  allowedPropIdentifiers?: ReadonlySet<string>;
   resolveImportForExpr: (expr: unknown, localName: string) => ImportMeta | null;
   resolveCall: InterpolatedDeclarationContext["ctx"]["state"]["resolveCall"];
   parseExpr: (expr: string) => unknown;
@@ -3254,7 +3599,13 @@ function tryResolveDynamicHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(ctx.j, dynamicArg, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(
+    ctx.j,
+    dynamicArg,
+    ctx.paramName,
+    ctx.bindings,
+    ctx.allowedPropIdentifiers,
+  );
   if (!dynamicProp) {
     return false;
   }
@@ -3315,7 +3666,13 @@ function tryResolveDirectHelperCall(
     return false;
   }
 
-  const dynamicProp = unwrapParamMemberArg(ctx.j, args[0] as ExpressionKind, ctx.paramName);
+  const dynamicProp = unwrapParamMemberArg(
+    ctx.j,
+    args[0] as ExpressionKind,
+    ctx.paramName,
+    ctx.bindings,
+    ctx.allowedPropIdentifiers,
+  );
   if (!dynamicProp) {
     return false;
   }
@@ -3403,15 +3760,39 @@ function unwrapParamMemberArg(
   j: JSCodeshift,
   arg: ExpressionKind,
   paramName: string,
+  bindings?: ArrowFnParamBindings,
+  allowedPropIdentifiers?: ReadonlySet<string>,
 ): { arg: ExpressionKind; propName: string } | null {
   if (isNullishLogicalExpression(arg)) {
-    const left = unwrapParamMemberArg(j, arg.left, paramName);
+    const left = unwrapParamMemberArg(j, arg.left, paramName, bindings, allowedPropIdentifiers);
     if (!left || literalToStaticValue(arg.right) === null) {
       return null;
     }
     return {
       arg: j.logicalExpression("??", left.arg, cloneAstNode(arg.right)),
       propName: left.propName,
+    };
+  }
+  if (bindings?.kind === "destructured") {
+    const propName = resolveIdentifierToPropName(arg, bindings);
+    if (propName) {
+      return {
+        arg: {
+          type: "Identifier",
+          name: propName,
+        } as ExpressionKind,
+        propName,
+      };
+    }
+  }
+  if (
+    arg?.type === "Identifier" &&
+    arg.name !== paramName &&
+    (allowedPropIdentifiers?.has(arg.name) ?? false)
+  ) {
+    return {
+      arg: cloneAstNode(arg) as ExpressionKind,
+      propName: arg.name,
     };
   }
   if (arg?.type !== "MemberExpression" && arg?.type !== "OptionalMemberExpression") {
@@ -3426,6 +3807,35 @@ function unwrapParamMemberArg(
     arg: j.identifier(propName),
     propName,
   };
+}
+
+function buildResolvedValueTransformCallArg(args: {
+  j: JSCodeshift;
+  jsxProp: string;
+  valueTransform: CallValueTransform | undefined;
+  parseExpr: (expr: string) => unknown;
+  addResolverImports: (imports: Iterable<unknown> | undefined | null) => void;
+}): ExpressionKind | null {
+  const { j, jsxProp, valueTransform, parseExpr, addResolverImports } = args;
+  if (!valueTransform?.resolvedExpr) {
+    return null;
+  }
+  if (!/^[A-Za-z_$][\w$]*$/.test(jsxProp)) {
+    return null;
+  }
+  const resolvedCallee = parseExpr(valueTransform.resolvedExpr) as ExpressionKind | null;
+  if (!resolvedCallee) {
+    return null;
+  }
+  const resolvedRoot = extractRootAndPath(resolvedCallee)?.rootName;
+  if (resolvedRoot === jsxProp) {
+    return null;
+  }
+  addResolverImports(valueTransform.resolvedImports);
+  const propArg = j.identifier(jsxProp);
+  return valueTransform.resolvedUsage === "memberAccess"
+    ? (j.memberExpression(resolvedCallee, propArg, true) as ExpressionKind)
+    : (j.callExpression(resolvedCallee, [propArg]) as ExpressionKind);
 }
 
 function dedupeDynamicHelperCallArguments(

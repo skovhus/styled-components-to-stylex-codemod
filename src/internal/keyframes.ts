@@ -69,6 +69,7 @@ function parseKeyframesTemplate(args: {
   const ast = compile(wrapped) as any[];
 
   const frames: Record<string, Record<string, unknown>> = {};
+  let failed = false;
   const visit = (node: any): void => {
     if (!node) {
       return;
@@ -84,7 +85,15 @@ function parseKeyframesTemplate(args: {
       return;
     }
     if (node.type === "rule") {
-      const frameKey = String(node.value ?? "").trim();
+      const frameKey = resolveKeyframeSelectorPlaceholders(
+        String(node.value ?? "").trim(),
+        slotExprById,
+        scopePath,
+      );
+      if (frameKey === null) {
+        failed = true;
+        return;
+      }
       const styleObj: Record<string, unknown> = {};
       const children: any[] = Array.isArray(node.children)
         ? node.children
@@ -125,7 +134,7 @@ function parseKeyframesTemplate(args: {
     visit(node.children);
   };
   visit(ast);
-  return Object.keys(frames).length ? frames : null;
+  return !failed && Object.keys(frames).length ? frames : null;
 }
 
 function convertStyledKeyframesImpl(args: {
@@ -180,7 +189,13 @@ function convertStyledKeyframesImpl(args: {
     changed = true;
   }
 
-  if (!hasPreservedKeyframesDefinition) {
+  const hasUnconvertedKeyframesDefinition = hasStyledKeyframesTemplate({
+    root,
+    j,
+    keyframesLocal,
+  });
+
+  if (!hasPreservedKeyframesDefinition && !hasUnconvertedKeyframesDefinition) {
     // Remove `keyframes` import specifier (now handled by stylex).
     styledImports.forEach((imp) => {
       const specs = imp.node.specifiers ?? [];
@@ -204,6 +219,23 @@ function convertStyledKeyframesImpl(args: {
   }
 
   return { keyframesNames, changed };
+}
+
+function hasStyledKeyframesTemplate(args: {
+  root: Collection<ASTNode>;
+  j: JSCodeshift;
+  keyframesLocal: string;
+}): boolean {
+  const { root, j, keyframesLocal } = args;
+  let hasTemplate = false;
+  root
+    .find(j.TaggedTemplateExpression, {
+      tag: { type: "Identifier", name: keyframesLocal },
+    } as any)
+    .forEach(() => {
+      hasTemplate = true;
+    });
+  return hasTemplate;
 }
 
 function insertStylexKeyframesDeclaration(args: {
@@ -488,6 +520,322 @@ function resolvePlaceholderValueToAst(
   return j.templateLiteral(quasis, exprs);
 }
 
+function resolveKeyframeSelectorPlaceholders(
+  frameKey: string,
+  slotExprById: Map<number, ExpressionKind>,
+  scopePath: ASTPath<ASTNode>,
+): string | null {
+  if (!/__SC_EXPR_\d+__/.test(frameKey)) {
+    return frameKey;
+  }
+
+  const resolved = frameKey.replace(/__SC_EXPR_(\d+)__/g, (_placeholder, id: string) => {
+    const expr = slotExprById.get(Number(id));
+    if (!expr) {
+      return _placeholder;
+    }
+    const value = evaluateStaticKeyframesExpression(expr, scopePath);
+    return typeof value === "string" || typeof value === "number" ? String(value) : _placeholder;
+  });
+  return /__SC_EXPR_\d+__/.test(resolved) ? null : resolved;
+}
+
+function evaluateStaticKeyframesExpression(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string> = new Set(),
+): string | number | boolean | null {
+  const staticValue = literalToStaticValue(expr);
+  if (
+    typeof staticValue === "string" ||
+    typeof staticValue === "number" ||
+    typeof staticValue === "boolean"
+  ) {
+    return staticValue;
+  }
+
+  if (expr.type === "Identifier") {
+    if (seenIdentifiers.has(expr.name)) {
+      return null;
+    }
+    seenIdentifiers.add(expr.name);
+    const init = getConstIdentifierInitializer(expr.name, scopePath, new Set());
+    const value = init ? evaluateStaticKeyframesExpression(init, scopePath, seenIdentifiers) : null;
+    seenIdentifiers.delete(expr.name);
+    return value;
+  }
+
+  if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+    const memberValue = getStaticMemberExpressionValue(expr, scopePath);
+    return memberValue
+      ? evaluateStaticKeyframesExpression(memberValue, scopePath, seenIdentifiers)
+      : null;
+  }
+
+  if (expr.type === "UnaryExpression") {
+    const value = evaluateStaticKeyframesExpression(
+      expr.argument as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+    if (typeof value !== "number") {
+      return null;
+    }
+    if (expr.operator === "-") {
+      return -value;
+    }
+    if (expr.operator === "+") {
+      return value;
+    }
+    return null;
+  }
+
+  if (expr.type === "BinaryExpression") {
+    return evaluateStaticBinaryExpression(expr, scopePath, seenIdentifiers);
+  }
+
+  if (expr.type === "LogicalExpression") {
+    const left = evaluateStaticKeyframesExpression(
+      expr.left as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+    if (expr.operator === "&&") {
+      return left
+        ? evaluateStaticKeyframesExpression(expr.right as ExpressionKind, scopePath)
+        : left;
+    }
+    if (expr.operator === "||") {
+      return left || evaluateStaticKeyframesExpression(expr.right as ExpressionKind, scopePath);
+    }
+    if (expr.operator === "??") {
+      return left ?? evaluateStaticKeyframesExpression(expr.right as ExpressionKind, scopePath);
+    }
+    return null;
+  }
+
+  if (expr.type === "ConditionalExpression") {
+    const test = evaluateStaticKeyframesExpression(
+      expr.test as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+    if (typeof test !== "boolean") {
+      return null;
+    }
+    return evaluateStaticKeyframesExpression(
+      (test ? expr.consequent : expr.alternate) as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (expr.type === "CallExpression") {
+    return evaluateStaticMathCall(expr, scopePath, seenIdentifiers);
+  }
+
+  if (expr.type === "TemplateLiteral") {
+    let result = "";
+    for (let i = 0; i < expr.quasis.length; i++) {
+      result += expr.quasis[i]?.value.cooked ?? expr.quasis[i]?.value.raw ?? "";
+      const slotExpr = expr.expressions[i];
+      if (!slotExpr) {
+        continue;
+      }
+      const value = evaluateStaticKeyframesExpression(
+        slotExpr as ExpressionKind,
+        scopePath,
+        seenIdentifiers,
+      );
+      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+        return null;
+      }
+      result += String(value);
+    }
+    return result;
+  }
+
+  if (expr.type === "ParenthesizedExpression") {
+    return evaluateStaticKeyframesExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  if (
+    expr.type === "TSAsExpression" ||
+    expr.type === "TSTypeAssertion" ||
+    expr.type === "TSSatisfiesExpression"
+  ) {
+    return evaluateStaticKeyframesExpression(
+      expr.expression as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  return null;
+}
+
+function evaluateStaticBinaryExpression(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): string | number | null {
+  if (expr.type !== "BinaryExpression") {
+    return null;
+  }
+  const left = evaluateStaticKeyframesExpression(
+    expr.left as ExpressionKind,
+    scopePath,
+    seenIdentifiers,
+  );
+  const right = evaluateStaticKeyframesExpression(
+    expr.right as ExpressionKind,
+    scopePath,
+    seenIdentifiers,
+  );
+  if (left === null || right === null) {
+    return null;
+  }
+  if (expr.operator === "+") {
+    if (typeof left === "string" || typeof right === "string") {
+      return String(left) + String(right);
+    }
+    if (typeof left === "number" && typeof right === "number") {
+      return left + right;
+    }
+    return null;
+  }
+  if (typeof left !== "number" || typeof right !== "number") {
+    return null;
+  }
+  if (expr.operator === "-") {
+    return left - right;
+  }
+  if (expr.operator === "*") {
+    return left * right;
+  }
+  if (expr.operator === "/") {
+    return left / right;
+  }
+  if (expr.operator === "%") {
+    return left % right;
+  }
+  return null;
+}
+
+function evaluateStaticMathCall(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): number | null {
+  if (expr.type !== "CallExpression") {
+    return null;
+  }
+  const method = getSupportedMathMethod(expr.callee as ExpressionKind | undefined);
+  if (!method) {
+    return null;
+  }
+  const args: number[] = [];
+  for (const arg of expr.arguments) {
+    if (arg.type === "SpreadElement") {
+      return null;
+    }
+    const value = evaluateStaticKeyframesExpression(
+      arg as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+    if (typeof value !== "number") {
+      return null;
+    }
+    args.push(value);
+  }
+  switch (method) {
+    case "min":
+      return Math.min(...args);
+    case "max":
+      return Math.max(...args);
+    case "round":
+      return args.length === 1 ? Math.round(args[0]!) : null;
+    case "floor":
+      return args.length === 1 ? Math.floor(args[0]!) : null;
+    case "ceil":
+      return args.length === 1 ? Math.ceil(args[0]!) : null;
+  }
+}
+
+function getSupportedMathMethod(
+  callee: ExpressionKind | undefined,
+): "min" | "max" | "round" | "floor" | "ceil" | null {
+  if (
+    callee?.type !== "MemberExpression" ||
+    (callee.object as { type?: string; name?: string } | undefined)?.type !== "Identifier" ||
+    (callee.object as { name?: string }).name !== "Math" ||
+    (callee.property as { type?: string; name?: string } | undefined)?.type !== "Identifier"
+  ) {
+    return null;
+  }
+  const method = (callee.property as { name?: string }).name;
+  return method === "min" ||
+    method === "max" ||
+    method === "round" ||
+    method === "floor" ||
+    method === "ceil"
+    ? method
+    : null;
+}
+
+function getStaticMemberExpressionValue(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+): ExpressionKind | null {
+  const member = expr as {
+    object?: ExpressionKind;
+    property?: ExpressionKind;
+    computed?: boolean;
+  };
+  if (!member.object || member.object.type !== "Identifier" || !member.property) {
+    return null;
+  }
+  const propertyName = getStaticPropertyName(member.property, member.computed);
+  if (!propertyName) {
+    return null;
+  }
+
+  const objectInit = getConstIdentifierInitializer(member.object.name, scopePath, new Set());
+  if (!objectInit || objectInit.type !== "ObjectExpression") {
+    return null;
+  }
+
+  for (const property of objectInit.properties ?? []) {
+    if (!property || (property.type !== "Property" && property.type !== "ObjectProperty")) {
+      continue;
+    }
+    const keyName = getStaticPropertyName(
+      property.key as ExpressionKind,
+      (property as { computed?: boolean }).computed,
+    );
+    if (keyName === propertyName) {
+      return property.value as ExpressionKind;
+    }
+  }
+
+  return null;
+}
+
+function getStaticPropertyName(key: ExpressionKind, computed: boolean | undefined): string | null {
+  if (!computed && key.type === "Identifier") {
+    return key.name;
+  }
+  if (key.type === "StringLiteral" || key.type === "Literal") {
+    return String(key.value);
+  }
+  return null;
+}
+
 function isStaticSafeKeyframesSlotExpression(
   expr: ExpressionKind,
   scopePath: ASTPath<ASTNode>,
@@ -504,6 +852,10 @@ function isStaticSafeKeyframesSlotExpression(
 
   if (expr.type === "Identifier") {
     return isStaticSafeIdentifierBinding(expr.name, scopePath, seenIdentifiers);
+  }
+
+  if (expr.type === "MemberExpression" || expr.type === "OptionalMemberExpression") {
+    return isStaticSafeMemberExpressionBinding(expr, scopePath, seenIdentifiers);
   }
 
   if (expr.type === "UnaryExpression") {
@@ -541,6 +893,26 @@ function isStaticSafeKeyframesSlotExpression(
         expr.alternate as ExpressionKind,
         scopePath,
         seenIdentifiers,
+      )
+    );
+  }
+
+  if (expr.type === "CallExpression") {
+    const callee = expr.callee as ExpressionKind | undefined;
+    const isSupportedMathCall =
+      callee?.type === "MemberExpression" &&
+      (callee.object as { type?: string; name?: string } | undefined)?.type === "Identifier" &&
+      (callee.object as { name?: string }).name === "Math" &&
+      (callee.property as { type?: string; name?: string } | undefined)?.type === "Identifier" &&
+      ["min", "max", "round", "floor", "ceil"].includes(
+        (callee.property as { name?: string }).name ?? "",
+      );
+    return (
+      isSupportedMathCall &&
+      expr.arguments.every(
+        (arg) =>
+          arg.type !== "SpreadElement" &&
+          isStaticSafeKeyframesSlotExpression(arg as ExpressionKind, scopePath, seenIdentifiers),
       )
     );
   }
@@ -626,6 +998,98 @@ function isStaticSafeIdentifierBinding(
   );
   seenIdentifiers.delete(name);
   return isStatic;
+}
+
+function isStaticSafeMemberExpressionBinding(
+  expr: ExpressionKind,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): boolean {
+  const member = expr as {
+    object?: ExpressionKind;
+    property?: ExpressionKind;
+    computed?: boolean;
+  };
+  if (!member.object || member.object.type !== "Identifier" || !member.property) {
+    return false;
+  }
+  const propertyName =
+    !member.computed && member.property.type === "Identifier"
+      ? member.property.name
+      : member.computed && member.property.type === "StringLiteral"
+        ? String(member.property.value)
+        : member.computed && member.property.type === "Literal"
+          ? String(member.property.value)
+          : null;
+  if (!propertyName) {
+    return false;
+  }
+
+  const objectInit = getConstIdentifierInitializer(member.object.name, scopePath, seenIdentifiers);
+  if (!objectInit || objectInit.type !== "ObjectExpression") {
+    return false;
+  }
+
+  for (const property of objectInit.properties ?? []) {
+    if (!property || (property.type !== "Property" && property.type !== "ObjectProperty")) {
+      continue;
+    }
+    const key = property.key as { type?: string; name?: string; value?: unknown };
+    const keyName =
+      key.type === "Identifier"
+        ? key.name
+        : key.type === "StringLiteral" || key.type === "Literal"
+          ? String(key.value)
+          : null;
+    if (keyName !== propertyName) {
+      continue;
+    }
+    return isStaticSafeKeyframesSlotExpression(
+      property.value as ExpressionKind,
+      scopePath,
+      seenIdentifiers,
+    );
+  }
+
+  return false;
+}
+
+function getConstIdentifierInitializer(
+  name: string,
+  scopePath: ASTPath<ASTNode>,
+  seenIdentifiers: Set<string>,
+): ExpressionKind | null {
+  if (seenIdentifiers.has(name)) {
+    return null;
+  }
+  seenIdentifiers.add(name);
+
+  const scope = (scopePath as any).scope?.lookup?.(name);
+  if (!scope || typeof scope.getBindings !== "function") {
+    seenIdentifiers.delete(name);
+    return null;
+  }
+
+  const bindings = scope.getBindings();
+  const refs = bindings?.[name];
+  if (!Array.isArray(refs) || refs.length !== 1) {
+    seenIdentifiers.delete(name);
+    return null;
+  }
+
+  const idPath = refs[0];
+  const declarator = idPath?.parent?.value;
+  const declaration = idPath?.parent?.parent?.value;
+  const init =
+    declarator &&
+    declarator.type === "VariableDeclarator" &&
+    declarator.id === idPath.value &&
+    declaration?.type === "VariableDeclaration" &&
+    declaration.kind === "const"
+      ? ((declarator.init as ExpressionKind | null | undefined) ?? null)
+      : null;
+  seenIdentifiers.delete(name);
+  return init;
 }
 
 /**

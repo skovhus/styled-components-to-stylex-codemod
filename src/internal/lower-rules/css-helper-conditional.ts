@@ -25,6 +25,7 @@ import { extractConditionName } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
   getArrowFnParamBindings,
+  getMemberPathFromIdentifier,
   getNodeLocStart,
   isCallExpressionNode,
   isEmptyCssBranch,
@@ -52,6 +53,7 @@ import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 import {
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
@@ -169,6 +171,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     warnings,
     keyframesNames: ctx.keyframesNames,
     inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
+  };
+
+  type ResolvedPseudoEntry = {
+    pseudo: string;
+    conditionExpr?: ExpressionKind;
   };
 
   return (d: any, pseudos?: string[] | null, pseudoElement?: string | null): boolean => {
@@ -399,6 +406,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
     const resolveCssBranchToInlineMap = (
       node: ExpressionKind,
+      opts?: { requireResolvedPseudoSelector?: boolean },
     ): Map<string, ExpressionKind> | null => {
       let tpl: ASTNode | null = null;
       if (isCssHelperTaggedTemplate(node)) {
@@ -419,13 +427,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         string,
         Array<{ keyExpr: unknown; value: ExpressionKind }>
       >();
+      let sawResolvedPseudoSelector = false;
 
       const setValueForProp = (
         prop: string,
         value: ExpressionKind,
         media: string | undefined,
         computedKey: unknown,
+        pseudoEntries?: ResolvedPseudoEntry[] | null,
       ) => {
+        if (pseudoEntries?.length) {
+          if (media || computedKey) {
+            return false;
+          }
+          sawResolvedPseudoSelector = true;
+          out.set(prop, wrapValueWithResolvedPseudos(prop, value, pseudoEntries));
+          return true;
+        }
         if (computedKey) {
           const arr = computedMediaValues.get(prop) ?? [];
           arr.push({ keyExpr: computedKey, value });
@@ -438,12 +456,127 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         } else {
           out.set(prop, value);
         }
+        return true;
+      };
+
+      const resolveRulePseudoEntries = (selector: string): ResolvedPseudoEntry[] | null => {
+        if (selector === "&") {
+          return [];
+        }
+        const match = selector.match(
+          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
+        );
+        if (!match?.[2]) {
+          return null;
+        }
+        const prefixPseudo = match[1] || "";
+        const slotExpr = slotExprById.get(Number(match[2]));
+        if (!slotExpr || typeof slotExpr !== "object") {
+          return null;
+        }
+        let localName: string | null = null;
+        let path: string | undefined;
+        if ((slotExpr as { type?: string; name?: string }).type === "Identifier") {
+          localName = (slotExpr as { name: string }).name;
+        } else if (isMemberExpression(slotExpr)) {
+          const parts: string[] = [];
+          let current = slotExpr as any;
+          while (current?.type === "MemberExpression") {
+            const property = current.property;
+            if (property?.type !== "Identifier") {
+              return null;
+            }
+            parts.unshift(property.name);
+            current = current.object;
+          }
+          if (current?.type !== "Identifier") {
+            return null;
+          }
+          localName = current.name;
+          path = parts.length > 0 ? parts.join(".") : undefined;
+        }
+        if (!localName) {
+          return null;
+        }
+        const imp = resolveImportInScope(localName, slotExpr);
+        if (!imp) {
+          return null;
+        }
+        const selectorResult = resolveSelector({
+          kind: "selectorInterpolation",
+          importedName: imp.importedName,
+          source: imp.source,
+          ...(path ? { path } : {}),
+          filePath,
+          loc: getNodeLocStart(slotExpr) ?? undefined,
+        });
+        if (!selectorResult) {
+          return null;
+        }
+        registerImports(selectorResult.imports, resolverImports);
+        if (selectorResult.kind === "pseudoAlias") {
+          return selectorResult.values.map((value) => ({ pseudo: `${prefixPseudo}:${value}` }));
+        }
+        if (selectorResult.kind !== "pseudoExpand") {
+          return null;
+        }
+        const entries: ResolvedPseudoEntry[] = [];
+        for (const expansion of selectorResult.expansions) {
+          let conditionExpr: ExpressionKind | undefined;
+          if (expansion.condition) {
+            registerImports(expansion.condition.imports, resolverImports);
+            const parsed = parseExpr(expansion.condition.expr);
+            if (!parsed) {
+              return null;
+            }
+            conditionExpr = parsed as ExpressionKind;
+          }
+          entries.push({
+            pseudo: `${prefixPseudo}:${expansion.pseudo}`,
+            ...(conditionExpr ? { conditionExpr } : {}),
+          });
+        }
+        return entries;
+      };
+
+      const wrapValueWithResolvedPseudos = (
+        prop: string,
+        value: ExpressionKind,
+        pseudoEntries: ResolvedPseudoEntry[],
+      ): ExpressionKind => {
+        const properties =
+          styleObj[prop] !== undefined
+            ? [
+                j.property(
+                  "init",
+                  j.identifier("default"),
+                  styleValueToExpression(j, styleObj[prop]) as any,
+                ),
+              ]
+            : [];
+        for (const entry of pseudoEntries) {
+          let entryValue = value;
+          if (entry.conditionExpr) {
+            const conditioned = j.objectExpression([
+              j.property("init", j.identifier("default"), j.literal(null) as any),
+              (() => {
+                const p = j.property("init", entry.conditionExpr!, value);
+                (p as { computed?: boolean }).computed = true;
+                return p;
+              })(),
+            ]);
+            entryValue = conditioned as ExpressionKind;
+          }
+          properties.push(j.property("init", j.literal(entry.pseudo), entryValue));
+        }
+        return j.objectExpression(properties) as ExpressionKind;
       };
 
       for (const rule of rules) {
         const rawMedia = findSupportedAtRule(rule.atRuleStack);
-        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
-        if (rule.atRuleStack.length > 0 && !rawMedia) {
+        // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.).
+        // Mixed stacks must also bail because preserving only the supported rule would be too broad.
+        if (hasUnsupportedAtRule(rule.atRuleStack)) {
           return null;
         }
 
@@ -475,19 +608,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
 
         const selector = (rule.selector ?? "").trim();
-        if (selector !== "&") {
+        const pseudoEntries = resolveRulePseudoEntries(selector);
+        if (!pseudoEntries) {
           return null;
         }
 
         // Convert expanded animation values (mix of AST nodes and primitives) to ExpressionKind
-        const applyExpandedAnimation = (expanded: Record<string, unknown>): void => {
+        const applyExpandedAnimation = (expanded: Record<string, unknown>): boolean => {
           for (const [prop, value] of Object.entries(expanded)) {
             const exprValue =
               typeof value === "string" || typeof value === "number"
                 ? (staticValueToLiteral(j, value) as ExpressionKind)
                 : (value as ExpressionKind);
-            setValueForProp(prop, exprValue, media, computedMediaKeyExpr);
+            if (!setValueForProp(prop, exprValue, media, computedMediaKeyExpr, pseudoEntries)) {
+              return false;
+            }
           }
+          return true;
         };
 
         for (const d of rule.declarations) {
@@ -514,7 +651,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                   ctx.inlineKeyframeNameMap,
                 )
               ) {
-                applyExpandedAnimation(expanded);
+                if (!applyExpandedAnimation(expanded)) {
+                  return null;
+                }
                 continue;
               }
             }
@@ -528,12 +667,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                 typeof value === "number" ||
                 typeof value === "boolean"
               ) {
-                setValueForProp(
-                  mapped.prop,
-                  staticValueToLiteral(j, value) as ExpressionKind,
-                  media,
-                  computedMediaKeyExpr,
-                );
+                if (
+                  !setValueForProp(
+                    mapped.prop,
+                    staticValueToLiteral(j, value) as ExpressionKind,
+                    media,
+                    computedMediaKeyExpr,
+                    pseudoEntries,
+                  )
+                ) {
+                  return null;
+                }
               } else {
                 return null;
               }
@@ -558,7 +702,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
               inlineKeyframeNameMap: ctx.inlineKeyframeNameMap,
             });
             if (expanded) {
-              applyExpandedAnimation(expanded);
+              if (!applyExpandedAnimation(expanded)) {
+                return null;
+              }
               continue;
             }
           }
@@ -575,11 +721,40 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             return null;
           }
           const rawExpr = replaceParamWithProps(slotExpr as ExpressionKind);
+          let resolvedExpr: ExpressionKind = rawExpr;
+          const memberPath =
+            paramName && isMemberExpression(slotExpr)
+              ? getMemberPathFromIdentifier(slotExpr as any, paramName)
+              : null;
+          if (memberPath?.[0] === "theme") {
+            const themePath = memberPath.slice(1).join(".");
+            const resolved = resolveValue({
+              kind: "theme",
+              path: themePath,
+              filePath,
+              loc: getNodeLocStart(slotExpr) ?? undefined,
+            });
+            if (!resolved || "directional" in resolved || resolved.usage === "props") {
+              return null;
+            }
+            registerImports(resolved.imports, resolverImports);
+            const parsed = parseExpr(resolved.expr);
+            if (!parsed) {
+              return null;
+            }
+            resolvedExpr = parsed as ExpressionKind;
+          }
           const { prefix, suffix } = extractStaticPartsForDecl(d);
           const valueExpr =
-            prefix || suffix ? buildTemplateWithStaticParts(j, rawExpr, prefix, suffix) : rawExpr;
+            prefix || suffix
+              ? buildTemplateWithStaticParts(j, resolvedExpr, prefix, suffix)
+              : resolvedExpr;
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-            setValueForProp(mapped.prop, valueExpr, media, computedMediaKeyExpr);
+            if (
+              !setValueForProp(mapped.prop, valueExpr, media, computedMediaKeyExpr, pseudoEntries)
+            ) {
+              return null;
+            }
           }
         }
       }
@@ -612,6 +787,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           }
         }
         out.set(prop, j.objectExpression(properties) as unknown as ExpressionKind);
+      }
+
+      if (opts?.requireResolvedPseudoSelector && !sawResolvedPseudoSelector) {
+        return null;
       }
 
       return out;
@@ -1690,6 +1869,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
 
     if (consIsCss && altIsEmpty) {
+      const consMap = resolveCssBranchToInlineMap(cons as ExpressionKind, {
+        requireResolvedPseudoSelector: true,
+      });
+      if (consMap) {
+        applyVariant(testInfo, Object.fromEntries(consMap));
+        return true;
+      }
       const consResolved = resolveCssBranch(cons);
       if (!consResolved) {
         markBail();
@@ -2188,6 +2374,13 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
 
   decl.needsWrapperComponent = true;
   return true;
+}
+
+function styleValueToExpression(j: any, value: unknown): ExpressionKind {
+  if (value !== null && typeof value === "object" && "type" in value) {
+    return cloneAstNode(value) as ExpressionKind;
+  }
+  return staticValueToLiteral(j, value as string | number | boolean) as ExpressionKind;
 }
 
 /**

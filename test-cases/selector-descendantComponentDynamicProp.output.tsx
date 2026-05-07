@@ -144,6 +144,29 @@ function GroupedPanel(props: GroupedPanelProps) {
   );
 }
 
+type ScrollerProps = React.PropsWithChildren<{
+  minContentWidth: number;
+}>;
+
+function Scroller(props: ScrollerProps) {
+  const { children, minContentWidth } = props;
+  const sx = stylex.props(styles.scroller);
+
+  return (
+    <div
+      {...sx}
+      style={
+        {
+          ...sx.style,
+          "--stickyHeaderInScroller-minWidth": props.minContentWidth,
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Button color="blue">
@@ -169,6 +192,9 @@ export const App = () => (
         </span>
       </button>
     </GroupedPanel>
+    <Scroller minContentWidth={320}>
+      <div sx={[styles.stickyHeader, styles.stickyHeaderInScroller]}>Dynamic descendant width</div>
+    </Scroller>
   </div>
 );
 
@@ -227,6 +253,13 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: "#ccc",
   },
+  stickyHeader: {
+    position: "sticky",
+    top: 0,
+  },
+  scroller: {
+    overflow: "auto",
+  },
   iconInButton: {
     color: {
       default: null,
@@ -273,5 +306,8 @@ const styles = stylex.create({
       [stylex.when.ancestor(":focus-within")]:
         "var(--groupedLabelInGroupedPanel-focusWithin-color)",
     },
+  },
+  stickyHeaderInScroller: {
+    minWidth: "calc(var(--stickyHeaderInScroller-minWidth) * 1px)",
   },
 });

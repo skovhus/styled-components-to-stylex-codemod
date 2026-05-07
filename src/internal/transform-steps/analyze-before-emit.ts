@@ -140,6 +140,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   });
 
+  // Namespace exports (`export namespace Graph { export function Item() {} }`) and exported
+  // object namespaces (`export const Section = { Container }`) are commonly consumed as
+  // `<Graph.Item />` / `<Section.Container />`. Record the dotted export surface so
+  // post-transform consumer patchers can update JSX attributes outside this file.
+  collectDottedExportedComponents(root, j, declByLocal, exportedComponents);
+
   // Default exports: export default Foo
   root.find(j.ExportDefaultDeclaration).forEach((p) => {
     const name = getIdentifierName(p.node.declaration);
@@ -188,6 +194,22 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     if (decl.isDirectJsxResolution) {
       continue;
+    }
+    if (decl.base.kind === "component") {
+      const baseDecl = declByLocal.get(decl.base.ident);
+      if (baseDecl?.attrsInfo) {
+        decl.attrsInfo = mergeInheritedAttrsInfo(baseDecl.attrsInfo, decl.attrsInfo);
+      }
+      if (
+        decl.attrsInfo &&
+        ((decl.attrsInfo.defaultAttrs?.length ?? 0) > 0 ||
+          Object.keys(decl.attrsInfo.staticAttrs ?? {}).length > 0 ||
+          (decl.attrsInfo.attrsDynamicStyles?.length ?? 0) > 0 ||
+          (decl.attrsInfo.attrsStaticStyles &&
+            Object.keys(decl.attrsInfo.attrsStaticStyles).length > 0))
+      ) {
+        decl.needsWrapperComponent = true;
+      }
     }
     const hadWrapperBeforePrepass = decl.needsWrapperComponent;
     // Intrinsic components with prop-conditional attrs (e.g. `size: props.$small ? 5 : undefined`)
@@ -670,6 +692,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         if (baseDecl?.transientPropRenames && baseDecl.transientPropRenames.size > 0) {
           decl.transientPropRenames = new Map(baseDecl.transientPropRenames);
           decl.transientPropRenamesInherited = true;
+          applyTransientPropRenames(decl, decl.transientPropRenames);
           // Note: we intentionally do NOT set transientOmitFromBase here because
           // the base component's type has already been renamed ($prop → prop).
           // The Omit+remap approach only works when the base type still has the
@@ -2052,16 +2075,28 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
   if (decl.attrsInfo?.defaultAttrs) {
     for (const attr of decl.attrsInfo.defaultAttrs) {
       attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
     }
   }
   if (decl.attrsInfo?.conditionalAttrs) {
     for (const attr of decl.attrsInfo.conditionalAttrs) {
       attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
     }
+  }
+  if (decl.attrsInfo?.invertedBoolAttrs) {
+    for (const attr of decl.attrsInfo.invertedBoolAttrs) {
+      attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
+    }
+  }
+  if (decl.attrsInfo?.staticAttrs) {
+    decl.attrsInfo.staticAttrs = renameStaticAttrKeys(decl.attrsInfo.staticAttrs, renames);
   }
   if (decl.attrsInfo?.attrsDynamicStyles) {
     for (const ds of decl.attrsInfo.attrsDynamicStyles) {
       ds.jsxProp = renames.get(ds.jsxProp) ?? ds.jsxProp;
+      renameIdentifiersInAst(ds.callArgExpr, renames);
     }
   }
 
@@ -2093,6 +2128,22 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       cs.propNames = cs.propNames.map((p) => renames.get(p) ?? p);
     }
   }
+}
+
+function renameStaticAttrKeys(
+  attrs: Record<string, unknown>,
+  renames: Map<string, string>,
+): Record<string, unknown> {
+  let changed = false;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(attrs)) {
+    const renamed = renames.get(key) ?? key;
+    if (renamed !== key) {
+      changed = true;
+    }
+    out[renamed] = value;
+  }
+  return changed ? out : attrs;
 }
 
 /**
@@ -2353,6 +2404,138 @@ function emitTransientPropRenameWarning(
   });
   ctx.transientPropRenames ??= [];
   ctx.transientPropRenames.push({ exportName, renames: renameRecord });
+}
+
+function collectDottedExportedComponents(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  declByLocal: Map<string, StyledDecl>,
+  exportedComponents: Map<string, ExportInfo>,
+): void {
+  const getIdentifierName = (node: unknown): string | null => {
+    const n = node as { type?: string; name?: string } | null | undefined;
+    return n?.type === "Identifier" && n.name ? n.name : null;
+  };
+
+  const setDottedExport = (localName: string, exportName: string): void => {
+    if (!declByLocal.has(localName)) {
+      return;
+    }
+    const existing = exportedComponents.get(localName)?.exportName;
+    if (existing && existing.split(".").length > exportName.split(".").length) {
+      return;
+    }
+    exportedComponents.set(localName, {
+      exportName,
+      isDefault: false,
+      isSpecifier: false,
+    });
+  };
+
+  const collectObjectProperties = (objectExpression: unknown, prefix: string): void => {
+    const objectNode = objectExpression as
+      | { type?: string; properties?: Array<{ type?: string; key?: unknown; value?: unknown }> }
+      | null
+      | undefined;
+    if (objectNode?.type !== "ObjectExpression" || !Array.isArray(objectNode.properties)) {
+      return;
+    }
+    for (const property of objectNode.properties) {
+      if (property?.type !== "Property" && property?.type !== "ObjectProperty") {
+        continue;
+      }
+      const keyName = getIdentifierName(property.key);
+      if (!keyName) {
+        continue;
+      }
+      const valueName = getIdentifierName(property.value);
+      if (valueName) {
+        setDottedExport(valueName, `${prefix}.${keyName}`);
+        continue;
+      }
+      collectObjectProperties(property.value, `${prefix}.${keyName}`);
+    }
+  };
+
+  root.find(j.ExportNamedDeclaration).forEach((p) => {
+    const declaration = p.node.declaration;
+    if (declaration?.type !== "VariableDeclaration") {
+      return;
+    }
+    for (const declarator of declaration.declarations) {
+      if (declarator.type !== "VariableDeclarator") {
+        continue;
+      }
+      const exportName = getIdentifierName(declarator.id);
+      if (exportName) {
+        collectObjectProperties(declarator.init, exportName);
+      }
+    }
+  });
+
+  const collectNamespaceExports = (node: unknown, namespacePath: string[]): void => {
+    const current = node as
+      | {
+          type?: string;
+          id?: unknown;
+          body?: { type?: string; body?: unknown[] };
+          declaration?: unknown;
+        }
+      | null
+      | undefined;
+    if (!current) {
+      return;
+    }
+    if (current.type === "TSModuleDeclaration") {
+      const namespaceName = getIdentifierName(current.id);
+      if (!namespaceName) {
+        return;
+      }
+      const nextPath = [...namespacePath, namespaceName];
+      if (current.body?.type === "TSModuleBlock") {
+        for (const statement of current.body.body ?? []) {
+          collectNamespaceExports(statement, nextPath);
+        }
+      } else {
+        collectNamespaceExports(current.body, nextPath);
+      }
+      return;
+    }
+    if (current.type !== "ExportNamedDeclaration") {
+      return;
+    }
+    const declaration = current.declaration as {
+      type?: string;
+      id?: unknown;
+      declarations?: unknown[];
+    } | null;
+    if (!declaration) {
+      return;
+    }
+    if (declaration.type === "TSModuleDeclaration") {
+      collectNamespaceExports(declaration, namespacePath);
+      return;
+    }
+    if (declaration.type === "FunctionDeclaration") {
+      const localName = getIdentifierName(declaration.id);
+      if (localName) {
+        setDottedExport(localName, [...namespacePath, localName].join("."));
+      }
+      return;
+    }
+    if (declaration.type === "VariableDeclaration" && Array.isArray(declaration.declarations)) {
+      for (const declarator of declaration.declarations) {
+        const localName = getIdentifierName((declarator as { id?: unknown }).id);
+        if (localName) {
+          setDottedExport(localName, [...namespacePath, localName].join("."));
+        }
+      }
+    }
+  };
+
+  root.find(j.TSModuleDeclaration).forEach((p) => {
+    collectNamespaceExports(p.node, []);
+  });
 }
 
 /** Recursively check if a pattern (Identifier, ArrayPattern, ObjectPattern, etc.) contains a binding with the given name. */
@@ -3545,4 +3728,38 @@ function isPlainStyleObject(value: unknown): value is Record<string, unknown> {
         typeof v === "string" || typeof v === "number" || typeof v === "boolean" || isAstNode(v),
     )
   );
+}
+
+function mergeInheritedAttrsInfo(
+  baseAttrsInfo: NonNullable<StyledDecl["attrsInfo"]>,
+  ownAttrsInfo: StyledDecl["attrsInfo"],
+): NonNullable<StyledDecl["attrsInfo"]> {
+  return {
+    staticAttrs: {
+      ...baseAttrsInfo.staticAttrs,
+      ...ownAttrsInfo?.staticAttrs,
+    },
+    sourceKind: ownAttrsInfo?.sourceKind ?? baseAttrsInfo.sourceKind,
+    hasUnsupportedValues:
+      (baseAttrsInfo.hasUnsupportedValues ?? false) ||
+      (ownAttrsInfo?.hasUnsupportedValues ?? false),
+    attrsAsTag: ownAttrsInfo?.attrsAsTag ?? baseAttrsInfo.attrsAsTag,
+    defaultAttrs: [...(baseAttrsInfo.defaultAttrs ?? []), ...(ownAttrsInfo?.defaultAttrs ?? [])],
+    conditionalAttrs: [
+      ...(baseAttrsInfo.conditionalAttrs ?? []),
+      ...(ownAttrsInfo?.conditionalAttrs ?? []),
+    ],
+    invertedBoolAttrs: [
+      ...(baseAttrsInfo.invertedBoolAttrs ?? []),
+      ...(ownAttrsInfo?.invertedBoolAttrs ?? []),
+    ],
+    attrsStaticStyles: {
+      ...baseAttrsInfo.attrsStaticStyles,
+      ...ownAttrsInfo?.attrsStaticStyles,
+    },
+    attrsDynamicStyles: [
+      ...(baseAttrsInfo.attrsDynamicStyles ?? []),
+      ...(ownAttrsInfo?.attrsDynamicStyles ?? []),
+    ],
+  };
 }

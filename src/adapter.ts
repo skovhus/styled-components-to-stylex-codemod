@@ -230,6 +230,15 @@ export type ResolveValueResult = {
    */
   usage?: "props";
   /**
+   * Optional raw CSS text for imported values that resolve to StyleX style objects.
+   *
+   * When provided alongside `usage: "props"`, the codemod can expand the CSS
+   * declarations under nested selectors such as `:focus-visible`. Without this,
+   * imported StyleX object values are treated as opaque and are only safe at the
+   * base selector.
+   */
+  cssText?: string;
+  /**
    * When `usage` is `"props"` and the resolved expression should be indexed with a
    * dynamic prop value (e.g., `$colorMixins.backgroundColor[propValue]`):
    * - `"memberAccess"`: the codemod applies `expr[propValue]` computed member access

@@ -24,6 +24,54 @@ function LoadingPlaceholder(props: LoadingPlaceholderProps) {
   );
 }
 
+type LoadingPlaceholderWithHelperReturnProps = React.PropsWithChildren<{
+  highlightColor: ColorToken;
+}>;
+
+function LoadingPlaceholderWithHelperReturn(props: LoadingPlaceholderWithHelperReturnProps) {
+  const { children, highlightColor } = props;
+  return (
+    <div sx={styles.loadingPlaceholderWithHelperReturn($colors[highlightColor])}>{children}</div>
+  );
+}
+
+type LoadingPlaceholderWithDestructuredTemplateProps = React.PropsWithChildren<{
+  shimmerColor: ColorToken;
+}>;
+
+function LoadingPlaceholderWithDestructuredTemplate(
+  props: LoadingPlaceholderWithDestructuredTemplateProps,
+) {
+  const { children, shimmerColor } = props;
+  return (
+    <div
+      sx={[
+        styles.loadingPlaceholderWithDestructuredTemplate,
+        styles.loadingPlaceholderWithDestructuredTemplateBackgroundImage($colors[shimmerColor]),
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type LoadingPlaceholderWithPseudoHelperProps = React.PropsWithChildren<{
+  shimmerColor: ColorToken;
+}>;
+
+function LoadingPlaceholderWithPseudoHelper(props: LoadingPlaceholderWithPseudoHelperProps) {
+  const { children, shimmerColor } = props;
+  return (
+    <div
+      sx={styles.loadingPlaceholderWithPseudoHelper({
+        colorShimmerColor: $colors[shimmerColor],
+      })}
+    >
+      {children}
+    </div>
+  );
+}
+
 type LoadingPlaceholderRangeProps = React.PropsWithChildren<{
   startColor: ColorToken;
   endColor: ColorToken;
@@ -116,18 +164,25 @@ function LayeredShadowPlaceholder(props: LayeredShadowPlaceholderProps) {
   );
 }
 
-export const App = () => (
-  <div style={{ display: "grid", gap: 8, padding: 12 }}>
-    <LoadingPlaceholder highlightColor="accent" />
-    <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
-    <LoadingPlaceholderRepeat highlightColor="accent" />
-    <OptionalColorPanel>Default faint panel</OptionalColorPanel>
-    <OptionalColorPanel color="accent">Accent panel</OptionalColorPanel>
-    <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
-    <div sx={styles.shadowPlaceholder("dark")} />
-    <LayeredShadowPlaceholder shadowTone="light" />
-  </div>
-);
+export const App = () => {
+  const runtimeHighlightColor: ColorToken = "accent";
+
+  return (
+    <div style={{ display: "grid", gap: 8, padding: 12 }}>
+      <LoadingPlaceholder highlightColor="accent" />
+      <LoadingPlaceholderWithHelperReturn highlightColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithDestructuredTemplate shimmerColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithPseudoHelper shimmerColor={runtimeHighlightColor} />
+      <LoadingPlaceholderRange startColor="labelBase" endColor="accent" />
+      <LoadingPlaceholderRepeat highlightColor="accent" />
+      <OptionalColorPanel>Default faint panel</OptionalColorPanel>
+      <OptionalColorPanel color="accent">Accent panel</OptionalColorPanel>
+      <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
+      <div sx={styles.shadowPlaceholder("dark")} />
+      <LayeredShadowPlaceholder shadowTone="light" />
+    </div>
+  );
+};
 
 const styles = stylex.create({
   loadingPlaceholder: {
@@ -137,6 +192,50 @@ const styles = stylex.create({
   },
   loadingPlaceholderBackgroundImage: (resolvedColorHighlightColor: string) => ({
     backgroundImage: `linear-gradient(90deg, transparent, ${resolvedColorHighlightColor}, transparent)`,
+  }),
+  loadingPlaceholderWithHelperReturn: (backgroundImage: string) => ({
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+    backgroundImage: `linear-gradient(
+    90deg,
+    transparent,
+    ${backgroundImage},
+    transparent
+  )`,
+  }),
+  loadingPlaceholderWithDestructuredTemplate: {
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+  },
+  loadingPlaceholderWithDestructuredTemplateBackgroundImage: (
+    paletteColorShimmerColor: string,
+  ) => ({
+    backgroundImage: `linear-gradient(90deg, transparent 0, ${paletteColorShimmerColor} 50%, transparent)`,
+  }),
+  loadingPlaceholderWithPseudoHelper: (props: { colorShimmerColor: string }) => ({
+    position: "relative",
+    width: 160,
+    height: 20,
+    borderRadius: 6,
+    overflow: "hidden",
+    backgroundColor: "#e2e8f0",
+    "::after": {
+      content: '""',
+      position: "absolute",
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      backgroundImage: `linear-gradient(
+      90deg,
+      transparent 0,
+      ${props.colorShimmerColor}
+      50%,
+      transparent
+    )`,
+    },
   }),
   loadingPlaceholderRange: {
     width: 160,

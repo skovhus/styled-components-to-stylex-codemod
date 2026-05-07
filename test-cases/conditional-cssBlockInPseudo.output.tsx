@@ -1,6 +1,7 @@
-import React from "react";
-import * as stylex from "@stylexjs/stylex";
+import * as React from "react";
 import { useTheme } from "styled-components";
+import * as stylex from "@stylexjs/stylex";
+import { $interaction } from "./lib/interaction.stylex";
 import { $colors } from "./tokens.stylex";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
@@ -14,10 +15,24 @@ function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>
   );
 }
 
+type CardButtonProps = React.PropsWithChildren<{
+  interactive?: boolean;
+}>;
+
+function CardButton(props: CardButtonProps) {
+  const { children, interactive } = props;
+  return (
+    <button sx={[styles.cardButton, interactive && styles.cardButtonInteractive]}>
+      {children}
+    </button>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
+    <CardButton interactive>Interactive</CardButton>
   </div>
 );
 
@@ -45,6 +60,29 @@ const styles = stylex.create({
     boxShadow: {
       default: null,
       ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint}`,
+    },
+  },
+  cardButton: {
+    color: "#334155",
+    backgroundColor: "#f8fafc",
+  },
+  cardButtonInteractive: {
+    cursor: "pointer",
+    backgroundColor: {
+      default: "#f8fafc",
+      ":active": $colors.bgBaseHover,
+      ":hover": {
+        default: null,
+        [$interaction.canHover]: $colors.bgBaseHover,
+      },
+    },
+    color: {
+      default: "#334155",
+      ":active": $colors.labelTitle,
+      ":hover": {
+        default: null,
+        [$interaction.canHover]: $colors.labelTitle,
+      },
     },
   },
 });

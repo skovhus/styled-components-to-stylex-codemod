@@ -2,7 +2,7 @@
 import * as React from "react";
 import styled from "styled-components";
 import { color } from "./lib/color-helper";
-import { glowShadow, shadow } from "./lib/helpers";
+import { glowShadow, paletteColor, shadow } from "./lib/helpers";
 import type { ColorToken } from "./tokens.stylex";
 
 type ShadowToken = "dark" | "light";
@@ -13,6 +13,51 @@ const LoadingPlaceholder = styled.div<{ $highlightColor: ColorToken }>`
   border-radius: 6px;
   background-image: ${(props) =>
     `linear-gradient(90deg, transparent, ${color(props.$highlightColor)(props)}, transparent)`};
+`;
+
+const LoadingPlaceholderWithHelperReturn = styled.div<{ $highlightColor: ColorToken }>`
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    ${(props) => color(props.$highlightColor)},
+    transparent
+  );
+`;
+
+const LoadingPlaceholderWithDestructuredTemplate = styled.div<{ $shimmerColor: ColorToken }>`
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  background-image: ${({ $shimmerColor }) =>
+    `linear-gradient(90deg, transparent 0, ${paletteColor($shimmerColor)} 50%, transparent)`};
+`;
+
+const LoadingPlaceholderWithPseudoHelper = styled.div<{ $shimmerColor: ColorToken }>`
+  position: relative;
+  width: 160px;
+  height: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-color: #e2e8f0;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0,
+      ${(props) => color(props.$shimmerColor)}
+      50%,
+      transparent
+    );
+  }
 `;
 
 const LoadingPlaceholderRange = styled.div<{
@@ -72,15 +117,22 @@ const LayeredShadowPlaceholder = styled.div<{ $shadowTone: ShadowToken }>`
   text-shadow: ${(props) => `${shadow(props.$shadowTone)}, ${glowShadow(props.$shadowTone)}`};
 `;
 
-export const App = () => (
-  <div style={{ display: "grid", gap: 8, padding: 12 }}>
-    <LoadingPlaceholder $highlightColor="accent" />
-    <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
-    <LoadingPlaceholderRepeat $highlightColor="accent" />
-    <OptionalColorPanel>Default faint panel</OptionalColorPanel>
-    <OptionalColorPanel $color="accent">Accent panel</OptionalColorPanel>
-    <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
-    <ShadowPlaceholder $shadow="dark" />
-    <LayeredShadowPlaceholder $shadowTone="light" />
-  </div>
-);
+export const App = () => {
+  const runtimeHighlightColor: ColorToken = "accent";
+
+  return (
+    <div style={{ display: "grid", gap: 8, padding: 12 }}>
+      <LoadingPlaceholder $highlightColor="accent" />
+      <LoadingPlaceholderWithHelperReturn $highlightColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithDestructuredTemplate $shimmerColor={runtimeHighlightColor} />
+      <LoadingPlaceholderWithPseudoHelper $shimmerColor={runtimeHighlightColor} />
+      <LoadingPlaceholderRange $startColor="labelBase" $endColor="accent" />
+      <LoadingPlaceholderRepeat $highlightColor="accent" />
+      <OptionalColorPanel>Default faint panel</OptionalColorPanel>
+      <OptionalColorPanel $color="accent">Accent panel</OptionalColorPanel>
+      <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
+      <ShadowPlaceholder $shadow="dark" />
+      <LayeredShadowPlaceholder $shadowTone="light" />
+    </div>
+  );
+};

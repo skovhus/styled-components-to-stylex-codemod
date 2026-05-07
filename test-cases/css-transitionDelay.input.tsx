@@ -7,6 +7,8 @@ type ContainerProps = {
   children?: React.ReactNode;
 };
 
+const EASING = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
+
 /**
  * Test case for transitionDelay with number value.
  * The codemod should convert number 0 to "0ms" string for CSS properties.
@@ -19,6 +21,13 @@ const Container = styled.div<ContainerProps>`
   color: white;
   padding: 16px 20px;
   border-radius: 8px;
+`;
+
+const DynamicTransitionPanel = styled.div<{ $visible?: boolean }>`
+  opacity: ${(props) => (props.$visible ? 1 : 0)};
+  transition: opacity ${(props) => (props.$visible ? 400 : 100)}ms ${EASING};
+  padding: 12px;
+  background-color: #fef3c7;
 `;
 
 export function AutoFadingContainer(props: ContainerProps) {
@@ -45,6 +54,7 @@ export const App = () => {
       <AutoFadingContainer $open={open} $delay={600}>
         600ms delay
       </AutoFadingContainer>
+      <DynamicTransitionPanel $visible={open}>Dynamic shorthand</DynamicTransitionPanel>
     </div>
   );
 };

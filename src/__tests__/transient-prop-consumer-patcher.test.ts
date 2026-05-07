@@ -27,6 +27,29 @@ describe("findImportedRenamedComponents", () => {
     expect(result).toEqual([{ localComponentName: "Toggle", renames: { $open: "open" } }]);
   });
 
+  it("finds dotted namespace member imports", () => {
+    const memberRenames = [{ exportName: "Section.Container", renames: { $asCard: "asCard" } }];
+    const source = `import { Section as OverviewSection } from "./Toggle";\n<OverviewSection.Container $asCard />`;
+    const result = findImportedRenamedComponents(source, sources, memberRenames);
+    expect(result).toEqual([
+      { localComponentName: "OverviewSection.Container", renames: { $asCard: "asCard" } },
+    ]);
+  });
+
+  it("finds styled wrappers around dotted member imports", () => {
+    const memberRenames = [{ exportName: "Section.Container", renames: { $asCard: "asCard" } }];
+    const source = [
+      `import { Section } from "./Toggle";`,
+      `const LocalContainer = styled(Section.Container)\`margin: 0;\`;`,
+      `<LocalContainer $asCard />`,
+    ].join("\n");
+    const result = findImportedRenamedComponents(source, sources, memberRenames);
+    expect(result).toEqual([
+      { localComponentName: "Section.Container", renames: { $asCard: "asCard" } },
+      { localComponentName: "LocalContainer", renames: { $asCard: "asCard" } },
+    ]);
+  });
+
   it("returns empty for non-matching import source", () => {
     const source = `import { Toggle } from "./other-file";\n<Toggle $active />`;
     const result = findImportedRenamedComponents(source, sources, renames);
@@ -86,5 +109,24 @@ describe("patchSourceTransientProps", () => {
     expect(result).toContain('variant="ok"');
     expect(result).not.toContain("$active");
     expect(result).not.toContain("$variant");
+  });
+
+  it("renames props on JSX member expression tags", () => {
+    const result = patchSourceTransientProps(
+      `<Section.Container $asCard={collapsed} />\n<Graph.Legend.Grid $columnCount={3} $dense />`,
+      [
+        { localComponentName: "Section.Container", renames: { $asCard: "asCard" } },
+        {
+          localComponentName: "Graph.Legend.Grid",
+          renames: { $columnCount: "columnCount", $dense: "dense" },
+        },
+      ],
+    );
+    expect(result).not.toBeNull();
+    expect(result).toContain("<Section.Container asCard={collapsed}");
+    expect(result).toContain("<Graph.Legend.Grid columnCount={3} dense");
+    expect(result).not.toContain("$asCard");
+    expect(result).not.toContain("$columnCount");
+    expect(result).not.toContain("$dense");
   });
 });

@@ -23,6 +23,7 @@ import {
   extractRootAndPath,
   getArrowFnParamBindings,
   getNodeLocStart,
+  isAstNode,
 } from "../utilities/jscodeshift-utils.js";
 import {
   SOURCE_CSS_PROPERTIES_KEY,
@@ -61,6 +62,7 @@ import {
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isMemberExpression,
   isSupportedAtRule,
   registerImports,
@@ -77,6 +79,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     perPropPseudo,
     perPropMedia,
     nestedSelectors,
+    variantBuckets,
+    styleFnDecls,
     attrBuckets,
     localVarValues,
     cssHelperPropValues,
@@ -648,6 +652,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // `${Child}` / `&:hover ${Child}` / `&:focus-visible ${Child}` (Parent styling a descendant child)
       // Also handle standalone `__SC_EXPR_N__` selectors (no `&` prefix) which Stylis
       // produces when the component selector is used without `&` in the template.
+      if (
+        otherLocal &&
+        !isCssHelperPlaceholder &&
+        !/[+~]\s*&/.test(selTrim2) &&
+        /__SC_EXPR_\d+__:[a-z-]+(?:\([^)]*\))?/i.test(selTrim2)
+      ) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: component selector with child pseudo",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
       const isComponentSelectorPattern =
         selTrim2.startsWith("&") || /^__SC_EXPR_\d+__$/.test(selTrim2);
       if (otherLocal && !isCssHelperPlaceholder && isComponentSelectorPattern && !isHasPattern) {
@@ -683,25 +701,20 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // bridge import and a local component of the same canonical name exist in one file.
         const jsxLocalName = crossFileUsage?.bridgeComponentLocalName ?? otherLocal;
 
-        // For cross-file bridge selectors, the target component (e.g., Text) must
-        // have JSX usage in this file so the override styles can be applied to it.
-        // Without JSX usage, the override styles would be orphaned dead code.
-        if (crossFileUsage?.bridgeComponentLocalName) {
-          const hasJsxUsage =
-            root
-              .find(j.JSXOpeningElement, {
-                name: { type: "JSXIdentifier", name: jsxLocalName },
-              })
-              .size() > 0;
-          if (!hasJsxUsage) {
-            state.markBail();
-            warnings.push({
-              severity: "warning",
-              type: "Unsupported selector: cross-file component selector target has no JSX usage in this file",
-              loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-            });
-            break;
-          }
+        // The JSX rewrite step can only apply descendant/component selector overrides
+        // when the selected child JSX appears under this styled parent in the same file.
+        // Otherwise the generated override style object is dead code.
+        if (
+          !decl.isCssHelper &&
+          !hasPatchableDescendantJsx(root, j, decl.localName, jsxLocalName)
+        ) {
+          state.markBail();
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: component selector target has no patchable JSX usage under selector parent",
+            loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+          });
+          break;
         }
 
         const childStyleKey = childDecl ? childDecl.styleKey : toStyleKey(jsxLocalName);
@@ -980,6 +993,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
 
     let media = findSupportedAtRule(rule.atRuleStack);
+    if (hasUnsupportedAtRule(rule.atRuleStack)) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
 
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
@@ -1158,6 +1180,83 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
     }
 
+    const wrapStyleConditionValue = (
+      target: Record<string, unknown>,
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      const current = target[prop];
+      if (
+        current &&
+        typeof current === "object" &&
+        !Array.isArray(current) &&
+        !isAstNode(current)
+      ) {
+        const map = current as Record<string, unknown>;
+        if (!("default" in map)) {
+          map.default = null;
+        }
+        map[conditionKey] = conditionValue;
+        return;
+      }
+      target[prop] = { default: current ?? null, [conditionKey]: conditionValue };
+    };
+
+    const patchStyleFnConditionValue = (
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      for (const fn of styleFnDecls.values()) {
+        const body = (fn as { body?: unknown }).body;
+        if (
+          !body ||
+          typeof body !== "object" ||
+          (body as { type?: string }).type !== "ObjectExpression"
+        ) {
+          continue;
+        }
+        const properties = (body as { properties?: unknown[] }).properties ?? [];
+        for (const property of properties) {
+          if (!property || typeof property !== "object") {
+            continue;
+          }
+          const propNode = property as {
+            key?: { type?: string; name?: string; value?: unknown };
+            value?: unknown;
+          };
+          const key = propNode.key;
+          const keyName =
+            key?.type === "Identifier"
+              ? key.name
+              : key?.type === "Literal" || key?.type === "StringLiteral"
+                ? String(key.value)
+                : null;
+          if (keyName !== prop || propNode.value === undefined) {
+            continue;
+          }
+          propNode.value = j.objectExpression([
+            j.property("init", j.identifier("default"), propNode.value as any),
+            j.property("init", j.literal(conditionKey), literalToAst(j, conditionValue)),
+          ]);
+        }
+      }
+    };
+
+    const patchEarlierDynamicConditionValues = (
+      prop: string,
+      conditionKey: string,
+      conditionValue: unknown,
+    ): void => {
+      for (const bucket of variantBuckets.values()) {
+        if (Object.hasOwn(bucket, prop)) {
+          wrapStyleConditionValue(bucket, prop, conditionKey, conditionValue);
+        }
+      }
+      patchStyleFnConditionValue(prop, conditionKey, conditionValue);
+    };
+
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
@@ -1290,7 +1389,40 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         return;
       }
 
+      if (media && (pseudoElement || pseudoElementsList)) {
+        const pseudoElementsToApply = pseudoElement ? [pseudoElement] : pseudoElementsList;
+        for (const pe of pseudoElementsToApply ?? []) {
+          nestedSelectors[pe] ??= {};
+          const peTarget = nestedSelectors[pe]!;
+          noteSourceCssProperty(peTarget);
+          const current = peTarget[prop];
+          if (!current || typeof current !== "object" || isAstNode(current)) {
+            peTarget[prop] = { default: current ?? null, [media]: value };
+          } else {
+            const map = current as Record<string, unknown>;
+            if (!("default" in map)) {
+              map.default = null;
+            }
+            map[media] = value;
+          }
+        }
+        return;
+      }
+
       if (media) {
+        const target = ctx.getBaseStyleTarget();
+        if (target !== styleObj) {
+          wrapStyleConditionValue(target, prop, media, value);
+          noteSourceCssProperty(target);
+          if (commentSource) {
+            addPropComments(target, prop, {
+              leading: commentSource.leading,
+              trailingLine: commentSource.trailingLine,
+            });
+          }
+          patchEarlierDynamicConditionValues(prop, media, value);
+          return;
+        }
         perPropMedia[prop] ??= {};
         const existing = perPropMedia[prop]!;
         noteSourceCssProperty(existing);
@@ -1305,6 +1437,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           }
         }
         existing[media] = value;
+        patchEarlierDynamicConditionValues(prop, media, value);
         return;
       }
 
@@ -1371,7 +1504,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           nestedSelectors[pe] ??= {};
           const pseudoSelector = nestedSelectors[pe];
           if (pseudoSelector) {
-            pseudoSelector[prop] = value;
+            const existing = pseudoSelector[prop];
+            if (
+              existing &&
+              typeof existing === "object" &&
+              !Array.isArray(existing) &&
+              "default" in (existing as Record<string, unknown>)
+            ) {
+              (existing as Record<string, unknown>).default = value;
+            } else {
+              pseudoSelector[prop] = value;
+            }
             noteSourceCssProperty(pseudoSelector);
             if (commentSource) {
               addPropComments(pseudoSelector, prop, {
@@ -1644,7 +1787,31 @@ function tryForwardCssVarBridge(
  * Preserves static prefixes/suffixes around the interpolation slot.
  */
 function composeVarReference(parts: CssValuePart[], varName: string): string {
+  if (
+    parts.length === 2 &&
+    parts[0]?.kind === "slot" &&
+    parts[1]?.kind === "static" &&
+    isCssUnitSuffix(parts[1].value)
+  ) {
+    return `calc(var(${varName}) * 1${parts[1].value.trim()})`;
+  }
+  if (
+    parts.length === 3 &&
+    parts[0]?.kind === "static" &&
+    parts[0].value.trim() === "-" &&
+    parts[1]?.kind === "slot" &&
+    parts[2]?.kind === "static" &&
+    isCssUnitSuffix(parts[2].value)
+  ) {
+    return `calc(-1 * var(${varName}) * 1${parts[2].value.trim()})`;
+  }
   return parts.map((p) => (p.kind === "static" ? p.value : `var(${varName})`)).join("");
+}
+
+function isCssUnitSuffix(value: string): boolean {
+  return /^(?:px|r?em|%|vh|vw|vmin|vmax|cqw|cqh|cqi|cqb|cqmin|cqmax|ch|ex|lh|rlh|svh|lvh|dvh|svw|lvw|dvw)$/.test(
+    value.trim(),
+  );
 }
 
 /**
@@ -3092,6 +3259,45 @@ function buildAncestorPseudoMap(
   ]);
 }
 
+function hasPatchableDescendantJsx(
+  root: { find: (...args: any[]) => { forEach: (callback: (path: any) => void) => void } },
+  j: JSCodeshift,
+  parentLocalName: string,
+  childLocalName: string,
+): boolean {
+  let found = false;
+  root
+    .find(j.JSXOpeningElement, {
+      name: { type: "JSXIdentifier", name: childLocalName },
+    } as any)
+    .forEach((path: any) => {
+      if (found) {
+        return;
+      }
+      let current = path.parent;
+      while (current) {
+        const value = current.value;
+        if (
+          value?.type === "JSXElement" &&
+          jsxElementName(value.openingElement?.name) === parentLocalName
+        ) {
+          found = true;
+          return;
+        }
+        current = current.parent;
+      }
+    });
+  return found;
+}
+
+function jsxElementName(name: unknown): string | null {
+  if (!name || typeof name !== "object") {
+    return null;
+  }
+  const node = name as { type?: string; name?: string };
+  return node.type === "JSXIdentifier" ? (node.name ?? null) : null;
+}
+
 /**
  * Merges CSS properties from `.attrs({ style: { ... } })` into the styled component's
  * style object and style functions.
@@ -3121,14 +3327,18 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
       const fnKey = styleKeyWithSuffix(decl.styleKey, entry.cssProp);
       const paramName = cssPropertyToIdentifier(entry.cssProp);
       const param = j.identifier(paramName);
-      (param as any).typeAnnotation = j.tsTypeAnnotation(j.tsStringKeyword());
+      (param as any).typeAnnotation = j.tsTypeAnnotation(
+        entry.condition === "always"
+          ? j.tsUnionType([j.tsStringKeyword(), j.tsNumberKeyword()])
+          : j.tsStringKeyword(),
+      );
       const p = makeCssProperty(j, entry.cssProp, paramName);
       const body = j.objectExpression([p]);
       ctx.styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
       ctx.styleFnFromProps.push({
         fnKey,
         jsxProp: entry.jsxProp,
-        condition: "truthy",
+        condition: entry.condition ?? "truthy",
         callArg: entry.callArgExpr as any,
       });
       ensureShouldForwardPropDrop(decl, entry.jsxProp);

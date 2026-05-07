@@ -248,6 +248,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolverImports,
     warnings,
     keyframesNames,
+    inlineKeyframeNameMap: (ctx.inlineKeyframeNameMap ??= new Map()),
     j,
   });
 

@@ -20,7 +20,10 @@ import {
   isAstNode,
 } from "../utilities/jscodeshift-utils.js";
 import type { WarningLog, WarningType } from "../logger.js";
-import { parseStyledTemplateLiteral } from "../styled-css.js";
+import {
+  parseStyledTemplateLiteral,
+  terminateStandaloneInterpolationStatements,
+} from "../styled-css.js";
 import { parseSelector } from "../selectors.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -31,6 +34,7 @@ import {
 import {
   findInAst,
   findSupportedAtRule,
+  hasUnsupportedAtRule,
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
@@ -63,7 +67,8 @@ export function parseCssTemplateToRules(template: any): {
 } {
   const parsed = parseStyledTemplateLiteral(template);
   const rawCss = parsed.rawCss;
-  const wrappedRawCss = `& { ${rawCss} }`;
+  const stylisRawCss = terminateStandaloneInterpolationStatements(rawCss);
+  const wrappedRawCss = `& { ${stylisRawCss} }`;
   const stylisAst = compile(wrappedRawCss);
   const rules = normalizeStylisAstToIR(stylisAst, parsed.slots, { rawCss: wrappedRawCss });
   const slotExprById = new Map(parsed.slots.map((s) => [s.index, s.expression]));
@@ -330,8 +335,9 @@ export function createCssHelperResolver(args: {
 
     for (const rule of rules) {
       const rawMedia = findSupportedAtRule(rule.atRuleStack);
-      // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.)
-      if (rule.atRuleStack.length > 0 && !rawMedia) {
+      // Only support @media and @container at-rules; bail on others (@supports, @keyframes, etc.).
+      // Mixed stacks must also bail because preserving only the supported rule would be too broad.
+      if (hasUnsupportedAtRule(rule.atRuleStack)) {
         return bail("Conditional `css` block: @-rules (e.g., @media, @supports) are not supported");
       }
 

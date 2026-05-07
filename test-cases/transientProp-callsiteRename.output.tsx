@@ -19,13 +19,14 @@ function PanelBase(props: PanelBaseProps) {
 }
 
 type ResponsivePanelProps = {
+  sx?: stylex.StyleXStyles;
   asCard?: boolean;
   columnCount?: number;
   floatingOffset?: number;
 } & React.ComponentPropsWithRef<typeof PanelBase>;
 
 function ResponsivePanel(props: ResponsivePanelProps) {
-  const { className, children, style, asCard, columnCount, floatingOffset, ...rest } = props;
+  const { className, children, style, sx, asCard, columnCount, floatingOffset, ...rest } = props;
   return (
     <PanelBase
       {...rest}
@@ -35,6 +36,7 @@ function ResponsivePanel(props: ResponsivePanelProps) {
           styles.responsivePanelGridTemplateColumns(`repeat(${columnCount ?? 1}, minmax(0, 1fr))`),
           styles.responsivePanelTop(`${floatingOffset ?? 0}px`),
           asCard && styles.responsivePanelAsCard,
+          sx,
         ],
         className,
         style,
@@ -45,11 +47,42 @@ function ResponsivePanel(props: ResponsivePanelProps) {
   );
 }
 
+function CompactPanel(props: React.ComponentPropsWithRef<typeof ResponsivePanel>) {
+  const { className, children, style, ...rest } = props;
+  return (
+    <ResponsivePanel
+      {...rest}
+      asCard={true}
+      floatingOffset={4}
+      {...mergedSx(styles.compactPanel, className, style)}
+    >
+      {children}
+    </ResponsivePanel>
+  );
+}
+
+const WidgetKit = {
+  Panel: ResponsivePanel,
+  Legend: {
+    Grid: ResponsivePanel,
+  },
+};
+
+const SelectedPanel = Math.random() > 0.5 ? ResponsivePanel : CompactPanel;
+
 export const App = () => (
   <div style={{ padding: 12 }}>
     <ResponsivePanel asCard columnCount={3} floatingOffset={24} role="region">
       Renamed transient props
     </ResponsivePanel>
+    <WidgetKit.Panel asCard columnCount={2}>
+      Member transient prop
+    </WidgetKit.Panel>
+    <WidgetKit.Legend.Grid columnCount={4}>Nested member transient prop</WidgetKit.Legend.Grid>
+    <CompactPanel columnCount={1}>Attrs transient defaults</CompactPanel>
+    <SelectedPanel asCard floatingOffset={12}>
+      Alias transient prop
+    </SelectedPanel>
   </div>
 );
 
@@ -70,4 +103,7 @@ const styles = stylex.create({
   responsivePanelTop: (top: string) => ({
     top,
   }),
+  compactPanel: {
+    borderRadius: 8,
+  },
 });

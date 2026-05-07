@@ -41,6 +41,13 @@ export const App = () => (
       Grouped parent pseudos
       <span sx={[styles.moreActionsIcon, styles.moreActionsIconInHoverFocusContainer]} />
     </div>
+    <br />
+    <br />
+    <div>
+      <a href="#" sx={[styles.nestedLink, styles.nestedLinkInNestedRow]}>
+        Nested link
+      </a>
+    </div>
   </div>
 );
 
@@ -96,6 +103,9 @@ const styles = stylex.create({
       ":focus-within": "#111",
     },
   },
+  nestedLink: {
+    color: "#2563eb",
+  },
   contentInContainerLink: {
     outline: {
       default: null,
@@ -103,7 +113,7 @@ const styles = stylex.create({
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(":focus-visible")]: 5,
+      [stylex.when.ancestor(":focus-visible")]: "5px",
     },
   },
   shadowBoxInShadowContainer: {
@@ -131,5 +141,8 @@ const styles = stylex.create({
       [stylex.when.ancestor(":hover")]: 1,
       [stylex.when.ancestor(":focus-within")]: 1,
     },
+  },
+  nestedLinkInNestedRow: {
+    display: "flex",
   },
 });

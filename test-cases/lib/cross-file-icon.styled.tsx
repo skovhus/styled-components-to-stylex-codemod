@@ -15,3 +15,9 @@ export const CrossFileLink = styled.a`
   color: #bf4f74;
   text-decoration: none;
 `;
+
+export const TruncatedLabel = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;

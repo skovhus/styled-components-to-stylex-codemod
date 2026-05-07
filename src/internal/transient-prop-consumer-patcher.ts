@@ -83,9 +83,12 @@ export function findImportedRenamedComponents(
 ): TransientPropConsumerEntry[] {
   const entries: TransientPropConsumerEntry[] = [];
   for (const { exportName, renames } of componentRenames) {
-    const localName = findLocalImportName(consumerSource, targetImportSources, exportName);
+    const localName = findLocalImportNameForExport(consumerSource, targetImportSources, exportName);
     if (localName) {
       entries.push({ localComponentName: localName, renames });
+      for (const wrapperName of findStyledWrapperNames(consumerSource, localName)) {
+        entries.push({ localComponentName: wrapperName, renames });
+      }
     }
   }
   return entries;
@@ -210,6 +213,34 @@ function findLocalImportName(
   }
 
   return null;
+}
+
+function findLocalImportNameForExport(
+  source: string,
+  targetImportSources: ReadonlySet<string>,
+  exportName: string,
+): string | null {
+  const [rootExport, ...memberPath] = exportName.split(".");
+  if (!rootExport || memberPath.length === 0) {
+    return findLocalImportName(source, targetImportSources, exportName);
+  }
+  const rootLocalName = findLocalImportName(source, targetImportSources, rootExport);
+  return rootLocalName ? [rootLocalName, ...memberPath].join(".") : null;
+}
+
+function findStyledWrapperNames(source: string, componentName: string): string[] {
+  const escapedComponent = escapeRegex(componentName);
+  const names: string[] = [];
+  const wrapperRegex = new RegExp(
+    `(?:const|let|var)\\s+(\\w+)\\s*=\\s*styled\\(\\s*${escapedComponent}\\s*\\)`,
+    "g",
+  );
+  for (const match of source.matchAll(wrapperRegex)) {
+    if (match[1]) {
+      names.push(match[1]);
+    }
+  }
+  return names;
 }
 
 /**

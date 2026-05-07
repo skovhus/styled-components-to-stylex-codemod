@@ -6,6 +6,12 @@ export const StyledCollapseButton = styled.div`
   background-color: #f0f0f0;
   cursor: pointer;
 
+  ${CollapseArrowIconGlobalSelector} {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+
   &:hover ${CollapseArrowIconGlobalSelector} {
     background-color: rebeccapurple;
   }

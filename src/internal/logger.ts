@@ -106,6 +106,8 @@ export type WarningType =
   | "Unsupported selector: cross-file :has() component selector not yet supported"
   | "Unsupported selector: unresolved interpolation in :has() component selector"
   | "Unsupported selector: unknown component selector"
+  | "Unsupported selector: component selector with child pseudo"
+  | "Unsupported selector: component selector target has no patchable JSX usage under selector parent"
   | "Unsupported css`` mixin: after-base mixin style is not a plain object"
   | "Unsupported css`` mixin: nested contextual conditions in after-base mixin"
   | "Unsupported css`` mixin: cannot infer base default for after-base contextual override (base value is non-literal)"
@@ -284,8 +286,30 @@ export class Logger {
     if (typeof context === "undefined") {
       return null;
     }
-    return JSON.stringify(context, null, 2);
+    return JSON.stringify(context, createContextReplacer(), 2);
   }
+}
+
+function createContextReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>();
+  return (key, value) => {
+    if (
+      key === "loc" ||
+      key === "tokens" ||
+      key === "comments" ||
+      key === "start" ||
+      key === "end"
+    ) {
+      return undefined;
+    }
+    if (value && typeof value === "object") {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

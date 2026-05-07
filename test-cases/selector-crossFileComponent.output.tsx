@@ -1,11 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
-import { CrossFileIcon } from "./lib/cross-file-icon.styled";
+import { CrossFileIcon, TruncatedLabel } from "./lib/cross-file-icon.styled";
 
-import { IconButtonMarker, HoverFocusButtonMarker } from "./markers.stylex";
+import { IconButtonMarker, HoverFocusButtonMarker, LabelButtonMarker } from "./markers.stylex";
 
 export function App() {
   return (
-    <div style={{ display: "flex", gap: 16, padding: 16 }}>
+    <div style={{ display: "flex", gap: 16, padding: 16, width: 620 }}>
       <CrossFileIcon />
       <button sx={[styles.button, styles.iconButton, IconButtonMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInIconButton)} />
@@ -14,6 +14,15 @@ export function App() {
       <button sx={[styles.button, styles.hoverFocusButton, HoverFocusButtonMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInHoverFocusButton)} />
         Hover or focus
+      </button>
+      <button sx={styles.button}>
+        <CrossFileIcon {...stylex.props(styles.crossFileIconInCloneButton)} />
+        Clone
+      </button>
+      <button sx={[styles.button, LabelButtonMarker]}>
+        <TruncatedLabel {...stylex.props(styles.truncatedLabelInLabelButton)}>
+          Exported selector label
+        </TruncatedLabel>
       </button>
     </div>
   );
@@ -50,6 +59,19 @@ const styles = stylex.create({
       default: 0,
       [stylex.when.ancestor(":hover", HoverFocusButtonMarker)]: 1,
       [stylex.when.ancestor(":focus-within", HoverFocusButtonMarker)]: 1,
+    },
+  },
+  crossFileIconInCloneButton: {
+    backgroundColor: "transparent !important",
+  },
+  truncatedLabelInLabelButton: {
+    color: {
+      default: "#475569",
+      [stylex.when.ancestor(":hover", LabelButtonMarker)]: "#0f172a",
+    },
+    textDecoration: {
+      default: null,
+      [stylex.when.ancestor(":hover", LabelButtonMarker)]: "underline",
     },
   },
 });

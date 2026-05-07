@@ -19,6 +19,30 @@ export const color =
   (props: ThemedStyledProps): string =>
     props.theme.color[colorName];
 
+export const paletteColor = (colorName: ThemeColor): string => {
+  const colors: Record<ThemeColor, string> = {
+    accent: "#8B5CF6",
+    bgBase: "#990000",
+    bgBaseHover: "#BAE6FD",
+    bgBorderFaint: "#7DD3FC",
+    bgBorderSolid: "#94A3B8",
+    bgFocus: "#60A5FA",
+    bgSelected: "#3B82F6",
+    bgSub: "#009900",
+    controlPrimary: "#3B82F6",
+    controlPrimaryHover: "#2563EB",
+    greenBase: "#22C55E",
+    labelBase: "#111827",
+    labelFaint: "#9CA3AF",
+    labelMuted: "#6B7280",
+    labelTitle: "#111827",
+    primaryColor: "#BF4F74",
+    textPrimary: "#111827",
+    textSecondary: "#6B7280",
+  };
+  return colors[colorName];
+};
+
 export function mixedColor(
   colorName: ThemeColor,
   mode: "theme",
@@ -52,6 +76,10 @@ export const flexCenter = () => `
 export const gradient = () => `
   background-image: linear-gradient(90deg, #ff6b6b, #5f6cff);
   color: transparent;
+`;
+
+export const focusOutline = css`
+  outline: 2px solid #4f46e5;
 `;
 
 // Thin pixel helper - returns a CSS string for a thin pixel

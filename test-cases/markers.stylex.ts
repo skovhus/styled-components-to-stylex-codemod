@@ -6,6 +6,9 @@ export const IconButtonMarker = stylex.defineMarker();
 /** Custom marker for HoverFocusButton */
 export const HoverFocusButtonMarker = stylex.defineMarker();
 
+/** Custom marker for LabelButton */
+export const LabelButtonMarker = stylex.defineMarker();
+
 /** Custom marker for Wrapper */
 export const WrapperMarker = stylex.defineMarker();
 
@@ -29,3 +32,6 @@ export const ThingThemedMarker = stylex.defineMarker();
 
 /** Custom marker for Row */
 export const RowMarker = stylex.defineMarker();
+
+/** Custom marker for CloneButton */
+export const CloneButtonMarker = stylex.defineMarker();

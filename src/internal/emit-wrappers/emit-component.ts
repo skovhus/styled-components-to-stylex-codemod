@@ -883,12 +883,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
 
-      // When the wrapped component is sx-aware, className/style flow through
-      // `{...rest}` unchanged — the wrapped component merges them with its
-      // internal styles itself. `sx` is destructured so the wrapper can compose
-      // it with its own internal styles via `sx={[styles.x, sx]}`.
-      const destructureClassName = allowClassNameProp && !wrappedAcceptsSx;
-      const destructureStyle = allowStyleProp && !wrappedAcceptsSx;
+      // When the wrapped component is sx-aware and we can use the sx-only path,
+      // className/style flow through `{...rest}` unchanged. If extra className
+      // expressions or inline styles force explicit merging, bind them locally.
+      const canForwardClassNameStyleThroughRest =
+        wrappedAcceptsSx && !(staticClassNameExpr || d.inlineStyleProps?.length);
+      const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
+      const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
       const destructureSx = allowSxProp || wrappedAcceptsSx;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [

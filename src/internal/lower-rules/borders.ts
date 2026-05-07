@@ -580,6 +580,17 @@ export function tryHandleInterpolatedBorder(
       if (!hasStaticWidthOrStyle) {
         const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
         if (parsedTpl) {
+          if (selector.trim() !== "&" || (atRuleStack ?? []).length > 0) {
+            if (parsedTpl.width) {
+              applyResolvedPropValue(widthProp, parsedTpl.width);
+            }
+            if (parsedTpl.style) {
+              applyResolvedPropValue(styleProp, parsedTpl.style);
+            }
+            applyResolvedPropValue(colorProp, parsedTpl.colorExpr);
+            return true;
+          }
+
           const fullProp = direction ? `border${direction}` : "border";
           const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
           const bucket = extraStyleObjects.get(extraKey) ?? {};

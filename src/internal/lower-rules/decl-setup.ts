@@ -11,7 +11,7 @@ import { createCssHelperHandlers } from "./css-helper-handlers.js";
 import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
 import { createTypeInferenceHelpers, ensureShouldForwardPropDrop } from "./types.js";
 import { createCssHelperConditionalHandler } from "./css-helper-conditional.js";
-import { findSupportedAtRule, mergeMediaIntoStyles } from "./utils.js";
+import { findSupportedAtRule, hasUnsupportedAtRule, mergeMediaIntoStyles } from "./utils.js";
 import { createValuePatternHandlers } from "./value-patterns.js";
 import { createVariantApplier } from "./variant-utils.js";
 import { addStyleKeyMixin } from "./precompute.js";
@@ -293,8 +293,10 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     const mediaStyles = new Map<string, Record<string, unknown>>();
     for (const rule of rules) {
       const media = findSupportedAtRule(rule.atRuleStack);
-      // Only support @media and @container at-rules; bail on others (@supports, etc.)
-      if (rule.atRuleStack.length > 0 && !media) {
+      // Only support @media and @container at-rules; bail on others (@supports, etc.).
+      // Mixed stacks such as @supports { @media { ... } } must also bail because
+      // preserving only the media query would make the guarded declarations too broad.
+      if (hasUnsupportedAtRule(rule.atRuleStack)) {
         warnings.push({
           severity: "warning",
           type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",

@@ -98,6 +98,19 @@ const GroupedPanel = styled.div<{ $tone?: string }>`
   }
 `;
 
+const StickyHeader = styled.div`
+  position: sticky;
+  top: 0;
+`;
+
+const Scroller = styled.div<{ $minContentWidth: number }>`
+  overflow: auto;
+
+  ${StickyHeader} {
+    min-width: ${(props) => props.$minContentWidth}px;
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}>
     <Button $color="blue">
@@ -121,5 +134,8 @@ export const App = () => (
         <GroupedLabel>Grouped hover/focus dynamic color</GroupedLabel>
       </button>
     </GroupedPanel>
+    <Scroller $minContentWidth={320}>
+      <StickyHeader>Dynamic descendant width</StickyHeader>
+    </Scroller>
   </div>
 );

@@ -235,6 +235,40 @@ export function normalizeStylisAstToIR(
               }
             } else if (child?.type === "comm") {
               handleCommentNode(String(child.value ?? ""));
+            } else if (typeof child?.type === "string" && child.type.startsWith("@")) {
+              const atType = String(child.type);
+              const atValue =
+                child.value !== undefined && child.value !== null ? String(child.value) : "";
+              const at =
+                atValue && !atValue.trim().startsWith(atType)
+                  ? `${atType} ${atValue}`.trim()
+                  : atValue || atType;
+              atRuleStack.push(at);
+              const nestedRule = ensureRule(selector, atRuleStack);
+              const atChildren = child.children;
+              if (Array.isArray(atChildren)) {
+                for (const atChild of atChildren) {
+                  if (atChild?.type === "decl") {
+                    const decls = parseDeclarations(String(atChild.value ?? ""), slotByPlaceholder);
+                    const firstDeclInner = decls[0];
+                    if (decls.length && firstDeclInner) {
+                      if (pendingComment) {
+                        firstDeclInner.leadingComment = pendingComment;
+                        pendingComment = null;
+                      }
+                      nestedRule.declarations.push(...decls);
+                      lastDecl = decls[decls.length - 1] ?? null;
+                    }
+                  } else if (atChild?.type === "comm") {
+                    handleCommentNode(String(atChild.value ?? ""));
+                  } else {
+                    visit(atChild as Element);
+                  }
+                }
+              } else {
+                visit(atChildren as unknown as Element);
+              }
+              atRuleStack.pop();
             } else {
               visit(child as Element);
             }
@@ -336,10 +370,11 @@ export function normalizeStylisAstToIR(
         recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       } else if (selectorStack.length > 0) {
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
-        // Skip simple pseudo-class selectors (&:hover, &:focus, etc.) since those are already
-        // handled by tryResolveConditionalHelperCallInPseudo in finalize-decl.ts via rawCss regex.
+        // Simple pseudo-class selectors without a user-authored semicolon are handled later
+        // from rawCss. With an explicit semicolon, Stylis drops the placeholder entirely,
+        // so recover it here.
         const currentSelector = selectorStack[selectorStack.length - 1]!;
-        if (!/^&:[a-z]/i.test(currentSelector)) {
+        if (!/^&:[a-z]/i.test(currentSelector) || /;\s*$/.test(trimmed)) {
           recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
       }
@@ -455,6 +490,17 @@ function parseDeclarations(
   if (leadingSlot && leadingSlot[1]) {
     const slotId = Number(leadingSlot[2]);
     const rest = leadingSlot[3] ?? "";
+    const restTrimmed = rest.trim();
+    if (restTrimmed.startsWith("@")) {
+      return [
+        {
+          property: "",
+          value: { kind: "interpolated", parts: [{ kind: "slot", slotId }] },
+          important: false,
+          valueRaw: leadingSlot[1],
+        },
+      ];
+    }
     return [
       {
         property: "",

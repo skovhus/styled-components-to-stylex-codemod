@@ -11,10 +11,27 @@ export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children"
   );
 }
 
+type MoveIconProps = { animated?: boolean } & Omit<
+  React.ComponentProps<"svg">,
+  "className" | "style"
+>;
+
+export function MoveIcon(props: MoveIconProps) {
+  const { children, animated, ...rest } = props;
+  return (
+    <svg {...rest} sx={[styles.moveIcon, animated && styles.moveIconAnimated]}>
+      {children}
+    </svg>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
       <Move>Moving in</Move>
+      <MoveIcon animated viewBox="0 0 32 32">
+        <circle cx="16" cy="16" r="12" />
+      </MoveIcon>
     </div>
   );
 }
@@ -31,6 +48,16 @@ const MoveAnimation = stylex.keyframes({
   },
 });
 
+const MoveIconAnimation = stylex.keyframes({
+  from: {
+    transform: "translateY(4px)",
+  },
+
+  to: {
+    transform: "translateY(0)",
+  },
+});
+
 const styles = stylex.create({
   move: {
     animationName: MoveAnimation,
@@ -40,5 +67,16 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 16,
     color: "#0369a1",
+  },
+  moveIcon: {
+    width: 32,
+    height: 32,
+    fill: "#4f46e5",
+  },
+  moveIconAnimated: {
+    animationName: MoveIconAnimation,
+    animationDuration: "0.8s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
   },
 });

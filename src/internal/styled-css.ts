@@ -51,10 +51,68 @@ export function parseStyledTemplateLiteral(template: TemplateLiteral): ParsedSty
   }
 
   const rawCss = parts.join("");
-  const stylisAst = compile(rawCss);
+  const stylisCss = terminateStandaloneInterpolationStatements(rawCss);
+  const stylisAst = compile(stylisCss);
   return { rawCss, slots, stylisAst };
+}
+
+export function terminateStandaloneInterpolationStatements(css: string): string {
+  let parenDepth = 0;
+  const lines = css.split(/(?<=\n)/);
+  const depthsBeforeLine: number[] = [];
+  for (const line of lines) {
+    depthsBeforeLine.push(parenDepth);
+    parenDepth = updateParenDepth(parenDepth, line);
+  }
+  return lines
+    .map((line, index) => {
+      const lineForStylis =
+        depthsBeforeLine[index] === 0 &&
+        /^\s*__SC_EXPR_\d+__\s*$/.test(line) &&
+        isBeforeAtRule(lines, index)
+          ? line.replace(/(\s*)$/, ";$1")
+          : line;
+      return lineForStylis;
+    })
+    .join("");
 }
 
 function makeInterpolationPlaceholder(index: number): string {
   return `__SC_EXPR_${index}__`;
+}
+
+function isBeforeAtRule(lines: string[], startIndex: number): boolean {
+  for (let i = startIndex + 1; i < lines.length; i++) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed || /^__SC_EXPR_\d+__\s*;?$/.test(trimmed)) {
+      continue;
+    }
+    return trimmed.startsWith("@");
+  }
+  return false;
+}
+
+function updateParenDepth(startDepth: number, line: string): number {
+  let depth = startDepth;
+  let inString: false | '"' | "'" = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if ((ch === '"' || ch === "'") && line[i - 1] !== "\\") {
+      if (!inString) {
+        inString = ch;
+      } else if (inString === ch) {
+        inString = false;
+      }
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return depth;
 }

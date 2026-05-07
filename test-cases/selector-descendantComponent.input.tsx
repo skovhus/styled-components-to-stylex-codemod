@@ -97,6 +97,16 @@ const HoverFocusContainer = styled.div`
   }
 `;
 
+const NestedLink = styled.a`
+  color: #2563eb;
+`;
+
+const NestedRow = styled.div`
+  ${NestedLink} {
+    display: flex;
+  }
+`;
+
 export const App = () => (
   <div>
     <Button>
@@ -119,5 +129,10 @@ export const App = () => (
       Grouped parent pseudos
       <MoreActionsIcon />
     </HoverFocusContainer>
+    <br />
+    <br />
+    <NestedRow>
+      <NestedLink href="#">Nested link</NestedLink>
+    </NestedRow>
   </div>
 );

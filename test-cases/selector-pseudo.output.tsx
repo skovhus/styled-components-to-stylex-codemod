@@ -1,8 +1,25 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+type FocusableCellProps = React.PropsWithChildren<{
+  isAnimating?: boolean;
+}>;
+
+function FocusableCell(props: FocusableCellProps) {
+  const { children, isAnimating } = props;
+  return (
+    <div sx={[styles.focusableCell, isAnimating && styles.focusableCellAnimating]}>{children}</div>
+  );
+}
+
 export const App = () => (
-  <div data-label=" after" sx={styles.thing}>
-    Hover me!
+  <div style={{ display: "grid", gap: 12 }}>
+    <div data-label=" after" sx={styles.thing}>
+      Hover me!
+    </div>
+    <FocusableCell isAnimating>
+      <button type="button">Focusable cell</button>
+    </FocusableCell>
   </div>
 );
 
@@ -25,5 +42,15 @@ const styles = stylex.create({
     "::after": {
       content: "attr(data-label)",
     },
+  },
+  focusableCell: {
+    position: "relative",
+    zIndex: {
+      default: null,
+      ":focus-within": 12,
+    },
+  },
+  focusableCellAnimating: {
+    zIndex: 10,
   },
 });

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Simulated imported component
 const Flex = (
@@ -169,6 +170,94 @@ function DynamicHeightBox(props: DynamicHeightBoxProps) {
   );
 }
 
+type PositionedTileProps = React.PropsWithChildren<{
+  height: number;
+}>;
+
+// Pattern 11: dynamic attrs style must be applied as style, not leaked as an inert DOM prop
+function PositionedTile(props: PositionedTileProps) {
+  const { children, height } = props;
+  return <div sx={styles.positionedTile(height)}>{children}</div>;
+}
+
+type SeparatorLineProps = React.PropsWithChildren<{
+  height?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}>;
+
+// Pattern 12: dynamic attrs style should merge with caller style, with caller style last
+function SeparatorLine(props: SeparatorLineProps) {
+  const { className, children, style, height } = props;
+  return <div {...mergedSx(styles.separatorLine(height ?? 1), className, style)}>{children}</div>;
+}
+
+type FallbackSeparatorLineProps = React.PropsWithChildren<{
+  height?: number;
+}>;
+
+function FallbackSeparatorLine(props: FallbackSeparatorLineProps) {
+  const { children, height } = props;
+  return <div sx={styles.fallbackSeparatorLine(height ? `${height}px` : "16px")}>{children}</div>;
+}
+
+function HeaderSeparator(props: {
+  className?: string;
+  height?: number;
+  style?: React.CSSProperties;
+}) {
+  const { className, height, style } = props;
+  return <SeparatorLine height={height} className={className} style={style} />;
+}
+
+// Pattern 13: attrs on a base wrapper must be inherited by styled extensions
+type ButtonLikeProps = React.PropsWithChildren<{
+  className?: string;
+  size?: "small" | "medium";
+  style?: React.CSSProperties;
+  variant?: "borderless" | "solid";
+}>;
+
+function ButtonLike(props: ButtonLikeProps) {
+  const { children, className, size, style, variant } = props;
+  return (
+    <button className={className} data-size={size} data-variant={variant} style={style}>
+      {children}
+    </button>
+  );
+}
+
+function BaseToolbarButton(
+  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+) {
+  return (
+    <ButtonLike
+      {...props}
+      size="small"
+      variant="borderless"
+      {...stylex.props(styles.baseToolbarButton)}
+    />
+  );
+}
+
+function ActiveToolbarButton(
+  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+) {
+  return (
+    <ButtonLike
+      {...props}
+      size="small"
+      variant="borderless"
+      {...stylex.props(styles.baseToolbarButton, styles.activeToolbarButton)}
+    />
+  );
+}
+
+// Pattern 14: attrs style identifiers from module scope must not be treated as props
+const MODULE_SCOPE_TEXT_COLOR = "#0f766e";
+
+const CALLBACK_SCOPE_TEXT_COLOR = "#7c3aed";
+
 export const App = () => (
   <>
     <Input small placeholder="Small" />
@@ -183,6 +272,12 @@ export const App = () => (
     <AlignedFlex>Aligned content</AlignedFlex>
     <span sx={styles.noWrapText}>No wrapping text</span>
     <DynamicHeightBox height={50}>Dynamic height</DynamicHeightBox>
+    <PositionedTile height={64}>Tile with attrs height</PositionedTile>
+    <HeaderSeparator height={2} style={{ opacity: 1 }} />
+    <FallbackSeparatorLine height={4}>Fallback separator</FallbackSeparatorLine>
+    <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
+    <span sx={styles.moduleScopeStyleText}>Module scope style</span>
+    <span sx={styles.callbackScopeStyleText}>Callback scope style</span>
   </>
 );
 
@@ -249,4 +344,52 @@ const styles = stylex.create({
   dynamicHeightBoxHeight: (height: string) => ({
     height,
   }),
+  positionedTile: (height: string | number) => ({
+    position: "absolute",
+    minHeight: 1,
+    backgroundColor: "#eef2ff",
+    outlineOffset: {
+      default: null,
+      ":focus-visible": "3px",
+    },
+    outlineWidth: {
+      default: null,
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#4f46e5",
+    },
+    height,
+  }),
+  separatorLine: (height: string | number) => ({
+    width: "100%",
+    backgroundColor: "#94a3b8",
+    height,
+  }),
+  fallbackSeparatorLine: (height: string | number) => ({
+    width: "100%",
+    backgroundColor: "#16a34a",
+    height,
+  }),
+  baseToolbarButton: {
+    paddingBlock: 4,
+    paddingInline: 8,
+  },
+  activeToolbarButton: {
+    color: "#4338ca",
+    backgroundColor: "#e0e7ff",
+  },
+  moduleScopeStyleText: {
+    fontWeight: 600,
+    color: "#0f766e",
+  },
+  callbackScopeStyleText: {
+    fontStyle: "italic",
+    color: "#7c3aed",
+  },
 });
