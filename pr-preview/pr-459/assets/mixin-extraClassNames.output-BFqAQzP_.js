@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import"./stylex-vFXG5bjz.js";import{t}from"./electronMixins.module-Af5y8lPg.js";var n=e();function r(){return(0,n.jsx)(`div`,{className:`x71s49j`,className:t.draggableRegionDisableChildren,children:`Draggable`})}export{r as App};
