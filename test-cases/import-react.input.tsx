@@ -33,11 +33,23 @@ export const ChoiceButton = styled.button<ChoiceButtonProps>`
   color: white;
 `;
 
+type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
+
+const LocalChoiceButton = styled.button<LocalChoiceButtonProps>`
+  display: inline-flex;
+  align-items: center;
+  background: ${(props) => (props.active ? "purple" : "silver")};
+  color: white;
+`;
+
 export function App() {
   return (
     <div>
       <ChoiceButton active>Active</ChoiceButton>
       <ChoiceButton active={false}>Inactive</ChoiceButton>
+      <LocalChoiceButton active onClick={() => undefined}>
+        Local active
+      </LocalChoiceButton>
     </div>
   );
 }

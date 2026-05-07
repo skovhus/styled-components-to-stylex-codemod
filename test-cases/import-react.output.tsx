@@ -54,11 +54,25 @@ export function ChoiceButton(
   );
 }
 
+type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
+
+function LocalChoiceButton(props: React.PropsWithChildren<Omit<LocalChoiceButtonProps, "className" | "style">>) {
+  const { children, active, ...rest } = props;
+  return (
+    <button {...rest} sx={[styles.localChoiceButton, active ? styles.localChoiceButtonActive : undefined]}>
+      {children}
+    </button>
+  );
+}
+
 export function App() {
   return (
     <div>
       <ChoiceButton active>Active</ChoiceButton>
       <ChoiceButton active={false}>Inactive</ChoiceButton>
+      <LocalChoiceButton active onClick={() => undefined}>
+        Local active
+      </LocalChoiceButton>
     </div>
   );
 }
@@ -82,5 +96,14 @@ const styles = stylex.create({
   },
   choiceButtonActive: {
     backgroundColor: "navy",
+  },
+  localChoiceButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    backgroundColor: "silver",
+    color: "white",
+  },
+  localChoiceButtonActive: {
+    backgroundColor: "purple",
   },
 });
