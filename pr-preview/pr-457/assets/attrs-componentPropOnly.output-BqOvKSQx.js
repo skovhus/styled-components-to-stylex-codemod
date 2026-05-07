@@ -1,0 +1,1 @@
+import"./chunk-jRWAZmH_.js";import{m as e,p as t}from"./index-JUItjMPr.js";import{t as n}from"./text-B-lB11vC.js";e();var r=t();function i(e){return(0,r.jsx)(n,{...e,variant:`title2`})}var a=()=>(0,r.jsx)(`div`,{style:{padding:`16px`},children:(0,r.jsx)(i,{children:`Hello World`})});export{a as App};
