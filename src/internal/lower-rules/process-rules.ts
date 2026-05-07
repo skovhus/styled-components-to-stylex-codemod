@@ -71,6 +71,13 @@ import {
   type AdapterCallResolver,
 } from "./utils.js";
 
+const SUPPORTED_STYLEX_PSEUDO_ELEMENTS = new Set([
+  "::after",
+  "::before",
+  "::placeholder",
+  "::-webkit-slider-thumb",
+]);
+
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
     state,
@@ -1121,6 +1128,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           : null;
     const pseudoElementsList =
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
+
+    const pseudoElementsToValidate = pseudoElement ? [pseudoElement] : pseudoElementsList;
+    if (pseudoElementsToValidate?.some((pe) => !SUPPORTED_STYLEX_PSEUDO_ELEMENTS.has(pe))) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: unsupported pseudo-element",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+
     const attrSel =
       parsedSelector.kind === "attribute"
         ? {
