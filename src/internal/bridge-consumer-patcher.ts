@@ -184,6 +184,8 @@ export function patchConsumerFile(
     });
   }
 
+  modified = removeNowUnusedComponentImports(modified, replacements);
+
   return modified !== source ? modified : null;
 }
 
@@ -213,4 +215,65 @@ function isInStyledTemplateSelectorContext(
 function hasExactImportName(importSpecifiers: string, name: string): boolean {
   const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegex(name)}(?:$|[^A-Za-z0-9_$])`);
   return re.test(importSpecifiers);
+}
+
+function removeNowUnusedComponentImports(
+  source: string,
+  replacements: ConsumerReplacement[],
+): string {
+  let modified = source;
+  for (const replacement of replacements) {
+    if (hasIdentifierUsageOutsideImports(modified, replacement.localName)) {
+      continue;
+    }
+    modified = removeNamedImportSpecifier(
+      modified,
+      replacement.importSource,
+      replacement.localName,
+    );
+  }
+  return modified;
+}
+
+function hasIdentifierUsageOutsideImports(source: string, name: string): boolean {
+  const withoutImports = source.replace(/^\s*import\s+[\s\S]*?;\s*/gm, "");
+  return new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegex(name)}($|[^A-Za-z0-9_$])`).test(
+    withoutImports,
+  );
+}
+
+function removeNamedImportSpecifier(source: string, importSource: string, localName: string): string {
+  const namedImportRegex = new RegExp(
+    `import\\s+([\\w$]+\\s*,\\s*)?\\{([^}]*)\\}\\s+from\\s+(['"]${escapeRegex(importSource)}['"]\\s*;?)`,
+    "g",
+  );
+
+  return source.replace(namedImportRegex, (match, defaultPart, specifierList, fromClause) => {
+    const remainingSpecifiers = String(specifierList)
+      .split(",")
+      .map((specifier) => specifier.trim())
+      .filter(Boolean)
+      .filter((specifier) => getImportedSpecifierLocalName(specifier) !== localName);
+
+    if (remainingSpecifiers.length > 0) {
+      return `import ${defaultPart ?? ""}{ ${remainingSpecifiers.join(", ")} } from ${fromClause}`;
+    }
+
+    const defaultName = String(defaultPart ?? "")
+      .replace(/,\s*$/, "")
+      .trim();
+    if (defaultName) {
+      return `import ${defaultName} from ${fromClause}`;
+    }
+
+    return "";
+  });
+}
+
+function getImportedSpecifierLocalName(specifier: string): string {
+  const aliasMatch = specifier.match(/\bas\s+([A-Za-z_$][\w$]*)$/);
+  if (aliasMatch?.[1]) {
+    return aliasMatch[1];
+  }
+  return specifier.trim();
 }
