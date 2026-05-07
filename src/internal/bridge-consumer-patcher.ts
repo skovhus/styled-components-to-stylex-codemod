@@ -236,13 +236,80 @@ function removeNowUnusedComponentImports(
 }
 
 function hasIdentifierUsageOutsideImports(source: string, name: string): boolean {
-  const withoutImports = stripComments(source).replace(
-    /^[ \t]*import\b[\s\S]*?;[ \t]*(?:\r?\n)?/gm,
-    "",
-  );
+  const withoutImports = stripImportDeclarations(stripComments(source));
   return new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegex(name)}($|[^A-Za-z0-9_$])`).test(
     withoutImports,
   );
+}
+
+function stripImportDeclarations(source: string): string {
+  const lines = source.split(/(?<=\n)/);
+  let result = "";
+  let inImport = false;
+  let nestingDepth = 0;
+
+  for (const line of lines) {
+    if (!inImport && !isImportDeclarationStart(line)) {
+      result += line;
+      continue;
+    }
+
+    inImport = true;
+    nestingDepth += getImportNestingDelta(line);
+
+    if (nestingDepth <= 0 && isImportDeclarationEnd(line)) {
+      inImport = false;
+      nestingDepth = 0;
+    }
+  }
+
+  return result;
+}
+
+function isImportDeclarationStart(line: string): boolean {
+  const match = line.match(/^[ \t]*import\b/);
+  if (!match) {
+    return false;
+  }
+  const next = line.slice(match[0].length).trimStart()[0];
+  return next !== "(" && next !== ".";
+}
+
+function isImportDeclarationEnd(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed.endsWith(";") ||
+    /^import\s+["'][^"']+["']$/.test(trimmed) ||
+    /\bfrom\s+["'][^"']+["'](?:\s+with\s+\{[^}]*\})?$/.test(trimmed)
+  );
+}
+
+function getImportNestingDelta(line: string): number {
+  let depth = 0;
+  let quote: "'" | '"' | null = null;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+
+    if (quote) {
+      if (char === "\\") {
+        index += 1;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "{" || char === "(" || char === "[") {
+      depth += 1;
+    } else if (char === "}" || char === ")" || char === "]") {
+      depth -= 1;
+    }
+  }
+
+  return depth;
 }
 
 function stripComments(source: string): string {

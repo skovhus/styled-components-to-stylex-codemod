@@ -79,4 +79,33 @@ export function App() {
     expect(patched).toContain("<Tile />");
     expect(patched).toContain("${TileGlobalSelector}");
   });
+
+  it("keeps the component import when a semicolon-free import is followed by value usage", () => {
+    const filePath = writeConsumer(`
+import styled from "styled-components"
+import { Tile } from "./Tile"
+const selectedTile = Tile;
+
+export const Grid = styled.div\`
+  > \${Tile} {
+    width: 100%;
+  }
+\`;
+
+export const selected = selectedTile;
+`);
+
+    const patched = patchConsumerFile(filePath, [
+      {
+        localName: "Tile",
+        importSource: "./Tile",
+        globalSelectorVarName: "TileGlobalSelector",
+        importedName: "Tile",
+      },
+    ]);
+
+    expect(patched).toContain(`import { Tile, TileGlobalSelector } from "./Tile"`);
+    expect(patched).toContain("const selectedTile = Tile;");
+    expect(patched).toContain("${TileGlobalSelector}");
+  });
 });
