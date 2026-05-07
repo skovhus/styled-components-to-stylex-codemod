@@ -393,6 +393,26 @@ export function resolveImportedHelperCall(
     : { kind: "unresolved", resolveCallContext, resolveCallResult: undefined };
 }
 
+export function resolveImportedCurriedHelperCall(
+  callExpr: CallExpressionNode,
+  ctx: InternalHandlerContext,
+  cssProperty?: string,
+): { innerCall: CallExpressionNode; result: ResolveImportedHelperCallResult } | null {
+  if (!isCallExpressionNode(callExpr.callee)) {
+    return null;
+  }
+  const outerArgs = callExpr.arguments ?? [];
+  if (outerArgs.length !== 1) {
+    return null;
+  }
+
+  const innerCall = callExpr.callee;
+  return {
+    innerCall,
+    result: resolveImportedHelperCall(innerCall, ctx, undefined, cssProperty),
+  };
+}
+
 /**
  * Resolves a DynamicNode whose expression is a direct (non-arrow) call expression.
  * Handles both simple `helper(...)` and curried `helper(...)(props)` patterns.
@@ -419,18 +439,15 @@ export function tryResolveCallExpression(
   // The adapter receives cssProperty context and decides what to return:
   // - With CSS property context: returns a CSS value expression
   // - Without CSS property context: returns a StyleX style reference
-  if (isCallExpressionNode(expr.callee)) {
-    const outerArgs = expr.arguments ?? [];
-    if (outerArgs.length === 1) {
-      const innerCall = expr.callee;
-      const innerRes = resolveImportedHelperCall(innerCall, ctx, undefined, node.css.property);
-      if (innerRes.kind === "resolved") {
-        return buildResolvedHandlerResult(innerRes.result, node.css.property, {
-          resolveCallContext: innerRes.resolveCallContext,
-          resolveCallResult: innerRes.resolveCallResult,
-        });
-      }
-    }
+  const curried = resolveImportedCurriedHelperCall(expr, ctx, node.css.property);
+  if (curried?.result.kind === "resolved") {
+    return buildResolvedHandlerResult(curried.result.result, node.css.property, {
+      resolveCallContext: curried.result.resolveCallContext,
+      resolveCallResult: curried.result.resolveCallResult,
+    });
+  }
+  if (curried?.result.kind === "unresolved") {
+    return buildUnresolvedHelperResult(curried.innerCall.callee, ctx);
   }
 
   if (simple.kind === "unresolved") {

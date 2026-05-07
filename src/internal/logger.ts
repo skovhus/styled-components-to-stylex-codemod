@@ -67,7 +67,6 @@ export type WarningType =
   | "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)"
   | "Unsupported interpolation: arrow function"
   | "Unsupported interpolation: call expression"
-  | "Unsupported interpolation: helper call receives full styled-components props object"
   | "Unsupported interpolation: identifier"
   | "Unsupported interpolation: member expression"
   | "Unsupported interpolation: property"

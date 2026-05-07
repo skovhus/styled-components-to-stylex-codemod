@@ -28,6 +28,7 @@ import {
   buildUnresolvedHelperResult,
   getArrowFnThemeParamInfo,
   isAdapterResultCssValue,
+  resolveImportedCurriedHelperCall,
   resolveImportedHelperCall,
   resolveTemplateLiteralWithTheme,
   tryResolveCallExpression,
@@ -68,7 +69,7 @@ export function resolveDynamicNode(
     tryResolveConditionalCssBlock(node, ctx) ??
     tryResolveArrowFnCallWithSinglePropArg(node, ctx) ??
     tryResolveArrowFnCurriedHelperCallWithPropFallback(node, ctx) ??
-    tryRejectArrowFnHelperCallWithFullPropsArg(node) ??
+    tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(node, ctx) ??
     // Resolve or detect theme-dependent template literals before trying to emit style functions
     tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
@@ -720,6 +721,48 @@ function tryResolveArrowFnCurriedHelperCallWithPropFallback(
   return { type: "emitStyleFunctionFromPropsObject", props };
 }
 
+function tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const paramName = getArrowFnSingleParamName(expr);
+  if (!paramName) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const outerArgs = body.arguments ?? [];
+  if (
+    outerArgs.length !== 1 ||
+    outerArgs[0]?.type !== "Identifier" ||
+    outerArgs[0].name !== paramName
+  ) {
+    return null;
+  }
+
+  const curried = resolveImportedCurriedHelperCall(body, ctx, node.css.property);
+  if (curried?.result.kind === "resolved") {
+    return buildResolvedHandlerResult(curried.result.result, node.css.property, {
+      resolveCallContext: curried.result.resolveCallContext,
+      resolveCallResult: curried.result.resolveCallResult,
+    });
+  }
+  if (curried?.result.kind === "unresolved") {
+    return buildUnresolvedHelperResult(curried.innerCall.callee, ctx);
+  }
+  return null;
+}
+
 /**
  * Attempts to resolve a callee identifier through the adapter's resolveCall hook.
  * Uses `resolveCallOptional` (non-bailing) so that an unhandled helper does NOT
@@ -780,35 +823,6 @@ function isPropAccessWithLiteralFallback(node: unknown, paramName: string): bool
     return false;
   }
   return literalToStaticValue(node.right) !== null;
-}
-
-function tryRejectArrowFnHelperCallWithFullPropsArg(node: DynamicNode): HandlerResult | null {
-  if (!node.css.property) {
-    return null;
-  }
-  const expr = node.expr;
-  if (!isArrowFunctionExpression(expr)) {
-    return null;
-  }
-  const paramName = getArrowFnSingleParamName(expr);
-  if (!paramName) {
-    return null;
-  }
-  const body = getFunctionBodyExpr(expr);
-  if (!isCallExpressionNode(body) || !callReceivesBareIdentifierArg(body, paramName)) {
-    return null;
-  }
-  return {
-    type: "keepOriginal",
-    reason: "Unsupported interpolation: helper call receives full styled-components props object",
-  };
-}
-
-function callReceivesBareIdentifierArg(call: { arguments?: unknown[] }, name: string): boolean {
-  return (call.arguments ?? []).some((arg) => {
-    const node = arg as { type?: string; name?: string } | null;
-    return node?.type === "Identifier" && node.name === name;
-  });
 }
 
 function tryResolveInlineStyleValueForConditionalExpression(
