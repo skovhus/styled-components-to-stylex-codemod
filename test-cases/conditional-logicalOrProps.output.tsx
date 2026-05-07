@@ -2,10 +2,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type DotProps = React.PropsWithChildren<{
+type DotProps = {
   active?: boolean;
   completed?: boolean;
-}>;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // Pattern 1: Simple logical OR
 function Dot(props: DotProps) {
@@ -15,10 +15,10 @@ function Dot(props: DotProps) {
   );
 }
 
-type StepProps = React.PropsWithChildren<{
+type StepProps = {
   active?: boolean;
   completed?: boolean;
-}>;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // Pattern 2: Negated logical OR
 function Step(props: StepProps) {
@@ -30,11 +30,11 @@ function Step(props: StepProps) {
   );
 }
 
-type BadgeProps = React.PropsWithChildren<{
+type BadgeProps = {
   visible?: boolean;
   primary?: boolean;
   accent?: boolean;
-}>;
+} & Omit<React.ComponentProps<"span">, "className" | "style">;
 
 // Pattern 3: AND wrapping OR on the right
 function Badge(props: BadgeProps) {

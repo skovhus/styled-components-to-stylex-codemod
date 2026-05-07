@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type BoxProps = React.PropsWithChildren<{
-  position: "top" | "bottom";
-}>;
+type BoxProps = { position: "top" | "bottom" } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 function Box(props: BoxProps) {
   const { children, position } = props;

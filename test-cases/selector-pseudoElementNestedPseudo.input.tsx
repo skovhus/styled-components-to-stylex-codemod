@@ -1,4 +1,4 @@
-// Hovering a parent pseudo-element selector must not emit invalid nested pseudo values.
+// Parent-state pseudo-element selectors should preserve selector ordering.
 import styled from "styled-components";
 
 const ResizeHandle = styled.div`

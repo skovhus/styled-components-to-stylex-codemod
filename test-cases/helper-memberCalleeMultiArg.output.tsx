@@ -71,10 +71,7 @@ function TintedLabel(props: React.PropsWithChildren<{ style?: React.CSSPropertie
   );
 }
 
-type TintedPanelProps = React.PropsWithChildren<{
-  faded: boolean;
-  style?: React.CSSProperties;
-}>;
+type TintedPanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className">;
 
 function TintedPanel(props: TintedPanelProps) {
   const { children, style, faded } = props;
@@ -106,10 +103,7 @@ function TintedPanel(props: TintedPanelProps) {
   );
 }
 
-type PlainSwatchProps = React.PropsWithChildren<{
-  tone: string;
-  style?: React.CSSProperties;
-}>;
+type PlainSwatchProps = { tone: string } & Omit<React.ComponentProps<"div">, "className">;
 
 function PlainSwatch(props: PlainSwatchProps) {
   const { children, style, tone } = props;
@@ -126,10 +120,7 @@ function PlainSwatch(props: PlainSwatchProps) {
   );
 }
 
-type MixedModePanelProps = React.PropsWithChildren<{
-  faded: boolean;
-  style?: React.CSSProperties;
-}>;
+type MixedModePanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className">;
 
 function MixedModePanel(props: MixedModePanelProps) {
   const { children, style, faded } = props;

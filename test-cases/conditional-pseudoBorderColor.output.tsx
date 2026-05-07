@@ -2,7 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { pixelVars, $colors } from "./tokens.stylex";
 
-type JsonTextareaProps = { hasError?: boolean } & React.ComponentProps<"textarea">;
+type JsonTextareaProps = { hasError?: boolean } & Omit<
+  React.ComponentProps<"textarea">,
+  "className" | "style"
+>;
 
 function JsonTextarea(props: JsonTextareaProps) {
   const { children, hasError, ...rest } = props;

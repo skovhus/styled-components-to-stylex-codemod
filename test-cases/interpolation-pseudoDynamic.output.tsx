@@ -2,9 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-type ButtonProps = React.PropsWithChildren<{
-  active?: boolean;
-}>;
+type ButtonProps = { active?: boolean } & Omit<
+  React.ComponentProps<"button">,
+  "className" | "style"
+>;
 
 function Button(props: ButtonProps) {
   const { children, active } = props;

@@ -43,6 +43,11 @@ export interface StyleMergingResult {
    * Whether className should be emitted before the spread.
    */
   classNameBeforeSpread?: boolean;
+  /**
+   * Whether generated className/style attrs should be emitted before `sx={...}`.
+   * This is used for sx-aware components where `sx` is not a spread.
+   */
+  externalAttrsBeforeSxProp?: boolean;
 
   /**
    * The style attribute expression, or null if using merger.
@@ -195,11 +200,25 @@ export function emitStyleMerging(args: {
   }
 
   // When the wrapped component accepts a StyleX `sx` prop (per adapter), emit
-  // `sx={...}` directly and skip className/style merging — the wrapped component
-  // handles className/style itself. The destructured className/style values are
-  // forwarded to the wrapped component via the surrounding `{...rest}` spread.
+  // `sx={...}` directly. If there is no generated static class/style, external
+  // className/style flow through `{...rest}` unchanged.
   if (wrappedAcceptsSxProp && inlineStyleProps.length === 0 && !staticClassNameExpr) {
     return buildSxOnlyResult(j, styleArgs, { normalizeOptionalEntries: true });
+  }
+
+  // A generated static class (attrs/bridge class) must still be forwarded, but
+  // sx-aware components should keep StyleX styles in `sx` instead of receiving
+  // them through a merger spread that also contains className/style.
+  if (wrappedAcceptsSxProp && inlineStyleProps.length === 0 && staticClassNameExpr) {
+    return buildSxWithExternalPropsResult({
+      j,
+      styleArgs,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      staticClassNameExpr,
+    });
   }
 
   // If neither className nor style merging is needed, just use stylex.props directly
@@ -476,6 +495,37 @@ function buildMergerClassNameArg(args: {
   return j.arrayExpression(parts);
 }
 
+function buildClassNameAttributeExpr(args: {
+  j: JSCodeshift;
+  classNameId: Identifier;
+  allowClassNameProp: boolean;
+  staticClassNameExpr?: ExpressionKind;
+}): ExpressionKind | null {
+  const { j, classNameId, allowClassNameProp, staticClassNameExpr } = args;
+  const parts: ExpressionKind[] = [];
+  if (staticClassNameExpr) {
+    parts.push(staticClassNameExpr);
+  }
+  if (allowClassNameProp) {
+    parts.push(classNameId);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  if (parts.length === 1) {
+    return parts[0] ?? null;
+  }
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
+  );
+}
+
 /**
  * Generates the verbose className/style merging pattern.
  */
@@ -638,6 +688,38 @@ function buildSxOnlyResult(
     classNameAttr: null,
     classNameBeforeSpread: false,
     styleAttr: null,
+  };
+}
+
+function buildSxWithExternalPropsResult(args: {
+  j: JSCodeshift;
+  styleArgs: ExpressionKind[];
+  classNameId: Identifier;
+  styleId: Identifier;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+  staticClassNameExpr: ExpressionKind;
+}): StyleMergingResult {
+  const {
+    j,
+    styleArgs,
+    classNameId,
+    styleId,
+    allowClassNameProp,
+    allowStyleProp,
+    staticClassNameExpr,
+  } = args;
+  const sxResult = buildSxOnlyResult(j, styleArgs, { normalizeOptionalEntries: true });
+  return {
+    ...sxResult,
+    classNameAttr: buildClassNameAttributeExpr({
+      j,
+      classNameId,
+      allowClassNameProp,
+      staticClassNameExpr,
+    }),
+    styleAttr: allowStyleProp ? styleId : null,
+    externalAttrsBeforeSxProp: true,
   };
 }
 

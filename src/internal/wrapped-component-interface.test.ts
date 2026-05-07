@@ -505,7 +505,7 @@ export const Foo = React.forwardRef<HTMLButtonElement, Props>((props, ref) => nu
     expect(check("Foo", lib)).toBe(false);
   });
 
-  it("does not follow an interface's `extends` clause", () => {
+  it("follows an interface's local `extends` clause", () => {
     const lib = writeLib(
       "extendsClause",
       `
@@ -517,7 +517,29 @@ interface Props extends Base { id?: string }
 export function Foo(props: Props) { return null as any; }
 `,
     );
-    expect(check("Foo", lib)).toBe(false);
+    expect(check("Foo", lib)).toBe(true);
+  });
+
+  it("follows an interface's imported `extends` clause", () => {
+    writeLib(
+      "baseProps",
+      `
+import * as stylex from "@stylexjs/stylex";
+
+export interface BaseProps { sx?: stylex.StyleXStyles }
+`,
+    );
+    const lib = writeLib(
+      "importedExtendsClause",
+      `
+import { type BaseProps } from "./baseProps";
+
+interface Props extends BaseProps { id?: string }
+
+export const Foo = (props: Props) => null as any;
+`,
+    );
+    expect(check("Foo", lib)).toBe(true);
   });
 
   it("does not follow type imports across files", () => {

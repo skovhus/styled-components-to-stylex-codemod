@@ -1,6 +1,6 @@
 // Pseudo-expand where some CSS properties only exist in the conditional block, not in base styles
 import * as React from "react";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { highlightExpand } from "./lib/helpers";
 
 const Box = styled.div`
@@ -14,10 +14,26 @@ const Box = styled.div`
   }
 `;
 
+const Card = styled.div<{ $interactive?: boolean }>`
+  padding: 12px;
+
+  ${(props) =>
+    props.$interactive
+      ? css`
+          cursor: pointer;
+
+          &:${highlightExpand} {
+            background-color: #e0f2fe;
+          }
+        `
+      : undefined}
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <Box>Mixed: base + condition-only</Box>
+      <Card $interactive>Prop-gated condition-only</Card>
     </div>
   );
 }

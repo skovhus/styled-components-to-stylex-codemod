@@ -3,9 +3,10 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { ColorConverter, getRowHighlightColor } from "./lib/helpers";
 
-type CardContainerProps = React.PropsWithChildren<{
-  checked: boolean;
-}>;
+type CardContainerProps = { checked: boolean } & Omit<
+  React.ComponentProps<"label">,
+  "className" | "style"
+>;
 
 function CardContainer(props: CardContainerProps) {
   const { children, checked } = props;
@@ -22,9 +23,10 @@ function CardContainer(props: CardContainerProps) {
   );
 }
 
-type RowProps = React.PropsWithChildren<{
-  isHighlighted: boolean;
-}>;
+type RowProps = { isHighlighted: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 // Preserved runtime call using a theme boolean argument (plain function, not member expression)
 function Row(props: RowProps) {

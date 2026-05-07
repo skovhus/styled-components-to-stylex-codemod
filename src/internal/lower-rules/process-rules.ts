@@ -318,6 +318,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
+      if (hasEnabledCompoundPseudoSelector(s)) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: compound pseudo selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+
       // Component selector patterns that have special handling below:
       // 1. `${Other}:pseudo &` - ancestor pseudo via descendant combinator (space only)
       // 1c: `${Other} &` - ancestor without pseudo (no-pseudo reverse)
@@ -1121,6 +1131,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           : null;
     const pseudoElementsList =
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
+
+    const pseudoElementsToValidate = pseudoElement ? [pseudoElement] : pseudoElementsList;
+    if (pseudoElementsToValidate?.some((pe) => !isStylexCompilerPseudoElement(pe))) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: unsupported pseudo-element",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+
     const attrSel =
       parsedSelector.kind === "attribute"
         ? {
@@ -2277,11 +2299,41 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoExpand") {
+    if (prefixPseudo && containsPseudoToken(prefixPseudo, "enabled")) {
+      return "bail";
+    }
     return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
   return "bail";
+}
+
+function hasEnabledCompoundPseudoSelector(selector: string): boolean {
+  return selector.split(",").some((part) => {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith("&")) {
+      return false;
+    }
+    const pseudoTokens = extractPseudoTokens(trimmed);
+    return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
+  });
+}
+
+function isStylexCompilerPseudoElement(selector: string): boolean {
+  // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.
+  // Keep this broader than the eslint plugin's finite allowlist so linter lag does not force bailouts.
+  return selector.startsWith("::");
+}
+
+function containsPseudoToken(selector: string, token: string): boolean {
+  return extractPseudoTokens(selector).includes(token);
+}
+
+function extractPseudoTokens(selector: string): string[] {
+  return [...selector.matchAll(/:(?!:)([a-zA-Z][a-zA-Z0-9-]*)/g)]
+    .map((match) => match[1])
+    .filter((value): value is string => value !== undefined);
 }
 
 /**

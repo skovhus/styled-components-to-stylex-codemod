@@ -1,0 +1,20 @@
+diff --git a/lib/index.js b/lib/index.js
+index b1e8d41717df6588346261c86589851bc4a86ce0..4f8dd799f9fe53be7ae7f3f0177e6501ca9b2f34 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -4678,11 +4678,12 @@ var libExports = requireLib();
+ 
+ const THUMB_VARIANTS = ['::-webkit-slider-thumb', '::-moz-range-thumb', '::-ms-thumb'];
+ function buildNestedCSSRule(className, decls, pseudos, atRules, constRules) {
+-  const pseudo = pseudos.filter(p => p !== '::thumb').join('');
++  const pseudoClasses = pseudos.filter(p => p !== '::thumb' && !p.startsWith('::')).join('');
++  const pseudoElements = pseudos.filter(p => p.startsWith('::') && p !== '::thumb').join('');
+   const combinedAtRules = atRules.concat(constRules);
+-  const hasWhere = pseudo.includes(':where(');
++  const hasWhere = pseudoClasses.includes(':where(');
+   const extraClassForWhere = hasWhere ? `.${className}` : '';
+-  let selectorForAtRules = `.${className}` + extraClassForWhere + combinedAtRules.map(() => `.${className}`).join('') + pseudo;
++  let selectorForAtRules = `.${className}` + extraClassForWhere + combinedAtRules.map(() => `.${className}`).join('') + pseudoClasses + pseudoElements;
+   if (pseudos.includes('::thumb')) {
+     selectorForAtRules = THUMB_VARIANTS.map(suffix => selectorForAtRules + suffix).join(', ');
+   }

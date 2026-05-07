@@ -835,7 +835,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       d.extraClassNames,
     );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
-    const staticAttrs = attrsInfo?.staticAttrs ?? {};
+    const staticAttrs = normalizeStaticForwardedAsAttr(
+      attrsInfo?.staticAttrs ?? {},
+      shouldLowerForwardedAs,
+    );
     const needsSxVar =
       allowClassNameProp ||
       allowStyleProp ||
@@ -945,14 +948,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
 
       const openingAttrs: JsxAttr[] = [];
-      const hasStaticForwardedAsFallback =
-        shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "as");
-      const staticForwardedAsFallback = hasStaticForwardedAsFallback ? staticAttrs.as : undefined;
+      const staticForwardedAsFallbackKey =
+        shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "as")
+          ? "as"
+          : shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "forwardedAs")
+            ? "forwardedAs"
+            : null;
+      const hasStaticForwardedAsFallback = staticForwardedAsFallbackKey !== null;
+      const staticForwardedAsFallback = hasStaticForwardedAsFallback
+        ? staticAttrs[staticForwardedAsFallbackKey]
+        : undefined;
       const staticAttrsWithoutForwardedAsFallback = (() => {
         if (!hasStaticForwardedAsFallback) {
           return staticAttrs;
         }
-        const { as: _omitAs, ...restStaticAttrs } = staticAttrs;
+        const { [staticForwardedAsFallbackKey]: _omitAs, ...restStaticAttrs } = staticAttrs;
         return restStaticAttrs;
       })();
       // Use buildDefaultAttrsFromProps to preserve nullish coalescing (e.g., tabIndex ?? 0)
@@ -1189,6 +1199,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
 function shouldKeepStylePropSeparate(componentName: string): boolean {
   return componentName.startsWith("motion.") || componentName.startsWith("animated.");
+}
+
+function normalizeStaticForwardedAsAttr(
+  staticAttrs: Record<string, unknown>,
+  shouldLowerForwardedAs: boolean,
+): Record<string, unknown> {
+  if (shouldLowerForwardedAs || !Object.hasOwn(staticAttrs, "forwardedAs")) {
+    return staticAttrs;
+  }
+  const { forwardedAs, ...restStaticAttrs } = staticAttrs;
+  if (Object.hasOwn(restStaticAttrs, "as")) {
+    return restStaticAttrs;
+  }
+  return { ...restStaticAttrs, as: forwardedAs };
 }
 
 function resolveRenderedAsProp(args: {

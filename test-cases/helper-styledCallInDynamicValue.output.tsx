@@ -177,6 +177,7 @@ export const App = () => {
       <LoadingPlaceholderRepeat highlightColor="accent" />
       <OptionalColorPanel>Default faint panel</OptionalColorPanel>
       <OptionalColorPanel color="accent">Accent panel</OptionalColorPanel>
+      <div sx={styles.staticColorPanel}>Static helper panel</div>
       <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
       <div sx={styles.shadowPlaceholder("dark")} />
       <LayeredShadowPlaceholder shadowTone="light" />
@@ -267,6 +268,14 @@ const styles = stylex.create({
     "--optional-color-panel-background-color": resolvedColorColor,
     backgroundColor: "var(--optional-color-panel-background-color) !important",
   }),
+  staticColorPanel: {
+    width: 160,
+    minHeight: 40,
+    borderRadius: 6,
+    padding: 8,
+    color: "white",
+    backgroundColor: $colors.bgBase,
+  },
   loadingPlaceholderWithSize: {
     width: 160,
     height: 20,
