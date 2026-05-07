@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { zIndex } from "./lib/helpers";
 
 const Thing = styled.div`
   border-right: 1px solid hotpink;
@@ -23,10 +24,10 @@ const Thing = styled.div`
 
 const FocusableCell = styled.div<{ $isAnimating?: boolean }>`
   position: relative;
-  z-index: ${(props) => (props.$isAnimating ? 10 : undefined)};
+  z-index: ${(props) => (props.$isAnimating ? zIndex.modal : undefined)};
 
   &:focus-within {
-    z-index: 12;
+    z-index: ${zIndex.modal + 2};
   }
 `;
 
