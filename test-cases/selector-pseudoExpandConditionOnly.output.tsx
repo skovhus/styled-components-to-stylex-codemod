@@ -3,10 +3,20 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
 
+type CardProps = React.PropsWithChildren<{
+  interactive?: boolean;
+}>;
+
+function Card(props: CardProps) {
+  const { children, interactive } = props;
+  return <div sx={[styles.card, interactive && styles.cardInteractive]}>{children}</div>;
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
       <div sx={styles.box}>Mixed: base + condition-only</div>
+      <Card interactive>Prop-gated condition-only</Card>
     </div>
   );
 }
@@ -36,6 +46,20 @@ const styles = stylex.create({
       ":hover": {
         default: null,
         [$interaction.canHover]: "scale(1.02)",
+      },
+    },
+  },
+  card: {
+    padding: 12,
+  },
+  cardInteractive: {
+    cursor: "pointer",
+    backgroundColor: {
+      default: null,
+      ":active": "#e0f2fe",
+      ":hover": {
+        default: null,
+        [$interaction.canHover]: "#e0f2fe",
       },
     },
   },
