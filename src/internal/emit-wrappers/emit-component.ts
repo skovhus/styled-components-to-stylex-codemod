@@ -835,7 +835,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       d.extraClassNames,
     );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
-    const staticAttrs = attrsInfo?.staticAttrs ?? {};
+    const staticAttrs = normalizeStaticForwardedAsAttr(
+      attrsInfo?.staticAttrs ?? {},
+      shouldLowerForwardedAs,
+    );
     const needsSxVar =
       allowClassNameProp ||
       allowStyleProp ||
@@ -1196,6 +1199,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
 function shouldKeepStylePropSeparate(componentName: string): boolean {
   return componentName.startsWith("motion.") || componentName.startsWith("animated.");
+}
+
+function normalizeStaticForwardedAsAttr(
+  staticAttrs: Record<string, unknown>,
+  shouldLowerForwardedAs: boolean,
+): Record<string, unknown> {
+  if (shouldLowerForwardedAs || !Object.hasOwn(staticAttrs, "forwardedAs")) {
+    return staticAttrs;
+  }
+  const { forwardedAs, ...restStaticAttrs } = staticAttrs;
+  if (Object.hasOwn(restStaticAttrs, "as")) {
+    return restStaticAttrs;
+  }
+  return { ...restStaticAttrs, as: forwardedAs };
 }
 
 function resolveRenderedAsProp(args: {
