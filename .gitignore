@@ -163,3 +163,6 @@ local-setup.sh
 # Local benchmark scripts
 scripts/bench-prepass*.mts
 scripts/bench-prepass*.json
+
+# Local agent workflow skills
+.claude/skills/linear-improvement-loop/
