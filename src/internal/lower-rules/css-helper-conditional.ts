@@ -544,16 +544,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         value: ExpressionKind,
         pseudoEntries: ResolvedPseudoEntry[],
       ): ExpressionKind => {
-        const properties =
-          styleObj[prop] !== undefined
-            ? [
-                j.property(
-                  "init",
-                  j.identifier("default"),
-                  styleValueToExpression(j, styleObj[prop]) as any,
-                ),
-              ]
-            : [];
+        const properties = [
+          j.property(
+            "init",
+            j.identifier("default"),
+            styleObj[prop] !== undefined
+              ? (styleValueToExpression(j, styleObj[prop]) as any)
+              : (j.literal(null) as any),
+          ),
+        ];
         for (const entry of pseudoEntries) {
           let entryValue = value;
           if (entry.conditionExpr) {
