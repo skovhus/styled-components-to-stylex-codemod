@@ -3328,9 +3328,7 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
       const paramName = cssPropertyToIdentifier(entry.cssProp);
       const param = j.identifier(paramName);
       const condition = getAttrsDynamicStyleCondition(ctx, entry);
-      (param as any).typeAnnotation = j.tsTypeAnnotation(
-        getAttrsDynamicStyleParamType(ctx, entry),
-      );
+      (param as any).typeAnnotation = j.tsTypeAnnotation(getAttrsDynamicStyleParamType(ctx, entry));
       const p = makeCssProperty(j, entry.cssProp, paramName);
       const body = j.objectExpression([p]);
       ctx.styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
@@ -3349,6 +3347,7 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
 type AttrsDynamicStyleEntry = NonNullable<
   NonNullable<StyledDecl["attrsInfo"]>["attrsDynamicStyles"]
 >[number];
+type TypeAnnotationInput = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
 
 function getAttrsDynamicStyleCondition(
   ctx: DeclProcessingState,
@@ -3364,12 +3363,15 @@ function getAttrsDynamicStyleCondition(
   return undefined;
 }
 
-function getAttrsDynamicStyleParamType(ctx: DeclProcessingState, entry: AttrsDynamicStyleEntry) {
+function getAttrsDynamicStyleParamType(
+  ctx: DeclProcessingState,
+  entry: AttrsDynamicStyleEntry,
+): TypeAnnotationInput {
   const { j } = ctx.state;
   if (usesAttrsPropValueType(entry)) {
     const propType = resolveTypeNodeFromTsType(j, ctx.findJsxPropTsType(entry.jsxProp));
     if (propType) {
-      return cloneAstNode(propType);
+      return cloneAstNode(propType) as TypeAnnotationInput;
     }
   }
   if (entry.condition === "truthy") {
