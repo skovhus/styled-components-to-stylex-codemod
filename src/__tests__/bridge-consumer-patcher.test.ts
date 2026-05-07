@@ -26,7 +26,9 @@ describe("patchConsumerFile", () => {
 import styled from "styled-components";
 import { Tile } from "./Tile";
 
+/** Children must be Tile components. */
 export const Grid = styled.div\`
+  /* Tile children are patched through the global selector. */
   > \${Tile} {
     width: 100%;
   }
