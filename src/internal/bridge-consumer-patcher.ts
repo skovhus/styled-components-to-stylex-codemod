@@ -242,13 +242,17 @@ function hasIdentifierUsageOutsideImports(source: string, name: string): boolean
   );
 }
 
-function removeNamedImportSpecifier(source: string, importSource: string, localName: string): string {
+function removeNamedImportSpecifier(
+  source: string,
+  importSource: string,
+  localName: string,
+): string {
   const namedImportRegex = new RegExp(
     `import\\s+([\\w$]+\\s*,\\s*)?\\{([^}]*)\\}\\s+from\\s+(['"]${escapeRegex(importSource)}['"]\\s*;?)`,
     "g",
   );
 
-  return source.replace(namedImportRegex, (match, defaultPart, specifierList, fromClause) => {
+  return source.replace(namedImportRegex, (_match, defaultPart, specifierList, fromClause) => {
     const remainingSpecifiers = String(specifierList)
       .split(",")
       .map((specifier) => specifier.trim())
