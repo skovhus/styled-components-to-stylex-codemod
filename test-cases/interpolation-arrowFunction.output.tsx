@@ -2,9 +2,10 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-type GradientBoxProps = React.PropsWithChildren<{
-  direction?: "horizontal" | "vertical";
-}>;
+type GradientBoxProps = { direction?: "horizontal" | "vertical" } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 // Arrow function in background (10 occurrences)
 function GradientBox(props: GradientBoxProps) {

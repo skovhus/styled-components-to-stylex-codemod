@@ -10,7 +10,7 @@ type Props = {
   disabled?: boolean;
 };
 
-function Button(props: React.PropsWithChildren<Props & { ref?: React.Ref<HTMLButtonElement> }>) {
+function Button(props: Props & Omit<React.ComponentProps<"button">, "className" | "style">) {
   const { children, size = "small", color = "secondary", disabled, ...rest } = props;
   return (
     <button
@@ -34,7 +34,7 @@ type LinkProps = {
   disabled?: boolean;
 };
 
-function Link(props: LinkProps & React.ComponentProps<"a">) {
+function Link(props: LinkProps & Omit<React.ComponentProps<"a">, "className" | "style">) {
   const { children, disabled, color = "secondary", ...rest } = props;
   return (
     <a

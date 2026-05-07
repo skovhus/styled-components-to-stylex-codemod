@@ -184,6 +184,8 @@ export function patchConsumerFile(
     });
   }
 
+  modified = removeNowUnusedComponentImports(modified, replacements);
+
   return modified !== source ? modified : null;
 }
 
@@ -213,4 +215,170 @@ function isInStyledTemplateSelectorContext(
 function hasExactImportName(importSpecifiers: string, name: string): boolean {
   const re = new RegExp(`(?:^|[^A-Za-z0-9_$])${escapeRegex(name)}(?:$|[^A-Za-z0-9_$])`);
   return re.test(importSpecifiers);
+}
+
+function removeNowUnusedComponentImports(
+  source: string,
+  replacements: ConsumerReplacement[],
+): string {
+  let modified = source;
+  for (const replacement of replacements) {
+    if (hasIdentifierUsageOutsideImports(modified, replacement.localName)) {
+      continue;
+    }
+    modified = removeNamedImportSpecifier(
+      modified,
+      replacement.importSource,
+      replacement.localName,
+    );
+  }
+  return modified;
+}
+
+function hasIdentifierUsageOutsideImports(source: string, name: string): boolean {
+  const withoutImports = stripComments(source).replace(
+    /^[ \t]*import\b[\s\S]*?;[ \t]*(?:\r?\n)?/gm,
+    "",
+  );
+  return new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegex(name)}($|[^A-Za-z0-9_$])`).test(
+    withoutImports,
+  );
+}
+
+function stripComments(source: string): string {
+  let result = "";
+  let state:
+    | "normal"
+    | "lineComment"
+    | "blockComment"
+    | "singleQuote"
+    | "doubleQuote"
+    | "template" = "normal";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    const next = source[index + 1] ?? "";
+
+    if (state === "lineComment") {
+      if (char === "\n") {
+        result += char;
+        state = "normal";
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+
+    if (state === "blockComment") {
+      if (char === "*" && next === "/") {
+        result += "  ";
+        index += 1;
+        state = "normal";
+      } else {
+        result += char === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+
+    if (state === "template") {
+      if (char === "/" && next === "/") {
+        result += "  ";
+        index += 1;
+        state = "lineComment";
+        continue;
+      }
+      if (char === "/" && next === "*") {
+        result += "  ";
+        index += 1;
+        state = "blockComment";
+        continue;
+      }
+      result += char;
+      if (char === "\\") {
+        result += next;
+        index += 1;
+        continue;
+      }
+      if (char === "`") {
+        state = "normal";
+      }
+      continue;
+    }
+
+    if (state === "singleQuote" || state === "doubleQuote") {
+      result += char;
+      if (char === "\\") {
+        result += next;
+        index += 1;
+        continue;
+      }
+      if ((state === "singleQuote" && char === "'") || (state === "doubleQuote" && char === '"')) {
+        state = "normal";
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      result += "  ";
+      index += 1;
+      state = "lineComment";
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      result += "  ";
+      index += 1;
+      state = "blockComment";
+      continue;
+    }
+    if (char === "'") {
+      state = "singleQuote";
+    } else if (char === '"') {
+      state = "doubleQuote";
+    } else if (char === "`") {
+      state = "template";
+    }
+    result += char;
+  }
+
+  return result;
+}
+
+function removeNamedImportSpecifier(
+  source: string,
+  importSource: string,
+  localName: string,
+): string {
+  const namedImportRegex = new RegExp(
+    `import\\s+([\\w$]+\\s*,\\s*)?\\{([^}]*)\\}\\s+from\\s+(['"]${escapeRegex(importSource)}['"]\\s*;?)`,
+    "g",
+  );
+
+  return source.replace(namedImportRegex, (_match, defaultPart, specifierList, fromClause) => {
+    const remainingSpecifiers = String(specifierList)
+      .split(",")
+      .map((specifier) => specifier.trim())
+      .filter(Boolean)
+      .filter((specifier) => getImportedSpecifierLocalName(specifier) !== localName);
+
+    if (remainingSpecifiers.length > 0) {
+      return `import ${defaultPart ?? ""}{ ${remainingSpecifiers.join(", ")} } from ${fromClause}`;
+    }
+
+    const defaultName = String(defaultPart ?? "")
+      .replace(/,\s*$/, "")
+      .trim();
+    if (defaultName) {
+      return `import ${defaultName} from ${fromClause}`;
+    }
+
+    return "";
+  });
+}
+
+function getImportedSpecifierLocalName(specifier: string): string {
+  const aliasMatch = specifier.match(/\bas\s+([A-Za-z_$][\w$]*)$/);
+  if (aliasMatch?.[1]) {
+    return aliasMatch[1];
+  }
+  return specifier.trim();
 }

@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { $zIndex } from "./tokens.stylex";
 
 type FocusableCellProps = React.PropsWithChildren<{
   isAnimating?: boolean;
@@ -47,10 +48,10 @@ const styles = stylex.create({
     position: "relative",
     zIndex: {
       default: null,
-      ":focus-within": 12,
+      ":focus-within": `calc(${$zIndex.modal} + 2)`,
     },
   },
   focusableCellAnimating: {
-    zIndex: 10,
+    zIndex: $zIndex.modal,
   },
 });

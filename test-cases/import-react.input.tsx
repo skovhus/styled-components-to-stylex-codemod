@@ -24,6 +24,32 @@ export const ThemeSpan = styled.span<ThemeSpanProps>`
   color: ${(props) => props.theme.color[props.variant]};
 `;
 
+type ChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
+
+export const ChoiceButton = styled.button<ChoiceButtonProps>`
+  display: flex;
+  align-items: center;
+  background: ${(props) => (props.active ? "navy" : "gray")};
+  color: white;
+`;
+
+type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
+
+const LocalChoiceButton = styled.button<LocalChoiceButtonProps>`
+  display: inline-flex;
+  align-items: center;
+  background: ${(props) => (props.active ? "purple" : "silver")};
+  color: white;
+`;
+
 export function App() {
-  return null;
+  return (
+    <div>
+      <ChoiceButton active>Active</ChoiceButton>
+      <ChoiceButton active={false}>Inactive</ChoiceButton>
+      <LocalChoiceButton active onClick={() => undefined}>
+        Local active
+      </LocalChoiceButton>
+    </div>
+  );
 }

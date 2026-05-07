@@ -1,12 +1,29 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CircleProps = { isAnimated?: boolean } & React.ComponentProps<"path">;
+type CircleProps = { isAnimated?: boolean } & Omit<
+  React.ComponentProps<"path">,
+  "className" | "style"
+>;
 
 function Circle(props: CircleProps) {
   const { children, isAnimated, ...rest } = props;
   return (
     <path {...rest} sx={[styles.circle, isAnimated && styles.circleAnimated]}>
+      {children}
+    </path>
+  );
+}
+
+type RingProps = { isAnimated?: boolean } & Omit<
+  React.ComponentProps<"path">,
+  "className" | "style"
+>;
+
+function Ring(props: RingProps) {
+  const { children, isAnimated, ...rest } = props;
+  return (
+    <path {...rest} sx={isAnimated && styles.ringAnimated}>
       {children}
     </path>
   );
@@ -21,6 +38,7 @@ export function App() {
       <svg>
         <Circle isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
+        <Ring isAnimated d="M20,90 Q105,20 190,90" />
       </svg>
     </div>
   );
@@ -96,6 +114,12 @@ const styles = stylex.create({
   circleAnimated: {
     animationName: Dash,
     animationDuration: "1s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
+  },
+  ringAnimated: {
+    animationName: Dash,
+    animationDuration: "1.5s",
     animationTimingFunction: "ease-out",
     animationFillMode: "forwards",
   },

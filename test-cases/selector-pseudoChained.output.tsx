@@ -8,12 +8,12 @@ const Flex = (props: React.ComponentProps<"div"> & { gap?: number; shrink?: numb
 };
 
 // Chained pseudo-selectors with :not()
-function Input(props: React.ComponentProps<"input">) {
+function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
   return <input {...props} sx={styles.input} />;
 }
 
 // Checkbox with chained pseudos
-function Checkbox(props: React.ComponentProps<"input">) {
+function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
   return <input {...props} sx={styles.checkbox} />;
 }
 

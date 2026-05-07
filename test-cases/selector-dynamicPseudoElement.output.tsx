@@ -58,9 +58,10 @@ function Tag(props: TagProps) {
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
-type DynamicPlaceholderProps = {
-  placeholderColor: PlaceholderColor;
-} & React.ComponentProps<"input">;
+type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Omit<
+  React.ComponentProps<"input">,
+  "className" | "style"
+>;
 
 function DynamicPlaceholder(props: DynamicPlaceholderProps) {
   const { placeholderColor, ...rest } = props;
@@ -83,13 +84,6 @@ export const App = () => (
     <Tooltip>Default</Tooltip>
     <Tag tagColor="tomato">With color</Tag>
     <Tag>No color</Tag>
-    <button
-      sx={styles.button({
-        glowColor: "rgba(0,128,255,0.3)",
-      })}
-    >
-      Hover me
-    </button>
     <input placeholder="Muted placeholder" sx={styles.input} />
     <DynamicPlaceholder placeholderColor="labelBase" placeholder="Base" />
     <DynamicPlaceholder placeholderColor="labelMuted" placeholder="Muted" />
@@ -137,27 +131,6 @@ const styles = stylex.create({
   tagAfterBackgroundColor: (tagColor: string) => ({
     "::after": {
       backgroundColor: tagColor,
-    },
-  }),
-  // Dynamic pseudo-element style inside :hover context
-  button: (props: { glowColor: string }) => ({
-    position: "relative",
-    paddingBlock: 8,
-    paddingInline: 16,
-    backgroundColor: "#333",
-    color: "white",
-    "::after": {
-      content: '""',
-      display: "block",
-      height: 3,
-      opacity: {
-        default: 0,
-        ":hover": 1,
-      },
-      backgroundColor: {
-        default: null,
-        ":hover": props.glowColor,
-      },
     },
   }),
   // Dynamic ::placeholder with theme color

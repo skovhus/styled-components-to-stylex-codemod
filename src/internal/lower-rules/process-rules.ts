@@ -71,6 +71,13 @@ import {
   type AdapterCallResolver,
 } from "./utils.js";
 
+const SUPPORTED_STYLEX_PSEUDO_ELEMENTS = new Set([
+  "::after",
+  "::before",
+  "::placeholder",
+  "::-webkit-slider-thumb",
+]);
+
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
     state,
@@ -316,6 +323,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // pseudoAlias and media both handled all declarations —
         // skip remaining rule processing for this rule.
         continue;
+      }
+
+      if (hasEnabledCompoundPseudoSelector(s)) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: compound pseudo selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
       }
 
       // Component selector patterns that have special handling below:
@@ -1121,6 +1138,30 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           : null;
     const pseudoElementsList =
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
+
+    const pseudoElementsToValidate = pseudoElement ? [pseudoElement] : pseudoElementsList;
+    if (pseudoElementsToValidate?.some((pe) => !SUPPORTED_STYLEX_PSEUDO_ELEMENTS.has(pe))) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: unsupported pseudo-element",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+    if (
+      parsedSelector.kind === "pseudoElementWithPseudo" &&
+      hasParentPseudoBeforePseudoElement(rule.selector)
+    ) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: pseudo-class on pseudo-element selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
+
     const attrSel =
       parsedSelector.kind === "attribute"
         ? {
@@ -2277,11 +2318,44 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoExpand") {
+    if (prefixPseudo && containsPseudoToken(prefixPseudo, "enabled")) {
+      return "bail";
+    }
     return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
   return "bail";
+}
+
+function hasEnabledCompoundPseudoSelector(selector: string): boolean {
+  return selector.split(",").some((part) => {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith("&")) {
+      return false;
+    }
+    const pseudoTokens = extractPseudoTokens(trimmed);
+    return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
+  });
+}
+
+function hasParentPseudoBeforePseudoElement(selector: string): boolean {
+  const pseudoElementMatch = /::[-_a-zA-Z0-9]+|:(?:before|after|placeholder)\b/.exec(selector);
+  if (!pseudoElementMatch || pseudoElementMatch.index === undefined) {
+    return false;
+  }
+  const beforePseudoElement = selector.slice(0, pseudoElementMatch.index);
+  return /:(?!:)/.test(beforePseudoElement);
+}
+
+function containsPseudoToken(selector: string, token: string): boolean {
+  return extractPseudoTokens(selector).includes(token);
+}
+
+function extractPseudoTokens(selector: string): string[] {
+  return [...selector.matchAll(/:(?!:)([a-zA-Z][a-zA-Z0-9-]*)/g)]
+    .map((match) => match[1])
+    .filter((value): value is string => value !== undefined);
 }
 
 /**

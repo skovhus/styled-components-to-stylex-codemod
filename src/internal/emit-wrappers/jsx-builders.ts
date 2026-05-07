@@ -217,6 +217,23 @@ export function appendMergingAttrs(
   attrs: JsxAttr[],
   merging: StyleMergingResult,
 ): void {
+  if (merging.externalAttrsBeforeSxProp && merging.sxPropExpr) {
+    if (merging.classNameAttr) {
+      attrs.push(
+        j.jsxAttribute(
+          j.jsxIdentifier("className"),
+          j.jsxExpressionContainer(merging.classNameAttr),
+        ),
+      );
+    }
+    if (merging.styleAttr) {
+      attrs.push(
+        j.jsxAttribute(j.jsxIdentifier("style"), j.jsxExpressionContainer(merging.styleAttr)),
+      );
+    }
+    attrs.push(j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(merging.sxPropExpr)));
+    return;
+  }
   if (merging.classNameBeforeSpread && merging.classNameAttr) {
     attrs.push(
       j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(merging.classNameAttr)),

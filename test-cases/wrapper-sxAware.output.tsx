@@ -6,7 +6,6 @@ import * as React from "react";
 // `sx={styles.x}` instead of `{...stylex.props(styles.x)}` on the rendered
 // wrapped component.
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
 // Generic component whose props type intersects an aliased object literal
@@ -97,11 +96,11 @@ export function DraggableSxButton(
   return (
     <SxAwareButton
       {...rest}
-      {...mergedSx(
-        [callerStyles.draggableSxButton, sx],
-        [`${electronStyles.draggableRegionDisableChildren}`, className],
-        style,
-      )}
+      className={[`${electronStyles.draggableRegionDisableChildren}`, className]
+        .filter(Boolean)
+        .join(" ")}
+      style={style}
+      sx={[callerStyles.draggableSxButton, sx]}
     >
       {children}
     </SxAwareButton>

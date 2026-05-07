@@ -4,7 +4,10 @@ import { $colors } from "./tokens.stylex";
 
 type Color = "labelBase" | "labelMuted";
 
-type InputProps = { placeholderColor: Color } & React.ComponentProps<"input">;
+type InputProps = { placeholderColor: Color } & Omit<
+  React.ComponentProps<"input">,
+  "className" | "style"
+>;
 
 function Input(props: InputProps) {
   const { placeholderColor, ...rest } = props;

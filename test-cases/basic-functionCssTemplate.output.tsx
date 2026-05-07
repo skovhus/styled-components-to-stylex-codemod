@@ -3,9 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 
 type Align = "left" | "right";
 
-type FlexContainerProps = React.PropsWithChildren<{
-  align?: Align;
-}>;
+type FlexContainerProps = { align?: Align } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 // Function call form returning a css template literal (not object syntax)
 function FlexContainer(props: FlexContainerProps) {

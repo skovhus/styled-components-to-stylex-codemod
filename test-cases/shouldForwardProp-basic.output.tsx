@@ -23,7 +23,7 @@ function Button(props: ButtonProps) {
   );
 }
 
-type LinkProps = { isActive?: boolean } & React.ComponentProps<"a">;
+type LinkProps = { isActive?: boolean } & Omit<React.ComponentProps<"a">, "className" | "style">;
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
