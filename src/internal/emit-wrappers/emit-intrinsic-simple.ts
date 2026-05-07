@@ -848,9 +848,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             // Non-exported: use the computed slim type directly
             inlineTypeText = typeTextWithForwardedAs;
           } else {
-            // User's existing type first in the intersection for readability
+            // User's existing type first in the intersection for readability.
+            // Omit className/style from both sides because aliases can themselves
+            // include React.ComponentProps<"tag">.
+            const explicitBase = explicitTypeMayContainExternalStyleProps({
+              ctx,
+              propsType: d.propsType,
+            })
+              ? omitExternalStylePropsFromTypeText({
+                  typeText: explicit,
+                  allowClassNameProp,
+                  allowStyleProp,
+                })
+              : explicit;
             const inlineBase = emitter.joinIntersection(
-              explicit,
+              explicitBase,
               extendBaseTypeText,
               sxTypeIntersection,
             );
@@ -1279,6 +1291,147 @@ function hasComplementaryVariantPairs(d: StyledDecl): boolean {
     }
   }
   return false;
+}
+
+function omitExternalStylePropsFromTypeText(args: {
+  typeText: string;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+}): string {
+  const omitted: string[] = [];
+  if (!args.allowClassNameProp) {
+    omitted.push('"className"');
+  }
+  if (!args.allowStyleProp) {
+    omitted.push('"style"');
+  }
+  return omitted.length > 0 ? `Omit<${args.typeText}, ${omitted.join(" | ")}>` : args.typeText;
+}
+
+function explicitTypeMayContainExternalStyleProps(args: {
+  ctx: EmitIntrinsicContext;
+  propsType: StyledDecl["propsType"];
+}): boolean {
+  const visit = (node: unknown, seen: Set<string>): boolean => {
+    if (!node || typeof node !== "object") {
+      return false;
+    }
+    const typed = node as {
+      type?: string;
+      members?: unknown[];
+      types?: unknown[];
+      typeName?: unknown;
+      typeAnnotation?: unknown;
+      extends?: unknown[];
+      body?: { body?: unknown[] };
+    };
+    if (typed.type === "TSTypeLiteral") {
+      return typeMembersContainExternalStyleProps(typed.members);
+    }
+    if (typed.type === "TSIntersectionType" || typed.type === "TSUnionType") {
+      return (typed.types ?? []).some((member) => visit(member, seen));
+    }
+    if (typed.type === "TSParenthesizedType") {
+      return visit(typed.typeAnnotation, seen);
+    }
+    if (typed.type !== "TSTypeReference") {
+      return false;
+    }
+
+    if (isReactPropsUtilityType(typed.typeName)) {
+      return true;
+    }
+
+    const typeName = getIdentifierTypeName(typed.typeName);
+    if (!typeName || seen.has(typeName)) {
+      return false;
+    }
+    seen.add(typeName);
+
+    const typeAlias = args.ctx.emitter.root
+      .find(args.ctx.j.TSTypeAliasDeclaration)
+      .filter((path) => path.node.id.name === typeName);
+    if (typeAlias.size() > 0) {
+      return visit(typeAlias.get().node.typeAnnotation, seen);
+    }
+
+    const iface = args.ctx.emitter.root
+      .find(args.ctx.j.TSInterfaceDeclaration)
+      .filter((path) => (path.node.id as { name?: string }).name === typeName);
+    if (iface.size() === 0) {
+      return false;
+    }
+    const ifaceNode = iface.get().node;
+    if (typeMembersContainExternalStyleProps(ifaceNode.body?.body)) {
+      return true;
+    }
+    return (ifaceNode.extends ?? []).some((extended: unknown) => visit(extended, seen));
+  };
+
+  return visit(args.propsType, new Set());
+}
+
+function typeMembersContainExternalStyleProps(members: unknown[] | undefined): boolean {
+  if (!Array.isArray(members)) {
+    return false;
+  }
+  return members.some((member) => {
+    const typed = member as {
+      type?: string;
+      key?: { type?: string; name?: string; value?: unknown };
+    };
+    if (typed.type !== "TSPropertySignature") {
+      return false;
+    }
+    const keyName =
+      typed.key?.type === "Identifier"
+        ? typed.key.name
+        : typeof typed.key?.value === "string"
+          ? typed.key.value
+          : undefined;
+    return keyName === "className" || keyName === "style";
+  });
+}
+
+function isReactPropsUtilityType(typeName: unknown): boolean {
+  const name = getTypeNameText(typeName);
+  return (
+    name === "React.ComponentProps" ||
+    name === "React.ComponentPropsWithRef" ||
+    name === "React.HTMLAttributes" ||
+    name === "ComponentProps" ||
+    name === "ComponentPropsWithRef" ||
+    name === "HTMLAttributes"
+  );
+}
+
+function getIdentifierTypeName(typeName: unknown): string | null {
+  return typeof typeName === "object" &&
+    typeName !== null &&
+    (typeName as { type?: string }).type === "Identifier"
+    ? ((typeName as { name?: string }).name ?? null)
+    : null;
+}
+
+function getTypeNameText(typeName: unknown): string | null {
+  if (!typeName || typeof typeName !== "object") {
+    return null;
+  }
+  const node = typeName as {
+    type?: string;
+    name?: string;
+    left?: unknown;
+    right?: unknown;
+  };
+  if (node.type === "Identifier") {
+    return node.name ?? null;
+  }
+  if (node.type === "TSQualifiedName") {
+    const left = getTypeNameText(node.left);
+    const right = getTypeNameText(node.right);
+    return left && right ? `${left}.${right}` : null;
+  }
+  return null;
 }
 
 function collectPropsUsedOutsideExtraStyleConditionals(

@@ -1738,7 +1738,7 @@ export class WrapperEmitter {
     const allowForwardedAsProp = this.getUsedAttrs(localName).has("forwardedAs");
     const propsParamId = j.identifier("props");
     const needsPolymorphicTypeParams =
-      this.emitTypes && (allowAsProp || Boolean(inlineTypeText?.includes("<C")));
+      this.emitTypes && (allowAsProp || inlineTypeNeedsElementGeneric(inlineTypeText));
     if (this.emitTypes) {
       if (inlineTypeText) {
         let typeNode: TsTypeAnnotationInput | null = null;
@@ -2191,6 +2191,15 @@ const UNIVERSAL_PROP_TYPES: Record<string, string> = {
   className: "className?: string",
   style: "style?: React.CSSProperties",
 };
+
+function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
+  if (!typeText) {
+    return false;
+  }
+  return (
+    /\bReact\.ComponentProps(?:WithRef)?<C\b/.test(typeText) || /\bas\??:\s*C\b/.test(typeText)
+  );
+}
 
 /**
  * If `typeText` is a simple `{ prop?: type; … }` object literal, returns the

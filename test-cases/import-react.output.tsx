@@ -42,7 +42,10 @@ export function ThemeSpan(
 
 type ChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
 
-export function ChoiceButton(props: Omit<ChoiceButtonProps, "className" | "style">) {
+export function ChoiceButton(
+  props: Omit<ChoiceButtonProps, "className" | "style"> &
+    Omit<React.ComponentProps<"button">, "className" | "style">,
+) {
   const { children, active, ...rest } = props;
   return (
     <button {...rest} sx={[styles.choiceButton, active ? styles.choiceButtonActive : undefined]}>
