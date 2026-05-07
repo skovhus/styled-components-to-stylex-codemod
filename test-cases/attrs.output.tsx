@@ -180,6 +180,20 @@ function PositionedTile(props: PositionedTileProps) {
   return <div sx={styles.positionedTile(height)}>{children}</div>;
 }
 
+type OptionalHeightBoxProps = React.PropsWithChildren<{
+  height?: number;
+}>;
+
+// Pattern 11b: optional direct attrs style values should be omitted when undefined
+function OptionalHeightBox(props: OptionalHeightBoxProps) {
+  const { children, height } = props;
+  return (
+    <div sx={[styles.optionalHeightBox, height != null && styles.optionalHeightBoxHeight(height)]}>
+      {children}
+    </div>
+  );
+}
+
 type SeparatorLineProps = React.PropsWithChildren<{
   height?: number;
   className?: string;
@@ -273,6 +287,8 @@ export const App = () => (
     <span sx={styles.noWrapText}>No wrapping text</span>
     <DynamicHeightBox height={50}>Dynamic height</DynamicHeightBox>
     <PositionedTile height={64}>Tile with attrs height</PositionedTile>
+    <OptionalHeightBox>Optional height omitted</OptionalHeightBox>
+    <OptionalHeightBox height={24}>Optional height set</OptionalHeightBox>
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
     <FallbackSeparatorLine height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
@@ -344,7 +360,7 @@ const styles = stylex.create({
   dynamicHeightBoxHeight: (height: string) => ({
     height,
   }),
-  positionedTile: (height: string | number) => ({
+  positionedTile: (height: number) => ({
     position: "absolute",
     minHeight: 1,
     backgroundColor: "#eef2ff",
@@ -366,7 +382,16 @@ const styles = stylex.create({
     },
     height,
   }),
-  separatorLine: (height: string | number) => ({
+  optionalHeightBox: {
+    display: "flex",
+    alignItems: "center",
+    padding: 4,
+    backgroundColor: "#fee2e2",
+  },
+  optionalHeightBoxHeight: (height: number) => ({
+    height,
+  }),
+  separatorLine: (height: number) => ({
     width: "100%",
     backgroundColor: "#94a3b8",
     height,

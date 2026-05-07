@@ -50,7 +50,7 @@ import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../emit-styles.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
-import { ensureShouldForwardPropDrop } from "./types.js";
+import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   unwrapArrowFunctionToPropsExpr,
@@ -3327,10 +3327,9 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
       const fnKey = styleKeyWithSuffix(decl.styleKey, entry.cssProp);
       const paramName = cssPropertyToIdentifier(entry.cssProp);
       const param = j.identifier(paramName);
+      const condition = getAttrsDynamicStyleCondition(ctx, entry);
       (param as any).typeAnnotation = j.tsTypeAnnotation(
-        entry.condition === "always"
-          ? j.tsUnionType([j.tsStringKeyword(), j.tsNumberKeyword()])
-          : j.tsStringKeyword(),
+        getAttrsDynamicStyleParamType(ctx, entry),
       );
       const p = makeCssProperty(j, entry.cssProp, paramName);
       const body = j.objectExpression([p]);
@@ -3338,11 +3337,64 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
       ctx.styleFnFromProps.push({
         fnKey,
         jsxProp: entry.jsxProp,
-        condition: entry.condition ?? "truthy",
+        ...(condition ? { condition } : {}),
         callArg: entry.callArgExpr as any,
       });
       ensureShouldForwardPropDrop(decl, entry.jsxProp);
       decl.needsWrapperComponent = true;
     }
   }
+}
+
+type AttrsDynamicStyleEntry = NonNullable<
+  NonNullable<StyledDecl["attrsInfo"]>["attrsDynamicStyles"]
+>[number];
+
+function getAttrsDynamicStyleCondition(
+  ctx: DeclProcessingState,
+  entry: AttrsDynamicStyleEntry,
+): "truthy" | "always" | undefined {
+  if (entry.condition) {
+    return entry.condition;
+  }
+  const propType = ctx.findJsxPropTsType(entry.jsxProp);
+  if (propType && !ctx.isJsxPropOptional(entry.jsxProp)) {
+    return "always";
+  }
+  return undefined;
+}
+
+function getAttrsDynamicStyleParamType(ctx: DeclProcessingState, entry: AttrsDynamicStyleEntry) {
+  const { j } = ctx.state;
+  if (usesAttrsPropValueType(entry)) {
+    const propType = resolveTypeNodeFromTsType(j, ctx.findJsxPropTsType(entry.jsxProp));
+    if (propType) {
+      return cloneAstNode(propType);
+    }
+  }
+  if (entry.condition === "truthy") {
+    return j.tsStringKeyword();
+  }
+  return j.tsUnionType([j.tsStringKeyword(), j.tsNumberKeyword()]);
+}
+
+function usesAttrsPropValueType(entry: AttrsDynamicStyleEntry): boolean {
+  const callArg = entry.callArgExpr;
+  if (!callArg || typeof callArg !== "object") {
+    return false;
+  }
+  const node = callArg as { type?: string; name?: string; left?: unknown };
+  if (node.type === "Identifier" && node.name === entry.jsxProp) {
+    return true;
+  }
+  if (node.type !== "LogicalExpression" && node.type !== "TSNullishCoalescingExpression") {
+    return false;
+  }
+  const left = node.left;
+  return (
+    !!left &&
+    typeof left === "object" &&
+    (left as { type?: string; name?: string }).type === "Identifier" &&
+    (left as { name?: string }).name === entry.jsxProp
+  );
 }

@@ -1410,9 +1410,10 @@ function applyStyledPrefixStripping(styledDecls: StyledDecl[]): void {
 /**
  * Extracts CSS style properties from an `attrs({ style: { ... } })` object.
  *
- * Handles two patterns:
+ * Handles these patterns:
  * - Static values: `style: { whiteSpace: "nowrap" }` → stored in `attrsStaticStyles`
  * - Dynamic ternary: `style: { height: $prop ? expr : undefined }` → stored in `attrsDynamicStyles`
+ * - Direct prop reads: `style: { height: props.height }` → stored in `attrsDynamicStyles`
  *
  * Returns true if all properties were handled, false if any property is unsupported.
  */
@@ -1476,7 +1477,7 @@ function tryExtractStyleObject(
 
     const directDynamic = extractDynamicStyleValue(v, attrsParamPropNames);
     if (directDynamic) {
-      dynamicStyles.push({ cssProp, ...directDynamic, condition: "always" });
+      dynamicStyles.push({ cssProp, ...directDynamic });
       continue;
     }
 
@@ -1540,7 +1541,7 @@ function extractTernaryJsxProp(
 function extractDynamicStyleValue(
   value: any,
   attrsParamPropNames: ReadonlySet<string>,
-): { jsxProp: string; callArgExpr: unknown } | null {
+): { jsxProp: string; callArgExpr: unknown; condition?: "always" } | null {
   const propName = extractPropName(value, attrsParamPropNames);
   if (propName) {
     return { jsxProp: propName, callArgExpr: identifierNode(propName) };
@@ -1558,6 +1559,7 @@ function extractDynamicStyleValue(
           ...value,
           left: identifierNode(leftPropName),
         },
+        condition: "always",
       };
     }
   }
