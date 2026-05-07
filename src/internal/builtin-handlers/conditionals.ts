@@ -8,6 +8,7 @@ import {
   type CallExpressionNode,
   cloneAstNode,
   getArrowFnParamBindings,
+  extractRootAndPath,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
@@ -436,19 +437,37 @@ export function tryResolveConditionalValue(
 
     // Handle direct MemberExpression theme access (reuse the helper)
     const themeInfo = resolveThemeFromMemberExpr(b);
-    if (!themeInfo) {
-      return null;
+    if (themeInfo) {
+      const res = ctx.resolveValue({
+        kind: "theme",
+        path: themeInfo.path,
+        filePath: ctx.filePath,
+        loc: getNodeLocStart(b) ?? undefined,
+      });
+      if (!res) {
+        return null;
+      }
+      return { usage: expectedUsage, expr: res.expr, imports: res.imports };
     }
-    const res = ctx.resolveValue({
-      kind: "theme",
-      path: themeInfo.path,
-      filePath: ctx.filePath,
-      loc: getNodeLocStart(b) ?? undefined,
-    });
-    if (!res) {
-      return null;
+
+    const importedInfo = extractRootAndPath(b);
+    if (importedInfo) {
+      const imp = ctx.resolveImport(importedInfo.rootName, importedInfo.rootNode);
+      if (imp) {
+        const res = ctx.resolveValue({
+          kind: "importedValue",
+          importedName: imp.importedName,
+          source: imp.source,
+          path: importedInfo.path.length > 0 ? importedInfo.path.join(".") : undefined,
+          filePath: ctx.filePath,
+          loc: getNodeLocStart(b) ?? undefined,
+        });
+        if (res) {
+          return { usage: expectedUsage, expr: res.expr, imports: res.imports };
+        }
+      }
     }
-    return { usage: expectedUsage, expr: res.expr, imports: res.imports };
+    return null;
   };
 
   const getBranch = (value: unknown): Branch => {
