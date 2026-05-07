@@ -236,10 +236,111 @@ function removeNowUnusedComponentImports(
 }
 
 function hasIdentifierUsageOutsideImports(source: string, name: string): boolean {
-  const withoutImports = source.replace(/^\s*import\s+[\s\S]*?;\s*/gm, "");
+  const withoutImports = stripComments(source).replace(
+    /^[ \t]*import\b[\s\S]*?;[ \t]*(?:\r?\n)?/gm,
+    "",
+  );
   return new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegex(name)}($|[^A-Za-z0-9_$])`).test(
     withoutImports,
   );
+}
+
+function stripComments(source: string): string {
+  let result = "";
+  let state:
+    | "normal"
+    | "lineComment"
+    | "blockComment"
+    | "singleQuote"
+    | "doubleQuote"
+    | "template" = "normal";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? "";
+    const next = source[index + 1] ?? "";
+
+    if (state === "lineComment") {
+      if (char === "\n") {
+        result += char;
+        state = "normal";
+      } else {
+        result += " ";
+      }
+      continue;
+    }
+
+    if (state === "blockComment") {
+      if (char === "*" && next === "/") {
+        result += "  ";
+        index += 1;
+        state = "normal";
+      } else {
+        result += char === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+
+    if (state === "template") {
+      if (char === "/" && next === "/") {
+        result += "  ";
+        index += 1;
+        state = "lineComment";
+        continue;
+      }
+      if (char === "/" && next === "*") {
+        result += "  ";
+        index += 1;
+        state = "blockComment";
+        continue;
+      }
+      result += char;
+      if (char === "\\") {
+        result += next;
+        index += 1;
+        continue;
+      }
+      if (char === "`") {
+        state = "normal";
+      }
+      continue;
+    }
+
+    if (state === "singleQuote" || state === "doubleQuote") {
+      result += char;
+      if (char === "\\") {
+        result += next;
+        index += 1;
+        continue;
+      }
+      if ((state === "singleQuote" && char === "'") || (state === "doubleQuote" && char === '"')) {
+        state = "normal";
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      result += "  ";
+      index += 1;
+      state = "lineComment";
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      result += "  ";
+      index += 1;
+      state = "blockComment";
+      continue;
+    }
+    if (char === "'") {
+      state = "singleQuote";
+    } else if (char === '"') {
+      state = "doubleQuote";
+    } else if (char === "`") {
+      state = "template";
+    }
+    result += char;
+  }
+
+  return result;
 }
 
 function removeNamedImportSpecifier(
