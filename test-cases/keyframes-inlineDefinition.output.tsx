@@ -15,6 +15,20 @@ function Circle(props: CircleProps) {
   );
 }
 
+type RingProps = { isAnimated?: boolean } & Omit<
+  React.ComponentProps<"path">,
+  "className" | "style"
+>;
+
+function Ring(props: RingProps) {
+  const { children, isAnimated, ...rest } = props;
+  return (
+    <path {...rest} sx={isAnimated && styles.ringAnimated}>
+      {children}
+    </path>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
@@ -24,6 +38,7 @@ export function App() {
       <svg>
         <Circle isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
+        <Ring isAnimated d="M20,90 Q105,20 190,90" />
       </svg>
     </div>
   );
@@ -99,6 +114,12 @@ const styles = stylex.create({
   circleAnimated: {
     animationName: Dash,
     animationDuration: "1s",
+    animationTimingFunction: "ease-out",
+    animationFillMode: "forwards",
+  },
+  ringAnimated: {
+    animationName: Dash,
+    animationDuration: "1.5s",
     animationTimingFunction: "ease-out",
     animationFillMode: "forwards",
   },

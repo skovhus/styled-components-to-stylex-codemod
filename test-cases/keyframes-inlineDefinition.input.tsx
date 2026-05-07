@@ -66,6 +66,15 @@ const Circle = styled.path<{ $isAnimated?: boolean }>`
     `}
 `;
 
+const Ring = styled.path<{ isAnimated?: boolean }>`
+  ${DashAnimation}
+  ${(props) =>
+    props.isAnimated &&
+    css`
+      animation: Dash 1.5s ease-out forwards;
+    `}
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
@@ -75,6 +84,7 @@ export function App() {
       <svg>
         <Circle $isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
+        <Ring isAnimated d="M20,90 Q105,20 190,90" />
       </svg>
     </div>
   );
