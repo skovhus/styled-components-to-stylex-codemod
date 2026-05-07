@@ -13,7 +13,7 @@ const Flex = (
 type InputProps = {
   padding?: string;
   small?: boolean;
-} & React.ComponentProps<"input">;
+} & Omit<React.ComponentProps<"input">, "className" | "style">;
 
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {

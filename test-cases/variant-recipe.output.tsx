@@ -34,7 +34,7 @@ type LinkProps = {
   disabled?: boolean;
 };
 
-function Link(props: LinkProps & React.ComponentProps<"a">) {
+function Link(props: LinkProps & Omit<React.ComponentProps<"a">, "className" | "style">) {
   const { children, disabled, color = "secondary", ...rest } = props;
   return (
     <a

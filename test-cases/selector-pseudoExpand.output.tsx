@@ -7,7 +7,7 @@ function Button(props: React.PropsWithChildren<{}>) {
   return <button sx={styles.button}>{props.children}</button>;
 }
 
-function DisabledAwareButton(props: React.ComponentProps<"button">) {
+function DisabledAwareButton(props: Omit<React.ComponentProps<"button">, "className" | "style">) {
   const { children, ...rest } = props;
   return (
     <button {...rest} sx={styles.disabledAwareButton}>

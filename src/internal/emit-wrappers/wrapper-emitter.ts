@@ -1317,6 +1317,16 @@ export class WrapperEmitter {
           : "{}";
 
     const intrinsicBase = `React.ComponentProps<"${tagName}">`;
+    const intrinsicBaseOmitted: string[] = [];
+    if (!allowClassNameProp) {
+      intrinsicBaseOmitted.push('"className"');
+    }
+    if (!allowStyleProp) {
+      intrinsicBaseOmitted.push('"style"');
+    }
+    const intrinsicBaseMaybeOmitted = intrinsicBaseOmitted.length
+      ? `Omit<${intrinsicBase}, ${intrinsicBaseOmitted.join(" | ")}>`
+      : intrinsicBase;
     const pickExpr =
       pickedAttrKeys.length > 0
         ? `Pick<${intrinsicBase}, ${pickedAttrKeys.map((k) => `"${k}"`).join(" | ")}>`
@@ -1331,40 +1341,20 @@ export class WrapperEmitter {
       // to avoid verbose, brittle types.
       if (forceNarrow) {
         if (hasElementSpecificPicks) {
-          return intrinsicBase;
+          return intrinsicBaseMaybeOmitted;
         }
         return narrowResult;
       }
       if (VOID_TAGS.has(tagName)) {
-        const omittedVoid: string[] = [];
-        if (!allowClassNameProp) {
-          omittedVoid.push('"className"');
-        }
-        if (!allowStyleProp) {
-          omittedVoid.push('"style"');
-        }
-        const baseType = omittedVoid.length
-          ? `Omit<${intrinsicBase}, ${omittedVoid.join(" | ")}>`
-          : intrinsicBase;
         if (allowSxProp) {
-          return this.joinIntersection(baseType, `{ ${SX_PROP_TYPE_TEXT} }`);
+          return this.joinIntersection(intrinsicBaseMaybeOmitted, `{ ${SX_PROP_TYPE_TEXT} }`);
         }
-        return baseType;
+        return intrinsicBaseMaybeOmitted;
       }
       return narrowResult;
     }
 
-    const omitted: string[] = [];
-    if (!allowClassNameProp) {
-      omitted.push('"className"');
-    }
-    if (!allowStyleProp) {
-      omitted.push('"style"');
-    }
-    const baseMaybeOmitted = omitted.length
-      ? `Omit<${intrinsicBase}, ${omitted.join(" | ")}>`
-      : intrinsicBase;
-    const composed = this.joinIntersection(literal, baseMaybeOmitted);
+    const composed = this.joinIntersection(literal, intrinsicBaseMaybeOmitted);
     return VOID_TAGS.has(tagName) ? composed : this.withChildren(composed);
   }
 

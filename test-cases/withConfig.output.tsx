@@ -8,7 +8,10 @@ function Card(props: CardProps) {
   return <div sx={styles.card}>{props.children}</div>;
 }
 
-type InputProps = { hasError?: boolean } & React.ComponentProps<"input">;
+type InputProps = { hasError?: boolean } & Omit<
+  React.ComponentProps<"input">,
+  "className" | "style"
+>;
 
 // Combining withConfig options
 function Input(props: InputProps) {

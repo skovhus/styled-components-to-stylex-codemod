@@ -58,9 +58,10 @@ function Tag(props: TagProps) {
 // Indexed theme lookup in ::placeholder pseudo-element
 type PlaceholderColor = "labelBase" | "labelMuted";
 
-type DynamicPlaceholderProps = {
-  placeholderColor: PlaceholderColor;
-} & React.ComponentProps<"input">;
+type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Omit<
+  React.ComponentProps<"input">,
+  "className" | "style"
+>;
 
 function DynamicPlaceholder(props: DynamicPlaceholderProps) {
   const { placeholderColor, ...rest } = props;
