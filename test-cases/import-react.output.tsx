@@ -40,8 +40,24 @@ export function ThemeSpan(
   );
 }
 
+type ChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
+
+export function ChoiceButton(props: Omit<ChoiceButtonProps, "className" | "style">) {
+  const { children, active, ...rest } = props;
+  return (
+    <button {...rest} sx={[styles.choiceButton, active ? styles.choiceButtonActive : undefined]}>
+      {children}
+    </button>
+  );
+}
+
 export function App() {
-  return null;
+  return (
+    <div>
+      <ChoiceButton active>Active</ChoiceButton>
+      <ChoiceButton active={false}>Inactive</ChoiceButton>
+    </div>
+  );
 }
 
 const styles = stylex.create({
@@ -54,5 +70,14 @@ const styles = stylex.create({
     paddingInline: 16,
     backgroundColor: "blue",
     color: "white",
+  },
+  choiceButton: {
+    display: "flex",
+    alignItems: "center",
+    backgroundColor: "gray",
+    color: "white",
+  },
+  choiceButtonActive: {
+    backgroundColor: "navy",
   },
 });
