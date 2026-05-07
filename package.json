@@ -1,6 +1,6 @@
 {
   "name": "styled-components-to-stylex-codemod",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "description": "Codemod to transform styled-components to StyleX",
   "keywords": [
     "codemod",
