@@ -1,11 +1,4 @@
-// @expected-warning: Unsupported selector: pseudo-class on pseudo-element selector
-//
-// This is a parent-state pseudo-element case: styled-components emits `.root:hover::after` and
-// `.root:focus-within::before`, where the parent state changes the pseudo-element. The old supported
-// output passed static Storybook screenshots but failed an interactive Playwright check: hovering or
-// focusing the input side changed the pseudo-element, while the StyleX side did not. This appears to
-// be a StyleX selector-shape limitation for parent-state pseudo-element styling, so the codemod must
-// bail instead of emitting `::after { backgroundColor: { ":hover": ... } }`.
+// Parent-state pseudo-element selectors should preserve selector ordering.
 import styled from "styled-components";
 
 const ResizeHandle = styled.div`

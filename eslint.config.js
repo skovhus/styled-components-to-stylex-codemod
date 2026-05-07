@@ -97,6 +97,19 @@ export default [
     ],
     rules: { "stylex/valid-styles": "off" },
   },
+  {
+    // Vendor file-upload pseudo-element: the StyleX compiler emits
+    // `::-webkit-file-upload-button`, but stylex/valid-styles does not include
+    // it in the eslint pseudo-element allowlist.
+    files: ["test-cases/selector-webkitFileUploadButton.output.tsx"],
+    rules: { "stylex/valid-styles": "off" },
+  },
+  {
+    // Dynamic values nested under pseudo-element conditional styles compile and render,
+    // but this eslint plugin version only accepts literal color values in that position.
+    files: ["test-cases/selector-pseudoElementDynamicNestedPseudo.output.tsx"],
+    rules: { "stylex/valid-styles": "off" },
+  },
 
   {
     // stylex.when.descendant(): `:has()` selectors have limited browser support

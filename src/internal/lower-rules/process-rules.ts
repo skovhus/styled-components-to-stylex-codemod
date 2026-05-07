@@ -71,13 +71,6 @@ import {
   type AdapterCallResolver,
 } from "./utils.js";
 
-const SUPPORTED_STYLEX_PSEUDO_ELEMENTS = new Set([
-  "::after",
-  "::before",
-  "::placeholder",
-  "::-webkit-slider-thumb",
-]);
-
 export function processDeclRules(ctx: DeclProcessingState): void {
   const {
     state,
@@ -1140,23 +1133,11 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       parsedSelector.kind === "pseudoElements" ? parsedSelector.elements : null;
 
     const pseudoElementsToValidate = pseudoElement ? [pseudoElement] : pseudoElementsList;
-    if (pseudoElementsToValidate?.some((pe) => !SUPPORTED_STYLEX_PSEUDO_ELEMENTS.has(pe))) {
+    if (pseudoElementsToValidate?.some((pe) => !isStylexCompilerPseudoElement(pe))) {
       state.markBail();
       warnings.push({
         severity: "warning",
         type: "Unsupported selector: unsupported pseudo-element",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-      break;
-    }
-    if (
-      parsedSelector.kind === "pseudoElementWithPseudo" &&
-      hasParentPseudoBeforePseudoElement(rule.selector)
-    ) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: pseudo-class on pseudo-element selector",
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
       break;
@@ -2339,13 +2320,10 @@ function hasEnabledCompoundPseudoSelector(selector: string): boolean {
   });
 }
 
-function hasParentPseudoBeforePseudoElement(selector: string): boolean {
-  const pseudoElementMatch = /::[-_a-zA-Z0-9]+|:(?:before|after|placeholder)\b/.exec(selector);
-  if (!pseudoElementMatch || pseudoElementMatch.index === undefined) {
-    return false;
-  }
-  const beforePseudoElement = selector.slice(0, pseudoElementMatch.index);
-  return /:(?!:)/.test(beforePseudoElement);
+function isStylexCompilerPseudoElement(selector: string): boolean {
+  // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.
+  // Keep this broader than the eslint plugin's finite allowlist so linter lag does not force bailouts.
+  return selector.startsWith("::");
 }
 
 function containsPseudoToken(selector: string, token: string): boolean {
