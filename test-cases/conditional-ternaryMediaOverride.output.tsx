@@ -3,9 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { breakpoints } from "./lib/breakpoints.stylex";
 import { fontSizeVars } from "./tokens.stylex";
 
-type TitleProps = React.PropsWithChildren<{
-  size?: "small" | "large";
-}>;
+type TitleProps = { size?: "small" | "large" } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 function Title(props: TitleProps) {
   const { children, size } = props;

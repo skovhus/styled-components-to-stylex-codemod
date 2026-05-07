@@ -10,7 +10,7 @@ type Props = {
   disabled?: boolean;
 };
 
-function Button(props: React.PropsWithChildren<Props & { ref?: React.Ref<HTMLButtonElement> }>) {
+function Button(props: Props & Omit<React.ComponentProps<"button">, "className" | "style">) {
   const { children, size = "small", color = "secondary", disabled, ...rest } = props;
   return (
     <button

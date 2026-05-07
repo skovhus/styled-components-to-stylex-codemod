@@ -734,7 +734,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           const combined = emitter.joinIntersection(
             explicitBaseText,
             customStyleDrivingPropsTypeText,
-            explicitTypeIncludesIntrinsicProps ? extendBaseTypeText : baseTypeText,
+            needsRestForType || explicitTypeIncludesIntrinsicProps
+              ? extendBaseTypeText
+              : baseTypeText,
             sxTypeIntersection,
           );
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);

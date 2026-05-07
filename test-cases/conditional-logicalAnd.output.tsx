@@ -16,7 +16,10 @@ function LayeredBox(props: LayeredBoxProps) {
   );
 }
 
-type GrayscaleImageProps = { isBw?: boolean } & React.ComponentProps<"img">;
+type GrayscaleImageProps = { isBw?: boolean } & Omit<
+  React.ComponentProps<"img">,
+  "className" | "style"
+>;
 
 // Pattern 2: Simple logical AND with css helper (using destructured props)
 function GrayscaleImage(props: GrayscaleImageProps) {
@@ -24,10 +27,10 @@ function GrayscaleImage(props: GrayscaleImageProps) {
   return <img {...rest} sx={[styles.grayscaleImage, isBw && styles.grayscaleImageBw]} />;
 }
 
-type DialogTextProps = React.PropsWithChildren<{
+type DialogTextProps = {
   renderingContext?: "dialog" | "page";
   lines?: number;
-}>;
+} & Omit<React.ComponentProps<"p">, "className" | "style">;
 
 // Pattern 3: Chained logical expressions with multiple conditions
 function DialogText(props: DialogTextProps) {

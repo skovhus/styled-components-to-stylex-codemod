@@ -6,9 +6,10 @@ function getRowHighlightColor(isDark: boolean): string {
   return isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)";
 }
 
-type RowProps = React.PropsWithChildren<{
-  isHighlighted: boolean;
-}>;
+type RowProps = { isHighlighted: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
 
 function Row(props: RowProps) {
   const { children, isHighlighted } = props;

@@ -2,9 +2,7 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 
-type BoxProps = React.PropsWithChildren<{
-  enabled: boolean;
-}>;
+type BoxProps = { enabled: boolean } & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 // Block-level theme logical conditional: theme.isDark && props.enabled controls entire CSS block
 function Box(props: BoxProps) {
