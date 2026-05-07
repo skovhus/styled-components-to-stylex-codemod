@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: pseudo-class on pseudo-element selector
 // Hover styles nested inside a pseudo-element selector, using theme helper calls
 // The color() calls go through the adapter's resolveCall hook
 import styled from "styled-components";

@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported selector: pseudo-class on pseudo-element selector
 // Hovering a parent pseudo-element selector must not emit invalid nested pseudo values.
 import styled from "styled-components";
 

@@ -1139,6 +1139,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       });
       break;
     }
+    if (parsedSelector.kind === "pseudoElementWithPseudo") {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: pseudo-class on pseudo-element selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
 
     const attrSel =
       parsedSelector.kind === "attribute"
