@@ -194,6 +194,15 @@ function OptionalHeightBox(props: OptionalHeightBoxProps) {
   );
 }
 
+type MixedFallbackHeightBoxProps = React.PropsWithChildren<{
+  height?: number;
+}>;
+
+function MixedFallbackHeightBox(props: MixedFallbackHeightBoxProps) {
+  const { children, height } = props;
+  return <div sx={styles.mixedFallbackHeightBox(height ?? "16px")}>{children}</div>;
+}
+
 type SeparatorLineProps = React.PropsWithChildren<{
   height?: number;
   className?: string;
@@ -289,6 +298,7 @@ export const App = () => (
     <PositionedTile height={64}>Tile with attrs height</PositionedTile>
     <OptionalHeightBox>Optional height omitted</OptionalHeightBox>
     <OptionalHeightBox height={24}>Optional height set</OptionalHeightBox>
+    <MixedFallbackHeightBox>Mixed fallback height</MixedFallbackHeightBox>
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
     <FallbackSeparatorLine height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
@@ -391,7 +401,14 @@ const styles = stylex.create({
   optionalHeightBoxHeight: (height: number) => ({
     height,
   }),
-  separatorLine: (height: number) => ({
+  mixedFallbackHeightBox: (height: string | number) => ({
+    display: "flex",
+    alignItems: "center",
+    padding: 4,
+    backgroundColor: "#fef3c7",
+    height,
+  }),
+  separatorLine: (height: string | number) => ({
     width: "100%",
     backgroundColor: "#94a3b8",
     height,

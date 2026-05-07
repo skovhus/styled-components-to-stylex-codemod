@@ -83,7 +83,6 @@
     "eslint": "^10.0.3",
     "eslint-plugin-storybook": "10.2.19",
     "knip": "^5.86.0",
-    "lefthook": "^2.1.6",
     "oxfmt": "^0.34.0",
     "oxlint": "^1.55.0",
     "oxlint-tsgolint": "^0.16.0",

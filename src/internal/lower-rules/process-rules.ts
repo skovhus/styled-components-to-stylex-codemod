@@ -3368,7 +3368,7 @@ function getAttrsDynamicStyleParamType(
   entry: AttrsDynamicStyleEntry,
 ): TypeAnnotationInput {
   const { j } = ctx.state;
-  if (usesAttrsPropValueType(entry)) {
+  if (isDirectAttrsPropValue(entry)) {
     const propType = resolveTypeNodeFromTsType(j, ctx.findJsxPropTsType(entry.jsxProp));
     if (propType) {
       return cloneAstNode(propType) as TypeAnnotationInput;
@@ -3380,23 +3380,11 @@ function getAttrsDynamicStyleParamType(
   return j.tsUnionType([j.tsStringKeyword(), j.tsNumberKeyword()]);
 }
 
-function usesAttrsPropValueType(entry: AttrsDynamicStyleEntry): boolean {
+function isDirectAttrsPropValue(entry: AttrsDynamicStyleEntry): boolean {
   const callArg = entry.callArgExpr;
   if (!callArg || typeof callArg !== "object") {
     return false;
   }
   const node = callArg as { type?: string; name?: string; left?: unknown };
-  if (node.type === "Identifier" && node.name === entry.jsxProp) {
-    return true;
-  }
-  if (node.type !== "LogicalExpression" && node.type !== "TSNullishCoalescingExpression") {
-    return false;
-  }
-  const left = node.left;
-  return (
-    !!left &&
-    typeof left === "object" &&
-    (left as { type?: string; name?: string }).type === "Identifier" &&
-    (left as { name?: string }).name === entry.jsxProp
-  );
+  return node.type === "Identifier" && node.name === entry.jsxProp;
 }

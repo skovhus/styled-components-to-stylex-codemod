@@ -166,6 +166,17 @@ const OptionalHeightBox = styled.div.attrs<{ height?: number }>((props) => ({
   background-color: #fee2e2;
 `;
 
+const MixedFallbackHeightBox = styled.div.attrs<{ height?: number }>((props) => ({
+  style: {
+    height: props.height ?? "16px",
+  },
+}))`
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  background-color: #fef3c7;
+`;
+
 // Pattern 12: dynamic attrs style should merge with caller style, with caller style last
 const SeparatorLine = styled.div.attrs<{ $height?: number }>((props) => ({
   style: {
@@ -261,6 +272,7 @@ export const App = () => (
     <PositionedTile height={64}>Tile with attrs height</PositionedTile>
     <OptionalHeightBox>Optional height omitted</OptionalHeightBox>
     <OptionalHeightBox height={24}>Optional height set</OptionalHeightBox>
+    <MixedFallbackHeightBox>Mixed fallback height</MixedFallbackHeightBox>
     <HeaderSeparator height={2} style={{ opacity: 1 }} />
     <FallbackSeparatorLine $height={4}>Fallback separator</FallbackSeparatorLine>
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
