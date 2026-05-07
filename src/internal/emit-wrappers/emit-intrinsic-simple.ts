@@ -684,6 +684,21 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       })();
 
       const sxTypeIntersection = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
+      const explicitBaseText = explicit
+        ? maybeOmitExternalStylePropsFromExplicitTypeText({
+            ctx,
+            propsType: d.propsType,
+            typeText: explicit,
+            allowClassNameProp,
+            allowStyleProp,
+          })
+        : undefined;
+      const explicitTypeIncludesIntrinsicProps =
+        !!d.propsType &&
+        explicitTypeMayContainExternalStyleProps({
+          ctx,
+          propsType: d.propsType,
+        });
 
       const typeText = (() => {
         if (!explicit) {
@@ -717,16 +732,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           // Non-exported with explicit type: intersect the user type with only
           // the actually-used element props.
           const combined = emitter.joinIntersection(
-            explicit,
+            explicitBaseText,
             customStyleDrivingPropsTypeText,
-            baseTypeText,
+            explicitTypeIncludesIntrinsicProps ? extendBaseTypeText : baseTypeText,
             sxTypeIntersection,
           );
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
         if (VOID_TAGS.has(tagName)) {
           return emitter.joinIntersection(
-            explicit,
+            explicitBaseText,
             customStyleDrivingPropsTypeText,
             extendBaseTypeText,
             sxTypeIntersection,
@@ -745,7 +760,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             return emitter.withChildren(explicit);
           }
           return emitter.joinIntersection(
-            explicit,
+            explicitBaseText,
             customStyleDrivingPropsTypeText,
             extendBaseTypeText,
             sxTypeIntersection,
@@ -763,10 +778,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             extras.push(SX_PROP_TYPE_TEXT);
           }
           extras.push("children?: React.ReactNode");
-          return emitter.joinIntersection(explicit, `{ ${extras.join("; ")} }`);
+          return emitter.joinIntersection(explicitBaseText, `{ ${extras.join("; ")} }`);
         }
         // Wrap the explicit type with PropsWithChildren since the wrapper may need children
-        return emitter.withChildren(explicit);
+        return emitter.withChildren(explicitBaseText ?? explicit);
       })();
       const typeTextWithForwardedAs = withForwardedAsType(typeText, includesForwardedAs);
 
@@ -851,18 +866,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             // User's existing type first in the intersection for readability.
             // Omit className/style from both sides because aliases can themselves
             // include React.ComponentProps<"tag">.
-            const explicitBase = explicitTypeMayContainExternalStyleProps({
-              ctx,
-              propsType: d.propsType,
-            })
-              ? omitExternalStylePropsFromTypeText({
-                  typeText: explicit,
-                  allowClassNameProp,
-                  allowStyleProp,
-                })
-              : explicit;
             const inlineBase = emitter.joinIntersection(
-              explicitBase,
+              explicitBaseText,
               extendBaseTypeText,
               sxTypeIntersection,
             );
@@ -1293,11 +1298,21 @@ function hasComplementaryVariantPairs(d: StyledDecl): boolean {
   return false;
 }
 
-function omitExternalStylePropsFromTypeText(args: {
+function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
+  ctx: EmitIntrinsicContext;
+  propsType: StyledDecl["propsType"];
   typeText: string;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
 }): string {
+  if (
+    !explicitTypeMayContainExternalStyleProps({
+      ctx: args.ctx,
+      propsType: args.propsType,
+    })
+  ) {
+    return args.typeText;
+  }
   const omitted: string[] = [];
   if (!args.allowClassNameProp) {
     omitted.push('"className"');
@@ -1325,9 +1340,6 @@ function explicitTypeMayContainExternalStyleProps(args: {
       extends?: unknown[];
       body?: { body?: unknown[] };
     };
-    if (typed.type === "TSTypeLiteral") {
-      return typeMembersContainExternalStyleProps(typed.members);
-    }
     if (typed.type === "TSIntersectionType" || typed.type === "TSUnionType") {
       return (typed.types ?? []).some((member) => visit(member, seen));
     }
@@ -1362,35 +1374,10 @@ function explicitTypeMayContainExternalStyleProps(args: {
       return false;
     }
     const ifaceNode = iface.get().node;
-    if (typeMembersContainExternalStyleProps(ifaceNode.body?.body)) {
-      return true;
-    }
     return (ifaceNode.extends ?? []).some((extended: unknown) => visit(extended, seen));
   };
 
   return visit(args.propsType, new Set());
-}
-
-function typeMembersContainExternalStyleProps(members: unknown[] | undefined): boolean {
-  if (!Array.isArray(members)) {
-    return false;
-  }
-  return members.some((member) => {
-    const typed = member as {
-      type?: string;
-      key?: { type?: string; name?: string; value?: unknown };
-    };
-    if (typed.type !== "TSPropertySignature") {
-      return false;
-    }
-    const keyName =
-      typed.key?.type === "Identifier"
-        ? typed.key.name
-        : typeof typed.key?.value === "string"
-          ? typed.key.value
-          : undefined;
-    return keyName === "className" || keyName === "style";
-  });
 }
 
 function isReactPropsUtilityType(typeName: unknown): boolean {

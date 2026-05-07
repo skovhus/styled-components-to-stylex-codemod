@@ -56,10 +56,16 @@ export function ChoiceButton(
 
 type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
 
-function LocalChoiceButton(props: React.PropsWithChildren<Omit<LocalChoiceButtonProps, "className" | "style">>) {
+function LocalChoiceButton(
+  props: Omit<LocalChoiceButtonProps, "className" | "style"> &
+    Omit<React.ComponentProps<"button">, "className" | "style">,
+) {
   const { children, active, ...rest } = props;
   return (
-    <button {...rest} sx={[styles.localChoiceButton, active ? styles.localChoiceButtonActive : undefined]}>
+    <button
+      {...rest}
+      sx={[styles.localChoiceButton, active ? styles.localChoiceButtonActive : undefined]}
+    >
       {children}
     </button>
   );
