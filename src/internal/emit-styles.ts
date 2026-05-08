@@ -5,7 +5,7 @@
 import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
-import { lowerFirst } from "./utilities/string-utils.js";
+import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
 import { findUncollectedStyledTemplateLoc } from "./utilities/uncollected-styled-template.js";
@@ -485,8 +485,9 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       // Avoid attaching "Bug N:" narrative comments to a specific style property inside
       // `stylex.create({ ... })` — those belong above the `styles` declaration instead.
       const { property } = splitBugNarrativeLeadingComments(decl.leadingComments);
-      if (property.length > 0) {
-        styleKeyToComments.set(decl.styleKey, property);
+      const stylexCreateComments = property.filter((comment) => !isJSDocBlockComment(comment));
+      if (stylexCreateComments.length > 0) {
+        styleKeyToComments.set(decl.styleKey, stylexCreateComments);
       }
     }
   }

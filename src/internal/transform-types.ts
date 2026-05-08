@@ -661,7 +661,7 @@ export type StyledDecl = {
       value: string;
     }>;
   };
-  // Leading comments (JSDoc, line comments) from the original styled component declaration
+  // Preserved leading comments from the original styled component declaration.
   leadingComments?: Comment[];
   /** Deterministic bridge CSS class name for unconverted consumer selectors */
   bridgeClassName?: string;

@@ -127,6 +127,30 @@ export function isPrettierIgnoreComment(body: string): boolean {
 }
 
 /**
+ * Returns true if a comment body is only a visual marker for a styles section.
+ * These markers describe the old styled-components grouping, not emitted StyleX code.
+ */
+export function isStyleSectionMarkerComment(body: string): boolean {
+  const marker = body
+    .trim()
+    .replace(/^[-\s]+/, "")
+    .replace(/[-\s]+$/, "")
+    .trim()
+    .toLowerCase();
+  return /^(?:styled\s*-?\s*components?|styles?)$/.test(marker);
+}
+
+export function getCommentBody(comment: unknown): string {
+  const c = comment && typeof comment === "object" ? (comment as { value?: unknown }) : {};
+  return typeof c.value === "string" ? c.value : "";
+}
+
+export function isJSDocBlockComment(comment: unknown): boolean {
+  const c = comment && typeof comment === "object" ? (comment as { type?: unknown }) : {};
+  return c.type === "CommentBlock" && getCommentBody(comment).trimStart().startsWith("*");
+}
+
+/**
  * Normalizes whitespace in a CSS value string.
  * Collapses all sequences of whitespace (including newlines) to single spaces
  * and trims leading/trailing whitespace.

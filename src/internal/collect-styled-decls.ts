@@ -17,7 +17,11 @@ import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 import { stripStyledPrefix, toStyleKey, styleKeyWithSuffix } from "./transform/helpers.js";
-import { isPrettierIgnoreComment } from "./utilities/string-utils.js";
+import {
+  getCommentBody,
+  isPrettierIgnoreComment,
+  isStyleSectionMarkerComment,
+} from "./utilities/string-utils.js";
 
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
@@ -561,8 +565,8 @@ function collectStyledDeclsImpl(args: {
   };
 
   /**
-   * Extract leading comments from the parent VariableDeclaration if it has a single declarator.
-   * This captures JSDoc and line comments for preservation in the output.
+   * Extract preserved leading comments from the parent VariableDeclaration if it has a single
+   * declarator.
    */
   const getLeadingComments = (declaratorPath: any): any[] | undefined => {
     const parentPath = declaratorPath.parentPath;
@@ -596,9 +600,7 @@ function collectStyledDeclsImpl(args: {
     if (!comments || !Array.isArray(comments) || comments.length === 0) {
       return;
     }
-    const filtered = comments.filter(
-      (c: any) => c.leading !== false && !isPrettierIgnoreComment(String(c.value ?? "")),
-    );
+    const filtered = comments.filter((c: unknown) => !shouldDropStyledLeadingComment(c));
     return filtered.length > 0 ? filtered : undefined;
   };
 
@@ -1565,6 +1567,20 @@ function extractDynamicStyleValue(
   }
 
   return null;
+}
+
+function shouldDropStyledLeadingComment(comment: unknown): boolean {
+  const body = getCommentBody(comment);
+  return (
+    hasLeadingFalse(comment) || isPrettierIgnoreComment(body) || isStyleSectionMarkerComment(body)
+  );
+}
+
+function hasLeadingFalse(comment: unknown): boolean {
+  if (!comment || typeof comment !== "object") {
+    return false;
+  }
+  return (comment as { leading?: unknown }).leading === false;
 }
 
 function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {

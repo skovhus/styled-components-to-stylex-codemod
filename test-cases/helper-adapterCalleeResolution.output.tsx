@@ -18,10 +18,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Test case for adapter callee resolution.
-   * The adapter should resolve these helper function calls to StyleX variables.
-   */
   text: {
     fontWeight: fontWeightVars.medium,
     fontSize: fontSizeVars.medium,

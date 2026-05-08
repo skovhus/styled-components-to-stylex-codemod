@@ -3,6 +3,8 @@ import {
   looksLikeLength,
   isBackgroundImageValue,
   isSingleBackgroundComponent,
+  isJSDocBlockComment,
+  isStyleSectionMarkerComment,
   kebabToCamelCase,
   camelToKebabCase,
 } from "./string-utils.js";
@@ -89,6 +91,30 @@ describe("isSingleBackgroundComponent", () => {
     expect(isSingleBackgroundComponent("red url('image.png') no-repeat")).toBe(false);
     expect(isSingleBackgroundComponent("url('image.png') center / cover")).toBe(false);
     expect(isSingleBackgroundComponent("linear-gradient(red, blue), green")).toBe(false);
+  });
+});
+
+describe("isStyleSectionMarkerComment", () => {
+  it("matches comments that only mark style sections", () => {
+    expect(isStyleSectionMarkerComment(" -- Styled Components")).toBe(true);
+    expect(isStyleSectionMarkerComment(" - Styles")).toBe(true);
+    expect(isStyleSectionMarkerComment("--- styles ---")).toBe(true);
+  });
+
+  it("rejects descriptive style comments", () => {
+    expect(isStyleSectionMarkerComment("Page wrapper with padding")).toBe(false);
+    expect(isStyleSectionMarkerComment("Styles depend on responsive props")).toBe(false);
+  });
+});
+
+describe("isJSDocBlockComment", () => {
+  it("matches block comments whose body starts with a JSDoc marker", () => {
+    expect(isJSDocBlockComment({ type: "CommentBlock", value: "* Docs" })).toBe(true);
+  });
+
+  it("rejects line comments and regular block comments", () => {
+    expect(isJSDocBlockComment({ type: "CommentLine", value: "Docs" })).toBe(false);
+    expect(isJSDocBlockComment({ type: "CommentBlock", value: " regular block " })).toBe(false);
   });
 });
 

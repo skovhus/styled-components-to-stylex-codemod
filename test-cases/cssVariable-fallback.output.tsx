@@ -20,10 +20,6 @@ const scrollContainerInlineStyle = {
 } satisfies React.CSSProperties;
 
 const styles = stylex.create({
-  /**
-   * Test case for CSS variable with fallback value.
-   * The codemod should handle: var(--scrollbar-width, 12px)
-   */
   scrollContainer: {
     width: "100%",
     overflowY: "auto",
