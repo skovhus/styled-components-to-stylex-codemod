@@ -390,7 +390,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
         { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
-        { [stylexProp]: value },
+        { [stylexProp]: observedValues ? String(value) : value },
       );
     }
     if (observedValues) {
@@ -410,8 +410,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (jsxProp !== "__props") {
         annotateParamFromJsxProp(param, jsxProp);
       }
+      const valueExpr = j.templateLiteral(
+        [
+          j.templateElement({ raw: "", cooked: "" }, false),
+          j.templateElement({ raw: "", cooked: "" }, true),
+        ],
+        [j.identifier(paramName)],
+      );
       const body = j.objectExpression([
-        j.property("init", makeCssPropKey(j, stylexProp), j.identifier(paramName)),
+        j.property("init", makeCssPropKey(j, stylexProp), valueExpr),
       ]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
