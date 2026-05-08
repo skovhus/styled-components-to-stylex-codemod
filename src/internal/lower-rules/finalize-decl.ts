@@ -11,7 +11,11 @@ import {
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
-import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
+import {
+  extractUnionLiteralValues,
+  groupVariantBucketsIntoDimensions,
+  hasFiniteNumericVariantKey,
+} from "./variants.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import {
   getArrowFnSingleParamName,
@@ -1680,16 +1684,6 @@ function mergeVariantDimensions(
     return existingDimensions;
   }
   return [...existingDimensions, ...nextDimensions];
-}
-
-function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean {
-  return Object.keys(dimension.variants).some((key) => {
-    if (key === "") {
-      return false;
-    }
-    const value = Number(key);
-    return Number.isFinite(value) && String(value) === key;
-  });
 }
 
 function isComponentBlockHandledByRuleProcessor(

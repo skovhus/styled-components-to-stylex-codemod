@@ -109,6 +109,16 @@ export function extractUnionLiteralValues(tsType: unknown): Array<string | numbe
   return null;
 }
 
+export function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean {
+  return Object.keys(dimension.variants).some((key) => {
+    if (key === "") {
+      return false;
+    }
+    const value = Number(key);
+    return Number.isFinite(value) && String(value) === key;
+  });
+}
+
 /**
  * Groups variant buckets into dimensions for the StyleX variants recipe pattern.
  *

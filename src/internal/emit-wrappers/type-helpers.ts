@@ -3,6 +3,7 @@
  * Core concepts: variant sorting and intrinsic tag classification.
  */
 import type { StyledDecl } from "../transform-types.js";
+import { hasFiniteNumericVariantKey } from "../lower-rules/variants.js";
 import { SX_PROP_TYPE_TEXT } from "./wrapper-emitter.js";
 
 /**
@@ -215,18 +216,6 @@ function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>):
       result.add(name.slice(1));
     }
   }
-}
-
-function hasFiniteNumericVariantKey(
-  dim: NonNullable<StyledDecl["variantDimensions"]>[number],
-): boolean {
-  return Object.keys(dim.variants).some((key) => {
-    if (key === "") {
-      return false;
-    }
-    const value = Number(key);
-    return Number.isFinite(value) && String(value) === key;
-  });
 }
 
 function extractBooleanProps(node: unknown): Set<string> {

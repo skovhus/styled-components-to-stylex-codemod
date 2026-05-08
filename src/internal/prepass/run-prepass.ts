@@ -17,6 +17,7 @@ import type {
 import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
 import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
+import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 import {
   fileExports,
@@ -918,7 +919,7 @@ function scanConsumerStaticPropUsages(
       if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
         continue;
       }
-      const value = readStaticJsxAttributeValue(attr);
+      const value = readStaticJsxLiteral(attr);
       props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
     }
 
@@ -1085,45 +1086,6 @@ function getJsxAttributeName(name: AstNode | undefined): string | null {
     return name.name;
   }
   return null;
-}
-
-function readStaticJsxAttributeValue(attr: AstNode): StaticPropValue | undefined {
-  if (!("value" in attr) || attr.value == null) {
-    return true;
-  }
-  const direct = readStaticLiteralNode(attr.value);
-  if (direct !== undefined) {
-    return direct;
-  }
-  const value = attr.value as AstNode;
-  if (value.type !== "JSXExpressionContainer") {
-    return undefined;
-  }
-  return readStaticLiteralNode(value.expression);
-}
-
-function readStaticLiteralNode(node: unknown): StaticPropValue | undefined {
-  if (!node || typeof node !== "object") {
-    return undefined;
-  }
-  const n = node as AstNode;
-  if (
-    n.type === "StringLiteral" ||
-    n.type === "NumericLiteral" ||
-    n.type === "BooleanLiteral" ||
-    n.type === "Literal"
-  ) {
-    const value = n.value;
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-      ? value
-      : undefined;
-  }
-  if (n.type === "UnaryExpression" && n.operator === "-") {
-    const arg = n.argument as AstNode | undefined;
-    const value = readStaticLiteralNode(arg);
-    return typeof value === "number" ? -value : undefined;
-  }
-  return undefined;
 }
 
 /**
