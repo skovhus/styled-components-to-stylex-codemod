@@ -102,7 +102,7 @@ const styles = stylex.create({
     color: "white",
   },
   faderOpacity: (opacity: number) => ({
-    opacity: `${opacity}`,
+    opacity: opacity,
   }),
   transientFader: {
     width: 120,
@@ -111,26 +111,26 @@ const styles = stylex.create({
     color: "white",
   },
   transientFaderOpacity: (opacity: number) => ({
-    opacity: `${opacity}`,
+    opacity: opacity,
   }),
 });
 
 const faderOpacityVariants = stylex.create({
   0.4: {
-    opacity: "0.4",
+    opacity: 0.4,
   },
 
   0.8: {
-    opacity: "0.8",
+    opacity: 0.8,
   },
 });
 
 const transientFaderOpacityVariants = stylex.create({
   0.5: {
-    opacity: "0.5",
+    opacity: 0.5,
   },
 
   0.9: {
-    opacity: "0.9",
+    opacity: 0.9,
   },
 });

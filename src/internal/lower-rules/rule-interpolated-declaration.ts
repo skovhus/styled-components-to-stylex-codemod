@@ -381,7 +381,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
     const unionValues = extractUnionLiteralValues(propType);
     const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
-    if (observedValues && shouldPreserveNumericCssText(stylexProp)) {
+    if (observedValues && getNumericCssEmissionMode(stylexProp) === "cssText") {
       observedNumericCssTextProps.add(jsxProp);
       return false;
     }
@@ -396,7 +396,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
         { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
-        { [stylexProp]: observedValues ? String(value) : value },
+        { [stylexProp]: emitStaticObservedValue(value, stylexProp, observedValues !== null) },
       );
     }
     if (observedValues) {
@@ -416,13 +416,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (jsxProp !== "__props") {
         annotateParamFromJsxProp(param, jsxProp);
       }
-      const valueExpr = j.templateLiteral(
-        [
-          j.templateElement({ raw: "", cooked: "" }, false),
-          j.templateElement({ raw: "", cooked: "" }, true),
-        ],
-        [j.identifier(paramName)],
-      );
+      const valueExpr = buildRuntimeObservedValueExpr(j, stylexProp, j.identifier(paramName));
       const body = j.objectExpression([
         j.property("init", makeCssPropKey(j, stylexProp), valueExpr),
       ]);
@@ -435,7 +429,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     return (
       (observedNumericCssTextProps.has(jsxProp) ||
         isNumberLikeTsType(findJsxPropTsType(jsxProp))) &&
-      shouldPreserveNumericCssText(stylexProp)
+      getNumericCssEmissionMode(stylexProp) === "cssText"
     );
   };
 
@@ -3035,11 +3029,41 @@ function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDe
   return decl.templateExpressions[parts[0].slotId] !== undefined;
 }
 
-function shouldPreserveNumericCssText(stylexProp: string): boolean {
+type NumericCssEmissionMode = "stylexNumber" | "cssText";
+
+function getNumericCssEmissionMode(stylexProp: string): NumericCssEmissionMode {
   if (stylexProp.startsWith("--")) {
-    return false;
+    return "cssText";
   }
-  return !UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp);
+  return UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp) ? "stylexNumber" : "cssText";
+}
+
+function emitStaticObservedValue(
+  value: string | number,
+  stylexProp: string,
+  isObservedNumeric: boolean,
+): string | number {
+  if (typeof value !== "number" || !isObservedNumeric) {
+    return value;
+  }
+  return getNumericCssEmissionMode(stylexProp) === "stylexNumber" ? value : String(value);
+}
+
+function buildRuntimeObservedValueExpr(
+  j: JSCodeshift,
+  stylexProp: string,
+  valueExpr: ExpressionKind,
+): ExpressionKind {
+  if (getNumericCssEmissionMode(stylexProp) === "stylexNumber") {
+    return valueExpr;
+  }
+  return j.templateLiteral(
+    [
+      j.templateElement({ raw: "", cooked: "" }, false),
+      j.templateElement({ raw: "", cooked: "" }, true),
+    ],
+    [valueExpr],
+  ) as ExpressionKind;
 }
 
 function isNumberLikeTsType(tsType: unknown): boolean {
