@@ -888,8 +888,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       root
         .find(j.Identifier, { name: decl.localName })
         .filter((p) => {
-          // Skip the styled component declaration itself
-          if (p.parentPath?.node?.type === "VariableDeclarator") {
+          // Skip the styled component declaration itself, but still count
+          // `const Alias = StyledComponent` as a value use.
+          if (
+            p.parentPath?.node?.type === "VariableDeclarator" &&
+            p.parentPath.node.id === p.node
+          ) {
             return false;
           }
           // Skip JSX element names (these are handled by inline substitution)

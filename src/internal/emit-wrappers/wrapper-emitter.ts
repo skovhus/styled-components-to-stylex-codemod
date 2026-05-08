@@ -321,16 +321,22 @@ export class WrapperEmitter {
     }
 
     const { root, j } = this;
-    const aliasNames = new Set<string>();
-    root.find(j.VariableDeclarator).forEach((p) => {
-      const { id, init } = p.node;
-      if (id.type !== "Identifier" || id.name === localName || !init) {
-        return;
-      }
-      if (nodeContainsIdentifier(init, localName)) {
-        aliasNames.add(id.name);
-      }
-    });
+    const aliasNames = new Set<string>([localName]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      root.find(j.VariableDeclarator).forEach((p) => {
+        const { id, init } = p.node;
+        if (id.type !== "Identifier" || aliasNames.has(id.name) || !init) {
+          return;
+        }
+        if (expressionReferencesComponentAlias(init, aliasNames)) {
+          aliasNames.add(id.name);
+          changed = true;
+        }
+      });
+    }
+    aliasNames.delete(localName);
 
     const hasSpread =
       aliasNames.size > 0 &&
@@ -2238,9 +2244,9 @@ function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
   );
 }
 
-function nodeContainsIdentifier(
+function expressionReferencesComponentAlias(
   node: unknown,
-  name: string,
+  aliasNames: ReadonlySet<string>,
   seen = new WeakSet<object>(),
 ): boolean {
   if (!node || typeof node !== "object") {
@@ -2250,16 +2256,32 @@ function nodeContainsIdentifier(
     return false;
   }
   seen.add(node);
-  if (Array.isArray(node)) {
-    return node.some((child) => nodeContainsIdentifier(child, name, seen));
-  }
   const maybeNode = node as { type?: string; name?: string };
-  if (maybeNode.type === "Identifier" && maybeNode.name === name) {
-    return true;
+  if (maybeNode.type === "Identifier") {
+    return Boolean(maybeNode.name && aliasNames.has(maybeNode.name));
   }
-  return Object.values(node as Record<string, unknown>).some((child) =>
-    nodeContainsIdentifier(child, name, seen),
-  );
+  if (
+    maybeNode.type === "ConditionalExpression" ||
+    maybeNode.type === "LogicalExpression" ||
+    maybeNode.type === "SequenceExpression"
+  ) {
+    return Object.values(node as Record<string, unknown>).some((child) =>
+      expressionReferencesComponentAlias(child, aliasNames, seen),
+    );
+  }
+  if (
+    maybeNode.type === "TSAsExpression" ||
+    maybeNode.type === "TSTypeAssertion" ||
+    maybeNode.type === "TSNonNullExpression" ||
+    maybeNode.type === "ParenthesizedExpression"
+  ) {
+    return expressionReferencesComponentAlias(
+      (node as { expression?: unknown }).expression,
+      aliasNames,
+      seen,
+    );
+  }
+  return false;
 }
 
 /**

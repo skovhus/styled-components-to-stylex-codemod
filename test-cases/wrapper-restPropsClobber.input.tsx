@@ -19,6 +19,14 @@ const AliasedOptionsList = styled.ul`
   outline: none;
 `;
 
+const TransitiveOptionsList = styled.ul`
+  position: relative;
+  margin: 0;
+  background-color: #f2ffee;
+  height: 100%;
+  outline: none;
+`;
+
 type ListWrapperProps = React.HTMLAttributes<HTMLUListElement> & {
   ref: React.Ref<HTMLUListElement>;
 };
@@ -31,6 +39,13 @@ function ListWrapper(props: ListWrapperProps) {
 function AliasedListWrapper(props: ListWrapperProps) {
   const { ref, ...rest } = props;
   const ListComponent = true ? AliasedOptionsList : "ul";
+  return <ListComponent ref={ref} {...rest} />;
+}
+
+function TransitiveListWrapper(props: ListWrapperProps) {
+  const { ref, ...rest } = props;
+  const FirstAlias = TransitiveOptionsList;
+  const ListComponent = FirstAlias;
   return <ListComponent ref={ref} {...rest} />;
 }
 
@@ -55,6 +70,9 @@ function VirtualList(props: { children: React.ReactNode }) {
       <AliasedListWrapper ref={innerRef} {...innerProps}>
         {props.children}
       </AliasedListWrapper>
+      <TransitiveListWrapper ref={innerRef} {...innerProps}>
+        {props.children}
+      </TransitiveListWrapper>
     </div>
   );
 }
