@@ -1,1 +1,1 @@
-export { readStaticJsxLiteral, type StaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+export { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";

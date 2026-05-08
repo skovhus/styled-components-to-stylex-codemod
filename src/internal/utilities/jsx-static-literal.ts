@@ -3,7 +3,7 @@
  * Core concept: safely reading static literal attribute values from AST nodes.
  */
 
-export type StaticJsxLiteral = string | number | boolean;
+type StaticJsxLiteral = string | number | boolean;
 
 export function readStaticJsxLiteral(attr: unknown): StaticJsxLiteral | undefined {
   if (!isObjectRecord(attr) || attr.type !== "JSXAttribute") {
