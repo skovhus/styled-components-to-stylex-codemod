@@ -561,8 +561,8 @@ function collectStyledDeclsImpl(args: {
   };
 
   /**
-   * Extract leading comments from the parent VariableDeclaration if it has a single declarator.
-   * This captures JSDoc and line comments for preservation in the output.
+   * Extract preserved leading comments from the parent VariableDeclaration if it has a single
+   * declarator.
    */
   const getLeadingComments = (declaratorPath: any): any[] | undefined => {
     const parentPath = declaratorPath.parentPath;
@@ -596,7 +596,7 @@ function collectStyledDeclsImpl(args: {
     if (!comments || !Array.isArray(comments) || comments.length === 0) {
       return;
     }
-    const filtered = comments.filter((c: any) => !shouldDropStyledLeadingComment(c));
+    const filtered = comments.filter((c: unknown) => !shouldDropStyledLeadingComment(c));
     return filtered.length > 0 ? filtered : undefined;
   };
 
@@ -1567,22 +1567,28 @@ function extractDynamicStyleValue(
 
 type CommentLike = { leading?: boolean; type?: string; value?: unknown };
 
-function shouldDropStyledLeadingComment(comment: CommentLike): boolean {
+function shouldDropStyledLeadingComment(comment: unknown): boolean {
+  const c = toCommentLike(comment);
   const body = getCommentBody(comment);
   return (
-    comment.leading === false ||
+    c.leading === false ||
     isPrettierIgnoreComment(body) ||
     isStyleSectionMarkerComment(body) ||
-    isJSDocBlockComment(comment)
+    isJSDocBlockComment(c)
   );
+}
+
+function toCommentLike(comment: unknown): CommentLike {
+  return comment && typeof comment === "object" ? (comment as CommentLike) : {};
 }
 
 function isJSDocBlockComment(comment: CommentLike): boolean {
   return comment.type === "CommentBlock" && getCommentBody(comment).trimStart().startsWith("*");
 }
 
-function getCommentBody(comment: CommentLike): string {
-  return typeof comment.value === "string" ? comment.value : "";
+function getCommentBody(comment: unknown): string {
+  const c = toCommentLike(comment);
+  return typeof c.value === "string" ? c.value : "";
 }
 
 function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {
