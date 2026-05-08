@@ -112,6 +112,7 @@ export class WrapperEmitter {
   private jsxCallsitesCache = new Map<string, { hasAny: boolean }>();
   private jsxChildrenUsageCache = new Map<string, boolean>();
   private usedAsValueCache = new Map<string, boolean>();
+  private aliasedJsxSpreadUsageCache = new Map<string, boolean>();
   private forwardedAsUsageCache = new Map<string, boolean>();
 
   constructor(args: WrapperEmitterArgs) {
@@ -305,6 +306,58 @@ export class WrapperEmitter {
     return inJsxExpr;
   }
 
+  isUsedAsValue(d: StyledDecl): boolean {
+    return Boolean(d.usedAsValue) || this.isUsedAsValueInFile(d.localName);
+  }
+
+  requiresRestForValueUsage(d: StyledDecl): boolean {
+    return this.isUsedAsValueInFile(d.localName) || this.hasAliasedJsxSpreadUsage(d.localName);
+  }
+
+  private hasAliasedJsxSpreadUsage(localName: string): boolean {
+    const cached = this.aliasedJsxSpreadUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const { root, j } = this;
+    const aliasNames = new Set<string>([localName]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      root.find(j.VariableDeclarator).forEach((p) => {
+        const { id, init } = p.node;
+        if (id.type !== "Identifier" || aliasNames.has(id.name) || !init) {
+          return;
+        }
+        if (expressionReferencesComponentAlias(init, aliasNames)) {
+          aliasNames.add(id.name);
+          changed = true;
+        }
+      });
+    }
+    aliasNames.delete(localName);
+
+    const hasSpread =
+      aliasNames.size > 0 &&
+      [...aliasNames].some(
+        (aliasName) =>
+          root
+            .find(j.JSXElement, {
+              openingElement: { name: { type: "JSXIdentifier", name: aliasName } },
+            } as any)
+            .filter((p) =>
+              (
+                (p.node.openingElement.attributes ?? []) as Array<JSXAttribute | JSXSpreadAttribute>
+              ).some((attr) => attr.type === "JSXSpreadAttribute"),
+            )
+            .size() > 0,
+      );
+
+    this.aliasedJsxSpreadUsageCache.set(localName, hasSpread);
+    return hasSpread;
+  }
+
   /**
    * Decide whether a wrapper component should accept/merge external `className`/`style`.
    */
@@ -315,7 +368,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return true;
     }
-    if ((d as any).usedAsValue) {
+    if (this.isUsedAsValue(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -329,7 +382,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return true;
     }
-    if ((d as any).usedAsValue) {
+    if (this.isUsedAsValue(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -1232,7 +1285,7 @@ export class WrapperEmitter {
     } = args;
 
     const used = this.getUsedAttrs(d.localName);
-    const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
+    const needsBroadAttrs = used.has("*") || this.isUsedAsValue(d);
 
     const lines: string[] = [];
     // Standard props go into Pick<ComponentProps<"tag">, ...> for proper types.
@@ -2189,6 +2242,46 @@ function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
   return (
     /\bReact\.ComponentProps(?:WithRef)?<C\b/.test(typeText) || /\bas\??:\s*C\b/.test(typeText)
   );
+}
+
+function expressionReferencesComponentAlias(
+  node: unknown,
+  aliasNames: ReadonlySet<string>,
+  seen = new WeakSet<object>(),
+): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (seen.has(node)) {
+    return false;
+  }
+  seen.add(node);
+  const maybeNode = node as { type?: string; name?: string };
+  if (maybeNode.type === "Identifier") {
+    return Boolean(maybeNode.name && aliasNames.has(maybeNode.name));
+  }
+  if (
+    maybeNode.type === "ConditionalExpression" ||
+    maybeNode.type === "LogicalExpression" ||
+    maybeNode.type === "SequenceExpression"
+  ) {
+    return Object.values(node as Record<string, unknown>).some((child) =>
+      expressionReferencesComponentAlias(child, aliasNames, seen),
+    );
+  }
+  if (
+    maybeNode.type === "TSAsExpression" ||
+    maybeNode.type === "TSTypeAssertion" ||
+    maybeNode.type === "TSNonNullExpression" ||
+    maybeNode.type === "ParenthesizedExpression"
+  ) {
+    return expressionReferencesComponentAlias(
+      (node as { expression?: unknown }).expression,
+      aliasNames,
+      seen,
+    );
+  }
+  return false;
 }
 
 /**
