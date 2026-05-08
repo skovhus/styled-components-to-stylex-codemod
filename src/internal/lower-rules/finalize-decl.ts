@@ -167,20 +167,22 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       dropCssVariableDefinitionsFromBucket(bucket, name);
     }
   }
-  moveUnsafeRawCssVarPropsToInlineStyles({
-    styleObj,
-    inlineStyleProps,
-    staticInlineStyleProps,
-    unsafeProps: collectStyleOverrideProps({
-      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
-      cssHelperPropValues,
-      extraStyleObjects,
-      resolvedStyleObjects,
-      variantBuckets,
-      styleFnDecls,
-    }),
-    j: state.j,
-  });
+  if (decl.base.kind !== "component") {
+    moveUnsafeRawCssVarPropsToInlineStyles({
+      styleObj,
+      inlineStyleProps,
+      staticInlineStyleProps,
+      unsafeProps: collectStyleOverrideProps({
+        afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+        cssHelperPropValues,
+        extraStyleObjects,
+        resolvedStyleObjects,
+        variantBuckets,
+        styleFnDecls,
+      }),
+      j: state.j,
+    });
+  }
 
   // Check for interpolations in pseudo selectors that can't be safely transformed
   const hasPseudoBlockInterpolation = (() => {
