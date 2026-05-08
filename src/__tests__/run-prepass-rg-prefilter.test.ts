@@ -86,8 +86,8 @@ describe("runPrepass rg prefilter", () => {
       enableAstCache: true,
     });
 
-    // Two rg calls: (1) rgPreFilter for styled-components/as-prop, (2) rgComponentFilter for className/style
-    expect(execSyncMock).toHaveBeenCalledTimes(2);
+    // Three rg calls: styled/as/ref prefilter, className/style prefilter, and JSX prop-usage prefilter.
+    expect(execSyncMock).toHaveBeenCalledTimes(3);
     expect(execSyncMock.mock.calls[0]?.[0]).toContain("--glob '*.mts'");
 
     const key = `${realComponentFile}:Button`;
