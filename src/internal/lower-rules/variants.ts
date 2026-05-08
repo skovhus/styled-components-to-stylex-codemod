@@ -76,7 +76,7 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
  * Extract string literal values from a TypeScript union type.
  * Returns an array of literal values, or null if the type doesn't contain string literals.
  */
-export function extractUnionLiteralValues(tsType: unknown): Array<string | number> | null {
+export function extractUnionLiteralValues(tsType: unknown): string[] | null {
   if (!tsType || typeof tsType !== "object") {
     return null;
   }
@@ -85,13 +85,10 @@ export function extractUnionLiteralValues(tsType: unknown): Array<string | numbe
 
   // Handle TSUnionType: "up" | "down" | "both"
   if (type.type === "TSUnionType" && Array.isArray(type.types)) {
-    const values: Array<string | number> = [];
+    const values: string[] = [];
     for (const t of type.types) {
       const inner = t as { type?: string; literal?: { value?: unknown } };
-      if (
-        inner.type === "TSLiteralType" &&
-        (typeof inner.literal?.value === "string" || typeof inner.literal?.value === "number")
-      ) {
+      if (inner.type === "TSLiteralType" && typeof inner.literal?.value === "string") {
         values.push(inner.literal.value);
       }
     }
@@ -99,10 +96,7 @@ export function extractUnionLiteralValues(tsType: unknown): Array<string | numbe
   }
 
   // Handle single TSLiteralType
-  if (
-    type.type === "TSLiteralType" &&
-    (typeof type.literal?.value === "string" || typeof type.literal?.value === "number")
-  ) {
+  if (type.type === "TSLiteralType" && typeof type.literal?.value === "string") {
     return [type.literal.value];
   }
 

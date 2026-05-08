@@ -2068,6 +2068,22 @@ export const App = () => (
     ]);
   });
 
+  it("does not emit numeric variants without observed consumer prop values", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ height: 40 | 80 }>\`
+  height: \${({ height }) => height};
+  background-color: tomato;
+\`;
+`;
+    const result = runTransform(input, {}, "unobserved-numeric-variants.tsx");
+
+    expect(result).toContain("panelHeight: (");
+    expect(result).toContain("styles.panelHeight(height)");
+    expect(result).not.toContain("heightVariants");
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
