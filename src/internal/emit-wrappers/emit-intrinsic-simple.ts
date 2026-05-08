@@ -152,6 +152,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       // When there's an explicit user type, create a wrapper type that combines element props
       // with the user type (don't modify the user type)
       const needsElementProps = hasElementPropsInDefaultAttrs(d);
+      const variantDimByProp = buildVariantDimPropTypeMap(d);
+      const variantPropOverrideTypeText =
+        explicit && variantDimByProp.size > 0
+          ? `{\n${[...variantDimByProp.entries()]
+              .map(([propName, typeText]) => `  ${propName}?: ${typeText};`)
+              .join("\n")}\n}`
+          : undefined;
       const typeText = (() => {
         if (explicit) {
           // Check if we need to include element props (for defaultAttrs like `tabIndex: props.tabIndex ?? 0`)
@@ -165,9 +172,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
               includeRef: willForwardRef,
             });
             ctx.markNeedsReactTypeImport();
-            return emitter.joinIntersection(explicit, intrinsicBaseType);
+            return emitter.joinIntersection(
+              explicit,
+              variantPropOverrideTypeText,
+              intrinsicBaseType,
+            );
           }
-          return explicit;
+          return emitter.joinIntersection(explicit, variantPropOverrideTypeText);
         }
         return typeWithChildren;
       })();

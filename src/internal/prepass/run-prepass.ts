@@ -265,20 +265,22 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
+    if (hasStyled) {
+      // Detect styled component definitions for both external-interface and prop-usage matching.
+      STYLED_DEF_RE.lastIndex = 0;
+      for (const m of source.matchAll(STYLED_DEF_RE)) {
+        if (m[1]) {
+          addToSetMap(styledDefFiles, filePath, m[1]);
+        }
+      }
+    }
+
     if (createExternalInterface && hasStyled) {
       // Detect styled(Component) calls
       STYLED_CALL_RE.lastIndex = 0;
       for (const m of source.matchAll(STYLED_CALL_RE)) {
         if (m[1]) {
           styledCallUsages.push({ file: filePath, name: m[1] });
-        }
-      }
-
-      // Detect styled component definitions (for as-prop matching)
-      STYLED_DEF_RE.lastIndex = 0;
-      for (const m of source.matchAll(STYLED_DEF_RE)) {
-        if (m[1]) {
-          addToSetMap(styledDefFiles, filePath, m[1]);
         }
       }
 
