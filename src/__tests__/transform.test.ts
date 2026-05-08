@@ -1960,19 +1960,19 @@ describe("output invariants", () => {
 // - Result must not import styled-components
 // - Result must match the expected output fixture
 describe("transform", () => {
-  it("uses prepass prop values to emit observed numeric identity variants", () => {
+  it("uses prepass prop values to emit observed unitless numeric identity variants", () => {
     const input = `
 import styled from "styled-components";
 
-export const Panel = styled.div<{ height: number }>\`
-  height: \${({ height }) => height};
+export const Panel = styled.div<{ opacity: number }>\`
+  opacity: \${({ opacity }) => opacity};
   background-color: tomato;
 \`;
 
 export const App = () => (
   <div>
-    <Panel height={40}>Short</Panel>
-    <Panel height={80}>Tall</Panel>
+    <Panel opacity={0.4}>Dim</Panel>
+    <Panel opacity={0.8}>Bright</Panel>
   </div>
 );
 `;
@@ -1989,8 +1989,8 @@ export const App = () => (
                 usageCount: 2,
                 hasUnknownUsage: false,
                 props: {
-                  height: {
-                    values: [40, 80],
+                  opacity: {
+                    values: [0.4, 0.8],
                     hasUnknown: false,
                     usageCount: 2,
                     omittedCount: 0,
@@ -2005,26 +2005,26 @@ export const App = () => (
     );
 
     expect(result).toContain(
-      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
     );
-    expect(result).toContain("40: {");
-    expect(result).toContain("80: {");
-    expect(result).toContain("panelHeight: (");
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).toContain("panelOpacity: (");
   });
 
-  it("uses prepass prop values to emit observed transient numeric identity variants", () => {
+  it("uses prepass prop values to emit observed transient unitless numeric identity variants", () => {
     const input = `
 import styled from "styled-components";
 
-export const Panel = styled.div<{ $height: number }>\`
-  height: \${({ $height }) => $height};
+export const Panel = styled.div<{ $opacity: number }>\`
+  opacity: \${({ $opacity }) => $opacity};
   background-color: tomato;
 \`;
 
 export const App = () => (
   <div>
-    <Panel $height={40}>Short</Panel>
-    <Panel $height={80}>Tall</Panel>
+    <Panel $opacity={0.4}>Dim</Panel>
+    <Panel $opacity={0.8}>Bright</Panel>
   </div>
 );
 `;
@@ -2041,8 +2041,8 @@ export const App = () => (
                 usageCount: 2,
                 hasUnknownUsage: false,
                 props: {
-                  $height: {
-                    values: [40, 80],
+                  $opacity: {
+                    values: [0.4, 0.8],
                     hasUnknown: false,
                     usageCount: 2,
                     omittedCount: 0,
@@ -2058,62 +2058,62 @@ export const App = () => (
     const result = diagnostics.code ?? "";
 
     expect(result).toContain(
-      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
     );
-    expect(result).toContain("40: {");
-    expect(result).toContain("80: {");
-    expect(result).not.toContain("$height");
-    expect(result).toContain("panelHeight: (");
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).not.toContain("$opacity");
+    expect(result).toContain("panelOpacity: (");
     expect(diagnostics.transientPropRenames).toEqual([
       {
         exportName: "Panel",
-        renames: { $height: "height" },
+        renames: { $opacity: "opacity" },
       },
     ]);
   });
 
-  it("uses same-file JSX prop values to emit observed numeric identity variants without prepass", () => {
+  it("uses same-file JSX prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
 
-const dynamicHeight = 120;
+const dynamicOpacity = 1;
 
-export const Panel = styled.div<{ height: number }>\`
-  height: \${({ height }) => height};
+export const Panel = styled.div<{ opacity: number }>\`
+  opacity: \${({ opacity }) => opacity};
   background-color: tomato;
 \`;
 
 export const App = () => (
   <div>
-    <Panel height={40}>Short</Panel>
-    <Panel height={80}>Tall</Panel>
-    <Panel height={dynamicHeight}>Dynamic</Panel>
+    <Panel opacity={0.4}>Dim</Panel>
+    <Panel opacity={0.8}>Bright</Panel>
+    <Panel opacity={dynamicOpacity}>Dynamic</Panel>
   </div>
 );
 `;
     const result = runTransform(input, {}, "local-observed-variants.tsx");
 
     expect(result).toContain(
-      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
     );
-    expect(result).toContain("40: {");
-    expect(result).toContain("80: {");
-    expect(result).toContain("panelHeight: (");
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).toContain("panelOpacity: (");
   });
 
-  it("uses same-file transient prop values to emit observed numeric identity variants without prepass", () => {
+  it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
 
-export const Panel = styled.div<{ $height: number }>\`
-  height: \${({ $height }) => $height};
+export const Panel = styled.div<{ $opacity: number }>\`
+  opacity: \${({ $opacity }) => $opacity};
   background-color: tomato;
 \`;
 
 export const App = () => (
   <div>
-    <Panel $height={40}>Short</Panel>
-    <Panel $height={80}>Tall</Panel>
+    <Panel $opacity={0.4}>Dim</Panel>
+    <Panel $opacity={0.8}>Bright</Panel>
   </div>
 );
 `;
@@ -2121,15 +2121,15 @@ export const App = () => (
     const result = diagnostics.code ?? "";
 
     expect(result).toContain(
-      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
     );
-    expect(result).toContain("40: {");
-    expect(result).toContain("80: {");
-    expect(result).not.toContain("$height");
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).not.toContain("$opacity");
     expect(diagnostics.transientPropRenames).toEqual([
       {
         exportName: "Panel",
-        renames: { $height: "height" },
+        renames: { $opacity: "opacity" },
       },
     ]);
   });

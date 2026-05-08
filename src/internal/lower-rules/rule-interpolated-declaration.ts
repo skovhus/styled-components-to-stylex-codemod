@@ -214,6 +214,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     return values;
   };
 
+  const observedNumericCssTextProps = new Set<string>();
+
   const tryHandleMultiSlotRuntimeValue = (): boolean => {
     if (!d.property || d.value.kind !== "interpolated") {
       return false;
@@ -379,6 +381,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
     const unionValues = extractUnionLiteralValues(propType);
     const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
+    if (observedValues && shouldPreserveNumericCssText(stylexProp)) {
+      observedNumericCssTextProps.add(jsxProp);
+      return false;
+    }
     const values = unionValues ?? observedValues;
     if (!values || values.length < 2 || values.length > 20) {
       return false;
@@ -423,6 +429,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
     return fnKey;
+  };
+
+  const shouldPreserveNumericCssTextForProp = (jsxProp: string, stylexProp: string): boolean => {
+    return (
+      (observedNumericCssTextProps.has(jsxProp) ||
+        isNumberLikeTsType(findJsxPropTsType(jsxProp))) &&
+      shouldPreserveNumericCssText(stylexProp)
+    );
   };
 
   const maybeEmitPreservedRuntimeCallOverride = (args: {
@@ -2327,9 +2341,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 return transformedValue;
               }
 
-              // If it's just the slot, keep it as the raw value (number/string).
+              // If it's just the slot, keep it as the raw value (number/string), except
+              // number props in CSS text for unitful properties must stay text (`height: 40`),
+              // not StyleX numeric px (`height: 40px`).
               const hasStatic = parts.some((p: any) => p?.kind === "static" && p.value !== "");
               if (!hasStatic) {
+                if (shouldPreserveNumericCssTextForProp(jsxProp, out.prop)) {
+                  return j.templateLiteral(
+                    [
+                      j.templateElement({ raw: "", cooked: "" }, false),
+                      j.templateElement({ raw: "", cooked: "" }, true),
+                    ],
+                    [transformed],
+                  );
+                }
                 return transformedValue;
               }
 
@@ -3009,6 +3034,74 @@ function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDe
   }
   return decl.templateExpressions[parts[0].slotId] !== undefined;
 }
+
+function shouldPreserveNumericCssText(stylexProp: string): boolean {
+  if (stylexProp.startsWith("--")) {
+    return false;
+  }
+  return !UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp);
+}
+
+function isNumberLikeTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "number";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    return type.types.length > 0 && type.types.every(isNumberLikeTsType);
+  }
+  return false;
+}
+
+const UNITLESS_NUMERIC_STYLEX_PROPS = new Set([
+  "animationIterationCount",
+  "aspectRatio",
+  "borderImageOutset",
+  "borderImageSlice",
+  "borderImageWidth",
+  "boxFlex",
+  "boxFlexGroup",
+  "boxOrdinalGroup",
+  "columnCount",
+  "columns",
+  "flex",
+  "flexGrow",
+  "flexPositive",
+  "flexShrink",
+  "flexNegative",
+  "flexOrder",
+  "fontWeight",
+  "gridArea",
+  "gridColumn",
+  "gridColumnEnd",
+  "gridColumnStart",
+  "gridRow",
+  "gridRowEnd",
+  "gridRowStart",
+  "lineClamp",
+  "lineHeight",
+  "opacity",
+  "order",
+  "orphans",
+  "tabSize",
+  "widows",
+  "zIndex",
+  "zoom",
+  "fillOpacity",
+  "floodOpacity",
+  "stopOpacity",
+  "strokeDasharray",
+  "strokeDashoffset",
+  "strokeMiterlimit",
+  "strokeOpacity",
+  "strokeWidth",
+]);
 
 function buildFullInterpolatedDeclarationValueExpr(
   j: JSCodeshift,
