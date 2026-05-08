@@ -14,6 +14,7 @@ import type {
   ResolveBaseComponentContext,
   ResolveBaseComponentResult,
 } from "../../adapter.js";
+import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
 import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { escapeRegex } from "../utilities/string-utils.js";
@@ -185,6 +186,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const styleUsages = new Map<string, Set<string>>();
   const elementPropUsages = new Map<string, Set<string>>();
   const spreadPropUsages = new Map<string, Set<string>>();
+  const propUsageCandidates = new Map<string, ConsumerStaticPropUsage[]>();
   const styledWrapperUsages: { file: string; localStyledName: string; wrappedName: string }[] = [];
 
   // File content cache — populated on-demand, used for cross-referencing in Phase 2
@@ -321,11 +323,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
   const styledFileCount = fileContents.size;
 
-  // Phase 1.5: Targeted className/style prop detection in consumer files.
-  // After Phase 1 identified all styled component definitions, scan files that
-  // weren't processed (no styled-components, no as-prop) for JSX usage of those
-  // components with className or style props.
-  if (createExternalInterface && styledDefFiles.size > 0) {
+  // Phase 1.5: Targeted JSX consumer prop detection.
+  // After Phase 1 identified all styled component definitions, scan consumers for:
+  // - className/style/as external surface (when requested)
+  // - static prop values that can later drive variant emission
+  if (styledDefFiles.size > 0) {
     const allStyledNames = new Set<string>();
     for (const names of styledDefFiles.values()) {
       for (const name of names) {
@@ -335,28 +337,48 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
     if (allStyledNames.size > 0) {
       // Use targeted rg to find files containing className/style props (fast, small pattern)
-      const rgHits = rgClassNameStyleFilter(uniqueAllFiles);
+      const rgHits = createExternalInterface ? rgClassNameStyleFilter(uniqueAllFiles) : undefined;
+      const jsxHits = rgJsxComponentFilter(uniqueAllFiles);
 
       const scanAndRecord = (filePath: string, source: string) => {
-        for (const result of scanConsumerProps(source, allStyledNames)) {
-          addToSetMap(classNameStyleUsages, result.name, filePath);
-          if (result.className) {
-            addToSetMap(classNameUsages, result.name, filePath);
+        if (createExternalInterface) {
+          for (const result of scanConsumerProps(source, allStyledNames)) {
+            addToSetMap(classNameStyleUsages, result.name, filePath);
+            if (result.className) {
+              addToSetMap(classNameUsages, result.name, filePath);
+            }
+            if (result.style) {
+              addToSetMap(styleUsages, result.name, filePath);
+            }
+            if (result.elementProps) {
+              addToSetMap(elementPropUsages, result.name, filePath);
+            }
+            if (result.spreadProps) {
+              addToSetMap(spreadPropUsages, result.name, filePath);
+            }
           }
-          if (result.style) {
-            addToSetMap(styleUsages, result.name, filePath);
-          }
-          if (result.elementProps) {
-            addToSetMap(elementPropUsages, result.name, filePath);
-          }
-          if (result.spreadProps) {
-            addToSetMap(spreadPropUsages, result.name, filePath);
-          }
+        }
+        for (const usage of scanConsumerStaticPropUsages(
+          filePath,
+          source,
+          allStyledNames,
+          parser,
+        )) {
+          const entries = propUsageCandidates.get(usage.name) ?? [];
+          entries.push(usage);
+          propUsageCandidates.set(usage.name, entries);
         }
       };
 
       // Scan files already cached from Phase 1 first (no I/O cost)
       for (const [filePath, source] of fileContents) {
+        if (
+          jsxHits &&
+          !jsxHits.has(filePath) &&
+          (!createExternalInterface || !rgHits?.has(filePath))
+        ) {
+          continue;
+        }
         scanAndRecord(filePath, source);
       }
 
@@ -364,9 +386,23 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       // Only read files not already cached from Phase 1 — these are consumer
       // files without styled-components (e.g., .stories.tsx, page components).
       // Intersect with allFilesSet to avoid scanning files outside the requested scope.
-      const filesToScan = rgHits
-        ? [...rgHits].filter((f) => allFilesSet.has(f) && !fileContents.has(f))
-        : uniqueAllFiles.filter((f) => !fileContents.has(f));
+      const filesToScan = (() => {
+        const hits = new Set<string>();
+        const hasAnyFilter = (createExternalInterface && rgHits !== undefined) || jsxHits !== undefined;
+        if (createExternalInterface && rgHits) {
+          for (const f of rgHits) {
+            hits.add(f);
+          }
+        }
+        if (jsxHits) {
+          for (const f of jsxHits) {
+            hits.add(f);
+          }
+        }
+        return hasAnyFilter
+          ? [...hits].filter((f) => allFilesSet.has(f) && !fileContents.has(f))
+          : uniqueAllFiles.filter((f) => !fileContents.has(f));
+      })();
 
       for (const filePath of filesToScan) {
         const source = cachedRead(filePath);
@@ -523,6 +559,14 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  const propUsageByFile = buildPropUsageByFile({
+    styledDefFiles,
+    propUsageCandidates,
+    cachedRead,
+    resolve,
+    toRealPath,
+  });
+
   let globalLeafKeys: Set<string> | undefined;
   if (leavesOnly) {
     const styledDefBases: StyledDefBasesMap = new Map();
@@ -543,6 +587,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     selectorUsages,
     componentsNeedingMarkerSidecar,
     componentsNeedingGlobalSelectorBridge,
+    propUsageByFile,
     styledDefFiles: createExternalInterface ? styledDefFiles : undefined,
     globalLeafKeys,
   };
@@ -557,6 +602,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const refProp = consumerAnalysis
       ? [...consumerAnalysis.values()].filter((v) => v.ref).length
       : 0;
+    const propUsageCount = [...propUsageByFile.values()].reduce((sum, byComponent) => {
+      return sum + byComponent.size;
+    }, 0);
     Logger.info(
       `Prepass: scanned ${uniqueAllFiles.length} files in ${elapsed}s` +
         ` — ${styledFileCount} with styled-components` +
@@ -565,6 +613,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         `, ${asProp} as-prop` +
         `, ${refProp} ref-prop` +
         `, ${classNameStyleUsages.size} className/style` +
+        `, ${propUsageCount} prop-usage` +
         `, ${forwardedAsConsumers.size} forwardedAs\n`,
     );
   }
@@ -713,6 +762,13 @@ interface ConsumerPropResult {
   spreadProps: boolean;
 }
 
+interface ConsumerStaticPropUsage {
+  name: string;
+  filePath: string;
+  props: Record<string, { kind: "static"; value: StaticPropValue } | { kind: "unknown" }>;
+  hasSpread: boolean;
+}
+
 /**
  * Scan source for JSX usage of specific components with className, style,
  * element-specific props, or JSX spread.
@@ -804,6 +860,269 @@ function scanConsumerProps(
   return [...resultMap.values()];
 }
 
+function scanConsumerStaticPropUsages(
+  filePath: string,
+  source: string,
+  componentNames: ReadonlySet<string>,
+  parser: ReturnType<typeof createPrepassParser>,
+): ConsumerStaticPropUsage[] {
+  if (!/<[A-Z]/.test(source)) {
+    return [];
+  }
+
+  let ast: AstNode;
+  try {
+    ast = parser.parse(source) as AstNode;
+  } catch {
+    return [];
+  }
+
+  const importNodes: AstNode[] = [];
+  const jsxOpenings: AstNode[] = [];
+  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
+  const importMap = buildImportMapFromNodes(importNodes);
+  const usages: ConsumerStaticPropUsage[] = [];
+
+  for (const opening of jsxOpenings) {
+    const tagName = getJsxOpeningIdentifierName(opening.name as AstNode | undefined);
+    if (!tagName) {
+      continue;
+    }
+    const importEntry = importMap.get(tagName);
+    const resolvedName = componentNames.has(tagName)
+      ? tagName
+      : importEntry && componentNames.has(importEntry.importedName)
+        ? importEntry.importedName
+        : undefined;
+    if (!resolvedName) {
+      continue;
+    }
+
+    const props: ConsumerStaticPropUsage["props"] = {};
+    let hasSpread = false;
+    for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
+      if (!attr) {
+        continue;
+      }
+      if (attr.type === "JSXSpreadAttribute") {
+        hasSpread = true;
+        continue;
+      }
+      if (attr.type !== "JSXAttribute") {
+        continue;
+      }
+      const propName = getJsxAttributeName(attr.name as AstNode | undefined);
+      if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+        continue;
+      }
+      const value = readStaticJsxAttributeValue(attr);
+      props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+    }
+
+    usages.push({ name: resolvedName, filePath, props, hasSpread });
+  }
+
+  return usages;
+}
+
+function buildPropUsageByFile(args: {
+  styledDefFiles: ReadonlyMap<string, ReadonlySet<string>>;
+  propUsageCandidates: ReadonlyMap<string, readonly ConsumerStaticPropUsage[]>;
+  cachedRead: (filePath: string) => string;
+  resolve: Resolve;
+  toRealPath: (path: string) => string;
+}): Map<string, Map<string, ComponentPropUsageInfo>> {
+  const { styledDefFiles, propUsageCandidates, cachedRead, resolve, toRealPath } = args;
+  const propUsageByFile = new Map<string, Map<string, ComponentPropUsageInfo>>();
+
+  for (const [defFile, names] of styledDefFiles) {
+    const defSrc = cachedRead(defFile);
+    for (const name of names) {
+      const candidates = propUsageCandidates.get(name);
+      if (!candidates || !fileExports(defSrc, name)) {
+        continue;
+      }
+      for (const candidate of candidates) {
+        const usageFile = candidate.filePath;
+        if (
+          usageFile !== defFile &&
+          !fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)
+        ) {
+          continue;
+        }
+        const byComponent = getOrCreatePropUsageFileMap(propUsageByFile, toRealPath(defFile));
+        const info = getOrCreateComponentPropUsage(byComponent, name);
+        mergeComponentPropUsage(info, candidate);
+      }
+    }
+  }
+
+  return propUsageByFile;
+}
+
+function getOrCreatePropUsageFileMap(
+  propUsageByFile: Map<string, Map<string, ComponentPropUsageInfo>>,
+  filePath: string,
+): Map<string, ComponentPropUsageInfo> {
+  let byComponent = propUsageByFile.get(filePath);
+  if (!byComponent) {
+    byComponent = new Map();
+    propUsageByFile.set(filePath, byComponent);
+  }
+  return byComponent;
+}
+
+function getOrCreateComponentPropUsage(
+  byComponent: Map<string, ComponentPropUsageInfo>,
+  name: string,
+): ComponentPropUsageInfo {
+  let info = byComponent.get(name);
+  if (!info) {
+    info = {
+      componentName: name,
+      usageCount: 0,
+      hasUnknownUsage: false,
+      props: {},
+    };
+    byComponent.set(name, info);
+  }
+  return info;
+}
+
+function mergeComponentPropUsage(
+  info: ComponentPropUsageInfo,
+  usage: ConsumerStaticPropUsage,
+): void {
+  info.usageCount += 1;
+  if (usage.hasSpread) {
+    info.hasUnknownUsage = true;
+  }
+
+  const presentProps = new Set(Object.keys(usage.props));
+  for (const [propName, propInfo] of Object.entries(info.props)) {
+    if (!presentProps.has(propName)) {
+      propInfo.omittedCount += 1;
+    }
+  }
+
+  for (const [propName, value] of Object.entries(usage.props)) {
+    const propInfo =
+      info.props[propName] ??
+      (info.props[propName] = {
+        values: [],
+        hasUnknown: false,
+        usageCount: 0,
+        omittedCount: info.usageCount - 1,
+      });
+    propInfo.usageCount += 1;
+    if (value.kind === "unknown") {
+      propInfo.hasUnknown = true;
+      continue;
+    }
+    if (!propInfo.values.some((existing) => existing === value.value)) {
+      propInfo.values.push(value.value);
+    }
+  }
+}
+
+function walkForImportsAndJsxOpenings(
+  node: unknown,
+  imports: AstNode[],
+  jsxOpenings: AstNode[],
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const n = node as AstNode;
+  if (n.type === "ImportDeclaration") {
+    imports.push(n);
+    return;
+  }
+  if (n.type === "JSXOpeningElement") {
+    jsxOpenings.push(n);
+    return;
+  }
+  for (const key of Object.keys(n)) {
+    if (
+      key === "type" ||
+      key === "start" ||
+      key === "end" ||
+      key === "loc" ||
+      key === "leadingComments" ||
+      key === "trailingComments"
+    ) {
+      continue;
+    }
+    const val = n[key];
+    if (Array.isArray(val)) {
+      for (const child of val) {
+        walkForImportsAndJsxOpenings(child, imports, jsxOpenings);
+      }
+    } else if (val && typeof val === "object" && (val as AstNode).type) {
+      walkForImportsAndJsxOpenings(val, imports, jsxOpenings);
+    }
+  }
+}
+
+function getJsxOpeningIdentifierName(name: AstNode | undefined): string | null {
+  if (!name) {
+    return null;
+  }
+  if (name.type === "JSXIdentifier" && typeof name.name === "string") {
+    return name.name;
+  }
+  return null;
+}
+
+function getJsxAttributeName(name: AstNode | undefined): string | null {
+  if (!name) {
+    return null;
+  }
+  if (name.type === "JSXIdentifier" && typeof name.name === "string") {
+    return name.name;
+  }
+  return null;
+}
+
+function readStaticJsxAttributeValue(attr: AstNode): StaticPropValue | undefined {
+  if (!("value" in attr) || attr.value == null) {
+    return true;
+  }
+  const direct = readStaticLiteralNode(attr.value);
+  if (direct !== undefined) {
+    return direct;
+  }
+  const value = attr.value as AstNode;
+  if (value.type !== "JSXExpressionContainer") {
+    return undefined;
+  }
+  return readStaticLiteralNode(value.expression);
+}
+
+function readStaticLiteralNode(node: unknown): StaticPropValue | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
+  }
+  const n = node as AstNode;
+  if (
+    n.type === "StringLiteral" ||
+    n.type === "NumericLiteral" ||
+    n.type === "BooleanLiteral" ||
+    n.type === "Literal"
+  ) {
+    const value = n.value;
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      ? value
+      : undefined;
+  }
+  if (n.type === "UnaryExpression" && n.operator === "-") {
+    const arg = n.argument as AstNode | undefined;
+    const value = readStaticLiteralNode(arg);
+    return typeof value === "number" ? -value : undefined;
+  }
+  return undefined;
+}
+
 /**
  * Use ripgrep to find files containing `className` or `style` props.
  * Searches for the prop keywords (not component names) to keep the pattern
@@ -820,6 +1139,34 @@ function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefin
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
     const cmd = `rg -l ${shellQuote(String.raw`\b(className|style)\s*[={]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    return new Set(
+      output
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((f) => pathResolve(f)),
+    );
+  } catch (err: unknown) {
+    if (err instanceof Error && "status" in err && (err as { status: number }).status === 1) {
+      return new Set();
+    }
+    return undefined;
+  }
+}
+
+/** Use ripgrep to find files with PascalCase JSX tags. */
+function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined {
+  const dirs = deduplicateParentDirs(files);
+  if (dirs.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const globArgs = ["*.tsx", "*.jsx", "*.ts", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
+      .map((glob) => `--glob ${shellQuote(glob)}`)
+      .join(" ");
+    const cmd = `rg -l ${shellQuote(String.raw`<[A-Z][A-Za-z0-9]*\b`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
     const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     return new Set(
       output

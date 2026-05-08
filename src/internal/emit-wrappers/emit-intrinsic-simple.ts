@@ -651,6 +651,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         for (const k of compoundVariantWhenKeys) {
           keys.delete(k);
         }
+        const variantDimByProp = buildVariantDimPropTypeMap(d);
         const filtered = [...keys].filter(
           (k) =>
             k &&
@@ -660,12 +661,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             k !== "style" &&
             k !== "as" &&
             k !== "forwardedAs" &&
-            !explicitPropNames.has(k),
+            (!explicitPropNames.has(k) || variantDimByProp.has(k)),
         );
         if (filtered.length === 0) {
           return "{}";
         }
-        const variantDimByProp = buildVariantDimPropTypeMap(d);
         const staticVariantPropTypes = buildStaticVariantPropTypes(d);
 
         const lines = filtered.map((k) => {

@@ -315,6 +315,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     isIdentifierShadowed,
     enumValueMap,
     crossFileSelectorsByLocal,
+    propUsageByComponent: ctx.propUsageByComponent ?? new Map(),
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     /**
      * File-level bail flag. Used only for bails that cannot be scoped to a single

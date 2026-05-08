@@ -5,7 +5,13 @@
 import type { VariantDimension } from "../transform-types.js";
 
 type ParsedVariantCondition =
-  | { type: "equality"; propName: string; operator: "===" | "!=="; value: string }
+  | {
+      type: "equality";
+      propName: string;
+      operator: "===" | "!==";
+      value: string;
+      staticValue: string | number | boolean;
+    }
   | { type: "boolean"; propName: string; negated: boolean }
   | { type: "compound" | "unknown" };
 
@@ -32,12 +38,30 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
   // Equality: propName === "value" or propName !== "value"
   const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*"([^"]*)"$/);
   if (eqMatch && eqMatch[1] && eqMatch[2] && eqMatch[3] !== undefined) {
+    const value = eqMatch[3];
     return {
       type: "equality",
       propName: eqMatch[1],
       operator: eqMatch[2] as "===" | "!==",
-      value: eqMatch[3],
+      value,
+      staticValue: value,
     };
+  }
+
+  const numberMatch = trimmed.match(
+    /^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*(-?(?:0|[1-9]\d*)(?:\.\d+)?)$/,
+  );
+  if (numberMatch && numberMatch[1] && numberMatch[2] && numberMatch[3] !== undefined) {
+    const value = Number(numberMatch[3]);
+    if (Number.isFinite(value) && String(value) === numberMatch[3]) {
+      return {
+        type: "equality",
+        propName: numberMatch[1],
+        operator: numberMatch[2] as "===" | "!==",
+        value: numberMatch[3],
+        staticValue: value,
+      };
+    }
   }
 
   // Simple boolean: propName (no operators)
@@ -52,7 +76,7 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
  * Extract string literal values from a TypeScript union type.
  * Returns an array of literal values, or null if the type doesn't contain string literals.
  */
-export function extractUnionLiteralValues(tsType: unknown): string[] | null {
+export function extractUnionLiteralValues(tsType: unknown): Array<string | number> | null {
   if (!tsType || typeof tsType !== "object") {
     return null;
   }
@@ -61,10 +85,13 @@ export function extractUnionLiteralValues(tsType: unknown): string[] | null {
 
   // Handle TSUnionType: "up" | "down" | "both"
   if (type.type === "TSUnionType" && Array.isArray(type.types)) {
-    const values: string[] = [];
+    const values: Array<string | number> = [];
     for (const t of type.types) {
       const inner = t as { type?: string; literal?: { value?: unknown } };
-      if (inner.type === "TSLiteralType" && typeof inner.literal?.value === "string") {
+      if (
+        inner.type === "TSLiteralType" &&
+        (typeof inner.literal?.value === "string" || typeof inner.literal?.value === "number")
+      ) {
         values.push(inner.literal.value);
       }
     }
@@ -72,7 +99,10 @@ export function extractUnionLiteralValues(tsType: unknown): string[] | null {
   }
 
   // Handle single TSLiteralType
-  if (type.type === "TSLiteralType" && typeof type.literal?.value === "string") {
+  if (
+    type.type === "TSLiteralType" &&
+    (typeof type.literal?.value === "string" || typeof type.literal?.value === "number")
+  ) {
     return [type.literal.value];
   }
 
@@ -230,7 +260,7 @@ export function groupVariantBucketsIntoDimensions(
 
     if (Object.keys(defaultStyles).length > 0 && unionValues) {
       const explicitValues = new Set(variants.map((v) => v.value));
-      const remainingValues = unionValues.filter((v) => !explicitValues.has(v));
+      const remainingValues = unionValues.map(String).filter((v) => !explicitValues.has(v));
       if (remainingValues.length === 1 && remainingValues[0]) {
         // Use actual remaining value as key - for variants-recipe, this enables simple lookup
         // even for optional props when we emit destructuring defaults

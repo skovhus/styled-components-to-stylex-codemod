@@ -1960,6 +1960,57 @@ describe("output invariants", () => {
 // - Result must not import styled-components
 // - Result must match the expected output fixture
 describe("transform", () => {
+  it("uses prepass prop values to emit observed numeric identity variants", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ height: number }>\`
+  height: \${({ height }) => height};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel height={40}>Short</Panel>
+    <Panel height={80}>Tall</Panel>
+  </div>
+);
+`;
+    const result = runTransform(
+      input,
+      {
+        crossFileInfo: {
+          selectorUsages: [],
+          propUsageByComponent: new Map([
+            [
+              "Panel",
+              {
+                componentName: "Panel",
+                usageCount: 2,
+                hasUnknownUsage: false,
+                props: {
+                  height: {
+                    values: [40, 80],
+                    hasUnknown: false,
+                    usageCount: 2,
+                    omittedCount: 0,
+                  },
+                },
+              },
+            ],
+          ]),
+        },
+      },
+      "observed-variants.tsx",
+    );
+
+    expect(result).toContain("heightVariants[height]");
+    expect(result).toContain("height?: keyof typeof heightVariants");
+    expect(result).toContain("40: {");
+    expect(result).toContain("80: {");
+    expect(result).not.toContain("panelHeight: (");
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);

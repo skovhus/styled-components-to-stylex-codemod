@@ -437,6 +437,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         selectorUsages: new Map(),
         componentsNeedingMarkerSidecar: new Map(),
         componentsNeedingGlobalSelectorBridge: new Map(),
+        propUsageByFile: new Map(),
         globalLeafKeys: leavesOnly ? new Set() : undefined,
       },
       consumerAnalysis: undefined,

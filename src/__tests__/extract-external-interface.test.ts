@@ -12,6 +12,7 @@ import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import type { ExternalInterfaceResult } from "../adapter.js";
+import type { ComponentPropUsageInfo } from "../internal/transform-types.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
 
@@ -42,9 +43,100 @@ const toSnapshot = (map: Map<string, ExternalInterfaceResult>, base = process.cw
   );
 };
 
+const propUsageToSnapshot = (
+  map: Map<string, Map<string, ComponentPropUsageInfo>>,
+  base = process.cwd(),
+) => {
+  const realBase = realpathSync(base);
+  return Object.fromEntries(
+    [...map.entries()]
+      .flatMap(([filePath, byComponent]) =>
+        [...byComponent.entries()].map(([name, value]) => [
+          `${path.relative(realBase, filePath)}:${name}`,
+          value,
+        ]),
+      )
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  );
+};
+
 // ---------------------------------------------------------------------------
 // Integration tests (temp fixture files + runPrepass)
 // ---------------------------------------------------------------------------
+
+describe("runPrepass prop usage inventory", () => {
+  it("records static prop values, aliases, spreads, and unknown expressions", async () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "prop-usage-prepass-test-"));
+    writeFileSync(
+      path.join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { baseUrl: "." } }),
+    );
+    const componentsDir = path.join(fixtureDir, "components");
+    const consumersDir = path.join(fixtureDir, "consumers");
+    mkdirSync(componentsDir, { recursive: true });
+    mkdirSync(consumersDir, { recursive: true });
+
+    writeFileSync(
+      path.join(componentsDir, "Panel.tsx"),
+      'import styled from "styled-components";\nexport const Panel = styled.div<{ height: number }>`height: ${p => p.height};`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "page.tsx"),
+      [
+        'import { Panel as UiPanel } from "../components/Panel";',
+        "const dynamicHeight = 120;",
+        "const rest = {};",
+        "export const App = () => (",
+        "  <>",
+        '    <UiPanel height={40} tone="info" />',
+        '    <UiPanel height={80} tone="warning" />',
+        "    <UiPanel height={dynamicHeight} tone={dynamicHeight > 100 ? 'big' : 'small'} />",
+        "    <UiPanel {...rest} />",
+        "  </>",
+        ");",
+      ].join("\n"),
+    );
+
+    const resolver = createModuleResolver();
+    const prepassResult = await runPrepass({
+      filesToTransform: collectFiles(fixtureDir),
+      consumerPaths: [],
+      resolver,
+      createExternalInterface: false,
+    });
+
+    expect(propUsageToSnapshot(prepassResult.crossFileInfo.propUsageByFile!, fixtureDir))
+      .toMatchInlineSnapshot(`
+        {
+          "components/Panel.tsx:Panel": {
+            "componentName": "Panel",
+            "hasUnknownUsage": true,
+            "props": {
+              "height": {
+                "hasUnknown": true,
+                "omittedCount": 1,
+                "usageCount": 3,
+                "values": [
+                  40,
+                  80,
+                ],
+              },
+              "tone": {
+                "hasUnknown": true,
+                "omittedCount": 1,
+                "usageCount": 3,
+                "values": [
+                  "info",
+                  "warning",
+                ],
+              },
+            },
+            "usageCount": 4,
+          },
+        }
+      `);
+  });
+});
 
 describe("runPrepass createExternalInterface", () => {
   let fixtureDir: string;

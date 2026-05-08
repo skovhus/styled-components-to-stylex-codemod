@@ -17,7 +17,10 @@ import { readFileSync } from "node:fs";
 import { relative, resolve as pathResolve } from "node:path";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
-import type { CrossFileSelectorUsage as CoreUsage } from "../transform-types.js";
+import type {
+  ComponentPropUsageInfo,
+  CrossFileSelectorUsage as CoreUsage,
+} from "../transform-types.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
@@ -40,6 +43,8 @@ export interface CrossFileInfo {
   componentsNeedingMarkerSidecar: Map<string, Set<string>>;
   /** Target file → exported component names needing global selector bridge className (consumer is not transformed) */
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
+  /** Definition file → local styled component name → observed prop usage. */
+  propUsageByFile?: Map<string, Map<string, ComponentPropUsageInfo>>;
   /** Files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
   /**

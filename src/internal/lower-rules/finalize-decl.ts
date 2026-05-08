@@ -56,6 +56,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleFnFromProps,
     styleFnDecls,
     attrBuckets,
+    observedVariantProps,
     inlineStyleProps,
     localVarValues,
     cssHelperPropValues,
@@ -535,6 +536,11 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         if (minOrder !== undefined) {
           dim.sourceOrder = minOrder;
         }
+      }
+    }
+    for (const dim of dimensions) {
+      if (observedVariantProps.has(dim.propName)) {
+        dim.propTypeFromKeyof = true;
       }
     }
     decl.variantDimensions = mergeVariantDimensions(decl.variantDimensions, dimensions);

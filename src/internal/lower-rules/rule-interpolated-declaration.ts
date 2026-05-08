@@ -110,6 +110,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     variantBuckets,
     variantStyleKeys,
     variantSourceOrder,
+    observedVariantProps,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -193,6 +194,28 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         decl.extraClassNames.push({ expr: cnExpr as any });
       }
     }
+  };
+
+  const getObservedStaticVariantValues = (jsxProp: string): Array<string | number> | null => {
+    const usage = state.propUsageByComponent.get(decl.localName);
+    if (!usage || usage.hasUnknownUsage) {
+      return null;
+    }
+    const propUsage = usage.props[jsxProp];
+    if (!propUsage || propUsage.hasUnknown || propUsage.values.length < 2) {
+      return null;
+    }
+    const values = propUsage.values.filter(
+      (value): value is string | number => typeof value === "string" || typeof value === "number",
+    );
+    if (values.length !== propUsage.values.length) {
+      return null;
+    }
+    const valueType = typeof values[0];
+    if (!values.every((value) => typeof value === valueType)) {
+      return null;
+    }
+    return values;
   };
 
   const tryHandleMultiSlotRuntimeValue = (): boolean => {
@@ -352,21 +375,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const tryEmitIdentityVariantBuckets = (
     jsxProp: string,
     stylexProp: string,
-    skipValue?: string,
+    skipValue?: string | number,
   ): boolean => {
     const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
     const unionValues = extractUnionLiteralValues(propType);
-    if (!unionValues || unionValues.length < 2 || unionValues.length > 20) {
+    const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
+    const values = unionValues ?? observedValues;
+    if (!values || values.length < 2 || values.length > 20) {
       return false;
     }
-    for (const value of unionValues) {
+    for (const value of values) {
       if (value === skipValue) {
         continue;
       }
+      const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
-        { when: `${jsxProp} === "${value}"`, propName: jsxProp },
+        { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
         { [stylexProp]: value },
       );
+    }
+    if (observedValues) {
+      observedVariantProps.add(jsxProp);
     }
     if (jsxProp.startsWith("$")) {
       ensureShouldForwardPropDrop(decl, jsxProp);
