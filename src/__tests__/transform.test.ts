@@ -2072,6 +2072,68 @@ export const App = () => (
     ]);
   });
 
+  it("uses same-file JSX prop values to emit observed numeric identity variants without prepass", () => {
+    const input = `
+import styled from "styled-components";
+
+const dynamicHeight = 120;
+
+export const Panel = styled.div<{ height: number }>\`
+  height: \${({ height }) => height};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel height={40}>Short</Panel>
+    <Panel height={80}>Tall</Panel>
+    <Panel height={dynamicHeight}>Dynamic</Panel>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "local-observed-variants.tsx");
+
+    expect(result).toContain(
+      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+    );
+    expect(result).toContain("40: {");
+    expect(result).toContain("80: {");
+    expect(result).toContain("panelHeight: (");
+  });
+
+  it("uses same-file transient prop values to emit observed numeric identity variants without prepass", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ $height: number }>\`
+  height: \${({ $height }) => $height};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel $height={40}>Short</Panel>
+    <Panel $height={80}>Tall</Panel>
+  </div>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "local-observed-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain(
+      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+    );
+    expect(result).toContain("40: {");
+    expect(result).toContain("80: {");
+    expect(result).not.toContain("$height");
+    expect(diagnostics.transientPropRenames).toEqual([
+      {
+        exportName: "Panel",
+        renames: { $height: "height" },
+      },
+    ]);
+  });
+
   it("does not emit numeric variants without observed consumer prop values", () => {
     const input = `
 import styled from "styled-components";

@@ -198,22 +198,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
   const getObservedStaticVariantValues = (jsxProp: string): Array<string | number> | null => {
     const usage = state.propUsageByComponent.get(decl.localName);
-    if (!usage || usage.hasUnknownUsage) {
+    if (!usage) {
       return null;
     }
     const propUsage = usage.props[jsxProp];
-    if (!propUsage || propUsage.hasUnknown || propUsage.values.length < 2) {
+    if (!propUsage || propUsage.values.length < 2) {
       return null;
     }
     const values = propUsage.values.filter(
-      (value: string | number | boolean): value is string | number =>
-        typeof value === "string" || typeof value === "number",
+      (value: string | number | boolean): value is number => typeof value === "number",
     );
     if (values.length !== propUsage.values.length) {
-      return null;
-    }
-    const valueType = typeof values[0];
-    if (!values.every((value: string | number) => typeof value === valueType)) {
       return null;
     }
     return values;
@@ -378,6 +373,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     stylexProp: string,
     skipValue?: string | number,
   ): boolean => {
+    if (!isEntireInterpolatedValueSingleSlot(d, decl)) {
+      return false;
+    }
     const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
     const unionValues = extractUnionLiteralValues(propType);
     const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);

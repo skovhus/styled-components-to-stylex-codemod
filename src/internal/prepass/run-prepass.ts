@@ -14,10 +14,16 @@ import type {
   ResolveBaseComponentContext,
   ResolveBaseComponentResult,
 } from "../../adapter.js";
-import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
+import type { ComponentPropUsageInfo } from "../transform-types.js";
 import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+import {
+  createComponentPropUsageInfo,
+  KNOWN_NON_ELEMENT_PROPS,
+  mergeComponentPropUsage,
+  type ComponentPropUsageCandidate,
+} from "../utilities/prop-usage.js";
 import { escapeRegex } from "../utilities/string-utils.js";
 import {
   fileExports,
@@ -747,17 +753,6 @@ function buildLocalToImportedMap(source: string): Map<string, string> {
   return map;
 }
 
-/** Props that don't indicate element-specific usage (non-element props). */
-const KNOWN_NON_ELEMENT_PROPS = new Set([
-  "className",
-  "style",
-  "as",
-  "ref",
-  "forwardedAs",
-  "key",
-  "children",
-]);
-
 interface ConsumerPropResult {
   name: string;
   className: boolean;
@@ -769,8 +764,7 @@ interface ConsumerPropResult {
 interface ConsumerStaticPropUsage {
   name: string;
   filePath: string;
-  props: Record<string, { kind: "static"; value: StaticPropValue } | { kind: "unknown" }>;
-  hasSpread: boolean;
+  usage: ComponentPropUsageCandidate;
 }
 
 /**
@@ -902,7 +896,7 @@ function scanConsumerStaticPropUsages(
       continue;
     }
 
-    const props: ConsumerStaticPropUsage["props"] = {};
+    const props: ComponentPropUsageCandidate["props"] = {};
     let hasSpread = false;
     for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
       if (!attr) {
@@ -923,7 +917,7 @@ function scanConsumerStaticPropUsages(
       props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
     }
 
-    usages.push({ name: resolvedName, filePath, props, hasSpread });
+    usages.push({ name: resolvedName, filePath, usage: { props, hasSpread } });
   }
 
   return usages;
@@ -956,7 +950,7 @@ function buildPropUsageByFile(args: {
         }
         const byComponent = getOrCreatePropUsageFileMap(propUsageByFile, toRealPath(defFile));
         const info = getOrCreateComponentPropUsage(byComponent, name);
-        mergeComponentPropUsage(info, candidate);
+        mergeComponentPropUsage(info, candidate.usage);
       }
     }
   }
@@ -982,51 +976,10 @@ function getOrCreateComponentPropUsage(
 ): ComponentPropUsageInfo {
   let info = byComponent.get(name);
   if (!info) {
-    info = {
-      componentName: name,
-      usageCount: 0,
-      hasUnknownUsage: false,
-      props: {},
-    };
+    info = createComponentPropUsageInfo(name);
     byComponent.set(name, info);
   }
   return info;
-}
-
-function mergeComponentPropUsage(
-  info: ComponentPropUsageInfo,
-  usage: ConsumerStaticPropUsage,
-): void {
-  info.usageCount += 1;
-  if (usage.hasSpread) {
-    info.hasUnknownUsage = true;
-  }
-
-  const presentProps = new Set(Object.keys(usage.props));
-  for (const [propName, propInfo] of Object.entries(info.props)) {
-    if (!presentProps.has(propName)) {
-      propInfo.omittedCount += 1;
-    }
-  }
-
-  for (const [propName, value] of Object.entries(usage.props)) {
-    const propInfo =
-      info.props[propName] ??
-      (info.props[propName] = {
-        values: [],
-        hasUnknown: false,
-        usageCount: 0,
-        omittedCount: info.usageCount - 1,
-      });
-    propInfo.usageCount += 1;
-    if (value.kind === "unknown") {
-      propInfo.hasUnknown = true;
-      continue;
-    }
-    if (!propInfo.values.some((existing) => existing === value.value)) {
-      propInfo.values.push(value.value);
-    }
-  }
 }
 
 function walkForImportsAndJsxOpenings(
