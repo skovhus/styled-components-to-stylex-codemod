@@ -13,6 +13,15 @@ function OptionsList(props: React.ComponentProps<"ul">) {
   );
 }
 
+function AliasedOptionsList(props: React.ComponentProps<"ul">) {
+  const { className, children, style, ...rest } = props;
+  return (
+    <ul {...rest} {...mergedSx(styles.aliasedOptionsList, className, style)}>
+      {children}
+    </ul>
+  );
+}
+
 type ListWrapperProps = React.HTMLAttributes<HTMLUListElement> & {
   ref: React.Ref<HTMLUListElement>;
 };
@@ -20,6 +29,12 @@ type ListWrapperProps = React.HTMLAttributes<HTMLUListElement> & {
 function ListWrapper(props: ListWrapperProps) {
   const { ref, ...rest } = props;
   return <OptionsList ref={ref} {...rest} />;
+}
+
+function AliasedListWrapper(props: ListWrapperProps) {
+  const { ref, ...rest } = props;
+  const ListComponent = true ? AliasedOptionsList : "ul";
+  return <ListComponent ref={ref} {...rest} />;
 }
 
 function VirtualList(props: { children: React.ReactNode }) {
@@ -40,6 +55,9 @@ function VirtualList(props: { children: React.ReactNode }) {
       <ListWrapper ref={innerRef} {...innerProps}>
         {props.children}
       </ListWrapper>
+      <AliasedListWrapper ref={innerRef} {...innerProps}>
+        {props.children}
+      </AliasedListWrapper>
     </div>
   );
 }
@@ -61,6 +79,13 @@ const styles = stylex.create({
     position: "relative",
     margin: 0,
     backgroundColor: "#f5f5f5",
+    height: "100%",
+    outline: "none",
+  },
+  aliasedOptionsList: {
+    position: "relative",
+    margin: 0,
+    backgroundColor: "#eef8ff",
     height: "100%",
     outline: "none",
   },

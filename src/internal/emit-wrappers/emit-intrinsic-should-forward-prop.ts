@@ -593,7 +593,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const { hasAny: hasLocalUsage } = emitter.getJsxCallsites(d.localName);
 
     const shouldIncludeRest = shouldIncludeRestForProps({
-      usedAsValue: emitter.isUsedAsValueInFile(d.localName),
+      usedAsValue: emitter.isUsedAsValue(d),
       hasLocalUsage,
       usedAttrs,
       destructureProps: destructureParts,

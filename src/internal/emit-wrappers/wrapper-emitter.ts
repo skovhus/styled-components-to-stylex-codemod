@@ -305,6 +305,10 @@ export class WrapperEmitter {
     return inJsxExpr;
   }
 
+  isUsedAsValue(d: StyledDecl): boolean {
+    return Boolean(d.usedAsValue) || this.isUsedAsValueInFile(d.localName);
+  }
+
   /**
    * Decide whether a wrapper component should accept/merge external `className`/`style`.
    */
@@ -315,7 +319,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return true;
     }
-    if ((d as any).usedAsValue) {
+    if (this.isUsedAsValue(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -329,7 +333,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return true;
     }
-    if ((d as any).usedAsValue) {
+    if (this.isUsedAsValue(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -1232,7 +1236,7 @@ export class WrapperEmitter {
     } = args;
 
     const used = this.getUsedAttrs(d.localName);
-    const needsBroadAttrs = used.has("*") || !!(d as any).usedAsValue;
+    const needsBroadAttrs = used.has("*") || this.isUsedAsValue(d);
 
     const lines: string[] = [];
     // Standard props go into Pick<ComponentProps<"tag">, ...> for proper types.
