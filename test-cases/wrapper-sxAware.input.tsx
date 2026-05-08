@@ -3,6 +3,7 @@
 // prop type signature (no adapter configuration required), so it emits
 // `sx={styles.x}` instead of `{...stylex.props(styles.x)}` on the rendered
 // wrapped component.
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { draggableRegion } from "./lib/helpers";
@@ -62,9 +63,23 @@ const StyledText = styled(Text)`
   line-height: 20px;
 `;
 
+// Non-exported Text wrapper should preserve base Text props while
+// composing the generated styles through sx.
+const Identifier = styled(Text)`
+  min-width: var(--column-width);
+  flex-shrink: 0;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
+
+const identifierRowStyle = {
+  "--column-width": "96px",
+  display: "flex",
+  gap: 8,
+  padding: 8,
+} satisfies React.CSSProperties & Record<"--column-width", string>;
 
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 480 }}>
@@ -86,5 +101,9 @@ export const App = () => (
     </ExportedToggleButton>
     <DraggableSxButton sx={callerStyles.caller}>Draggable sx</DraggableSxButton>
     <StyledText size="md">Generic Text</StyledText>
+    <div style={identifierRowStyle}>
+      <Identifier color="labelMuted">ABC-123</Identifier>
+      <span>Item title</span>
+    </div>
   </div>
 );

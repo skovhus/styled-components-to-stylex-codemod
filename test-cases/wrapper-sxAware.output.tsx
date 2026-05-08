@@ -1,13 +1,13 @@
-import * as React from "react";
-
 // styled(Component) where the wrapped component accepts a StyleX `sx` prop.
 // The codemod auto-detects sx support by walking the imported component's
 // prop type signature (no adapter configuration required), so it emits
 // `sx={styles.x}` instead of `{...stylex.props(styles.x)}` on the rendered
 // wrapped component.
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
+
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { Text } from "./lib/sx-aware-text";
@@ -148,7 +148,20 @@ const callerStyles = stylex.create({
     color: "navy",
     lineHeight: "20px",
   },
+  // Non-exported Text wrapper should preserve base Text props while
+  // composing the generated styles through sx.
+  identifier: {
+    minWidth: "var(--column-width)",
+    flexShrink: 0,
+  },
 });
+
+const identifierRowStyle = {
+  "--column-width": "96px",
+  display: "flex",
+  gap: 8,
+  padding: 8,
+} satisfies React.CSSProperties & Record<"--column-width", string>;
 
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 480 }}>
@@ -174,5 +187,11 @@ export const App = () => (
     <Text size="md" sx={callerStyles.text}>
       Generic Text
     </Text>
+    <div style={identifierRowStyle}>
+      <Text color="labelMuted" sx={callerStyles.identifier}>
+        ABC-123
+      </Text>
+      <span>Item title</span>
+    </div>
   </div>
 );
