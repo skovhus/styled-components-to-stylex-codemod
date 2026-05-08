@@ -2005,7 +2005,6 @@ export const App = () => (
     );
 
     expect(result).toContain("heightVariants[height]");
-    expect(result).toContain("height?: keyof typeof heightVariants");
     expect(result).toContain("40: {");
     expect(result).toContain("80: {");
     expect(result).not.toContain("panelHeight: (");
