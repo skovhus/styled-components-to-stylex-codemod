@@ -112,6 +112,7 @@ export class WrapperEmitter {
   private jsxCallsitesCache = new Map<string, { hasAny: boolean }>();
   private jsxChildrenUsageCache = new Map<string, boolean>();
   private usedAsValueCache = new Map<string, boolean>();
+  private aliasedJsxSpreadUsageCache = new Map<string, boolean>();
   private forwardedAsUsageCache = new Map<string, boolean>();
 
   constructor(args: WrapperEmitterArgs) {
@@ -307,6 +308,48 @@ export class WrapperEmitter {
 
   isUsedAsValue(d: StyledDecl): boolean {
     return Boolean(d.usedAsValue) || this.isUsedAsValueInFile(d.localName);
+  }
+
+  requiresRestForValueUsage(d: StyledDecl): boolean {
+    return this.isUsedAsValueInFile(d.localName) || this.hasAliasedJsxSpreadUsage(d.localName);
+  }
+
+  private hasAliasedJsxSpreadUsage(localName: string): boolean {
+    const cached = this.aliasedJsxSpreadUsageCache.get(localName);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const { root, j } = this;
+    const aliasNames = new Set<string>();
+    root.find(j.VariableDeclarator).forEach((p) => {
+      const { id, init } = p.node;
+      if (id.type !== "Identifier" || id.name === localName || !init) {
+        return;
+      }
+      if (nodeContainsIdentifier(init, localName)) {
+        aliasNames.add(id.name);
+      }
+    });
+
+    const hasSpread =
+      aliasNames.size > 0 &&
+      [...aliasNames].some(
+        (aliasName) =>
+          root
+            .find(j.JSXElement, {
+              openingElement: { name: { type: "JSXIdentifier", name: aliasName } },
+            } as any)
+            .filter((p) =>
+              (
+                (p.node.openingElement.attributes ?? []) as Array<JSXAttribute | JSXSpreadAttribute>
+              ).some((attr) => attr.type === "JSXSpreadAttribute"),
+            )
+            .size() > 0,
+      );
+
+    this.aliasedJsxSpreadUsageCache.set(localName, hasSpread);
+    return hasSpread;
   }
 
   /**
@@ -2192,6 +2235,30 @@ function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
   }
   return (
     /\bReact\.ComponentProps(?:WithRef)?<C\b/.test(typeText) || /\bas\??:\s*C\b/.test(typeText)
+  );
+}
+
+function nodeContainsIdentifier(
+  node: unknown,
+  name: string,
+  seen = new WeakSet<object>(),
+): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (seen.has(node)) {
+    return false;
+  }
+  seen.add(node);
+  if (Array.isArray(node)) {
+    return node.some((child) => nodeContainsIdentifier(child, name, seen));
+  }
+  const maybeNode = node as { type?: string; name?: string };
+  if (maybeNode.type === "Identifier" && maybeNode.name === name) {
+    return true;
+  }
+  return Object.values(node as Record<string, unknown>).some((child) =>
+    nodeContainsIdentifier(child, name, seen),
   );
 }
 

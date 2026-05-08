@@ -1009,7 +1009,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         return !destructureProps.includes(n);
       });
     let shouldIncludeRest = shouldIncludeRestForProps({
-      usedAsValue: emitter.isUsedAsValue(d),
+      usedAsValue: emitter.requiresRestForValueUsage(d),
       hasLocalUsage,
       usedAttrs,
       destructureProps,
