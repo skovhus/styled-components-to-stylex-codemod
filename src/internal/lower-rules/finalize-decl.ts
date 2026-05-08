@@ -60,7 +60,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleFnFromProps,
     styleFnDecls,
     attrBuckets,
-    observedVariantProps,
+    observedVariantFallbackFns,
     inlineStyleProps,
     localVarValues,
     cssHelperPropValues,
@@ -543,7 +543,11 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
     }
     for (const dim of dimensions) {
-      if (observedVariantProps.has(dim.propName) || hasFiniteNumericVariantKey(dim)) {
+      const observedFallbackFnKey = observedVariantFallbackFns.get(dim.propName);
+      if (observedFallbackFnKey) {
+        dim.fallbackFnKey = observedFallbackFnKey;
+      }
+      if (!observedFallbackFnKey && hasFiniteNumericVariantKey(dim)) {
         dim.propTypeFromKeyof = true;
       }
     }

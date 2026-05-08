@@ -2004,10 +2004,12 @@ export const App = () => (
       "observed-variants.tsx",
     );
 
-    expect(result).toContain("heightVariants[height]");
+    expect(result).toContain(
+      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+    );
     expect(result).toContain("40: {");
     expect(result).toContain("80: {");
-    expect(result).not.toContain("panelHeight: (");
+    expect(result).toContain("panelHeight: (");
   });
 
   it("uses prepass prop values to emit observed transient numeric identity variants", () => {
@@ -2055,11 +2057,13 @@ export const App = () => (
     );
     const result = diagnostics.code ?? "";
 
-    expect(result).toContain("heightVariants[height]");
+    expect(result).toContain(
+      "heightVariants[height as keyof typeof heightVariants] ?? styles.panelHeight(height)",
+    );
     expect(result).toContain("40: {");
     expect(result).toContain("80: {");
     expect(result).not.toContain("$height");
-    expect(result).not.toContain("panelHeight: (");
+    expect(result).toContain("panelHeight: (");
     expect(diagnostics.transientPropRenames).toEqual([
       {
         exportName: "Panel",

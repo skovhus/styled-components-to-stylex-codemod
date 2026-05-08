@@ -218,6 +218,8 @@ export type VariantDimension = {
   namespaceBooleanProp?: string;
   /** Whether this is the "disabled" namespace (true) or "enabled" namespace (false/undefined) */
   isDisabledNamespace?: boolean;
+  /** Dynamic style function used when observed consumer values do not cover a runtime value. */
+  fallbackFnKey?: string;
   /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
   isOptional?: boolean;
   /** Minimum source order from the original variant entries that were grouped into this dimension.

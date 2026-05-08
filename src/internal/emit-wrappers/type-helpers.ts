@@ -105,7 +105,9 @@ export function buildStaticVariantPropTypes(d: StyledDecl): Map<string, string> 
 export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   return new Map(
     (d.variantDimensions ?? [])
-      .filter((dim) => dim.propTypeFromKeyof || hasFiniteNumericVariantKey(dim))
+      .filter(
+        (dim) => dim.propTypeFromKeyof || (!dim.fallbackFnKey && hasFiniteNumericVariantKey(dim)),
+      )
       .map((dim) => {
         const typeText = dim.isBooleanProp ? "boolean" : `keyof typeof ${dim.variantObjectName}`;
         return [dim.propName, typeText];

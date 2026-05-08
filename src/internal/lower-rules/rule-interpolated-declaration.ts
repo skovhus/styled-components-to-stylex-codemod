@@ -110,7 +110,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     variantBuckets,
     variantStyleKeys,
     variantSourceOrder,
-    observedVariantProps,
+    observedVariantFallbackFns,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -396,12 +396,28 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
     }
     if (observedValues) {
-      observedVariantProps.add(jsxProp);
+      observedVariantFallbackFns.set(jsxProp, ensureObservedVariantFallbackFn(jsxProp, stylexProp));
     }
     if (jsxProp.startsWith("$")) {
       ensureShouldForwardPropDrop(decl, jsxProp);
     }
     return true;
+  };
+
+  const ensureObservedVariantFallbackFn = (jsxProp: string, stylexProp: string): string => {
+    const fnKey = styleKeyWithSuffix(decl.styleKey, stylexProp);
+    if (!styleFnDecls.has(fnKey)) {
+      const paramName = cssPropertyToIdentifier(stylexProp, avoidNames);
+      const param = j.identifier(paramName);
+      if (jsxProp !== "__props") {
+        annotateParamFromJsxProp(param, jsxProp);
+      }
+      const body = j.objectExpression([
+        j.property("init", makeCssPropKey(j, stylexProp), j.identifier(paramName)),
+      ]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    }
+    return fnKey;
   };
 
   const maybeEmitPreservedRuntimeCallOverride = (args: {
