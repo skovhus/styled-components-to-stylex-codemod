@@ -97,16 +97,19 @@ describe("runPrepass prop usage inventory", () => {
       ].join("\n"),
     );
 
-    const resolver = createModuleResolver();
-    const prepassResult = await runPrepass({
-      filesToTransform: collectFiles(fixtureDir),
-      consumerPaths: [],
-      resolver,
-      createExternalInterface: false,
-    });
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: collectFiles(fixtureDir),
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: false,
+      });
 
-    expect(propUsageToSnapshot(prepassResult.crossFileInfo.propUsageByFile!, fixtureDir))
-      .toMatchInlineSnapshot(`
+      expect(propUsageToSnapshot(prepassResult.crossFileInfo.propUsageByFile!, fixtureDir))
+        .toMatchInlineSnapshot(`
         {
           "components/Panel.tsx:Panel": {
             "componentName": "Panel",
@@ -135,6 +138,9 @@ describe("runPrepass prop usage inventory", () => {
           },
         }
       `);
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 });
 

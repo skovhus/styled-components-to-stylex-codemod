@@ -388,7 +388,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       // Intersect with allFilesSet to avoid scanning files outside the requested scope.
       const filesToScan = (() => {
         const hits = new Set<string>();
-        const hasAnyFilter = (createExternalInterface && rgHits !== undefined) || jsxHits !== undefined;
+        const hasAnyFilter =
+          (createExternalInterface && rgHits !== undefined) || jsxHits !== undefined;
         if (createExternalInterface && rgHits) {
           for (const f of rgHits) {
             hits.add(f);
@@ -1166,7 +1167,7 @@ function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined
     const globArgs = ["*.tsx", "*.jsx", "*.ts", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
-    const cmd = `rg -l ${shellQuote(String.raw`<[A-Z][A-Za-z0-9]*\b`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const cmd = `rg -l ${shellQuote(String.raw`<[A-Z]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
     const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     return new Set(
       output

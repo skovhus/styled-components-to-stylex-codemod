@@ -539,7 +539,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       }
     }
     for (const dim of dimensions) {
-      if (observedVariantProps.has(dim.propName)) {
+      if (observedVariantProps.has(dim.propName) || hasFiniteNumericVariantKey(dim)) {
         dim.propTypeFromKeyof = true;
       }
     }
@@ -1680,6 +1680,16 @@ function mergeVariantDimensions(
     return existingDimensions;
   }
   return [...existingDimensions, ...nextDimensions];
+}
+
+function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean {
+  return Object.keys(dimension.variants).some((key) => {
+    if (key === "") {
+      return false;
+    }
+    const value = Number(key);
+    return Number.isFinite(value) && String(value) === key;
+  });
 }
 
 function isComponentBlockHandledByRuleProcessor(

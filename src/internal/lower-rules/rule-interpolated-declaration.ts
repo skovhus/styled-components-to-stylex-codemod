@@ -206,13 +206,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return null;
     }
     const values = propUsage.values.filter(
-      (value): value is string | number => typeof value === "string" || typeof value === "number",
+      (value: string | number | boolean): value is string | number =>
+        typeof value === "string" || typeof value === "number",
     );
     if (values.length !== propUsage.values.length) {
       return null;
     }
     const valueType = typeof values[0];
-    if (!values.every((value) => typeof value === valueType)) {
+    if (!values.every((value: string | number) => typeof value === valueType)) {
       return null;
     }
     return values;
