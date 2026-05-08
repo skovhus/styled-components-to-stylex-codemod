@@ -153,6 +153,8 @@ export interface CrossFileInfo {
   selectorUsages: CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className (consumer not transformed) */
   bridgeComponentNames?: Set<string>;
+  /** Styled component prop usage inventory from the prepass, keyed by local component name. */
+  propUsageByComponent?: Map<string, ComponentPropUsageInfo>;
   /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
   /** Global leaf keys from prepass when leaves-only mode is enabled. */
@@ -174,6 +176,22 @@ export interface CrossFileSelectorUsage {
   bridgeComponentName?: string;
   /** Local name of the actual component in the consumer file (for JSX matching) */
   bridgeComponentLocalName?: string;
+}
+
+export type StaticPropValue = string | number | boolean;
+
+export interface PropUsageValueInfo {
+  values: StaticPropValue[];
+  hasUnknown: boolean;
+  usageCount: number;
+  omittedCount: number;
+}
+
+export interface ComponentPropUsageInfo {
+  componentName: string;
+  usageCount: number;
+  hasUnknownUsage: boolean;
+  props: Record<string, PropUsageValueInfo>;
 }
 
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
@@ -200,6 +218,8 @@ export type VariantDimension = {
   namespaceBooleanProp?: string;
   /** Whether this is the "disabled" namespace (true) or "enabled" namespace (false/undefined) */
   isDisabledNamespace?: boolean;
+  /** Dynamic style function used when observed consumer values do not cover a runtime value. */
+  fallbackFnKey?: string;
   /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
   isOptional?: boolean;
   /** Minimum source order from the original variant entries that were grouped into this dimension.

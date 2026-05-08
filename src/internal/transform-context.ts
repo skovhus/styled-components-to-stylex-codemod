@@ -129,6 +129,8 @@ export class TransformContext {
   crossFileSelectorUsages?: import("./transform-types.js").CrossFileSelectorUsage[];
   /** Component names in this file that need a global selector bridge className */
   bridgeComponentNames?: Set<string>;
+  /** Prepass prop usage inventory for styled components defined in this file. */
+  propUsageByComponent?: import("./transform-types.js").CrossFileInfo["propUsageByComponent"];
   /** Marker variable names generated for cross-file parent components and sibling selectors (parentStyleKey → markerName) */
   crossFileMarkers?: Map<string, string>;
   /** Style keys that use sibling markers (scoped marker replaces defaultMarker) */
@@ -309,6 +311,7 @@ export class TransformContext {
     if (options.crossFileInfo) {
       this.crossFileSelectorUsages = options.crossFileInfo.selectorUsages;
       this.bridgeComponentNames = options.crossFileInfo.bridgeComponentNames;
+      this.propUsageByComponent = options.crossFileInfo.propUsageByComponent;
     }
   }
 

@@ -14,7 +14,9 @@ function Container(props: ContainerProps) {
     <Flex
       {...rest}
       {...stylex.props(
-        styles.container(props.duration),
+        styles.container,
+        durationVariants[duration as keyof typeof durationVariants] ??
+          styles.containerDuration(duration),
         open &&
           styles.containerOpen({
             delay,
@@ -38,15 +40,26 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  container: (transition: number) => ({
+  container: {
     opacity: 0,
     transitionDelay: "0ms",
     pointerEvents: "none",
-    transition: `opacity ${transition}ms`,
-  }),
+  },
   containerOpen: (props) => ({
     pointerEvents: "inherit",
     opacity: 1,
     transitionDelay: `${props.delay}ms`,
   }),
+  containerDuration: (duration: number) => ({
+    transition: `opacity ${duration}ms`,
+  }),
+});
+
+const durationVariants = stylex.create({
+  200: {
+    transition: "opacity 200ms",
+  },
+  300: {
+    transition: "opacity 300ms",
+  },
 });

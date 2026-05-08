@@ -5,7 +5,13 @@
 import type { VariantDimension } from "../transform-types.js";
 
 type ParsedVariantCondition =
-  | { type: "equality"; propName: string; operator: "===" | "!=="; value: string }
+  | {
+      type: "equality";
+      propName: string;
+      operator: "===" | "!==";
+      value: string;
+      staticValue: string | number | boolean;
+    }
   | { type: "boolean"; propName: string; negated: boolean }
   | { type: "compound" | "unknown" };
 
@@ -32,12 +38,30 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
   // Equality: propName === "value" or propName !== "value"
   const eqMatch = trimmed.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*"([^"]*)"$/);
   if (eqMatch && eqMatch[1] && eqMatch[2] && eqMatch[3] !== undefined) {
+    const value = eqMatch[3];
     return {
       type: "equality",
       propName: eqMatch[1],
       operator: eqMatch[2] as "===" | "!==",
-      value: eqMatch[3],
+      value,
+      staticValue: value,
     };
+  }
+
+  const numberMatch = trimmed.match(
+    /^([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(===|!==)\s*(-?(?:0|[1-9]\d*)(?:\.\d+)?)$/,
+  );
+  if (numberMatch && numberMatch[1] && numberMatch[2] && numberMatch[3] !== undefined) {
+    const value = Number(numberMatch[3]);
+    if (Number.isFinite(value) && String(value) === numberMatch[3]) {
+      return {
+        type: "equality",
+        propName: numberMatch[1],
+        operator: numberMatch[2] as "===" | "!==",
+        value: numberMatch[3],
+        staticValue: value,
+      };
+    }
   }
 
   // Simple boolean: propName (no operators)
@@ -77,6 +101,16 @@ export function extractUnionLiteralValues(tsType: unknown): string[] | null {
   }
 
   return null;
+}
+
+export function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean {
+  return Object.keys(dimension.variants).some((key) => {
+    if (key === "") {
+      return false;
+    }
+    const value = Number(key);
+    return Number.isFinite(value) && String(value) === key;
+  });
 }
 
 /**
@@ -230,7 +264,7 @@ export function groupVariantBucketsIntoDimensions(
 
     if (Object.keys(defaultStyles).length > 0 && unionValues) {
       const explicitValues = new Set(variants.map((v) => v.value));
-      const remainingValues = unionValues.filter((v) => !explicitValues.has(v));
+      const remainingValues = unionValues.map(String).filter((v) => !explicitValues.has(v));
       if (remainingValues.length === 1 && remainingValues[0]) {
         // Use actual remaining value as key - for variants-recipe, this enables simple lookup
         // even for optional props when we emit destructuring defaults

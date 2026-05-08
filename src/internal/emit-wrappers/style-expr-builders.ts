@@ -416,6 +416,7 @@ export function buildVariantDimensionLookups(
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
     orderedEntries?: OrderedStyleEntry[];
+    stylesIdentifier: string;
   },
 ): void {
   const { dimensions, styleArgs, destructureProps, propDefaults, namespaceBooleanProps } = args;
@@ -427,6 +428,18 @@ export function buildVariantDimensionLookups(
     } else {
       styleArgs.push(expr);
     }
+  };
+
+  const buildFallbackExpr = (dim: VariantDimension, propId: ExpressionKind): ExpressionKind => {
+    const castProp = buildKeyofTypeofCast(j, propId, dim.variantObjectName);
+    const lookup = j.memberExpression(j.identifier(dim.variantObjectName), castProp, true);
+    if (!dim.fallbackFnKey) {
+      return lookup;
+    }
+    const fallbackCall = j.callExpression(styleRef(j, args.stylesIdentifier, dim.fallbackFnKey), [
+      propId,
+    ]);
+    return j.logicalExpression("??", lookup, fallbackCall) as ExpressionKind;
   };
 
   // Group namespace dimensions by their boolean prop and propName
@@ -485,7 +498,9 @@ export function buildVariantDimensionLookups(
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
       }
-      const lookup = j.memberExpression(variantsId, propId, true /* computed */);
+      const lookup = dim.fallbackFnKey
+        ? buildFallbackExpr(dim, propId)
+        : j.memberExpression(variantsId, propId, true /* computed */);
       // Guard optional props without defaults to avoid `undefined` index type error
       if (dim.isOptional && !dim.defaultValue) {
         const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));

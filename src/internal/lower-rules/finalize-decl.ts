@@ -11,7 +11,11 @@ import {
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
-import { extractUnionLiteralValues, groupVariantBucketsIntoDimensions } from "./variants.js";
+import {
+  extractUnionLiteralValues,
+  groupVariantBucketsIntoDimensions,
+  hasFiniteNumericVariantKey,
+} from "./variants.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import {
   getArrowFnSingleParamName,
@@ -56,6 +60,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleFnFromProps,
     styleFnDecls,
     attrBuckets,
+    observedVariantFallbackFns,
     inlineStyleProps,
     localVarValues,
     cssHelperPropValues,
@@ -537,6 +542,15 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         if (minOrder !== undefined) {
           dim.sourceOrder = minOrder;
         }
+      }
+    }
+    for (const dim of dimensions) {
+      const observedFallbackFnKey = observedVariantFallbackFns.get(dim.propName);
+      if (observedFallbackFnKey) {
+        dim.fallbackFnKey = observedFallbackFnKey;
+      }
+      if (!observedFallbackFnKey && hasFiniteNumericVariantKey(dim)) {
+        dim.propTypeFromKeyof = true;
       }
     }
     decl.variantDimensions = mergeVariantDimensions(decl.variantDimensions, dimensions);

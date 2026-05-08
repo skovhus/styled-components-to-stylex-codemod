@@ -101,6 +101,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   });
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
+  const observedVariantFallbackFns = new Map<string, string>();
   const inlineStyleProps: Array<{
     prop: string;
     expr: ExpressionKind;
@@ -434,6 +435,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     styleFnFromProps,
     styleFnDecls,
     attrBuckets,
+    observedVariantFallbackFns,
     inlineStyleProps,
     localVarValues,
     cssHelperPropValues,

@@ -10,6 +10,7 @@ import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import { Logger } from "./internal/logger.js";
 import { TransformContext } from "./internal/transform-context.js";
 import type {
+  ComponentPropUsageInfo,
   CrossFileInfo,
   CrossFileSelectorUsage,
   TransformOptions,
@@ -191,6 +192,7 @@ export function transformWithWarnings(
 interface GlobalPrepassResult {
   selectorUsages: Map<string, CrossFileSelectorUsage[]>;
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
+  propUsageByFile?: Map<string, Map<string, ComponentPropUsageInfo>>;
   styledDefFiles?: Map<string, Set<string>>;
   globalLeafKeys?: Set<string>;
   transformedFiles?: Set<string>;
@@ -221,14 +223,17 @@ function extractCrossFileInfoForFile(
   const absPath = resolveToPrepassKey(filePath, prepass);
   const selectorUsages = prepass.selectorUsages.get(absPath);
   const bridgeComponentNames = prepass.componentsNeedingGlobalSelectorBridge?.get(absPath);
+  const propUsageByComponent = prepass.propUsageByFile?.get(absPath);
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
+  const hasPropUsage = propUsageByComponent && propUsageByComponent.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
   const hasTransformedFiles = prepass.transformedFiles !== undefined;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&
     !bridgeComponentNames &&
+    !hasPropUsage &&
     !hasStyledDefFiles &&
     !hasGlobalLeafKeys &&
     !hasTransformedFiles
@@ -239,6 +244,7 @@ function extractCrossFileInfoForFile(
   const crossFileInfo: CrossFileInfo = {
     selectorUsages: selectorUsages ?? [],
     bridgeComponentNames,
+    propUsageByComponent,
     styledDefFiles: prepass.styledDefFiles,
     globalLeafKeys: prepass.globalLeafKeys,
     transformedFiles: prepass.transformedFiles,
@@ -260,7 +266,8 @@ function resolveToPrepassKey(filePath: string, prepass: GlobalPrepassResult): st
   const resolved = pathResolve(filePath);
   if (
     prepass.selectorUsages.has(resolved) ||
-    prepass.componentsNeedingGlobalSelectorBridge?.has(resolved)
+    prepass.componentsNeedingGlobalSelectorBridge?.has(resolved) ||
+    prepass.propUsageByFile?.has(resolved)
   ) {
     return resolved;
   }

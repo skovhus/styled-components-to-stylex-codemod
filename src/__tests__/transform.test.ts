@@ -1960,6 +1960,196 @@ describe("output invariants", () => {
 // - Result must not import styled-components
 // - Result must match the expected output fixture
 describe("transform", () => {
+  it("uses prepass prop values to emit observed unitless numeric identity variants", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ opacity: number }>\`
+  opacity: \${({ opacity }) => opacity};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel opacity={0.4}>Dim</Panel>
+    <Panel opacity={0.8}>Bright</Panel>
+  </div>
+);
+`;
+    const result = runTransform(
+      input,
+      {
+        crossFileInfo: {
+          selectorUsages: [],
+          propUsageByComponent: new Map([
+            [
+              "Panel",
+              {
+                componentName: "Panel",
+                usageCount: 2,
+                hasUnknownUsage: false,
+                props: {
+                  opacity: {
+                    values: [0.4, 0.8],
+                    hasUnknown: false,
+                    usageCount: 2,
+                    omittedCount: 0,
+                  },
+                },
+              },
+            ],
+          ]),
+        },
+      },
+      "observed-variants.tsx",
+    );
+
+    expect(result).toContain(
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
+    );
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).toContain("panelOpacity: (");
+  });
+
+  it("uses prepass prop values to emit observed transient unitless numeric identity variants", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ $opacity: number }>\`
+  opacity: \${({ $opacity }) => $opacity};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel $opacity={0.4}>Dim</Panel>
+    <Panel $opacity={0.8}>Bright</Panel>
+  </div>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      {
+        crossFileInfo: {
+          selectorUsages: [],
+          propUsageByComponent: new Map([
+            [
+              "Panel",
+              {
+                componentName: "Panel",
+                usageCount: 2,
+                hasUnknownUsage: false,
+                props: {
+                  $opacity: {
+                    values: [0.4, 0.8],
+                    hasUnknown: false,
+                    usageCount: 2,
+                    omittedCount: 0,
+                  },
+                },
+              },
+            ],
+          ]),
+        },
+      },
+      "observed-transient-variants.tsx",
+    );
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain(
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
+    );
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).not.toContain("$opacity");
+    expect(result).toContain("panelOpacity: (");
+    expect(diagnostics.transientPropRenames).toEqual([
+      {
+        exportName: "Panel",
+        renames: { $opacity: "opacity" },
+      },
+    ]);
+  });
+
+  it("uses same-file JSX prop values to emit observed unitless numeric identity variants without prepass", () => {
+    const input = `
+import styled from "styled-components";
+
+const dynamicOpacity = 1;
+
+export const Panel = styled.div<{ opacity: number }>\`
+  opacity: \${({ opacity }) => opacity};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel opacity={0.4}>Dim</Panel>
+    <Panel opacity={0.8}>Bright</Panel>
+    <Panel opacity={dynamicOpacity}>Dynamic</Panel>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "local-observed-variants.tsx");
+
+    expect(result).toContain(
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
+    );
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).toContain("panelOpacity: (");
+  });
+
+  it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ $opacity: number }>\`
+  opacity: \${({ $opacity }) => $opacity};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel $opacity={0.4}>Dim</Panel>
+    <Panel $opacity={0.8}>Bright</Panel>
+  </div>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "local-observed-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain(
+      "opacityVariants[opacity as keyof typeof opacityVariants] ?? styles.panelOpacity(opacity)",
+    );
+    expect(result).toContain("0.4: {");
+    expect(result).toContain("0.8: {");
+    expect(result).not.toContain("$opacity");
+    expect(diagnostics.transientPropRenames).toEqual([
+      {
+        exportName: "Panel",
+        renames: { $opacity: "opacity" },
+      },
+    ]);
+  });
+
+  it("does not emit numeric variants without observed consumer prop values", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ height: 40 | 80 }>\`
+  height: \${({ height }) => height};
+  background-color: tomato;
+\`;
+`;
+    const result = runTransform(input, {}, "unobserved-numeric-variants.tsx");
+
+    expect(result).toContain("panel: (height: 40 | 80) =>");
+    expect(result).toContain("styles.panel(height)");
+    expect(result).not.toContain("heightVariants");
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);

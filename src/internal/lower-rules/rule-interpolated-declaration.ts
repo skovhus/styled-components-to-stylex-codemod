@@ -110,6 +110,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     variantBuckets,
     variantStyleKeys,
     variantSourceOrder,
+    observedVariantFallbackFns,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,
@@ -194,6 +195,26 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
     }
   };
+
+  const getObservedStaticVariantValues = (jsxProp: string): Array<string | number> | null => {
+    const usage = state.propUsageByComponent.get(decl.localName);
+    if (!usage) {
+      return null;
+    }
+    const propUsage = usage.props[jsxProp];
+    if (!propUsage || propUsage.values.length < 2) {
+      return null;
+    }
+    const values = propUsage.values.filter(
+      (value: string | number | boolean): value is number => typeof value === "number",
+    );
+    if (values.length !== propUsage.values.length) {
+      return null;
+    }
+    return values;
+  };
+
+  const observedNumericCssTextProps = new Set<string>();
 
   const tryHandleMultiSlotRuntimeValue = (): boolean => {
     if (!d.property || d.value.kind !== "interpolated") {
@@ -352,26 +373,93 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const tryEmitIdentityVariantBuckets = (
     jsxProp: string,
     stylexProp: string,
-    skipValue?: string,
+    skipValue?: string | number,
   ): boolean => {
-    const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
-    const unionValues = extractUnionLiteralValues(propType);
-    if (!unionValues || unionValues.length < 2 || unionValues.length > 20) {
+    const staticParts = getSingleSlotStaticParts(d, decl);
+    if (!staticParts) {
       return false;
     }
-    for (const value of unionValues) {
+    const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
+    const unionValues = extractUnionLiteralValues(propType);
+    const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
+    const hasStaticText = staticParts.prefix !== "" || staticParts.suffix !== "";
+    if (observedValues && getNumericCssEmissionMode(stylexProp) === "cssText" && !hasStaticText) {
+      observedNumericCssTextProps.add(jsxProp);
+      return false;
+    }
+    const values = unionValues ?? observedValues;
+    if (!values || values.length < 2 || values.length > 20) {
+      return false;
+    }
+    for (const value of values) {
       if (value === skipValue) {
         continue;
       }
+      const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
-        { when: `${jsxProp} === "${value}"`, propName: jsxProp },
-        { [stylexProp]: value },
+        { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
+        {
+          [stylexProp]: emitStaticObservedValue(
+            value,
+            stylexProp,
+            observedValues !== null,
+            staticParts,
+          ),
+        },
+      );
+    }
+    if (observedValues) {
+      observedVariantFallbackFns.set(
+        jsxProp,
+        ensureObservedVariantFallbackFn(jsxProp, stylexProp, staticParts),
       );
     }
     if (jsxProp.startsWith("$")) {
       ensureShouldForwardPropDrop(decl, jsxProp);
     }
     return true;
+  };
+
+  const ensureObservedVariantFallbackFn = (
+    jsxProp: string,
+    stylexProp: string,
+    staticParts: StaticParts,
+  ): string => {
+    const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
+    const fnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
+    const paramName = cssPropertyToIdentifier(normalizedJsxProp || stylexProp, avoidNames);
+    const valueExpr = buildRuntimeObservedValueExpr(
+      j,
+      stylexProp,
+      j.identifier(paramName),
+      staticParts,
+    );
+    const property = j.property("init", makeCssPropKey(j, stylexProp), valueExpr);
+    const existing = styleFnDecls.get(fnKey);
+    if (
+      existing?.type === "ArrowFunctionExpression" &&
+      existing.body?.type === "ObjectExpression"
+    ) {
+      existing.body.properties.push(property);
+      return fnKey;
+    }
+    if (!styleFnDecls.has(fnKey)) {
+      const param = j.identifier(paramName);
+      if (jsxProp !== "__props") {
+        annotateParamFromJsxProp(param, jsxProp);
+      }
+      const body = j.objectExpression([property]);
+      styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+    }
+    return fnKey;
+  };
+
+  const shouldPreserveNumericCssTextForProp = (jsxProp: string, stylexProp: string): boolean => {
+    return (
+      (observedNumericCssTextProps.has(jsxProp) ||
+        isNumberLikeTsType(findJsxPropTsType(jsxProp))) &&
+      getNumericCssEmissionMode(stylexProp) === "cssText"
+    );
   };
 
   const maybeEmitPreservedRuntimeCallOverride = (args: {
@@ -2276,9 +2364,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 return transformedValue;
               }
 
-              // If it's just the slot, keep it as the raw value (number/string).
+              // If it's just the slot, keep it as the raw value (number/string), except
+              // number props in CSS text for unitful properties must stay text (`height: 40`),
+              // not StyleX numeric px (`height: 40px`).
               const hasStatic = parts.some((p: any) => p?.kind === "static" && p.value !== "");
               if (!hasStatic) {
+                if (shouldPreserveNumericCssTextForProp(jsxProp, out.prop)) {
+                  return j.templateLiteral(
+                    [
+                      j.templateElement({ raw: "", cooked: "" }, false),
+                      j.templateElement({ raw: "", cooked: "" }, true),
+                    ],
+                    [transformed],
+                  );
+                }
                 return transformedValue;
               }
 
@@ -2949,15 +3048,133 @@ function tryResolveIndexedThemeForPseudoElement(
 }
 
 function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDecl): boolean {
+  return getSingleSlotStaticParts(d, decl) !== null;
+}
+
+type StaticParts = { prefix: string; suffix: string };
+
+function getSingleSlotStaticParts(d: CssDeclarationIR, decl: StyledDecl): StaticParts | null {
   if (d.value.kind !== "interpolated") {
-    return false;
+    return null;
   }
   const parts = d.value.parts ?? [];
-  if (parts.length !== 1 || parts[0]?.kind !== "slot") {
+  const slotParts = parts.filter((part) => part.kind === "slot");
+  if (slotParts.length !== 1) {
+    return null;
+  }
+  const slot = slotParts[0]!;
+  if (decl.templateExpressions[slot.slotId] === undefined) {
+    return null;
+  }
+  return extractStaticPartsForDecl(d);
+}
+
+type NumericCssEmissionMode = "stylexNumber" | "cssText";
+
+function getNumericCssEmissionMode(stylexProp: string): NumericCssEmissionMode {
+  if (stylexProp.startsWith("--")) {
+    return "cssText";
+  }
+  return UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp) ? "stylexNumber" : "cssText";
+}
+
+function emitStaticObservedValue(
+  value: string | number,
+  stylexProp: string,
+  isObservedNumeric: boolean,
+  staticParts: StaticParts,
+): string | number {
+  if (typeof value !== "number" || !isObservedNumeric) {
+    return value;
+  }
+  if (staticParts.prefix || staticParts.suffix) {
+    return `${staticParts.prefix}${value}${staticParts.suffix}`;
+  }
+  return getNumericCssEmissionMode(stylexProp) === "stylexNumber" ? value : String(value);
+}
+
+function buildRuntimeObservedValueExpr(
+  j: JSCodeshift,
+  stylexProp: string,
+  valueExpr: ExpressionKind,
+  staticParts: StaticParts,
+): ExpressionKind {
+  if (
+    getNumericCssEmissionMode(stylexProp) === "stylexNumber" &&
+    !staticParts.prefix &&
+    !staticParts.suffix
+  ) {
+    return valueExpr;
+  }
+  return j.templateLiteral(
+    [
+      j.templateElement({ raw: staticParts.prefix, cooked: staticParts.prefix }, false),
+      j.templateElement({ raw: staticParts.suffix, cooked: staticParts.suffix }, true),
+    ],
+    [valueExpr],
+  ) as ExpressionKind;
+}
+
+function isNumberLikeTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
     return false;
   }
-  return decl.templateExpressions[parts[0].slotId] !== undefined;
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "number";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    return type.types.length > 0 && type.types.every(isNumberLikeTsType);
+  }
+  return false;
 }
+
+const UNITLESS_NUMERIC_STYLEX_PROPS = new Set([
+  "animationIterationCount",
+  "aspectRatio",
+  "borderImageOutset",
+  "borderImageSlice",
+  "borderImageWidth",
+  "boxFlex",
+  "boxFlexGroup",
+  "boxOrdinalGroup",
+  "columnCount",
+  "columns",
+  "flex",
+  "flexGrow",
+  "flexPositive",
+  "flexShrink",
+  "flexNegative",
+  "flexOrder",
+  "fontWeight",
+  "gridArea",
+  "gridColumn",
+  "gridColumnEnd",
+  "gridColumnStart",
+  "gridRow",
+  "gridRowEnd",
+  "gridRowStart",
+  "lineClamp",
+  "lineHeight",
+  "opacity",
+  "order",
+  "orphans",
+  "tabSize",
+  "widows",
+  "zIndex",
+  "zoom",
+  "fillOpacity",
+  "floodOpacity",
+  "stopOpacity",
+  "strokeDasharray",
+  "strokeDashoffset",
+  "strokeMiterlimit",
+  "strokeOpacity",
+  "strokeWidth",
+]);
 
 function buildFullInterpolatedDeclarationValueExpr(
   j: JSCodeshift,

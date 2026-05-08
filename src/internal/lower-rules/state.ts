@@ -5,7 +5,11 @@
 import { type ImportSource, isDirectionalResult } from "../../adapter.js";
 import type { InternalHandlerContext } from "../builtin-handlers/types.js";
 import type { TransformContext } from "../transform-context.js";
-import type { CrossFileSelectorUsage, StyledDecl } from "../transform-types.js";
+import type {
+  ComponentPropUsageInfo,
+  CrossFileSelectorUsage,
+  StyledDecl,
+} from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import { createCssHelperResolver } from "./css-helper.js";
 import { createThemeResolvers } from "./theme.js";
@@ -17,6 +21,13 @@ import {
 import { createImportResolver } from "./import-resolution.js";
 import { literalToStaticValue } from "./types.js";
 import { buildEnumValueMap, cloneAstNode } from "../utilities/jscodeshift-utils.js";
+import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+import {
+  createComponentPropUsageInfo,
+  KNOWN_NON_ELEMENT_PROPS,
+  mergeComponentPropUsage,
+  type ComponentPropUsageCandidate,
+} from "../utilities/prop-usage.js";
 
 export type RelationOverride = {
   parentStyleKey: string;
@@ -253,6 +264,7 @@ export function createLowerRulesState(ctx: TransformContext) {
   });
 
   const enumValueMap = buildEnumValueMap(root, j);
+  const propUsageByComponent = collectPropUsageByComponent(ctx, styledDecls);
 
   // Build cross-file selector lookup: localName → usage info
   const crossFileSelectorsByLocal = new Map<string, CrossFileSelectorUsage>();
@@ -315,6 +327,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     isIdentifierShadowed,
     enumValueMap,
     crossFileSelectorsByLocal,
+    propUsageByComponent,
     inlineKeyframeNameMap: undefined as Map<string, string> | undefined,
     /**
      * File-level bail flag. Used only for bails that cannot be scoped to a single
@@ -348,4 +361,100 @@ export function createLowerRulesState(ctx: TransformContext) {
   };
 
   return state;
+}
+
+function collectPropUsageByComponent(
+  ctx: TransformContext,
+  styledDecls: StyledDecl[],
+): Map<string, ComponentPropUsageInfo> {
+  const byComponent = clonePropUsageByComponent(ctx.propUsageByComponent);
+  const localNames = new Set(styledDecls.map((decl) => decl.localName));
+
+  const recordOpening = (opening: unknown): void => {
+    if (!opening || typeof opening !== "object") {
+      return;
+    }
+    const openingRecord = opening as { name?: unknown; attributes?: unknown[] };
+    const name = getJsxIdentifierName(openingRecord.name);
+    if (!name || !localNames.has(name)) {
+      return;
+    }
+
+    const usage = collectOpeningPropUsage(openingRecord.attributes);
+    let info = byComponent.get(name);
+    if (!info) {
+      info = createComponentPropUsageInfo(name);
+      byComponent.set(name, info);
+    }
+    mergeComponentPropUsage(info, usage);
+  };
+
+  ctx.root.find(ctx.j.JSXElement).forEach((path) => {
+    recordOpening(path.node.openingElement);
+  });
+  ctx.root.find(ctx.j.JSXSelfClosingElement).forEach((path) => {
+    recordOpening(path.node);
+  });
+
+  return byComponent;
+}
+
+function clonePropUsageByComponent(
+  source: TransformContext["propUsageByComponent"],
+): Map<string, ComponentPropUsageInfo> {
+  const cloned = new Map<string, ComponentPropUsageInfo>();
+  for (const [name, info] of source ?? []) {
+    cloned.set(name, {
+      componentName: info.componentName,
+      usageCount: info.usageCount,
+      hasUnknownUsage: info.hasUnknownUsage,
+      props: Object.fromEntries(
+        Object.entries(info.props).map(([propName, propInfo]) => [
+          propName,
+          {
+            values: [...propInfo.values],
+            hasUnknown: propInfo.hasUnknown,
+            usageCount: propInfo.usageCount,
+            omittedCount: propInfo.omittedCount,
+          },
+        ]),
+      ),
+    });
+  }
+  return cloned;
+}
+
+function collectOpeningPropUsage(attributes: unknown[] | undefined): ComponentPropUsageCandidate {
+  const props: ComponentPropUsageCandidate["props"] = {};
+  let hasSpread = false;
+
+  for (const attr of attributes ?? []) {
+    if (!attr || typeof attr !== "object") {
+      continue;
+    }
+    const attrRecord = attr as { type?: string; name?: unknown };
+    if (attrRecord.type === "JSXSpreadAttribute") {
+      hasSpread = true;
+      continue;
+    }
+    if (attrRecord.type !== "JSXAttribute") {
+      continue;
+    }
+    const propName = getJsxIdentifierName(attrRecord.name);
+    if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+      continue;
+    }
+    const value = readStaticJsxLiteral(attr);
+    props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+  }
+
+  return { props, hasSpread };
+}
+
+function getJsxIdentifierName(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const record = node as { type?: string; name?: unknown };
+  return record.type === "JSXIdentifier" && typeof record.name === "string" ? record.name : null;
 }

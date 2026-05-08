@@ -2202,7 +2202,7 @@ export class WrapperEmitter {
     namespaceBooleanProps?: string[];
     orderedEntries?: seb.OrderedStyleEntry[];
   }): void {
-    seb.buildVariantDimensionLookups(this.j, args);
+    seb.buildVariantDimensionLookups(this.j, { ...args, stylesIdentifier: this.stylesIdentifier });
   }
 
   buildStyleFnExpressions(args: {
