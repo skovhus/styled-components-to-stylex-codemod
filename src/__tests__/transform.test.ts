@@ -2079,8 +2079,8 @@ export const Panel = styled.div<{ height: 40 | 80 }>\`
 `;
     const result = runTransform(input, {}, "unobserved-numeric-variants.tsx");
 
-    expect(result).toContain("panelHeight: (");
-    expect(result).toContain("styles.panelHeight(height)");
+    expect(result).toContain("panel: (height: 40 | 80) =>");
+    expect(result).toContain("styles.panel(height)");
     expect(result).not.toContain("heightVariants");
   });
 
