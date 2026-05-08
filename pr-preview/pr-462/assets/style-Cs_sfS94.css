@@ -4954,6 +4954,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   min-width: calc(var(--stickyHeaderInScroller-minWidth) * 1px);
 }
 
+.xn7gheo:not(#\#):not(#\#):not(#\#):not(#\#) {
+  min-width: var(--column-width);
+}
+
 .x1odjw0f:not(#\#):not(#\#):not(#\#):not(#\#) {
   overflow-y: auto;
 }
