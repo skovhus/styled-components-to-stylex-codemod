@@ -10,10 +10,6 @@ type ContainerProps = {
 
 const EASING = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
 
-/**
- * Test case for transitionDelay with number value.
- * The codemod should convert number 0 to "0ms" string for CSS properties.
- */
 function Container(props: ContainerProps & React.ComponentProps<"div">) {
   const { className, children, style, $delay, $open, ...rest } = props;
   return (

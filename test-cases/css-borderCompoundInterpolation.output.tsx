@@ -7,10 +7,6 @@ export function App() {
 }
 
 const styles = stylex.create({
-  /**
-   * Compound border shorthand with two interpolations:
-   * width from thinPixel(), style static, color from color() helper.
-   */
   container: {
     borderRadius: 2,
     paddingBlock: 2,

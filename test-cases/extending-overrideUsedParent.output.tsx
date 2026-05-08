@@ -8,7 +8,6 @@ function StyledText(props: Omit<React.ComponentPropsWithRef<typeof Text>, "class
   return <Text {...props} {...stylex.props(styles.text)} />;
 }
 
-/** Exported child that extends the non-exported parent, overriding margin-left. */
 export function HelpText(
   props: Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">,
 ) {

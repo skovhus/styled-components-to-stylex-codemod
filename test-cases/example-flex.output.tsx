@@ -79,9 +79,6 @@ export const flexPropKeys = [
   "noMinHeight",
 ];
 
-/**
- * Generic flexbox div component.
- */
 export function Flex<C extends React.ElementType = "div">(
   props: FlexProps &
     Omit<React.ComponentPropsWithRef<C>, keyof FlexProps> & { sx?: stylex.StyleXStyles; as?: C },
@@ -153,7 +150,6 @@ export function Flex<C extends React.ElementType = "div">(
   );
 }
 
-/** A flex spacer */
 export function FlexSpacer(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
   const { children, ...rest } = props;
   return (

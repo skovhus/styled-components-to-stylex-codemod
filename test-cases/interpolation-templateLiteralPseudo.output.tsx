@@ -5,10 +5,6 @@ type HoverSwatchProps = React.PropsWithChildren<{
   tone: string;
 }>;
 
-/**
- * Template literal interpolation inside pseudo/media should stay scoped
- * when preserved via a StyleX style function.
- */
 function HoverSwatch(props: HoverSwatchProps) {
   const { children, tone } = props;
   return <div sx={[styles.hoverSwatch, styles.hoverSwatchColor(props)]}>{children}</div>;

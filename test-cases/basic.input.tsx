@@ -1,6 +1,7 @@
 import React from "react";
 import styled from "styled-components";
 
+// -- Styled Components
 /**
  * Page title with brand color styling.
  */
@@ -16,6 +17,7 @@ const Wrapper = styled.section`
   background: papayawhip;
 `;
 
+// - Styles
 export const Select = styled.select`
   padding: 4px 8px;
   border-radius: 4px;

@@ -8,10 +8,6 @@ interface TextColorProps {
   sx?: stylex.StyleXStyles;
 }
 
-/**
- * A text span that sets the color.
- * When exported, should include HTML span props (className, children, style).
- */
 export function TextColor(
   props: TextColorProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {

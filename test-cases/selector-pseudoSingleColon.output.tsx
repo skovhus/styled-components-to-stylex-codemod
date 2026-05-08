@@ -8,10 +8,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Pseudo-elements with single colon (&:before, &:after).
-   * The codemod should normalize to double-colon (::before / ::after).
-   */
   point: {
     position: "relative",
     width: 48,

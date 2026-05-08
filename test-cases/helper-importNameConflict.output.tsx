@@ -13,10 +13,6 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  /**
-   * Test case for helper name conflicts.
-   * The adapter should alias its StyleX import when the helper is used outside styled templates.
-   */
   box: {
     transition: `color ${transitionSpeedVars.normal}`,
   },

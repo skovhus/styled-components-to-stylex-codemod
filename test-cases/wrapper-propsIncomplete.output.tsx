@@ -69,7 +69,6 @@ interface ThemeTextProps {
   themeColor: Colors;
 }
 
-/** A text span that gets color from theme */
 export function ThemeText(
   props: ThemeTextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {

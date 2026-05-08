@@ -3,6 +3,7 @@ import {
   looksLikeLength,
   isBackgroundImageValue,
   isSingleBackgroundComponent,
+  isStyleSectionMarkerComment,
   kebabToCamelCase,
   camelToKebabCase,
 } from "./string-utils.js";
@@ -89,6 +90,19 @@ describe("isSingleBackgroundComponent", () => {
     expect(isSingleBackgroundComponent("red url('image.png') no-repeat")).toBe(false);
     expect(isSingleBackgroundComponent("url('image.png') center / cover")).toBe(false);
     expect(isSingleBackgroundComponent("linear-gradient(red, blue), green")).toBe(false);
+  });
+});
+
+describe("isStyleSectionMarkerComment", () => {
+  it("matches comments that only mark style sections", () => {
+    expect(isStyleSectionMarkerComment(" -- Styled Components")).toBe(true);
+    expect(isStyleSectionMarkerComment(" - Styles")).toBe(true);
+    expect(isStyleSectionMarkerComment("--- styles ---")).toBe(true);
+  });
+
+  it("rejects descriptive style comments", () => {
+    expect(isStyleSectionMarkerComment("Page wrapper with padding")).toBe(false);
+    expect(isStyleSectionMarkerComment("Styles depend on responsive props")).toBe(false);
   });
 });
 
