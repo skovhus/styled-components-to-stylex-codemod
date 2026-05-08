@@ -2010,6 +2010,64 @@ export const App = () => (
     expect(result).not.toContain("panelHeight: (");
   });
 
+  it("uses prepass prop values to emit observed transient numeric identity variants", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Panel = styled.div<{ $height: number }>\`
+  height: \${({ $height }) => $height};
+  background-color: tomato;
+\`;
+
+export const App = () => (
+  <div>
+    <Panel $height={40}>Short</Panel>
+    <Panel $height={80}>Tall</Panel>
+  </div>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      {
+        crossFileInfo: {
+          selectorUsages: [],
+          propUsageByComponent: new Map([
+            [
+              "Panel",
+              {
+                componentName: "Panel",
+                usageCount: 2,
+                hasUnknownUsage: false,
+                props: {
+                  $height: {
+                    values: [40, 80],
+                    hasUnknown: false,
+                    usageCount: 2,
+                    omittedCount: 0,
+                  },
+                },
+              },
+            ],
+          ]),
+        },
+      },
+      "observed-transient-variants.tsx",
+    );
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("heightVariants[height]");
+    expect(result).toContain("40: {");
+    expect(result).toContain("80: {");
+    expect(result).not.toContain("$height");
+    expect(result).not.toContain("panelHeight: (");
+    expect(diagnostics.transientPropRenames).toEqual([
+      {
+        exportName: "Panel",
+        renames: { $height: "height" },
+      },
+    ]);
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
