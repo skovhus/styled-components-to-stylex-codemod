@@ -375,13 +375,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     stylexProp: string,
     skipValue?: string | number,
   ): boolean => {
-    if (!isEntireInterpolatedValueSingleSlot(d, decl)) {
+    const staticParts = getSingleSlotStaticParts(d, decl);
+    if (!staticParts) {
       return false;
     }
     const propType = findJsxPropTsTypeForVariantExtraction(jsxProp);
     const unionValues = extractUnionLiteralValues(propType);
     const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
-    if (observedValues && getNumericCssEmissionMode(stylexProp) === "cssText") {
+    const hasStaticText = staticParts.prefix !== "" || staticParts.suffix !== "";
+    if (observedValues && getNumericCssEmissionMode(stylexProp) === "cssText" && !hasStaticText) {
       observedNumericCssTextProps.add(jsxProp);
       return false;
     }
@@ -396,11 +398,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
         { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
-        { [stylexProp]: emitStaticObservedValue(value, stylexProp, observedValues !== null) },
+        {
+          [stylexProp]: emitStaticObservedValue(
+            value,
+            stylexProp,
+            observedValues !== null,
+            staticParts,
+          ),
+        },
       );
     }
     if (observedValues) {
-      observedVariantFallbackFns.set(jsxProp, ensureObservedVariantFallbackFn(jsxProp, stylexProp));
+      observedVariantFallbackFns.set(
+        jsxProp,
+        ensureObservedVariantFallbackFn(jsxProp, stylexProp, staticParts),
+      );
     }
     if (jsxProp.startsWith("$")) {
       ensureShouldForwardPropDrop(decl, jsxProp);
@@ -408,18 +420,35 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     return true;
   };
 
-  const ensureObservedVariantFallbackFn = (jsxProp: string, stylexProp: string): string => {
-    const fnKey = styleKeyWithSuffix(decl.styleKey, stylexProp);
+  const ensureObservedVariantFallbackFn = (
+    jsxProp: string,
+    stylexProp: string,
+    staticParts: StaticParts,
+  ): string => {
+    const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
+    const fnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
+    const paramName = cssPropertyToIdentifier(normalizedJsxProp || stylexProp, avoidNames);
+    const valueExpr = buildRuntimeObservedValueExpr(
+      j,
+      stylexProp,
+      j.identifier(paramName),
+      staticParts,
+    );
+    const property = j.property("init", makeCssPropKey(j, stylexProp), valueExpr);
+    const existing = styleFnDecls.get(fnKey);
+    if (
+      existing?.type === "ArrowFunctionExpression" &&
+      existing.body?.type === "ObjectExpression"
+    ) {
+      existing.body.properties.push(property);
+      return fnKey;
+    }
     if (!styleFnDecls.has(fnKey)) {
-      const paramName = cssPropertyToIdentifier(stylexProp, avoidNames);
       const param = j.identifier(paramName);
       if (jsxProp !== "__props") {
         annotateParamFromJsxProp(param, jsxProp);
       }
-      const valueExpr = buildRuntimeObservedValueExpr(j, stylexProp, j.identifier(paramName));
-      const body = j.objectExpression([
-        j.property("init", makeCssPropKey(j, stylexProp), valueExpr),
-      ]);
+      const body = j.objectExpression([property]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
     return fnKey;
@@ -3019,14 +3048,25 @@ function tryResolveIndexedThemeForPseudoElement(
 }
 
 function isEntireInterpolatedValueSingleSlot(d: CssDeclarationIR, decl: StyledDecl): boolean {
+  return getSingleSlotStaticParts(d, decl) !== null;
+}
+
+type StaticParts = { prefix: string; suffix: string };
+
+function getSingleSlotStaticParts(d: CssDeclarationIR, decl: StyledDecl): StaticParts | null {
   if (d.value.kind !== "interpolated") {
-    return false;
+    return null;
   }
   const parts = d.value.parts ?? [];
-  if (parts.length !== 1 || parts[0]?.kind !== "slot") {
-    return false;
+  const slotParts = parts.filter((part) => part.kind === "slot");
+  if (slotParts.length !== 1) {
+    return null;
   }
-  return decl.templateExpressions[parts[0].slotId] !== undefined;
+  const slot = slotParts[0]!;
+  if (decl.templateExpressions[slot.slotId] === undefined) {
+    return null;
+  }
+  return extractStaticPartsForDecl(d);
 }
 
 type NumericCssEmissionMode = "stylexNumber" | "cssText";
@@ -3042,9 +3082,13 @@ function emitStaticObservedValue(
   value: string | number,
   stylexProp: string,
   isObservedNumeric: boolean,
+  staticParts: StaticParts,
 ): string | number {
   if (typeof value !== "number" || !isObservedNumeric) {
     return value;
+  }
+  if (staticParts.prefix || staticParts.suffix) {
+    return `${staticParts.prefix}${value}${staticParts.suffix}`;
   }
   return getNumericCssEmissionMode(stylexProp) === "stylexNumber" ? value : String(value);
 }
@@ -3053,14 +3097,19 @@ function buildRuntimeObservedValueExpr(
   j: JSCodeshift,
   stylexProp: string,
   valueExpr: ExpressionKind,
+  staticParts: StaticParts,
 ): ExpressionKind {
-  if (getNumericCssEmissionMode(stylexProp) === "stylexNumber") {
+  if (
+    getNumericCssEmissionMode(stylexProp) === "stylexNumber" &&
+    !staticParts.prefix &&
+    !staticParts.suffix
+  ) {
     return valueExpr;
   }
   return j.templateLiteral(
     [
-      j.templateElement({ raw: "", cooked: "" }, false),
-      j.templateElement({ raw: "", cooked: "" }, true),
+      j.templateElement({ raw: staticParts.prefix, cooked: staticParts.prefix }, false),
+      j.templateElement({ raw: staticParts.suffix, cooked: staticParts.suffix }, true),
     ],
     [valueExpr],
   ) as ExpressionKind;

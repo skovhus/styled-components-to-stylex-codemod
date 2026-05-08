@@ -1,14 +1,19 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type PanelProps = React.PropsWithChildren<{
-  height: number;
-}>;
+type PanelProps = { height: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 export function Panel(props: PanelProps) {
   const { children, height, ...rest } = props;
   return (
-    <div {...rest} sx={styles.panel(height)}>
+    <div
+      {...rest}
+      sx={[
+        styles.panel,
+        panelHeightVariants[height as keyof typeof panelHeightVariants] ??
+          styles.panelHeight(height),
+      ]}
+    >
       {children}
     </div>
   );
@@ -22,7 +27,14 @@ type TransientPanelProps = { height: number } & Omit<
 export function TransientPanel(props: TransientPanelProps) {
   const { children, height, ...rest } = props;
   return (
-    <div {...rest} sx={styles.transientPanel(height)}>
+    <div
+      {...rest}
+      sx={[
+        styles.transientPanel,
+        transientPanelHeightVariants[height as keyof typeof transientPanelHeightVariants] ??
+          styles.transientPanelHeight(height),
+      ]}
+    >
       {children}
     </div>
   );
@@ -81,19 +93,23 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  panel: (height: number) => ({
+  panel: {
     width: 120,
     padding: 8,
     backgroundColor: "tomato",
     color: "white",
-    height: `${height}`,
+  },
+  panelHeight: (height: number) => ({
+    height: `${height}px`,
   }),
-  transientPanel: (height: number) => ({
+  transientPanel: {
     width: 120,
     padding: 8,
     backgroundColor: "royalblue",
     color: "white",
-    height: `${height}`,
+  },
+  transientPanelHeight: (height: number) => ({
+    height: `${height}px`,
   }),
   fader: {
     width: 120,
@@ -113,6 +129,24 @@ const styles = stylex.create({
   transientFaderOpacity: (opacity: number) => ({
     opacity: opacity,
   }),
+});
+
+const panelHeightVariants = stylex.create({
+  40: {
+    height: "40px",
+  },
+  80: {
+    height: "80px",
+  },
+});
+
+const transientPanelHeightVariants = stylex.create({
+  50: {
+    height: "50px",
+  },
+  90: {
+    height: "90px",
+  },
 });
 
 const faderOpacityVariants = stylex.create({

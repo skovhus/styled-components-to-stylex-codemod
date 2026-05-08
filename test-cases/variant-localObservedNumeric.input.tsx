@@ -3,7 +3,7 @@ import styled from "styled-components";
 
 export const Panel = styled.div<{ height: number }>`
   width: 120px;
-  height: ${({ height }) => height};
+  height: ${({ height }) => height}px;
   padding: 8px;
   background-color: tomato;
   color: white;
@@ -11,7 +11,7 @@ export const Panel = styled.div<{ height: number }>`
 
 export const TransientPanel = styled.div<{ $height: number }>`
   width: 120px;
-  height: ${({ $height }) => $height};
+  height: ${({ $height }) => $height}px;
   padding: 8px;
   background-color: royalblue;
   color: white;

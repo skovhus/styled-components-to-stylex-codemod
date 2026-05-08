@@ -15,9 +15,7 @@ export function EmojiContainer(props: EmojiContainerProps) {
       {...rest}
       sx={[
         styles.emojiContainer,
-        styles.emojiContainerWidth(size),
-        styles.emojiContainerMaxWidth(size),
-        styles.emojiContainerMaxHeight(size),
+        sizeVariants[size as keyof typeof sizeVariants] ?? styles.emojiContainerSize(size),
         Browser.isSafari
           ? styles.emojiContainerBrowserIsSafari(size)
           : styles.emojiContainerDefault(size),
@@ -45,14 +43,10 @@ const styles = stylex.create({
     wordBreak: "keep-all",
     height: "auto",
   },
-  emojiContainerWidth: (width: number) => ({
-    width: `${width}px`,
-  }),
-  emojiContainerMaxWidth: (maxWidth: number) => ({
-    maxWidth: `${maxWidth}px`,
-  }),
-  emojiContainerMaxHeight: (maxHeight: number) => ({
-    maxHeight: `${maxHeight}px`,
+  emojiContainerSize: (size: number) => ({
+    width: `${size}px`,
+    maxWidth: `${size}px`,
+    maxHeight: `${size}px`,
   }),
   emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {
@@ -74,4 +68,22 @@ const styles = stylex.create({
       "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size}px`,
     },
   }),
+});
+
+const sizeVariants = stylex.create({
+  16: {
+    width: "16px",
+    maxWidth: "16px",
+    maxHeight: "16px",
+  },
+  24: {
+    width: "24px",
+    maxWidth: "24px",
+    maxHeight: "24px",
+  },
+  32: {
+    width: "32px",
+    maxWidth: "32px",
+    maxHeight: "32px",
+  },
 });
