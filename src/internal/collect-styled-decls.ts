@@ -17,10 +17,7 @@ import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 import { stripStyledPrefix, toStyleKey, styleKeyWithSuffix } from "./transform/helpers.js";
-import {
-  isPrettierIgnoreComment,
-  isStyleSectionMarkerComment,
-} from "./utilities/string-utils.js";
+import { isPrettierIgnoreComment, isStyleSectionMarkerComment } from "./utilities/string-utils.js";
 
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
@@ -1571,7 +1568,7 @@ function extractDynamicStyleValue(
 type CommentLike = { leading?: boolean; type?: string; value?: unknown };
 
 function shouldDropStyledLeadingComment(comment: CommentLike): boolean {
-  const body = String(comment.value ?? "");
+  const body = getCommentBody(comment);
   return (
     comment.leading === false ||
     isPrettierIgnoreComment(body) ||
@@ -1581,7 +1578,11 @@ function shouldDropStyledLeadingComment(comment: CommentLike): boolean {
 }
 
 function isJSDocBlockComment(comment: CommentLike): boolean {
-  return comment.type === "CommentBlock" && String(comment.value ?? "").trimStart().startsWith("*");
+  return comment.type === "CommentBlock" && getCommentBody(comment).trimStart().startsWith("*");
+}
+
+function getCommentBody(comment: CommentLike): string {
+  return typeof comment.value === "string" ? comment.value : "";
 }
 
 function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {
