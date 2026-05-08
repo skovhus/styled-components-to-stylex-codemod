@@ -104,7 +104,7 @@ export function buildStaticVariantPropTypes(d: StyledDecl): Map<string, string> 
 export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   return new Map(
     (d.variantDimensions ?? [])
-      .filter((dim) => dim.propTypeFromKeyof)
+      .filter((dim) => dim.propTypeFromKeyof || hasFiniteNumericVariantKey(dim))
       .map((dim) => {
         const typeText = dim.isBooleanProp ? "boolean" : `keyof typeof ${dim.variantObjectName}`;
         return [dim.propName, typeText];
@@ -215,6 +215,18 @@ function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>):
       result.add(name.slice(1));
     }
   }
+}
+
+function hasFiniteNumericVariantKey(
+  dim: NonNullable<StyledDecl["variantDimensions"]>[number],
+): boolean {
+  return Object.keys(dim.variants).some((key) => {
+    if (key === "") {
+      return false;
+    }
+    const value = Number(key);
+    return Number.isFinite(value) && String(value) === key;
+  });
 }
 
 function extractBooleanProps(node: unknown): Set<string> {
