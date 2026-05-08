@@ -3,6 +3,7 @@ import {
   looksLikeLength,
   isBackgroundImageValue,
   isSingleBackgroundComponent,
+  isJSDocBlockComment,
   isStyleSectionMarkerComment,
   kebabToCamelCase,
   camelToKebabCase,
@@ -103,6 +104,17 @@ describe("isStyleSectionMarkerComment", () => {
   it("rejects descriptive style comments", () => {
     expect(isStyleSectionMarkerComment("Page wrapper with padding")).toBe(false);
     expect(isStyleSectionMarkerComment("Styles depend on responsive props")).toBe(false);
+  });
+});
+
+describe("isJSDocBlockComment", () => {
+  it("matches block comments whose body starts with a JSDoc marker", () => {
+    expect(isJSDocBlockComment({ type: "CommentBlock", value: "* Docs" })).toBe(true);
+  });
+
+  it("rejects line comments and regular block comments", () => {
+    expect(isJSDocBlockComment({ type: "CommentLine", value: "Docs" })).toBe(false);
+    expect(isJSDocBlockComment({ type: "CommentBlock", value: " regular block " })).toBe(false);
   });
 });
 

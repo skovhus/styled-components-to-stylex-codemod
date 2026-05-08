@@ -6,6 +6,12 @@ type BannerProps = React.PropsWithChildren<{
   ref?: React.Ref<HTMLDivElement>;
 }>;
 
+/**
+ * Tests that template literal CSS blocks inside ternary conditional
+ * expressions correctly handle @media rules instead of silently dropping them.
+ * Exercises the `resolveTemplateLiteralBranch` code path (prop-conditional
+ * ternary with plain template literal branches).
+ */
 function Banner(props: BannerProps) {
   const { children, prominent, ...rest } = props;
   return (

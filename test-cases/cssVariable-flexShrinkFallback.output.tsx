@@ -7,6 +7,10 @@ type ColumnContainerProps = {
   basis?: number;
 } & Omit<React.ComponentProps<"div">, "className">;
 
+/**
+ * Arrow function returns a template literal with nested conditionals.
+ * The codemod should preserve this via a stylex function.
+ */
 export function ColumnContainer(props: ColumnContainerProps) {
   const { children, style, noGrowOrShrink, basis, ...rest } = props;
   return (

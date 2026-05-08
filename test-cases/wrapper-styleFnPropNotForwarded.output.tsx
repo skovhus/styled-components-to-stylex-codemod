@@ -9,6 +9,10 @@ type ScrollableProps = {
   applyBackground?: boolean;
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
+/**
+ * Exported styled(ImportedComponent) with non-$-prefixed prop used only for CSS.
+ * The gutter prop is only used in the CSS template and should NOT be forwarded to Flex.
+ */
 export function Scrollable(props: ScrollableProps) {
   const { children, applyBackground, ...rest } = props;
   return (

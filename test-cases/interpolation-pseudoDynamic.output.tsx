@@ -30,6 +30,10 @@ type InvertedButtonProps = React.PropsWithChildren<{
   $disabled?: boolean;
 }>;
 
+/**
+ * Ternary with CSS in alternate branch: the guard must be negated.
+ * `$disabled ? '' : 'background-color: green;'` → `!$disabled && ...`
+ */
 function InvertedButton(props: InvertedButtonProps) {
   const { children, $disabled } = props;
   return (

@@ -20,6 +20,7 @@ function BaseDivider(props: React.PropsWithChildren<BaseDividerProps>) {
   );
 }
 
+/** Styled wrapper - should still accept children */
 export function StyledDivider(
   props: Omit<React.ComponentPropsWithRef<typeof BaseDivider>, "className" | "style">,
 ) {

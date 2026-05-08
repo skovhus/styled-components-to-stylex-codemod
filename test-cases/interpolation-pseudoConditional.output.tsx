@@ -3,6 +3,11 @@ import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
+/**
+ * Interpolated pseudo-class selector using a runtime variable.
+ * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
+ * wrapped in `highlightStyles({ active: ..., hover: ... })` for runtime selection.
+ */
 function Button(props: React.PropsWithChildren<{}>) {
   return (
     <button
@@ -19,6 +24,10 @@ function Button(props: React.PropsWithChildren<{}>) {
   );
 }
 
+/**
+ * Same as Button but with `&&:${highlight}` specificity hack.
+ * The `&&` should be stripped and the pseudo alias still applied.
+ */
 function SpecificButton(props: React.PropsWithChildren<{}>) {
   return (
     <button

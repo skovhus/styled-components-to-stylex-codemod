@@ -140,6 +140,16 @@ export function isStyleSectionMarkerComment(body: string): boolean {
   return /^(?:styled\s*-?\s*components?|styles?)$/.test(marker);
 }
 
+export function getCommentBody(comment: unknown): string {
+  const c = comment && typeof comment === "object" ? (comment as { value?: unknown }) : {};
+  return typeof c.value === "string" ? c.value : "";
+}
+
+export function isJSDocBlockComment(comment: unknown): boolean {
+  const c = comment && typeof comment === "object" ? (comment as { type?: unknown }) : {};
+  return c.type === "CommentBlock" && getCommentBody(comment).trimStart().startsWith("*");
+}
+
 /**
  * Normalizes whitespace in a CSS value string.
  * Collapses all sequences of whitespace (including newlines) to single spaces

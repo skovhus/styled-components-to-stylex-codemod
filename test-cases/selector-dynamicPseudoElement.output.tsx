@@ -6,6 +6,10 @@ type BadgeProps = React.PropsWithChildren<{
   badgeColor: string;
 }>;
 
+/**
+ * Test case for dynamic styles in pseudo elements (::before / ::after).
+ * Emits a StyleX dynamic style function with pseudo-element nesting.
+ */
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
   return (

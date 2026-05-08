@@ -38,6 +38,10 @@ interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
   sx?: stylex.StyleXStyles;
 }
 
+/**
+ * Scrollable wraps Flex and adds a transient prop for conditional styling.
+ * The $applyBackground prop must NOT be passed to Flex since Flex doesn't accept it.
+ */
 export function Scrollable(props: ScrollableProps) {
   const { className, children, style, sx, applyBackground, ...rest } = props;
   return (

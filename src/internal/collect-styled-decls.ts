@@ -17,7 +17,11 @@ import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
 import type { StyledDecl } from "./transform-types.js";
 import { stripStyledPrefix, toStyleKey, styleKeyWithSuffix } from "./transform/helpers.js";
-import { isPrettierIgnoreComment, isStyleSectionMarkerComment } from "./utilities/string-utils.js";
+import {
+  getCommentBody,
+  isPrettierIgnoreComment,
+  isStyleSectionMarkerComment,
+} from "./utilities/string-utils.js";
 
 /**
  * Collect styled component declarations and pre-resolved object-style decls.
@@ -1565,30 +1569,18 @@ function extractDynamicStyleValue(
   return null;
 }
 
-type CommentLike = { leading?: boolean; type?: string; value?: unknown };
-
 function shouldDropStyledLeadingComment(comment: unknown): boolean {
-  const c = toCommentLike(comment);
   const body = getCommentBody(comment);
   return (
-    c.leading === false ||
-    isPrettierIgnoreComment(body) ||
-    isStyleSectionMarkerComment(body) ||
-    isJSDocBlockComment(c)
+    hasLeadingFalse(comment) || isPrettierIgnoreComment(body) || isStyleSectionMarkerComment(body)
   );
 }
 
-function toCommentLike(comment: unknown): CommentLike {
-  return comment && typeof comment === "object" ? (comment as CommentLike) : {};
-}
-
-function isJSDocBlockComment(comment: CommentLike): boolean {
-  return comment.type === "CommentBlock" && getCommentBody(comment).trimStart().startsWith("*");
-}
-
-function getCommentBody(comment: unknown): string {
-  const c = toCommentLike(comment);
-  return typeof c.value === "string" ? c.value : "";
+function hasLeadingFalse(comment: unknown): boolean {
+  if (!comment || typeof comment !== "object") {
+    return false;
+  }
+  return (comment as { leading?: unknown }).leading === false;
 }
 
 function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {

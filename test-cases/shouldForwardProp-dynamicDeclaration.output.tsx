@@ -34,6 +34,9 @@ export type FlexProps = {
 /** Prop keys for the Flex component */
 export const flexPropKeys = ["wrap", "alignSelf", "gap", "wrapGap", "column"];
 
+/**
+ * Generic flexbox div component.
+ */
 export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "className">) {
   const { children, style, wrap, alignSelf, gap, wrapGap, column, ...rest } = props;
   return (

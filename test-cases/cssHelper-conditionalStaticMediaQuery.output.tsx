@@ -5,6 +5,11 @@ type CardProps = React.PropsWithChildren<{
   compact: boolean;
 }>;
 
+/**
+ * Tests that static CSS blocks (no interpolations) inside conditional
+ * expressions correctly handle @media rules instead of silently dropping them.
+ * Exercises the `resolveStaticCssBlock` code path.
+ */
 function Card(props: CardProps) {
   const { children, compact } = props;
   return <div sx={[styles.card, compact && styles.cardCompact]}>{children}</div>;
