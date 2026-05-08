@@ -48,16 +48,13 @@ const propUsageToSnapshot = (
   base = process.cwd(),
 ) => {
   const realBase = realpathSync(base);
-  return Object.fromEntries(
-    [...map.entries()]
-      .flatMap(([filePath, byComponent]) =>
-        [...byComponent.entries()].map(([name, value]) => [
-          `${path.relative(realBase, filePath)}:${name}`,
-          value,
-        ]),
-      )
-      .sort(([a], [b]) => String(a).localeCompare(String(b))),
-  );
+  const entries: Array<[string, ComponentPropUsageInfo]> = [];
+  for (const [filePath, byComponent] of map) {
+    for (const [name, value] of byComponent) {
+      entries.push([`${path.relative(realBase, filePath)}:${name}`, value]);
+    }
+  }
+  return Object.fromEntries(entries.sort(([a], [b]) => a.localeCompare(b)));
 };
 
 // ---------------------------------------------------------------------------
