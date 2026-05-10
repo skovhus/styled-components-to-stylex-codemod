@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-sPxQQ_79.js";t();var n=e();function r({style:e,size:t=`medium`,text:r=`Loading…`}){return(0,n.jsx)(`div`,{style:e,children:(0,n.jsx)(`div`,{className:`spinner spinner-${t}`,children:r})})}export{r as t};
