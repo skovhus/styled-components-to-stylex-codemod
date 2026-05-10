@@ -8,7 +8,7 @@ import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
-import type { Adapter, ResolveValueContext } from "../adapter.js";
+import type { Adapter, CallResolveContext, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import type { CrossFileInfo } from "../internal/transform-types.js";
@@ -3236,6 +3236,57 @@ export const App = () => (
         (w) => w.type === "Adapter resolveCall returned undefined for helper call",
       ),
     ).toBe(true);
+  });
+
+  it("should call the adapter for helper calls nested in arithmetic interpolations", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - runtimeValue()}px;
+\`;
+`;
+    const resolveCalls: CallResolveContext[] = [];
+
+    const adapterWithoutRuntimeResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        resolveCalls.push(ctx);
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-nestedArithmeticNoResolution.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutRuntimeResolution },
+    );
+
+    expect(resolveCalls).toHaveLength(1);
+    expect(resolveCalls[0]).toMatchObject({
+      calleeImportedName: "runtimeValue",
+      cssProperty: "padding-top",
+      args: [],
+    });
+    expect(resolveCalls[0]?.calleeSource.value).toMatch(/helpers$/);
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Adapter resolveCall returned undefined for helper call",
+    );
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {

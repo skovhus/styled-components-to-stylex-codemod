@@ -738,6 +738,38 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (tryHandleThemeValueInPseudo()) {
       continue;
     }
+    // Create a resolver for embedded call expressions in compound CSS values.
+    const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
+      if (expr?.type !== "CallExpression") {
+        return null;
+      }
+      const res = resolveDynamicNode(
+        {
+          slotId: 0,
+          expr,
+          css: {
+            kind: "declaration",
+            selector: rule.selector,
+            atRuleStack: rule.atRuleStack,
+            ...(d.property ? { property: d.property } : {}),
+            valueRaw: d.valueRaw,
+          },
+          component: componentInfo,
+          usage: { jsxUsages: 0, hasPropsSpread: false },
+        },
+        {
+          ...handlerContext,
+          resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
+        },
+      );
+      if (res && res.type === "resolvedValue") {
+        const exprAst = parseExpr(res.expr);
+        if (exprAst) {
+          return { resolved: exprAst, imports: res.imports };
+        }
+      }
+      return null;
+    };
     const allowCssCalcForImportedArithmetic = isEntireInterpolatedValueSingleSlot(d, decl);
     const resolveImportedValueExpr = (
       expr: any,
@@ -773,6 +805,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           resolved: j.binaryExpression(expr.operator, resolvedLeft, resolvedRight),
           imports,
         };
+      }
+      if (expr?.type === "CallExpression") {
+        const calleeInfo = extractRootAndPath(expr.callee);
+        const imp = calleeInfo ? resolveImportForExpr(expr, calleeInfo.rootName) : null;
+        if (!imp) {
+          return null;
+        }
+        const resolvedCall = resolveCallExpr(expr);
+        if (resolvedCall) {
+          return resolvedCall;
+        }
+        warnings.push({
+          severity: "warning",
+          type: "Adapter resolveCall returned undefined for helper call",
+          loc: getNodeLocStart(expr) ?? decl.loc,
+          context: {
+            localName: decl.localName,
+            importedName: imp.importedName,
+            source: imp.source.value,
+          },
+        });
+        bail = true;
+        return { bail: true };
       }
       const info = getRootIdentifierInfo(expr);
       if (!info) {
@@ -822,38 +877,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         return null;
       }
       return { resolved: exprAst, imports: resolveValueResult.imports };
-    };
-    // Create a resolver for embedded call expressions in compound CSS values
-    const resolveCallExpr = (expr: any): { resolved: any; imports?: any[] } | null => {
-      if (expr?.type !== "CallExpression") {
-        return null;
-      }
-      const res = resolveDynamicNode(
-        {
-          slotId: 0,
-          expr,
-          css: {
-            kind: "declaration",
-            selector: rule.selector,
-            atRuleStack: rule.atRuleStack,
-            ...(d.property ? { property: d.property } : {}),
-            valueRaw: d.valueRaw,
-          },
-          component: componentInfo,
-          usage: { jsxUsages: 0, hasPropsSpread: false },
-        },
-        {
-          ...handlerContext,
-          resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
-        },
-      );
-      if (res && res.type === "resolvedValue") {
-        const exprAst = parseExpr(res.expr);
-        if (exprAst) {
-          return { resolved: exprAst, imports: res.imports };
-        }
-      }
-      return null;
     };
     const addImport = (imp: any) => {
       addResolverImports([imp]);
