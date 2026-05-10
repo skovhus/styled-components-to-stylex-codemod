@@ -1010,7 +1010,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...finalRest,
           ...(styleAttr && !needsMerge && !useSxPropForWrapped ? [styleAttr] : []),
         ];
-        preserveInlineJsxTextWhitespace(j, p, styledDecls);
+        preserveInlineJsxTextWhitespace(ctx, p, styledDecls);
       });
   }
 
@@ -1216,19 +1216,30 @@ function hasPreviousStaticSiblingWithName(path: JsxPath, componentName: string):
 }
 
 function preserveInlineJsxTextWhitespace(
-  j: TransformContext["j"]["jscodeshift"],
+  ctx: TransformContext,
   path: JsxPath,
   styledDecls: StyledDecl[],
 ): void {
+  const { j } = ctx;
   const parentNode = findContainingJsxChildrenOwner(path);
   const children = parentNode?.children;
-  if (!children || isCustomComponentJsxElement(parentNode, styledDecls)) {
+  if (!children || isCustomComponentJsxElement(ctx, parentNode, styledDecls)) {
     return;
   }
 
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
-    if (!isJsxTextChild(child) || !child.value.trim()) {
+    if (!isJsxTextChild(child)) {
+      continue;
+    }
+    if (!child.value.trim()) {
+      if (
+        /^[ \t]+$/.test(child.value) &&
+        hasRenderableJsxSibling(children, i - 1, -1) &&
+        hasRenderableJsxSibling(children, i + 1, 1)
+      ) {
+        children.splice(i, 1, createJsxSpaceExpression(j, child.value));
+      }
       continue;
     }
 
@@ -1250,6 +1261,7 @@ function preserveInlineJsxTextWhitespace(
 }
 
 function isCustomComponentJsxElement(
+  ctx: TransformContext,
   parentNode: {
     type?: string;
     openingElement?: { name?: unknown };
@@ -1257,7 +1269,7 @@ function isCustomComponentJsxElement(
   styledDecls: StyledDecl[],
 ): boolean {
   const parentName = parentNode.openingElement?.name;
-  if (isReactFragmentJsxName(parentName)) {
+  if (isReactFragmentJsxName(ctx, parentName)) {
     return false;
   }
   if (isInlineStyledParent(parentName, styledDecls)) {
@@ -1279,24 +1291,54 @@ function isInlineStyledParent(name: unknown, styledDecls: StyledDecl[]): boolean
   return styledDecls.some(
     (decl) =>
       decl.localName === name.name &&
+      decl.base.kind === "intrinsic" &&
       !decl.skipTransform &&
       !decl.needsWrapperComponent &&
       !decl.isCssHelper,
   );
 }
 
-function isReactFragmentJsxName(name: unknown): boolean {
+function isReactFragmentJsxName(ctx: TransformContext, name: unknown): boolean {
   if (isJsxIdentifierName(name)) {
-    return name.name === "Fragment";
+    const importInfo = ctx.importMap?.get(name.name);
+    return importInfo?.importedName === "Fragment" && isReactImportSource(importInfo.source);
   }
   if (!isJsxMemberExpressionName(name)) {
     return false;
   }
   return (
     isJsxIdentifierName(name.object) &&
-    name.object.name === "React" &&
+    isReactNamespaceBinding(ctx, name.object.name) &&
     isJsxIdentifierName(name.property) &&
     name.property.name === "Fragment"
+  );
+}
+
+function isReactImportSource(source: unknown): boolean {
+  return (
+    typeof source === "object" &&
+    source !== null &&
+    (source as { kind?: unknown; value?: unknown }).kind === "specifier" &&
+    (source as { value?: unknown }).value === "react"
+  );
+}
+
+function isReactNamespaceBinding(ctx: TransformContext, localName: string): boolean {
+  const { root, j } = ctx;
+  return (
+    root
+      .find(j.ImportDeclaration)
+      .filter((path) => (path.node.source as { value?: unknown })?.value === "react")
+      .filter((path) =>
+        (path.node.specifiers ?? []).some(
+          (specifier) =>
+            (specifier.type === "ImportDefaultSpecifier" ||
+              specifier.type === "ImportNamespaceSpecifier") &&
+            specifier.local?.type === "Identifier" &&
+            specifier.local.name === localName,
+        ),
+      )
+      .size() > 0
   );
 }
 

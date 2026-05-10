@@ -2696,11 +2696,16 @@ export function App() {
     expect(result.code).toContain("<ui.Counter>Before <Plain /> after</ui.Counter>");
   });
 
-  it("should preserve JSX whitespace in fragment and styled parents without splitting custom elements", () => {
+  it("should preserve JSX whitespace in safe parents without splitting custom children", () => {
     const source = `
 import * as React from "react";
-import { Fragment } from "react";
+import { Fragment as RF, Fragment as F } from "react";
 import styled from "styled-components";
+import { Counter as ImportedCounter } from "./lib/counter";
+
+function Fragment(props: { children: React.ReactNode }) {
+  return <section>{props.children}</section>;
+}
 
 const ReactInner = styled.span\`
   color: red;
@@ -2710,8 +2715,24 @@ const FragmentInner = styled.span\`
   color: orange;
 \`;
 
+const AliasFragmentInner = styled.span\`
+  color: pink;
+\`;
+
+const LocalFragmentInner = styled.span\`
+  color: cyan;
+\`;
+
 const OuterInner = styled.span\`
   color: green;
+\`;
+
+const OuterCustomInner = styled.span\`
+  color: brown;
+\`;
+
+const Middle = styled.span\`
+  color: gray;
 \`;
 
 const CustomInner = styled.span\`
@@ -2722,11 +2743,19 @@ const Outer = styled.div\`
   padding: 4px;
 \`;
 
+const OuterCustom = styled(ImportedCounter)\`
+  padding: 4px;
+\`;
+
 export const App = () => (
   <>
     <React.Fragment>Before <ReactInner /> after</React.Fragment>
-    <Fragment>Before <FragmentInner /> after</Fragment>
+    <RF>Before <FragmentInner /> after</RF>
+    <F>Before <AliasFragmentInner /> after</F>
+    <Fragment>Before <LocalFragmentInner /> after</Fragment>
     <Outer>Before <OuterInner /> after</Outer>
+    <OuterCustom>Before <OuterCustomInner /> after</OuterCustom>
+    <><span /> <Middle /> <span /></>
     <my-counter>Before <CustomInner /> after</my-counter>
   </>
 );
@@ -2742,10 +2771,19 @@ export const App = () => (
     expect(result.warnings).toEqual([]);
     expect(result.code).toContain('<React.Fragment>Before{" "}');
     expect(result.code).toContain('{" "}after</React.Fragment>');
-    expect(result.code).toContain('<Fragment>Before{" "}');
-    expect(result.code).toContain('{" "}after</Fragment>');
+    expect(result.code).toContain('<RF>Before{" "}');
+    expect(result.code).toContain('{" "}after</RF>');
+    expect(result.code).toContain('<F>Before{" "}');
+    expect(result.code).toContain('{" "}after</F>');
+    expect(result.code).toContain(
+      "<Fragment>Before <span sx={styles.localFragmentInner} /> after</Fragment>",
+    );
     expect(result.code).toContain('<div sx={styles.outer}>Before{" "}');
     expect(result.code).toContain('{" "}after</div>');
+    expect(result.code).toContain(
+      "<ImportedCounter {...stylex.props(styles.outerCustom)}>Before <span sx={styles.outerCustomInner} /> after</ImportedCounter>",
+    );
+    expect(result.code).toContain('<><span />{" "}<span sx={styles.middle} />{" "}<span /></>');
     expect(result.code).toContain(
       "<my-counter>Before <span sx={styles.customInner} /> after</my-counter>",
     );
