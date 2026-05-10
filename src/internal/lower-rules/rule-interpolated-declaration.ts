@@ -86,7 +86,8 @@ import {
   extractIndexedThemeLookupInfo,
 } from "../builtin-handlers/resolver-utils.js";
 type CommentSource = { leading?: string; trailingLine?: string } | null;
-type ImportedValueResolution = { resolved: any; imports?: ImportSpec[] } | { bail: true } | null;
+type ResolvedImportedValue = { resolved: ExpressionKind; imports?: ImportSpec[] };
+type ImportedValueResolution = ResolvedImportedValue | { bail: true } | null;
 type ResolveImportedValueExpr = (expr: any, allowCssCalc?: boolean) => ImportedValueResolution;
 
 type InterpolatedDeclarationContext = {
@@ -798,8 +799,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) => {
       const resolveChildExpression = (child: any): ImportedValueResolution =>
         resolveImportedValueExpr(child, false);
+      const isBailResolution = (result: ImportedValueResolution): result is { bail: true } =>
+        Boolean(result && "bail" in result);
+      const resolvedOrOriginal = (
+        result: ImportedValueResolution,
+        original: ExpressionKind,
+      ): ExpressionKind => (result && !isBailResolution(result) ? result.resolved : original);
       const mergeImports = (...results: ImportedValueResolution[]): ImportSpec[] =>
-        results.flatMap((result) => ("imports" in (result ?? {}) ? (result.imports ?? []) : []));
+        results.flatMap((result) =>
+          result && !isBailResolution(result) ? (result.imports ?? []) : [],
+        );
 
       if (expr?.type === "BinaryExpression") {
         const leftResult = resolveChildExpression(expr.left);
@@ -807,15 +816,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (!leftResult && !rightResult) {
           return null;
         }
-        if (leftResult && "bail" in leftResult) {
+        if (isBailResolution(leftResult)) {
           return leftResult;
         }
-        if (rightResult && "bail" in rightResult) {
+        if (isBailResolution(rightResult)) {
           return rightResult;
         }
-        const resolvedLeft = leftResult ? leftResult.resolved : expr.left;
-        const resolvedRight = rightResult ? rightResult.resolved : expr.right;
-        const imports = [...(leftResult?.imports ?? []), ...(rightResult?.imports ?? [])];
+        const resolvedLeft = resolvedOrOriginal(leftResult, expr.left);
+        const resolvedRight = resolvedOrOriginal(rightResult, expr.right);
+        const imports = mergeImports(leftResult, rightResult);
         if (allowCssCalc && isCssCalcOperator(expr.operator)) {
           const calcExpr = buildCssCalcTemplateExpression({
             j,
@@ -837,7 +846,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (!argumentResult) {
           return null;
         }
-        if ("bail" in argumentResult) {
+        if (isBailResolution(argumentResult)) {
           return argumentResult;
         }
         return {
@@ -852,16 +861,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (!testResult && !consequentResult && !alternateResult) {
           return null;
         }
-        for (const result of [testResult, consequentResult, alternateResult]) {
-          if (result && "bail" in result) {
-            return result;
-          }
+        if (isBailResolution(testResult)) {
+          return testResult;
+        }
+        if (isBailResolution(consequentResult)) {
+          return consequentResult;
+        }
+        if (isBailResolution(alternateResult)) {
+          return alternateResult;
         }
         return {
           resolved: j.conditionalExpression(
-            testResult ? testResult.resolved : expr.test,
-            consequentResult ? consequentResult.resolved : expr.consequent,
-            alternateResult ? alternateResult.resolved : expr.alternate,
+            resolvedOrOriginal(testResult, expr.test),
+            resolvedOrOriginal(consequentResult, expr.consequent),
+            resolvedOrOriginal(alternateResult, expr.alternate),
           ),
           imports: mergeImports(testResult, consequentResult, alternateResult),
         };
@@ -872,17 +885,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (!leftResult && !rightResult) {
           return null;
         }
-        if (leftResult && "bail" in leftResult) {
+        if (isBailResolution(leftResult)) {
           return leftResult;
         }
-        if (rightResult && "bail" in rightResult) {
+        if (isBailResolution(rightResult)) {
           return rightResult;
         }
         return {
           resolved: j.logicalExpression(
             expr.operator,
-            leftResult ? leftResult.resolved : expr.left,
-            rightResult ? rightResult.resolved : expr.right,
+            resolvedOrOriginal(leftResult, expr.left),
+            resolvedOrOriginal(rightResult, expr.right),
           ),
           imports: mergeImports(leftResult, rightResult),
         };
@@ -893,7 +906,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const expressions: any[] = [];
         for (const templateExpr of expr.expressions ?? []) {
           const expressionResult = resolveChildExpression(templateExpr);
-          if (expressionResult && "bail" in expressionResult) {
+          if (isBailResolution(expressionResult)) {
             return expressionResult;
           }
           if (expressionResult) {
