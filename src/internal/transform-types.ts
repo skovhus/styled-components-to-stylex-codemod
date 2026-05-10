@@ -554,6 +554,10 @@ export type StyledDecl = {
       attrName: string;
       value: unknown;
     }>;
+    dynamicAttrs?: Array<{
+      jsxProp: string;
+      attrName: string;
+    }>;
     conditionalAttrs: Array<{
       jsxProp: string;
       attrName: string;
@@ -569,6 +573,8 @@ export type StyledDecl = {
     }>;
     /** Static CSS properties extracted from `style: { ... }` in attrs. */
     attrsStaticStyles?: Record<string, unknown>;
+    /** Static style object expression extracted from `style: expr` in attrs. */
+    attrsStaticStyleExpr?: ExpressionKind;
     /**
      * Dynamic CSS properties from `style: { prop: cond ? value : undefined }` in attrs.
      * Each entry stores the CSS property, the JSX prop that controls it, and the

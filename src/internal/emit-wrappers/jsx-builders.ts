@@ -141,6 +141,22 @@ export function buildInvertedBoolAttrs(
   );
 }
 
+export function buildDynamicAttrsFromProps(
+  j: JSCodeshift,
+  args: {
+    dynamicAttrs: Array<{ jsxProp: string; attrName: string }>;
+    propExprFor: (jsxProp: string) => ExpressionKind;
+  },
+): JsxAttr[] {
+  const { dynamicAttrs, propExprFor } = args;
+  return dynamicAttrs.map((attr) =>
+    j.jsxAttribute(
+      j.jsxIdentifier(attr.attrName),
+      j.jsxExpressionContainer(propExprFor(attr.jsxProp)),
+    ),
+  );
+}
+
 export function buildStaticAttrsFromRecord(
   j: JSCodeshift,
   staticAttrs: Record<string, unknown>,
@@ -230,6 +246,10 @@ export function buildAttrsFromAttrsInfo(
     ...buildInvertedBoolAttrs(j, {
       invertedBoolAttrs: attrsInfo.invertedBoolAttrs ?? [],
       testExprFor: propExprFor,
+    }),
+    ...buildDynamicAttrsFromProps(j, {
+      dynamicAttrs: attrsInfo.dynamicAttrs ?? [],
+      propExprFor,
     }),
     ...buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}),
   ];

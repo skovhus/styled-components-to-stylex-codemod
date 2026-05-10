@@ -273,6 +273,9 @@ function canResolveBaseFromAttrs(attrsInfo: StyledDecl["attrsInfo"]): boolean {
   if ((attrsInfo.defaultAttrs?.length ?? 0) > 0) {
     return false;
   }
+  if ((attrsInfo.dynamicAttrs?.length ?? 0) > 0) {
+    return false;
+  }
   if ((attrsInfo.conditionalAttrs?.length ?? 0) > 0) {
     return false;
   }

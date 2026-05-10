@@ -6249,6 +6249,123 @@ export const App = () => <Input />;
 });
 
 describe("attrs defaultAttrs nullish coalescing", () => {
+  it("preserves callback prop reads as dynamic attrs instead of static expressions", () => {
+    const source = `
+import styled from "styled-components";
+
+function Icon(props: { size?: number; className?: string }) {
+  return <svg width={props.size} height={props.size} className={props.className} />;
+}
+
+const StyledIcon = styled(Icon).attrs((p) => ({
+  size: p.size,
+}))\`
+  position: relative;
+\`;
+
+export const App = () => <StyledIcon size={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={size}");
+    expect(result.code).not.toContain("p.size");
+  });
+
+  it("merges expression-valued className attrs with generated and caller classes", () => {
+    const source = `
+import styled from "styled-components";
+
+const attrsClassName = "attrs-class";
+
+const Box = styled.div.attrs({
+  className: attrsClassName,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box className="caller">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('mergedSx(styles.box, [attrsClassName, "caller"])');
+    expect(result.code).not.toContain("className={attrsClassName}");
+  });
+
+  it("merges expression-valued style attrs before caller styles", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const attrsStyle = { opacity: 0.8 } satisfies React.CSSProperties;
+const callerStyle = { marginTop: 4 } satisfies React.CSSProperties;
+
+const Box = styled.div.attrs({
+  style: attrsStyle,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box style={callerStyle}>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("...attrsStyle");
+    expect(result.code).toContain("...callerStyle");
+    expect(result.code).not.toContain("style={attrsStyle}");
+  });
+
+  it("emits expression-valued static attrs in minimal wrappers", () => {
+    const source = `
+import styled from "styled-components";
+
+const moduleId = "scroll-region";
+
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+  id: moduleId,
+}))\`
+  overflow: auto;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("id={moduleId}");
+  });
+
+  it("uses expression-valued as attrs as render targets", () => {
+    const source = `
+import styled from "styled-components";
+
+const Components = {
+  Button: "button" as const,
+};
+
+const Box = styled.div.attrs({
+  as: Components.Button,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box type="button">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("<Components.Button");
+    expect(result.code).not.toContain("as={Components.Button}");
+  });
+
   it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
     // Regression test: styled.div.attrs with props.X ?? defaultValue should
     // use nullish coalescing (??) in the output, not destructuring defaults.

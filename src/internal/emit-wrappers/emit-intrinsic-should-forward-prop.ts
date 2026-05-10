@@ -775,6 +775,7 @@ function filterAttrsForShouldForwardProp(
 
   const hasDroppedAttrs =
     (attrsInfo.defaultAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
+    (attrsInfo.dynamicAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
     attrsInfo.conditionalAttrs.some((a) => shouldDrop(a.attrName)) ||
     (attrsInfo.invertedBoolAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
     Object.keys(attrsInfo.staticAttrs).some(shouldDrop);
@@ -785,6 +786,7 @@ function filterAttrsForShouldForwardProp(
   return {
     ...attrsInfo,
     defaultAttrs: (attrsInfo.defaultAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
+    dynamicAttrs: (attrsInfo.dynamicAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
     conditionalAttrs: attrsInfo.conditionalAttrs.filter((a) => !shouldDrop(a.attrName)),
     invertedBoolAttrs: (attrsInfo.invertedBoolAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
     staticAttrs: Object.fromEntries(

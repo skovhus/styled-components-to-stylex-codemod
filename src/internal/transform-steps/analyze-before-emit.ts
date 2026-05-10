@@ -145,7 +145,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (
         decl.attrsInfo &&
         ((decl.attrsInfo.defaultAttrs?.length ?? 0) > 0 ||
+          (decl.attrsInfo.dynamicAttrs?.length ?? 0) > 0 ||
           Object.keys(decl.attrsInfo.staticAttrs ?? {}).length > 0 ||
+          !!decl.attrsInfo.attrsStaticStyleExpr ||
           (decl.attrsInfo.attrsDynamicStyles?.length ?? 0) > 0 ||
           (decl.attrsInfo.attrsStaticStyles &&
             Object.keys(decl.attrsInfo.attrsStaticStyles).length > 0))
@@ -163,6 +165,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     // Intrinsic components with default attrs (e.g. `tabIndex: props.tabIndex ?? 0`)
     // need a wrapper to destructure the prop and apply the default value.
     if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.defaultAttrs?.length ?? 0) > 0) {
+      decl.needsWrapperComponent = true;
+    }
+    if (decl.base.kind === "intrinsic" && (decl.attrsInfo?.dynamicAttrs?.length ?? 0) > 0) {
       decl.needsWrapperComponent = true;
     }
     // shouldForwardProp from withConfig() still needs wrappers.
@@ -239,6 +244,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       // cannot preserve dynamic semantics for conditional/default/inverted attrs.
       (decl.attrsInfo?.conditionalAttrs?.length ?? 0) === 0 &&
       (decl.attrsInfo?.defaultAttrs?.length ?? 0) === 0 &&
+      (decl.attrsInfo?.dynamicAttrs?.length ?? 0) === 0 &&
       (decl.attrsInfo?.invertedBoolAttrs?.length ?? 0) === 0 &&
       // Conditional extraStylexPropsArgs (with `when` guards) are filtered out by the
       // inline path, so they need the wrapper to emit the conditional logic.
@@ -321,6 +327,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         return false;
       }
       if (decl.attrsInfo.defaultAttrs?.length) {
+        return false;
+      }
+      if (decl.attrsInfo.dynamicAttrs?.length) {
         return false;
       }
       if (decl.attrsInfo.invertedBoolAttrs?.length) {
@@ -2036,6 +2045,12 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
       attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
     }
   }
+  if (decl.attrsInfo?.dynamicAttrs) {
+    for (const attr of decl.attrsInfo.dynamicAttrs) {
+      attr.jsxProp = renames.get(attr.jsxProp) ?? attr.jsxProp;
+      attr.attrName = renames.get(attr.attrName) ?? attr.attrName;
+    }
+  }
   if (decl.attrsInfo?.staticAttrs) {
     decl.attrsInfo.staticAttrs = renameStaticAttrKeys(decl.attrsInfo.staticAttrs, renames);
   }
@@ -3567,10 +3582,12 @@ function mergeInheritedAttrsInfo(
       ...(baseAttrsInfo.invertedBoolAttrs ?? []),
       ...(ownAttrsInfo?.invertedBoolAttrs ?? []),
     ],
+    dynamicAttrs: [...(baseAttrsInfo.dynamicAttrs ?? []), ...(ownAttrsInfo?.dynamicAttrs ?? [])],
     attrsStaticStyles: {
       ...baseAttrsInfo.attrsStaticStyles,
       ...ownAttrsInfo?.attrsStaticStyles,
     },
+    attrsStaticStyleExpr: ownAttrsInfo?.attrsStaticStyleExpr ?? baseAttrsInfo.attrsStaticStyleExpr,
     attrsDynamicStyles: [
       ...(baseAttrsInfo.attrsDynamicStyles ?? []),
       ...(ownAttrsInfo?.attrsDynamicStyles ?? []),

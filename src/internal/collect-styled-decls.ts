@@ -88,10 +88,11 @@ function collectStyledDeclsImpl(args: {
     // Use Omit + Required to make all fields non-optional, then add optional fields back
     const out: Omit<
       Required<NonNullable<StyledDecl["attrsInfo"]>>,
-      "attrsAsTag" | "attrsStaticStyles" | "attrsDynamicStyles"
+      "attrsAsTag" | "attrsStaticStyles" | "attrsStaticStyleExpr" | "attrsDynamicStyles"
     > & {
       attrsAsTag?: string;
       attrsStaticStyles?: Record<string, unknown>;
+      attrsStaticStyleExpr?: NonNullable<StyledDecl["attrsInfo"]>["attrsStaticStyleExpr"];
       attrsDynamicStyles?: Array<{
         cssProp: string;
         jsxProp: string;
@@ -103,11 +104,12 @@ function collectStyledDeclsImpl(args: {
       sourceKind: "unknown",
       hasUnsupportedValues: false,
       defaultAttrs: [],
+      dynamicAttrs: [],
       conditionalAttrs: [],
       invertedBoolAttrs: [],
     };
 
-    const fillFromObject = (obj: any, attrsParamPropNames: ReadonlySet<string> = new Set()) => {
+    const fillFromObject = (obj: any, attrsParamInfo: AttrsParamInfo = emptyAttrsParamInfo()) => {
       for (const prop of obj.properties ?? []) {
         if (!prop || (prop.type !== "ObjectProperty" && prop.type !== "Property")) {
           continue;
@@ -138,7 +140,31 @@ function collectStyledDeclsImpl(args: {
           continue;
         }
 
-        if (isStaticAttrExpression(v, attrsParamPropNames)) {
+        if (key === "as") {
+          const asTag = staticAttrExpressionToReference(v, attrsParamInfo);
+          if (asTag) {
+            out.attrsAsTag = asTag;
+            continue;
+          }
+        }
+
+        if (key === "style" && isStaticAttrExpression(v, attrsParamInfo)) {
+          out.attrsStaticStyleExpr = cloneAstNode(v) as NonNullable<
+            StyledDecl["attrsInfo"]
+          >["attrsStaticStyleExpr"];
+          continue;
+        }
+
+        const dynamicAttrProp = extractPropName(v, attrsParamInfo);
+        if (dynamicAttrProp) {
+          out.dynamicAttrs.push({
+            jsxProp: dynamicAttrProp,
+            attrName: key,
+          });
+          continue;
+        }
+
+        if (isStaticAttrExpression(v, attrsParamInfo)) {
           out.staticAttrs[key] = cloneAstNode(v);
           continue;
         }
@@ -157,17 +183,15 @@ function collectStyledDeclsImpl(args: {
         ) {
           const left = v.left as any;
           const right = v.right as any;
+          const leftPropName = extractPropName(left, attrsParamInfo);
           if (
-            left?.type === "MemberExpression" &&
-            left.object?.type === "Identifier" &&
-            (left.object.name === "props" || left.object.name === "p") &&
-            left.property?.type === "Identifier" &&
+            leftPropName &&
             (right?.type === "StringLiteral" ||
               right?.type === "NumericLiteral" ||
               right?.type === "BooleanLiteral")
           ) {
             out.defaultAttrs.push({
-              jsxProp: left.property.name,
+              jsxProp: leftPropName,
               attrName: key,
               value: right.value,
             });
@@ -221,7 +245,7 @@ function collectStyledDeclsImpl(args: {
         if (
           key === "style" &&
           v.type === "ObjectExpression" &&
-          tryExtractStyleObject(v, out, attrsParamPropNames, resolveModuleScopeStaticValue)
+          tryExtractStyleObject(v, out, attrsParamInfo.propNames, resolveModuleScopeStaticValue)
         ) {
           continue;
         }
@@ -238,16 +262,16 @@ function collectStyledDeclsImpl(args: {
 
     if (arg0.type === "ArrowFunctionExpression") {
       out.sourceKind = "function";
-      const attrsParamPropNames = getAttrsParamPropNames(arg0.params);
+      const attrsParamInfo = getAttrsParamInfo(arg0.params);
       const body = arg0.body as any;
       if (body?.type === "ObjectExpression") {
-        fillFromObject(body, attrsParamPropNames);
+        fillFromObject(body, attrsParamInfo);
         return out;
       }
       if (body?.type === "BlockStatement") {
         const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;
         if (ret?.argument?.type === "ObjectExpression") {
-          fillFromObject(ret.argument, attrsParamPropNames);
+          fillFromObject(ret.argument, attrsParamInfo);
           return out;
         }
       }
@@ -1549,7 +1573,11 @@ function extractDynamicStyleValue(
   value: any,
   attrsParamPropNames: ReadonlySet<string>,
 ): { jsxProp: string; callArgExpr: unknown; condition?: "always" } | null {
-  const propName = extractPropName(value, attrsParamPropNames);
+  const attrsParamInfo = {
+    propNames: attrsParamPropNames,
+    rootNames: new Set(["props", "p"]),
+  };
+  const propName = extractPropName(value, attrsParamInfo);
   if (propName) {
     return { jsxProp: propName, callArgExpr: identifierNode(propName) };
   }
@@ -1558,7 +1586,7 @@ function extractDynamicStyleValue(
     (value?.type === "LogicalExpression" && value.operator === "??") ||
     value?.type === "TSNullishCoalescingExpression"
   ) {
-    const leftPropName = extractPropName(value.left, attrsParamPropNames);
+    const leftPropName = extractPropName(value.left, attrsParamInfo);
     if (leftPropName) {
       return {
         jsxProp: leftPropName,
@@ -1588,18 +1616,30 @@ function hasLeadingFalse(comment: unknown): boolean {
   return (comment as { leading?: unknown }).leading === false;
 }
 
-function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): string | null {
+type AttrsParamInfo = {
+  propNames: ReadonlySet<string>;
+  rootNames: ReadonlySet<string>;
+};
+
+function emptyAttrsParamInfo(): AttrsParamInfo {
+  return {
+    propNames: new Set(),
+    rootNames: new Set(["props", "p"]),
+  };
+}
+
+function extractPropName(value: any, attrsParamInfo: AttrsParamInfo): string | null {
   if (
     value?.type === "Identifier" &&
     typeof value.name === "string" &&
-    attrsParamPropNames.has(value.name)
+    attrsParamInfo.propNames.has(value.name)
   ) {
     return value.name;
   }
   if (
     value?.type === "MemberExpression" &&
     value.object?.type === "Identifier" &&
-    (value.object.name === "props" || value.object.name === "p") &&
+    attrsParamInfo.rootNames.has(value.object.name) &&
     value.property?.type === "Identifier" &&
     typeof value.property.name === "string"
   ) {
@@ -1608,11 +1648,16 @@ function extractPropName(value: any, attrsParamPropNames: ReadonlySet<string>): 
   return null;
 }
 
-function getAttrsParamPropNames(params: any[] | undefined): ReadonlySet<string> {
+function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   const names = new Set<string>();
+  const rootNames = new Set<string>(["props", "p"]);
   const firstParam = params?.[0];
+  if (firstParam?.type === "Identifier" && typeof firstParam.name === "string") {
+    rootNames.add(firstParam.name);
+    return { propNames: names, rootNames };
+  }
   if (firstParam?.type !== "ObjectPattern") {
-    return names;
+    return { propNames: names, rootNames };
   }
 
   for (const prop of firstParam.properties ?? []) {
@@ -1633,7 +1678,7 @@ function getAttrsParamPropNames(params: any[] | undefined): ReadonlySet<string> 
     }
   }
 
-  return names;
+  return { propNames: names, rootNames };
 }
 
 function literalStaticValueFromNode(node: any): string | number | undefined {
@@ -1652,15 +1697,19 @@ function literalStaticValueFromNode(node: any): string | number | undefined {
   return undefined;
 }
 
-function isStaticAttrExpression(node: any, attrsParamPropNames: ReadonlySet<string>): boolean {
+function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {
   if (!node || typeof node !== "object") {
     return false;
   }
   if (node.type === "TSAsExpression" || node.type === "TSSatisfiesExpression") {
-    return isStaticAttrExpression(node.expression, attrsParamPropNames);
+    return isStaticAttrExpression(node.expression, attrsParamInfo);
   }
   const rootName = getStaticAttrExpressionRootName(node);
-  return rootName != null && !attrsParamPropNames.has(rootName);
+  return (
+    rootName != null &&
+    !attrsParamInfo.propNames.has(rootName) &&
+    !attrsParamInfo.rootNames.has(rootName)
+  );
 }
 
 function getStaticAttrExpressionRootName(node: any): string | null {
@@ -1674,6 +1723,25 @@ function getStaticAttrExpressionRootName(node: any): string | null {
     return null;
   }
   return getStaticAttrExpressionRootName(node.object);
+}
+
+function staticAttrExpressionToReference(node: any, attrsParamInfo: AttrsParamInfo): string | null {
+  if (!isStaticAttrExpression(node, attrsParamInfo)) {
+    return null;
+  }
+  if (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+    return staticAttrExpressionToReference(node.expression, attrsParamInfo);
+  }
+  if (node?.type === "Identifier" && node.name !== "undefined") {
+    return node.name;
+  }
+  if (node?.type === "MemberExpression" && !node.computed) {
+    const objectRef = staticAttrExpressionToReference(node.object, attrsParamInfo);
+    if (objectRef && node.property?.type === "Identifier") {
+      return `${objectRef}.${node.property.name}`;
+    }
+  }
+  return null;
 }
 
 function identifierNode(name: string): unknown {
