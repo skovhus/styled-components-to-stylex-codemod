@@ -32,13 +32,6 @@ export type CallExpressionNode = {
   loc?: { start: { line: number; column: number }; end: { line: number; column: number } };
 };
 
-export type MemberExpressionNode = {
-  type: "MemberExpression" | "OptionalMemberExpression";
-  object?: unknown;
-  property?: unknown;
-  computed?: boolean;
-};
-
 export type AstPath = {
   node: ASTNode;
   parentPath?: AstPath | null;
@@ -57,6 +50,13 @@ type RootIdentifierInfo = {
   rootName: string;
   rootNode: IdentifierNode;
   path: string[];
+};
+
+type MemberExpressionNode = {
+  type: "MemberExpression" | "OptionalMemberExpression";
+  object?: unknown;
+  property?: unknown;
+  computed?: boolean;
 };
 
 /**
