@@ -32,6 +32,13 @@ export type CallExpressionNode = {
   loc?: { start: { line: number; column: number }; end: { line: number; column: number } };
 };
 
+export type MemberExpressionNode = {
+  type: "MemberExpression" | "OptionalMemberExpression";
+  object?: unknown;
+  property?: unknown;
+  computed?: boolean;
+};
+
 export type AstPath = {
   node: ASTNode;
   parentPath?: AstPath | null;
@@ -66,7 +73,6 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
   if (!node || typeof node !== "object") {
     return null;
   }
-  const typed = node as { type?: string };
 
   // Simple identifier case
   if (isIdentifierNode(node)) {
@@ -74,7 +80,7 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
   }
 
   // Not a member expression
-  if (typed.type !== "MemberExpression" && typed.type !== "OptionalMemberExpression") {
+  if (!isMemberExpressionNode(node)) {
     return null;
   }
 
@@ -83,25 +89,19 @@ export function extractRootAndPath(node: unknown): RootIdentifierInfo | null {
   let cur: unknown = node;
 
   while (cur && typeof cur === "object") {
-    const curTyped = cur as {
-      type?: string;
-      computed?: boolean;
-      property?: unknown;
-      object?: unknown;
-    };
-    if (curTyped.type !== "MemberExpression" && curTyped.type !== "OptionalMemberExpression") {
+    if (!isMemberExpressionNode(cur)) {
       break;
     }
     // Computed properties (bracket notation with non-literal) are not supported
-    if (curTyped.computed) {
+    if (cur.computed) {
       return null;
     }
-    const prop = curTyped.property;
+    const prop = cur.property;
     if (!isIdentifierNode(prop)) {
       return null;
     }
     parts.unshift(prop.name);
-    cur = curTyped.object;
+    cur = cur.object;
   }
 
   // Verify root is an identifier
@@ -213,6 +213,39 @@ export function isCallExpressionNode(node: unknown): node is CallExpressionNode 
   return (
     !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
   );
+}
+
+/** Type guard for `MemberExpression` and `OptionalMemberExpression` nodes. */
+export function isMemberExpressionNode(node: unknown): node is MemberExpressionNode {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const type = (node as { type?: string }).type;
+  return type === "MemberExpression" || type === "OptionalMemberExpression";
+}
+
+/**
+ * Reads `object.property` when both sides are identifiers and the property is
+ * non-computed. Returns null for computed paths the caller cannot safely treat
+ * as a static member reference.
+ */
+export function getIdentifierMemberPropertyName(node: unknown, objectName: string): string | null {
+  if (!isMemberExpressionNode(node) || node.computed) {
+    return null;
+  }
+  if (!isIdentifierNode(node.object) || node.object.name !== objectName) {
+    return null;
+  }
+  return isIdentifierNode(node.property) ? node.property.name : null;
+}
+
+/** Matches a static `objectName.propertyName` member reference. */
+export function isIdentifierMemberExpression(
+  node: unknown,
+  objectName: string,
+  propertyName: string,
+): boolean {
+  return getIdentifierMemberPropertyName(node, objectName) === propertyName;
 }
 
 /**
@@ -964,7 +997,7 @@ export function unwrapLogicalFallback(expr: unknown): unknown {
   if (
     isLogicalExpressionNode(expr) &&
     (expr.operator === "??" || expr.operator === "||") &&
-    isMemberOrOptionalMemberExpression(expr.left)
+    isMemberExpressionNode(expr.left)
   ) {
     return expr.left;
   }
@@ -1058,16 +1091,6 @@ function isJsxIdentifierNode(node: unknown): node is { type: "JSXIdentifier"; na
   }
   const typed = node as { type?: unknown; name?: unknown };
   return typed.type === "JSXIdentifier" && typeof typed.name === "string";
-}
-
-function isMemberOrOptionalMemberExpression(
-  node: unknown,
-): node is { type: "MemberExpression" | "OptionalMemberExpression" } {
-  if (!node || typeof node !== "object") {
-    return false;
-  }
-  const t = (node as { type?: string }).type;
-  return t === "MemberExpression" || t === "OptionalMemberExpression";
 }
 
 /** Allow `void 0`, `void null`, `void ""`, `void 1`, `void false` as empty. */

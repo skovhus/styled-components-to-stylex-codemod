@@ -7,7 +7,11 @@ import type { RelationOverride } from "./lower-rules/state.js";
 import { cleanupEmptyStyleReferences } from "./post-process-empty-style-references.js";
 import { cleanupPostProcessImports } from "./post-process-imports.js";
 import { toStyleKey } from "./transform/helpers.js";
-import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
+import {
+  getIdentifierMemberPropertyName,
+  getJsxElementName,
+  isIdentifierMemberExpression,
+} from "./utilities/jscodeshift-utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
@@ -94,12 +98,7 @@ export function postProcessTransformedAst(args: {
     }
 
     const isStylexPropsCall = (n: any): n is any =>
-      n?.type === "CallExpression" &&
-      n.callee?.type === "MemberExpression" &&
-      n.callee.object?.type === "Identifier" &&
-      n.callee.object.name === "stylex" &&
-      n.callee.property?.type === "Identifier" &&
-      n.callee.property.name === "props";
+      n?.type === "CallExpression" && isIdentifierMemberExpression(n.callee, "stylex", "props");
 
     const getStylexPropsCallFromAttrs = (attrs: any[]): any => {
       for (const a of attrs ?? []) {
@@ -141,13 +140,7 @@ export function postProcessTransformedAst(args: {
 
     const isStyleKeyRef = (node: any, key: string): boolean => {
       // Match styles.key (identifier reference)
-      if (
-        node?.type === "MemberExpression" &&
-        node.object?.type === "Identifier" &&
-        node.object.name === stylesIdentifier &&
-        node.property?.type === "Identifier" &&
-        node.property.name === key
-      ) {
+      if (isIdentifierMemberExpression(node, stylesIdentifier, key)) {
         return true;
       }
       // Match styles.key(...) (function call, e.g. styleFn invocation)
@@ -190,11 +183,7 @@ export function postProcessTransformedAst(args: {
 
     const isDefaultMarkerCall = (a: any): boolean =>
       a?.type === "CallExpression" &&
-      a.callee?.type === "MemberExpression" &&
-      a.callee.object?.type === "Identifier" &&
-      a.callee.object.name === "stylex" &&
-      a.callee.property?.type === "Identifier" &&
-      a.callee.property.name === "defaultMarker";
+      isIdentifierMemberExpression(a.callee, "stylex", "defaultMarker");
 
     const hasIdentifierArg = (call: any, name: string): boolean =>
       (call.arguments ?? []).some((a: any) => isIdentifierNamed(a, name));
@@ -549,14 +538,7 @@ export function postProcessTransformedAst(args: {
     for (const { call, key } of pendingEmptyKeyRemovals) {
       const originalLength = (call.arguments ?? []).length;
       call.arguments = (call.arguments ?? []).filter(
-        (a: any) =>
-          !(
-            a?.type === "MemberExpression" &&
-            a.object?.type === "Identifier" &&
-            a.object.name === stylesIdentifier &&
-            a.property?.type === "Identifier" &&
-            a.property.name === key
-          ),
+        (a: any) => !isIdentifierMemberExpression(a, stylesIdentifier, key),
       );
       if ((call.arguments ?? []).length !== originalLength) {
         changed = true;
@@ -588,13 +570,9 @@ export function postProcessTransformedAst(args: {
 function getUsedStyleKeys(call: any, sxAttr: any, stylesIdentifier: string): string[] {
   const keys: string[] = [];
   const extractKey = (node: any): void => {
-    if (
-      node?.type === "MemberExpression" &&
-      node.object?.type === "Identifier" &&
-      node.object.name === stylesIdentifier &&
-      node.property?.type === "Identifier"
-    ) {
-      keys.push(node.property.name);
+    const propertyName = getIdentifierMemberPropertyName(node, stylesIdentifier);
+    if (propertyName) {
+      keys.push(propertyName);
     }
     // Also match styleFn calls: styles.key(...)
     if (node?.type === "CallExpression") {

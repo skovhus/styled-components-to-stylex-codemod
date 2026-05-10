@@ -3,6 +3,10 @@
  * Core concepts: stylex.props cleanup, merger call cleanup, and sx attribute cleanup.
  */
 import type { Collection } from "jscodeshift";
+import {
+  getIdentifierMemberPropertyName,
+  isIdentifierMemberExpression,
+} from "./utilities/jscodeshift-utils.js";
 
 export function cleanupEmptyStyleReferences(args: {
   root: Collection<any>;
@@ -16,24 +20,16 @@ export function cleanupEmptyStyleReferences(args: {
   }
 
   let changed = false;
-  const isEmptyStyleRef = (a: any): boolean =>
-    a?.type === "MemberExpression" &&
-    a.object?.type === "Identifier" &&
-    a.object.name === stylesIdentifier &&
-    a.property?.type === "Identifier" &&
-    emptyStyleKeys.has(a.property.name);
+  const isEmptyStyleRef = (a: any): boolean => {
+    const propertyName = getIdentifierMemberPropertyName(a, stylesIdentifier);
+    return propertyName !== null && emptyStyleKeys.has(propertyName);
+  };
 
   // Clean stylex.props() and merger calls.
   root.find(j.CallExpression).forEach((p: any) => {
     const call = p.node;
 
-    if (
-      call?.callee?.type === "MemberExpression" &&
-      call.callee.object?.type === "Identifier" &&
-      call.callee.object.name === "stylex" &&
-      call.callee.property?.type === "Identifier" &&
-      call.callee.property.name === "props"
-    ) {
+    if (isIdentifierMemberExpression(call?.callee, "stylex", "props")) {
       const originalLength = (call.arguments ?? []).length;
       call.arguments = (call.arguments ?? []).filter((a: any) => !isEmptyStyleRef(a));
       if (call.arguments.length !== originalLength) {

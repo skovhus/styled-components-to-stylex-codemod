@@ -2,7 +2,11 @@
  * Shared lower-rules helpers for merging and formatting style objects.
  * Core concepts: deep merge semantics, AST node detection, and media query resolution.
  */
-import { extractRootAndPath, isAstNode } from "../utilities/jscodeshift-utils.js";
+import {
+  extractRootAndPath,
+  isAstNode,
+  isMemberExpressionNode,
+} from "../utilities/jscodeshift-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import type { Adapter, CallResolveContext, ImportSource, ImportSpec } from "../../adapter.js";
 import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
@@ -85,7 +89,7 @@ export function registerImports(
 
 /** Returns true if the AST node is a `MemberExpression` or `OptionalMemberExpression`. */
 export function isMemberExpression(node: { type?: string } | null | undefined): boolean {
-  return node?.type === "MemberExpression" || node?.type === "OptionalMemberExpression";
+  return isMemberExpressionNode(node);
 }
 
 /** Returns true for at-rules the codemod can transform (`@media`, `@container`). */
