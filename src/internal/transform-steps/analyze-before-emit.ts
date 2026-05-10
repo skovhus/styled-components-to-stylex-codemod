@@ -1755,7 +1755,7 @@ function hasCustomComponentInlineTextUsage(
       if (!isCustomComponentJsxElement(parent)) {
         return;
       }
-      const children = parent.children ?? [];
+      const children = parent?.children ?? [];
       const index = children.indexOf(path.node);
       if (index === -1) {
         return;
