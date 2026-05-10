@@ -226,11 +226,11 @@ export function isMemberExpressionNode(node: unknown): node is MemberExpressionN
 
 /**
  * Reads `object.property` when both sides are identifiers and the property is
- * non-computed. Returns null for computed paths the caller cannot safely treat
- * as a static member reference.
+ * non-optional and non-computed. Returns null for optional/computed paths the
+ * caller cannot safely treat as a static member reference.
  */
 export function getIdentifierMemberPropertyName(node: unknown, objectName: string): string | null {
-  if (!isMemberExpressionNode(node) || node.computed) {
+  if (!isMemberExpressionNode(node) || node.type !== "MemberExpression" || node.computed) {
     return null;
   }
   if (!isIdentifierNode(node.object) || node.object.name !== objectName) {

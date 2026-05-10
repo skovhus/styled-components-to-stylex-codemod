@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import jscodeshift from "jscodeshift";
-import { buildEnumValueMap, resolveStaticExpressionValue } from "./jscodeshift-utils.js";
+import {
+  buildEnumValueMap,
+  getIdentifierMemberPropertyName,
+  isIdentifierMemberExpression,
+  resolveStaticExpressionValue,
+} from "./jscodeshift-utils.js";
 
 const j = jscodeshift.withParser("tsx");
 
@@ -136,5 +141,21 @@ describe("resolveStaticExpressionValue", () => {
   it("returns null for null/undefined input", () => {
     expect(resolveStaticExpressionValue(null, undefined)).toBeNull();
     expect(resolveStaticExpressionValue(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("identifier member expression helpers", () => {
+  it("matches non-optional identifier member references", () => {
+    const expr = parseExpr("styles.emptyKey");
+
+    expect(getIdentifierMemberPropertyName(expr, "styles")).toBe("emptyKey");
+    expect(isIdentifierMemberExpression(expr, "styles", "emptyKey")).toBe(true);
+  });
+
+  it("does not treat optional member references as static member references", () => {
+    const expr = parseExpr("styles?.emptyKey");
+
+    expect(getIdentifierMemberPropertyName(expr, "styles")).toBeNull();
+    expect(isIdentifierMemberExpression(expr, "styles", "emptyKey")).toBe(false);
   });
 });
