@@ -693,6 +693,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+      staticStyleExpr: attrsInfoForJsx?.attrsStaticStyleExpr,
       staticClassNameExpr,
       isIntrinsicElement: !allowAsProp,
     });

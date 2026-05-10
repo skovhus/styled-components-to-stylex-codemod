@@ -3563,9 +3563,12 @@ function mergeInheritedAttrsInfo(
   baseAttrsInfo: NonNullable<StyledDecl["attrsInfo"]>,
   ownAttrsInfo: StyledDecl["attrsInfo"],
 ): NonNullable<StyledDecl["attrsInfo"]> {
+  const ownAttrNames = collectAttrsInfoAttrNames(ownAttrsInfo);
   return {
     staticAttrs: {
-      ...baseAttrsInfo.staticAttrs,
+      ...Object.fromEntries(
+        Object.entries(baseAttrsInfo.staticAttrs ?? {}).filter(([key]) => !ownAttrNames.has(key)),
+      ),
       ...ownAttrsInfo?.staticAttrs,
     },
     sourceKind: ownAttrsInfo?.sourceKind ?? baseAttrsInfo.sourceKind,
@@ -3574,19 +3577,19 @@ function mergeInheritedAttrsInfo(
       (ownAttrsInfo?.hasUnsupportedValues ?? false),
     attrsAsTag: ownAttrsInfo?.attrsAsTag ?? baseAttrsInfo.attrsAsTag,
     defaultAttrs: mergeAttrEntriesByAttrName(
-      baseAttrsInfo.defaultAttrs,
+      filterAttrEntriesByAttrName(baseAttrsInfo.defaultAttrs, ownAttrNames),
       ownAttrsInfo?.defaultAttrs,
     ),
     conditionalAttrs: [
-      ...(baseAttrsInfo.conditionalAttrs ?? []),
+      ...filterAttrEntriesByAttrName(baseAttrsInfo.conditionalAttrs, ownAttrNames),
       ...(ownAttrsInfo?.conditionalAttrs ?? []),
     ],
     invertedBoolAttrs: [
-      ...(baseAttrsInfo.invertedBoolAttrs ?? []),
+      ...filterAttrEntriesByAttrName(baseAttrsInfo.invertedBoolAttrs, ownAttrNames),
       ...(ownAttrsInfo?.invertedBoolAttrs ?? []),
     ],
     dynamicAttrs: mergeAttrEntriesByAttrName(
-      baseAttrsInfo.dynamicAttrs,
+      filterAttrEntriesByAttrName(baseAttrsInfo.dynamicAttrs, ownAttrNames),
       ownAttrsInfo?.dynamicAttrs,
     ),
     attrsStaticStyles: {
@@ -3599,6 +3602,33 @@ function mergeInheritedAttrsInfo(
       ...(ownAttrsInfo?.attrsDynamicStyles ?? []),
     ],
   };
+}
+
+function collectAttrsInfoAttrNames(attrsInfo: StyledDecl["attrsInfo"]): Set<string> {
+  const names = new Set<string>();
+  for (const key of Object.keys(attrsInfo?.staticAttrs ?? {})) {
+    names.add(key);
+  }
+  for (const entry of attrsInfo?.defaultAttrs ?? []) {
+    names.add(entry.attrName);
+  }
+  for (const entry of attrsInfo?.dynamicAttrs ?? []) {
+    names.add(entry.attrName);
+  }
+  for (const entry of attrsInfo?.conditionalAttrs ?? []) {
+    names.add(entry.attrName);
+  }
+  for (const entry of attrsInfo?.invertedBoolAttrs ?? []) {
+    names.add(entry.attrName);
+  }
+  return names;
+}
+
+function filterAttrEntriesByAttrName<T extends { attrName: string }>(
+  entries: T[] | undefined,
+  names: ReadonlySet<string>,
+): T[] {
+  return (entries ?? []).filter((entry) => !names.has(entry.attrName));
 }
 
 function mergeAttrEntriesByAttrName<T extends { attrName: string }>(

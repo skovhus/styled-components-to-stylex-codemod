@@ -411,14 +411,23 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                 a.name.type === "JSXIdentifier" &&
                 a.name.name === dyn.jsxProp,
             );
-            if (idx !== -1 && !hasAttr(dyn.attrName)) {
+            if (idx !== -1) {
               const propAttr = keptAttrs[idx] as (typeof keptAttrs)[number];
               const valueExpr = extractJsxAttrValueExpr(j, propAttr);
               if (valueExpr) {
+                removeJsxAttrsByName(keptAttrs, dyn.attrName);
                 keptAttrs.unshift(
                   j.jsxAttribute(
                     j.jsxIdentifier(dyn.attrName),
-                    j.jsxExpressionContainer(valueExpr),
+                    j.jsxExpressionContainer(
+                      dyn.defaultValue === undefined
+                        ? valueExpr
+                        : j.conditionalExpression(
+                            j.binaryExpression("===", valueExpr, j.identifier("undefined")),
+                            literalExprForDynamicAttrDefault(j, dyn.defaultValue),
+                            valueExpr,
+                          ),
+                    ),
                   ),
                 );
               }
@@ -1128,6 +1137,32 @@ function mergeClassNameAttrs(
   const parts = [firstExpr, secondExpr].filter((expr): expr is ExpressionKind => !!expr);
   const expr = parts.length === 1 ? parts[0]! : buildClassNameJoinExpr(j, parts);
   return j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(expr));
+}
+
+function removeJsxAttrsByName(attrs: Array<unknown>, name: string): void {
+  for (let i = attrs.length - 1; i >= 0; i--) {
+    const attr = attrs[i] as { type?: string; name?: { type?: string; name?: string } } | undefined;
+    if (
+      attr?.type === "JSXAttribute" &&
+      attr.name?.type === "JSXIdentifier" &&
+      attr.name.name === name
+    ) {
+      attrs.splice(i, 1);
+    }
+  }
+}
+
+function literalExprForDynamicAttrDefault(
+  j: TransformContext["j"]["jscodeshift"],
+  value: unknown,
+): ExpressionKind {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return j.literal(value) as ExpressionKind;
+  }
+  if (value === null) {
+    return j.literal(null) as ExpressionKind;
+  }
+  return j.identifier("undefined");
 }
 
 function buildInlineVerboseMergeFallback(

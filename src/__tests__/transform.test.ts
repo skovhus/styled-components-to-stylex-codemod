@@ -6437,7 +6437,27 @@ export const App = () => <StyledIcon />;
     const result = runTransformWithDiagnostics(source);
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("size={size ?? 14}");
+    expect(result.code).toContain("size === undefined ? 14 : size");
+    expect(result.code).not.toContain("size ?? 14");
+  });
+
+  it("preserves boolean destructured callback defaults in dynamic attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.button.attrs(({ disabled = true }) => ({
+  disabled,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("disabled === undefined ? true : disabled");
   });
 
   it("does not treat callback-local attrs variables as static attrs", () => {
@@ -6457,6 +6477,45 @@ export const App = () => <Box id="box" />;
     const result = runTransformWithDiagnostics(source);
 
     expect(result.code).toBeNull();
+  });
+
+  it("treats callback function declarations as local attrs bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.button.attrs(() => {
+  function handleClick() {}
+  return { onClick: handleClick };
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("tracks rest bindings in attrs callback parameters", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ ...p }) => ({
+  id: p.id,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box id="box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('id="box"');
+    expect(result.code).not.toContain("p.id");
   });
 
   it("keeps module-scope props objects as static attrs in object-form attrs", () => {
@@ -6502,6 +6561,26 @@ export const App = () => <Box>Box</Box>;
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("mergedSx(styles.box, undefined, attrsStyle)");
     expect(result.code).not.toContain("mergedSx(styles.box, undefined, undefined, attrsStyle)");
+  });
+
+  it("emits intrinsic dynamic attrs after rest spreads so attrs override target props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+  "data-size": props.size,
+}))\`
+  overflow: auto;
+\`;
+
+export const App = () => <Box size={1} data-size={2} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
   });
 
   it("lets child dynamic attrs override inherited dynamic attrs", () => {

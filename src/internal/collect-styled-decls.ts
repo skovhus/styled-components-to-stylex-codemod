@@ -158,18 +158,11 @@ function collectStyledDeclsImpl(args: {
         const dynamicAttrProp = extractPropName(v, attrsParamInfo);
         if (dynamicAttrProp) {
           const dynamicAttrDefault = extractPropDefault(v, attrsParamInfo);
-          if (dynamicAttrDefault !== undefined) {
-            out.defaultAttrs.push({
-              jsxProp: dynamicAttrProp,
-              attrName: key,
-              value: dynamicAttrDefault,
-            });
-          } else {
-            out.dynamicAttrs.push({
-              jsxProp: dynamicAttrProp,
-              attrName: key,
-            });
-          }
+          out.dynamicAttrs.push({
+            jsxProp: dynamicAttrProp,
+            attrName: key,
+            ...(dynamicAttrDefault !== undefined ? { defaultValue: dynamicAttrDefault } : {}),
+          });
           continue;
         }
 
@@ -357,7 +350,8 @@ function collectStyledDeclsImpl(args: {
     if (decls.length !== 1) {
       return undefined;
     }
-    return literalStaticValueFromNode((decls.get().node as any).init);
+    const value = literalStaticValueFromNode((decls.get().node as any).init);
+    return typeof value === "string" || typeof value === "number" ? value : undefined;
   };
 
   const parseShouldForwardProp = (arg0: any): ShouldForwardPropResult | undefined => {
@@ -1690,7 +1684,13 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   }
 
   for (const prop of firstParam.properties ?? []) {
-    if (!prop || prop.type === "RestElement") {
+    if (!prop) {
+      continue;
+    }
+    if (prop.type === "RestElement") {
+      if (prop.argument?.type === "Identifier" && typeof prop.argument.name === "string") {
+        rootNames.add(prop.argument.name);
+      }
       continue;
     }
     const propName =
@@ -1725,13 +1725,18 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
 }
 
-function literalStaticValueFromNode(node: any): string | number | undefined {
+function literalStaticValueFromNode(node: any): string | number | boolean | undefined {
   if (node?.type === "StringLiteral" || node?.type === "NumericLiteral") {
+    return node.value;
+  }
+  if (node?.type === "BooleanLiteral") {
     return node.value;
   }
   if (
     node?.type === "Literal" &&
-    (typeof node.value === "string" || typeof node.value === "number")
+    (typeof node.value === "string" ||
+      typeof node.value === "number" ||
+      typeof node.value === "boolean")
   ) {
     return node.value;
   }
@@ -1792,6 +1797,12 @@ function staticAttrExpressionToReference(node: any, attrsParamInfo: AttrsParamIn
 function collectBlockLocalNames(block: any): ReadonlySet<string> {
   const names = new Set<string>();
   for (const stmt of block.body ?? []) {
+    if (stmt?.type === "FunctionDeclaration" || stmt?.type === "ClassDeclaration") {
+      if (stmt.id?.type === "Identifier") {
+        names.add(stmt.id.name);
+      }
+      continue;
+    }
     if (stmt?.type !== "VariableDeclaration") {
       continue;
     }

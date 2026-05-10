@@ -237,6 +237,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         allowStyleProp,
         allowSxProp,
         inlineStyleProps: [],
+        staticStyleExpr: attrsInfoWithoutForwardedAsStatic?.attrsStaticStyleExpr,
         staticClassNameExpr,
         isIntrinsicElement: false,
       });

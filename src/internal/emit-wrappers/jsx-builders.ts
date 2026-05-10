@@ -144,17 +144,33 @@ export function buildInvertedBoolAttrs(
 export function buildDynamicAttrsFromProps(
   j: JSCodeshift,
   args: {
-    dynamicAttrs: Array<{ jsxProp: string; attrName: string }>;
+    dynamicAttrs: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
     propExprFor: (jsxProp: string) => ExpressionKind;
   },
 ): JsxAttr[] {
   const { dynamicAttrs, propExprFor } = args;
-  return dynamicAttrs.map((attr) =>
-    j.jsxAttribute(
-      j.jsxIdentifier(attr.attrName),
-      j.jsxExpressionContainer(propExprFor(attr.jsxProp)),
-    ),
-  );
+  return dynamicAttrs.map((attr) => {
+    const propExpr = propExprFor(attr.jsxProp);
+    const valueExpr =
+      attr.defaultValue === undefined
+        ? propExpr
+        : j.conditionalExpression(
+            j.binaryExpression("===", propExpr, j.identifier("undefined")),
+            literalExprForAttrDefault(j, attr.defaultValue),
+            propExpr,
+          );
+    return j.jsxAttribute(j.jsxIdentifier(attr.attrName), j.jsxExpressionContainer(valueExpr));
+  });
+}
+
+function literalExprForAttrDefault(j: JSCodeshift, value: unknown): ExpressionKind {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return j.literal(value) as ExpressionKind;
+  }
+  if (value === null) {
+    return j.literal(null) as ExpressionKind;
+  }
+  return j.identifier("undefined");
 }
 
 export function buildStaticAttrsFromRecord(
@@ -252,14 +268,6 @@ export function buildAttrsFromAttrsInfo(
       propExprFor,
     }),
     ...buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}),
-    ...(attrsInfo.attrsStaticStyleExpr
-      ? [
-          j.jsxAttribute(
-            j.jsxIdentifier("style"),
-            j.jsxExpressionContainer(cloneAstNode(attrsInfo.attrsStaticStyleExpr)),
-          ),
-        ]
-      : []),
   ];
 }
 

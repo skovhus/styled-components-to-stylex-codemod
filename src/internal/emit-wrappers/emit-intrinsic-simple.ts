@@ -379,6 +379,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       allowSxProp,
       inlineStyleProps: [],
+      staticStyleExpr: attrsInfo?.attrsStaticStyleExpr,
       staticClassNameExpr,
       isIntrinsicElement: !allowAsProp,
     });
@@ -1146,6 +1147,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowStyleProp,
         allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticStyleExpr: attrsInfoWithoutForwardedAsStatic?.attrsStaticStyleExpr,
         staticClassNameExpr,
         isIntrinsicElement: !useAsProp,
       });

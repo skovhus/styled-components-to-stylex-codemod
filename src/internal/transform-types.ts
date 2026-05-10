@@ -557,6 +557,7 @@ export type StyledDecl = {
     dynamicAttrs?: Array<{
       jsxProp: string;
       attrName: string;
+      defaultValue?: unknown;
     }>;
     conditionalAttrs: Array<{
       jsxProp: string;

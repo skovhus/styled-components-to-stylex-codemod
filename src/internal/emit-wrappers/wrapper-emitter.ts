@@ -1699,7 +1699,7 @@ export class WrapperEmitter {
     includeRefProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
-    dynamicAttrs?: Array<{ jsxProp: string; attrName: string }>;
+    dynamicAttrs?: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
     conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
     staticAttrs?: Record<string, unknown>;
@@ -1969,13 +1969,6 @@ export class WrapperEmitter {
         ),
       );
     }
-    jsxAttrs.push(
-      ...jb.buildDynamicAttrsFromProps(j, {
-        dynamicAttrs,
-        propExprFor: (prop) => j.identifier(prop),
-      }),
-    );
-
     if (includeRefProp) {
       jsxAttrs.push(
         j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
@@ -1985,6 +1978,13 @@ export class WrapperEmitter {
     if (includeRest && restId) {
       jsxAttrs.push(j.jsxSpreadAttribute(restId));
     }
+
+    jsxAttrs.push(
+      ...jb.buildDynamicAttrsFromProps(j, {
+        dynamicAttrs,
+        propExprFor: (prop) => j.identifier(prop),
+      }),
+    );
 
     jsxAttrs.push(...jb.buildStaticAttrsFromRecord(j, filteredStaticAttrs));
     if (allowForwardedAsProp) {
@@ -2125,7 +2125,7 @@ export class WrapperEmitter {
   }
 
   buildDynamicAttrsFromProps(args: {
-    dynamicAttrs: Array<{ jsxProp: string; attrName: string }>;
+    dynamicAttrs: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
     propExprFor: (jsxProp: string) => ExpressionKind;
   }): JsxAttr[] {
     return jb.buildDynamicAttrsFromProps(this.j, args);
