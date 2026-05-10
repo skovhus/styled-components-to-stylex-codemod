@@ -3291,6 +3291,18 @@ export const Box = styled.div\`
 
   it.each([
     {
+      name: "member helper arithmetic expression",
+      source: `
+import styled from "styled-components";
+import { helpers } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - helpers.runtimeValue()}px;
+\`;
+`,
+      expectedMemberPath: ["runtimeValue"],
+    },
+    {
       name: "conditional expression",
       source: `
 import styled from "styled-components";
@@ -3345,49 +3357,55 @@ export const Box = styled.div<{ $size: number }>\`
 \`;
 `,
     },
-  ])("should call the adapter for helper calls nested in $name", ({ name, source }) => {
-    const resolveCalls: CallResolveContext[] = [];
+  ])(
+    "should call the adapter for helper calls nested in $name",
+    ({ name, source, expectedMemberPath }) => {
+      const resolveCalls: CallResolveContext[] = [];
 
-    const adapterWithoutRuntimeResolution = {
-      externalInterface() {
-        return { styles: false, as: false, ref: false };
-      },
-      resolveValue() {
-        return undefined;
-      },
-      resolveCall(ctx: CallResolveContext) {
-        resolveCalls.push(ctx);
-        return undefined;
-      },
-      resolveSelector() {
-        return undefined;
-      },
-      styleMerger: null,
-      useSxProp: false,
-    } satisfies Adapter;
+      const adapterWithoutRuntimeResolution = {
+        externalInterface() {
+          return { styles: false, as: false, ref: false };
+        },
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall(ctx: CallResolveContext) {
+          resolveCalls.push(ctx);
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        styleMerger: null,
+        useSxProp: false,
+      } satisfies Adapter;
 
-    const result = transformWithWarnings(
-      {
-        source,
-        path: join(testCasesDir, `helper-nested-${name.replaceAll(" ", "-")}.input.tsx`),
-      },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: adapterWithoutRuntimeResolution },
-    );
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, `helper-nested-${name.replaceAll(" ", "-")}.input.tsx`),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: adapterWithoutRuntimeResolution },
+      );
 
-    expect(resolveCalls.length).toBeGreaterThan(0);
-    expect(resolveCalls[0]).toMatchObject({
-      calleeImportedName: "runtimeValue",
-    });
-    expect(result.code).toBeNull();
-    expect(result.warnings.map((w) => w.type)).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(
-          /Adapter resolveCall returned undefined for helper call|Unsupported interpolation: call expression/,
-        ),
-      ]),
-    );
-  });
+      expect(resolveCalls.length).toBeGreaterThan(0);
+      expect(resolveCalls[0]).toMatchObject({
+        calleeImportedName: expectedMemberPath ? "helpers" : "runtimeValue",
+      });
+      if (expectedMemberPath) {
+        expect(resolveCalls[0]?.calleeMemberPath).toEqual(expectedMemberPath);
+      }
+      expect(result.code).toBeNull();
+      expect(result.warnings.map((w) => w.type)).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(
+            /Adapter resolveCall returned undefined for helper call|Unsupported interpolation: call expression/,
+          ),
+        ]),
+      );
+    },
+  );
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
     const source = `

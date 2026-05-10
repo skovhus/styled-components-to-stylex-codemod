@@ -781,7 +781,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         },
         {
           ...handlerContext,
-          resolveImport: (localName: string) => resolveImportForExpr(expr, localName),
+          resolveImport: (localName: string, identNode?: unknown) =>
+            resolveImportInScope(localName, identNode),
         },
       );
       if (res && res.type === "resolvedValue") {
@@ -927,7 +928,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
       if (expr?.type === "CallExpression") {
         const calleeInfo = extractRootAndPath(expr.callee);
-        const imp = calleeInfo ? resolveImportForExpr(expr, calleeInfo.rootName) : null;
+        const imp = calleeInfo
+          ? resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode)
+          : null;
         if (!imp) {
           return null;
         }
@@ -2197,6 +2200,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               cssProperty: out.prop,
               paramName,
               resolveImportForExpr,
+              resolveImportInScope,
               resolveCall,
               parseExpr,
               filePath,
@@ -3459,7 +3463,15 @@ function isStylexCalcExpression(node: unknown): boolean {
 function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclarationContext): boolean {
   const { ctx, d, pseudoElement, pseudos, media } = args;
   const { state, decl, styleFnDecls, styleFnFromProps } = ctx;
-  const { j, filePath, parseExpr, resolveCall, resolveImportForExpr, resolverImports } = state;
+  const {
+    j,
+    filePath,
+    parseExpr,
+    resolveCall,
+    resolveImportForExpr,
+    resolveImportInScope,
+    resolverImports,
+  } = state;
   const avoidNames = new Set(state.importMap.keys());
   const addResolverImports = (imports: Iterable<unknown> | undefined | null) => {
     if (!imports) {
@@ -3572,6 +3584,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
           bindings,
           allowedPropIdentifiers: propsUsed,
           resolveImportForExpr,
+          resolveImportInScope,
           resolveCall,
           parseExpr,
           filePath,
@@ -3763,6 +3776,7 @@ type DynamicHelperCallContext = {
   bindings?: ArrowFnParamBindings;
   allowedPropIdentifiers?: ReadonlySet<string>;
   resolveImportForExpr: (expr: unknown, localName: string) => ImportMeta | null;
+  resolveImportInScope: (localName: string, identNode?: unknown) => ImportMeta | null;
   resolveCall: InterpolatedDeclarationContext["ctx"]["state"]["resolveCall"];
   parseExpr: (expr: string) => unknown;
   filePath: string;
@@ -3921,7 +3935,7 @@ function isUnsupportedCurriedHelperCall(
   if (!calleeInfo) {
     return false;
   }
-  const imp = ctx.resolveImportForExpr(innerCall, calleeInfo.rootName);
+  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
   if (!imp) {
     return false;
   }
@@ -3953,7 +3967,7 @@ function tryResolveDynamicHelperCall(
     return false;
   }
 
-  const imp = ctx.resolveImportForExpr(innerCall, calleeInfo.rootName);
+  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
   if (!imp) {
     return false;
   }
@@ -4015,7 +4029,7 @@ function tryResolveDirectHelperCall(
     return false;
   }
 
-  const imp = ctx.resolveImportForExpr(callExpr, calleeInfo.rootName);
+  const imp = ctx.resolveImportInScope(calleeInfo.rootName, calleeInfo.rootNode);
   if (!imp) {
     return false;
   }
