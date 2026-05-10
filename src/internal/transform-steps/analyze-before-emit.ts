@@ -30,6 +30,11 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import {
+  findContainingJsxChildrenOwner,
+  isJsxTextChild,
+  type JsxChildrenOwner,
+} from "../utilities/jsx-children.js";
+import {
   camelToKebabCase,
   escapeRegex,
   isSingleBackgroundComponent,
@@ -630,6 +635,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       continue;
     }
     if (hasSpreadInJsxLocal(decl.localName)) {
+      decl.needsWrapperComponent = true;
+    }
+  }
+
+  // Inlining a styled element inside a custom component can require `{" "}`
+  // spacer expressions around literal text. Custom components can observe
+  // `props.children`, so keep a wrapper to preserve the authored child array.
+  for (const decl of styledDecls) {
+    if (decl.needsWrapperComponent || decl.isCssHelper) {
+      continue;
+    }
+    if (decl.isDirectJsxResolution || decl.base.kind !== "intrinsic") {
+      continue;
+    }
+    if (relationChildStyleKeys.has(decl.styleKey)) {
+      continue;
+    }
+    if (hasCustomComponentInlineTextUsage(root, j, decl.localName)) {
       decl.needsWrapperComponent = true;
     }
   }
@@ -1710,6 +1733,57 @@ interface CallSiteAttrResult {
    * `null` when no spread sites exist.
    */
   explicitTransientAtSpreadSites: Set<string> | null;
+}
+
+function hasCustomComponentInlineTextUsage(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  componentName: string,
+): boolean {
+  let found = false;
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: componentName },
+      },
+    } as object)
+    .forEach((path) => {
+      if (found) {
+        return;
+      }
+      const parent = findContainingJsxChildrenOwner(path);
+      if (!isCustomComponentJsxElement(parent)) {
+        return;
+      }
+      const children = parent.children ?? [];
+      const index = children.indexOf(path.node);
+      if (index === -1) {
+        return;
+      }
+      if (
+        hasTrailingInlineSpace(children[index - 1]) ||
+        hasLeadingInlineSpace(children[index + 1])
+      ) {
+        found = true;
+      }
+    });
+  return found;
+}
+
+function isCustomComponentJsxElement(node: JsxChildrenOwner | undefined): boolean {
+  if (node?.type !== "JSXElement") {
+    return false;
+  }
+  const rootName = getRootJsxIdentifierName(node.openingElement?.name);
+  return rootName === null || !/^[a-z]/.test(rootName);
+}
+
+function hasTrailingInlineSpace(node: unknown): boolean {
+  return isJsxTextChild(node) && /\S[ \t]+$/.test(node.value);
+}
+
+function hasLeadingInlineSpace(node: unknown): boolean {
+  return isJsxTextChild(node) && /^[ \t]+\S/.test(node.value);
 }
 
 function collectCallSiteAttrNames(

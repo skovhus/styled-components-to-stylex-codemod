@@ -14,6 +14,14 @@ function Link(props: { to: string; children: React.ReactNode }) {
   return <a href={props.to}>{props.children}</a>;
 }
 
+function CountingSpan(props: React.PropsWithChildren<{}>) {
+  return <span sx={styles.countingSpan}>{props.children}</span>;
+}
+
+function Counter(props: { children: React.ReactNode }) {
+  return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
+}
+
 export function Repro(props: { integrationsPath: string }) {
   return (
     <>
@@ -24,10 +32,19 @@ export function Repro(props: { integrationsPath: string }) {
   );
 }
 
+export function ChildrenShapeRepro() {
+  return (
+    <Counter>
+      Before <CountingSpan /> after
+    </Counter>
+  );
+}
+
 export const App = () => (
   <section sx={styles.wrapper}>
     <h1 sx={styles.title}>Hello World!</h1>
     <Repro integrationsPath="/integrations" />
+    <ChildrenShapeRepro />
     <Select onChange={(e) => console.log(e.target.value)} />
   </section>
 );
@@ -51,5 +68,8 @@ const styles = stylex.create({
   },
   span: {
     position: "relative",
+  },
+  countingSpan: {
+    color: "rebeccapurple",
   },
 });

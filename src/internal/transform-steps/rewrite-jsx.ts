@@ -6,6 +6,12 @@ import { CONTINUE, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { cloneAstNode, type ExpressionKind } from "../utilities/jscodeshift-utils.js";
+import {
+  findContainingJsxChildrenOwner,
+  isJsxEmptyExpressionContainer,
+  isJsxTextChild,
+  type JsxPath,
+} from "../utilities/jsx-children.js";
 import { toStyleKey } from "../transform/helpers.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
@@ -1139,10 +1145,6 @@ function extractJsxAttrValueExpr(
   return undefined;
 }
 
-type JsxChildrenOwner = { type?: string; children?: unknown[] };
-type JsxPath = { node: unknown; parentPath?: unknown };
-type JsxParentPath = { node?: JsxChildrenOwner; parentPath?: unknown };
-
 function hasPreviousStaticSiblingWithName(path: JsxPath, componentName: string): boolean {
   const currentNode = path.node;
   const parentNode = findContainingJsxChildrenOwner(path);
@@ -1246,35 +1248,6 @@ function preserveInlineJsxTextWhitespace(
   }
 }
 
-function findContainingJsxChildrenOwner(path: JsxPath): JsxChildrenOwner | undefined {
-  const currentNode = path.node;
-  let cursor = path.parentPath as JsxParentPath | undefined;
-
-  while (cursor) {
-    const candidate = cursor.node;
-    if (
-      candidate &&
-      (candidate.type === "JSXElement" || candidate.type === "JSXFragment") &&
-      Array.isArray(candidate.children) &&
-      candidate.children.includes(currentNode)
-    ) {
-      return candidate;
-    }
-    cursor = cursor.parentPath as JsxParentPath | undefined;
-  }
-
-  return undefined;
-}
-
-function isJsxTextChild(child: unknown): child is { type: "JSXText"; value: string } {
-  return (
-    typeof child === "object" &&
-    child !== null &&
-    (child as { type?: unknown }).type === "JSXText" &&
-    typeof (child as { value?: unknown }).value === "string"
-  );
-}
-
 function hasRenderableJsxSibling(children: unknown[], startIndex: number, step: 1 | -1): boolean {
   for (let i = startIndex; i >= 0 && i < children.length; i += step) {
     const sibling = children[i];
@@ -1292,20 +1265,6 @@ function hasRenderableJsxSibling(children: unknown[], startIndex: number, step: 
     }
   }
   return false;
-}
-
-function isJsxEmptyExpressionContainer(child: unknown): boolean {
-  if (typeof child !== "object" || child === null) {
-    return false;
-  }
-  const maybeExpression = child as {
-    type?: unknown;
-    expression?: { type?: unknown };
-  };
-  return (
-    maybeExpression.type === "JSXExpressionContainer" &&
-    maybeExpression.expression?.type === "JSXEmptyExpression"
-  );
 }
 
 function createJsxSpaceExpression(

@@ -32,6 +32,14 @@ const StyledSpan = styled.span`
   position: relative;
 `;
 
+const CountingSpan = styled.span`
+  color: rebeccapurple;
+`;
+
+function Counter(props: { children: React.ReactNode }) {
+  return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
+}
+
 export function Repro(props: { integrationsPath: string }) {
   return (
     <>
@@ -42,10 +50,19 @@ export function Repro(props: { integrationsPath: string }) {
   );
 }
 
+export function ChildrenShapeRepro() {
+  return (
+    <Counter>
+      Before <CountingSpan /> after
+    </Counter>
+  );
+}
+
 export const App = () => (
   <Wrapper>
     <Title>Hello World!</Title>
     <Repro integrationsPath="/integrations" />
+    <ChildrenShapeRepro />
     <Select onChange={(e) => console.log(e.target.value)} />
   </Wrapper>
 );
