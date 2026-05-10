@@ -2696,6 +2696,61 @@ export function App() {
     expect(result.code).toContain("<ui.Counter>Before <Plain /> after</ui.Counter>");
   });
 
+  it("should preserve JSX whitespace in fragment and styled parents without splitting custom elements", () => {
+    const source = `
+import * as React from "react";
+import { Fragment } from "react";
+import styled from "styled-components";
+
+const ReactInner = styled.span\`
+  color: red;
+\`;
+
+const FragmentInner = styled.span\`
+  color: orange;
+\`;
+
+const OuterInner = styled.span\`
+  color: green;
+\`;
+
+const CustomInner = styled.span\`
+  color: blue;
+\`;
+
+const Outer = styled.div\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <>
+    <React.Fragment>Before <ReactInner /> after</React.Fragment>
+    <Fragment>Before <FragmentInner /> after</Fragment>
+    <Outer>Before <OuterInner /> after</Outer>
+    <my-counter>Before <CustomInner /> after</my-counter>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "fragment-and-custom-whitespace.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain('<React.Fragment>Before{" "}');
+    expect(result.code).toContain('{" "}after</React.Fragment>');
+    expect(result.code).toContain('<Fragment>Before{" "}');
+    expect(result.code).toContain('{" "}after</Fragment>');
+    expect(result.code).toContain('<div sx={styles.outer}>Before{" "}');
+    expect(result.code).toContain('{" "}after</div>');
+    expect(result.code).toContain(
+      "<my-counter>Before <span sx={styles.customInner} /> after</my-counter>",
+    );
+  });
+
   it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {
     const source = `
 import styled from "styled-components";

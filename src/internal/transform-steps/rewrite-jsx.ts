@@ -1010,7 +1010,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...finalRest,
           ...(styleAttr && !needsMerge && !useSxPropForWrapped ? [styleAttr] : []),
         ];
-        preserveInlineJsxTextWhitespace(j, p);
+        preserveInlineJsxTextWhitespace(j, p, styledDecls);
       });
   }
 
@@ -1218,10 +1218,11 @@ function hasPreviousStaticSiblingWithName(path: JsxPath, componentName: string):
 function preserveInlineJsxTextWhitespace(
   j: TransformContext["j"]["jscodeshift"],
   path: JsxPath,
+  styledDecls: StyledDecl[],
 ): void {
   const parentNode = findContainingJsxChildrenOwner(path);
   const children = parentNode?.children;
-  if (!children || isCustomComponentJsxElement(parentNode)) {
+  if (!children || isCustomComponentJsxElement(parentNode, styledDecls)) {
     return;
   }
 
@@ -1248,15 +1249,78 @@ function preserveInlineJsxTextWhitespace(
   }
 }
 
-function isCustomComponentJsxElement(parentNode: {
-  type?: string;
-  openingElement?: { name?: unknown };
-}): boolean {
-  if (parentNode.type !== "JSXElement") {
+function isCustomComponentJsxElement(
+  parentNode: {
+    type?: string;
+    openingElement?: { name?: unknown };
+  },
+  styledDecls: StyledDecl[],
+): boolean {
+  const parentName = parentNode.openingElement?.name;
+  if (isReactFragmentJsxName(parentName)) {
     return false;
   }
-  const name = parentNode.openingElement?.name as { type?: string; name?: string } | undefined;
-  return name?.type !== "JSXIdentifier" || !name.name || !/^[a-z]/.test(name.name);
+  if (isInlineStyledParent(parentName, styledDecls)) {
+    return false;
+  }
+  if (isCustomElementJsxName(parentName)) {
+    return true;
+  }
+  if (isJsxIdentifierName(parentName)) {
+    return !parentName.name || !/^[a-z]/.test(parentName.name);
+  }
+  return parentNode.type === "JSXElement";
+}
+
+function isInlineStyledParent(name: unknown, styledDecls: StyledDecl[]): boolean {
+  if (!isJsxIdentifierName(name)) {
+    return false;
+  }
+  return styledDecls.some(
+    (decl) =>
+      decl.localName === name.name &&
+      !decl.skipTransform &&
+      !decl.needsWrapperComponent &&
+      !decl.isCssHelper,
+  );
+}
+
+function isReactFragmentJsxName(name: unknown): boolean {
+  if (isJsxIdentifierName(name)) {
+    return name.name === "Fragment";
+  }
+  if (!isJsxMemberExpressionName(name)) {
+    return false;
+  }
+  return (
+    isJsxIdentifierName(name.object) &&
+    name.object.name === "React" &&
+    isJsxIdentifierName(name.property) &&
+    name.property.name === "Fragment"
+  );
+}
+
+function isCustomElementJsxName(name: unknown): boolean {
+  return isJsxIdentifierName(name) && name.name.includes("-");
+}
+
+function isJsxIdentifierName(name: unknown): name is { type: "JSXIdentifier"; name: string } {
+  return (
+    typeof name === "object" &&
+    name !== null &&
+    (name as { type?: unknown }).type === "JSXIdentifier" &&
+    typeof (name as { name?: unknown }).name === "string"
+  );
+}
+
+function isJsxMemberExpressionName(
+  name: unknown,
+): name is { type: "JSXMemberExpression"; object: unknown; property: unknown } {
+  return (
+    typeof name === "object" &&
+    name !== null &&
+    (name as { type?: unknown }).type === "JSXMemberExpression"
+  );
 }
 
 function hasRenderableJsxSibling(children: unknown[], startIndex: number, step: 1 | -1): boolean {
