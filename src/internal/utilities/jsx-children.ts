@@ -3,7 +3,7 @@
  * Core concepts: parent lookup and JSX child node guards.
  */
 
-export type JsxChildrenOwner = {
+type JsxChildrenOwner = {
   type?: string;
   children?: unknown[];
   openingElement?: { name?: unknown };

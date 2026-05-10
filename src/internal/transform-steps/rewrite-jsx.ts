@@ -1221,7 +1221,7 @@ function preserveInlineJsxTextWhitespace(
 ): void {
   const parentNode = findContainingJsxChildrenOwner(path);
   const children = parentNode?.children;
-  if (!children) {
+  if (!children || isCustomComponentJsxElement(parentNode)) {
     return;
   }
 
@@ -1246,6 +1246,17 @@ function preserveInlineJsxTextWhitespace(
       i++;
     }
   }
+}
+
+function isCustomComponentJsxElement(parentNode: {
+  type?: string;
+  openingElement?: { name?: unknown };
+}): boolean {
+  if (parentNode.type !== "JSXElement") {
+    return false;
+  }
+  const name = parentNode.openingElement?.name as { type?: string; name?: string } | undefined;
+  return name?.type !== "JSXIdentifier" || !name.name || !/^[a-z]/.test(name.name);
 }
 
 function hasRenderableJsxSibling(children: unknown[], startIndex: number, step: 1 | -1): boolean {

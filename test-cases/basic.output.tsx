@@ -14,10 +14,6 @@ function Link(props: { to: string; children: React.ReactNode }) {
   return <a href={props.to}>{props.children}</a>;
 }
 
-function CountingSpan(props: React.PropsWithChildren<{}>) {
-  return <span sx={styles.countingSpan}>{props.children}</span>;
-}
-
 function Counter(props: { children: React.ReactNode }) {
   return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
 }
@@ -35,7 +31,8 @@ export function Repro(props: { integrationsPath: string }) {
 export function ChildrenShapeRepro() {
   return (
     <Counter>
-      Before <CountingSpan /> after
+      Before <span sx={styles.countingSpan} />
+      after
     </Counter>
   );
 }

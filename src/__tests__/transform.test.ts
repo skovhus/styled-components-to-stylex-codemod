@@ -2633,6 +2633,69 @@ export const App = () => (
     expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
   });
 
+  it("should not split custom component children when preserving JSX whitespace", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Counter(props: { children: React.ReactNode }) {
+  return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
+}
+
+const ui = { Counter };
+
+const Plain = styled.span\`
+  color: blue;
+\`;
+
+const Commented = styled.span\`
+  color: purple;
+\`;
+
+const WithRef = styled.span\`
+  color: green;
+\`;
+
+const Item = styled.span\`
+  color: black;
+  & + & {
+    color: red;
+  }
+\`;
+
+const Tone = styled.span<{ $tone?: "danger" }>\`
+  color: \${(props) => (props.$tone === "danger" ? "red" : "blue")};
+\`;
+
+export function App() {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  return (
+    <>
+      <Counter><Plain /> <span /> after</Counter>
+      <Counter>Before {/* note */}<Commented /> after</Counter>
+      <Counter>Before <WithRef ref={ref} /> after</Counter>
+      <Counter>Before <Item /> <Item /> after</Counter>
+      <Counter>Before <Tone $tone="danger" /> after</Counter>
+      <ui.Counter>Before <Plain /> after</ui.Counter>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "custom-children-whitespace.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).not.toContain('{" "}');
+    expect(result.code).toContain("ref={ref}");
+    expect(result.code).toContain("itemAdjacentSibling");
+    expect(result.code).toContain("<ui.Counter>Before <Plain /> after</ui.Counter>");
+  });
+
   it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {
     const source = `
 import styled from "styled-components";
