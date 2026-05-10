@@ -816,21 +816,33 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         results.flatMap((result) =>
           result && !isBailResolution(result) ? (result.imports ?? []) : [],
         );
+      const bailResolvedUnitExpression = (exprArg: any): { bail: true } => {
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported interpolation: call expression",
+          loc: getNodeLocStart(exprArg) ?? decl.loc,
+        });
+        bail = true;
+        return { bail: true };
+      };
       const singleSlotStaticParts = getSingleSlotStaticParts(d, decl);
       const canFoldUnitSuffix =
         !!singleSlotStaticParts &&
         singleSlotStaticParts.prefix === "" &&
         singleSlotStaticParts.suffix !== "" &&
         /^-?(?:[a-zA-Z%]+)$/.test(singleSlotStaticParts.suffix);
-      const withUnitIfStaticNumber = (node: ExpressionKind): ExpressionKind => {
-        if (!canFoldUnitSuffix) {
-          return node;
+      const resolveUnitBranch = (
+        result: ImportedValueResolution,
+        original: ExpressionKind,
+      ): ExpressionKind | null => {
+        if (result && !isBailResolution(result)) {
+          return result.resolved;
         }
-        const staticValue = literalToStaticValue(node);
-        if (typeof staticValue === "number") {
+        const staticValue = literalToStaticValue(original);
+        if (typeof staticValue === "number" && singleSlotStaticParts) {
           return j.literal(`${staticValue}${singleSlotStaticParts.suffix}`) as ExpressionKind;
         }
-        return node;
+        return null;
       };
 
       if (expr?.type === "BinaryExpression") {
@@ -873,6 +885,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               skipStaticWrap: staticParts.suffix !== "",
             };
           }
+          if (staticParts.suffix && imports.length > 0) {
+            return bailResolvedUnitExpression(expr);
+          }
         }
         return {
           resolved: j.binaryExpression(expr.operator, resolvedLeft, resolvedRight),
@@ -888,6 +903,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           return argumentResult;
         }
         if (canFoldUnitSuffix) {
+          if (expr.operator !== "-") {
+            return bailResolvedUnitExpression(expr);
+          }
           return {
             resolved: j.templateLiteral(
               [
@@ -922,11 +940,27 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (isBailResolution(alternateResult)) {
           return alternateResult;
         }
+        if (canFoldUnitSuffix) {
+          const consequent = resolveUnitBranch(consequentResult, expr.consequent);
+          const alternate = resolveUnitBranch(alternateResult, expr.alternate);
+          if (!consequent || !alternate) {
+            return bailResolvedUnitExpression(expr);
+          }
+          return {
+            resolved: j.conditionalExpression(
+              resolvedOrOriginal(testResult, expr.test),
+              consequent,
+              alternate,
+            ),
+            imports: mergeImports(testResult, consequentResult, alternateResult),
+            skipStaticWrap: true,
+          };
+        }
         return {
           resolved: j.conditionalExpression(
             resolvedOrOriginal(testResult, expr.test),
-            withUnitIfStaticNumber(resolvedOrOriginal(consequentResult, expr.consequent)),
-            withUnitIfStaticNumber(resolvedOrOriginal(alternateResult, expr.alternate)),
+            resolvedOrOriginal(consequentResult, expr.consequent),
+            resolvedOrOriginal(alternateResult, expr.alternate),
           ),
           imports: mergeImports(testResult, consequentResult, alternateResult),
           skipStaticWrap:
@@ -945,11 +979,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (isBailResolution(rightResult)) {
           return rightResult;
         }
+        if (canFoldUnitSuffix) {
+          const left = resolveUnitBranch(leftResult, expr.left);
+          const right = resolveUnitBranch(rightResult, expr.right);
+          if (!left || !right) {
+            return bailResolvedUnitExpression(expr);
+          }
+          return {
+            resolved: j.logicalExpression(expr.operator, left, right),
+            imports: mergeImports(leftResult, rightResult),
+            skipStaticWrap: true,
+          };
+        }
         return {
           resolved: j.logicalExpression(
             expr.operator,
-            withUnitIfStaticNumber(resolvedOrOriginal(leftResult, expr.left)),
-            withUnitIfStaticNumber(resolvedOrOriginal(rightResult, expr.right)),
+            resolvedOrOriginal(leftResult, expr.left),
+            resolvedOrOriginal(rightResult, expr.right),
           ),
           imports: mergeImports(leftResult, rightResult),
           skipStaticWrap: canFoldUnitSuffix || skipStaticWrap(leftResult, rightResult),
@@ -960,13 +1006,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const imports: any[] = [];
         const expressions: any[] = [];
         const expressionResults: ImportedValueResolution[] = [];
-        for (const templateExpr of expr.expressions ?? []) {
+        const templateExpressions = expr.expressions ?? [];
+        for (let index = 0; index < templateExpressions.length; index++) {
+          const templateExpr = templateExpressions[index];
           const expressionResult = resolveChildExpression(templateExpr);
           expressionResults.push(expressionResult);
           if (isBailResolution(expressionResult)) {
             return expressionResult;
           }
           if (expressionResult) {
+            if (hasAdjacentTemplateUnit(expr.quasis ?? [], index)) {
+              return bailResolvedUnitExpression(templateExpr);
+            }
             didResolve = true;
             imports.push(...(expressionResult.imports ?? []));
             expressions.push(expressionResult.resolved);
@@ -3490,6 +3541,17 @@ function expressionToCalcStaticText(node: unknown, unit = ""): string | null {
   return null;
 }
 
+function hasAdjacentTemplateUnit(
+  quasis: Array<{ value?: { raw?: string; cooked?: string } }>,
+  expressionIndex: number,
+): boolean {
+  const before =
+    quasis[expressionIndex]?.value?.raw ?? quasis[expressionIndex]?.value?.cooked ?? "";
+  const after =
+    quasis[expressionIndex + 1]?.value?.raw ?? quasis[expressionIndex + 1]?.value?.cooked ?? "";
+  return /[a-zA-Z%]$/.test(before) || /^[a-zA-Z%]/.test(after);
+}
+
 function isStylexCalcExpression(node: unknown): boolean {
   if (!node || typeof node !== "object") {
     return false;
@@ -4051,7 +4113,7 @@ function tryResolveDynamicHelperCall(
     ctx.allowedPropIdentifiers,
   );
   if (!dynamicProp) {
-    return null;
+    return false;
   }
 
   const resolvedExpr = ctx.parseExpr(result.expr) as ExpressionKind | null;
@@ -4107,7 +4169,7 @@ function tryResolveDirectHelperCall(
 
   const args = callExpr.arguments ?? [];
   if (args.length !== 1) {
-    return null;
+    return false;
   }
 
   const dynamicProp = unwrapParamMemberArg(
@@ -4118,7 +4180,7 @@ function tryResolveDirectHelperCall(
     ctx.allowedPropIdentifiers,
   );
   if (!dynamicProp) {
-    return null;
+    return false;
   }
 
   const resolvedExpr = ctx.parseExpr(result.expr) as ExpressionKind | null;

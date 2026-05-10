@@ -70,6 +70,7 @@ export function resolveDynamicNode(
     tryResolveArrowFnCallWithSinglePropArg(node, ctx) ??
     tryResolveArrowFnCurriedHelperCallWithPropFallback(node, ctx) ??
     tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(node, ctx) ??
+    tryResolveArrowFnImportedHelperCall(node, ctx) ??
     // Resolve or detect theme-dependent template literals before trying to emit style functions
     tryResolveThemeDependentTemplateLiteral(node, ctx) ??
     tryResolveStyleFunctionFromTemplateLiteral(node) ??
@@ -759,6 +760,42 @@ function tryResolveArrowFnImportedCurriedHelperCallWithPropsArg(
   }
   if (curried?.result.kind === "unresolved") {
     return buildUnresolvedHelperResult(curried.innerCall.callee, ctx);
+  }
+  return null;
+}
+
+function tryResolveArrowFnImportedHelperCall(
+  node: DynamicNode,
+  ctx: InternalHandlerContext,
+): HandlerResult | null {
+  if (!node.css.property) {
+    return null;
+  }
+  const expr = node.expr;
+  if (!isArrowFunctionExpression(expr)) {
+    return null;
+  }
+  const body = getFunctionBodyExpr(expr);
+  if (!isCallExpressionNode(body)) {
+    return null;
+  }
+
+  const paramName = getArrowFnSingleParamName(expr) ?? undefined;
+  const resolved = resolveImportedHelperCall(body, ctx, paramName, node.css.property);
+  if (resolved.kind === "resolved") {
+    return buildResolvedHandlerResult(resolved.result, node.css.property, {
+      resolveCallContext: resolved.resolveCallContext,
+      resolveCallResult: resolved.resolveCallResult,
+    });
+  }
+  if (resolved.kind === "unresolved") {
+    return { type: "emitInlineStyleValueFromProps" };
+  }
+
+  const callee = body.callee;
+  const calleeInfo = extractRootAndPath(callee);
+  if (calleeInfo && ctx.resolveImport(calleeInfo.rootName, calleeInfo.rootNode)) {
+    return { type: "emitInlineStyleValueFromProps" };
   }
   return null;
 }
