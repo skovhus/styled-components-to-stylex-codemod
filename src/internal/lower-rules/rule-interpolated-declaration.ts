@@ -827,9 +827,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const resolvedRight = resolvedOrOriginal(rightResult, expr.right);
         const imports = mergeImports(leftResult, rightResult);
         if (allowCssCalc && isCssCalcOperator(expr.operator)) {
+          const staticParts = getSingleSlotStaticParts(d, decl) ?? { prefix: "", suffix: "" };
           const calcExpr = buildCssCalcTemplateExpression({
             j,
             operator: expr.operator,
+            unit: staticParts.prefix ? "" : staticParts.suffix,
             left: { node: resolvedLeft, allowExpression: Boolean(leftResult) },
             right: { node: resolvedRight, allowExpression: Boolean(rightResult) },
           });
@@ -3377,6 +3379,7 @@ function isCssCalcOperator(operator: string | undefined): boolean {
 function buildCssCalcTemplateExpression(args: {
   j: JSCodeshift;
   operator: string;
+  unit?: string;
   left: { node: unknown; allowExpression: boolean };
   right: { node: unknown; allowExpression: boolean };
 }): ExpressionKind | null {
@@ -3385,7 +3388,7 @@ function buildCssCalcTemplateExpression(args: {
   let currentQuasi = "calc(";
 
   const appendOperand = (operand: { node: unknown; allowExpression: boolean }): boolean => {
-    const staticText = expressionToCalcStaticText(operand.node);
+    const staticText = expressionToCalcStaticText(operand.node, args.unit);
     if (staticText !== null) {
       currentQuasi += staticText;
       return true;
@@ -3424,10 +3427,10 @@ function buildCssCalcTemplateExpression(args: {
   ) as ExpressionKind;
 }
 
-function expressionToCalcStaticText(node: unknown): string | null {
+function expressionToCalcStaticText(node: unknown, unit = ""): string | null {
   const staticValue = literalToStaticValue(node);
   if (typeof staticValue === "number") {
-    return String(staticValue);
+    return `${staticValue}${unit}`;
   }
   return null;
 }

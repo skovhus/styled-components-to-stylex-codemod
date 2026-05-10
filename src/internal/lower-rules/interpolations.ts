@@ -340,6 +340,12 @@ function buildInterpolatedTemplate(args: {
           return null;
         }
         const resolved = importedResolved;
+        if (isFullCalcExpression(resolved.resolved) && hasSingleSlotUnitSuffix(cssValue)) {
+          for (const imp of resolved.imports ?? []) {
+            addImport?.(imp);
+          }
+          return resolved.resolved;
+        }
         if (
           resolved.resolved?.type === "StringLiteral" ||
           (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
@@ -382,4 +388,38 @@ function buildInterpolatedTemplate(args: {
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);
+}
+
+function hasSingleSlotUnitSuffix(cssValue: any): boolean {
+  const parts = cssValue?.parts ?? [];
+  const slotCount = parts.filter((part: any) => part?.kind === "slot").length;
+  let prefix = "";
+  let suffix = "";
+  let foundSlot = false;
+  for (const part of parts) {
+    if (part?.kind === "slot") {
+      foundSlot = true;
+      continue;
+    }
+    if (part?.kind !== "static") {
+      continue;
+    }
+    if (foundSlot) {
+      suffix += part.value ?? "";
+    } else {
+      prefix += part.value ?? "";
+    }
+  }
+  return slotCount === 1 && prefix === "" && suffix !== "" && /^-?(?:[a-zA-Z%]+)$/.test(suffix);
+}
+
+function isFullCalcExpression(expr: any): boolean {
+  if (expr?.type === "TemplateLiteral") {
+    const firstRaw = expr.quasis?.[0]?.value?.raw ?? "";
+    return firstRaw.startsWith("calc(");
+  }
+  if (expr?.type === "StringLiteral" || expr?.type === "Literal") {
+    return typeof expr.value === "string" && expr.value.startsWith("calc(");
+  }
+  return false;
 }

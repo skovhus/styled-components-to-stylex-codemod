@@ -3407,6 +3407,60 @@ export const Box = styled.div<{ $size: number }>\`
     },
   );
 
+  it("should fold static unit suffixes into calc expressions for resolved helper arithmetic", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - runtimeValue()}px;
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("`calc(8px - ${$spacing.runtimeValue})`");
+    expect(code).not.toContain(")px");
+  });
+
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
     const source = `
 import styled from "styled-components";
