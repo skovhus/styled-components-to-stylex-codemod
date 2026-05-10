@@ -5,7 +5,7 @@
 import type { Collection } from "jscodeshift";
 import { isMemberExpression } from "./lower-rules/utils.js";
 
-export type PostProcessImportCleanupResult = {
+type PostProcessImportCleanupResult = {
   changed: boolean;
   needsReactImport: boolean;
 };
