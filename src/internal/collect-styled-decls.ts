@@ -157,10 +157,19 @@ function collectStyledDeclsImpl(args: {
 
         const dynamicAttrProp = extractPropName(v, attrsParamInfo);
         if (dynamicAttrProp) {
-          out.dynamicAttrs.push({
-            jsxProp: dynamicAttrProp,
-            attrName: key,
-          });
+          const dynamicAttrDefault = extractPropDefault(v, attrsParamInfo);
+          if (dynamicAttrDefault !== undefined) {
+            out.defaultAttrs.push({
+              jsxProp: dynamicAttrProp,
+              attrName: key,
+              value: dynamicAttrDefault,
+            });
+          } else {
+            out.dynamicAttrs.push({
+              jsxProp: dynamicAttrProp,
+              attrName: key,
+            });
+          }
           continue;
         }
 
@@ -271,7 +280,10 @@ function collectStyledDeclsImpl(args: {
       if (body?.type === "BlockStatement") {
         const ret = body.body.find((s: any) => s.type === "ReturnStatement") as any;
         if (ret?.argument?.type === "ObjectExpression") {
-          fillFromObject(ret.argument, attrsParamInfo);
+          fillFromObject(ret.argument, {
+            ...attrsParamInfo,
+            localNames: collectBlockLocalNames(body),
+          });
           return out;
         }
       }
@@ -1575,7 +1587,10 @@ function extractDynamicStyleValue(
 ): { jsxProp: string; callArgExpr: unknown; condition?: "always" } | null {
   const attrsParamInfo = {
     propNames: attrsParamPropNames,
+    propByLocalName: new Map<string, string>(),
+    defaultsByPropName: new Map<string, unknown>(),
     rootNames: new Set(["props", "p"]),
+    localNames: new Set<string>(),
   };
   const propName = extractPropName(value, attrsParamInfo);
   if (propName) {
@@ -1618,13 +1633,19 @@ function hasLeadingFalse(comment: unknown): boolean {
 
 type AttrsParamInfo = {
   propNames: ReadonlySet<string>;
+  propByLocalName: ReadonlyMap<string, string>;
+  defaultsByPropName: ReadonlyMap<string, unknown>;
   rootNames: ReadonlySet<string>;
+  localNames: ReadonlySet<string>;
 };
 
 function emptyAttrsParamInfo(): AttrsParamInfo {
   return {
     propNames: new Set(),
-    rootNames: new Set(["props", "p"]),
+    propByLocalName: new Map(),
+    defaultsByPropName: new Map(),
+    rootNames: new Set(),
+    localNames: new Set(),
   };
 }
 
@@ -1634,7 +1655,7 @@ function extractPropName(value: any, attrsParamInfo: AttrsParamInfo): string | n
     typeof value.name === "string" &&
     attrsParamInfo.propNames.has(value.name)
   ) {
-    return value.name;
+    return attrsParamInfo.propByLocalName.get(value.name) ?? value.name;
   }
   if (
     value?.type === "MemberExpression" &&
@@ -1648,25 +1669,43 @@ function extractPropName(value: any, attrsParamInfo: AttrsParamInfo): string | n
   return null;
 }
 
+function extractPropDefault(value: any, attrsParamInfo: AttrsParamInfo): unknown {
+  const propName = extractPropName(value, attrsParamInfo);
+  return propName ? attrsParamInfo.defaultsByPropName.get(propName) : undefined;
+}
+
 function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   const names = new Set<string>();
-  const rootNames = new Set<string>(["props", "p"]);
+  const propByLocalName = new Map<string, string>();
+  const defaultsByPropName = new Map<string, unknown>();
+  const rootNames = new Set<string>();
+  const localNames = new Set<string>();
   const firstParam = params?.[0];
   if (firstParam?.type === "Identifier" && typeof firstParam.name === "string") {
     rootNames.add(firstParam.name);
-    return { propNames: names, rootNames };
+    return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
   }
   if (firstParam?.type !== "ObjectPattern") {
-    return { propNames: names, rootNames };
+    return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
   }
 
   for (const prop of firstParam.properties ?? []) {
     if (!prop || prop.type === "RestElement") {
       continue;
     }
+    const propName =
+      prop.key?.type === "Identifier"
+        ? prop.key.name
+        : prop.key?.type === "StringLiteral"
+          ? prop.key.value
+          : null;
+    if (!propName) {
+      continue;
+    }
     const value = prop.value ?? prop.argument;
     if (value?.type === "Identifier" && typeof value.name === "string") {
       names.add(value.name);
+      propByLocalName.set(value.name, propName);
       continue;
     }
     if (
@@ -1675,10 +1714,15 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
       typeof value.left.name === "string"
     ) {
       names.add(value.left.name);
+      propByLocalName.set(value.left.name, propName);
+      const defaultValue = literalStaticValueFromNode(value.right);
+      if (defaultValue !== undefined) {
+        defaultsByPropName.set(propName, defaultValue);
+      }
     }
   }
 
-  return { propNames: names, rootNames };
+  return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
 }
 
 function literalStaticValueFromNode(node: any): string | number | undefined {
@@ -1708,7 +1752,8 @@ function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): bool
   return (
     rootName != null &&
     !attrsParamInfo.propNames.has(rootName) &&
-    !attrsParamInfo.rootNames.has(rootName)
+    !attrsParamInfo.rootNames.has(rootName) &&
+    !attrsParamInfo.localNames.has(rootName)
   );
 }
 
@@ -1742,6 +1787,44 @@ function staticAttrExpressionToReference(node: any, attrsParamInfo: AttrsParamIn
     }
   }
   return null;
+}
+
+function collectBlockLocalNames(block: any): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const stmt of block.body ?? []) {
+    if (stmt?.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const decl of stmt.declarations ?? []) {
+      collectPatternNames(decl?.id, names);
+    }
+  }
+  return names;
+}
+
+function collectPatternNames(pattern: any, names: Set<string>): void {
+  if (!pattern) {
+    return;
+  }
+  if (pattern.type === "Identifier") {
+    names.add(pattern.name);
+    return;
+  }
+  if (pattern.type === "ObjectPattern") {
+    for (const prop of pattern.properties ?? []) {
+      collectPatternNames(prop?.value ?? prop?.argument, names);
+    }
+    return;
+  }
+  if (pattern.type === "ArrayPattern") {
+    for (const element of pattern.elements ?? []) {
+      collectPatternNames(element, names);
+    }
+    return;
+  }
+  if (pattern.type === "AssignmentPattern" || pattern.type === "RestElement") {
+    collectPatternNames(pattern.left ?? pattern.argument, names);
+  }
 }
 
 function identifierNode(name: string): unknown {

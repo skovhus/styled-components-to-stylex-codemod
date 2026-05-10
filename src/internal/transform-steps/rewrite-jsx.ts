@@ -922,6 +922,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).
+        if (!styleAttr && decl.attrsInfo?.attrsStaticStyleExpr) {
+          styleAttr = j.jsxAttribute(
+            j.jsxIdentifier("style"),
+            j.jsxExpressionContainer(cloneAstNode(decl.attrsInfo.attrsStaticStyleExpr)),
+          );
+        }
+
         if (staticInlineStyleExpr && !styleAttr) {
           styleAttr = j.jsxAttribute(
             j.jsxIdentifier("style"),
@@ -951,10 +958,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         if (extraClassNameExpr && !ctx.adapter.useSxProp) {
           // Synthesize a JSX className attribute so buildInlineMergeCall
           // folds the CSS module class into the spread merge.
-          effectiveClassNameAttr = j.jsxAttribute(
+          const extraClassNameAttr = j.jsxAttribute(
             j.jsxIdentifier("className"),
             j.jsxExpressionContainer(extraClassNameExpr),
           );
+          effectiveClassNameAttr = effectiveClassNameAttr
+            ? mergeClassNameAttrs(j, effectiveClassNameAttr, extraClassNameAttr)
+            : extraClassNameAttr;
         }
 
         const hasRestSpreadAttr = keptRestAfterVariants.some(
@@ -1116,7 +1126,7 @@ function mergeClassNameAttrs(
   const firstExpr = extractJsxAttrValueExpr(j, first);
   const secondExpr = extractJsxAttrValueExpr(j, second);
   const parts = [firstExpr, secondExpr].filter((expr): expr is ExpressionKind => !!expr);
-  const expr = parts.length === 1 ? parts[0]! : j.arrayExpression(parts);
+  const expr = parts.length === 1 ? parts[0]! : buildClassNameJoinExpr(j, parts);
   return j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(expr));
 }
 
@@ -1135,7 +1145,7 @@ function buildInlineVerboseMergeFallback(
         j.memberExpression(
           j.callExpression(
             j.memberExpression(
-              j.arrayExpression([sxClassName, classNameExpr]),
+              j.arrayExpression([sxClassName, ...flattenClassNameExpr(classNameExpr)]),
               j.identifier("filter"),
             ),
             [j.identifier("Boolean")],
@@ -1175,6 +1185,28 @@ function buildInlineVerboseMergeFallback(
       ]),
     ),
     [],
+  );
+}
+
+function flattenClassNameExpr(classNameExpr: ExpressionKind): ExpressionKind[] {
+  return classNameExpr.type === "ArrayExpression" &&
+    classNameExpr.elements.every((element): element is ExpressionKind => !!element)
+    ? [...classNameExpr.elements]
+    : [classNameExpr];
+}
+
+function buildClassNameJoinExpr(
+  j: TransformContext["j"]["jscodeshift"],
+  parts: ExpressionKind[],
+): ExpressionKind {
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
   );
 }
 

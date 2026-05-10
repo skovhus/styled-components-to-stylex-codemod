@@ -311,6 +311,14 @@ export function buildStaticClassNameExpr(
     return undefined;
   }
 
+  if (staticClassNameExpr) {
+    return buildClassNameJoinExpr(j, [
+      staticClassNameExpr,
+      ...(bridgeClassVar ? [j.identifier(bridgeClassVar) as ExpressionKind] : []),
+      ...(extraClassNames ?? []).map((extra) => extra.expr),
+    ]);
+  }
+
   // Build a template literal combining all parts: `staticClassName ${bridgeClassVar} ${extra1} ${extra2}`
   const expressions: ExpressionKind[] = [];
   const quasis: ReturnType<typeof j.templateElement>[] = [];
@@ -364,6 +372,18 @@ export function buildStaticClassNameExpr(
   }
 
   return j.templateLiteral(quasis, expressions);
+}
+
+function buildClassNameJoinExpr(j: JSCodeshift, parts: ExpressionKind[]): ExpressionKind {
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
+  );
 }
 
 /**

@@ -473,7 +473,6 @@ function emitWithMerger(args: {
       }
     } else if (inlineStyleProps.length > 0 || staticStyleExpr) {
       // Only inline style props, no external style
-      mergerArgs.push(j.identifier("undefined"));
       mergerArgs.push(
         maybeCastStyleForCustomProps(
           j,

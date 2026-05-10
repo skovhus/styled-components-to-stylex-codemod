@@ -3573,7 +3573,10 @@ function mergeInheritedAttrsInfo(
       (baseAttrsInfo.hasUnsupportedValues ?? false) ||
       (ownAttrsInfo?.hasUnsupportedValues ?? false),
     attrsAsTag: ownAttrsInfo?.attrsAsTag ?? baseAttrsInfo.attrsAsTag,
-    defaultAttrs: [...(baseAttrsInfo.defaultAttrs ?? []), ...(ownAttrsInfo?.defaultAttrs ?? [])],
+    defaultAttrs: mergeAttrEntriesByAttrName(
+      baseAttrsInfo.defaultAttrs,
+      ownAttrsInfo?.defaultAttrs,
+    ),
     conditionalAttrs: [
       ...(baseAttrsInfo.conditionalAttrs ?? []),
       ...(ownAttrsInfo?.conditionalAttrs ?? []),
@@ -3582,7 +3585,10 @@ function mergeInheritedAttrsInfo(
       ...(baseAttrsInfo.invertedBoolAttrs ?? []),
       ...(ownAttrsInfo?.invertedBoolAttrs ?? []),
     ],
-    dynamicAttrs: [...(baseAttrsInfo.dynamicAttrs ?? []), ...(ownAttrsInfo?.dynamicAttrs ?? [])],
+    dynamicAttrs: mergeAttrEntriesByAttrName(
+      baseAttrsInfo.dynamicAttrs,
+      ownAttrsInfo?.dynamicAttrs,
+    ),
     attrsStaticStyles: {
       ...baseAttrsInfo.attrsStaticStyles,
       ...ownAttrsInfo?.attrsStaticStyles,
@@ -3593,4 +3599,18 @@ function mergeInheritedAttrsInfo(
       ...(ownAttrsInfo?.attrsDynamicStyles ?? []),
     ],
   };
+}
+
+function mergeAttrEntriesByAttrName<T extends { attrName: string }>(
+  baseEntries: T[] | undefined,
+  ownEntries: T[] | undefined,
+): T[] {
+  const byAttrName = new Map<string, T>();
+  for (const entry of baseEntries ?? []) {
+    byAttrName.set(entry.attrName, entry);
+  }
+  for (const entry of ownEntries ?? []) {
+    byAttrName.set(entry.attrName, entry);
+  }
+  return [...byAttrName.values()];
 }

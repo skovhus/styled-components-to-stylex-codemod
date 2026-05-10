@@ -899,7 +899,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // className/style flow through `{...rest}` unchanged. If extra className
       // expressions or inline styles force explicit merging, bind them locally.
       const canForwardClassNameStyleThroughRest =
-        wrappedAcceptsSx && !(staticClassNameExpr || d.inlineStyleProps?.length);
+        wrappedAcceptsSx &&
+        !(staticClassNameExpr || attrsStaticStyleExpr || d.inlineStyleProps?.length);
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
       const destructureSx = allowSxProp || wrappedAcceptsSx;
@@ -992,6 +993,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // Pre-populate with attr names already emitted as JSX attributes above.
       // defaultAttrs are emitted by buildDefaultAttrsFromProps (e.g., column={column ?? true}).
       for (const attr of defaultAttrs) {
+        forwardedProps.add(attr.attrName);
+      }
+      for (const attr of dynamicAttrs) {
         forwardedProps.add(attr.attrName);
       }
       // staticAttrs are emitted by buildStaticAttrsFromRecord (e.g., column={true}).

@@ -252,6 +252,14 @@ export function buildAttrsFromAttrsInfo(
       propExprFor,
     }),
     ...buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}),
+    ...(attrsInfo.attrsStaticStyleExpr
+      ? [
+          j.jsxAttribute(
+            j.jsxIdentifier("style"),
+            j.jsxExpressionContainer(cloneAstNode(attrsInfo.attrsStaticStyleExpr)),
+          ),
+        ]
+      : []),
   ];
 }
 
