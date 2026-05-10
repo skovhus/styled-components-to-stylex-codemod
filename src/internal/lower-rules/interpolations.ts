@@ -111,7 +111,7 @@ export function tryHandleInterpolatedStringValue(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
-  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
+  ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
   setStyleValue?: (prop: string, value: unknown) => void;
@@ -277,7 +277,7 @@ function buildInterpolatedTemplate(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
-  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
+  ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
 }): unknown {
   const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
@@ -340,7 +340,7 @@ function buildInterpolatedTemplate(args: {
           return null;
         }
         const resolved = importedResolved;
-        if (isFullCalcExpression(resolved.resolved) && hasSingleSlotUnitSuffix(cssValue)) {
+        if (resolved.skipStaticWrap && hasSingleSlotUnitSuffix(cssValue)) {
           for (const imp of resolved.imports ?? []) {
             addImport?.(imp);
           }
@@ -411,15 +411,4 @@ function hasSingleSlotUnitSuffix(cssValue: any): boolean {
     }
   }
   return slotCount === 1 && prefix === "" && suffix !== "" && /^-?(?:[a-zA-Z%]+)$/.test(suffix);
-}
-
-function isFullCalcExpression(expr: any): boolean {
-  if (expr?.type === "TemplateLiteral") {
-    const firstRaw = expr.quasis?.[0]?.value?.raw ?? "";
-    return firstRaw.startsWith("calc(");
-  }
-  if (expr?.type === "StringLiteral" || expr?.type === "Literal") {
-    return typeof expr.value === "string" && expr.value.startsWith("calc(");
-  }
-  return false;
 }

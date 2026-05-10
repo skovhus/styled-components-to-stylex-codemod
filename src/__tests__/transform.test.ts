@@ -3356,10 +3356,11 @@ export const Box = styled.div<{ $size: number }>\`
   width: \${(props) => runtimeValue(props.$size, 1) + 4}px;
 \`;
 `,
+      expectWarning: false,
     },
   ])(
     "should call the adapter for helper calls nested in $name",
-    ({ name, source, expectedMemberPath }) => {
+    ({ name, source, expectedMemberPath, expectWarning = true }) => {
       const resolveCalls: CallResolveContext[] = [];
 
       const adapterWithoutRuntimeResolution = {
@@ -3397,13 +3398,15 @@ export const Box = styled.div<{ $size: number }>\`
         expect(resolveCalls[0]?.calleeMemberPath).toEqual(expectedMemberPath);
       }
       expect(result.code).toBeNull();
-      expect(result.warnings.map((w) => w.type)).toEqual(
-        expect.arrayContaining([
-          expect.stringMatching(
-            /Adapter resolveCall returned undefined for helper call|Unsupported interpolation: call expression/,
-          ),
-        ]),
-      );
+      if (expectWarning) {
+        expect(result.warnings.map((w) => w.type)).toEqual(
+          expect.arrayContaining([
+            expect.stringMatching(
+              /Adapter resolveCall returned undefined for helper call|Unsupported interpolation: call expression/,
+            ),
+          ]),
+        );
+      }
     },
   );
 
@@ -3459,6 +3462,138 @@ export const Box = styled.div\`
     const code = result.code ?? "";
     expect(code).toContain("`calc(8px - ${$spacing.runtimeValue})`");
     expect(code).not.toContain(")px");
+  });
+
+  it.each([
+    {
+      name: "nested conditional arithmetic",
+      css: "padding-top: ${cond ? 8 - runtimeValue() : 4}px;",
+      expected: 'cond ? `calc(8px - ${$spacing.runtimeValue})` : "4px"',
+      forbidden: "8 - $spacing.runtimeValue",
+    },
+    {
+      name: "multiplication scalar",
+      css: "padding-top: ${2 * runtimeValue()}px;",
+      expected: "`calc(2 * ${$spacing.runtimeValue})`",
+      forbidden: "2px *",
+    },
+    {
+      name: "conditional resolved branch",
+      css: "padding-top: ${cond ? runtimeValue() : 4}px;",
+      expected: 'cond ? $spacing.runtimeValue : "4px"',
+      forbidden: "}px",
+    },
+  ])(
+    "should preserve units for resolved helper arithmetic in $name",
+    ({ css, expected, forbidden }) => {
+      const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+const cond = true;
+
+export const Box = styled.div\`
+  ${css}
+\`;
+`;
+
+      const adapterWithTokenResolution = {
+        externalInterface() {
+          return { styles: false, as: false, ref: false };
+        },
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall(ctx: CallResolveContext) {
+          if (ctx.calleeImportedName === "runtimeValue") {
+            return {
+              usage: "create" as const,
+              expr: "$spacing.runtimeValue",
+              imports: [
+                {
+                  from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                  names: [{ imported: "$spacing" }],
+                },
+              ],
+            };
+          }
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        styleMerger: null,
+        useSxProp: false,
+      } satisfies Adapter;
+
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, "helper-resolvedArithmeticNestedUnit.input.tsx"),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: adapterWithTokenResolution },
+      );
+
+      expect(result.code).not.toBeNull();
+      const code = result.code ?? "";
+      expect(code).toContain(expected);
+      expect(code).not.toContain(forbidden);
+    },
+  );
+
+  it("should bail when resolved helper arithmetic has surrounding static text", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  transform: translateX(\${8 - runtimeValue()}px);
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticWrapped.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported interpolation: call expression",
+    );
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
