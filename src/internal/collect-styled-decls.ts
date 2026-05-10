@@ -138,6 +138,11 @@ function collectStyledDeclsImpl(args: {
           continue;
         }
 
+        if (isStaticAttrExpression(v, attrsParamPropNames)) {
+          out.staticAttrs[key] = cloneAstNode(v);
+          continue;
+        }
+
         // Support: onlyIcon: undefined or onlyIcon: null
         if ((v.type === "Identifier" && v.name === "undefined") || v.type === "NullLiteral") {
           out.staticAttrs[key] = v.type === "NullLiteral" ? null : undefined;
@@ -1645,6 +1650,30 @@ function literalStaticValueFromNode(node: any): string | number | undefined {
     return literalStaticValueFromNode(node.expression);
   }
   return undefined;
+}
+
+function isStaticAttrExpression(node: any, attrsParamPropNames: ReadonlySet<string>): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (node.type === "TSAsExpression" || node.type === "TSSatisfiesExpression") {
+    return isStaticAttrExpression(node.expression, attrsParamPropNames);
+  }
+  const rootName = getStaticAttrExpressionRootName(node);
+  return rootName != null && !attrsParamPropNames.has(rootName);
+}
+
+function getStaticAttrExpressionRootName(node: any): string | null {
+  if (node?.type === "Identifier" && node.name !== "undefined") {
+    return node.name;
+  }
+  if (node?.type !== "MemberExpression" || node.computed) {
+    return null;
+  }
+  if (node.property?.type !== "Identifier" && node.property?.type !== "PrivateName") {
+    return null;
+  }
+  return getStaticAttrExpressionRootName(node.object);
 }
 
 function identifierNode(name: string): unknown {

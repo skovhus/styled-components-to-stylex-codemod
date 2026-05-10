@@ -13,6 +13,7 @@ import {
   type JsxPath,
 } from "../utilities/jsx-children.js";
 import { toStyleKey } from "../transform/helpers.js";
+import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
@@ -400,17 +401,10 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             if (hasAttr(k)) {
               continue;
             }
-            const valNode =
-              typeof v === "string"
-                ? j.literal(v)
-                : typeof v === "number" || typeof v === "boolean"
-                  ? j.jsxExpressionContainer(j.literal(v))
-                  : v === undefined
-                    ? j.jsxExpressionContainer(j.identifier("undefined"))
-                    : v === null
-                      ? j.jsxExpressionContainer(j.literal(null))
-                      : j.literal(String(v as string | number | boolean));
-            keptAttrs.unshift(j.jsxAttribute(j.jsxIdentifier(k), valNode as any));
+            const attr = buildStaticAttrFromValue(j, k, v, { booleanTrueAsShorthand: false });
+            if (attr) {
+              keptAttrs.unshift(attr);
+            }
           }
         }
 

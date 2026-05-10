@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
+import { Icon } from "./lib/icon";
 
 // Simulated imported component
 const Flex = (
@@ -281,6 +282,13 @@ const MODULE_SCOPE_TEXT_COLOR = "#0f766e";
 
 const CALLBACK_SCOPE_TEXT_COLOR = "#7c3aed";
 
+// Pattern 15: static attrs that reference module-scope values must be preserved
+const iconSize = 14;
+
+function StyledIcon(props: Omit<React.ComponentPropsWithRef<typeof Icon>, "className" | "style">) {
+  return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
+}
+
 export const App = () => (
   <>
     <Input small placeholder="Small" />
@@ -304,6 +312,7 @@ export const App = () => (
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
     <span sx={styles.moduleScopeStyleText}>Module scope style</span>
     <span sx={styles.callbackScopeStyleText}>Callback scope style</span>
+    <StyledIcon title="Attrs icon size" />
   </>
 );
 
@@ -433,5 +442,9 @@ const styles = stylex.create({
   callbackScopeStyleText: {
     fontStyle: "italic",
     color: "#7c3aed",
+  },
+  icon: {
+    position: "relative",
+    left: -3,
   },
 });

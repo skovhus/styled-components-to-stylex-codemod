@@ -532,6 +532,7 @@ export type StyledDecl = {
 
   withConfig?: { componentId?: string };
   attrsInfo?: {
+    /** Literal attrs plus safe reference expression attrs from `.attrs({...})`. */
     staticAttrs: Record<string, unknown>;
     /** Source kind for `.attrs(...)` argument. Used by base-component resolution bails. */
     sourceKind?: "object" | "function" | "unknown";

@@ -267,6 +267,9 @@ function canResolveBaseFromAttrs(attrsInfo: StyledDecl["attrsInfo"]): boolean {
   if (attrsInfo.hasUnsupportedValues) {
     return false;
   }
+  if (Object.values(attrsInfo.staticAttrs).some((value) => !isStaticLiteral(value))) {
+    return false;
+  }
   if ((attrsInfo.defaultAttrs?.length ?? 0) > 0) {
     return false;
   }

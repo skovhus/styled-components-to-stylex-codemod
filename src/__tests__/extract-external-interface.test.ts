@@ -1220,6 +1220,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": true,
         },
+        "test-cases/lib/icon.ts:Icon": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": true,
+          "style": false,
+          "styles": true,
+        },
         "test-cases/lib/inline-base-flex.tsx:Flex": {
           "as": false,
           "className": true,
