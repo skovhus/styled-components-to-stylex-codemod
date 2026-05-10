@@ -4,9 +4,10 @@
  */
 import type { Collection } from "jscodeshift";
 import type { RelationOverride } from "./lower-rules/state.js";
+import { cleanupEmptyStyleReferences } from "./post-process-empty-style-references.js";
+import { cleanupPostProcessImports } from "./post-process-imports.js";
 import { toStyleKey } from "./transform/helpers.js";
 import { getJsxElementName } from "./utilities/jscodeshift-utils.js";
-import { isMemberExpression } from "./lower-rules/utils.js";
 
 export function postProcessTransformedAst(args: {
   root: Collection<any>;
@@ -563,287 +564,22 @@ export function postProcessTransformedAst(args: {
     }
   }
 
-  // Remove empty style key references from stylex.props(), merger calls, and sx={} attributes
-  if (emptyStyleKeys && emptyStyleKeys.size > 0) {
-    const isEmptyStyleRef = (a: any): boolean =>
-      a?.type === "MemberExpression" &&
-      a.object?.type === "Identifier" &&
-      a.object.name === stylesIdentifier &&
-      a.property?.type === "Identifier" &&
-      emptyStyleKeys.has(a.property.name);
-
-    // Clean stylex.props() and merger calls
-    root.find(j.CallExpression).forEach((p: any) => {
-      const call = p.node;
-
-      if (
-        call?.callee?.type === "MemberExpression" &&
-        call.callee.object?.type === "Identifier" &&
-        call.callee.object.name === "stylex" &&
-        call.callee.property?.type === "Identifier" &&
-        call.callee.property.name === "props"
-      ) {
-        const originalLength = (call.arguments ?? []).length;
-        call.arguments = (call.arguments ?? []).filter((a: any) => !isEmptyStyleRef(a));
-        if (call.arguments.length !== originalLength) {
-          changed = true;
-        }
-        if (call.arguments.length === 0) {
-          const parentNode = p.parentPath?.node;
-          if (parentNode?.type === "JSXSpreadAttribute") {
-            const jsxOpening = p.parentPath?.parentPath?.node;
-            if (jsxOpening?.type === "JSXOpeningElement" && Array.isArray(jsxOpening.attributes)) {
-              jsxOpening.attributes = jsxOpening.attributes.filter(
-                (attr: unknown) => attr !== parentNode,
-              );
-              changed = true;
-            }
-          }
-        }
-      }
-
-      if (call?.callee?.type === "Identifier") {
-        const firstArg = call.arguments?.[0];
-        if (firstArg?.type === "ArrayExpression") {
-          const arr = firstArg;
-          const originalLength = (arr.elements ?? []).length;
-          arr.elements = (arr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
-          if (arr.elements.length !== originalLength) {
-            changed = true;
-          }
-        }
-        if (isEmptyStyleRef(firstArg)) {
-          call.arguments[0] = j.identifier("undefined");
-          changed = true;
-        }
-      }
-    });
-
-    // Clean sx={} JSX attributes
-    root.find(j.JSXAttribute, { name: { name: "sx" } } as any).forEach((p: any) => {
-      const val = p.node.value;
-      if (!val || val.type !== "JSXExpressionContainer") {
-        return;
-      }
-      const expr = val.expression;
-      if (expr?.type === "ArrayExpression") {
-        const orig = (expr.elements ?? []).length;
-        expr.elements = (expr.elements ?? []).filter((e: any) => !isEmptyStyleRef(e));
-        if (expr.elements.length !== orig) {
-          changed = true;
-        }
-        if (expr.elements.length === 1) {
-          val.expression = expr.elements[0];
-          changed = true;
-        }
-        if (expr.elements.length === 0) {
-          const opening = p.parentPath?.node;
-          if (opening?.type === "JSXOpeningElement" && Array.isArray(opening.attributes)) {
-            opening.attributes = opening.attributes.filter((attr: unknown) => attr !== p.node);
-            changed = true;
-          }
-        }
-      } else if (isEmptyStyleRef(expr)) {
-        const opening = p.parentPath?.node;
-        if (opening?.type === "JSXOpeningElement" && Array.isArray(opening.attributes)) {
-          opening.attributes = opening.attributes.filter((attr: unknown) => attr !== p.node);
-          changed = true;
-        }
-      }
-    });
+  if (cleanupEmptyStyleReferences({ root, j, emptyStyleKeys, stylesIdentifier })) {
+    changed = true;
   }
 
-  // If `@emotion/is-prop-valid` was only used inside removed styled declarations, drop the import.
-  root
-    .find(j.ImportDeclaration, { source: { value: "@emotion/is-prop-valid" } } as any)
-    .forEach((p: any) => {
-      const spec = p.node.specifiers?.find((s: any) => s.type === "ImportDefaultSpecifier") as any;
-      const local = spec?.local?.type === "Identifier" ? spec.local.name : null;
-      if (!local) {
-        return;
-      }
-      const used =
-        root
-          .find(j.Identifier, { name: local } as any)
-          .filter((idPath: any) => j(idPath).closest(j.ImportDeclaration).size() === 0)
-          .size() > 0;
-      if (!used) {
-        j(p).remove();
-        changed = true;
-      }
-    });
-
-  // Drop unused import specifiers (common after removing styled declarations).
-  // Keep side-effect imports (no specifiers) as-is.
-  root.find(j.ImportDeclaration).forEach((p: any) => {
-    // Some codebases intentionally keep `import React ... from "react"` even with automatic JSX runtimes,
-    // either for classic runtime compatibility, global React typing, or local conventions.
-    // Preserve existing `React` default/namespace imports when requested.
-    if (preserveReactImport && (p.node?.source as any)?.value === "react") {
-      const hasReactValueBinding = (p.node.specifiers ?? []).some(
-        (s: any) =>
-          (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
-          s.local?.type === "Identifier" &&
-          s.local.name === "React",
-      );
-      if (hasReactValueBinding) {
-        return;
-      }
-    }
-
-    const specs = (p.node.specifiers ?? []) as any[];
-    if (specs.length === 0) {
-      return;
-    }
-
-    const usedOutsideImports = (localName: string, importLocalNode: unknown): boolean => {
-      const isProbablyJsxBindingName = (name: string): boolean => {
-        // In JSX, lowercase tag names like `<div />` are treated as intrinsic elements, not scope bindings.
-        // We only treat JSX identifiers as usage of an import when they look like component names.
-        // (Uppercase is the conventional signal, and matches React/TSX binding semantics.)
-        const first = name[0] ?? "";
-        return first.toUpperCase() === first && first.toLowerCase() !== first;
-      };
-
-      const resolvesToImportBinding = (idPath: any): boolean => {
-        try {
-          const scope = idPath.scope?.lookup?.(localName);
-          const bindings = scope?.getBindings?.()?.[localName];
-          if (!Array.isArray(bindings)) {
-            return true;
-          }
-          return bindings.some((bindingPath: any) => bindingPath?.node === importLocalNode);
-        } catch {
-          // Some TS/JSX AST patterns are not fully supported by ast-types scope scanning.
-          // Keep the import when we cannot prove the reference resolves elsewhere.
-          return true;
-        }
-      };
-
-      const usedByIdentifier =
-        root
-          .find(j.Identifier, { name: localName } as any)
-          .filter((idPath: any) => {
-            if (j(idPath).closest(j.ImportDeclaration).size() > 0) {
-              return false;
-            }
-
-            const parent = idPath.parent?.node as any;
-            // Ignore identifiers used as non-computed member property keys: `obj.foo`
-            if (
-              parent &&
-              isMemberExpression(parent) &&
-              parent.property === idPath.node &&
-              parent.computed === false
-            ) {
-              return false;
-            }
-            // Ignore identifiers used as object literal keys when not shorthand: `{ foo: 1 }`
-            if (
-              parent &&
-              parent.type === "Property" &&
-              parent.key === idPath.node &&
-              parent.shorthand !== true
-            ) {
-              return false;
-            }
-            // Ignore identifiers that are declaration-only property names, not value references.
-            if (parent?.type === "TSPropertySignature" && parent.key === idPath.node) {
-              return false;
-            }
-            // Ignore JSX attribute names: `<Box color="accent" />` does not reference an import.
-            if (parent?.type === "JSXAttribute" && parent.name === idPath.node) {
-              return false;
-            }
-
-            return resolvesToImportBinding(idPath);
-          })
-          .size() > 0;
-
-      // JSX element names are `JSXIdentifier`, not `Identifier`, so include those too:
-      // - `styled(ExternalComponent)` becomes `<ExternalComponent ... />`
-      const usedByJsxIdentifier =
-        isProbablyJsxBindingName(localName) &&
-        root
-          .find(j.JSXIdentifier, { name: localName } as any)
-          .filter((jsxPath: any) => {
-            // No need for ImportDeclaration guard (JSXIdentifier doesn't appear in imports), but keep it symmetric.
-            if (j(jsxPath).closest(j.ImportDeclaration).size() > 0) {
-              return false;
-            }
-            return true;
-          })
-          .size() > 0;
-
-      return usedByIdentifier || usedByJsxIdentifier;
-    };
-
-    // Preserve entire type-only import declarations
-    // `import type { ... }` has importKind on the declaration, not the specifiers
-    if ((p.node as any).importKind === "type") {
-      return;
-    }
-
-    const nextSpecs = specs.filter((s: any) => {
-      // Preserve type-only import specifiers - they're used for TypeScript types
-      // and may not be detectable via standard Identifier lookup
-      if (s?.importKind === "type") {
-        return true;
-      }
-      const local =
-        s?.local?.type === "Identifier"
-          ? s.local.name
-          : s?.type === "ImportDefaultSpecifier" && s.local?.type === "Identifier"
-            ? s.local.name
-            : s?.type === "ImportNamespaceSpecifier" && s.local?.type === "Identifier"
-              ? s.local.name
-              : null;
-      if (!local) {
-        return true;
-      }
-      // If this identifier is being shadowed by a new import (added by the adapter),
-      // only drop it when the import source does NOT match the adapter's source for that local.
-      if (newImportLocalNames?.has(local)) {
-        const sourceValue = (p.node?.source as any)?.value;
-        const allowedSources = newImportSourcesByLocal?.get(local);
-        if (!allowedSources || !allowedSources.has(sourceValue)) {
-          return false;
-        }
-      }
-      const importLocalNode = s.local?.type === "Identifier" ? s.local : null;
-      return usedOutsideImports(local, importLocalNode);
-    });
-
-    if (nextSpecs.length !== specs.length) {
-      p.node.specifiers = nextSpecs;
-      changed = true;
-    }
-    if ((p.node.specifiers?.length ?? 0) === 0) {
-      j(p).remove();
-      changed = true;
-    }
+  const importCleanup = cleanupPostProcessImports({
+    root,
+    j,
+    preserveReactImport,
+    newImportLocalNames,
+    newImportSourcesByLocal,
   });
+  if (importCleanup.changed) {
+    changed = true;
+  }
 
-  // If we already have a value binding named `React` in scope, don't auto-insert `import React from "react";`.
-  //
-  // NOTE: Avoid relying on a strict matcher like `{ source: { value: "react" } }` here; different printers/parsers
-  // can represent the module specifier slightly differently, but the `source.value` string remains stable.
-  const hasReactImport =
-    root
-      .find(j.ImportDeclaration)
-      .filter((p: any) => (p.node?.source as any)?.value === "react")
-      .filter((p: any) =>
-        (p.node.specifiers ?? []).some(
-          (s: any) =>
-            (s.type === "ImportDefaultSpecifier" || s.type === "ImportNamespaceSpecifier") &&
-            s.local?.type === "Identifier" &&
-            s.local.name === "React",
-        ),
-      )
-      .size() > 0;
-  const usesReactIdent = root.find(j.Identifier, { name: "React" } as any).size() > 0;
-
-  return { changed, needsReactImport: usesReactIdent && !hasReactImport };
+  return { changed, needsReactImport: importCleanup.needsReactImport };
 }
 
 // --- Non-exported helpers ---
