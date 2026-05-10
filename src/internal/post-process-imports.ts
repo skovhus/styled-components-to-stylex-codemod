@@ -3,7 +3,9 @@
  * Core concepts: unused import pruning, adapter import shadowing, and React import reconciliation.
  */
 import type { Collection } from "jscodeshift";
+import type { ImportSpec } from "../adapter.js";
 import { isMemberExpression } from "./lower-rules/utils.js";
+import { importSourceToModuleSpecifier } from "./utilities/import-source.js";
 
 type PostProcessImportCleanupResult = {
   changed: boolean;
@@ -113,6 +115,32 @@ export function cleanupPostProcessImports(args: {
     changed,
     needsReactImport: usesReactIdentifierWithoutImport(root, j),
   };
+}
+
+export function collectNewImportMetadata(
+  resolverImports: Map<string, ImportSpec>,
+  filePath: string,
+): {
+  newImportLocalNames: Set<string>;
+  newImportSourcesByLocal: Map<string, Set<string>>;
+} {
+  const newImportLocalNames = new Set<string>();
+  const newImportSourcesByLocal = new Map<string, Set<string>>();
+
+  for (const imp of resolverImports.values()) {
+    const source = importSourceToModuleSpecifier(imp.from, filePath);
+    for (const n of imp.names ?? []) {
+      const local = n.local ?? n.imported;
+      if (local) {
+        newImportLocalNames.add(local);
+        const sources = newImportSourcesByLocal.get(local) ?? new Set<string>();
+        sources.add(source);
+        newImportSourcesByLocal.set(local, sources);
+      }
+    }
+  }
+
+  return { newImportLocalNames, newImportSourcesByLocal };
 }
 
 function usedOutsideImports(

@@ -2,11 +2,12 @@
  * Step: post-process transformed AST and cleanup imports.
  * Core concepts: relation overrides and import reconciliation.
  */
+import { cleanupConsumedLocalHelpers } from "../post-process-consumed-helpers.js";
 import { postProcessTransformedAst } from "../rewrite-jsx.js";
+import { collectNewImportMetadata } from "../post-process-imports.js";
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
-import { importSourceToModuleSpecifier } from "../utilities/import-source.js";
 
 /**
  * Performs post-processing rewrites, import cleanup, and descendant/ancestor selector adjustments.
@@ -20,24 +21,10 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   // Skip decls that couldn't be lowered — their helpers and JSX must remain untouched.
   const styledDecls = getActiveStyledDecls(allStyledDecls) ?? [];
 
-  // Extract local names of identifiers added as new imports by the adapter.
-  // These should shadow old imports with the same name (e.g., when adapter replaces
-  // `transitionSpeed` from `./lib/helpers` with `transitionSpeed` from `./tokens.stylex`).
-  const newImportLocalNames = new Set<string>();
-  const newImportSourcesByLocal = new Map<string, Set<string>>();
-  for (const imp of ctx.resolverImports.values()) {
-    const source = importSourceToModuleSpecifier(imp.from, String(file.path));
-    for (const n of imp.names ?? []) {
-      const local = n.local ?? n.imported;
-      if (local) {
-        newImportLocalNames.add(local);
-        const sources = newImportSourcesByLocal.get(local) ?? new Set<string>();
-        sources.add(source);
-        newImportSourcesByLocal.set(local, sources);
-      }
-    }
-  }
-
+  const { newImportLocalNames, newImportSourcesByLocal } = collectNewImportMetadata(
+    ctx.resolverImports,
+    String(file.path),
+  );
   ctx.newImportLocalNames = newImportLocalNames;
   ctx.newImportSourcesByLocal = newImportSourcesByLocal;
 
@@ -67,52 +54,7 @@ export function postProcessStep(ctx: TransformContext): StepResult {
   }
   ctx.needsReactImport = post.needsReactImport;
 
-  // Remove local helper functions that were consumed during interpolation processing.
-  // Only remove when no remaining references exist (the function may be exported
-  // or called from non-styled code elsewhere in the file).
-  for (const decl of styledDecls) {
-    for (const helperName of decl.consumedLocalHelpers ?? []) {
-      const fnPaths = root.find(j.FunctionDeclaration, { id: { name: helperName } });
-      if (fnPaths.size() === 0) {
-        continue;
-      }
-      // Skip exported functions — they're part of the module's public API
-      const isExported = fnPaths.some(
-        (p: { parentPath?: { node?: { type?: string } } }) =>
-          p.parentPath?.node?.type === "ExportNamedDeclaration" ||
-          p.parentPath?.node?.type === "ExportDefaultDeclaration",
-      );
-      if (isExported) {
-        continue;
-      }
-      // Check for remaining references outside the declaration itself
-      const refs = root
-        .find(j.Identifier, { name: helperName })
-        .filter(
-          (idPath: { node?: unknown; parentPath?: { node?: { type?: string; id?: unknown } } }) => {
-            const parent = idPath.parentPath?.node;
-            if (parent?.type === "FunctionDeclaration" && parent.id === idPath.node) {
-              return false;
-            }
-            return true;
-          },
-        );
-      if (refs.size() === 0) {
-        fnPaths.forEach((p: { prune: () => void }) => p.prune());
-      }
-    }
-  }
-
-  // Annotate event handler parameters at usage sites of converted components.
-  // After conversion, inline arrow function event handlers may lose type inference
-  // (e.g., `onKeyDown={e => ...}` gets implicit-any). Add explicit React event type annotations.
-  if (/\.(ts|tsx)$/.test(file.path)) {
-    // Event handler annotation is disabled: non-polymorphic components have
-    // stable element types that TypeScript infers automatically, and polymorphic
-    // components use the base tag which may be wrong when `as` overrides it
-    // (e.g., `<Box as="input" onChange={...}>` where Box is based on `div`
-    // would incorrectly annotate with HTMLDivElement instead of HTMLInputElement).
-  }
+  cleanupConsumedLocalHelpers(ctx, styledDecls);
 
   return CONTINUE;
 }
