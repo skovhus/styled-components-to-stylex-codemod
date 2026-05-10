@@ -24,9 +24,28 @@ export const Select = styled.select`
   font-size: 13px;
 `;
 
+function Link(props: { to: string; children: React.ReactNode }) {
+  return <a href={props.to}>{props.children}</a>;
+}
+
+const StyledSpan = styled.span`
+  position: relative;
+`;
+
+export function Repro(props: { integrationsPath: string }) {
+  return (
+    <>
+      Browse <Link to={props.integrationsPath}>integrations</Link> to enable new agents, or manage
+      access
+      <StyledSpan>team</StyledSpan>
+    </>
+  );
+}
+
 export const App = () => (
   <Wrapper>
     <Title>Hello World!</Title>
+    <Repro integrationsPath="/integrations" />
     <Select onChange={(e) => console.log(e.target.value)} />
   </Wrapper>
 );

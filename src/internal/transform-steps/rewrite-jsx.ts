@@ -1004,6 +1004,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           ...finalRest,
           ...(styleAttr && !needsMerge && !useSxPropForWrapped ? [styleAttr] : []),
         ];
+        preserveInlineJsxTextWhitespace(j, p);
       });
   }
 
@@ -1138,24 +1139,13 @@ function extractJsxAttrValueExpr(
   return undefined;
 }
 
-function hasPreviousStaticSiblingWithName(path: any, componentName: string): boolean {
-  const currentNode = path.node;
-  let cursor = path.parentPath;
-  let parentNode: { type?: string; children?: unknown[] } | undefined;
+type JsxChildrenOwner = { type?: string; children?: unknown[] };
+type JsxPath = { node: unknown; parentPath?: unknown };
+type JsxParentPath = { node?: JsxChildrenOwner; parentPath?: unknown };
 
-  while (cursor) {
-    const candidate = cursor.node as { type?: string; children?: unknown[] } | undefined;
-    if (
-      candidate &&
-      (candidate.type === "JSXElement" || candidate.type === "JSXFragment") &&
-      Array.isArray(candidate.children) &&
-      candidate.children.includes(currentNode)
-    ) {
-      parentNode = candidate;
-      break;
-    }
-    cursor = cursor.parentPath;
-  }
+function hasPreviousStaticSiblingWithName(path: JsxPath, componentName: string): boolean {
+  const currentNode = path.node;
+  const parentNode = findContainingJsxChildrenOwner(path);
 
   if (!parentNode?.children) {
     return false;
@@ -1221,6 +1211,108 @@ function hasPreviousStaticSiblingWithName(path: any, componentName: string): boo
   }
 
   return false;
+}
+
+function preserveInlineJsxTextWhitespace(
+  j: TransformContext["j"]["jscodeshift"],
+  path: JsxPath,
+): void {
+  const parentNode = findContainingJsxChildrenOwner(path);
+  const children = parentNode?.children;
+  if (!children) {
+    return;
+  }
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (!isJsxTextChild(child) || !child.value.trim()) {
+      continue;
+    }
+
+    // Recast can drop inline edge spaces when a multiline JSX parent is reprinted.
+    const leading = child.value.match(/^[ \t]+(?=\S)/)?.[0];
+    if (leading && hasRenderableJsxSibling(children, i - 1, -1)) {
+      child.value = child.value.slice(leading.length);
+      children.splice(i, 0, createJsxSpaceExpression(j, leading));
+      i++;
+    }
+
+    const trailing = child.value.match(/\S([ \t]+)$/)?.[1];
+    if (trailing && hasRenderableJsxSibling(children, i + 1, 1)) {
+      child.value = child.value.slice(0, -trailing.length);
+      children.splice(i + 1, 0, createJsxSpaceExpression(j, trailing));
+      i++;
+    }
+  }
+}
+
+function findContainingJsxChildrenOwner(path: JsxPath): JsxChildrenOwner | undefined {
+  const currentNode = path.node;
+  let cursor = path.parentPath as JsxParentPath | undefined;
+
+  while (cursor) {
+    const candidate = cursor.node;
+    if (
+      candidate &&
+      (candidate.type === "JSXElement" || candidate.type === "JSXFragment") &&
+      Array.isArray(candidate.children) &&
+      candidate.children.includes(currentNode)
+    ) {
+      return candidate;
+    }
+    cursor = cursor.parentPath as JsxParentPath | undefined;
+  }
+
+  return undefined;
+}
+
+function isJsxTextChild(child: unknown): child is { type: "JSXText"; value: string } {
+  return (
+    typeof child === "object" &&
+    child !== null &&
+    (child as { type?: unknown }).type === "JSXText" &&
+    typeof (child as { value?: unknown }).value === "string"
+  );
+}
+
+function hasRenderableJsxSibling(children: unknown[], startIndex: number, step: 1 | -1): boolean {
+  for (let i = startIndex; i >= 0 && i < children.length; i += step) {
+    const sibling = children[i];
+    if (isJsxTextChild(sibling)) {
+      if (sibling.value.trim()) {
+        return true;
+      }
+      continue;
+    }
+    if (isJsxEmptyExpressionContainer(sibling)) {
+      continue;
+    }
+    if (sibling) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isJsxEmptyExpressionContainer(child: unknown): boolean {
+  if (typeof child !== "object" || child === null) {
+    return false;
+  }
+  const maybeExpression = child as {
+    type?: unknown;
+    expression?: { type?: unknown };
+  };
+  return (
+    maybeExpression.type === "JSXExpressionContainer" &&
+    maybeExpression.expression?.type === "JSXEmptyExpression"
+  );
+}
+
+function createJsxSpaceExpression(
+  j: TransformContext["j"]["jscodeshift"],
+  value: string,
+): ReturnType<TransformContext["j"]["jscodeshift"]["jsxExpressionContainer"]> {
+  return j.jsxExpressionContainer(j.literal(value));
 }
 
 /**
