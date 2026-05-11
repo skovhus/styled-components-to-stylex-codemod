@@ -111,7 +111,7 @@ export function tryHandleInterpolatedStringValue(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
-  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
+  ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
   resolveThemeValue?: (expr: any, cssProperty?: string) => unknown;
   setStyleValue?: (prop: string, value: unknown) => void;
@@ -277,7 +277,7 @@ function buildInterpolatedTemplate(args: {
   resolveCallExpr?: (expr: any) => { resolved: any; imports?: any[] } | null;
   resolveImportedValueExpr?: (
     expr: any,
-  ) => { resolved: any; imports?: any[] } | { bail: true } | null;
+  ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
 }): unknown {
   const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
@@ -292,7 +292,8 @@ function buildInterpolatedTemplate(args: {
   let allStatic = true;
   const quasis: any[] = [];
   let q = "";
-  for (const part of parts) {
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex];
     if (part.kind === "static") {
       q += part.value;
       fullStaticValue += part.value;
@@ -308,6 +309,9 @@ function buildInterpolatedTemplate(args: {
       if (expr.type === "CallExpression" && resolveCallExpr) {
         const resolved = resolveCallExpr(expr);
         if (resolved) {
+          if (hasAdjacentUnitInParts(parts, partIndex)) {
+            return null;
+          }
           // If resolved to a string literal, inline it directly into the static text
           if (
             resolved.resolved?.type === "StringLiteral" ||
@@ -340,6 +344,15 @@ function buildInterpolatedTemplate(args: {
           return null;
         }
         const resolved = importedResolved;
+        if (resolved.skipStaticWrap && hasSingleSlotUnitSuffix(cssValue)) {
+          for (const imp of resolved.imports ?? []) {
+            addImport?.(imp);
+          }
+          return resolved.resolved;
+        }
+        if (hasAdjacentUnitInParts(parts, partIndex)) {
+          return null;
+        }
         if (
           resolved.resolved?.type === "StringLiteral" ||
           (resolved.resolved?.type === "Literal" && typeof resolved.resolved.value === "string")
@@ -382,4 +395,33 @@ function buildInterpolatedTemplate(args: {
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);
+}
+
+function hasAdjacentUnitInParts(parts: any[], slotIndex: number): boolean {
+  const before = parts[slotIndex - 1]?.kind === "static" ? (parts[slotIndex - 1]?.value ?? "") : "";
+  const after = parts[slotIndex + 1]?.kind === "static" ? (parts[slotIndex + 1]?.value ?? "") : "";
+  return /[a-zA-Z%]$/.test(before) || /^[a-zA-Z%]/.test(after);
+}
+
+function hasSingleSlotUnitSuffix(cssValue: any): boolean {
+  const parts = cssValue?.parts ?? [];
+  const slotCount = parts.filter((part: any) => part?.kind === "slot").length;
+  let prefix = "";
+  let suffix = "";
+  let foundSlot = false;
+  for (const part of parts) {
+    if (part?.kind === "slot") {
+      foundSlot = true;
+      continue;
+    }
+    if (part?.kind !== "static") {
+      continue;
+    }
+    if (foundSlot) {
+      suffix += part.value ?? "";
+    } else {
+      prefix += part.value ?? "";
+    }
+  }
+  return slotCount === 1 && prefix === "" && suffix !== "" && /^-?(?:[a-zA-Z%]+)$/.test(suffix);
 }

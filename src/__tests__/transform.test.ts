@@ -8,7 +8,7 @@ import { format } from "oxfmt";
 import transform, { transformWithWarnings } from "../transform.js";
 import type { TransformOptions } from "../transform.js";
 import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
-import type { Adapter, ResolveValueContext } from "../adapter.js";
+import type { Adapter, CallResolveContext, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import type { CrossFileInfo } from "../internal/transform-types.js";
@@ -3236,6 +3236,638 @@ export const App = () => (
         (w) => w.type === "Adapter resolveCall returned undefined for helper call",
       ),
     ).toBe(true);
+  });
+
+  it("should call the adapter for helper calls nested in arithmetic interpolations", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - runtimeValue()}px;
+\`;
+`;
+    const resolveCalls: CallResolveContext[] = [];
+
+    const adapterWithoutRuntimeResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        resolveCalls.push(ctx);
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-nestedArithmeticNoResolution.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutRuntimeResolution },
+    );
+
+    expect(resolveCalls).toHaveLength(1);
+    expect(resolveCalls[0]).toMatchObject({
+      calleeImportedName: "runtimeValue",
+      cssProperty: "padding-top",
+      args: [],
+    });
+    expect(resolveCalls[0]?.calleeSource.value).toMatch(/helpers$/);
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Adapter resolveCall returned undefined for helper call",
+    );
+  });
+
+  it.each([
+    {
+      name: "member helper arithmetic expression",
+      source: `
+import styled from "styled-components";
+import { helpers } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - helpers.runtimeValue()}px;
+\`;
+`,
+      expectedMemberPath: ["runtimeValue"],
+    },
+    {
+      name: "conditional expression",
+      source: `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${runtimeValue() ? 8 : 4}px;
+\`;
+`,
+    },
+    {
+      name: "unary expression",
+      source: `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${-runtimeValue()}px;
+\`;
+`,
+    },
+    {
+      name: "nested template literal",
+      source: `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${\`calc(\${runtimeValue()}px + 1px)\`};
+\`;
+`,
+    },
+    {
+      name: "multi-slot background image",
+      source: `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  background-image: linear-gradient(\${runtimeValue()}, \${runtimeValue()});
+\`;
+`,
+    },
+    {
+      name: "arrow function dynamic value",
+      source: `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div<{ $size: number }>\`
+  width: \${(props) => runtimeValue(props.$size, 1) + 4}px;
+\`;
+`,
+      expectWarning: false,
+    },
+  ])(
+    "should call the adapter for helper calls nested in $name",
+    ({ name, source, expectedMemberPath, expectWarning = true }) => {
+      const resolveCalls: CallResolveContext[] = [];
+
+      const adapterWithoutRuntimeResolution = {
+        externalInterface() {
+          return { styles: false, as: false, ref: false };
+        },
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall(ctx: CallResolveContext) {
+          resolveCalls.push(ctx);
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        styleMerger: null,
+        useSxProp: false,
+      } satisfies Adapter;
+
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, `helper-nested-${name.replaceAll(" ", "-")}.input.tsx`),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: adapterWithoutRuntimeResolution },
+      );
+
+      expect(resolveCalls.length).toBeGreaterThan(0);
+      expect(resolveCalls[0]).toMatchObject({
+        calleeImportedName: expectedMemberPath ? "helpers" : "runtimeValue",
+      });
+      if (expectedMemberPath) {
+        expect(resolveCalls[0]?.calleeMemberPath).toEqual(expectedMemberPath);
+      }
+      expect(result.code).toBeNull();
+      if (expectWarning) {
+        expect(result.warnings.map((w) => w.type)).toEqual(
+          expect.arrayContaining([
+            expect.stringMatching(
+              /Adapter resolveCall returned undefined for helper call|Unsupported interpolation: call expression/,
+            ),
+          ]),
+        );
+      }
+    },
+  );
+
+  it("should fold static unit suffixes into calc expressions for resolved helper arithmetic", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${8 - runtimeValue()}px;
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("`calc(8px - ${$spacing.runtimeValue})`");
+    expect(code).not.toContain(")px");
+  });
+
+  it.each([
+    {
+      name: "nested conditional arithmetic",
+      css: "padding-top: ${cond ? 8 - runtimeValue() : 4}px;",
+      expected: 'cond ? `calc(8px - ${$spacing.runtimeValue})` : "4px"',
+      forbidden: "8 - $spacing.runtimeValue",
+    },
+    {
+      name: "multiplication scalar",
+      css: "padding-top: ${2 * runtimeValue()}px;",
+      expected: "`calc(2 * ${$spacing.runtimeValue})`",
+      forbidden: "2px *",
+    },
+    {
+      name: "conditional resolved branch",
+      css: "padding-top: ${cond ? runtimeValue() : 4}px;",
+      expected: 'cond ? $spacing.runtimeValue : "4px"',
+      forbidden: "}px",
+    },
+  ])(
+    "should preserve units for resolved helper arithmetic in $name",
+    ({ css, expected, forbidden }) => {
+      const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+const cond = true;
+
+export const Box = styled.div\`
+  ${css}
+\`;
+`;
+
+      const adapterWithTokenResolution = {
+        externalInterface() {
+          return { styles: false, as: false, ref: false };
+        },
+        resolveValue() {
+          return undefined;
+        },
+        resolveCall(ctx: CallResolveContext) {
+          if (ctx.calleeImportedName === "runtimeValue") {
+            return {
+              usage: "create" as const,
+              expr: "$spacing.runtimeValue",
+              imports: [
+                {
+                  from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                  names: [{ imported: "$spacing" }],
+                },
+              ],
+            };
+          }
+          return undefined;
+        },
+        resolveSelector() {
+          return undefined;
+        },
+        styleMerger: null,
+        useSxProp: false,
+      } satisfies Adapter;
+
+      const result = transformWithWarnings(
+        {
+          source,
+          path: join(testCasesDir, "helper-resolvedArithmeticNestedUnit.input.tsx"),
+        },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: adapterWithTokenResolution },
+      );
+
+      expect(result.code).not.toBeNull();
+      const code = result.code ?? "";
+      expect(code).toContain(expected);
+      expect(code).not.toContain(forbidden);
+    },
+  );
+
+  it("should bail when resolved helper arithmetic has surrounding static text", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  transform: translateX(\${8 - runtimeValue()}px);
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticWrapped.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported interpolation: call expression",
+    );
+  });
+
+  it.each([
+    {
+      name: "unresolved arithmetic operand",
+      declarations: "const base = 8;",
+      css: "padding-top: ${base - runtimeValue()}px;",
+    },
+    {
+      name: "nested template literal unit adjacency",
+      declarations: "",
+      css: "padding-top: ${`calc(${runtimeValue()}px + 1px)`};",
+    },
+    {
+      name: "unary plus",
+      declarations: "",
+      css: "padding-top: ${+runtimeValue()}px;",
+    },
+    {
+      name: "conditional nonliteral branch",
+      declarations: "const size = 8;",
+      css: "padding-top: ${cond ? size : runtimeValue()}px;",
+    },
+    {
+      name: "logical nonliteral branch",
+      declarations: "const size = 8;",
+      css: "padding-top: ${size || runtimeValue()}px;",
+    },
+    {
+      name: "helper predicate",
+      declarations: "",
+      css: "padding-top: ${runtimeValue() ? 8 : 4}px;",
+    },
+  ])("should bail for unsafe resolved helper unit arithmetic in $name", ({ declarations, css }) => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+const cond = true;
+${declarations}
+
+export const Box = styled.div\`
+  ${css}
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticUnsafeUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported interpolation: call expression",
+    );
+  });
+
+  it("should bail for resolved helper slots with adjacent units in multi-slot backgrounds", () => {
+    const source = `
+import styled from "styled-components";
+import { other, runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  background-image: linear-gradient(\${runtimeValue()}px, \${other()});
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        return {
+          usage: "create" as const,
+          expr:
+            ctx.calleeImportedName === "runtimeValue" ? "$spacing.runtimeValue" : "$spacing.other",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "$spacing" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-backgroundAdjacentUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported interpolation: call expression",
+    );
+  });
+
+  it.each([
+    {
+      name: "static direct helper arg",
+      css: 'background-color: ${(props) => color("bgBase")};',
+    },
+    {
+      name: "static curried helper key",
+      css: 'background-color: ${(props) => color("bgBase")(props)};',
+    },
+    {
+      name: "multi-argument helper",
+      css: 'padding-top: ${(props) => spacing(props.size, "px")};',
+    },
+  ])("should preserve dynamic helper calls with $name", ({ css }) => {
+    const source = `
+import styled from "styled-components";
+import { color, spacing } from "./lib/helpers";
+
+export const Box = styled.div<{ size: number }>\`
+  ${css}
+\`;
+`;
+
+    const adapterWithHelperResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "color") {
+          return {
+            usage: "create" as const,
+            expr: "$colors.bgBase",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        if (ctx.calleeImportedName === "spacing") {
+          return {
+            usage: "create" as const,
+            expr: "getSpacing",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./spacing" },
+                names: [{ imported: "getSpacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-dynamicStaticArgPreserve.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithHelperResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(
+      "Unsupported interpolation: call expression",
+    );
+  });
+
+  it("should preserve member helper calls with dynamic arguments", () => {
+    const source = `
+import styled from "styled-components";
+import { helpers } from "./lib/helpers";
+
+export const Box = styled.div<{ tone: string }>\`
+  background-color: \${(props) => helpers.color(props.tone)};
+\`;
+`;
+
+    const adapterWithMemberResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "helpers" && ctx.calleeMemberPath?.join(".") === "color") {
+          return {
+            usage: "create" as const,
+            dynamicArgUsage: "memberAccess" as const,
+            expr: "$colors",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-memberDynamicArgPreserve.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithMemberResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("helpers.color(");
+    expect(code).not.toContain("backgroundColor: $colors");
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {
