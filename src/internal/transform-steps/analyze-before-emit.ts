@@ -457,6 +457,65 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       !hasSpreadInJsx(root, j, targetDecl.localName)
     );
   };
+  const hasNonJsxComponentValueReference = (name: string): boolean =>
+    root
+      .find(j.Identifier, { name })
+      .filter((p) => {
+        // Skip the styled component declaration itself, but still count
+        // `const Alias = StyledComponent` as a value use.
+        if (
+          p.parentPath?.node?.type === "VariableDeclarator" &&
+          p.parentPath.node.id === p.node
+        ) {
+          return false;
+        }
+        // Skip JSX element names (these are handled by inline substitution).
+        if (
+          p.parentPath?.node?.type === "JSXOpeningElement" ||
+          p.parentPath?.node?.type === "JSXClosingElement"
+        ) {
+          return false;
+        }
+        // Skip JSX member expressions like <Styled.Component />.
+        if (
+          p.parentPath?.node?.type === "JSXMemberExpression" &&
+          (p.parentPath.node as any).object === p.node
+        ) {
+          return false;
+        }
+        // Skip styled(Component) extensions.
+        if (p.parentPath?.node?.type === "CallExpression") {
+          const callExpr = p.parentPath.node as any;
+          const callee = callExpr.callee;
+          if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
+            return false;
+          }
+          if (
+            callee?.type === "MemberExpression" &&
+            callee.object?.type === "CallExpression" &&
+            callee.object.callee?.type === "Identifier" &&
+            callee.object.callee.name === ctx.styledDefaultImport
+          ) {
+            return false;
+          }
+        }
+        // Skip TaggedTemplateExpression tags and styled(Component)`...` calls.
+        if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
+          return false;
+        }
+        if (
+          p.parentPath?.node?.type === "CallExpression" &&
+          p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
+        ) {
+          return false;
+        }
+        // Skip template literal interpolations (e.g., ${Link}:hover &).
+        if (p.parentPath?.node?.type === "TemplateLiteral") {
+          return false;
+        }
+        return true;
+      })
+      .size() > 0;
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
   // is statically enumerable, each usage site stays on the inline JSX rewrite path,
@@ -527,6 +586,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
           className ||
           style ||
           ref ||
+          hasNonJsxComponentValueReference(decl.localName) ||
           hasSpreadInJsx(root, j, decl.localName)
         ? "dynamic"
         : proof.safe
@@ -630,19 +690,15 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
             return returnResult({ code: null, warnings: ctx.warnings }, "bail");
           }
           if (
-            targetIds.size === 1 &&
-            ctx.resolvedStyleObjects &&
-            (targetDecl.extraStyleKeysAfterBase ?? []).length === 0 &&
-            tryMergeLocalElementOverrideIntoTargetBase({
-              root,
-              j,
-              parentName: decl.localName,
-              targetDecl,
-              override,
-              resolvedStyleObjects: ctx.resolvedStyleObjects,
-            })
+            hasPseudoLocalElementOverride(override) &&
+            hasRuntimeStyleEntriesForLocalElementTarget(targetDecl)
           ) {
-            continue;
+            ctx.warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: ambiguous element selector",
+              loc: override.loc,
+            });
+            return returnResult({ code: null, warnings: ctx.warnings }, "bail");
           }
           targetDecl.localElementTargetProofs ??= [];
           targetDecl.localElementTargetProofs.push({
@@ -1021,66 +1077,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.isDirectJsxResolution) {
       continue;
     }
-    const usedAsValue =
-      root
-        .find(j.Identifier, { name: decl.localName })
-        .filter((p) => {
-          // Skip the styled component declaration itself, but still count
-          // `const Alias = StyledComponent` as a value use.
-          if (
-            p.parentPath?.node?.type === "VariableDeclarator" &&
-            p.parentPath.node.id === p.node
-          ) {
-            return false;
-          }
-          // Skip JSX element names (these are handled by inline substitution)
-          if (
-            p.parentPath?.node?.type === "JSXOpeningElement" ||
-            p.parentPath?.node?.type === "JSXClosingElement"
-          ) {
-            return false;
-          }
-          // Skip JSX member expressions like <Styled.Component />
-          if (
-            p.parentPath?.node?.type === "JSXMemberExpression" &&
-            (p.parentPath.node as any).object === p.node
-          ) {
-            return false;
-          }
-          // Skip styled(Component) extensions
-          if (p.parentPath?.node?.type === "CallExpression") {
-            const callExpr = p.parentPath.node as any;
-            const callee = callExpr.callee;
-            if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
-              return false;
-            }
-            if (
-              callee?.type === "MemberExpression" &&
-              callee.object?.type === "CallExpression" &&
-              callee.object.callee?.type === "Identifier" &&
-              callee.object.callee.name === ctx.styledDefaultImport
-            ) {
-              return false;
-            }
-          }
-          // Skip TaggedTemplateExpression tags
-          if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
-            return false;
-          }
-          // Skip styled(Component) call in TaggedTemplateExpression
-          if (
-            p.parentPath?.node?.type === "CallExpression" &&
-            p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
-          ) {
-            return false;
-          }
-          // Skip template literal interpolations (e.g., ${Link}:hover &)
-          if (p.parentPath?.node?.type === "TemplateLiteral") {
-            return false;
-          }
-          return true;
-        })
-        .size() > 0;
+    const usedAsValue = hasNonJsxComponentValueReference(decl.localName);
 
     if (usedAsValue) {
       decl.usedAsValue = true;
@@ -3968,66 +3965,18 @@ function buildLocalElementOverrideProperties(args: {
   });
 }
 
-function tryMergeLocalElementOverrideIntoTargetBase(args: {
-  root: TransformContext["root"];
-  j: JSCodeshift;
-  targetDecl: StyledDecl;
-  parentName: string;
-  override: LocalElementOverrideCandidate;
-  resolvedStyleObjects: Map<string, unknown>;
-}): boolean {
-  const { root, j, targetDecl, parentName, override, resolvedStyleObjects } = args;
-  if (
-    override.relation !== "child" ||
-    override.ancestorPseudo ||
-    override.childPseudo ||
-    override.pseudoBuckets.size !== 1 ||
-    !override.pseudoBuckets.has(null)
-  ) {
-    return false;
-  }
-  if (!hasOnlyDirectChildUsages(root, j, targetDecl.localName, parentName)) {
-    return false;
-  }
-  const baseStyles = resolvedStyleObjects.get(targetDecl.styleKey);
-  if (!isPlainStyleObject(baseStyles)) {
-    return false;
-  }
-  const bucket = override.pseudoBuckets.get(null) ?? {};
-  for (const [prop, value] of Object.entries(bucket)) {
-    baseStyles[prop] = value;
-  }
-  return true;
+function hasPseudoLocalElementOverride(override: LocalElementOverrideCandidate): boolean {
+  return [...override.pseudoBuckets.keys()].some((pseudo) => pseudo !== null);
 }
 
-function hasOnlyDirectChildUsages(
-  root: TransformContext["root"],
-  j: JSCodeshift,
-  childName: string,
-  parentName: string,
-): boolean {
-  let sawUsage = false;
-  let allUsagesAreDirectChildren = true;
-  root
-    .find(j.JSXElement, {
-      openingElement: { name: { type: "JSXIdentifier", name: childName } },
-    } as any)
-    .forEach((path: any) => {
-      if (!allUsagesAreDirectChildren) {
-        return;
-      }
-      sawUsage = true;
-      const parentNode = path.parentPath?.node;
-      if (parentNode?.type !== "JSXElement") {
-        allUsagesAreDirectChildren = false;
-        return;
-      }
-      const parentElementName = getRootJsxIdentifierName(parentNode.openingElement?.name);
-      if (parentElementName !== parentName) {
-        allUsagesAreDirectChildren = false;
-      }
-    });
-  return sawUsage && allUsagesAreDirectChildren;
+function hasRuntimeStyleEntriesForLocalElementTarget(decl: StyledDecl): boolean {
+  return (
+    Object.keys(decl.variantStyleKeys ?? {}).length > 0 ||
+    (decl.variantDimensions?.length ?? 0) > 0 ||
+    (decl.staticBooleanVariants?.length ?? 0) > 0 ||
+    (decl.callSiteCombinedStyles?.length ?? 0) > 0 ||
+    (decl.styleFnFromProps?.length ?? 0) > 0
+  );
 }
 
 function buildResolvedStyleObjectList(

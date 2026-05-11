@@ -2964,6 +2964,199 @@ export const App = () => (
     expect(result.code).toContain('fill: "blue"');
   });
 
+  it("should bail when parent child overrides would conflict with child variants", () => {
+    const source = `
+import styled from "styled-components";
+
+const Child = styled.button<{ $primary?: boolean }>\`
+  color: \${(props) => (props.$primary ? "green" : "gray")};
+\`;
+
+const Parent = styled.div\`
+  > button {
+    color: red;
+  }
+\`;
+
+export const App = () => (
+  <Parent>
+    <Child $primary>Action</Child>
+  </Parent>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should preserve child pseudo maps when parent child overrides target the same prop", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+
+  &:hover {
+    fill: red;
+  }
+\`;
+
+const Container = styled.div\`
+  > svg {
+    fill: blue;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("childIcon");
+    expect(result.code).toContain('":hover": "red"');
+  });
+
+  it("should bail when local pseudo defaults would override child variants", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg<{ $active?: boolean }>\`
+  fill: gray;
+  \${(props) => props.$active && "fill: green;"}
+\`;
+
+const Container = styled.div\`
+  svg:hover {
+    fill: red;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon $active viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should recheck direct child targets that become wrappers after proof", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  > svg {
+    fill: blue;
+  }
+\`;
+
+const useAsValue = (Comp: React.ComponentType<any>) => Comp;
+useAsValue(Icon);
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should bail when local element selector parents are used as non-JSX values", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+\`;
+
+const useAsValue = (Comp: React.ComponentType<any>) => Comp;
+useAsValue(Container);
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: element selector with plain intrinsic children",
+      }),
+    ]);
+  });
+
   it("should transform & + & when same-file JSX adjacency is statically provable", () => {
     const source = `
 import styled from "styled-components";
