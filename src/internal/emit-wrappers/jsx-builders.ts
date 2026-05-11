@@ -15,6 +15,7 @@ import type {
   RestElement,
 } from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { cloneAstNode } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind, WrapperPropDefaults } from "./types.js";
 import type { StyleMergingResult } from "./style-merger.js";
 
@@ -140,40 +141,94 @@ export function buildInvertedBoolAttrs(
   );
 }
 
+export function buildDynamicAttrsFromProps(
+  j: JSCodeshift,
+  args: {
+    dynamicAttrs: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
+    propExprFor: (jsxProp: string) => ExpressionKind;
+  },
+): JsxAttr[] {
+  const { dynamicAttrs, propExprFor } = args;
+  return dynamicAttrs.map((attr) => {
+    const propExpr = propExprFor(attr.jsxProp);
+    const valueExpr =
+      attr.defaultValue === undefined
+        ? propExpr
+        : j.conditionalExpression(
+            j.binaryExpression("===", propExpr, j.identifier("undefined")),
+            literalExprForAttrDefault(j, attr.defaultValue),
+            propExpr,
+          );
+    return j.jsxAttribute(j.jsxIdentifier(attr.attrName), j.jsxExpressionContainer(valueExpr));
+  });
+}
+
+function literalExprForAttrDefault(j: JSCodeshift, value: unknown): ExpressionKind {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return j.literal(value) as ExpressionKind;
+  }
+  if (value === null) {
+    return j.literal(null) as ExpressionKind;
+  }
+  return j.identifier("undefined");
+}
+
 export function buildStaticAttrsFromRecord(
   j: JSCodeshift,
   staticAttrs: Record<string, unknown>,
   options?: { booleanTrueAsShorthand?: boolean },
 ): JsxAttr[] {
-  const booleanTrueAsShorthand = options?.booleanTrueAsShorthand ?? true;
   const attrs: JsxAttr[] = [];
   for (const [key, value] of Object.entries(staticAttrs)) {
-    if (typeof value === "string") {
-      attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
-    } else if (typeof value === "boolean") {
-      if (value) {
-        attrs.push(
-          j.jsxAttribute(
-            j.jsxIdentifier(key),
-            booleanTrueAsShorthand ? null : j.jsxExpressionContainer(j.booleanLiteral(true)),
-          ),
-        );
-      } else {
-        attrs.push(
-          j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(false))),
-        );
-      }
-    } else if (typeof value === "number") {
-      attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))));
-    } else if (value === undefined) {
-      attrs.push(
-        j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.identifier("undefined"))),
-      );
-    } else if (value === null) {
-      attrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(null))));
+    const attr = buildStaticAttrFromValue(j, key, value, options);
+    if (attr) {
+      attrs.push(attr);
     }
   }
   return attrs;
+}
+
+export function buildStaticAttrFromValue(
+  j: JSCodeshift,
+  key: string,
+  value: unknown,
+  options?: { booleanTrueAsShorthand?: boolean },
+): JSXAttribute | null {
+  const booleanTrueAsShorthand = options?.booleanTrueAsShorthand ?? true;
+  if (typeof value === "string") {
+    return j.jsxAttribute(j.jsxIdentifier(key), j.literal(value));
+  }
+  if (typeof value === "boolean") {
+    return j.jsxAttribute(
+      j.jsxIdentifier(key),
+      value && booleanTrueAsShorthand ? null : j.jsxExpressionContainer(j.booleanLiteral(value)),
+    );
+  }
+  if (typeof value === "number") {
+    return j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value)));
+  }
+  if (value === undefined) {
+    return j.jsxAttribute(
+      j.jsxIdentifier(key),
+      j.jsxExpressionContainer(j.identifier("undefined")),
+    );
+  }
+  if (value === null) {
+    return j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(null)));
+  }
+  if (isStaticAttrExpression(value)) {
+    return j.jsxAttribute(
+      j.jsxIdentifier(key),
+      j.jsxExpressionContainer(cloneAstNode(value) as ExpressionKind),
+    );
+  }
+  return null;
+}
+
+function isStaticAttrExpression(value: unknown): value is ExpressionKind {
+  return (
+    !!value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string"
+  );
 }
 
 // ---------------------------------------------------------------------------

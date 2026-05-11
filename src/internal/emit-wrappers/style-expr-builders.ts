@@ -260,15 +260,36 @@ function escapeTemplateRaw(s: string): string {
 
 export function buildStaticClassNameExpr(
   j: JSCodeshift,
-  staticClassName: string | undefined,
+  staticClassName: unknown,
   bridgeClassVar: string | undefined,
   extraClassNames?: Array<{ expr: ExpressionKind }>,
 ): ExpressionKind | undefined {
   const hasExtra = extraClassNames && extraClassNames.length > 0;
+  const staticClassNameExpr =
+    typeof staticClassName === "string"
+      ? undefined
+      : isExpressionLike(staticClassName)
+        ? (cloneAstNode(staticClassName) as ExpressionKind)
+        : undefined;
 
   // No extra classNames — preserve original behavior exactly
   if (!hasExtra) {
-    if (staticClassName && bridgeClassVar) {
+    if (staticClassNameExpr && bridgeClassVar) {
+      return j.callExpression(
+        j.memberExpression(
+          j.callExpression(
+            j.memberExpression(
+              j.arrayExpression([staticClassNameExpr, j.identifier(bridgeClassVar)]),
+              j.identifier("filter"),
+            ),
+            [j.identifier("Boolean")],
+          ),
+          j.identifier("join"),
+        ),
+        [j.literal(" ")],
+      );
+    }
+    if (typeof staticClassName === "string" && bridgeClassVar) {
       const raw = escapeTemplateRaw(`${staticClassName} `);
       return j.templateLiteral(
         [
@@ -281,10 +302,21 @@ export function buildStaticClassNameExpr(
     if (bridgeClassVar) {
       return j.identifier(bridgeClassVar);
     }
-    if (staticClassName) {
+    if (staticClassNameExpr) {
+      return staticClassNameExpr;
+    }
+    if (typeof staticClassName === "string" && staticClassName) {
       return j.literal(staticClassName) as ExpressionKind;
     }
     return undefined;
+  }
+
+  if (staticClassNameExpr) {
+    return buildClassNameJoinExpr(j, [
+      staticClassNameExpr,
+      ...(bridgeClassVar ? [j.identifier(bridgeClassVar) as ExpressionKind] : []),
+      ...(extraClassNames ?? []).map((extra) => extra.expr),
+    ]);
   }
 
   // Build a template literal combining all parts: `staticClassName ${bridgeClassVar} ${extra1} ${extra2}`
@@ -292,13 +324,24 @@ export function buildStaticClassNameExpr(
   const quasis: ReturnType<typeof j.templateElement>[] = [];
 
   // Start with static className as leading text (or empty)
-  const leadingText = staticClassName ? `${escapeTemplateRaw(staticClassName)} ` : "";
+  const leadingText =
+    typeof staticClassName === "string" && staticClassName
+      ? `${escapeTemplateRaw(staticClassName)} `
+      : "";
   quasis.push(
     j.templateElement(
-      { raw: leadingText, cooked: staticClassName ? `${staticClassName} ` : "" },
+      {
+        raw: leadingText,
+        cooked: typeof staticClassName === "string" && staticClassName ? `${staticClassName} ` : "",
+      },
       false,
     ),
   );
+
+  if (staticClassNameExpr) {
+    expressions.push(staticClassNameExpr);
+    quasis.push(j.templateElement({ raw: " ", cooked: " " }, false));
+  }
 
   if (bridgeClassVar) {
     expressions.push(j.identifier(bridgeClassVar));
@@ -317,18 +360,30 @@ export function buildStaticClassNameExpr(
 
   // Edge case: no expressions were added (only staticClassName, no bridge, extraClassNames was empty after filter)
   if (expressions.length === 0) {
-    if (staticClassName) {
+    if (typeof staticClassName === "string" && staticClassName) {
       return j.literal(staticClassName) as ExpressionKind;
     }
     return undefined;
   }
 
   // If no bridge and no static className, trim the leading empty quasi
-  if (!staticClassName && !bridgeClassVar) {
+  if (!staticClassName && !staticClassNameExpr && !bridgeClassVar) {
     quasis[0] = j.templateElement({ raw: "", cooked: "" }, false);
   }
 
   return j.templateLiteral(quasis, expressions);
+}
+
+function buildClassNameJoinExpr(j: JSCodeshift, parts: ExpressionKind[]): ExpressionKind {
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
+  );
 }
 
 /**
@@ -364,7 +419,7 @@ export function splitAttrsInfo(
     staticAttrs: attrsInfo.staticAttrs ?? {},
     conditionalAttrs: attrsInfo.conditionalAttrs ?? [],
   };
-  const hasStaticClassName = typeof className === "string";
+  const hasStaticClassName = typeof className === "string" || isExpressionLike(className);
   const hasExtraClassNames = extraClassNames && extraClassNames.length > 0;
   if (!hasStaticClassName && !bridgeClassVar && !hasExtraClassNames) {
     return { attrsInfo: normalized, staticClassNameExpr: undefined };
@@ -381,11 +436,17 @@ export function splitAttrsInfo(
     attrsInfo: strippedAttrsInfo,
     staticClassNameExpr: buildStaticClassNameExpr(
       j,
-      hasStaticClassName ? (className as string) : undefined,
+      hasStaticClassName ? className : undefined,
       bridgeClassVar,
       extraClassNames,
     ),
   };
+}
+
+function isExpressionLike(value: unknown): value is ExpressionKind {
+  return (
+    !!value && typeof value === "object" && typeof (value as { type?: unknown }).type === "string"
+  );
 }
 
 // ---------------------------------------------------------------------------

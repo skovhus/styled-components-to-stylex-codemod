@@ -1699,9 +1699,11 @@ export class WrapperEmitter {
     includeRefProp?: boolean;
     includeRest?: boolean;
     defaultAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
+    dynamicAttrs?: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
     conditionalAttrs?: Array<{ jsxProp: string; attrName: string; value: unknown }>;
     invertedBoolAttrs?: Array<{ jsxProp: string; attrName: string }>;
     staticAttrs?: Record<string, unknown>;
+    attrsStaticStyleExpr?: ExpressionKind;
     inlineStyleProps?: InlineStyleProp[];
     /** Component reference from `.attrs({ as: Component })` — overrides the rendered tag. */
     attrsAsTag?: string;
@@ -1722,9 +1724,11 @@ export class WrapperEmitter {
       includeRefProp = false,
       includeRest = true,
       defaultAttrs = [],
+      dynamicAttrs = [],
       conditionalAttrs = [],
       invertedBoolAttrs = [],
       staticAttrs = {},
+      attrsStaticStyleExpr,
       inlineStyleProps = [],
       attrsAsTag,
       bridgeClassVar,
@@ -1871,6 +1875,11 @@ export class WrapperEmitter {
         patternProps.push(this.patternProp(a.jsxProp));
       }
     }
+    for (const attr of dynamicAttrs) {
+      if (!expandedDestructureProps.has(attr.jsxProp)) {
+        patternProps.push(this.patternProp(attr.jsxProp));
+      }
+    }
 
     let restId: Identifier | null = includeRest ? j.identifier("rest") : null;
     if (includeRest && restId) {
@@ -1885,8 +1894,7 @@ export class WrapperEmitter {
 
     const classNameId = j.identifier("className");
     const styleId = j.identifier("style");
-    const staticClassName =
-      typeof staticAttrs.className === "string" ? staticAttrs.className : undefined;
+    const staticClassName = staticAttrs.className;
     const hasStaticAsFallback = allowForwardedAsProp && Object.hasOwn(staticAttrs, "as");
     const staticAsFallback = hasStaticAsFallback ? staticAttrs.as : undefined;
     const filteredStaticAttrs = (() => {
@@ -1907,6 +1915,7 @@ export class WrapperEmitter {
       allowClassNameProp,
       allowStyleProp,
       inlineStyleProps,
+      staticStyleExpr: attrsStaticStyleExpr,
       staticClassNameExpr,
       isIntrinsicElement: !allowAsProp,
     });
@@ -1960,7 +1969,6 @@ export class WrapperEmitter {
         ),
       );
     }
-
     if (includeRefProp) {
       jsxAttrs.push(
         j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
@@ -1971,22 +1979,14 @@ export class WrapperEmitter {
       jsxAttrs.push(j.jsxSpreadAttribute(restId));
     }
 
-    for (const [key, value] of Object.entries(filteredStaticAttrs)) {
-      if (typeof value === "string") {
-        jsxAttrs.push(j.jsxAttribute(j.jsxIdentifier(key), j.literal(value)));
-      } else if (typeof value === "boolean") {
-        jsxAttrs.push(
-          j.jsxAttribute(
-            j.jsxIdentifier(key),
-            value ? null : j.jsxExpressionContainer(j.literal(false)),
-          ),
-        );
-      } else if (typeof value === "number") {
-        jsxAttrs.push(
-          j.jsxAttribute(j.jsxIdentifier(key), j.jsxExpressionContainer(j.literal(value))),
-        );
-      }
-    }
+    jsxAttrs.push(
+      ...jb.buildDynamicAttrsFromProps(j, {
+        dynamicAttrs,
+        propExprFor: (prop) => j.identifier(prop),
+      }),
+    );
+
+    jsxAttrs.push(...jb.buildStaticAttrsFromRecord(j, filteredStaticAttrs));
     if (allowForwardedAsProp) {
       const forwardedAsValueExpr = hasStaticAsFallback
         ? j.logicalExpression("??", j.identifier("forwardedAs"), this.literalExpr(staticAsFallback))
@@ -2029,13 +2029,14 @@ export class WrapperEmitter {
     }
 
     const renderedTagName = allowAsProp ? "Component" : (attrsAsTag ?? tagName);
-    const openingEl = j.jsxOpeningElement(j.jsxIdentifier(renderedTagName), jsxAttrs, isVoidTag);
+    const renderedJsxName = jsxNameFromString(j, renderedTagName);
+    const openingEl = j.jsxOpeningElement(renderedJsxName, jsxAttrs, isVoidTag);
     const childrenExpr = usePropsChildrenDirectly
       ? j.memberExpression(propsId, j.identifier("children"))
       : j.identifier("children");
     const jsx = j.jsxElement(
       openingEl,
-      isVoidTag ? null : j.jsxClosingElement(j.jsxIdentifier(renderedTagName)),
+      isVoidTag ? null : j.jsxClosingElement(renderedJsxName),
       isVoidTag ? [] : [j.jsxExpressionContainer(childrenExpr)],
     );
 
@@ -2121,6 +2122,13 @@ export class WrapperEmitter {
     testExprFor: (jsxProp: string) => ExpressionKind;
   }): JsxAttr[] {
     return jb.buildInvertedBoolAttrs(this.j, args);
+  }
+
+  buildDynamicAttrsFromProps(args: {
+    dynamicAttrs: Array<{ jsxProp: string; attrName: string; defaultValue?: unknown }>;
+    propExprFor: (jsxProp: string) => ExpressionKind;
+  }): JsxAttr[] {
+    return jb.buildDynamicAttrsFromProps(this.j, args);
   }
 
   buildStaticAttrsFromRecord(
@@ -2337,4 +2345,19 @@ function extractObjectLiteralMembers(typeText: string): string[] | null {
     members.push(last);
   }
   return members.length > 0 ? members : null;
+}
+
+function jsxNameFromString(j: JSCodeshift, name: string): JsxTagName {
+  if (!name.includes(".")) {
+    return j.jsxIdentifier(name);
+  }
+  const [root, ...members] = name.split(".");
+  if (!root || members.length === 0) {
+    return j.jsxIdentifier(name);
+  }
+  type JsxMemberObject = Parameters<JSCodeshift["jsxMemberExpression"]>[0];
+  return members.reduce<JsxMemberObject>(
+    (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
+    j.jsxIdentifier(root),
+  );
 }

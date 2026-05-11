@@ -326,9 +326,11 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
             includeRefProp: (d.supportsRefProp ?? false) || (!includeRest && willForwardRef),
             includeRest,
             defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+            dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
             conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
             invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
             staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+            attrsStaticStyleExpr: d.attrsInfo?.attrsStaticStyleExpr,
             inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
             attrsAsTag: d.attrsInfo?.attrsAsTag,
             bridgeClassVar: getBridgeClassVar(d),
@@ -377,6 +379,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       allowSxProp,
       inlineStyleProps: [],
+      staticStyleExpr: attrsInfo?.attrsStaticStyleExpr,
       staticClassNameExpr,
       isIntrinsicElement: !allowAsProp,
     });
@@ -390,6 +393,10 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       j.jsxSpreadAttribute(restId),
+      ...emitter.buildDynamicAttrsFromProps({
+        dynamicAttrs: attrsInfo?.dynamicAttrs ?? [],
+        propExprFor: (prop) => j.identifier(prop),
+      }),
     ];
     emitter.appendMergingAttrs(openingAttrs, merging);
 
@@ -1089,6 +1096,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           destructureProps.push(attr.jsxProp);
         }
       }
+      for (const attr of d.attrsInfo?.dynamicAttrs ?? []) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -1144,6 +1156,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         allowStyleProp,
         allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticStyleExpr: attrsInfoWithoutForwardedAsStatic?.attrsStaticStyleExpr,
         staticClassNameExpr,
         isIntrinsicElement: !useAsProp,
       });
@@ -1157,6 +1170,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
           : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+        ...emitter.buildDynamicAttrsFromProps({
+          dynamicAttrs: attrsInfoWithoutForwardedAsStatic?.dynamicAttrs ?? [],
+          propExprFor: (prop) => j.identifier(prop),
+        }),
         ...(includesForwardedAs
           ? [
               j.jsxAttribute(
@@ -1228,9 +1245,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           includeRefProp: (d.supportsRefProp ?? false) || (!shouldIncludeRest && willForwardRef),
           includeRest: shouldIncludeRest,
           defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+          dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
           conditionalAttrs: d.attrsInfo?.conditionalAttrs ?? [],
           invertedBoolAttrs: d.attrsInfo?.invertedBoolAttrs ?? [],
           staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+          attrsStaticStyleExpr: d.attrsInfo?.attrsStaticStyleExpr,
           inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
           attrsAsTag: d.attrsInfo?.attrsAsTag,
           bridgeClassVar: getBridgeClassVar(d),

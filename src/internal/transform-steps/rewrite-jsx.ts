@@ -13,6 +13,7 @@ import {
   type JsxPath,
 } from "../utilities/jsx-children.js";
 import { toStyleKey } from "../transform/helpers.js";
+import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
@@ -179,7 +180,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const closing = p.node.closingElement;
         (opening as { __styledComponentLocalName?: string }).__styledComponentLocalName =
           decl.localName;
-        let finalTag = decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident;
+        let finalTag =
+          decl.attrsInfo?.attrsAsTag ??
+          (decl.base.kind === "intrinsic" ? decl.base.tagName : decl.base.ident);
         const inlineVariantDimensions = decl.inlinedBaseComponent?.hasInlineJsxVariants
           ? (decl.variantDimensions ?? [])
           : [];
@@ -237,13 +240,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const createJsxName = (tag: string) => {
           if (tag.includes(".")) {
             const parts = tag.split(".");
-            const firstPart = parts[0];
-            if (!firstPart) {
+            const [firstPart, ...memberParts] = parts;
+            if (!firstPart || memberParts.length === 0) {
               return j.jsxIdentifier(tag);
             }
-            return j.jsxMemberExpression(
+            type JsxMemberObject = Parameters<typeof j.jsxMemberExpression>[0];
+            return memberParts.reduce<JsxMemberObject>(
+              (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
               j.jsxIdentifier(firstPart),
-              j.jsxIdentifier(parts.slice(1).join(".")),
             );
           }
           return j.jsxIdentifier(tag);
@@ -310,7 +314,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
 
         // Apply `attrs(...)` derived attributes (static + simple prop-conditional).
         if (decl.attrsInfo) {
-          const { staticAttrs, conditionalAttrs, invertedBoolAttrs } = decl.attrsInfo;
+          const {
+            staticAttrs,
+            dynamicAttrs,
+            conditionalAttrs,
+            invertedBoolAttrs,
+            attrsStaticStyleExpr,
+          } = decl.attrsInfo;
 
           const hasAttr = (name: string) =>
             keptAttrs.some(
@@ -395,22 +405,72 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             }
           }
 
+          for (const dyn of dynamicAttrs ?? []) {
+            const idx = keptAttrs.findIndex(
+              (a) =>
+                a.type === "JSXAttribute" &&
+                a.name.type === "JSXIdentifier" &&
+                a.name.name === dyn.jsxProp,
+            );
+            if (idx !== -1) {
+              const propAttr = keptAttrs[idx] as (typeof keptAttrs)[number];
+              const valueExpr = extractJsxAttrValueExpr(j, propAttr);
+              if (valueExpr) {
+                removeJsxAttrsByName(keptAttrs, dyn.attrName);
+                keptAttrs.unshift(
+                  j.jsxAttribute(
+                    j.jsxIdentifier(dyn.attrName),
+                    j.jsxExpressionContainer(
+                      dyn.defaultValue === undefined
+                        ? valueExpr
+                        : j.conditionalExpression(
+                            j.binaryExpression("===", valueExpr, j.identifier("undefined")),
+                            literalExprForDynamicAttrDefault(j, dyn.defaultValue),
+                            valueExpr,
+                          ),
+                    ),
+                  ),
+                );
+              }
+            } else if (dyn.defaultValue !== undefined) {
+              removeJsxAttrsByName(keptAttrs, dyn.attrName);
+              keptAttrs.unshift(
+                j.jsxAttribute(
+                  j.jsxIdentifier(dyn.attrName),
+                  j.jsxExpressionContainer(literalExprForDynamicAttrDefault(j, dyn.defaultValue)),
+                ),
+              );
+            }
+          }
+
           // Add static attrs (e.g. `type="text"`) if missing.
           for (const [k, v] of Object.entries(staticAttrs)) {
+            if (k === "className") {
+              continue;
+            }
             if (hasAttr(k)) {
               continue;
             }
-            const valNode =
-              typeof v === "string"
-                ? j.literal(v)
-                : typeof v === "number" || typeof v === "boolean"
-                  ? j.jsxExpressionContainer(j.literal(v))
-                  : v === undefined
-                    ? j.jsxExpressionContainer(j.identifier("undefined"))
-                    : v === null
-                      ? j.jsxExpressionContainer(j.literal(null))
-                      : j.literal(String(v as string | number | boolean));
-            keptAttrs.unshift(j.jsxAttribute(j.jsxIdentifier(k), valNode as any));
+            const attr = buildStaticAttrFromValue(j, k, v, { booleanTrueAsShorthand: false });
+            if (attr) {
+              keptAttrs.unshift(attr);
+            }
+          }
+          if (staticAttrs.className !== undefined) {
+            const attr = buildStaticAttrFromValue(j, "className", staticAttrs.className, {
+              booleanTrueAsShorthand: false,
+            });
+            if (attr) {
+              keptAttrs.unshift(attr);
+            }
+          }
+          if (attrsStaticStyleExpr) {
+            keptAttrs.unshift(
+              j.jsxAttribute(
+                j.jsxIdentifier("style"),
+                j.jsxExpressionContainer(cloneAstNode(attrsStaticStyleExpr)),
+              ),
+            );
           }
         }
 
@@ -437,17 +497,19 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.name === "style"
           ) {
             hasCallerStyleAttr = true;
-            if (staticInlineStyleExpr) {
-              const callerStyleExpr = extractJsxAttrValueExpr(j, attr);
+            const callerStyleExpr = extractJsxAttrValueExpr(j, attr);
+            const existingStyleExpr = extractJsxAttrValueExpr(j, styleAttr);
+            if (existingStyleExpr || staticInlineStyleExpr) {
               styleAttr = j.jsxAttribute(
                 j.jsxIdentifier("style"),
                 j.jsxExpressionContainer(
                   callerStyleExpr
                     ? j.objectExpression([
-                        j.spreadElement(staticInlineStyleExpr),
+                        ...(staticInlineStyleExpr ? [j.spreadElement(staticInlineStyleExpr)] : []),
+                        ...(existingStyleExpr ? [j.spreadElement(existingStyleExpr)] : []),
                         j.spreadElement(callerStyleExpr),
                       ])
-                    : staticInlineStyleExpr,
+                    : (existingStyleExpr ?? staticInlineStyleExpr!),
                 ),
               );
             } else {
@@ -458,7 +520,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             attr.name.type === "JSXIdentifier" &&
             attr.name.name === "className"
           ) {
-            classNameAttr = attr;
+            classNameAttr = mergeClassNameAttrs(j, classNameAttr, attr);
           } else if (
             attr.type === "JSXAttribute" &&
             attr.name.type === "JSXIdentifier" &&
@@ -878,6 +940,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build final rest with stylex.props inserted after last spread.
         // For inlined components with className/style, use adapter-configured
         // merger behavior (or verbose fallback when no merger is configured).
+        if (!styleAttr && decl.attrsInfo?.attrsStaticStyleExpr) {
+          styleAttr = j.jsxAttribute(
+            j.jsxIdentifier("style"),
+            j.jsxExpressionContainer(cloneAstNode(decl.attrsInfo.attrsStaticStyleExpr)),
+          );
+        }
+
         if (staticInlineStyleExpr && !styleAttr) {
           styleAttr = j.jsxAttribute(
             j.jsxIdentifier("style"),
@@ -907,10 +976,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         if (extraClassNameExpr && !ctx.adapter.useSxProp) {
           // Synthesize a JSX className attribute so buildInlineMergeCall
           // folds the CSS module class into the spread merge.
-          effectiveClassNameAttr = j.jsxAttribute(
+          const extraClassNameAttr = j.jsxAttribute(
             j.jsxIdentifier("className"),
             j.jsxExpressionContainer(extraClassNameExpr),
           );
+          effectiveClassNameAttr = effectiveClassNameAttr
+            ? mergeClassNameAttrs(j, effectiveClassNameAttr, extraClassNameAttr)
+            : extraClassNameAttr;
         }
 
         const hasRestSpreadAttr = keptRestAfterVariants.some(
@@ -1064,6 +1136,44 @@ function buildInlineMergeCall(
   return buildInlineVerboseMergeFallback(j, stylesArg, classNameExpr, styleExpr);
 }
 
+function mergeClassNameAttrs(
+  j: TransformContext["j"]["jscodeshift"],
+  first: unknown,
+  second: unknown,
+): ReturnType<TransformContext["j"]["jscodeshift"]["jsxAttribute"]> {
+  const firstExpr = extractJsxAttrValueExpr(j, first);
+  const secondExpr = extractJsxAttrValueExpr(j, second);
+  const parts = [firstExpr, secondExpr].filter((expr): expr is ExpressionKind => !!expr);
+  const expr = parts.length === 1 ? parts[0]! : buildClassNameJoinExpr(j, parts);
+  return j.jsxAttribute(j.jsxIdentifier("className"), j.jsxExpressionContainer(expr));
+}
+
+function removeJsxAttrsByName(attrs: Array<unknown>, name: string): void {
+  for (let i = attrs.length - 1; i >= 0; i--) {
+    const attr = attrs[i] as { type?: string; name?: { type?: string; name?: string } } | undefined;
+    if (
+      attr?.type === "JSXAttribute" &&
+      attr.name?.type === "JSXIdentifier" &&
+      attr.name.name === name
+    ) {
+      attrs.splice(i, 1);
+    }
+  }
+}
+
+function literalExprForDynamicAttrDefault(
+  j: TransformContext["j"]["jscodeshift"],
+  value: unknown,
+): ExpressionKind {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return j.literal(value) as ExpressionKind;
+  }
+  if (value === null) {
+    return j.literal(null) as ExpressionKind;
+  }
+  return j.identifier("undefined");
+}
+
 function buildInlineVerboseMergeFallback(
   j: TransformContext["j"]["jscodeshift"],
   stylesArg: ExpressionKind,
@@ -1079,7 +1189,7 @@ function buildInlineVerboseMergeFallback(
         j.memberExpression(
           j.callExpression(
             j.memberExpression(
-              j.arrayExpression([sxClassName, classNameExpr]),
+              j.arrayExpression([sxClassName, ...flattenClassNameExpr(classNameExpr)]),
               j.identifier("filter"),
             ),
             [j.identifier("Boolean")],
@@ -1119,6 +1229,28 @@ function buildInlineVerboseMergeFallback(
       ]),
     ),
     [],
+  );
+}
+
+function flattenClassNameExpr(classNameExpr: ExpressionKind): ExpressionKind[] {
+  return classNameExpr.type === "ArrayExpression" &&
+    classNameExpr.elements.every((element): element is ExpressionKind => !!element)
+    ? [...classNameExpr.elements]
+    : [classNameExpr];
+}
+
+function buildClassNameJoinExpr(
+  j: TransformContext["j"]["jscodeshift"],
+  parts: ExpressionKind[],
+): ExpressionKind {
+  return j.callExpression(
+    j.memberExpression(
+      j.callExpression(j.memberExpression(j.arrayExpression(parts), j.identifier("filter")), [
+        j.identifier("Boolean"),
+      ]),
+      j.identifier("join"),
+    ),
+    [j.literal(" ")],
   );
 }
 

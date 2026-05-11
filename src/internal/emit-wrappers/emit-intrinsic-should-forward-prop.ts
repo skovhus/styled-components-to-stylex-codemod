@@ -693,6 +693,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       allowStyleProp,
       allowSxProp,
       inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+      staticStyleExpr: attrsInfoForJsx?.attrsStaticStyleExpr,
       staticClassNameExpr,
       isIntrinsicElement: !allowAsProp,
     });
@@ -708,6 +709,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+      ...emitter.buildDynamicAttrsFromProps({
+        dynamicAttrs: attrsInfoForJsx?.dynamicAttrs ?? [],
+        propExprFor: (prop) => j.identifier(prop),
+      }),
       ...(includesForwardedAs
         ? [
             j.jsxAttribute(
@@ -775,6 +780,7 @@ function filterAttrsForShouldForwardProp(
 
   const hasDroppedAttrs =
     (attrsInfo.defaultAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
+    (attrsInfo.dynamicAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
     attrsInfo.conditionalAttrs.some((a) => shouldDrop(a.attrName)) ||
     (attrsInfo.invertedBoolAttrs ?? []).some((a) => shouldDrop(a.attrName)) ||
     Object.keys(attrsInfo.staticAttrs).some(shouldDrop);
@@ -785,6 +791,7 @@ function filterAttrsForShouldForwardProp(
   return {
     ...attrsInfo,
     defaultAttrs: (attrsInfo.defaultAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
+    dynamicAttrs: (attrsInfo.dynamicAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
     conditionalAttrs: attrsInfo.conditionalAttrs.filter((a) => !shouldDrop(a.attrName)),
     invertedBoolAttrs: (attrsInfo.invertedBoolAttrs ?? []).filter((a) => !shouldDrop(a.attrName)),
     staticAttrs: Object.fromEntries(

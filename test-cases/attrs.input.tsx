@@ -1,6 +1,7 @@
 import * as React from "react";
 import styled from "styled-components";
 import { focusOutline } from "./lib/helpers";
+import { Icon } from "./lib/icon";
 
 // Simulated imported component
 const Flex = (
@@ -255,6 +256,16 @@ const CallbackScopeStyleText = styled.span.attrs(() => ({
   font-style: italic;
 `;
 
+// Pattern 15: static attrs that reference module-scope values must be preserved
+const iconSize = 14;
+
+const StyledIcon = styled(Icon).attrs({
+  size: iconSize,
+})`
+  position: relative;
+  left: -3px;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -278,5 +289,6 @@ export const App = () => (
     <ActiveToolbarButton>Inherited attrs</ActiveToolbarButton>
     <ModuleScopeStyleText>Module scope style</ModuleScopeStyleText>
     <CallbackScopeStyleText>Callback scope style</CallbackScopeStyleText>
+    <StyledIcon title="Attrs icon size" />
   </>
 );

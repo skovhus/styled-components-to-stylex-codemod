@@ -104,6 +104,21 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
+  const unsupportedFunctionAttrsDecl = styledDecls.find(
+    (d) =>
+      !d.skipTransform &&
+      d.attrsInfo?.sourceKind === "function" &&
+      d.attrsInfo.hasUnsupportedValues,
+  );
+  if (unsupportedFunctionAttrsDecl && ctx.options.transformMode !== "leavesOnly") {
+    ctx.warnings.push({
+      severity: "warning",
+      type: "Unsupported .attrs() callback pattern",
+      loc: unsupportedFunctionAttrsDecl.loc,
+    });
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // If we didn't find any styled declarations but performed other edits (e.g. keyframes conversion),
   // we'll still emit output without injecting StyleX styles.
   if (styledDecls.length === 0) {

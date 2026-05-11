@@ -6249,6 +6249,492 @@ export const App = () => <Input />;
 });
 
 describe("attrs defaultAttrs nullish coalescing", () => {
+  it("preserves callback prop reads as dynamic attrs instead of static expressions", () => {
+    const source = `
+import styled from "styled-components";
+
+function Icon(props: { size?: number; className?: string }) {
+  return <svg width={props.size} height={props.size} className={props.className} />;
+}
+
+const StyledIcon = styled(Icon).attrs((p) => ({
+  size: p.size,
+}))\`
+  position: relative;
+\`;
+
+export const App = () => <StyledIcon size={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={size}");
+    expect(result.code).not.toContain("p.size");
+  });
+
+  it("merges expression-valued className attrs with generated and caller classes", () => {
+    const source = `
+import styled from "styled-components";
+
+const attrsClassName = "attrs-class";
+
+const Box = styled.div.attrs({
+  className: attrsClassName,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box className="caller">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('[attrsClassName, "caller"].filter(Boolean).join(" ")');
+    expect(result.code).not.toContain("className={attrsClassName}");
+  });
+
+  it("space-joins merged attrs className arrays in the no-merger fallback", () => {
+    const source = `
+import styled from "styled-components";
+
+const attrsClassName = "attrs-class";
+
+const Box = styled.div.attrs({
+  className: attrsClassName,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box className="caller">Box</Box>;
+`;
+    const adapterWithoutMerger = {
+      ...fixtureAdapter,
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = runTransformWithDiagnostics(source, { adapter: adapterWithoutMerger });
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('[attrsClassName, "caller"].filter(Boolean).join(" ")');
+    expect(result.code).not.toContain('[sx.className, [attrsClassName, "caller"]]');
+  });
+
+  it("merges expression-valued style attrs before caller styles", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const attrsStyle = { opacity: 0.8 } satisfies React.CSSProperties;
+const callerStyle = { marginTop: 4 } satisfies React.CSSProperties;
+
+const Box = styled.div.attrs({
+  style: attrsStyle,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box style={callerStyle}>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("...attrsStyle");
+    expect(result.code).toContain("...callerStyle");
+    expect(result.code).not.toContain("style={attrsStyle}");
+  });
+
+  it("emits expression-valued static attrs in minimal wrappers", () => {
+    const source = `
+import styled from "styled-components";
+
+const moduleId = "scroll-region";
+
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+  id: moduleId,
+}))\`
+  overflow: auto;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("id={moduleId}");
+  });
+
+  it("uses expression-valued as attrs as render targets", () => {
+    const source = `
+import styled from "styled-components";
+
+const Components = {
+  Button: "button" as const,
+};
+
+const Box = styled.div.attrs({
+  as: Components.Button,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box type="button">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("<Components.Button");
+    expect(result.code).not.toContain("as={Components.Button}");
+  });
+
+  it("builds nested JSX member names for expression-valued as attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const Components = {
+  UI: {
+    Button: "button" as const,
+  },
+};
+
+const Box = styled.div.attrs({
+  as: Components.UI.Button,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box type="button">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("<Components.UI.Button");
+    expect(result.code).not.toContain("UI.Button={");
+  });
+
+  it("uses original prop names for aliased callback attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+function Icon(props: { size?: number; className?: string }) {
+  return <svg width={props.size} height={props.size} className={props.className} />;
+}
+
+const StyledIcon = styled(Icon).attrs(({ size: iconSize }) => ({
+  size: iconSize,
+}))\`
+  position: relative;
+\`;
+
+export const App = () => <StyledIcon size={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={size}");
+    expect(result.code).not.toContain("iconSize");
+  });
+
+  it("preserves destructured callback defaults in dynamic attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+function Icon(props: { size?: number; className?: string }) {
+  return <svg width={props.size} height={props.size} className={props.className} />;
+}
+
+const StyledIcon = styled(Icon).attrs(({ size = 14 }) => ({
+  size,
+}))\`
+  position: relative;
+\`;
+
+export const App = () => <StyledIcon />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size === undefined ? 14 : size");
+    expect(result.code).not.toContain("size ?? 14");
+  });
+
+  it("emits dynamic attr defaults when the source prop is absent in promoted inline rewrites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ size = 14 }) => ({
+  size,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box style={{ marginTop: 4 }} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size === undefined ? 14 : size");
+  });
+
+  it("preserves boolean destructured callback defaults in dynamic attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.button.attrs(({ disabled = true }) => ({
+  disabled,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("disabled === undefined ? true : disabled");
+  });
+
+  it("does not treat callback-local attrs variables as static attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => {
+  const resolved = props.id;
+  return { id: resolved };
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box id="box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("treats callback function declarations as local attrs bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.button.attrs(() => {
+  function handleClick() {}
+  return { onClick: handleClick };
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("tracks rest bindings in attrs callback parameters", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ ...p }) => ({
+  id: p.id,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box id="box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('id="box"');
+    expect(result.code).not.toContain("p.id");
+  });
+
+  it("does not treat partial object rest as the full props object", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ id, ...rest }) => ({
+  "data-id": rest.id,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box id="box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("unwraps defaulted object-pattern attrs parameters", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ size } = {}) => ({
+  size,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box size={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={size}");
+    expect(result.code).not.toContain("size={size}\n       size={size}");
+  });
+
+  it("bails for attrs callbacks that alias string-literal prop names", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ "aria-label": ariaLabel }) => ({
+  title: ariaLabel,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box aria-label="Box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("keeps module-scope props objects as static attrs in object-form attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const props = { id: "module-id" };
+
+const Box = styled.div.attrs({
+  id: props.id,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("id={props.id}");
+    expect(result.code).not.toContain("id={id}");
+  });
+
+  it("passes attrs style as the merger style argument without shifting arity", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+const attrsStyle = { opacity: 0.8 } satisfies React.CSSProperties;
+
+const Box = styled.div.attrs({
+  style: attrsStyle,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box>Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("mergedSx(styles.box, undefined, attrsStyle)");
+    expect(result.code).not.toContain("mergedSx(styles.box, undefined, undefined, attrsStyle)");
+  });
+
+  it("emits intrinsic dynamic attrs after rest spreads so attrs override target props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs((props) => ({
+  tabIndex: props.tabIndex ?? 0,
+  "data-size": props.size,
+}))\`
+  overflow: auto;
+\`;
+
+export const App = () => <Box size={1} data-size={2} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
+  });
+
+  it("places shared dynamic attrs after rest spreads so attrs override target props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div
+  .withConfig({ shouldForwardProp: (prop) => prop !== "size" })
+  .attrs((props: { size?: number }) => ({
+    "data-size": props.size,
+  }))\`
+  color: red;
+\`;
+
+export const App = () => <Box size={1} data-size={2} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
+  });
+
+  it("lets child dynamic attrs override inherited dynamic attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+function Icon(props: { size?: number; className?: string }) {
+  return <svg width={props.size} height={props.size} className={props.className} />;
+}
+
+const BaseIcon = styled(Icon).attrs((props) => ({
+  size: props.size,
+}))\`
+  position: relative;
+\`;
+
+const ChildIcon = styled(BaseIcon).attrs((props) => ({
+  size: props.iconSize,
+}))<{ iconSize?: number }>\`
+  left: -3px;
+\`;
+
+export const App = () => <ChildIcon iconSize={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={iconSize}");
+    expect(result.code).not.toContain("size={size}\n       size={iconSize}");
+  });
+
   it("should preserve nullish-coalescing semantics for intrinsic element attrs", () => {
     // Regression test: styled.div.attrs with props.X ?? defaultValue should
     // use nullish coalescing (??) in the output, not destructuring defaults.
@@ -8926,6 +9412,72 @@ export function App() {
     // The className from CSS module should NOT be a standalone JSX attribute
     // following the spread — it must be merged.
     expect(result.code).not.toMatch(/\{\.\.\.stylex\.props\([^)]+\)\}\s*className=/);
+  });
+
+  it("joins expression attrs className with extra classNames without stringifying undefined", () => {
+    const source = `
+import styled from "styled-components";
+import { draggableRegion } from "./lib/helpers";
+
+const maybeClassName = undefined as string | undefined;
+
+const DraggableBar = styled.div.attrs({
+  className: maybeClassName,
+})\`
+  pointer-events: all;
+  \${draggableRegion(true)};
+\`;
+
+export function App() {
+  return <DraggableBar>Draggable</DraggableBar>;
+}
+`;
+
+    const adapterWithNoSxProp = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: Parameters<NonNullable<Adapter["resolveCall"]>>[0]) {
+        if (ctx.calleeImportedName === "draggableRegion") {
+          return {
+            extraClassNames: [
+              {
+                expr: "electronStyles.draggableRegionDisableChildren",
+                imports: [
+                  {
+                    from: { kind: "specifier" as const, value: "./lib/electronMixins.module.css" },
+                    names: [{ imported: "default", local: "electronStyles" }],
+                  },
+                ],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "mixin-extraClassNames.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithNoSxProp },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("[maybeClassName,");
+    expect(result.code).toContain(".filter(Boolean)");
+    expect(result.code).not.toContain("`${maybeClassName}");
   });
 });
 

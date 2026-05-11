@@ -816,13 +816,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier("Component");
     } else if (renderedComponent.includes(".")) {
       const parts = renderedComponent.split(".");
-      const firstPart = parts[0];
-      if (!firstPart) {
+      const [firstPart, ...memberParts] = parts;
+      if (!firstPart || memberParts.length === 0) {
         jsxTagName = j.jsxIdentifier(renderedComponent);
       } else {
-        jsxTagName = j.jsxMemberExpression(
+        type JsxMemberObject = Parameters<typeof j.jsxMemberExpression>[0];
+        jsxTagName = memberParts.reduce<JsxMemberObject>(
+          (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
           j.jsxIdentifier(firstPart),
-          j.jsxIdentifier(parts.slice(1).join(".")),
         );
       }
     } else {
@@ -835,15 +836,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       d.extraClassNames,
     );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
+    const dynamicAttrs = attrsInfo?.dynamicAttrs ?? [];
     const staticAttrs = normalizeStaticForwardedAsAttr(
       attrsInfo?.staticAttrs ?? {},
       shouldLowerForwardedAs,
     );
+    const attrsStaticStyleExpr = attrsInfo?.attrsStaticStyleExpr as ExpressionKind | undefined;
     const needsSxVar =
       allowClassNameProp ||
       allowStyleProp ||
       wrappedAcceptsSx ||
       !!d.inlineStyleProps?.length ||
+      !!attrsStaticStyleExpr ||
       !!staticClassNameExpr;
     // Only destructure when we have specific reasons: variant props or className/style support
     // Children flows through naturally via {...props} spread, no explicit handling needed
@@ -854,6 +858,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       needsSxVar ||
       isPolymorphicComponentWrapper ||
       defaultAttrs.length > 0 ||
+      dynamicAttrs.length > 0 ||
       shouldLowerForwardedAs ||
       (d.supportsRefProp ?? false);
     const includeChildren =
@@ -885,12 +890,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           destructureProps.push(attr.jsxProp);
         }
       }
+      for (const attr of dynamicAttrs) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
 
       // When the wrapped component is sx-aware and we can use the sx-only path,
       // className/style flow through `{...rest}` unchanged. If extra className
       // expressions or inline styles force explicit merging, bind them locally.
       const canForwardClassNameStyleThroughRest =
-        wrappedAcceptsSx && !(staticClassNameExpr || d.inlineStyleProps?.length);
+        wrappedAcceptsSx &&
+        !(staticClassNameExpr || attrsStaticStyleExpr || d.inlineStyleProps?.length);
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
       const destructureSx = allowSxProp || wrappedAcceptsSx;
@@ -933,6 +944,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         allowStyleProp,
         allowSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
+        staticStyleExpr: attrsStaticStyleExpr,
         staticClassNameExpr,
         isIntrinsicElement: false,
         wrappedAcceptsSxProp: wrappedAcceptsSx,
@@ -982,6 +994,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       // Pre-populate with attr names already emitted as JSX attributes above.
       // defaultAttrs are emitted by buildDefaultAttrsFromProps (e.g., column={column ?? true}).
       for (const attr of defaultAttrs) {
+        forwardedProps.add(attr.attrName);
+      }
+      for (const attr of dynamicAttrs) {
         forwardedProps.add(attr.attrName);
       }
       // staticAttrs are emitted by buildStaticAttrsFromRecord (e.g., column={true}).
@@ -1086,6 +1101,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           pushForwardedProp(attr.jsxProp);
         }
       }
+      for (const attr of dynamicAttrs) {
+        if (attr.jsxProp !== attr.attrName && !attr.jsxProp.startsWith("$")) {
+          pushForwardedProp(attr.jsxProp);
+        }
+      }
       // Pass namespace boolean props (like 'disabled') to the wrapped component.
       // These are destructured for the enabled/disabled styling ternary but also need
       // to be forwarded as they may be valid HTML attributes on the underlying element.
@@ -1093,6 +1113,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         pushForwardedProp(propName);
       }
       openingAttrs.push(j.jsxSpreadAttribute(restId));
+      openingAttrs.push(
+        ...emitter.buildDynamicAttrsFromProps({
+          dynamicAttrs,
+          propExprFor: (prop) => j.identifier(prop),
+        }),
+      );
       // Add staticAttrs from .attrs({...}) AFTER {...rest} so attrs override caller props
       // (styled-components semantics: .attrs() values always win over incoming props).
       openingAttrs.push(
@@ -1153,6 +1179,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const openingAttrs: JsxAttr[] = [];
       openingAttrs.push(...emitter.buildStaticValueAttrs({ attrs: defaultAttrs }));
       openingAttrs.push(j.jsxSpreadAttribute(propsId));
+      openingAttrs.push(
+        ...emitter.buildDynamicAttrsFromProps({
+          dynamicAttrs,
+          propExprFor: (prop) => j.memberExpression(propsId, j.identifier(prop)),
+        }),
+      );
       openingAttrs.push(
         ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
       );
