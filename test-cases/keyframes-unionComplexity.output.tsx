@@ -42,7 +42,7 @@ function StyledLoaderCaret(props: StyledLoaderCaretProps) {
   return (
     <LoaderCaret
       {...rest}
-      {...stylex.props(styles.styledLoaderCaret, noPadding && styles.styledLoaderCaretNoPadding)}
+      sx={[styles.styledLoaderCaret, noPadding ? styles.styledLoaderCaretNoPadding : null]}
     />
   );
 }

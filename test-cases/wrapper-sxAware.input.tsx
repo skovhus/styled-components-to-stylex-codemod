@@ -8,9 +8,10 @@ import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
+import type { ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
-import { Text } from "./lib/sx-aware-text";
+import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
 
 // Single call site → inlined into JSX directly.
 const StyledButton = styled(SxAwareButton)`
@@ -70,6 +71,42 @@ const Identifier = styled(Text)`
   flex-shrink: 0;
 `;
 
+// ImportedIcon's public props are an imported type alias with an sx member.
+// The detector must follow imported type references when deciding whether
+// styled(ImportedIcon) should forward sx.
+const StyledIcon = styled(ImportedIcon)`
+  margin-left: 4px;
+  color: #2563eb;
+`;
+
+// ImportedTooltip's public props go through a local alias that intersects an
+// imported interface. This mirrors sx-aware wrappers whose sx support is
+// inherited from shared prop interfaces.
+const StyledTooltip = styled(ImportedTooltip)`
+  align-items: center;
+  min-width: 24px;
+`;
+
+const InterfaceBase = styled(SxAwareButton)`
+  border-color: #c084fc;
+`;
+
+interface InterfaceWrapperProps extends React.ComponentProps<typeof InterfaceBase> {
+  label?: string;
+}
+
+const InterfaceWrapper = styled(InterfaceBase)<InterfaceWrapperProps>`
+  background-color: #f5f3ff;
+`;
+
+type ImportedWrapperProps = ImportedWrapperSxProps & {
+  label?: string;
+};
+
+const ImportedTypeWrapper = styled(InterfaceBase)<ImportedWrapperProps>`
+  color: #6d28d9;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -101,6 +138,10 @@ export const App = () => (
     </ExportedToggleButton>
     <DraggableSxButton sx={callerStyles.caller}>Draggable sx</DraggableSxButton>
     <StyledText size="md">Generic Text</StyledText>
+    <StyledIcon color="currentColor" aria-label="Imported icon" />
+    <StyledTooltip delay={100}>Imported tooltip</StyledTooltip>
+    <InterfaceWrapper sx={callerStyles.caller}>Interface wrapper</InterfaceWrapper>
+    <ImportedTypeWrapper sx={callerStyles.caller}>Imported type wrapper</ImportedTypeWrapper>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>
       <span>Item title</span>

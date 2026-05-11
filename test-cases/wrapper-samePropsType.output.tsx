@@ -35,9 +35,9 @@ function Base<C extends React.ElementType = "div">(
 export function Wrapper(
   props: SharedProps & Omit<React.ComponentPropsWithRef<"div">, keyof SharedProps | "className">,
 ) {
-  const { children, style, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <Base {...rest} {...mergedSx(styles.wrapper, undefined, style)}>
+    <Base {...rest} sx={styles.wrapper}>
       {children}
     </Base>
   );

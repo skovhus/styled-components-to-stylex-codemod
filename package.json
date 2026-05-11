@@ -31,9 +31,9 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest --configLoader runner",
+    "test:run": "vitest run --configLoader runner",
+    "test:coverage": "vitest run --coverage --configLoader runner",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "lint": "concurrently 'pnpm:lint:oxlint' 'pnpm:lint:eslint'",

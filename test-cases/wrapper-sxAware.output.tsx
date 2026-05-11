@@ -7,10 +7,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
+import type { ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
 
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
-import { Text } from "./lib/sx-aware-text";
+import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
 
 // Single call site → inlined into JSX directly.
 function StyledButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
@@ -107,6 +108,19 @@ export function DraggableSxButton(
   );
 }
 
+function InterfaceBase(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
+  const { sx, ...rest } = props;
+  return <SxAwareButton {...rest} sx={[callerStyles.interfaceBase, sx]} />;
+}
+
+interface InterfaceWrapperProps extends React.ComponentProps<typeof InterfaceBase> {
+  label?: string;
+}
+
+type ImportedWrapperProps = ImportedWrapperSxProps & {
+  label?: string;
+};
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
   button: {
@@ -154,6 +168,29 @@ const callerStyles = stylex.create({
     minWidth: "var(--column-width)",
     flexShrink: 0,
   },
+  // ImportedIcon's public props are an imported type alias with an sx member.
+  // The detector must follow imported type references when deciding whether
+  // styled(ImportedIcon) should forward sx.
+  icon: {
+    marginLeft: 4,
+    color: "#2563eb",
+  },
+  // ImportedTooltip's public props go through a local alias that intersects an
+  // imported interface. This mirrors sx-aware wrappers whose sx support is
+  // inherited from shared prop interfaces.
+  tooltip: {
+    alignItems: "center",
+    minWidth: 24,
+  },
+  interfaceBase: {
+    borderColor: "#c084fc",
+  },
+  interfaceWrapper: {
+    backgroundColor: "#f5f3ff",
+  },
+  importedTypeWrapper: {
+    color: "#6d28d9",
+  },
 });
 
 const identifierRowStyle = {
@@ -187,6 +224,20 @@ export const App = () => (
     <Text size="md" sx={callerStyles.text}>
       Generic Text
     </Text>
+    <ImportedIcon color="currentColor" aria-label="Imported icon" sx={callerStyles.icon} />
+    <ImportedTooltip delay={100} sx={callerStyles.tooltip}>
+      Imported tooltip
+    </ImportedTooltip>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.interfaceWrapper, callerStyles.caller]}
+    >
+      Interface wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.importedTypeWrapper, callerStyles.caller]}
+    >
+      Imported type wrapper
+    </SxAwareButton>
     <div style={identifierRowStyle}>
       <Text color="labelMuted" sx={callerStyles.identifier}>
         ABC-123

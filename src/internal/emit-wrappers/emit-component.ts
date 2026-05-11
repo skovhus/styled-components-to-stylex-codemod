@@ -2,8 +2,11 @@
  * Emits wrapper components for non-intrinsic styled declarations.
  * Core concepts: prop mapping, style merging, and JSX construction.
  */
+import { existsSync, readFileSync } from "node:fs";
 import type { ASTNode, Property } from "jscodeshift";
+import jscodeshift from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { createModuleResolver } from "../prepass/resolve-imports.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
@@ -43,6 +46,8 @@ import {
   type OrderedStyleEntry,
 } from "./style-expr-builders.js";
 import { appendCompoundVariantStyleArgs, collectCompoundVariantKeys } from "./compound-variants.js";
+
+const moduleResolver = createModuleResolver();
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -128,6 +133,84 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     return explicitProps.has(propName);
   };
 
+  const propsTypeExposesForwardedSx = (
+    propsType: ASTNode | undefined,
+    wrappedComponent: string,
+    seenTypeNames = new Set<string>(),
+  ): boolean => {
+    if (!propsType) {
+      return false;
+    }
+    const explicitProps = emitter.getExplicitPropNames(propsType, {
+      lookThroughPropsWithChildren: true,
+    });
+    if (explicitProps.has("sx")) {
+      return true;
+    }
+    const typeText = emitter.stringifyTsType(propsType);
+    if (typeText?.includes(`typeof ${wrappedComponent}`)) {
+      return true;
+    }
+    if (propsType.type === "TSIntersectionType") {
+      for (const member of (propsType as { types?: ASTNode[] }).types ?? []) {
+        if (propsTypeExposesForwardedSx(member, wrappedComponent, seenTypeNames)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    const typeRefName = resolveTypeIdentifierName(propsType);
+    if (!typeRefName || seenTypeNames.has(typeRefName)) {
+      return false;
+    }
+    seenTypeNames.add(typeRefName);
+    const alias = root.find(j.TSTypeAliasDeclaration).filter((p) => {
+      const id = (p.node as { id?: { name?: string } }).id;
+      return id?.name === typeRefName;
+    });
+    if (alias.size() === 0) {
+      const iface = root.find(j.TSInterfaceDeclaration).filter((p) => {
+        const id = (p.node as { id?: { name?: string } }).id;
+        return id?.name === typeRefName;
+      });
+      if (iface.size() === 0) {
+        return importedPropsTypeExposesForwardedSx({
+          emitter,
+          typeName: typeRefName,
+          wrappedComponent,
+          seenTypeNames,
+        });
+      }
+      const node = iface.get().node as {
+        body?: { body?: unknown[] };
+        extends?: unknown[];
+      };
+      if (membersExposeProp(node.body?.body, "sx")) {
+        return true;
+      }
+      for (const heritage of node.extends ?? []) {
+        const heritageText = emitter.stringifyTsType(heritage as ASTNode);
+        if (heritageText?.includes(`typeof ${wrappedComponent}`)) {
+          return true;
+        }
+        const heritageName = getHeritageIdentifierName(heritage);
+        if (
+          heritageName &&
+          propsTypeExposesForwardedSx(
+            j.tsTypeReference(j.identifier(heritageName)) as ASTNode,
+            wrappedComponent,
+            seenTypeNames,
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+    const annotation = (alias.get().node as { typeAnnotation?: ASTNode }).typeAnnotation;
+    return propsTypeExposesForwardedSx(annotation, wrappedComponent, seenTypeNames);
+  };
+
   // Component wrappers (styled(Component)) - these wrap another component
   const componentWrappers = wrapperDecls.filter((d: StyledDecl) => d.base.kind === "component");
 
@@ -140,9 +223,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const renderedComponent = d.attrsInfo?.attrsAsTag ?? wrappedComponent;
     const baseComponentPropsType = findComponentPropsType(wrappedComponent);
     const renderedComponentPropsType = findComponentPropsType(renderedComponent);
-    const wrappedComponentIsLocalStyledWrapper = wrapperDecls.some(
-      (decl) => decl.localName === wrappedComponent,
-    );
+    const wrappedLocalDecl = wrapperDecls.find((decl) => decl.localName === wrappedComponent);
+    const wrappedComponentIsLocalStyledWrapper = !!wrappedLocalDecl;
     const renderedAsProp = resolveRenderedAsProp({
       emitter,
       propsType: renderedComponentPropsType,
@@ -191,12 +273,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // accepts className/style in its type, but does not destructure them.
     const wrappedAcceptsSx =
       emitter.useSxProp &&
-      (emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
+      ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
+        emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
         localComponentHasProp({
           componentName: wrappedComponent,
           propName: "sx",
           propsType: baseComponentPropsType,
         }));
+    const wrapperPropsExposeSx =
+      wrappedAcceptsSx &&
+      (propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
+        !d.propsType ||
+        !wrappedLocalDecl);
     // When the wrapped component has className/style as REQUIRED props, we must
     // force them to be optional in the wrapper's type. Otherwise, the wrapper would
     // inherit the requiredness, breaking call sites that don't pass className/style
@@ -875,11 +963,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
 
-      // When the wrapped component accepts a StyleX `sx` prop, callers may also
-      // pass `sx` even when the wrapper does not declare it externally. Destructure
-      // it so we can compose with internal styles instead of letting `{...rest}`
-      // forward it (which would be overwritten by the wrapper's own `sx={...}`).
-      if (allowSxProp || wrappedAcceptsSx) {
+      if (allowSxProp || wrapperPropsExposeSx) {
         styleArgs.push(sxId);
       }
 
@@ -904,7 +988,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         !(staticClassNameExpr || attrsStaticStyleExpr || d.inlineStyleProps?.length);
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
-      const destructureSx = allowSxProp || wrappedAcceptsSx;
+      const destructureSx = allowSxProp || wrapperPropsExposeSx;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1423,6 +1507,198 @@ function resolveTypeIdentifierName(type: ASTNode | null): string | null {
   }
   const typeName = (type as { typeName?: { type?: string; name?: string } }).typeName;
   return typeName?.type === "Identifier" ? (typeName.name ?? null) : null;
+}
+
+function membersExposeProp(members: unknown[] | undefined, propName: string): boolean {
+  return (members ?? []).some((member) => {
+    const typed = member as {
+      type?: string;
+      key?: { type?: string; name?: string; value?: unknown };
+    };
+    if (typed.type !== "TSPropertySignature") {
+      return false;
+    }
+    if (typed.key?.type === "Identifier") {
+      return typed.key.name === propName;
+    }
+    return typeof typed.key?.value === "string" && typed.key.value === propName;
+  });
+}
+
+function getHeritageIdentifierName(heritage: unknown): string | null {
+  if (!heritage || typeof heritage !== "object") {
+    return null;
+  }
+  const node = heritage as {
+    expression?: { type?: string; name?: string };
+    typeName?: { type?: string; name?: string };
+  };
+  if (node.expression?.type === "Identifier") {
+    return node.expression.name ?? null;
+  }
+  if (node.typeName?.type === "Identifier") {
+    return node.typeName.name ?? null;
+  }
+  return null;
+}
+
+function importedPropsTypeExposesForwardedSx(args: {
+  emitter: WrapperEmitter;
+  typeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { emitter, typeName, wrappedComponent, seenTypeNames } = args;
+  const imported = findImportedType(emitter, typeName);
+  if (!imported) {
+    return false;
+  }
+  const resolvedPath = moduleResolver.resolve(emitter.filePath, imported.source);
+  if (!resolvedPath) {
+    return false;
+  }
+  const source = readSourceWithExtensionFallback(resolvedPath);
+  if (!source) {
+    return false;
+  }
+  const parsed = parseTypeSource(source);
+  if (!parsed) {
+    return false;
+  }
+  const importedType = findLocalTypeDeclaration(parsed, imported.importedName);
+  if (!importedType) {
+    return false;
+  }
+  return externalPropsTypeExposesForwardedSx({
+    j: parsed.j,
+    root: parsed.root,
+    propsType: importedType,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function externalPropsTypeExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  propsType: ASTNode;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, propsType, wrappedComponent, seenTypeNames } = args;
+  if (membersExposeProp((propsType as { members?: unknown[] }).members, "sx")) {
+    return true;
+  }
+  const typeText = j(propsType).toSource();
+  if (typeText.includes(`typeof ${wrappedComponent}`)) {
+    return true;
+  }
+  if (propsType.type === "TSIntersectionType") {
+    for (const member of (propsType as { types?: ASTNode[] }).types ?? []) {
+      if (
+        externalPropsTypeExposesForwardedSx({
+          j,
+          root,
+          propsType: member,
+          wrappedComponent,
+          seenTypeNames,
+        })
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const typeRefName = resolveTypeIdentifierName(propsType);
+  if (!typeRefName || seenTypeNames.has(typeRefName)) {
+    return false;
+  }
+  seenTypeNames.add(typeRefName);
+  const localType = findLocalTypeDeclaration({ j, root }, typeRefName);
+  return localType
+    ? externalPropsTypeExposesForwardedSx({
+        j,
+        root,
+        propsType: localType,
+        wrappedComponent,
+        seenTypeNames,
+      })
+    : false;
+}
+
+function findImportedType(
+  emitter: WrapperEmitter,
+  localTypeName: string,
+): { importedName: string; source: string } | null {
+  const body = emitter.root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type !== "ImportDeclaration") {
+      continue;
+    }
+    const source = (statement.source as { value?: unknown }).value;
+    if (typeof source !== "string") {
+      continue;
+    }
+    for (const specifier of statement.specifiers ?? []) {
+      const spec = specifier as {
+        type?: string;
+        local?: { name?: string };
+        imported?: { name?: string; value?: unknown };
+      };
+      if (spec.local?.name !== localTypeName || spec.type !== "ImportSpecifier") {
+        continue;
+      }
+      const importedName =
+        spec.imported?.name ??
+        (typeof spec.imported?.value === "string" ? spec.imported.value : undefined);
+      return importedName ? { importedName, source } : null;
+    }
+  }
+  return null;
+}
+
+function findLocalTypeDeclaration(
+  parsed: { j: typeof jscodeshift; root: ReturnType<typeof jscodeshift> },
+  typeName: string,
+): ASTNode | null {
+  const alias = parsed.root.find(parsed.j.TSTypeAliasDeclaration).filter((p) => {
+    const id = (p.node as { id?: { name?: string } }).id;
+    return id?.name === typeName;
+  });
+  if (alias.size() > 0) {
+    return (alias.get().node as { typeAnnotation?: ASTNode }).typeAnnotation ?? null;
+  }
+  const iface = parsed.root.find(parsed.j.TSInterfaceDeclaration).filter((p) => {
+    const id = (p.node as { id?: { name?: string } }).id;
+    return id?.name === typeName;
+  });
+  return iface.size() > 0 ? (iface.get().node as ASTNode) : null;
+}
+
+function parseTypeSource(
+  source: string,
+): { j: typeof jscodeshift; root: ReturnType<typeof jscodeshift> } | null {
+  try {
+    const j = jscodeshift.withParser("tsx");
+    return { j, root: j(source) };
+  } catch {
+    return null;
+  }
+}
+
+function readSourceWithExtensionFallback(absolutePath: string): string | null {
+  for (const ext of ["", ".tsx", ".ts", ".jsx", ".js"]) {
+    const candidate = `${absolutePath}${ext}`;
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    try {
+      return readFileSync(candidate, "utf8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 type AstNodeOrQualifiedName =

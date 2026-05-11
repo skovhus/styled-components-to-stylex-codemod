@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import { unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
 import {
@@ -16,12 +17,13 @@ const fixture = (name: string) => join(fixturesDir, name);
 
 /** Write a temp fixture, run `fn`, then clean up regardless of outcome. */
 function withTempFixture<T>(name: string, content: string, fn: (path: string) => T): T {
-  const tmpPath = join(fixturesDir, name);
+  const tmpDir = mkdtempSync(join(tmpdir(), "stylex-codemod-forwarded-as-"));
+  const tmpPath = join(tmpDir, name);
   writeFileSync(tmpPath, content);
   try {
     return fn(tmpPath);
   } finally {
-    unlinkSync(tmpPath);
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 

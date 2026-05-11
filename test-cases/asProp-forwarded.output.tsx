@@ -23,7 +23,12 @@ function ButtonWrapper(
     "className" | "style"
   >,
 ) {
-  return <Button {...props} {...stylex.props(styles.buttonWrapper)} />;
+  const { children, sx, ...rest } = props;
+  return (
+    <Button {...rest} sx={[styles.buttonWrapper, sx]}>
+      {children}
+    </Button>
+  );
 }
 
 export const App = () => (

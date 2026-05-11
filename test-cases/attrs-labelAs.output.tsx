@@ -39,7 +39,7 @@ type LabelProps = {
 export function Label(props: LabelProps) {
   const { children, ref, ...rest } = props;
   return (
-    <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
+    <Text ref={ref} {...rest} as="label" sx={styles.label}>
       {children}
     </Text>
   );

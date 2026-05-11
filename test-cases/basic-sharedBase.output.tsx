@@ -57,14 +57,24 @@ function PositionBase<C extends React.ElementType = "div">(
 export function Relative(
   props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
 ) {
-  return <PositionBase {...props} {...stylex.props(styles.relative)} />;
+  const { children, sx, ...rest } = props;
+  return (
+    <PositionBase {...rest} sx={[styles.relative, sx]}>
+      {children}
+    </PositionBase>
+  );
 }
 
 /** An absolutely positioned container. */
 export function Absolute(
   props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
 ) {
-  return <PositionBase {...props} {...stylex.props(styles.absolute)} />;
+  const { children, sx, ...rest } = props;
+  return (
+    <PositionBase {...rest} sx={[styles.absolute, sx]}>
+      {children}
+    </PositionBase>
+  );
 }
 
 export function App() {

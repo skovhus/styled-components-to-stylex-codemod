@@ -36,6 +36,7 @@ import {
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
+import { detectExportedComponentSxProp } from "./internal/wrapped-component-interface.js";
 
 export { mergeMarkerDeclarations };
 
@@ -449,6 +450,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Adapter hooks and cascade-conflict checks consult this live set so same-run
   // wrappers only assume a base accepts StyleX props after the base actually converted.
   const transformedFiles = new Set<string>();
+  const transformedFileSources = new Map<string, string>();
 
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
@@ -532,9 +534,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             resolveBarrelReExport(resolvedPath, ctx.importedName, prepassResolve, cachedRead) ??
             resolvedPath;
           const definitionSourcePath = resolveExistingSourcePath(definitionPath);
-          if (!transformedFiles.has(toRealPath(definitionSourcePath))) {
-            return undefined;
-          }
 
           const autoInterfaceNames =
             ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
@@ -545,14 +544,20 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
                   (name): name is string => typeof name === "string",
                 )
               : [ctx.importedName];
-          const definitionSource = cachedRead(definitionSourcePath);
-          const hasTransformedSxSurface =
-            definitionSource.includes("sx?: stylex.StyleXStyles") &&
-            sourceComponentNames.some((name) => definitionSource.includes(name));
-          if (
-            !hasTransformedSxSurface &&
-            !sourceComponentNames.some((name) => styledDefinitionNames.has(name))
-          ) {
+          const hasTransformedSxSurface = sourceComponentNames.some((name) =>
+            detectExportedComponentSxProp({
+              absolutePath: definitionSourcePath,
+              componentName: name,
+              sourceOverrides: transformedFileSources,
+            }),
+          );
+          if (hasTransformedSxSurface) {
+            return { acceptsSx: true };
+          }
+          if (!transformedFiles.has(toRealPath(definitionSourcePath))) {
+            return undefined;
+          }
+          if (!sourceComponentNames.some((name) => styledDefinitionNames.has(name))) {
             return undefined;
           }
           const autoInterface = autoInterfaceNames
@@ -619,8 +624,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     string,
     import("./internal/transform-types.js").TransientPropRenameResult[]
   >();
-
-  const transformedFileSources = new Map<string, string>();
 
   const runnerOptions = {
     parser,

@@ -48,14 +48,9 @@ function ResponsivePanel(props: ResponsivePanelProps) {
 }
 
 function CompactPanel(props: React.ComponentPropsWithRef<typeof ResponsivePanel>) {
-  const { className, children, style, ...rest } = props;
+  const { children, sx, ...rest } = props;
   return (
-    <ResponsivePanel
-      {...rest}
-      asCard={true}
-      floatingOffset={4}
-      {...mergedSx(styles.compactPanel, className, style)}
-    >
+    <ResponsivePanel {...rest} asCard={true} floatingOffset={4} sx={[styles.compactPanel, sx]}>
       {children}
     </ResponsivePanel>
   );

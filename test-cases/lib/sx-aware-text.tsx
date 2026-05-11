@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import type { ImportedIconProps, ImportedTooltipProps } from "./sx-aware-imported-types";
 
 /**
  * Generic StyleX-aware text component. Mirrors the real-world pattern where the
@@ -35,8 +36,40 @@ export function Text<C extends React.ElementType = "span">(props: TextComponentP
   );
 }
 
+export function ImportedIcon(props: ImportedIconProps) {
+  const { sx, color, className, style, ...rest } = props;
+  const sp = stylex.props(styles.icon, sx);
+  return (
+    <svg
+      {...rest}
+      className={[sp.className, className].filter(Boolean).join(" ")}
+      style={{ color, ...sp.style, ...style }}
+    />
+  );
+}
+
+type OptimizedTooltipProps = ImportedTooltipProps & {
+  align?: "start" | "end";
+};
+
+export function ImportedTooltip(props: OptimizedTooltipProps) {
+  const { sx, className, style, children, ...rest } = props;
+  const sp = stylex.props(styles.tooltip, sx);
+  return (
+    <span
+      {...rest}
+      className={[sp.className, className].filter(Boolean).join(" ")}
+      style={{ ...sp.style, ...style }}
+    >
+      {children}
+    </span>
+  );
+}
+
 const styles = stylex.create({
   base: { fontFamily: "system-ui, sans-serif" },
   sm: { fontSize: 12 },
   md: { fontSize: 16 },
+  icon: { display: "inline-block" },
+  tooltip: { display: "inline-flex" },
 });

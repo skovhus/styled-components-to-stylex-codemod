@@ -207,6 +207,34 @@ describe("runTransform (e2e)", () => {
     );
   });
 
+  it("uses sx for wrappers of components with imported StyleXStyles props", async () => {
+    const { result, container, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-imported-sx-type-",
+      componentLines: [
+        'import * as React from "react";',
+        'import type { StyleXStyles } from "@stylexjs/stylex";',
+        "",
+        "type ContentViewContainerProps = {",
+        "  sx?: StyleXStyles;",
+        "  children?: React.ReactNode;",
+        "};",
+        "",
+        "export function ContentViewContainer(props: ContentViewContainerProps) {",
+        "  return <section>{props.children}</section>;",
+        "}",
+        "",
+      ],
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+    });
+
+    expect(result.errors).toBe(0);
+    expect(container).toContain("sx?: StyleXStyles");
+    expect(container).not.toContain("sx?: stylex.StyleXStyles");
+    expect(consumer).toContain("return <ContentViewContainer sx={styles.body} />");
+    expect(consumer).not.toContain("stylex.props(styles.body)");
+  });
+
   it("does not infer sx for wrappers when the base file bails in the same run", async () => {
     const { result, container, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sx-aware-bailed-base-",
