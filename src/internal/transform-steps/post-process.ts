@@ -39,6 +39,11 @@ export function postProcessStep(ctx: TransformContext): StepResult {
     j,
     relationOverrides: ctx.relationOverrides ?? [],
     ancestorSelectorParents: ctx.ancestorSelectorParents ?? new Set<string>(),
+    localElementOverridesByParent: new Map(
+      styledDecls
+        .filter((decl) => decl.localElementOverrides?.length)
+        .map((decl) => [decl.styleKey, decl.localElementOverrides ?? []]),
+    ),
     componentNameToStyleKey,
     emptyStyleKeys: ctx.emptyStyleKeys ?? new Set<string>(),
     preserveReactImport: ctx.preserveReactImport,

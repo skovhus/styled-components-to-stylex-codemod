@@ -1,4 +1,4 @@
-// @expected-warning: Unsupported selector: ambiguous element selector
+// Same-file descendant selector that safely targets multiple local styled intrinsic children.
 import styled from "styled-components";
 
 const SmallIcon = styled.svg`

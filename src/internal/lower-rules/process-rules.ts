@@ -95,11 +95,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     parseExpr,
     cssHelperNames,
     declByLocalName,
-    styledDecls,
     relationOverridePseudoBuckets,
     relationOverrides,
     ancestorSelectorParents,
-    childPseudoMarkers,
     resolveThemeValue,
     resolveThemeValueFromFn,
     resolveImportInScope,
@@ -115,13 +113,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     rule: (typeof decl.rules)[number],
     parentDecl: StyledDecl,
   ): "break" | "continue" | null => {
-    const elementResult = resolveElementSelectorTarget(
-      selectorStr,
-      parentDecl,
-      styledDecls,
-      root,
-      j,
-    );
+    const elementResult = resolveElementSelectorTarget(selectorStr, parentDecl, root, j);
     if (typeof elementResult === "string") {
       state.markBail();
       warnings.push({
@@ -134,62 +126,48 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     if (!elementResult) {
       return null;
     }
-    const { childDecl, ancestorPseudo, childPseudo, directChildOnly } = elementResult;
-    const overrideStyleKey = directChildOnly
-      ? `${toStyleKey(childDecl.localName)}DirectChildIn${parentDecl.localName}`
-      : `${toStyleKey(childDecl.localName)}In${parentDecl.localName}`;
-    ancestorSelectorParents.add(parentDecl.styleKey);
+    const { tagName, ancestorPseudo, childPseudo, directOnly } = elementResult;
 
-    // For child pseudos, record the pseudo in childPseudoMarkers
-    // so finalizeRelationOverrides uses a string literal key instead of
-    // stylex.when.ancestor().
+    if (rule.atRuleStack.length > 0) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: descendant/child/sibling selector",
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+
+    if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: ELEMENT_BAIL_WARNING_MAP["bail-dynamic"],
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+    if (
+      hasLocalElementPseudoCollision(
+        parentDecl.localElementOverrides ?? [],
+        tagName,
+        ancestorPseudo,
+        childPseudo,
+      )
+    ) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+
+    const overrideIndex = (parentDecl.localElementOverrides?.length ?? 0) + 1;
+    const overrideStyleKey = `${parentDecl.styleKey}Element${overrideIndex}`;
     const pseudoForBucket = childPseudo ?? ancestorPseudo;
-
-    // Detect pseudo collision: same pseudo used as both ancestor and child
-    // for the same override key (e.g., `&:hover svg` + `svg:hover`).
-    if (pseudoForBucket) {
-      const existingChildPseudos = childPseudoMarkers.get(overrideStyleKey);
-      const existingBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
-      const isAlreadyUsedAsAncestor = !childPseudo && existingChildPseudos?.has(pseudoForBucket);
-      const isAlreadyUsedAsChild =
-        childPseudo &&
-        existingBuckets?.has(pseudoForBucket) &&
-        !existingChildPseudos?.has(pseudoForBucket);
-      if (isAlreadyUsedAsAncestor || isAlreadyUsedAsChild) {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
-          loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-        });
-        return "break";
-      }
-    }
-
-    if (childPseudo) {
-      let markers = childPseudoMarkers.get(overrideStyleKey);
-      if (!markers) {
-        markers = new Set();
-        childPseudoMarkers.set(overrideStyleKey, markers);
-      }
-      markers.add(childPseudo);
-    }
-
-    const bucket = getOrCreateRelationOverrideBucket(
-      overrideStyleKey,
-      parentDecl.styleKey,
-      childDecl.styleKey,
-      pseudoForBucket,
-      relationOverrides,
-      relationOverridePseudoBuckets,
-      childDecl.extraStyleKeys,
-    );
-    if (directChildOnly) {
-      const override = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
-      if (override) {
-        override.directChildOnly = true;
-      }
-    }
+    const bucket: Record<string, unknown> = {};
 
     const result = processDeclarationsIntoBucket(
       rule,
@@ -209,6 +187,18 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       });
       return "break";
     }
+    const pseudoBuckets = new Map<string | null, Record<string, unknown>>();
+    pseudoBuckets.set(pseudoForBucket, bucket);
+    parentDecl.localElementOverrides ??= [];
+    parentDecl.localElementOverrides.push({
+      styleKey: overrideStyleKey,
+      tagName,
+      relation: directOnly ? "child" : "descendant",
+      ancestorPseudo,
+      childPseudo,
+      pseudoBuckets,
+      loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+    });
     return "continue";
   };
 
@@ -2070,15 +2060,14 @@ const ELEMENT_BAIL_WARNING_MAP: Record<
 function resolveElementSelectorTarget(
   selector: string,
   parentDecl: StyledDecl,
-  styledDecls: StyledDecl[],
   root: DeclProcessingState["state"]["root"],
   j: JSCodeshift,
 ):
   | {
-      childDecl: StyledDecl;
+      tagName: string;
       ancestorPseudo: string | null;
       childPseudo: string | null;
-      directChildOnly: boolean;
+      directOnly: boolean;
     }
   | ElementSelectorBailReason
   | null {
@@ -2086,7 +2075,7 @@ function resolveElementSelectorTarget(
   if (!parsed) {
     return null;
   }
-  const { tagName, ancestorPseudo, childPseudo } = parsed;
+  const { tagName, ancestorPseudo, childPseudo, directOnly } = parsed;
 
   // Bail if both ancestor and child pseudos are present (e.g., `&:focus > button:disabled`)
   // — cannot represent both in a single StyleX override
@@ -2099,39 +2088,7 @@ function resolveElementSelectorTarget(
     return "bail-exported";
   }
 
-  // Find all styled components with matching intrinsic tag, excluding the parent
-  const matches = styledDecls.filter(
-    (d) =>
-      !d.isCssHelper &&
-      d.localName !== parentDecl.localName &&
-      d.base.kind === "intrinsic" &&
-      d.base.tagName === tagName,
-  );
-
-  if (matches.length === 0) {
-    return null;
-  }
-  if (matches.length > 1) {
-    return "bail-ambiguous";
-  }
-
-  // Bail if the parent has dynamic children (e.g., {children}, {props.children})
-  if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
-    return "bail-dynamic";
-  }
-
-  // Bail if the parent renders plain intrinsic elements matching the tag
-  // (e.g., both <Icon /> and a plain <svg>) — only the styled component gets the override
-  if (hasPlainIntrinsicDescendant(parentDecl.localName, tagName, matches[0]!.localName, root, j)) {
-    return "bail-plain-intrinsic";
-  }
-
-  return {
-    childDecl: matches[0]!,
-    ancestorPseudo,
-    childPseudo,
-    directChildOnly: parsed.usesChildCombinator,
-  };
+  return { tagName, ancestorPseudo, childPseudo, directOnly };
 }
 
 /**
@@ -2171,49 +2128,6 @@ function isComponentExported(
   return defaultExport.size() > 0;
 }
 
-/**
- * Checks whether any JSX usage of the given parent component contains a plain
- * intrinsic element matching `tagName` that is NOT the styled component. For example,
- * if parent renders both `<Icon />` (styled.svg) and a plain `<svg>`, returns true.
- */
-function hasPlainIntrinsicDescendant(
-  parentName: string,
-  tagName: string,
-  styledChildName: string,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-): boolean {
-  let found = false;
-  root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: parentName },
-      },
-    } as any)
-    .forEach((path) => {
-      if (found) {
-        return;
-      }
-      for (const child of path.node.children ?? []) {
-        if (
-          child.type === "JSXElement" &&
-          child.openingElement.name.type === "JSXIdentifier" &&
-          child.openingElement.name.name === tagName &&
-          child.openingElement.name.name !== styledChildName
-        ) {
-          found = true;
-          return;
-        }
-      }
-    });
-  return found;
-}
-
-/**
- * Checks whether any JSX usage of the given component has dynamic children
- * ({children}, {props.children}, or non-empty JSXExpressionContainers).
- * Static JSX children (<Icon />, <div>text</div>) are OK.
- */
 function hasDynamicJsxChildren(
   componentName: string,
   root: DeclProcessingState["state"]["root"],
@@ -2232,7 +2146,6 @@ function hasDynamicJsxChildren(
       }
       for (const child of path.node.children ?? []) {
         if (child.type === "JSXExpressionContainer") {
-          // Allow empty expressions (comments like {/* ... */})
           if (child.expression.type === "JSXEmptyExpression") {
             continue;
           }
@@ -2242,6 +2155,25 @@ function hasDynamicJsxChildren(
       }
     });
   return hasDynamic;
+}
+
+function hasLocalElementPseudoCollision(
+  overrides: NonNullable<StyledDecl["localElementOverrides"]>,
+  tagName: string,
+  ancestorPseudo: string | null,
+  childPseudo: string | null,
+): boolean {
+  const nextPseudo = childPseudo ?? ancestorPseudo;
+  if (!nextPseudo) {
+    return false;
+  }
+  return overrides.some((override) => {
+    if (override.tagName !== tagName) {
+      return false;
+    }
+    const existingPseudo = override.childPseudo ?? override.ancestorPseudo;
+    return existingPseudo === nextPseudo && override.childPseudo !== childPseudo;
+  });
 }
 
 /**

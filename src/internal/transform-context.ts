@@ -25,7 +25,11 @@ import {
   getStaticPropertiesFromImport as getStaticPropertiesFromImportImpl,
   patternProp as patternPropImpl,
 } from "./transform-utils.js";
-import type { LocalStylexVarRef, TransformOptions } from "./transform-types.js";
+import type {
+  LocalElementOverrideCandidate,
+  LocalStylexVarRef,
+  TransformOptions,
+} from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
 
 export type ExportInfo = { exportName: string; isDefault: boolean; isSpecifier: boolean };
@@ -144,6 +148,11 @@ export class TransformContext {
     localName: string;
     overrideStyleKey: string;
     loc?: { line: number; column: number } | null;
+  }>;
+  /** Same-file element-selector overrides deferred for local JSX topology proof. */
+  deferredLocalElementWarnings?: Array<{
+    localName: string;
+    override: LocalElementOverrideCandidate;
   }>;
   /** Sidecar .stylex.ts files (defineMarker declarations), populated by emitStylesStep */
   sidecarFiles?: import("./transform-types.js").SidecarFile[];

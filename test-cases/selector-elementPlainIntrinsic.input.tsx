@@ -1,4 +1,7 @@
-// @expected-warning: Unsupported selector: element selector with plain intrinsic children
+/**
+ * Test case for same-file element descendant selectors with both styled and plain intrinsic children.
+ * Demonstrates `svg { ... }` being applied callsite-locally to every statically provable matching child.
+ */
 import styled from "styled-components";
 
 const Icon = styled.svg`
@@ -7,14 +10,16 @@ const Icon = styled.svg`
   height: 24px;
 `;
 
-// Parent renders both <Icon /> (styled) and a plain <svg>.
-// `svg { ... }` would only be applied as an override on Icon, losing
-// styling for the plain <svg> element.
 const Container = styled.div`
   padding: 16px;
 
   svg {
     fill: blue;
+  }
+
+  > svg {
+    stroke: red;
+    stroke-width: 2px;
   }
 `;
 

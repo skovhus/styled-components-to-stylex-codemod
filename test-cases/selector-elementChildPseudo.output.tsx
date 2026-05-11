@@ -8,8 +8,8 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <div sx={[styles.container, stylex.defaultMarker()]}>
-      <svg viewBox="0 0 24 24" sx={[styles.icon, styles.iconInContainer]}>
+    <div sx={styles.container}>
+      <svg viewBox="0 0 24 24" sx={[styles.icon, styles.descendantIcon]}>
         <circle cx="12" cy="12" r="10" />
       </svg>
       <span>Hover the icon</span>
@@ -27,7 +27,7 @@ const styles = stylex.create({
     padding: 16,
     backgroundColor: "white",
   },
-  iconInContainer: {
+  descendantIcon: {
     fill: {
       default: "gray",
       ":hover": "blue",

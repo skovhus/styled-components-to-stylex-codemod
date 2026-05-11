@@ -405,10 +405,6 @@ function mapAttributeToPseudo(attr: string, tagName: string): string | null {
  * Parses selectors like "& svg", "& > button", "&:hover svg", "& svg:hover",
  * "&:focus > button:disabled", "& > button[disabled]".
  *
- * Both descendant (space) and child (>) combinators are mapped the same way
- * because `stylex.when.ancestor()` matches ANY ancestor, not just a direct parent.
- * The child combinator is therefore less strict in the output than the original CSS.
- *
  * Attribute selectors on child elements (e.g., `button[disabled]`) are mapped to
  * their pseudo-class equivalents (`:disabled`) for StyleX compatibility.
  *
@@ -418,7 +414,7 @@ export function parseElementSelectorPattern(selector: string): {
   tagName: string;
   ancestorPseudo: string | null;
   childPseudo: string | null;
-  usesChildCombinator: boolean;
+  directOnly: boolean;
 } | null {
   const trimmed = selector.trim();
 
@@ -429,6 +425,7 @@ export function parseElementSelectorPattern(selector: string): {
   );
   if (m) {
     const ancestorPseudoRaw = m[1] ?? "";
+    const combinatorRaw = m[2] ?? "";
     const tagName = m[3]!;
     const attrRaw = m[4] ?? "";
     const childPseudoRaw = m[5] ?? "";
@@ -440,7 +437,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName,
       ancestorPseudo: ancestorPseudoRaw || null,
       childPseudo,
-      usesChildCombinator: (m[2] ?? "").includes(">"),
+      directOnly: combinatorRaw.includes(">"),
     };
   }
 
@@ -462,7 +459,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName: bareTagName,
       ancestorPseudo: null,
       childPseudo,
-      usesChildCombinator: false,
+      directOnly: false,
     };
   }
 
@@ -483,7 +480,7 @@ export function parseElementSelectorPattern(selector: string): {
       tagName: combTagName,
       ancestorPseudo: null,
       childPseudo,
-      usesChildCombinator: true,
+      directOnly: true,
     };
   }
 
