@@ -6,7 +6,7 @@
  */
 import {
   findImportSource,
-  resolveBarrelReExport,
+  resolveBarrelReExportBinding,
   type Resolve,
 } from "./extract-external-interface.js";
 import type { ResolveBaseComponentContext, ResolveBaseComponentResult } from "../../adapter.js";
@@ -309,17 +309,22 @@ export function computeGlobalLeafKeys(args: {
       return false;
     }
     const exportNameForBarrel = importInfo.isDefault ? "default" : importInfo.exportedName;
-    const defFile =
-      resolveBarrelReExport(initialDefFile, exportNameForBarrel, resolve, cachedRead) ??
-      initialDefFile;
+    const reExport = resolveBarrelReExportBinding(
+      initialDefFile,
+      exportNameForBarrel,
+      resolve,
+      cachedRead,
+    );
+    const defFile = reExport?.filePath ?? initialDefFile;
+    const exportedName = reExport?.exportedName ?? importInfo.exportedName;
     const defReal = toRealPath(defFile);
     if (!transformSet.has(defReal)) {
       return false;
     }
     return leafKeyExists(
       defReal,
-      importInfo.exportedName,
-      importInfo.isDefault,
+      exportedName,
+      exportedName === "default" || importInfo.isDefault,
       cachedRead,
       globalLeaves,
     );

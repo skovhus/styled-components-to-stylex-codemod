@@ -572,6 +572,74 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
     expect(result.warnings).toHaveLength(1);
     expect(result.warnings[0]?.type).toBe(WARNING_TYPE);
   });
+
+  it("does not bail for unrelated styled-components files behind star barrels", () => {
+    const source = `
+import styled from "styled-components";
+import { Plain } from "./lib/cascade-star-barrel";
+
+const CustomPlain = styled(Plain)\`
+  padding: 4px;
+\`;
+
+export const App = () => <CustomPlain>safe</CustomPlain>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-star-safe.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("does not bail on non-styled-components styled factory usage", () => {
+    const source = `
+import styled from "styled-components";
+import { LocalStyledFactoryComponent } from "./lib/local-styled-factory";
+
+const CustomFactoryComponent = styled(LocalStyledFactoryComponent)\`
+  padding: 4px;
+\`;
+
+export const App = () => <CustomFactoryComponent>safe</CustomFactoryComponent>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-local-styled-factory.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("bails for non-relative barrel re-exports resolved by the configured resolver", () => {
+    const source = `
+import styled from "styled-components";
+import { GroupHeader } from "./lib/styled-group-header-alias-barrel";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomGroupHeader label="test" id="t" />;
+`;
+    const groupHeaderPath = join(testCasesDir, "lib/styled-group-header.tsx");
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-non-relative-barrel.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        resolveModule: (_fromFile: string, specifier: string) =>
+          specifier === "@fixtures/styled-group-header" ? groupHeaderPath : undefined,
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
 });
 
 describe("partial-file transforms", () => {
@@ -1140,6 +1208,15 @@ describe("leaves-only mode", () => {
   const leavesDefaultWrap = join(__dirname, "fixtures/leaves-only/cross/default-wrap.tsx");
   const leavesBarrelIndex = join(__dirname, "fixtures/leaves-only/cross/barrel/index.ts");
   const leavesBarrelWrap = join(__dirname, "fixtures/leaves-only/cross/barrel-wrap.tsx");
+  const leavesAliasedBox = join(__dirname, "fixtures/leaves-only/cross/aliased-box.tsx");
+  const leavesAliasedBarrelIndex = join(
+    __dirname,
+    "fixtures/leaves-only/cross/aliased-barrel/index.ts",
+  );
+  const leavesAliasedBarrelWrap = join(
+    __dirname,
+    "fixtures/leaves-only/cross/aliased-barrel-wrap.tsx",
+  );
   const leavesBlockedBox = join(__dirname, "fixtures/leaves-only/cross/blocked-box.tsx");
   const leavesBlockedWrap = join(__dirname, "fixtures/leaves-only/cross/blocked-wrap.tsx");
 
@@ -1325,6 +1402,27 @@ export const App = () => (
     });
     expect(result.code).not.toBeNull();
     expect(result.code).not.toMatch(/const\s+WrappedBarrelBox\s*=\s*styled\(RenamedBox\)`/);
+  });
+
+  it("resolves aliased re-export barrels to the source leaf binding", () => {
+    const { globalLeafKeys, requirePath, resolver } = collectLeafKeys([
+      leavesAliasedBox,
+      leavesAliasedBarrelIndex,
+      leavesAliasedBarrelWrap,
+    ]);
+    const boxPath = requirePath(0);
+    const wrapPath = requirePath(2);
+
+    expect(globalLeafKeys.has(`${boxPath}:InternalBox`)).toBe(true);
+    expect(globalLeafKeys.has(`${boxPath}:PublicBox`)).toBe(false);
+    expect(globalLeafKeys.has(`${wrapPath}:WrappedAliasedBox`)).toBe(true);
+
+    const result = runLeavesOnly(readFileSync(wrapPath, "utf-8"), wrapPath, {
+      globalLeafKeys,
+      resolveModule: (fromFile: string, specifier: string) => resolver.resolve(fromFile, specifier),
+    });
+    expect(result.code).not.toBeNull();
+    expect(result.code).not.toMatch(/const\s+WrappedAliasedBox\s*=\s*styled\(PublicBox\)`/);
   });
 
   it("does not use prepass keys for leaves that later skip", () => {
@@ -3613,6 +3711,35 @@ export const App = () => (
     expect(result.code).toContain(
       "<my-counter>Before <span sx={styles.customInner} /> after</my-counter>",
     );
+  });
+
+  it("preserves named React Fragment imports when module resolution is configured", () => {
+    const source = `
+import { Fragment as F } from "react";
+import styled from "styled-components";
+
+const Inner = styled.span\`
+  color: red;
+\`;
+
+export const App = () => (
+  <F>Before <Inner /> after</F>
+);
+`;
+
+    const result = runTransformWithDiagnostics(
+      source,
+      {
+        resolveModule: (_fromFile: string, specifier: string) =>
+          specifier === "react" ? "/virtual/pnp/react/index.js" : undefined,
+      },
+      "fragment-resolver.tsx",
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain('<F>Before{" "}');
+    expect(result.code).toContain('{" "}after</F>');
   });
 
   it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {

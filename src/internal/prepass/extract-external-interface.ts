@@ -9,6 +9,11 @@ import path from "node:path";
 
 export type Resolve = (specifier: string, fromFile: string) => string | null;
 
+interface ReExportResolution {
+  filePath: string;
+  exportedName: string;
+}
+
 interface ImportInfo {
   source: string;
   /** The original exported name (differs from local name for aliased imports) */
@@ -66,6 +71,15 @@ export function resolveBarrelReExport(
   resolve: Resolve,
   read: (f: string) => string,
 ): string | null {
+  return resolveBarrelReExportBinding(filePath, name, resolve, read)?.filePath ?? null;
+}
+
+export function resolveBarrelReExportBinding(
+  filePath: string,
+  name: string,
+  resolve: Resolve,
+  read: (f: string) => string,
+): ReExportResolution | null {
   const basename = path.basename(filePath);
   if (basename !== "index.ts" && basename !== "index.tsx") {
     return null;
@@ -79,9 +93,17 @@ export function resolveBarrelReExport(
   }
 
   // Match `export { Name } from "./..."` or `export { Name as ... } from "./..."`
-  const namedMatch = src.match(getBarrelExportRe(name));
-  if (namedMatch?.[1]) {
-    return resolve(namedMatch[1], filePath);
+  const namedRe = /export\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
+  for (const match of src.matchAll(namedRe)) {
+    const sourceName = getReExportedSourceName(match[1] ?? "", name);
+    const specifier = match[2];
+    if (!sourceName || !specifier) {
+      continue;
+    }
+    const resolved = resolve(specifier, filePath);
+    if (resolved) {
+      return { filePath: resolved, exportedName: sourceName };
+    }
   }
 
   // Match `export * from "./..."` — check each star-export for the name
@@ -95,7 +117,7 @@ export function resolveBarrelReExport(
     if (resolved) {
       try {
         if (fileExports(read(resolved), name)) {
-          return resolved;
+          return { filePath: resolved, exportedName: name };
         }
       } catch {
         // skip
@@ -110,6 +132,21 @@ export function fileExports(src: string, name: string): boolean {
   return getFileExportsRe(name).test(src);
 }
 
+export function getReExportedSourceName(specifiers: string, exportedName: string): string | null {
+  for (const raw of specifiers.split(",")) {
+    const parts = raw.trim().split(/\s+as\s+/);
+    const local = parts[0]?.trim();
+    const exported = (parts[1] ?? parts[0])?.trim();
+    if (!local || !exported) {
+      continue;
+    }
+    if (exported === exportedName) {
+      return local;
+    }
+  }
+  return null;
+}
+
 const fileExportsReCache = new Map<string, RegExp>();
 function getFileExportsRe(name: string): RegExp {
   let re = fileExportsReCache.get(name);
@@ -119,16 +156,6 @@ function getFileExportsRe(name: string): RegExp {
         String.raw`|export\s*\{[^}]*\b${name}\b[^}]*\}`,
     );
     fileExportsReCache.set(name, re);
-  }
-  return re;
-}
-
-const barrelExportReCache = new Map<string, RegExp>();
-function getBarrelExportRe(name: string): RegExp {
-  let re = barrelExportReCache.get(name);
-  if (!re) {
-    re = new RegExp(String.raw`export\s*\{[^}]*\b${name}\b[^}]*\}\s*from\s*["']([^"']+)["']`);
-    barrelExportReCache.set(name, re);
   }
   return re;
 }
