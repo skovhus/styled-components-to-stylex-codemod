@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-CAvI1P0O.js";import{t as n}from"./react-spring-_dY_LKw-.js";t();var r=e();function i(e){return(0,r.jsx)(n.div,{...e,role:`region`,className:`x78zum5 x6s0dn4`})}var a=()=>(0,r.jsx)(`div`,{className:`x1lliihq`,children:(0,r.jsx)(i,{children:`Hello`})});export{a as App};
