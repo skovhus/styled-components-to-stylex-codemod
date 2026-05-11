@@ -9,21 +9,15 @@ import * as stylex from "@stylexjs/stylex";
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
     <div sx={styles.toolbar}>
-      <button sx={[styles.actionButton, styles.actionButtonDirectChildInToolbar]}>Action 1</button>
-      <button sx={[styles.actionButton, styles.actionButtonDirectChildInToolbar]}>Action 2</button>
+      <button sx={[styles.actionButton, styles.childActionButton]}>Action 1</button>
+      <button sx={[styles.actionButton, styles.childActionButton]}>Action 2</button>
     </div>
     <div sx={styles.mixedToolbar}>
-      <button
-        sx={[
-          styles.actionButton,
-          styles.actionButtonInMixedToolbar,
-          styles.actionButtonDirectChildInMixedToolbar,
-        ]}
-      >
+      <button sx={[styles.actionButton, styles.descendantActionButton, styles.childActionButton2]}>
         Direct mixed
       </button>
       <span>
-        <button sx={[styles.actionButton, styles.actionButtonInMixedToolbar]}>Nested mixed</button>
+        <button sx={[styles.actionButton, styles.descendantActionButton]}>Nested mixed</button>
       </span>
     </div>
   </div>
@@ -52,13 +46,13 @@ const styles = stylex.create({
     padding: 8,
     backgroundColor: "#eef7ff",
   },
-  actionButtonDirectChildInToolbar: {
+  childActionButton: {
     fontWeight: "bold",
   },
-  actionButtonInMixedToolbar: {
+  descendantActionButton: {
     textDecoration: "underline",
   },
-  actionButtonDirectChildInMixedToolbar: {
+  childActionButton2: {
     fontWeight: "bold",
   },
 });

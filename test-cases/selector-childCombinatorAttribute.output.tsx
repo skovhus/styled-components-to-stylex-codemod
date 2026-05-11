@@ -2,9 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
   <div style={{ display: "flex", gap: "16px", padding: "16px" }}>
-    <div sx={[styles.trigger, stylex.defaultMarker()]}>
-      <button sx={[styles.actionButton, styles.actionButtonDirectChildInTrigger]}>Enabled</button>
-      <button disabled sx={[styles.actionButton, styles.actionButtonDirectChildInTrigger]}>
+    <div sx={styles.trigger}>
+      <button sx={[styles.actionButton, styles.childActionButton]}>Enabled</button>
+      <button disabled sx={[styles.actionButton, styles.childActionButton]}>
         Disabled
       </button>
     </div>
@@ -28,7 +28,7 @@ const styles = stylex.create({
     padding: 16,
     backgroundColor: "#f0f0f0",
   },
-  actionButtonDirectChildInTrigger: {
+  childActionButton: {
     pointerEvents: {
       default: null,
       ":disabled": "none",

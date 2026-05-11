@@ -127,15 +127,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       return null;
     }
     const { tagName, ancestorPseudo, childPseudo, directOnly } = elementResult;
-    const matchingStyledChildren = styledDecls.filter(
-      (candidate) =>
-        !candidate.isCssHelper &&
-        candidate.localName !== parentDecl.localName &&
-        candidate.base.kind === "intrinsic" &&
-        candidate.base.tagName === tagName,
-    );
-    const exactStyledChild =
-      matchingStyledChildren.length === 1 ? matchingStyledChildren[0] : undefined;
 
     if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
       state.markBail();
@@ -145,86 +136,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
       });
       return "break";
-    }
-
-    if (
-      exactStyledChild &&
-      !hasPlainIntrinsicDescendant(
-        parentDecl.localName,
-        tagName,
-        exactStyledChild.localName,
-        root,
-        j,
-      )
-    ) {
-      const overrideStyleKey = directOnly
-        ? `${toStyleKey(exactStyledChild.localName)}DirectChildIn${parentDecl.localName}`
-        : `${toStyleKey(exactStyledChild.localName)}In${parentDecl.localName}`;
-      const pseudoForBucket = childPseudo ?? ancestorPseudo;
-
-      if (pseudoForBucket) {
-        const existingChildPseudos = childPseudoMarkers.get(overrideStyleKey);
-        const existingBuckets = relationOverridePseudoBuckets.get(overrideStyleKey);
-        const isAlreadyUsedAsAncestor = !childPseudo && existingChildPseudos?.has(pseudoForBucket);
-        const isAlreadyUsedAsChild =
-          childPseudo &&
-          existingBuckets?.has(pseudoForBucket) &&
-          !existingChildPseudos?.has(pseudoForBucket);
-        if (isAlreadyUsedAsAncestor || isAlreadyUsedAsChild) {
-          state.markBail();
-          warnings.push({
-            severity: "warning",
-            type: ELEMENT_BAIL_WARNING_MAP["bail-pseudo-collision"],
-            loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-          });
-          return "break";
-        }
-      }
-
-      if (childPseudo) {
-        let markers = childPseudoMarkers.get(overrideStyleKey);
-        if (!markers) {
-          markers = new Set();
-          childPseudoMarkers.set(overrideStyleKey, markers);
-        }
-        markers.add(childPseudo);
-      }
-
-      const bucket = getOrCreateRelationOverrideBucket(
-        overrideStyleKey,
-        parentDecl.styleKey,
-        exactStyledChild.styleKey,
-        pseudoForBucket,
-        relationOverrides,
-        relationOverridePseudoBuckets,
-        exactStyledChild.extraStyleKeys,
-      );
-      if (directOnly) {
-        const override = relationOverrides.find((o) => o.overrideStyleKey === overrideStyleKey);
-        if (override) {
-          override.directChildOnly = true;
-        }
-      }
-      const result = processDeclarationsIntoBucket(
-        rule,
-        bucket,
-        j,
-        parentDecl,
-        resolveThemeValue,
-        resolveThemeValueFromFn,
-        { bailOnUnresolved: true },
-      );
-      if (result === "bail") {
-        state.markBail();
-        warnings.push({
-          severity: "warning",
-          type: "Unsupported selector: unresolved interpolation in element selector",
-          loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
-        });
-        return "break";
-      }
-      ancestorSelectorParents.add(parentDecl.styleKey);
-      return "continue";
     }
     if (
       hasLocalElementPseudoCollision(
