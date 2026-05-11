@@ -24,9 +24,45 @@ export const Select = styled.select`
   font-size: 13px;
 `;
 
+function Link(props: { to: string; children: React.ReactNode }) {
+  return <a href={props.to}>{props.children}</a>;
+}
+
+const StyledSpan = styled.span`
+  position: relative;
+`;
+
+const CountingSpan = styled.span`
+  color: rebeccapurple;
+`;
+
+function Counter(props: { children: React.ReactNode }) {
+  return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
+}
+
+export function Repro(props: { integrationsPath: string }) {
+  return (
+    <>
+      Browse <Link to={props.integrationsPath}>integrations</Link> to enable new agents, or manage
+      access
+      <StyledSpan>team</StyledSpan>
+    </>
+  );
+}
+
+export function ChildrenShapeRepro() {
+  return (
+    <Counter>
+      Before <CountingSpan /> after
+    </Counter>
+  );
+}
+
 export const App = () => (
   <Wrapper>
     <Title>Hello World!</Title>
+    <Repro integrationsPath="/integrations" />
+    <ChildrenShapeRepro />
     <Select onChange={(e) => console.log(e.target.value)} />
   </Wrapper>
 );

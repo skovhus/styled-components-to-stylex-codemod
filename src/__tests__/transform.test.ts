@@ -2633,6 +2633,162 @@ export const App = () => (
     expect(result.code).toContain("[styles.thing, styles.thingAdjacentSibling]");
   });
 
+  it("should not split custom component children when preserving JSX whitespace", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Counter(props: { children: React.ReactNode }) {
+  return <span data-count={React.Children.count(props.children)}>{props.children}</span>;
+}
+
+const ui = { Counter };
+
+const Plain = styled.span\`
+  color: blue;
+\`;
+
+const Commented = styled.span\`
+  color: purple;
+\`;
+
+const WithRef = styled.span\`
+  color: green;
+\`;
+
+const Item = styled.span\`
+  color: black;
+  & + & {
+    color: red;
+  }
+\`;
+
+const Tone = styled.span<{ $tone?: "danger" }>\`
+  color: \${(props) => (props.$tone === "danger" ? "red" : "blue")};
+\`;
+
+export function App() {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  return (
+    <>
+      <Counter><Plain /> <span /> after</Counter>
+      <Counter>Before {/* note */}<Commented /> after</Counter>
+      <Counter>Before <WithRef ref={ref} /> after</Counter>
+      <Counter>Before <Item /> <Item /> after</Counter>
+      <Counter>Before <Tone $tone="danger" /> after</Counter>
+      <ui.Counter>Before <Plain /> after</ui.Counter>
+    </>
+  );
+}
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "custom-children-whitespace.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).not.toContain('{" "}');
+    expect(result.code).toContain("ref={ref}");
+    expect(result.code).toContain("itemAdjacentSibling");
+    expect(result.code).toContain("<ui.Counter>Before <Plain /> after</ui.Counter>");
+  });
+
+  it("should preserve JSX whitespace in safe parents without splitting custom children", () => {
+    const source = `
+import * as React from "react";
+import { Fragment as RF, Fragment as F } from "react";
+import styled from "styled-components";
+import { Counter as ImportedCounter } from "./lib/counter";
+
+function Fragment(props: { children: React.ReactNode }) {
+  return <section>{props.children}</section>;
+}
+
+const ReactInner = styled.span\`
+  color: red;
+\`;
+
+const FragmentInner = styled.span\`
+  color: orange;
+\`;
+
+const AliasFragmentInner = styled.span\`
+  color: pink;
+\`;
+
+const LocalFragmentInner = styled.span\`
+  color: cyan;
+\`;
+
+const OuterInner = styled.span\`
+  color: green;
+\`;
+
+const OuterCustomInner = styled.span\`
+  color: brown;
+\`;
+
+const Middle = styled.span\`
+  color: gray;
+\`;
+
+const CustomInner = styled.span\`
+  color: blue;
+\`;
+
+const Outer = styled.div\`
+  padding: 4px;
+\`;
+
+const OuterCustom = styled(ImportedCounter)\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <>
+    <React.Fragment>Before <ReactInner /> after</React.Fragment>
+    <RF>Before <FragmentInner /> after</RF>
+    <F>Before <AliasFragmentInner /> after</F>
+    <Fragment>Before <LocalFragmentInner /> after</Fragment>
+    <Outer>Before <OuterInner /> after</Outer>
+    <OuterCustom>Before <OuterCustomInner /> after</OuterCustom>
+    <><span /> <Middle /> <span /></>
+    <my-counter>Before <CustomInner /> after</my-counter>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "fragment-and-custom-whitespace.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings).toEqual([]);
+    expect(result.code).toContain('<React.Fragment>Before{" "}');
+    expect(result.code).toContain('{" "}after</React.Fragment>');
+    expect(result.code).toContain('<RF>Before{" "}');
+    expect(result.code).toContain('{" "}after</RF>');
+    expect(result.code).toContain('<F>Before{" "}');
+    expect(result.code).toContain('{" "}after</F>');
+    expect(result.code).toContain(
+      "<Fragment>Before <span sx={styles.localFragmentInner} /> after</Fragment>",
+    );
+    expect(result.code).toContain('<div sx={styles.outer}>Before{" "}');
+    expect(result.code).toContain('{" "}after</div>');
+    expect(result.code).toContain(
+      "<ImportedCounter {...stylex.props(styles.outerCustom)}>Before <span sx={styles.outerCustomInner} /> after</ImportedCounter>",
+    );
+    expect(result.code).toContain('<><span />{" "}<span sx={styles.middle} />{" "}<span /></>');
+    expect(result.code).toContain(
+      "<my-counter>Before <span sx={styles.customInner} /> after</my-counter>",
+    );
+  });
+
   it("should preserve non-media adjacent overrides when media adjacent rules are also present", () => {
     const source = `
 import styled from "styled-components";
