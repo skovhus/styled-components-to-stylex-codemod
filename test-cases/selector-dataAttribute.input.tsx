@@ -1,4 +1,7 @@
 import styled from "styled-components";
+import { motion } from "./lib/framer-motion";
+
+export const DataAnimatingAttribute = `data-animating`;
 
 const Box = styled.div`
   opacity: 0;
@@ -39,6 +42,18 @@ const CompoundItem = styled.div`
   }
 `;
 
+const StyledMotionDiv = styled(motion.div)`
+  max-height: 80px;
+  overflow: visible;
+  padding: 12px;
+  border: 1px solid #222;
+
+  &[${DataAnimatingAttribute}="true"] {
+    max-height: 40px;
+    overflow: hidden;
+  }
+`;
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 16 }}>
@@ -58,6 +73,9 @@ export function App() {
       <div data-state="active" data-size="lg">
         <CompoundItem style={{ backgroundColor: "thistle", padding: 10 }}>Compound</CompoundItem>
       </div>
+      <StyledMotionDiv data-animating="true" style={{ backgroundColor: "lavender" }}>
+        Animating local attr
+      </StyledMotionDiv>
     </div>
   );
 }

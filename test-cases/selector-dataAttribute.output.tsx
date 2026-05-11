@@ -1,4 +1,26 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { motion } from "./lib/framer-motion";
+
+export const DataAnimatingAttribute = `data-animating`;
+
+function StyledMotionDiv(props: Omit<React.ComponentPropsWithRef<typeof motion.div>, "className">) {
+  const { children, style, ...rest } = props;
+  const sx = stylex.props(styles.motionDiv);
+
+  return (
+    <motion.div
+      {...rest}
+      {...sx}
+      style={{
+        ...sx.style,
+        ...style,
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export function App() {
   return (
@@ -19,6 +41,9 @@ export function App() {
       <div data-state="active" data-size="lg" sx={stylex.defaultMarker()}>
         <div sx={styles.compoundItem}>Compound</div>
       </div>
+      <StyledMotionDiv data-animating="true" style={{ backgroundColor: "lavender" }}>
+        Animating local attr
+      </StyledMotionDiv>
     </div>
   );
 }
@@ -60,6 +85,20 @@ const styles = stylex.create({
     },
     backgroundColor: "thistle",
     padding: 10,
+  },
+  motionDiv: {
+    maxHeight: {
+      default: 80,
+      ':is([data-animating="true"])': 40,
+    },
+    overflow: {
+      default: "visible",
+      ':is([data-animating="true"])': "hidden",
+    },
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#222",
   },
   boxVisible: {
     backgroundColor: "lightblue",

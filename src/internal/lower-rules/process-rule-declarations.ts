@@ -11,12 +11,8 @@ import {
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
-import {
-  findConstDeclaratorString,
-  resolveImportedConstStringInit,
-} from "./resolve-imported-static-string.js";
+import { resolveExpressionToStaticString } from "./resolve-imported-static-string.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
-import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 
 type CommentSource = { leading?: string; trailingLine?: string } | null;
 
@@ -201,65 +197,3 @@ function resolveInterpolatedPropertyName(
   return resolved;
 }
 
-/**
- * Resolves an AST expression to a static string. Handles direct string
- * literals and identifiers bound to:
- *   - a top-level `const NAME = "..."` declaration in the file being
- *     transformed, or
- *   - an imported binding whose source file declares a top-level
- *     `export const NAME = "..."`.
- *
- * Identifiers that are shadowed by an enclosing scope (e.g. a local `const
- * NAME = "..."` inside the function containing the styled template) are not
- * resolved — bailing is safer than substituting the wrong value.
- */
-function resolveExpressionToStaticString(
-  expr: unknown,
-  state: DeclProcessingState["state"],
-): string | null {
-  const direct = literalToStaticValue(expr);
-  if (typeof direct === "string") {
-    return direct;
-  }
-  if (!isIdentifierNode(expr)) {
-    return null;
-  }
-  if (state.isIdentifierShadowed(expr, expr.name)) {
-    return null;
-  }
-  const fromImport = resolveImportedConstStringInit(expr.name, state);
-  if (fromImport !== null) {
-    return fromImport;
-  }
-  return findTopLevelConstStringInit(expr.name, state);
-}
-
-/**
- * Finds a top-level `const <name> = <literal>` declaration in the current file
- * and returns its initializer when it resolves to a static string. Skips
- * non-`const` declarations and declarators whose initializer is not a static
- * literal so we never substitute a value that could change at runtime.
- */
-function findTopLevelConstStringInit(
-  name: string,
-  state: DeclProcessingState["state"],
-): string | null {
-  const { root, j } = state;
-  let resolved: string | null = null;
-  root
-    .find(j.VariableDeclaration, { kind: "const" } as { kind: "const" })
-    .filter((p) => {
-      const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
-      return parentType === "Program" || parentType === "ExportNamedDeclaration";
-    })
-    .forEach((p) => {
-      if (resolved !== null) {
-        return;
-      }
-      const found = findConstDeclaratorString(p.node.declarations, name);
-      if (found !== null) {
-        resolved = found;
-      }
-    });
-  return resolved;
-}

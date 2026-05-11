@@ -14,8 +14,29 @@
 import { readFileSync } from "node:fs";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { createModuleResolver, type ModuleResolver } from "../prepass/resolve-imports.js";
-import { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
+
+export function resolveExpressionToStaticString(
+  expr: unknown,
+  state: DeclProcessingState["state"],
+): string | null {
+  const direct = literalToStaticValue(expr);
+  if (typeof direct === "string") {
+    return direct;
+  }
+  if (!isIdentifierNode(expr)) {
+    return null;
+  }
+  if (state.isIdentifierShadowed(expr, expr.name)) {
+    return null;
+  }
+  const fromImport = resolveImportedConstStringInit(expr.name, state);
+  if (fromImport !== null) {
+    return fromImport;
+  }
+  return findTopLevelConstStringInit(expr.name, state);
+}
 
 export function resolveImportedConstStringInit(
   localName: string,
@@ -280,6 +301,30 @@ function findTopLevelLocalConstString(
       }),
     (p) => findConstDeclaratorString(p.node.declarations, name),
   );
+}
+
+function findTopLevelConstStringInit(
+  name: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  const { root, j } = state;
+  let resolved: string | null = null;
+  root
+    .find(j.VariableDeclaration, { kind: "const" } as { kind: "const" })
+    .filter((p) => {
+      const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
+      return parentType === "Program" || parentType === "ExportNamedDeclaration";
+    })
+    .forEach((p) => {
+      if (resolved !== null) {
+        return;
+      }
+      const found = findConstDeclaratorString(p.node.declarations, name);
+      if (found !== null) {
+        resolved = found;
+      }
+    });
+  return resolved;
 }
 
 /**
