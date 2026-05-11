@@ -292,7 +292,8 @@ function buildInterpolatedTemplate(args: {
   let allStatic = true;
   const quasis: any[] = [];
   let q = "";
-  for (const part of parts) {
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex];
     if (part.kind === "static") {
       q += part.value;
       fullStaticValue += part.value;
@@ -308,6 +309,9 @@ function buildInterpolatedTemplate(args: {
       if (expr.type === "CallExpression" && resolveCallExpr) {
         const resolved = resolveCallExpr(expr);
         if (resolved) {
+          if (hasAdjacentUnitInParts(parts, partIndex)) {
+            return null;
+          }
           // If resolved to a string literal, inline it directly into the static text
           if (
             resolved.resolved?.type === "StringLiteral" ||
@@ -345,6 +349,9 @@ function buildInterpolatedTemplate(args: {
             addImport?.(imp);
           }
           return resolved.resolved;
+        }
+        if (hasAdjacentUnitInParts(parts, partIndex)) {
+          return null;
         }
         if (
           resolved.resolved?.type === "StringLiteral" ||
@@ -388,6 +395,12 @@ function buildInterpolatedTemplate(args: {
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   return j.templateLiteral(quasis, exprs);
+}
+
+function hasAdjacentUnitInParts(parts: any[], slotIndex: number): boolean {
+  const before = parts[slotIndex - 1]?.kind === "static" ? (parts[slotIndex - 1]?.value ?? "") : "";
+  const after = parts[slotIndex + 1]?.kind === "static" ? (parts[slotIndex + 1]?.value ?? "") : "";
+  return /[a-zA-Z%]$/.test(before) || /^[a-zA-Z%]/.test(after);
 }
 
 function hasSingleSlotUnitSuffix(cssValue: any): boolean {

@@ -780,6 +780,20 @@ function tryResolveArrowFnImportedHelperCall(
     return null;
   }
 
+  const callee = body.callee;
+  const calleeInfo = extractRootAndPath(callee);
+  const importInfo = calleeInfo
+    ? ctx.resolveImport(calleeInfo.rootName, calleeInfo.rootNode)
+    : null;
+  if (!importInfo) {
+    return null;
+  }
+
+  const args = body.arguments ?? [];
+  if (args.some((arg) => literalToStaticValue(arg) === null)) {
+    return { type: "emitInlineStyleValueFromProps" };
+  }
+
   const paramName = getArrowFnSingleParamName(expr) ?? undefined;
   const resolved = resolveImportedHelperCall(body, ctx, paramName, node.css.property);
   if (resolved.kind === "resolved") {
@@ -789,12 +803,6 @@ function tryResolveArrowFnImportedHelperCall(
     });
   }
   if (resolved.kind === "unresolved") {
-    return { type: "emitInlineStyleValueFromProps" };
-  }
-
-  const callee = body.callee;
-  const calleeInfo = extractRootAndPath(callee);
-  if (calleeInfo && ctx.resolveImport(calleeInfo.rootName, calleeInfo.rootNode)) {
     return { type: "emitInlineStyleValueFromProps" };
   }
   return null;

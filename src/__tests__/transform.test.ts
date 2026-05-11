@@ -3622,6 +3622,11 @@ export const Box = styled.div\`
       declarations: "const size = 8;",
       css: "padding-top: ${size || runtimeValue()}px;",
     },
+    {
+      name: "helper predicate",
+      declarations: "",
+      css: "padding-top: ${runtimeValue() ? 8 : 4}px;",
+    },
   ])("should bail for unsafe resolved helper unit arithmetic in $name", ({ declarations, css }) => {
     const source = `
 import styled from "styled-components";
@@ -3668,6 +3673,58 @@ export const Box = styled.div\`
       {
         source,
         path: join(testCasesDir, "helper-resolvedArithmeticUnsafeUnit.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(
+      "Unsupported interpolation: call expression",
+    );
+  });
+
+  it("should bail for resolved helper slots with adjacent units in multi-slot backgrounds", () => {
+    const source = `
+import styled from "styled-components";
+import { other, runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  background-image: linear-gradient(\${runtimeValue()}px, \${other()});
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        return {
+          usage: "create" as const,
+          expr:
+            ctx.calleeImportedName === "runtimeValue" ? "$spacing.runtimeValue" : "$spacing.other",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "./tokens.stylex" },
+              names: [{ imported: "$spacing" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-backgroundAdjacentUnit.input.tsx"),
       },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
       { adapter: adapterWithTokenResolution },
@@ -3756,6 +3813,61 @@ export const Box = styled.div<{ size: number }>\`
     expect(result.warnings.map((w) => w.type)).not.toContain(
       "Unsupported interpolation: call expression",
     );
+  });
+
+  it("should preserve member helper calls with dynamic arguments", () => {
+    const source = `
+import styled from "styled-components";
+import { helpers } from "./lib/helpers";
+
+export const Box = styled.div<{ tone: string }>\`
+  background-color: \${(props) => helpers.color(props.tone)};
+\`;
+`;
+
+    const adapterWithMemberResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "helpers" && ctx.calleeMemberPath?.join(".") === "color") {
+          return {
+            usage: "create" as const,
+            dynamicArgUsage: "memberAccess" as const,
+            expr: "$colors",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$colors" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-memberDynamicArgPreserve.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithMemberResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("helpers.color(");
+    expect(code).not.toContain("backgroundColor: $colors");
   });
 
   it("should use call expression when adapter returns a function-like resolvedExpr for dynamic prop arg", () => {

@@ -266,7 +266,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     let currentStaticPart = "";
     let needsTheme = false;
 
-    for (const part of parts) {
+    for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+      const part = parts[partIndex]!;
       if (part.kind === "static") {
         currentStaticPart += part.value ?? "";
         continue;
@@ -293,6 +294,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         return true;
       }
       if (importedValueResolution) {
+        if (hasAdjacentUnitInInterpolatedParts(parts, partIndex)) {
+          warnings.push({
+            severity: "warning",
+            type: "Unsupported interpolation: call expression",
+            loc: getNodeLocStart(slotExpr) ?? decl.loc,
+          });
+          bail = true;
+          return true;
+        }
         addResolverImports(importedValueResolution.imports);
         slotExpr = importedValueResolution.resolved;
       }
@@ -939,6 +949,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
         if (isBailResolution(alternateResult)) {
           return alternateResult;
+        }
+        if (testResult) {
+          return bailResolvedUnitExpression(expr.test);
         }
         if (canFoldUnitSuffix) {
           const consequent = resolveUnitBranch(consequentResult, expr.consequent);
@@ -3549,6 +3562,15 @@ function hasAdjacentTemplateUnit(
     quasis[expressionIndex]?.value?.raw ?? quasis[expressionIndex]?.value?.cooked ?? "";
   const after =
     quasis[expressionIndex + 1]?.value?.raw ?? quasis[expressionIndex + 1]?.value?.cooked ?? "";
+  return /[a-zA-Z%]$/.test(before) || /^[a-zA-Z%]/.test(after);
+}
+
+function hasAdjacentUnitInInterpolatedParts(
+  parts: Array<{ kind?: string; value?: string }>,
+  slotIndex: number,
+): boolean {
+  const before = parts[slotIndex - 1]?.kind === "static" ? (parts[slotIndex - 1]?.value ?? "") : "";
+  const after = parts[slotIndex + 1]?.kind === "static" ? (parts[slotIndex + 1]?.value ?? "") : "";
   return /[a-zA-Z%]$/.test(before) || /^[a-zA-Z%]/.test(after);
 }
 
