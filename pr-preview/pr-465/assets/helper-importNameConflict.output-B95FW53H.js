@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-DQp_bt9w.js";import{D as n}from"./helpers-DqrRvmsT.js";t();var r=e(),i=n(`fast`),a=()=>(0,r.jsxs)(`div`,{children:[(0,r.jsx)(`div`,{children:i}),(0,r.jsx)(`div`,{className:`x4lopbt`})]});export{a as App};
