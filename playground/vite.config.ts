@@ -3,6 +3,15 @@ import react from "@vitejs/plugin-react";
 import stylex from "@stylexjs/unplugin";
 import path from "node:path";
 
+export const playgroundBrowserAliases = {
+  "node:fs": path.resolve(__dirname, "src/lib/fs-stub.ts"),
+  "node:module": path.resolve(__dirname, "src/lib/module-stub.ts"),
+  "node:path": "path-browserify",
+  path: "path-browserify",
+  assert: "assert",
+  "oxc-resolver": path.resolve(__dirname, "src/lib/oxc-resolver-stub.ts"),
+};
+
 export default defineConfig(({ command }) => {
   const isBuild = command === "build";
 
@@ -24,13 +33,7 @@ export default defineConfig(({ command }) => {
       "process.env.NODE_DEBUG": "false",
     },
     resolve: {
-      alias: {
-        "node:fs": path.resolve(__dirname, "src/lib/fs-stub.ts"),
-        "node:path": "path-browserify",
-        path: "path-browserify",
-        assert: "assert",
-        "oxc-resolver": path.resolve(__dirname, "src/lib/oxc-resolver-stub.ts"),
-      },
+      alias: playgroundBrowserAliases,
     },
     build: {
       outDir: path.resolve(__dirname, "../dist-playground"),
