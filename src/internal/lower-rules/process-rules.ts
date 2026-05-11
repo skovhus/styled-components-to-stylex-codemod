@@ -60,6 +60,7 @@ import {
   collectPropsFromArrowFnDestructured,
 } from "./inline-styles.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
+import { resolveExpressionToStaticString } from "./resolve-imported-static-string.js";
 import {
   findSupportedAtRule,
   hasUnsupportedAtRule,
@@ -227,6 +228,24 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
     // Track resolved selector media for this rule (set by adapter.resolveSelector)
     let resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null = null;
+
+    if (typeof rule.selector === "string") {
+      const selectorWithStaticAttrs = resolveStaticAttributeSelectorPlaceholders(
+        rule.selector,
+        decl,
+        state,
+      );
+      if (selectorWithStaticAttrs === null) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: unresolved interpolation in attribute selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
+      rule.selector = selectorWithStaticAttrs;
+    }
 
     // --- Unsupported complex selector detection ---
     // We bail out rather than emitting incorrect unconditional styles.
@@ -2686,11 +2705,49 @@ function extractCssTextFromNode(node: unknown): string | null {
   return null;
 }
 
+function resolveStaticAttributeSelectorPlaceholders(
+  selector: string,
+  decl: StyledDecl,
+  state: DeclProcessingState["state"],
+): string | null {
+  if (!selector.includes("__SC_EXPR_")) {
+    return selector;
+  }
+
+  let failed = false;
+  const resolvedSelector = selector.replace(
+    ATTRIBUTE_SELECTOR_WITH_PLACEHOLDER_RE,
+    (attributeSelector) => {
+      const match = attributeSelector.match(ATTRIBUTE_NAME_PLACEHOLDER_RE);
+      if (!match?.[1]) {
+        failed = true;
+        return attributeSelector;
+      }
+
+      const slotId = Number(match[1]);
+      const value = resolveExpressionToStaticString(decl.templateExpressions[slotId], state);
+      if (value === null || !CSS_ATTRIBUTE_NAME_RE.test(value)) {
+        failed = true;
+        return attributeSelector;
+      }
+
+      return `[${value}${match[2] ?? ""}]`;
+    },
+  );
+
+  return failed ? null : resolvedSelector;
+}
+
 /** Descendant-has pattern (full selector match): exactly `&:has(__SC_EXPR_N__)` */
 const HAS_COMPONENT_SELECTOR_STRICT_RE = /^&:has\(__SC_EXPR_\d+__\)\s*$/;
 
 /** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
 const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
+
+const ATTRIBUTE_SELECTOR_WITH_PLACEHOLDER_RE = /\[[^\][]*__SC_EXPR_\d+__[^\][]*\]/g;
+const ATTRIBUTE_NAME_PLACEHOLDER_RE =
+  /^\[\s*__SC_EXPR_(\d+)__(\s*(?:(?:[~|^$*]?=)\s*(?:"[^"]*"|'[^']*'|[^\]\s]+)\s*(?:[iIsS]\s*)?)?)\]$/;
+const CSS_ATTRIBUTE_NAME_RE = /^(?:-?[_a-zA-Z]|--)[-_a-zA-Z0-9:.]*$/;
 
 function extractParentPseudosForNestedComponentBlock(
   rawCss: string | undefined,

@@ -14,10 +14,31 @@
 import { readFileSync } from "node:fs";
 import type { DeclProcessingState } from "./decl-setup.js";
 import { createModuleResolver, type ModuleResolver } from "../prepass/resolve-imports.js";
-import { literalToStaticValue } from "../utilities/jscodeshift-utils.js";
+import { isIdentifierNode, literalToStaticValue } from "../utilities/jscodeshift-utils.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
 
-export function resolveImportedConstStringInit(
+export function resolveExpressionToStaticString(
+  expr: unknown,
+  state: DeclProcessingState["state"],
+): string | null {
+  const direct = literalToStaticValue(expr);
+  if (typeof direct === "string") {
+    return direct;
+  }
+  if (!isIdentifierNode(expr)) {
+    return null;
+  }
+  if (state.isIdentifierShadowed(expr, expr.name)) {
+    return null;
+  }
+  const fromImport = resolveImportedConstStringInit(expr.name, state);
+  if (fromImport !== null) {
+    return fromImport;
+  }
+  return findTopLevelConstStringInit(expr.name, state);
+}
+
+function resolveImportedConstStringInit(
   localName: string,
   state: DeclProcessingState["state"],
 ): string | null {
@@ -42,7 +63,7 @@ export function resolveImportedConstStringInit(
  * it can also be used by the in-file resolver in
  * `process-rule-declarations.ts`.
  */
-export function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
+function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
   for (const declarator of declarations) {
     if (
       !declarator ||
@@ -280,6 +301,30 @@ function findTopLevelLocalConstString(
       }),
     (p) => findConstDeclaratorString(p.node.declarations, name),
   );
+}
+
+function findTopLevelConstStringInit(
+  name: string,
+  state: DeclProcessingState["state"],
+): string | null {
+  const { root, j } = state;
+  let resolved: string | null = null;
+  root
+    .find(j.VariableDeclaration, { kind: "const" } as { kind: "const" })
+    .filter((p) => {
+      const parentType = (p.parent?.node as { type?: string } | undefined)?.type;
+      return parentType === "Program" || parentType === "ExportNamedDeclaration";
+    })
+    .forEach((p) => {
+      if (resolved !== null) {
+        return;
+      }
+      const found = findConstDeclaratorString(p.node.declarations, name);
+      if (found !== null) {
+        resolved = found;
+      }
+    });
+  return resolved;
 }
 
 /**
