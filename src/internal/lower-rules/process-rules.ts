@@ -2744,7 +2744,7 @@ const HAS_COMPONENT_SELECTOR_STRICT_RE = /^&:has\(__SC_EXPR_\d+__\)\s*$/;
 /** Reverse selector pattern for a single part: `__SC_EXPR_N__:pseudo &` */
 const REVERSE_SELECTOR_PART_RE = /^__SC_EXPR_\d+__:[a-z][a-z0-9()-]*\s+&$/;
 
-const ATTRIBUTE_SELECTOR_WITH_PLACEHOLDER_RE = /\[[^\]\[]*__SC_EXPR_\d+__[^\]\[]*\]/g;
+const ATTRIBUTE_SELECTOR_WITH_PLACEHOLDER_RE = /\[[^\][]*__SC_EXPR_\d+__[^\][]*\]/g;
 const ATTRIBUTE_NAME_PLACEHOLDER_RE =
   /^\[\s*__SC_EXPR_(\d+)__(\s*(?:(?:[~|^$*]?=)\s*(?:"[^"]*"|'[^']*'|[^\]\s]+)\s*(?:[iIsS]\s*)?)?)\]$/;
 const CSS_ATTRIBUTE_NAME_RE = /^(?:-?[_a-zA-Z]|--)[-_a-zA-Z0-9:.]*$/;

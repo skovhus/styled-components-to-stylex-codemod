@@ -38,7 +38,7 @@ export function resolveExpressionToStaticString(
   return findTopLevelConstStringInit(expr.name, state);
 }
 
-export function resolveImportedConstStringInit(
+function resolveImportedConstStringInit(
   localName: string,
   state: DeclProcessingState["state"],
 ): string | null {
@@ -63,7 +63,7 @@ export function resolveImportedConstStringInit(
  * it can also be used by the in-file resolver in
  * `process-rule-declarations.ts`.
  */
-export function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
+function findConstDeclaratorString(declarations: unknown[], name: string): string | null {
   for (const declarator of declarations) {
     if (
       !declarator ||

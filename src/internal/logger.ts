@@ -98,6 +98,7 @@ export type WarningType =
   | "Unsupported selector: cross-file component selector target has no JSX usage in this file"
   | "Unsupported selector: unresolved interpolation in cross-file component selector"
   | "Unsupported selector: unresolved interpolation in descendant component selector"
+  | "Unsupported selector: unresolved interpolation in attribute selector"
   | "Unsupported selector: unresolved interpolation in element selector"
   | "Unsupported selector: unresolved interpolation in reverse component selector"
   | "Unsupported selector: unresolved interpolation in cross-component sibling selector"
