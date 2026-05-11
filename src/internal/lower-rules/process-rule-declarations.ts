@@ -196,4 +196,3 @@ function resolveInterpolatedPropertyName(
   }
   return resolved;
 }
-
