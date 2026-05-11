@@ -7,6 +7,7 @@
   "ignore": [
     "src/__tests__/fixtures/**",
     "playground/src/lib/fs-stub.ts",
+    "playground/src/lib/module-stub.ts",
     "playground/src/lib/oxc-resolver-stub.ts",
     "playground/src/vite-env.d.ts"
   ]
