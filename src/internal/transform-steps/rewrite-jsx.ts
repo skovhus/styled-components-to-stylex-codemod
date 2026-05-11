@@ -432,6 +432,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
                   ),
                 );
               }
+            } else if (dyn.defaultValue !== undefined) {
+              removeJsxAttrsByName(keptAttrs, dyn.attrName);
+              keptAttrs.unshift(
+                j.jsxAttribute(
+                  j.jsxIdentifier(dyn.attrName),
+                  j.jsxExpressionContainer(literalExprForDynamicAttrDefault(j, dyn.defaultValue)),
+                ),
+              );
             }
           }
 
