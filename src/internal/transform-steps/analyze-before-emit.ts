@@ -445,6 +445,18 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       .forEach((p: any) => collectFromOpening(p.node));
     return { className: foundClassName, style: foundStyle, ref: foundRef };
   };
+  const isInlineableLocalElementTarget = (targetDecl: StyledDecl): boolean => {
+    const { className, style, ref } = getJsxAttributeUsage(targetDecl.localName);
+    return (
+      targetDecl.base.kind === "intrinsic" &&
+      !targetDecl.isExported &&
+      !targetDecl.needsWrapperComponent &&
+      !className &&
+      !style &&
+      !ref &&
+      !hasSpreadInJsx(root, j, targetDecl.localName)
+    );
+  };
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
   // is statically enumerable, each usage site stays on the inline JSX rewrite path,
@@ -534,6 +546,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     getJsxUsageCount,
     ctx.resolvedStyleObjects ?? new Map(),
   );
+  for (const decl of styledDecls) {
+    for (const entry of decl.promotedStyleProps ?? []) {
+      if (!entry.mergeIntoBase) {
+        reservedStyleKeys.add(entry.styleKey);
+      }
+    }
+  }
 
   // Styled components that receive className/style props in JSX need wrappers to merge them.
   // Without a wrapper, passing `className` would replace the stylex className instead of merging.
@@ -600,35 +619,31 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         const targetDecl = targetId.startsWith("styled:")
           ? declByLocal.get(targetId.slice("styled:".length))
           : undefined;
-        if (
-          targetDecl &&
-          targetIds.size === 1 &&
-          ctx.resolvedStyleObjects &&
-          tryMergeLocalElementOverrideIntoTargetBase({
-            root,
-            j,
-            parentName: decl.localName,
-            targetDecl,
-            override,
-            resolvedStyleObjects: ctx.resolvedStyleObjects,
-          })
-        ) {
-          continue;
-        }
         if (targetDecl) {
-          const {
-            className: childClassName,
-            style: childStyle,
-            ref: childRef,
-          } = getJsxAttributeUsage(targetDecl.localName);
-          const childInlineable =
-            targetDecl.base.kind === "intrinsic" &&
-            !targetDecl.isExported &&
-            !targetDecl.needsWrapperComponent &&
-            !childClassName &&
-            !childStyle &&
-            !childRef &&
-            !hasSpreadInJsx(root, j, targetDecl.localName);
+          const childInlineable = isInlineableLocalElementTarget(targetDecl);
+          if (!childInlineable) {
+            ctx.warnings.push({
+              severity: "warning",
+              type: "Unsupported selector: ambiguous element selector",
+              loc: override.loc,
+            });
+            return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+          }
+          if (
+            targetIds.size === 1 &&
+            ctx.resolvedStyleObjects &&
+            (targetDecl.extraStyleKeysAfterBase ?? []).length === 0 &&
+            tryMergeLocalElementOverrideIntoTargetBase({
+              root,
+              j,
+              parentName: decl.localName,
+              targetDecl,
+              override,
+              resolvedStyleObjects: ctx.resolvedStyleObjects,
+            })
+          ) {
+            continue;
+          }
           targetDecl.localElementTargetProofs ??= [];
           targetDecl.localElementTargetProofs.push({
             targetId,
@@ -1132,15 +1147,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (!decl.localElementTargetProofs?.length) {
       continue;
     }
-    const { className, style, ref } = getJsxAttributeUsage(decl.localName);
-    const isInlineableNow =
-      decl.base.kind === "intrinsic" &&
-      !decl.isExported &&
-      !decl.needsWrapperComponent &&
-      !className &&
-      !style &&
-      !ref &&
-      !hasSpreadInJsx(root, j, decl.localName);
+    const isInlineableNow = isInlineableLocalElementTarget(decl);
     const becameUnsafeAfterProof =
       decl.localElementTargetProofs.some((proof) => proof.wasInlineableAtProofTime) &&
       !isInlineableNow;
@@ -3850,6 +3857,10 @@ function proveLocalElementOverrideUsages(
           }
         }
       }
+      if (relation === "child" && isDirectChild && isUnknownWrapperBoundary) {
+        failureReason = "unsupported-wrapper";
+        return false;
+      }
       return true;
     };
 
@@ -4023,7 +4034,22 @@ function buildResolvedStyleObjectList(
   decl: StyledDecl,
   resolvedStyleObjects: Map<string, unknown>,
 ): Array<Record<string, unknown>> {
-  const keys = [decl.styleKey, ...(decl.extraStyleKeys ?? [])];
+  const afterBaseKeys = new Set(decl.extraStyleKeysAfterBase ?? []);
+  const beforeBaseKeys: string[] = [];
+  const afterBaseKeysInOrder: string[] = [];
+  for (const key of decl.extraStyleKeys ?? []) {
+    if (afterBaseKeys.has(key)) {
+      afterBaseKeysInOrder.push(key);
+    } else {
+      beforeBaseKeys.push(key);
+    }
+  }
+  const keys = [
+    ...afterBaseKeysInOrder.reverse(),
+    decl.styleKey,
+    ...beforeBaseKeys.reverse(),
+    ...(decl.extendsStyleKey ? [decl.extendsStyleKey] : []),
+  ];
   const results: Array<Record<string, unknown>> = [];
   for (const key of keys) {
     const value = resolvedStyleObjects.get(key);
