@@ -3557,6 +3557,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   stroke: currentColor;
 }
 
+.x1jn5448:not(#\#):not(#\#):not(#\#) {
+  stroke: red;
+}
+
 .x2b8uid:not(#\#):not(#\#):not(#\#) {
   text-align: center;
 }
