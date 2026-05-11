@@ -15,7 +15,7 @@ import {
 import { toStyleKey } from "../transform/helpers.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
-import { readStaticJsxLiteral } from "./jsx-static-literal.js";
+import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
 function shouldDropProp(decl: StyledDecl, propName: string): boolean {

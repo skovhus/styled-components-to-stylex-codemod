@@ -14,7 +14,7 @@ import type {
 } from "../transform-types.js";
 import { toStyleKey, styleKeyWithSuffix, toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
-import { readStaticJsxLiteral } from "./jsx-static-literal.js";
+import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 
 export function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
