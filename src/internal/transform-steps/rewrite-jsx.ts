@@ -240,13 +240,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const createJsxName = (tag: string) => {
           if (tag.includes(".")) {
             const parts = tag.split(".");
-            const firstPart = parts[0];
-            if (!firstPart) {
+            const [firstPart, ...memberParts] = parts;
+            if (!firstPart || memberParts.length === 0) {
               return j.jsxIdentifier(tag);
             }
-            return j.jsxMemberExpression(
+            type JsxMemberObject = Parameters<typeof j.jsxMemberExpression>[0];
+            return memberParts.reduce<JsxMemberObject>(
+              (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
               j.jsxIdentifier(firstPart),
-              j.jsxIdentifier(parts.slice(1).join(".")),
             );
           }
           return j.jsxIdentifier(tag);

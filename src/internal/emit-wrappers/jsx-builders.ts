@@ -263,10 +263,6 @@ export function buildAttrsFromAttrsInfo(
       invertedBoolAttrs: attrsInfo.invertedBoolAttrs ?? [],
       testExprFor: propExprFor,
     }),
-    ...buildDynamicAttrsFromProps(j, {
-      dynamicAttrs: attrsInfo.dynamicAttrs ?? [],
-      propExprFor,
-    }),
     ...buildStaticAttrsFromRecord(j, attrsInfo.staticAttrs ?? {}),
   ];
 }

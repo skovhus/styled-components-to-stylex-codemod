@@ -393,6 +393,10 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       j.jsxSpreadAttribute(restId),
+      ...emitter.buildDynamicAttrsFromProps({
+        dynamicAttrs: attrsInfo?.dynamicAttrs ?? [],
+        propExprFor: (prop) => j.identifier(prop),
+      }),
     ];
     emitter.appendMergingAttrs(openingAttrs, merging);
 
@@ -1092,6 +1096,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           destructureProps.push(attr.jsxProp);
         }
       }
+      for (const attr of d.attrsInfo?.dynamicAttrs ?? []) {
+        if (!destructureProps.includes(attr.jsxProp)) {
+          destructureProps.push(attr.jsxProp);
+        }
+      }
 
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
@@ -1161,6 +1170,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
           : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),
+        ...emitter.buildDynamicAttrsFromProps({
+          dynamicAttrs: attrsInfoWithoutForwardedAsStatic?.dynamicAttrs ?? [],
+          propExprFor: (prop) => j.identifier(prop),
+        }),
         ...(includesForwardedAs
           ? [
               j.jsxAttribute(

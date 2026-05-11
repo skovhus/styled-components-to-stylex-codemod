@@ -2355,5 +2355,9 @@ function jsxNameFromString(j: JSCodeshift, name: string): JsxTagName {
   if (!root || members.length === 0) {
     return j.jsxIdentifier(name);
   }
-  return j.jsxMemberExpression(j.jsxIdentifier(root), j.jsxIdentifier(members.join(".")));
+  type JsxMemberObject = Parameters<JSCodeshift["jsxMemberExpression"]>[0];
+  return members.reduce<JsxMemberObject>(
+    (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
+    j.jsxIdentifier(root),
+  );
 }

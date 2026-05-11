@@ -248,6 +248,10 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
           propExprFor: (prop) => j.identifier(prop),
         }),
         j.jsxSpreadAttribute(restId),
+        ...emitter.buildDynamicAttrsFromProps({
+          dynamicAttrs: attrsInfoWithoutForwardedAsStatic?.dynamicAttrs ?? [],
+          propExprFor: (prop) => j.identifier(prop),
+        }),
         ...(includesForwardedAs
           ? [
               j.jsxAttribute(

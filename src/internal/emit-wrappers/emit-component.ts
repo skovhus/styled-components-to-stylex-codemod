@@ -816,13 +816,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier("Component");
     } else if (renderedComponent.includes(".")) {
       const parts = renderedComponent.split(".");
-      const firstPart = parts[0];
-      if (!firstPart) {
+      const [firstPart, ...memberParts] = parts;
+      if (!firstPart || memberParts.length === 0) {
         jsxTagName = j.jsxIdentifier(renderedComponent);
       } else {
-        jsxTagName = j.jsxMemberExpression(
+        type JsxMemberObject = Parameters<typeof j.jsxMemberExpression>[0];
+        jsxTagName = memberParts.reduce<JsxMemberObject>(
+          (object, member) => j.jsxMemberExpression(object, j.jsxIdentifier(member)),
           j.jsxIdentifier(firstPart),
-          j.jsxIdentifier(parts.slice(1).join(".")),
         );
       }
     } else {

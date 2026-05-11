@@ -6393,6 +6393,32 @@ export const App = () => <Box type="button">Box</Box>;
     expect(result.code).not.toContain("as={Components.Button}");
   });
 
+  it("builds nested JSX member names for expression-valued as attrs", () => {
+    const source = `
+import styled from "styled-components";
+
+const Components = {
+  UI: {
+    Button: "button" as const,
+  },
+};
+
+const Box = styled.div.attrs({
+  as: Components.UI.Button,
+})\`
+  color: red;
+\`;
+
+export const App = () => <Box type="button">Box</Box>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("<Components.UI.Button");
+    expect(result.code).not.toContain("UI.Button={");
+  });
+
   it("uses original prop names for aliased callback attrs", () => {
     const source = `
 import styled from "styled-components";
@@ -6439,6 +6465,25 @@ export const App = () => <StyledIcon />;
     expect(result.code).not.toBeNull();
     expect(result.code).toContain("size === undefined ? 14 : size");
     expect(result.code).not.toContain("size ?? 14");
+  });
+
+  it("emits dynamic attr defaults when the source prop is absent in promoted inline rewrites", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ size = 14 }) => ({
+  size,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box style={{ marginTop: 4 }} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size === undefined ? 14 : size");
   });
 
   it("preserves boolean destructured callback defaults in dynamic attrs", () => {
@@ -6518,6 +6563,62 @@ export const App = () => <Box id="box" />;
     expect(result.code).not.toContain("p.id");
   });
 
+  it("does not treat partial object rest as the full props object", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ id, ...rest }) => ({
+  "data-id": rest.id,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box id="box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
+  it("unwraps defaulted object-pattern attrs parameters", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ size } = {}) => ({
+  size,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box size={14} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("size={size}");
+    expect(result.code).not.toContain("size={size}\n       size={size}");
+  });
+
+  it("bails for attrs callbacks that alias string-literal prop names", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div.attrs(({ "aria-label": ariaLabel }) => ({
+  title: ariaLabel,
+}))\`
+  color: red;
+\`;
+
+export const App = () => <Box aria-label="Box" />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).toBeNull();
+  });
+
   it("keeps module-scope props objects as static attrs in object-form attrs", () => {
     const source = `
 import styled from "styled-components";
@@ -6572,6 +6673,27 @@ const Box = styled.div.attrs((props) => ({
   "data-size": props.size,
 }))\`
   overflow: auto;
+\`;
+
+export const App = () => <Box size={1} data-size={2} />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/\{\.\.\.rest\}\s+data-size=\{size\}/);
+  });
+
+  it("places shared dynamic attrs after rest spreads so attrs override target props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div
+  .withConfig({ shouldForwardProp: (prop) => prop !== "size" })
+  .attrs((props: { size?: number }) => ({
+    "data-size": props.size,
+  }))\`
+  color: red;
 \`;
 
 export const App = () => <Box size={1} data-size={2} />;

@@ -1674,7 +1674,9 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   const defaultsByPropName = new Map<string, unknown>();
   const rootNames = new Set<string>();
   const localNames = new Set<string>();
-  const firstParam = params?.[0];
+  const firstParamRaw = params?.[0];
+  const firstParam =
+    firstParamRaw?.type === "AssignmentPattern" ? firstParamRaw.left : firstParamRaw;
   if (firstParam?.type === "Identifier" && typeof firstParam.name === "string") {
     rootNames.add(firstParam.name);
     return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
@@ -1689,7 +1691,11 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
     }
     if (prop.type === "RestElement") {
       if (prop.argument?.type === "Identifier" && typeof prop.argument.name === "string") {
-        rootNames.add(prop.argument.name);
+        if ((firstParam.properties ?? []).length === 1) {
+          rootNames.add(prop.argument.name);
+        } else {
+          localNames.add(prop.argument.name);
+        }
       }
       continue;
     }
@@ -1703,6 +1709,10 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
       continue;
     }
     const value = prop.value ?? prop.argument;
+    if (!isValidIdentifierName(propName)) {
+      collectPatternNames(value, localNames);
+      continue;
+    }
     if (value?.type === "Identifier" && typeof value.name === "string") {
       names.add(value.name);
       propByLocalName.set(value.name, propName);
@@ -1773,6 +1783,10 @@ function getStaticAttrExpressionRootName(node: any): string | null {
     return null;
   }
   return getStaticAttrExpressionRootName(node.object);
+}
+
+function isValidIdentifierName(name: string): boolean {
+  return /^[$A-Z_a-z][$\w]*$/.test(name);
 }
 
 function staticAttrExpressionToReference(node: any, attrsParamInfo: AttrsParamInfo): string | null {

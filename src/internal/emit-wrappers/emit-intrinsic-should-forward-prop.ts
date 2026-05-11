@@ -709,6 +709,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),
+      ...emitter.buildDynamicAttrsFromProps({
+        dynamicAttrs: attrsInfoForJsx?.dynamicAttrs ?? [],
+        propExprFor: (prop) => j.identifier(prop),
+      }),
       ...(includesForwardedAs
         ? [
             j.jsxAttribute(
