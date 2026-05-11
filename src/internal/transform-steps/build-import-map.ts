@@ -2,6 +2,7 @@
  * Step: build a map of local identifiers to their import sources.
  * Core concepts: identifier mapping and file-relative import resolution.
  */
+import { createRequire } from "node:module";
 import { dirname, resolve as pathResolve } from "node:path";
 import type { ASTNode, Collection, JSCodeshift } from "jscodeshift";
 import type { ImportSource } from "../../adapter.js";
@@ -10,7 +11,12 @@ import { TransformContext } from "../transform-context.js";
 import { isRelativeSpecifier } from "../utilities/path-utils.js";
 
 export function buildImportMapStep(ctx: TransformContext): StepResult {
-  ctx.importMap = buildImportMap({ root: ctx.root, j: ctx.j, filePath: ctx.file.path });
+  ctx.importMap = buildImportMap({
+    root: ctx.root,
+    j: ctx.j,
+    filePath: ctx.file.path,
+    resolveModule: ctx.options.resolveModule,
+  });
   return CONTINUE;
 }
 
@@ -20,8 +26,9 @@ function buildImportMap(args: {
   root: Collection<ASTNode>;
   j: JSCodeshift;
   filePath: string;
+  resolveModule?: (fromFile: string, specifier: string) => string | undefined;
 }): Map<string, { importedName: string; source: ImportSource }> {
-  const { root, j, filePath } = args;
+  const { root, j, filePath, resolveModule } = args;
   const importMap = new Map<string, { importedName: string; source: ImportSource }>();
   const baseDir = dirname(filePath);
 
@@ -30,7 +37,7 @@ function buildImportMap(args: {
     if (typeof source !== "string") {
       return;
     }
-    const resolvedSource = resolveImportSource(source, baseDir);
+    const resolvedSource = resolveImportSource(source, baseDir, filePath, resolveModule);
     for (const s of p.node.specifiers ?? []) {
       if (!s) {
         continue;
@@ -69,13 +76,62 @@ function buildImportMap(args: {
   return importMap;
 }
 
-/**
- * Deterministic resolution: relative specifiers resolve against the current
- * file's directory. This intentionally does NOT probe extensions, consult
- * tsconfig paths, or use Node resolution.
- */
-function resolveImportSource(specifier: string, baseDir: string): ImportSource {
-  return isRelativeSpecifier(specifier)
-    ? { kind: "absolutePath", value: pathResolve(baseDir, specifier) }
-    : { kind: "specifier", value: specifier };
+function resolveImportSource(
+  specifier: string,
+  baseDir: string,
+  filePath: string,
+  resolveModule?: (fromFile: string, specifier: string) => string | undefined,
+): ImportSource {
+  if (!isRelativeSpecifier(specifier)) {
+    if (isResolvablePackageSpecifier(specifier, filePath)) {
+      return { kind: "specifier", value: specifier };
+    }
+    const resolved = resolveModule?.(filePath, specifier);
+    return resolved
+      ? { kind: "absolutePath", value: resolved }
+      : { kind: "specifier", value: specifier };
+  }
+
+  return {
+    kind: "absolutePath",
+    value: resolveModule?.(filePath, specifier) ?? pathResolve(baseDir, specifier),
+  };
+}
+
+function isResolvablePackageSpecifier(specifier: string, filePath: string): boolean {
+  const packageName = packageNameFromSpecifier(specifier);
+  if (!packageName) {
+    return false;
+  }
+
+  const requireFromFile = createRequire(pathResolve(filePath));
+  try {
+    requireFromFile.resolve(`${packageName}/package.json`);
+    return true;
+  } catch {
+    try {
+      requireFromFile.resolve(packageName);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function packageNameFromSpecifier(specifier: string): string | null {
+  if (specifier.startsWith("#")) {
+    return null;
+  }
+
+  const parts = specifier.split("/");
+  const first = parts[0];
+  if (!first) {
+    return null;
+  }
+
+  if (first.startsWith("@")) {
+    const second = parts[1];
+    return second ? `${first}/${second}` : null;
+  }
+  return first;
 }

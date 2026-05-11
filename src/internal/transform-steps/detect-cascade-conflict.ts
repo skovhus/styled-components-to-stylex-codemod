@@ -7,7 +7,24 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
-import { toRealPath } from "../utilities/path-utils.js";
+import {
+  fileExports,
+  getReExportedSourceName,
+  resolveBarrelReExportBinding,
+} from "../prepass/extract-external-interface.js";
+import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
+
+type ModuleResolver = (fromFile: string, specifier: string) => string | undefined;
+
+interface ImportDefinition {
+  path: string;
+  importedName: string;
+}
+
+interface ReExportPath {
+  path: string;
+  importedName: string;
+}
 
 export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls;
@@ -48,7 +65,16 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     const importedPath = importEntry.source.value;
-    if (transformedFiles && pathSetContainsWithExtensionFallback(importedPath, transformedFiles)) {
+    const definition = resolveImportedDefinition(ctx, importedPath, importEntry.importedName) ?? {
+      path: importedPath,
+      importedName: importEntry.importedName,
+    };
+
+    if (
+      transformedFiles &&
+      (pathSetContainsWithExtensionFallback(importedPath, transformedFiles) ||
+        pathSetContainsWithExtensionFallback(definition.path, transformedFiles))
+    ) {
       continue;
     }
 
@@ -59,9 +85,9 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       if (
         globalLeafKeyExists(
           ctx.options.globalLeafKeys,
-          importedPath,
-          importEntry.importedName,
-          importEntry.importedName === "default",
+          definition.path,
+          definition.importedName,
+          definition.importedName === "default",
         )
       ) {
         continue;
@@ -72,8 +98,8 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // Prefer prepass data when available, but fall back to direct file scan if the
     // prepass map misses the path (e.g., file outside the configured prepass set).
     const styledNames =
-      (styledDefFiles && resolveStyledDefFile(importedPath, styledDefFiles)) ||
-      scanFileForStyledDefs(importedPath);
+      (styledDefFiles && resolveStyledDefFile(definition.path, styledDefFiles)) ||
+      scanFileForStyledDefs(definition.path, definition.importedName, ctx.options.resolveModule);
 
     if (!styledNames) {
       continue;
@@ -87,7 +113,12 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       severity: "warning",
       type: "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts",
       loc: decl.loc,
-      context: { component: decl.localName, base: baseIdent },
+      context: {
+        component: decl.localName,
+        base: baseIdent,
+        importedPath,
+        definitionPath: definition.path,
+      },
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
@@ -96,6 +127,24 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+function resolveImportedDefinition(
+  ctx: TransformContext,
+  importedPath: string,
+  importedName: string,
+): ImportDefinition | null {
+  const resolve = ctx.options.resolveModule;
+  if (!resolve) {
+    return null;
+  }
+  const resolved = resolveBarrelReExportBinding(
+    pathResolve(importedPath),
+    importedName,
+    (specifier, fromFile) => resolve(fromFile, specifier) ?? null,
+    readResolvedFile,
+  );
+  return resolved ? { path: resolved.filePath, importedName: resolved.exportedName } : null;
+}
 
 /** Common TypeScript/JavaScript file extensions to try when matching import paths to styledDefFiles keys. */
 const EXTENSIONS = [".tsx", ".ts", ".jsx", ".js"];
@@ -203,21 +252,49 @@ function pathCandidates(filePath: string): string[] {
  * Fallback: read an imported file and scan for styled-component definitions.
  * Used when styledDefFiles is not available (single-file mode, tests without prepass).
  */
-function scanFileForStyledDefs(importedPath: string): Set<string> | undefined {
-  const source = tryReadFile(importedPath);
-  if (!source || !source.includes("styled-components")) {
+function scanFileForStyledDefs(
+  importedPath: string,
+  importedName?: string,
+  resolveModule?: ModuleResolver,
+  visited = new Set<string>(),
+): Set<string> | undefined {
+  const file = tryReadFileWithPath(importedPath);
+  if (!file || visited.has(file.path)) {
     return undefined;
   }
+  visited.add(file.path);
 
+  const source = file.source;
   const names = new Set<string>();
-  STYLED_DEF_RE.lastIndex = 0;
-  for (const m of source.matchAll(STYLED_DEF_RE)) {
-    if (m[1]) {
-      names.add(m[1]);
+  if (source.includes("styled-components")) {
+    STYLED_DEF_RE.lastIndex = 0;
+    for (const m of source.matchAll(STYLED_DEF_RE)) {
+      if (m[1]) {
+        names.add(m[1]);
+      }
     }
   }
 
-  return names.size > 0 ? names : undefined;
+  if (names.size > 0) {
+    return names;
+  }
+
+  if (!importedName) {
+    return undefined;
+  }
+
+  for (const reExport of reExportPaths(source, file.path, importedName, resolveModule)) {
+    const nested = scanFileForStyledDefs(
+      reExport.path,
+      reExport.importedName,
+      resolveModule,
+      visited,
+    );
+    if (nested) {
+      return nested;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -225,12 +302,121 @@ function scanFileForStyledDefs(importedPath: string): Set<string> | undefined {
  * Import paths may lack extensions; tries exact match then common extensions.
  */
 function tryReadFile(importedPath: string): string | undefined {
+  return tryReadFileWithPath(importedPath)?.source;
+}
+
+function tryReadFileWithPath(importedPath: string): { path: string; source: string } | undefined {
   for (const candidate of pathCandidates(importedPath)) {
     try {
-      return readFileSync(candidate, "utf-8");
+      return { path: toRealPath(candidate), source: readFileSync(candidate, "utf-8") };
     } catch {
       // Try next candidate
     }
   }
   return undefined;
+}
+
+function reExportPaths(
+  source: string,
+  filePath: string,
+  importedName: string,
+  resolveModule?: ModuleResolver,
+): ReExportPath[] {
+  const paths: ReExportPath[] = [];
+
+  const namedRe = /export\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(namedRe)) {
+    const specifiers = match[1] ?? "";
+    const specifier = match[2];
+    if (!specifier) {
+      continue;
+    }
+    const nextImportedName = getReExportedSourceName(specifiers, importedName);
+    if (!nextImportedName) {
+      continue;
+    }
+    const resolved = resolveReExportSpecifier(filePath, specifier, resolveModule);
+    if (resolved) {
+      paths.push({ path: resolved, importedName: nextImportedName });
+    }
+  }
+
+  const starRe = /export\s*\*\s*from\s*["']([^"']+)["']/g;
+  for (const match of source.matchAll(starRe)) {
+    const specifier = match[1];
+    if (!specifier || importedName === "default") {
+      continue;
+    }
+    const resolved = resolveReExportSpecifier(filePath, specifier, resolveModule);
+    if (resolved && fileExportsNameThroughReExports(resolved, importedName, resolveModule)) {
+      paths.push({ path: resolved, importedName });
+    }
+  }
+
+  return paths;
+}
+
+function resolveReExportSpecifier(
+  fromFile: string,
+  specifier: string,
+  resolveModule?: ModuleResolver,
+): string | undefined {
+  if (isRelativeSpecifier(specifier)) {
+    return pathResolve(dirname(fromFile), specifier);
+  }
+  return resolveModule?.(fromFile, specifier);
+}
+
+function fileExportsNameThroughReExports(
+  importedPath: string,
+  importedName: string,
+  resolveModule?: ModuleResolver,
+  visited = new Set<string>(),
+): boolean {
+  const file = tryReadFileWithPath(importedPath);
+  if (!file || visited.has(file.path)) {
+    return false;
+  }
+  visited.add(file.path);
+
+  if (fileExports(file.source, importedName)) {
+    return true;
+  }
+
+  const namedRe = /export\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g;
+  for (const match of file.source.matchAll(namedRe)) {
+    const specifiers = match[1] ?? "";
+    const specifier = match[2];
+    if (!specifier || !getReExportedSourceName(specifiers, importedName)) {
+      continue;
+    }
+    const resolved = resolveReExportSpecifier(file.path, specifier, resolveModule);
+    if (resolved) {
+      return true;
+    }
+  }
+
+  const starRe = /export\s*\*\s*from\s*["']([^"']+)["']/g;
+  for (const match of file.source.matchAll(starRe)) {
+    const specifier = match[1];
+    if (!specifier) {
+      continue;
+    }
+    const resolved = resolveReExportSpecifier(file.path, specifier, resolveModule);
+    if (
+      resolved &&
+      fileExportsNameThroughReExports(resolved, importedName, resolveModule, visited)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function readResolvedFile(importedPath: string): string {
+  const source = tryReadFile(importedPath);
+  if (source === undefined) {
+    throw new Error(`Unable to read ${importedPath}`);
+  }
+  return source;
 }

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import {
   findImportSource,
-  resolveBarrelReExport,
+  resolveBarrelReExportBinding,
   type Resolve,
 } from "../prepass/extract-external-interface.js";
 import { hasUniversalSelectorInRules } from "../css-ir.js";
@@ -139,15 +139,20 @@ function isImportedLeafBinding(
 
   const cachedRead = (p: string): string => readFileSync(p, "utf-8");
   const exportNameForBarrel = importInfo.isDefault ? "default" : importInfo.exportedName;
-  const defFile =
-    resolveBarrelReExport(initialDefFile, exportNameForBarrel, resolve, cachedRead) ??
-    initialDefFile;
+  const reExport = resolveBarrelReExportBinding(
+    initialDefFile,
+    exportNameForBarrel,
+    resolve,
+    cachedRead,
+  );
+  const defFile = reExport?.filePath ?? initialDefFile;
+  const exportedName = reExport?.exportedName ?? importInfo.exportedName;
 
   return importedLeafKeyExists(
     globalLeafKeys,
     toRealPath(defFile),
-    importInfo.exportedName,
-    importInfo.isDefault,
+    exportedName,
+    exportedName === "default" || importInfo.isDefault,
     cachedRead,
   );
 }
