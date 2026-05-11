@@ -87,6 +87,7 @@ const styles = stylex.create({
     padding: 10,
   },
   motionDiv: {
+    width: 160,
     maxHeight: {
       default: 80,
       ':is([data-animating="true"])': 40,

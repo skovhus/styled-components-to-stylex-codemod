@@ -43,6 +43,7 @@ const CompoundItem = styled.div`
 `;
 
 const StyledMotionDiv = styled(motion.div)`
+  width: 160px;
   max-height: 80px;
   overflow: visible;
   padding: 12px;
