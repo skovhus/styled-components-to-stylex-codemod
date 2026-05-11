@@ -583,6 +583,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
           className ||
           style ||
           ref ||
+          extendedBy.has(decl.localName) ||
           hasNonJsxComponentValueReference(decl.localName) ||
           hasSpreadInJsx(root, j, decl.localName)
         ? "dynamic"
@@ -673,6 +674,14 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         proofInfo.proof.targetsByStyleKey.get(override.styleKey) ?? new Set<string>();
       const styleKeysByTargetId: Record<string, string> = {};
       for (const targetId of [...targetIds].sort()) {
+        if (hasOverlappingPseudoOnlyLocalOverride(nextOverrides, override, targetId)) {
+          ctx.warnings.push({
+            severity: "warning",
+            type: "Unsupported selector: ambiguous element selector",
+            loc: override.loc,
+          });
+          return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+        }
         const targetDecl = targetId.startsWith("styled:")
           ? declByLocal.get(targetId.slice("styled:".length))
           : undefined;
@@ -3827,8 +3836,16 @@ function proveLocalElementOverrideUsages(
       const decl = declByLocal.get(name);
       const isIntrinsicTagName = /^[a-z]/.test(name);
       const isIntrinsicMatch = isIntrinsicTagName && name === tagName;
+      const staticAsTag =
+        typeof decl?.attrsInfo?.staticAttrs?.as === "string"
+          ? decl.attrsInfo.staticAttrs.as
+          : undefined;
+      const renderedTagName =
+        decl?.attrsInfo?.attrsAsTag ??
+        staticAsTag ??
+        (decl?.base.kind === "intrinsic" ? decl.base.tagName : undefined);
       const isStyledIntrinsicMatch =
-        !!decl && decl.base.kind === "intrinsic" && decl.base.tagName === tagName;
+        !!decl && decl.base.kind === "intrinsic" && renderedTagName === tagName;
       const isUnknownWrapperBoundary =
         !isIntrinsicMatch && !isStyledIntrinsicMatch && (!!decl || !isIntrinsicTagName);
 
@@ -3966,13 +3983,42 @@ function hasPseudoLocalElementOverride(override: LocalElementOverrideCandidate):
   return [...override.pseudoBuckets.keys()].some((pseudo) => pseudo !== null);
 }
 
+function hasPseudoOnlyLocalElementOverride(override: LocalElementOverrideCandidate): boolean {
+  return override.pseudoBuckets.size > 0 && !override.pseudoBuckets.has(null);
+}
+
+function hasOverlappingPseudoOnlyLocalOverride(
+  priorOverrides: LocalElementOverrideCandidate[],
+  nextOverride: LocalElementOverrideCandidate,
+  targetId: string,
+): boolean {
+  if (!hasPseudoOnlyLocalElementOverride(nextOverride)) {
+    return false;
+  }
+  const nextProps = new Set(getLocalElementOverridePropNames(nextOverride));
+  return priorOverrides.some((priorOverride) => {
+    if (!hasPseudoOnlyLocalElementOverride(priorOverride)) {
+      return false;
+    }
+    if (!priorOverride.styleKeysByTargetId?.[targetId]) {
+      return false;
+    }
+    return getLocalElementOverridePropNames(priorOverride).some((prop) => nextProps.has(prop));
+  });
+}
+
+function getLocalElementOverridePropNames(override: LocalElementOverrideCandidate): string[] {
+  return [...override.pseudoBuckets.values()].flatMap((bucket) => Object.keys(bucket));
+}
+
 function hasRuntimeStyleEntriesForLocalElementTarget(decl: StyledDecl): boolean {
   return (
     Object.keys(decl.variantStyleKeys ?? {}).length > 0 ||
     (decl.variantDimensions?.length ?? 0) > 0 ||
     (decl.staticBooleanVariants?.length ?? 0) > 0 ||
     (decl.callSiteCombinedStyles?.length ?? 0) > 0 ||
-    (decl.styleFnFromProps?.length ?? 0) > 0
+    (decl.styleFnFromProps?.length ?? 0) > 0 ||
+    (decl.extraStylexPropsArgs?.length ?? 0) > 0
   );
 }
 

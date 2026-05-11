@@ -3075,6 +3075,160 @@ export const App = () => (
     ]);
   });
 
+  it("should bail when local pseudo defaults would override runtime style props", () => {
+    const source = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const Icon = styled.svg\`
+  fill: gray;
+  \${scrollFadeMaskStyles(18, "both")}
+\`;
+
+const Container = styled.div\`
+  svg:hover {
+    fill: red;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should bail for multiple pseudo-only local overrides targeting the same prop", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg:focus {
+    fill: green;
+  }
+
+  svg:hover {
+    fill: red;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should bail when attrs as changes a local selector target tag", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg.attrs({ as: "span" })\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: red;
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">Icon</Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: element selector with dynamic children",
+      }),
+    ]);
+  });
+
+  it("should bail for local element selectors inside at-rules", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  @media (min-width: 600px) {
+    svg {
+      fill: red;
+    }
+  }
+\`;
+
+export const App = () => (
+  <Container>
+    <Icon viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10" />
+    </Icon>
+  </Container>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: descendant/child/sibling selector",
+      }),
+    ]);
+  });
+
   it("should recheck direct child targets that become wrappers after proof", () => {
     const source = `
 import * as React from "react";
@@ -3112,6 +3266,54 @@ export const App = () => (
     expect(result.warnings).toEqual([
       expect.objectContaining({
         type: "Unsupported selector: ambiguous element selector",
+      }),
+    ]);
+  });
+
+  it("should bail when local element selector parents are extended with styled", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.svg\`
+  fill: gray;
+\`;
+
+const Container = styled.div\`
+  svg {
+    fill: blue;
+  }
+\`;
+
+const Special = styled(Container)\`
+  padding: 4px;
+\`;
+
+export const App = () => (
+  <>
+    <Container>
+      <Icon viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+      </Icon>
+    </Container>
+    <Special>
+      <Icon viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+      </Icon>
+    </Special>
+  </>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported selector: element selector with plain intrinsic children",
       }),
     ]);
   });

@@ -128,6 +128,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     }
     const { tagName, ancestorPseudo, childPseudo, directOnly } = elementResult;
 
+    if (rule.atRuleStack.length > 0) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: descendant/child/sibling selector",
+        loc: computeSelectorWarningLoc(parentDecl.loc, parentDecl.rawCss, rule.selector),
+      });
+      return "break";
+    }
+
     if (hasDynamicJsxChildren(parentDecl.localName, root, j)) {
       state.markBail();
       warnings.push({
