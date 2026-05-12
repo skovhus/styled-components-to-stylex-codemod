@@ -2,8 +2,11 @@
  * Emits wrapper components for non-intrinsic styled declarations.
  * Core concepts: prop mapping, style merging, and JSX construction.
  */
+import { existsSync, readFileSync } from "node:fs";
 import type { ASTNode, Property } from "jscodeshift";
+import jscodeshift from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
+import { createModuleResolver } from "../prepass/resolve-imports.js";
 import { getBridgeClassVar } from "../utilities/bridge-classname.js";
 import { emitStyleMerging } from "./style-merger.js";
 import { withLeadingComments } from "./comments.js";
@@ -43,6 +46,8 @@ import {
   type OrderedStyleEntry,
 } from "./style-expr-builders.js";
 import { appendCompoundVariantStyleArgs, collectCompoundVariantKeys } from "./compound-variants.js";
+
+const moduleResolver = createModuleResolver();
 
 export function emitComponentWrappers(emitter: WrapperEmitter): {
   emitted: ASTNode[];
@@ -128,6 +133,98 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     return explicitProps.has(propName);
   };
 
+  const propsTypeExposesForwardedSx = (
+    propsType: ASTNode | undefined,
+    wrappedComponent: string,
+    seenTypeNames = new Set<string>(),
+  ): boolean => {
+    if (!propsType) {
+      return false;
+    }
+    const explicitProps = emitter.getExplicitPropNames(propsType, {
+      lookThroughPropsWithChildren: true,
+    });
+    if (explicitProps.has("sx")) {
+      return true;
+    }
+    if (typeReferenceIsComponentPropsOfWrapped(propsType, wrappedComponent)) {
+      return true;
+    }
+    if (propsType.type === "TSIntersectionType") {
+      for (const member of (propsType as { types?: ASTNode[] }).types ?? []) {
+        if (propsTypeExposesForwardedSx(member, wrappedComponent, seenTypeNames)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    const typeRefName = resolveTypeReferenceName(propsType);
+    if (!typeRefName) {
+      return false;
+    }
+    const visitedKey = `${emitter.filePath}\u0000${typeReferenceNameKey(typeRefName)}`;
+    if (seenTypeNames.has(visitedKey)) {
+      return false;
+    }
+    seenTypeNames.add(visitedKey);
+    if (typeRefName.kind === "qualified") {
+      return importedNamespacePropsTypeExposesForwardedSx({
+        emitter,
+        typeName: typeRefName,
+        wrappedComponent,
+        seenTypeNames,
+      });
+    }
+    const alias = root.find(j.TSTypeAliasDeclaration).filter((p) => {
+      const id = (p.node as { id?: { name?: string } }).id;
+      return id?.name === typeRefName.name;
+    });
+    if (alias.size() === 0) {
+      const iface = root.find(j.TSInterfaceDeclaration).filter((p) => {
+        const id = (p.node as { id?: { name?: string } }).id;
+        return id?.name === typeRefName.name;
+      });
+      if (iface.size() === 0) {
+        return importedPropsTypeExposesForwardedSx({
+          emitter,
+          typeName: typeRefName.name,
+          wrappedComponent,
+          seenTypeNames,
+        });
+      }
+      const node = iface.get().node as {
+        body?: { body?: unknown[] };
+        extends?: unknown[];
+      };
+      if (membersExposeProp(node.body?.body, "sx")) {
+        return true;
+      }
+      for (const heritage of node.extends ?? []) {
+        const heritageText = emitter.stringifyTsType(heritage as ASTNode);
+        if (
+          typeReferenceIsComponentPropsOfWrapped(heritage as ASTNode, wrappedComponent) ||
+          heritageText === `typeof ${wrappedComponent}`
+        ) {
+          return true;
+        }
+        const heritageName = getHeritageTypeReferenceName(heritage);
+        if (
+          heritageName &&
+          propsTypeExposesForwardedSx(
+            createTypeReferenceFromName(j, heritageName),
+            wrappedComponent,
+            seenTypeNames,
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    }
+    const annotation = (alias.get().node as { typeAnnotation?: ASTNode }).typeAnnotation;
+    return propsTypeExposesForwardedSx(annotation, wrappedComponent, seenTypeNames);
+  };
+
   // Component wrappers (styled(Component)) - these wrap another component
   const componentWrappers = wrapperDecls.filter((d: StyledDecl) => d.base.kind === "component");
 
@@ -140,9 +237,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const renderedComponent = d.attrsInfo?.attrsAsTag ?? wrappedComponent;
     const baseComponentPropsType = findComponentPropsType(wrappedComponent);
     const renderedComponentPropsType = findComponentPropsType(renderedComponent);
-    const wrappedComponentIsLocalStyledWrapper = wrapperDecls.some(
-      (decl) => decl.localName === wrappedComponent,
-    );
+    const wrappedLocalDecl = wrapperDecls.find((decl) => decl.localName === wrappedComponent);
+    const wrappedComponentIsLocalStyledWrapper = !!wrappedLocalDecl;
     const renderedAsProp = resolveRenderedAsProp({
       emitter,
       propsType: renderedComponentPropsType,
@@ -191,12 +287,27 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // accepts className/style in its type, but does not destructure them.
     const wrappedAcceptsSx =
       emitter.useSxProp &&
-      (emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
+      ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
+        emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
         localComponentHasProp({
           componentName: wrappedComponent,
           propName: "sx",
           propsType: baseComponentPropsType,
         }));
+    const explicitPropsTypeRef = resolveTypeReferenceName(d.propsType ?? null);
+    const wrapperReusesWrappedPropsType =
+      explicitPropsTypeRef?.kind === "identifier" &&
+      explicitPropsTypeRef.name ===
+        emitter.resolveWrappedExplicitPropsTypeRef(renderedComponent)?.name;
+    const wrapperPropsExposeSx =
+      wrappedAcceptsSx &&
+      ((wrappedLocalDecl &&
+        d.propsType &&
+        !wrapperReusesWrappedPropsType &&
+        !propsTypeOmitsProp(d.propsType, "sx")) ||
+        propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
+        !d.propsType ||
+        !wrappedLocalDecl);
     // When the wrapped component has className/style as REQUIRED props, we must
     // force them to be optional in the wrapper's type. Otherwise, the wrapper would
     // inherit the requiredness, breaking call sites that don't pass className/style
@@ -875,11 +986,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
 
-      // When the wrapped component accepts a StyleX `sx` prop, callers may also
-      // pass `sx` even when the wrapper does not declare it externally. Destructure
-      // it so we can compose with internal styles instead of letting `{...rest}`
-      // forward it (which would be overwritten by the wrapper's own `sx={...}`).
-      if (allowSxProp || wrappedAcceptsSx) {
+      if (allowSxProp || wrapperPropsExposeSx) {
         styleArgs.push(sxId);
       }
 
@@ -904,7 +1011,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         !(staticClassNameExpr || attrsStaticStyleExpr || d.inlineStyleProps?.length);
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
-      const destructureSx = allowSxProp || wrappedAcceptsSx;
+      const destructureSx = allowSxProp || wrapperPropsExposeSx;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1424,6 +1531,747 @@ function resolveTypeIdentifierName(type: ASTNode | null): string | null {
   const typeName = (type as { typeName?: { type?: string; name?: string } }).typeName;
   return typeName?.type === "Identifier" ? (typeName.name ?? null) : null;
 }
+
+function resolveTypeReferenceName(type: ASTNode | null): TypeReferenceName | null {
+  if (type?.type !== "TSTypeReference") {
+    return null;
+  }
+  const typeName = (type as { typeName?: TypeReferenceNameNode }).typeName;
+  return getTypeReferenceName(typeName);
+}
+
+function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent: string): boolean {
+  if (type.type !== "TSTypeReference") {
+    return false;
+  }
+  const node = type as {
+    typeName?: TypeReferenceNameNode;
+    typeParameters?: { params?: ASTNode[] };
+  };
+  const typeName = getTypeReferenceName(node.typeName);
+  if (!typeName) {
+    return false;
+  }
+  const isComponentProps =
+    (typeName.kind === "identifier" && typeName.name.startsWith("ComponentProps")) ||
+    (typeName.kind === "qualified" &&
+      typeName.namespace === "React" &&
+      typeName.name.startsWith("ComponentProps"));
+  if (!isComponentProps) {
+    return false;
+  }
+  return (node.typeParameters?.params ?? []).some((param) => {
+    const query = param as { type?: string; exprName?: unknown };
+    return (
+      query.type === "TSTypeQuery" &&
+      getTypeQueryExpressionName(query.exprName) === wrappedComponent
+    );
+  });
+}
+
+function getTypeQueryExpressionName(exprName: unknown): string | null {
+  const node = exprName as
+    | {
+        type?: string;
+        name?: string;
+        left?: unknown;
+        right?: unknown;
+      }
+    | null
+    | undefined;
+  if (!node) {
+    return null;
+  }
+  if (node.type === "Identifier" && node.name) {
+    return node.name;
+  }
+  if (node.type !== "TSQualifiedName") {
+    return null;
+  }
+  const left = getTypeQueryExpressionName(node.left);
+  const right = getTypeQueryExpressionName(node.right);
+  return left && right ? `${left}.${right}` : null;
+}
+
+function propsTypeOmitsProp(propsType: ASTNode | undefined, propName: string): boolean {
+  if (!propsType) {
+    return false;
+  }
+  let found = false;
+  visitAst(propsType, (node) => {
+    if (found || node.type !== "TSTypeReference") {
+      return;
+    }
+    const typeReference = node as {
+      typeName?: TypeReferenceNameNode;
+      typeParameters?: { params?: ASTNode[] };
+    };
+    const typeName = getTypeReferenceName(typeReference.typeName);
+    if (typeName?.kind !== "identifier" || typeName.name !== "Omit") {
+      return;
+    }
+    if (
+      (typeReference.typeParameters?.params ?? []).some((param) =>
+        typeNodeContainsStringLiteral(param, propName),
+      )
+    ) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+function typeNodeContainsStringLiteral(node: unknown, value: string): boolean {
+  let found = false;
+  visitAst(node, (child) => {
+    if (found) {
+      return;
+    }
+    const typed = child as { type?: string; value?: unknown };
+    found =
+      (typed.type === "TSLiteralType" &&
+        (typed as { literal?: { value?: unknown } }).literal?.value === value) ||
+      ((typed.type === "StringLiteral" || typed.type === "Literal") && typed.value === value);
+  });
+  return found;
+}
+
+function visitAst(node: unknown, visitor: (node: { type?: string }) => void): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  visitor(node as { type?: string });
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "loc" || key === "comments" || key === "parentPath") {
+      continue;
+    }
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        visitAst(item, visitor);
+      }
+    } else if (child && typeof child === "object") {
+      visitAst(child, visitor);
+    }
+  }
+}
+
+function getTypeReferenceName(
+  typeName: TypeReferenceNameNode | undefined,
+): TypeReferenceName | null {
+  if (typeName?.type === "Identifier" && typeName.name) {
+    return { kind: "identifier", name: typeName.name };
+  }
+  if (
+    typeName?.type === "TSQualifiedName" &&
+    typeName.left?.type === "Identifier" &&
+    typeName.left.name &&
+    typeName.right?.type === "Identifier" &&
+    typeName.right.name
+  ) {
+    return { kind: "qualified", namespace: typeName.left.name, name: typeName.right.name };
+  }
+  return null;
+}
+
+function createTypeReferenceFromName(j: typeof jscodeshift, typeName: TypeReferenceName): ASTNode {
+  if (typeName.kind === "identifier") {
+    return j.tsTypeReference(j.identifier(typeName.name)) as ASTNode;
+  }
+  return j.tsTypeReference(
+    j.tsQualifiedName(j.identifier(typeName.namespace), j.identifier(typeName.name)),
+  ) as ASTNode;
+}
+
+function typeReferenceNameKey(typeName: TypeReferenceName): string {
+  return typeName.kind === "identifier" ? typeName.name : `${typeName.namespace}.${typeName.name}`;
+}
+
+function getModuleName(node: unknown): string | null {
+  const typed = node as { type?: string; name?: string; value?: unknown } | null | undefined;
+  if (!typed) {
+    return null;
+  }
+  if (typed.type === "Identifier" && typed.name) {
+    return typed.name;
+  }
+  return typeof typed.value === "string" ? typed.value : null;
+}
+
+function membersExposeProp(members: unknown[] | undefined, propName: string): boolean {
+  return (members ?? []).some((member) => {
+    const typed = member as {
+      type?: string;
+      key?: { type?: string; name?: string; value?: unknown };
+    };
+    if (typed.type !== "TSPropertySignature") {
+      return false;
+    }
+    if (typed.key?.type === "Identifier") {
+      return typed.key.name === propName;
+    }
+    return typeof typed.key?.value === "string" && typed.key.value === propName;
+  });
+}
+
+function getHeritageTypeReferenceName(heritage: unknown): TypeReferenceName | null {
+  if (!heritage || typeof heritage !== "object") {
+    return null;
+  }
+  const node = heritage as {
+    expression?: TypeReferenceNameNode;
+    typeName?: TypeReferenceNameNode;
+  };
+  return getTypeReferenceName(node.expression) ?? getTypeReferenceName(node.typeName);
+}
+
+function importedPropsTypeExposesForwardedSx(args: {
+  emitter: WrapperEmitter;
+  typeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { emitter, typeName, wrappedComponent, seenTypeNames } = args;
+  const imported = findImportedType(emitter, typeName);
+  if (!imported) {
+    return false;
+  }
+  const resolvedPath = moduleResolver.resolve(emitter.filePath, imported.source);
+  if (!resolvedPath) {
+    return false;
+  }
+  const source = readSourceWithExtensionFallback(resolvedPath);
+  if (!source) {
+    return false;
+  }
+  const parsed = parseTypeSource(source);
+  if (!parsed) {
+    return false;
+  }
+  return externalTypeReferenceExposesForwardedSx({
+    j: parsed.j,
+    root: parsed.root,
+    filePath: resolvedPath,
+    typeName: imported.importedName,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function importedNamespacePropsTypeExposesForwardedSx(args: {
+  emitter: WrapperEmitter;
+  typeName: Extract<TypeReferenceName, { kind: "qualified" }>;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { emitter, typeName, wrappedComponent, seenTypeNames } = args;
+  const imported = findNamespaceTypeImport(emitter, typeName.namespace);
+  if (!imported) {
+    return false;
+  }
+  const resolvedPath = moduleResolver.resolve(emitter.filePath, imported.source);
+  if (!resolvedPath) {
+    return false;
+  }
+  const source = readSourceWithExtensionFallback(resolvedPath);
+  if (!source) {
+    return false;
+  }
+  const parsed = parseTypeSource(source);
+  if (!parsed) {
+    return false;
+  }
+  return externalTypeReferenceExposesForwardedSx({
+    j: parsed.j,
+    root: parsed.root,
+    filePath: resolvedPath,
+    typeName: typeName.name,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function externalTypeReferenceExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  typeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, typeName, wrappedComponent, seenTypeNames } = args;
+  const visitedKey = `${filePath}\u0000${typeName}`;
+  if (seenTypeNames.has(visitedKey)) {
+    return false;
+  }
+  seenTypeNames.add(visitedKey);
+  if (typeName === "default") {
+    return externalDefaultExportedTypeExposesForwardedSx({
+      j,
+      root,
+      filePath,
+      wrappedComponent,
+      seenTypeNames,
+    });
+  }
+  const localType = findLocalTypeDeclaration({ j, root }, typeName);
+  if (localType) {
+    return externalPropsTypeExposesForwardedSx({
+      j,
+      root,
+      filePath,
+      propsType: localType,
+      wrappedComponent,
+      seenTypeNames,
+    });
+  }
+  return externalExportedTypeExposesForwardedSx({
+    j,
+    root,
+    filePath,
+    typeName,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function externalDefaultExportedTypeExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, wrappedComponent, seenTypeNames } = args;
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type !== "ExportDefaultDeclaration") {
+      if (statement.type !== "ExportNamedDeclaration") {
+        continue;
+      }
+      const source = (statement.source as { value?: unknown } | null | undefined)?.value;
+      if (typeof source === "string") {
+        continue;
+      }
+      for (const specifier of statement.specifiers ?? []) {
+        const spec = specifier as {
+          type?: string;
+          local?: { type?: string; name?: string; value?: unknown };
+          exported?: { type?: string; name?: string; value?: unknown };
+        };
+        if (spec.type !== "ExportSpecifier" && spec.type !== "ExportTypeSpecifier") {
+          continue;
+        }
+        if (getModuleName(spec.exported) !== "default") {
+          continue;
+        }
+        const sourceName = getModuleName(spec.local);
+        if (
+          sourceName &&
+          externalTypeReferenceExposesForwardedSx({
+            j,
+            root,
+            filePath,
+            typeName: sourceName,
+            wrappedComponent,
+            seenTypeNames,
+          })
+        ) {
+          return true;
+        }
+      }
+      continue;
+    }
+    const declaration = statement.declaration as
+      | {
+          type?: string;
+          name?: string;
+          body?: { body?: unknown[] };
+          extends?: unknown[];
+          typeAnnotation?: ASTNode;
+        }
+      | null
+      | undefined;
+    if (!declaration) {
+      continue;
+    }
+    if (
+      declaration.type === "TSInterfaceDeclaration" ||
+      declaration.type === "TSTypeAliasDeclaration"
+    ) {
+      return externalPropsTypeExposesForwardedSx({
+        j,
+        root,
+        filePath,
+        propsType: declaration as ASTNode,
+        wrappedComponent,
+        seenTypeNames,
+      });
+    }
+    if (declaration.type === "Identifier" && declaration.name) {
+      return externalTypeReferenceExposesForwardedSx({
+        j,
+        root,
+        filePath,
+        typeName: declaration.name,
+        wrappedComponent,
+        seenTypeNames,
+      });
+    }
+  }
+  return false;
+}
+
+function externalPropsTypeExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  propsType: ASTNode;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, propsType, wrappedComponent, seenTypeNames } = args;
+  const interfaceBody = (propsType as { body?: { body?: unknown[] }; members?: unknown[] }).body
+    ?.body;
+  if (
+    membersExposeProp(interfaceBody, "sx") ||
+    membersExposeProp((propsType as { members?: unknown[] }).members, "sx")
+  ) {
+    return true;
+  }
+  const interfaceExtends = (propsType as { extends?: unknown[] }).extends;
+  if (
+    externalInterfaceExtendsForwardedSx({
+      j,
+      root,
+      filePath,
+      interfaceExtends,
+      wrappedComponent,
+      seenTypeNames,
+    })
+  ) {
+    return true;
+  }
+  if (typeReferenceIsComponentPropsOfWrapped(propsType, wrappedComponent)) {
+    return true;
+  }
+  if (propsType.type === "TSIntersectionType") {
+    for (const member of (propsType as { types?: ASTNode[] }).types ?? []) {
+      if (
+        externalPropsTypeExposesForwardedSx({
+          j,
+          root,
+          filePath,
+          propsType: member,
+          wrappedComponent,
+          seenTypeNames,
+        })
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+  const typeRefName = resolveTypeReferenceName(propsType);
+  if (!typeRefName) {
+    return false;
+  }
+  return externalTypeReferenceNameExposesForwardedSx({
+    j,
+    root,
+    filePath,
+    typeName: typeRefName,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function externalInterfaceExtendsForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  interfaceExtends: unknown[] | undefined;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, interfaceExtends, wrappedComponent, seenTypeNames } = args;
+  for (const heritage of interfaceExtends ?? []) {
+    const typeName = getHeritageTypeReferenceName(heritage);
+    if (
+      typeName &&
+      externalTypeReferenceNameExposesForwardedSx({
+        j,
+        root,
+        filePath,
+        typeName,
+        wrappedComponent,
+        seenTypeNames,
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function externalTypeReferenceNameExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  typeName: TypeReferenceName;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, typeName, wrappedComponent, seenTypeNames } = args;
+  if (typeName.kind === "identifier") {
+    return externalTypeReferenceExposesForwardedSx({
+      j,
+      root,
+      filePath,
+      typeName: typeName.name,
+      wrappedComponent,
+      seenTypeNames,
+    });
+  }
+  const imported = findNamespaceTypeImportInRoot(root, typeName.namespace);
+  return imported
+    ? externalSourceTypeExposesForwardedSx({
+        fromPath: filePath,
+        source: imported.source,
+        typeName: typeName.name,
+        wrappedComponent,
+        seenTypeNames,
+      })
+    : false;
+}
+
+function externalExportedTypeExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  typeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, typeName, wrappedComponent, seenTypeNames } = args;
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type === "ExportAllDeclaration") {
+      const source = (statement.source as { value?: unknown } | null | undefined)?.value;
+      if (
+        typeof source === "string" &&
+        externalSourceTypeExposesForwardedSx({
+          fromPath: filePath,
+          source,
+          typeName,
+          wrappedComponent,
+          seenTypeNames,
+        })
+      ) {
+        return true;
+      }
+      continue;
+    }
+    if (statement.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+    const source = (statement.source as { value?: unknown } | null | undefined)?.value;
+    for (const specifier of statement.specifiers ?? []) {
+      const spec = specifier as {
+        type?: string;
+        local?: { type?: string; name?: string; value?: unknown };
+        exported?: { type?: string; name?: string; value?: unknown };
+      };
+      if (spec.type !== "ExportSpecifier" && spec.type !== "ExportTypeSpecifier") {
+        continue;
+      }
+      const exportedName = getModuleName(spec.exported);
+      if (exportedName !== typeName) {
+        continue;
+      }
+      const sourceName = getModuleName(spec.local) ?? exportedName;
+      if (typeof source !== "string") {
+        if (
+          externalTypeReferenceExposesForwardedSx({
+            j,
+            root,
+            filePath,
+            typeName: sourceName,
+            wrappedComponent,
+            seenTypeNames,
+          })
+        ) {
+          return true;
+        }
+        continue;
+      }
+      if (
+        externalSourceTypeExposesForwardedSx({
+          fromPath: filePath,
+          source,
+          typeName: sourceName,
+          wrappedComponent,
+          seenTypeNames,
+        })
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function externalSourceTypeExposesForwardedSx(args: {
+  fromPath: string;
+  source: string;
+  typeName: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { fromPath, source, typeName, wrappedComponent, seenTypeNames } = args;
+  const resolvedPath = moduleResolver.resolve(fromPath, source);
+  if (!resolvedPath) {
+    return false;
+  }
+  const sourceText = readSourceWithExtensionFallback(resolvedPath);
+  if (!sourceText) {
+    return false;
+  }
+  const parsed = parseTypeSource(sourceText);
+  if (!parsed) {
+    return false;
+  }
+  return externalTypeReferenceExposesForwardedSx({
+    j: parsed.j,
+    root: parsed.root,
+    filePath: resolvedPath,
+    typeName,
+    wrappedComponent,
+    seenTypeNames,
+  });
+}
+
+function findImportedType(
+  emitter: WrapperEmitter,
+  localTypeName: string,
+): { importedName: string; source: string } | null {
+  const body = emitter.root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type !== "ImportDeclaration") {
+      continue;
+    }
+    const source = (statement.source as { value?: unknown }).value;
+    if (typeof source !== "string") {
+      continue;
+    }
+    for (const specifier of statement.specifiers ?? []) {
+      const spec = specifier as {
+        type?: string;
+        local?: { name?: string };
+        imported?: { name?: string; value?: unknown };
+      };
+      if (spec.local?.name !== localTypeName || spec.type !== "ImportSpecifier") {
+        if (spec.local?.name === localTypeName && spec.type === "ImportDefaultSpecifier") {
+          return { importedName: "default", source };
+        }
+        continue;
+      }
+      const importedName =
+        spec.imported?.name ??
+        (typeof spec.imported?.value === "string" ? spec.imported.value : undefined);
+      return importedName ? { importedName, source } : null;
+    }
+  }
+  return null;
+}
+
+function findNamespaceTypeImport(
+  emitter: WrapperEmitter,
+  namespaceName: string,
+): { source: string } | null {
+  return findNamespaceTypeImportInRoot(emitter.root, namespaceName);
+}
+
+function findNamespaceTypeImportInRoot(
+  root: ReturnType<typeof jscodeshift>,
+  namespaceName: string,
+): { source: string } | null {
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type !== "ImportDeclaration") {
+      continue;
+    }
+    const source = (statement.source as { value?: unknown }).value;
+    if (typeof source !== "string") {
+      continue;
+    }
+    for (const specifier of statement.specifiers ?? []) {
+      const spec = specifier as {
+        type?: string;
+        local?: { name?: string };
+      };
+      if (spec.type === "ImportNamespaceSpecifier" && spec.local?.name === namespaceName) {
+        return { source };
+      }
+    }
+  }
+  return null;
+}
+
+function findLocalTypeDeclaration(
+  parsed: { j: typeof jscodeshift; root: ReturnType<typeof jscodeshift> },
+  typeName: string,
+): ASTNode | null {
+  const alias = parsed.root.find(parsed.j.TSTypeAliasDeclaration).filter((p) => {
+    const id = (p.node as { id?: { name?: string } }).id;
+    return id?.name === typeName;
+  });
+  if (alias.size() > 0) {
+    return (alias.get().node as { typeAnnotation?: ASTNode }).typeAnnotation ?? null;
+  }
+  const iface = parsed.root.find(parsed.j.TSInterfaceDeclaration).filter((p) => {
+    const id = (p.node as { id?: { name?: string } }).id;
+    return id?.name === typeName;
+  });
+  return iface.size() > 0 ? (iface.get().node as ASTNode) : null;
+}
+
+function parseTypeSource(
+  source: string,
+): { j: typeof jscodeshift; root: ReturnType<typeof jscodeshift> } | null {
+  try {
+    const j = jscodeshift.withParser("tsx");
+    return { j, root: j(source) };
+  } catch {
+    return null;
+  }
+}
+
+function readSourceWithExtensionFallback(absolutePath: string): string | null {
+  for (const ext of ["", ".tsx", ".ts", ".jsx", ".js"]) {
+    const candidate = `${absolutePath}${ext}`;
+    if (!existsSync(candidate)) {
+      continue;
+    }
+    try {
+      return readFileSync(candidate, "utf8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+type TypeReferenceName =
+  | { kind: "identifier"; name: string }
+  | { kind: "qualified"; namespace: string; name: string };
+
+type TypeReferenceNameNode =
+  | { type?: "Identifier"; name?: string }
+  | {
+      type?: "TSQualifiedName";
+      left?: TypeReferenceNameNode;
+      right?: TypeReferenceNameNode;
+    };
 
 type AstNodeOrQualifiedName =
   | (ASTNode & { type: "Identifier"; name?: string })

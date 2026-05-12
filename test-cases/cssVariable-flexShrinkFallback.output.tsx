@@ -17,13 +17,12 @@ export function ColumnContainer(props: ColumnContainerProps) {
     <div
       {...rest}
       {...mergedSx(
-        [
-          styles.columnContainer,
-          noGrowOrShrink && styles.columnContainerNoGrowOrShrink,
-          styles.columnContainerFlexShrink(props),
-        ],
+        [styles.columnContainer, noGrowOrShrink && styles.columnContainerNoGrowOrShrink],
         undefined,
-        style,
+        {
+          flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,
+          ...style,
+        },
       )}
     >
       {children}
@@ -57,7 +56,4 @@ const styles = stylex.create({
   columnContainerNoGrowOrShrink: {
     flexGrow: 0,
   },
-  columnContainerFlexShrink: (props: ColumnContainerProps) => ({
-    flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,
-  }),
 });

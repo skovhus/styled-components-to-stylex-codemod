@@ -542,7 +542,7 @@ export const Foo = (props: Props) => null as any;
     expect(check("Foo", lib)).toBe(true);
   });
 
-  it("does not follow type imports across files", () => {
+  it("follows type imports across files", () => {
     writeLib(
       "typeOnly",
       `
@@ -557,7 +557,228 @@ import type { ExternalProps } from "./typeOnly";
 export function Foo(props: ExternalProps) { return null as any; }
 `,
     );
-    expect(check("Foo", lib)).toBe(false);
+    expect(check("Foo", lib)).toBe(true);
+  });
+
+  it("follows namespace type imports across files", () => {
+    writeLib(
+      "namespaceTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+export type IconProps = { sx?: stylex.StyleXStyles };
+`,
+    );
+    const lib = writeLib(
+      "namespaceConsumer",
+      `
+import type * as Types from "./namespaceTypes";
+export function Icon(props: Types.IconProps) { return null as any; }
+`,
+    );
+    expect(check("Icon", lib)).toBe(true);
+  });
+
+  it("follows named barrel aliases to the source export name", () => {
+    writeLib(
+      "button",
+      `
+import * as stylex from "@stylexjs/stylex";
+export function Button(props: { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+    );
+    const barrel = writeLib("barrelAlias", `export { Button as IconButton } from "./button";`);
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("follows star barrels even when the barrel does not mention the component name", () => {
+    writeFile(
+      "lower-button.tsx",
+      `
+import * as stylex from "@stylexjs/stylex";
+export function IconButton(props: { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+    );
+    const barrel = writeLib("starBarrel", `export * from "./lower-button";`);
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("follows type-only barrels for imported prop types", () => {
+    writeLib(
+      "buttonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+export type ButtonProps = { sx?: stylex.StyleXStyles };
+`,
+    );
+    writeLib("typeBarrel", `export type { ButtonProps } from "./buttonTypes";`);
+    const lib = writeLib(
+      "typeBarrelConsumer",
+      `
+import type { ButtonProps } from "./typeBarrel";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
+  it("follows star barrels for imported prop types", () => {
+    writeLib(
+      "starButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+export type ButtonProps = { sx?: stylex.StyleXStyles };
+`,
+    );
+    writeLib("starTypeBarrel", `export * from "./starButtonTypes";`);
+    const lib = writeLib(
+      "starTypeBarrelConsumer",
+      `
+import type { ButtonProps } from "./starTypeBarrel";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
+  it("follows default imported prop type declarations", () => {
+    writeLib(
+      "defaultButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+export default interface ButtonProps {
+  sx?: stylex.StyleXStyles;
+}
+`,
+    );
+    const lib = writeLib(
+      "defaultTypeConsumer",
+      `
+import type ButtonProps from "./defaultButtonTypes";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
+  it("follows default imported prop type identifiers", () => {
+    writeLib(
+      "defaultIdentifierButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+type ButtonProps = { sx?: stylex.StyleXStyles };
+export default ButtonProps;
+`,
+    );
+    const lib = writeLib(
+      "defaultIdentifierTypeConsumer",
+      `
+import type ButtonProps from "./defaultIdentifierButtonTypes";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
+  it("follows source-less default type re-exports", () => {
+    writeLib(
+      "sourceLessDefaultButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+type ButtonProps = { sx?: stylex.StyleXStyles };
+export type { ButtonProps as default };
+`,
+    );
+    const lib = writeLib(
+      "sourceLessDefaultTypeConsumer",
+      `
+import type ButtonProps from "./sourceLessDefaultButtonTypes";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
+  it("follows named barrels that re-export a default component", () => {
+    writeLib(
+      "defaultButton",
+      `
+import * as stylex from "@stylexjs/stylex";
+export default function Button(props: { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+    );
+    const barrel = writeLib(
+      "defaultBarrel",
+      `export { default as IconButton } from "./defaultButton";`,
+    );
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("uses the actual default export when helper functions precede it", () => {
+    writeLib(
+      "defaultButtonWithHelper",
+      `
+import * as stylex from "@stylexjs/stylex";
+function helper(props: { sx?: stylex.StyleXStyles }) { return null as any; }
+export default function Button(props: { label?: string }) { return null as any; }
+`,
+    );
+    const barrel = writeLib(
+      "defaultButtonWithHelperBarrel",
+      `export { default as IconButton } from "./defaultButtonWithHelper";`,
+    );
+    expect(check("IconButton", barrel)).toBe(false);
+  });
+
+  it("follows default-exported identifiers to their declarations", () => {
+    writeLib(
+      "defaultIdentifierButton",
+      `
+import * as stylex from "@stylexjs/stylex";
+const Button = (props: { sx?: stylex.StyleXStyles }) => null as any;
+export default Button;
+`,
+    );
+    const barrel = writeLib(
+      "defaultIdentifierBarrel",
+      `export { default as IconButton } from "./defaultIdentifierButton";`,
+    );
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("follows identifiers inside default HOC exports", () => {
+    writeLib(
+      "defaultMemoIdentifierButton",
+      `
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+const Button = (props: { sx?: stylex.StyleXStyles }) => null as any;
+export default React.memo(Button);
+`,
+    );
+    const barrel = writeLib(
+      "defaultMemoIdentifierBarrel",
+      `export { default as IconButton } from "./defaultMemoIdentifierButton";`,
+    );
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("does not follow identifier arguments for unknown component factories", () => {
+    const lib = writeLib(
+      "factoryButton",
+      `
+import * as stylex from "@stylexjs/stylex";
+const IconRenderer = (props: { sx?: stylex.StyleXStyles }) => null as any;
+export const Button = createButton(IconRenderer, {});
+`,
+    );
+    expect(check("Button", lib)).toBe(false);
+  });
+
+  it("breaks cycles while following star barrels", () => {
+    writeLib("cycleA", `export * from "./cycleB";`);
+    const cycleB = writeLib("cycleB", `export * from "./cycleA";`);
+    expect(() => check("IconButton", cycleB)).not.toThrow();
+    expect(check("IconButton", cycleB)).toBe(false);
   });
 });
 
@@ -739,6 +960,48 @@ export const Foo = (p: { sx?: stylex.StyleXStyles }) => null as any;
             `
 import * as stylex from "@stylexjs/stylex";
 export function Foo(props: { id?: string } & { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+          ],
+        ]),
+      }),
+    ).toBe(true);
+  });
+
+  it("re-walks barrels when source overrides update re-exported targets", () => {
+    const target = writeLib(
+      "barrelTarget",
+      `export const Foo = (p: { id?: string }) => null as any;`,
+    );
+    const barrel = writeLib("barrelWithTarget", `export * from "./barrelTarget";`);
+    const importMap = new Map([
+      [
+        "Foo",
+        {
+          importedName: "Foo",
+          source: {
+            kind: "absolutePath" as const,
+            value: barrel.replace(/\.(tsx|ts|jsx|js)$/, ""),
+          },
+        },
+      ],
+    ]);
+    const args = {
+      adapter: { useSxProp: true },
+      importMap,
+      componentLocalName: "Foo",
+      filePath: join(dir, "consumer.tsx"),
+    };
+
+    expect(isWrappedComponentSxAware(args)).toBe(false);
+    expect(
+      isWrappedComponentSxAware({
+        ...args,
+        sourceOverrides: new Map([
+          [
+            toRealPath(target),
+            `
+import * as stylex from "@stylexjs/stylex";
+export const Foo = (props: { sx?: stylex.StyleXStyles }) => null as any;
 `,
           ],
         ]),

@@ -18,6 +18,7 @@ import {
 } from "./variants.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import {
+  cloneAstNode,
   getArrowFnSingleParamName,
   getFunctionBodyExpr,
   getMemberPathFromIdentifier,
@@ -30,6 +31,7 @@ import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
+import type { ExpressionKind } from "./decl-types.js";
 import {
   findPlaceholderBlock,
   findPreviousOpeningBraceBeforeSelector,
@@ -40,9 +42,9 @@ import {
 } from "./shared.js";
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
-import { isStyleConditionKey, mergeStyleObjects } from "./utils.js";
+import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
 
-export { replaceIdentifierInAst };
+export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
 export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   const {
@@ -188,6 +190,23 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       j: state.j,
     });
   }
+  moveUnsafeRawCssVarStyleFnsToInlineStyles({
+    styleFnFromProps,
+    styleFnDecls,
+    inlineStyleProps,
+    staticInlineStyleProps,
+    baseRawCssVarProps: collectRawCssVarStyleObjectProps(styleObj),
+    rawCss: decl.rawCss,
+    unsafeProps: collectStyleOverrideProps({
+      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+      cssHelperPropValues,
+      extraStyleObjects,
+      resolvedStyleObjects,
+      variantBuckets,
+      styleFnDecls: new Map(),
+    }),
+    j: state.j,
+  });
 
   // Check for interpolations in pseudo selectors that can't be safely transformed
   const hasPseudoBlockInterpolation = (() => {
@@ -706,6 +725,338 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
     inlineStyleProps.push({ prop, expr });
     staticInlineStyleProps.push({ prop, expr });
   }
+}
+
+function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+  inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
+  staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  baseRawCssVarProps: ReadonlySet<string>;
+  rawCss: string | undefined;
+  unsafeProps: ReadonlySet<string>;
+  j: Parameters<typeof literalToAst>[0];
+}): void {
+  const {
+    styleFnFromProps,
+    styleFnDecls,
+    inlineStyleProps,
+    staticInlineStyleProps,
+    baseRawCssVarProps,
+    rawCss,
+    unsafeProps,
+    j,
+  } = args;
+  const fnKeyUseCounts = new Map<string, number>();
+  for (const entry of styleFnFromProps) {
+    fnKeyUseCounts.set(entry.fnKey, (fnKeyUseCounts.get(entry.fnKey) ?? 0) + 1);
+  }
+  const staticInlineProps = new Set(staticInlineStyleProps.map((entry) => entry.prop));
+  const styleFnPropUseCounts = collectStyleFnPropUseCounts(styleFnDecls);
+  const movedEntries: Array<{
+    index: number;
+    sourceOrder: number;
+    inlineStyleProp: NonNullable<StyledDecl["inlineStyleProps"]>[number];
+    fnKey: string;
+  }> = [];
+
+  for (let i = styleFnFromProps.length - 1; i >= 0; i--) {
+    const entry = styleFnFromProps[i];
+    if (
+      !entry ||
+      entry.conditionWhen ||
+      entry.extraCallArgs?.length ||
+      fnKeyUseCounts.get(entry.fnKey) !== 1
+    ) {
+      continue;
+    }
+    const fnAst = styleFnDecls.get(entry.fnKey);
+    const extracted = extractSingleRawCssVarStyleFnProperty(fnAst);
+    const dynamicDeclarationIsLast =
+      extracted && rawCssVarDeclarationOrderHasDynamicLast(rawCss, extracted.prop);
+    if (
+      !extracted ||
+      unsafeProps.has(extracted.prop) ||
+      (styleFnPropUseCounts.get(extracted.prop) ?? 0) > 1 ||
+      (rawCss !== undefined && !dynamicDeclarationIsLast) ||
+      (baseRawCssVarProps.has(extracted.prop) && !dynamicDeclarationIsLast) ||
+      (staticInlineProps.has(extracted.prop) && !dynamicDeclarationIsLast) ||
+      expressionContainsStyleConditionKey(extracted.value)
+    ) {
+      continue;
+    }
+
+    const expr = rewriteStyleFnValueForWrapperScope({
+      j,
+      value: extracted.value,
+      fnParamName: extracted.paramName,
+      entry,
+    });
+    if (!expr) {
+      continue;
+    }
+
+    movedEntries.push({
+      index: i,
+      sourceOrder: entry.sourceOrder ?? i,
+      inlineStyleProp: {
+        prop: extracted.prop,
+        expr,
+        ...(entry.jsxProp && entry.jsxProp !== "__props" ? { jsxProp: entry.jsxProp } : {}),
+      },
+      fnKey: entry.fnKey,
+    });
+  }
+
+  movedEntries.sort((a, b) => a.sourceOrder - b.sourceOrder);
+  for (const moved of movedEntries) {
+    inlineStyleProps.push(moved.inlineStyleProp);
+  }
+  for (const moved of [...movedEntries].sort((a, b) => b.index - a.index)) {
+    styleFnDecls.delete(moved.fnKey);
+    styleFnFromProps.splice(moved.index, 1);
+  }
+}
+
+function collectStyleFnPropUseCounts(styleFnDecls: Map<string, unknown>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const fnAst of styleFnDecls.values()) {
+    const props = new Set<string>();
+    collectObjectExpressionPropertyNames(fnAst, props);
+    for (const prop of props) {
+      counts.set(prop, (counts.get(prop) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function collectRawCssVarStyleObjectProps(styleObj: Record<string, unknown>): Set<string> {
+  const props = new Set<string>();
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (
+      !prop.startsWith("__") &&
+      !prop.startsWith("--") &&
+      typeof value === "string" &&
+      findCssVarCallsInString(value).length > 0
+    ) {
+      props.add(prop);
+    }
+  }
+  return props;
+}
+
+function rawCssVarDeclarationOrderHasDynamicLast(
+  rawCss: string | undefined,
+  stylexProp: string,
+): boolean {
+  if (!rawCss) {
+    return false;
+  }
+  const cssProp = stylexProp.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  const declarationPattern = /([-\w]+)\s*:\s*([^;{}]+);/g;
+  let last: "dynamic" | "static" | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = declarationPattern.exec(rawCss))) {
+    if (match[1] !== cssProp) {
+      continue;
+    }
+    const value = match[2] ?? "";
+    if (value.includes("__SC_EXPR_")) {
+      last = "dynamic";
+    } else {
+      last = "static";
+    }
+  }
+  return last === "dynamic";
+}
+
+function extractSingleRawCssVarStyleFnProperty(fnAst: unknown): {
+  prop: string;
+  value: ExpressionKind;
+  paramName: string | null;
+} | null {
+  if (!fnAst || typeof fnAst !== "object" || !isAstNode(fnAst)) {
+    return null;
+  }
+  const fn = fnAst as {
+    params?: unknown[];
+  };
+  if (!Array.isArray(fn.params) || fn.params.length > 1) {
+    return null;
+  }
+  const param = fn.params[0] as { type?: string; name?: string } | undefined;
+  const paramName = param?.type === "Identifier" ? (param.name ?? null) : null;
+  const body = getFunctionBodyExpr(fnAst as Parameters<typeof getFunctionBodyExpr>[0]);
+  if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+    return null;
+  }
+  const properties = (body as { properties?: unknown[] }).properties ?? [];
+  if (properties.some((property) => (property as { type?: string }).type === "SpreadElement")) {
+    return null;
+  }
+  if (properties.length !== 1) {
+    return null;
+  }
+
+  const property = properties[0] as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string; value?: unknown };
+    value?: unknown;
+  };
+  if (
+    property.type !== "Property" &&
+    property.type !== "ObjectProperty" &&
+    property.type !== "ObjectMethod"
+  ) {
+    return null;
+  }
+  if (property.computed || !property.key || !property.value) {
+    return null;
+  }
+  const prop =
+    property.key.type === "Identifier"
+      ? property.key.name
+      : (property.key.type === "StringLiteral" || property.key.type === "Literal") &&
+          typeof property.key.value === "string"
+        ? property.key.value
+        : null;
+  if (!prop || !expressionContainsRawCssVar(property.value)) {
+    return null;
+  }
+  return { prop, value: property.value as ExpressionKind, paramName };
+}
+
+function expressionContainsRawCssVar(expr: unknown): boolean {
+  let found = false;
+  walkAst(expr, (node) => {
+    if (found) {
+      return;
+    }
+    const n = node as { type?: string; value?: unknown; extra?: { raw?: string } };
+    if (
+      (n.type === "StringLiteral" || n.type === "Literal") &&
+      typeof n.value === "string" &&
+      stringContainsRawCssVarRef(n.value)
+    ) {
+      found = true;
+      return;
+    }
+    if (
+      n.type === "TemplateElement" &&
+      typeof n.value === "object" &&
+      n.value &&
+      "raw" in n.value &&
+      typeof n.value.raw === "string" &&
+      stringContainsRawCssVarRef(n.value.raw)
+    ) {
+      found = true;
+      return;
+    }
+    if (typeof n.extra?.raw === "string" && stringContainsRawCssVarRef(n.extra.raw)) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+function expressionContainsStyleConditionKey(expr: unknown): boolean {
+  let found = false;
+  walkAst(expr, (node) => {
+    if (found) {
+      return;
+    }
+    const n = node as { type?: string; properties?: unknown[] };
+    if (n.type !== "ObjectExpression" || !Array.isArray(n.properties)) {
+      return;
+    }
+    for (const property of n.properties) {
+      const p = property as {
+        type?: string;
+        computed?: boolean;
+        key?: { type?: string; name?: string; value?: unknown };
+      };
+      if (p.type !== "Property" && p.type !== "ObjectProperty") {
+        continue;
+      }
+      if (p.computed) {
+        found = true;
+        return;
+      }
+      const key =
+        p.key?.type === "Identifier"
+          ? p.key.name
+          : (p.key?.type === "StringLiteral" || p.key?.type === "Literal") &&
+              typeof p.key.value === "string"
+            ? p.key.value
+            : null;
+      if (key && isStyleConditionKey(key)) {
+        found = true;
+        return;
+      }
+    }
+  });
+  return found;
+}
+
+function stringContainsRawCssVarRef(value: string): boolean {
+  return findCssVarCallsInString(value).length > 0 || value.includes("var(--");
+}
+
+function rewriteStyleFnValueForWrapperScope(args: {
+  j: Parameters<typeof literalToAst>[0];
+  value: ExpressionKind;
+  fnParamName: string | null;
+  entry: NonNullable<StyledDecl["styleFnFromProps"]>[number];
+}): ExpressionKind | null {
+  const { j, value, fnParamName, entry } = args;
+  let expr = cloneAstNode(value);
+  if (fnParamName) {
+    const replacement = styleFnEntryArgumentExpression(j, entry);
+    if (!replacement) {
+      return null;
+    }
+    expr = mapAst(expr, (node) => {
+      if ((node as { type?: string; name?: string }).type !== "Identifier") {
+        return undefined;
+      }
+      if ((node as { name?: string }).name !== fnParamName) {
+        return undefined;
+      }
+      return cloneAstNode(replacement);
+    }) as ExpressionKind;
+  }
+  if (entry.condition === "truthy") {
+    const condition = styleFnEntryArgumentExpression(j, entry);
+    if (!condition) {
+      return null;
+    }
+    expr = j.conditionalExpression(
+      cloneAstNode(condition) as Parameters<typeof j.conditionalExpression>[0],
+      expr,
+      j.identifier("undefined"),
+    );
+  }
+  return expr;
+}
+
+function styleFnEntryArgumentExpression(
+  j: Parameters<typeof literalToAst>[0],
+  entry: NonNullable<StyledDecl["styleFnFromProps"]>[number],
+): ExpressionKind | null {
+  if (entry.callArg) {
+    return cloneAstNode(entry.callArg);
+  }
+  if (entry.jsxProp === "__props") {
+    return j.identifier("props");
+  }
+  if (!entry.jsxProp) {
+    return null;
+  }
+  if (/^[A-Za-z_$][\w$]*$/.test(entry.jsxProp)) {
+    return j.memberExpression(j.identifier("props"), j.identifier(entry.jsxProp));
+  }
+  return j.memberExpression(j.identifier("props"), j.stringLiteral(entry.jsxProp), true);
 }
 
 function collectStyleOverrideProps(args: {

@@ -124,7 +124,13 @@ Addresses review comment: <brief summary>
 git push -u origin <branch-name>
 ```
 
-### Step 8: Run Code Quality Refactoring
+### Step 8: Resolve Addressed Review Threads
+
+After pushing the fixes, resolve the review threads that the changes addressed. Leave threads open if they were not addressed, are ambiguous, or need reviewer confirmation.
+
+Use thread-aware PR tooling when possible so you only resolve the intended review threads, then re-fetch review thread state to verify that the addressed threads are resolved.
+
+### Step 9: Run Code Quality Refactoring
 
 After addressing review feedback, run the [refactor-code-quality](.claude/skills/refactor-code-quality/SKILL.md) playbook to:
 

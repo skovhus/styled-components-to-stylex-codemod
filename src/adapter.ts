@@ -394,7 +394,7 @@ export type ResolveBaseComponentStaticValue = string | number | boolean;
 export interface ResolveBaseComponentContext {
   /**
    * Import source for the wrapped base component.
-   * - package import: "@linear/orbiter/components/Flex"
+   * - package import: "@acme/design-system/components/Flex"
    * - relative import: resolved absolute path
    */
   importSource: string;

@@ -215,6 +215,25 @@ export function emitStyleMerging(args: {
     return buildSxOnlyResult(j, styleArgs, { normalizeOptionalEntries: true });
   }
 
+  // Keep generated StyleX styles in `sx` even when raw CSS variables or attrs
+  // style objects have to remain as inline styles. Passing the result of
+  // stylex.props()/mergedSx() into an sx-aware custom component materializes
+  // className/style one level too early.
+  if (wrappedAcceptsSxProp && (inlineStyleProps.length > 0 || staticStyleExpr)) {
+    return buildSxWithInlineStyleResult({
+      j,
+      styleArgs,
+      classNameId,
+      styleId,
+      allowClassNameProp,
+      allowStyleProp,
+      inlineStyleProps,
+      staticStyleExpr,
+      staticClassNameExpr,
+      emitTypes,
+    });
+  }
+
   // A generated static class (attrs/bridge class) must still be forwarded, but
   // sx-aware components should keep StyleX styles in `sx` instead of receiving
   // them through a merger spread that also contains className/style.
@@ -754,6 +773,62 @@ function buildSxWithExternalPropsResult(args: {
       staticClassNameExpr,
     }),
     styleAttr: allowStyleProp ? styleId : null,
+    externalAttrsBeforeSxProp: true,
+  };
+}
+
+function buildSxWithInlineStyleResult(args: {
+  j: JSCodeshift;
+  styleArgs: ExpressionKind[];
+  classNameId: Identifier;
+  styleId: Identifier;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+  inlineStyleProps: InlineStyleProp[];
+  staticStyleExpr?: ExpressionKind;
+  staticClassNameExpr?: ExpressionKind;
+  emitTypes: boolean;
+}): StyleMergingResult {
+  const {
+    j,
+    styleArgs,
+    classNameId,
+    styleId,
+    allowClassNameProp,
+    allowStyleProp,
+    inlineStyleProps,
+    staticStyleExpr,
+    staticClassNameExpr,
+    emitTypes,
+  } = args;
+  const sxResult = buildSxOnlyResult(j, styleArgs, { normalizeOptionalEntries: true });
+  const stylePieces: Parameters<JSCodeshift["objectExpression"]>[0] = [
+    ...(staticStyleExpr ? [j.spreadElement(staticStyleExpr)] : []),
+    ...inlineStyleProps.map((p) => inlineStyleProperty(j, p)),
+  ];
+  if (allowStyleProp) {
+    stylePieces.push(j.spreadElement(styleId));
+  }
+
+  return {
+    ...sxResult,
+    classNameAttr: buildClassNameAttributeExpr({
+      j,
+      classNameId,
+      allowClassNameProp,
+      staticClassNameExpr,
+    }),
+    styleAttr:
+      stylePieces.length > 0
+        ? maybeCastStyleForCustomProps(
+            j,
+            j.objectExpression(stylePieces),
+            inlineStyleProps,
+            emitTypes,
+          )
+        : allowStyleProp
+          ? styleId
+          : null,
     externalAttrsBeforeSxProp: true,
   };
 }

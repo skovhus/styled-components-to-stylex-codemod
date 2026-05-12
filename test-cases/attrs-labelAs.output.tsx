@@ -37,9 +37,9 @@ type LabelProps = {
  * Uses .attrs({ as: "label" }) to set the element type.
  */
 export function Label(props: LabelProps) {
-  const { children, ref, ...rest } = props;
+  const { children, sx, ref, ...rest } = props;
   return (
-    <Text ref={ref} {...rest} as="label" {...stylex.props(styles.label)}>
+    <Text ref={ref} {...rest} as="label" sx={[styles.label, sx]}>
       {children}
     </Text>
   );

@@ -8,9 +8,15 @@ import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
+import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
+import type * as WrapperTypes from "./lib/sx-aware-imported-types";
+import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
+import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
+import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
+import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
-import { Text } from "./lib/sx-aware-text";
+import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
 
 // Single call site → inlined into JSX directly.
 const StyledButton = styled(SxAwareButton)`
@@ -70,6 +76,114 @@ const Identifier = styled(Text)`
   flex-shrink: 0;
 `;
 
+// ImportedIcon's public props are an imported type alias with an sx member.
+// The detector must follow imported type references when deciding whether
+// styled(ImportedIcon) should forward sx.
+const StyledIcon = styled(ImportedIcon)`
+  margin-left: 4px;
+  color: #2563eb;
+`;
+
+// ImportedTooltip's public props go through a local alias that intersects an
+// imported interface. This mirrors sx-aware wrappers whose sx support is
+// inherited from shared prop interfaces.
+const StyledTooltip = styled(ImportedTooltip)`
+  align-items: center;
+  min-width: 24px;
+`;
+
+const InterfaceBase = styled(SxAwareButton)`
+  border-color: #c084fc;
+`;
+
+interface InterfaceWrapperProps extends React.ComponentProps<typeof InterfaceBase> {
+  label?: string;
+}
+
+const InterfaceWrapper = styled(InterfaceBase)<InterfaceWrapperProps>`
+  background-color: #f5f3ff;
+`;
+
+type ExplicitWrapperProps = {
+  label?: string;
+};
+
+const ExplicitWrapper = styled(InterfaceBase)<ExplicitWrapperProps>`
+  color: #4c1d95;
+`;
+
+type ImportedWrapperProps = ImportedWrapperSxProps & {
+  label?: string;
+};
+
+const ImportedTypeWrapper = styled(InterfaceBase)<ImportedWrapperProps>`
+  color: #6d28d9;
+`;
+
+type ImportedInterfaceWrapperProps = ImportedFlexProps & {
+  label?: string;
+};
+
+const ImportedInterfaceWrapper = styled(InterfaceBase)<ImportedInterfaceWrapperProps>`
+  color: #7c3aed;
+`;
+
+type NamespaceWrapperProps = WrapperTypes.ImportedWrapperSxProps & {
+  label?: string;
+};
+
+const NamespaceTypeWrapper = styled(InterfaceBase)<NamespaceWrapperProps>`
+  color: #9333ea;
+`;
+
+interface NamespaceInterfaceWrapperProps extends WrapperTypes.ImportedWrapperSxProps {
+  label?: string;
+}
+
+const NamespaceInterfaceWrapper = styled(InterfaceBase)<NamespaceInterfaceWrapperProps>`
+  color: #a855f7;
+`;
+
+type BarrelWrapperProps = BarrelWrapperSxProps & {
+  label?: string;
+};
+
+const BarrelTypeWrapper = styled(InterfaceBase)<BarrelWrapperProps>`
+  color: #c084fc;
+`;
+
+type DefaultImportedWrapperProps = DefaultWrapperProps & {
+  label?: string;
+};
+
+const DefaultImportedTypeWrapper = styled(InterfaceBase)<DefaultImportedWrapperProps>`
+  color: #d8b4fe;
+`;
+
+type DefaultBarrelWrapperLocalProps = DefaultBarrelWrapperProps & {
+  label?: string;
+};
+
+const DefaultBarrelTypeWrapper = styled(InterfaceBase)<DefaultBarrelWrapperLocalProps>`
+  color: #e9d5ff;
+`;
+
+type LocalDefaultWrapperLocalProps = LocalDefaultWrapperProps & {
+  label?: string;
+};
+
+const LocalDefaultTypeWrapper = styled(InterfaceBase)<LocalDefaultWrapperLocalProps>`
+  color: #f3e8ff;
+`;
+
+type OmitSxWrapperProps = Omit<React.ComponentProps<typeof InterfaceBase>, "sx"> & {
+  label?: string;
+};
+
+const OmitSxWrapper = styled(InterfaceBase)<OmitSxWrapperProps>`
+  color: #581c87;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -101,6 +215,29 @@ export const App = () => (
     </ExportedToggleButton>
     <DraggableSxButton sx={callerStyles.caller}>Draggable sx</DraggableSxButton>
     <StyledText size="md">Generic Text</StyledText>
+    <StyledIcon color="currentColor" aria-label="Imported icon" />
+    <StyledTooltip delay={100}>Imported tooltip</StyledTooltip>
+    <InterfaceWrapper sx={callerStyles.caller}>Interface wrapper</InterfaceWrapper>
+    <ImportedTypeWrapper sx={callerStyles.caller}>Imported type wrapper</ImportedTypeWrapper>
+    <ImportedInterfaceWrapper sx={callerStyles.caller}>
+      Imported interface wrapper
+    </ImportedInterfaceWrapper>
+    <NamespaceTypeWrapper sx={callerStyles.caller}>Namespace type wrapper</NamespaceTypeWrapper>
+    <NamespaceInterfaceWrapper sx={callerStyles.caller}>
+      Namespace interface wrapper
+    </NamespaceInterfaceWrapper>
+    <BarrelTypeWrapper sx={callerStyles.caller}>Barrel type wrapper</BarrelTypeWrapper>
+    <DefaultImportedTypeWrapper sx={callerStyles.caller}>
+      Default imported type wrapper
+    </DefaultImportedTypeWrapper>
+    <DefaultBarrelTypeWrapper sx={callerStyles.caller}>
+      Default barrel type wrapper
+    </DefaultBarrelTypeWrapper>
+    <LocalDefaultTypeWrapper sx={callerStyles.caller}>
+      Local default type wrapper
+    </LocalDefaultTypeWrapper>
+    <ExplicitWrapper sx={callerStyles.caller}>Explicit wrapper</ExplicitWrapper>
+    <OmitSxWrapper>Omit sx wrapper</OmitSxWrapper>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>
       <span>Item title</span>
