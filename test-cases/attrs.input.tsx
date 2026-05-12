@@ -11,9 +11,7 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
-const Text = (
-  props: React.ComponentProps<"section"> & { someAttribute?: boolean },
-) => {
+const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean }) => {
   const { someAttribute, ...rest } = props;
   return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
 };

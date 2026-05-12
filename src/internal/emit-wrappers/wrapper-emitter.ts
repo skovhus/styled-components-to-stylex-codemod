@@ -22,7 +22,11 @@ import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
-import { appendAttrsProvidedPropOmissions, TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
+import {
+  appendAttrsProvidedPropOmissions,
+  TAG_TO_HTML_ELEMENT,
+  VOID_TAGS,
+} from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";

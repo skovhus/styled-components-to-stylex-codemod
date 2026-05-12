@@ -72,7 +72,7 @@ type ExportedToggleButtonProps = {
   style?: React.CSSProperties;
   sx?: stylex.StyleXStyles;
   open?: boolean;
-} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "$open">;
+} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "type" | "$open">;
 
 export function ExportedToggleButton(props: ExportedToggleButtonProps) {
   const { children, sx, open, ...rest } = props;
