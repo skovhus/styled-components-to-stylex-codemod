@@ -958,6 +958,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-color: #bf4f74;
 }
 
+.x1hwsvs8:not(#\#):not(#\#) {
+  border-color: #c084fc;
+}
+
 .x6nnw1e:not(#\#):not(#\#) {
   border-color: #cbd5e1;
 }
@@ -2223,6 +2227,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #f4f4ff;
 }
 
+.x1t3w4tk:not(#\#):not(#\#):not(#\#) {
+  background-color: #f5f3ff;
+}
+
 .x6cgz0f:not(#\#):not(#\#):not(#\#) {
   background-color: #f5f5f5;
 }
@@ -2779,6 +2787,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #475569;
 }
 
+.x1l3imt8:not(#\#):not(#\#):not(#\#) {
+  color: #4c1d95;
+}
+
 .xemmkqz:not(#\#):not(#\#):not(#\#) {
   color: #4caf50;
 }
@@ -2787,12 +2799,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #555;
 }
 
+.x1c8vj04:not(#\#):not(#\#):not(#\#) {
+  color: #581c87;
+}
+
 .xairlvy:not(#\#):not(#\#):not(#\#) {
   color: #64748b;
 }
 
 .x33gn0b:not(#\#):not(#\#):not(#\#) {
   color: #666;
+}
+
+.xumdyyo:not(#\#):not(#\#):not(#\#) {
+  color: #6d28d9;
 }
 
 .xosvivp:not(#\#):not(#\#):not(#\#) {
@@ -2823,8 +2843,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   color: #92400e;
 }
 
+.x4w541e:not(#\#):not(#\#):not(#\#) {
+  color: #9333ea;
+}
+
 .x1tnay75:not(#\#):not(#\#):not(#\#) {
   color: #a16207;
+}
+
+.xrvbfx3:not(#\#):not(#\#):not(#\#) {
+  color: #a855f7;
 }
 
 .x1c28xdg:not(#\#):not(#\#):not(#\#), .x12xhozv:not(#\#):not(#\#):not(#\#) {
@@ -2833,6 +2861,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1sl8gnu:not(#\#):not(#\#):not(#\#) {
   color: #c00;
+}
+
+.x1t8c94o:not(#\#):not(#\#):not(#\#) {
+  color: #c084fc;
+}
+
+.x1ffpkxm:not(#\#):not(#\#):not(#\#) {
+  color: #d8b4fe;
+}
+
+.x1wua1ho:not(#\#):not(#\#):not(#\#) {
+  color: #e9d5ff;
+}
+
+.xnyjkdq:not(#\#):not(#\#):not(#\#) {
+  color: #f3e8ff;
 }
 
 .xcoj9df:not(#\#):not(#\#):not(#\#) {
@@ -5033,6 +5077,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x12rczxh:not(#\#):not(#\#):not(#\#):not(#\#) {
   min-width: 220px;
+}
+
+.xnei2rj:not(#\#):not(#\#):not(#\#):not(#\#) {
+  min-width: 24px;
 }
 
 .x18n5i07:not(#\#):not(#\#):not(#\#):not(#\#) {
