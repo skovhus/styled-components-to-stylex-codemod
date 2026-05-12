@@ -2,6 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { Icon } from "./lib/icon";
+import type { ImportedSectionProps } from "./lib/attrs-props";
 
 // Simulated imported component
 const Flex = (
@@ -16,9 +17,18 @@ const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean
   return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
 };
 
-interface SectionProps {
-  someAttribute?: boolean;
+export interface SectionProps extends Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "someAttribute"
+> {
   label?: string;
+}
+
+interface HighlightSectionProps extends Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "someAttribute"
+> {
+  active?: boolean;
 }
 
 type InputProps = {
@@ -77,11 +87,30 @@ export function Background(props: BackgroundProps) {
 }
 
 // Pattern 3b: attrs-injected component props should be omitted from the wrapper type
-export function Section(
-  props: Omit<SectionProps, "someAttribute"> &
+export function Section(props: SectionProps) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.section)} />;
+}
+
+// Pattern 3c: imported explicit attrs props should be omitted even when unresolved
+export function ImportedSection(
+  props: Omit<ImportedSectionProps, "someAttribute"> &
     Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
 ) {
-  return <Text {...props} someAttribute={true} {...stylex.props(styles.section)} />;
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.importedSection)} />;
+}
+
+// Pattern 3d: transient prop renames should still apply when explicit props overlap attrs
+export function HighlightSection(props: HighlightSectionProps) {
+  const { children, active, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      someAttribute={true}
+      {...stylex.props(styles.highlightSection, active ? styles.highlightSectionActive : undefined)}
+    >
+      {children}
+    </Text>
+  );
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -323,6 +352,8 @@ export const App = () => (
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
     <Section label="section-label">Section content</Section>
+    <ImportedSection label="imported-section-label">Imported section content</ImportedSection>
+    <HighlightSection active>Highlighted section content</HighlightSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -378,6 +409,16 @@ const styles = stylex.create({
   section: {
     padding: 16,
     backgroundColor: "#f0f9ff",
+  },
+  importedSection: {
+    padding: 12,
+    backgroundColor: "#ecfdf5",
+  },
+  highlightSection: {
+    color: "#64748b",
+  },
+  highlightSectionActive: {
+    color: "#1d4ed8",
   },
   scrollable: {
     overflowY: "auto",

@@ -2,6 +2,7 @@ import * as React from "react";
 import styled from "styled-components";
 import { focusOutline } from "./lib/helpers";
 import { Icon } from "./lib/icon";
+import type { ImportedSectionProps } from "./lib/attrs-props";
 
 // Simulated imported component
 const Flex = (
@@ -16,9 +17,14 @@ const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean
   return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
 };
 
-interface SectionProps {
+export interface SectionProps {
   someAttribute?: boolean;
   label?: string;
+}
+
+interface HighlightSectionProps {
+  someAttribute?: boolean;
+  $active?: boolean;
 }
 
 // Pattern 1: styled.input.attrs (dot notation)
@@ -72,6 +78,19 @@ export const Background = styled(Flex).attrs({
 export const Section = styled(Text).attrs({ someAttribute: true })<SectionProps>`
   padding: 16px 16px;
   background-color: #f0f9ff;
+`;
+
+// Pattern 3c: imported explicit attrs props should be omitted even when unresolved
+export const ImportedSection = styled(Text).attrs({ someAttribute: true })<ImportedSectionProps>`
+  padding: 12px;
+  background-color: #ecfdf5;
+`;
+
+// Pattern 3d: transient prop renames should still apply when explicit props overlap attrs
+export const HighlightSection = styled(Text).attrs({
+  someAttribute: true,
+})<HighlightSectionProps>`
+  color: ${(props) => (props.$active ? "#1d4ed8" : "#64748b")};
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -290,6 +309,8 @@ export const App = () => (
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
     <Section label="section-label">Section content</Section>
+    <ImportedSection label="imported-section-label">Imported section content</ImportedSection>
+    <HighlightSection $active>Highlighted section content</HighlightSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
