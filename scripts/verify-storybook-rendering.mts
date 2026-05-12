@@ -67,6 +67,7 @@ const FLAKINESS_EXPECTED = new Set<string>([
 
 // Case-specific pixelmatch threshold overrides for known anti-aliasing noise.
 const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
+  ["selector-pseudoMedia", 0.2], // pseudo-element animation layer produces tiny edge anti-aliasing noise
   ["transientProp-memberExpression", 0.2], // TODO: investigate if this override can be removed
 ]);
 
