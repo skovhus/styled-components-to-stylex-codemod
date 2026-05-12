@@ -31,6 +31,16 @@ interface HighlightSectionProps extends Omit<
   active?: boolean;
 }
 
+type UtilitySectionProps = React.PropsWithChildren<{
+  tone?: "info" | "success";
+}> &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">;
+
+interface SharedSectionProps {
+  someAttribute?: boolean;
+  tone?: "primary" | "secondary";
+}
+
 type InputProps = {
   padding?: string;
   small?: boolean;
@@ -107,6 +117,84 @@ export function HighlightSection(props: HighlightSectionProps) {
       {...rest}
       someAttribute={true}
       {...stylex.props(styles.highlightSection, active ? styles.highlightSectionActive : undefined)}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3e: utility-wrapped explicit attrs props should be omitted from the local alias
+export function UtilitySection(props: UtilitySectionProps) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      someAttribute={true}
+      {...stylex.props(
+        styles.utilitySection,
+        tone === "success" && styles.utilitySectionToneSuccess,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3f: shared explicit aliases must not be mutated by attrs omission
+export function SharedAttrsSection(
+  props: Omit<SharedSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.sharedAttrsSection)} />;
+}
+
+type SharedPlainSectionProps = SharedSectionProps &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
+
+export function SharedPlainSection(props: SharedPlainSectionProps) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      {...stylex.props(
+        styles.sharedPlainSection,
+        tone === "secondary" && styles.sharedPlainSectionToneSecondary,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+type ImportedIntersectionSectionProps = Omit<
+  ImportedSectionProps & {
+    localLabel?: string;
+  },
+  "someAttribute"
+> &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">;
+
+// Pattern 3g: unresolved imported props inside intersections should still omit attrs props
+export function ImportedIntersectionSection(props: ImportedIntersectionSectionProps) {
+  return (
+    <Text {...props} someAttribute={true} {...stylex.props(styles.importedIntersectionSection)} />
+  );
+}
+
+type FocusIndexSectionProps = { focusIndex?: number } & Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "tabIndex"
+>;
+
+// Pattern 3h: dynamic attrs emitted after rest should omit the overwritten target prop
+export function FocusIndexSection(props: FocusIndexSectionProps) {
+  const { children, focusIndex, ...rest } = props;
+  return (
+    <Text
+      focusIndex={focusIndex}
+      {...rest}
+      tabIndex={focusIndex}
+      {...stylex.props(styles.focusIndexSection)}
     >
       {children}
     </Text>
@@ -354,6 +442,15 @@ export const App = () => (
     <Section label="section-label">Section content</Section>
     <ImportedSection label="imported-section-label">Imported section content</ImportedSection>
     <HighlightSection active>Highlighted section content</HighlightSection>
+    <UtilitySection tone="success">Utility section content</UtilitySection>
+    <SharedAttrsSection tone="primary">Shared attrs section content</SharedAttrsSection>
+    <SharedPlainSection someAttribute={false} tone="secondary">
+      Shared plain section content
+    </SharedPlainSection>
+    <ImportedIntersectionSection localLabel="local-label">
+      Imported intersection section content
+    </ImportedIntersectionSection>
+    <FocusIndexSection focusIndex={2}>Focus index section content</FocusIndexSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -419,6 +516,30 @@ const styles = stylex.create({
   },
   highlightSectionActive: {
     color: "#1d4ed8",
+  },
+  utilitySection: {
+    padding: 10,
+    backgroundColor: "#dbeafe",
+  },
+  utilitySectionToneSuccess: {
+    backgroundColor: "#dcfce7",
+  },
+  sharedAttrsSection: {
+    padding: 14,
+    backgroundColor: "#fef3c7",
+  },
+  sharedPlainSection: {
+    color: "#1e3a8a",
+  },
+  sharedPlainSectionToneSecondary: {
+    color: "#7c2d12",
+  },
+  importedIntersectionSection: {
+    padding: 6,
+    backgroundColor: "#fdf2f8",
+  },
+  focusIndexSection: {
+    outline: "1px solid #94a3b8",
   },
   scrollable: {
     overflowY: "auto",

@@ -27,6 +27,16 @@ interface HighlightSectionProps {
   $active?: boolean;
 }
 
+type UtilitySectionProps = React.PropsWithChildren<{
+  someAttribute?: boolean;
+  tone?: "info" | "success";
+}>;
+
+interface SharedSectionProps {
+  someAttribute?: boolean;
+  tone?: "primary" | "secondary";
+}
+
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
   type: "text",
@@ -91,6 +101,37 @@ export const HighlightSection = styled(Text).attrs({
   someAttribute: true,
 })<HighlightSectionProps>`
   color: ${(props) => (props.$active ? "#1d4ed8" : "#64748b")};
+`;
+
+// Pattern 3e: utility-wrapped explicit attrs props should be omitted from the local alias
+export const UtilitySection = styled(Text).attrs({ someAttribute: true })<UtilitySectionProps>`
+  padding: 10px;
+  background-color: ${(props) => (props.tone === "success" ? "#dcfce7" : "#dbeafe")};
+`;
+
+// Pattern 3f: shared explicit aliases must not be mutated by attrs omission
+export const SharedAttrsSection = styled(Text).attrs({ someAttribute: true })<SharedSectionProps>`
+  padding: 14px;
+  background-color: #fef3c7;
+`;
+
+export const SharedPlainSection = styled(Text)<SharedSectionProps>`
+  color: ${(props) => (props.tone === "secondary" ? "#7c2d12" : "#1e3a8a")};
+`;
+
+// Pattern 3g: unresolved imported props inside intersections should still omit attrs props
+export const ImportedIntersectionSection = styled(Text).attrs({
+  someAttribute: true,
+})<ImportedSectionProps & { localLabel?: string }>`
+  padding: 6px;
+  background-color: #fdf2f8;
+`;
+
+// Pattern 3h: dynamic attrs emitted after rest should omit the overwritten target prop
+export const FocusIndexSection = styled(Text).attrs((props: { focusIndex?: number }) => ({
+  tabIndex: props.focusIndex,
+}))<{ focusIndex?: number }>`
+  outline: 1px solid #94a3b8;
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -311,6 +352,15 @@ export const App = () => (
     <Section label="section-label">Section content</Section>
     <ImportedSection label="imported-section-label">Imported section content</ImportedSection>
     <HighlightSection $active>Highlighted section content</HighlightSection>
+    <UtilitySection tone="success">Utility section content</UtilitySection>
+    <SharedAttrsSection tone="primary">Shared attrs section content</SharedAttrsSection>
+    <SharedPlainSection someAttribute={false} tone="secondary">
+      Shared plain section content
+    </SharedPlainSection>
+    <ImportedIntersectionSection localLabel="local-label">
+      Imported intersection section content
+    </ImportedIntersectionSection>
+    <FocusIndexSection focusIndex={2}>Focus index section content</FocusIndexSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

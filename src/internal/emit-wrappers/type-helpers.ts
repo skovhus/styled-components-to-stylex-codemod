@@ -182,6 +182,11 @@ export function collectAttrsProvidedPropNames(
   if (attrsInfo?.attrsAsTag) {
     names.add("as");
   }
+  for (const attr of attrsInfo?.dynamicAttrs ?? []) {
+    if (attr.attrName !== attr.jsxProp) {
+      names.add(attr.attrName);
+    }
+  }
   return names;
 }
 

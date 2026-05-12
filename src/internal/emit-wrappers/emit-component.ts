@@ -367,13 +367,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         wrappedPropsTypeName &&
         explicitTypeName === wrappedPropsTypeName
       );
-
-      if (
+      const canMutateExplicitType = !!(
         explicitTypeExists &&
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
-        !isSelfReferentialPropsType
-      ) {
+        !isSelfReferentialPropsType &&
+        !isTypeNameUsedOutsideOwner(emitter, explicitTypeName, d.localName)
+      );
+
+      if (canMutateExplicitType && explicitTypeName) {
         renameTransientMembersInExistingType(emitter, explicitTypeName, d.transientPropRenames);
         removeAttrsMembersInExistingType(emitter, explicitTypeName, attrsProvidedPropNames);
         explicitAttrsOmitUnion = null;
@@ -384,7 +386,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         explicit &&
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
-        !isSelfReferentialPropsType
+        !isSelfReferentialPropsType &&
+        canMutateExplicitType
       ) {
         // Pass explicitTypeName to avoid self-referential types when wrapper and wrapped
         // component share the same props type name (P1 fix)
@@ -1392,14 +1395,31 @@ function getExplicitAttrsOmitUnion(args: {
   if (explicitAttrs.length > 0) {
     return buildOmitUnion(explicitAttrs.map((name) => JSON.stringify(name)));
   }
-  return isUnresolvedExplicitTypeReference(emitter, propsType)
+  return containsUnresolvedExplicitTypeReference(emitter, propsType)
     ? buildOmitUnion([...attrsProvidedPropNames].map((name) => JSON.stringify(name)))
     : null;
 }
 
-function isUnresolvedExplicitTypeReference(emitter: WrapperEmitter, propsType: ASTNode): boolean {
+function containsUnresolvedExplicitTypeReference(
+  emitter: WrapperEmitter,
+  propsType: ASTNode,
+): boolean {
+  if (propsType.type === "TSIntersectionType" || propsType.type === "TSUnionType") {
+    return ((propsType as { types?: ASTNode[] }).types ?? []).some((part) =>
+      containsUnresolvedExplicitTypeReference(emitter, part),
+    );
+  }
+  if (propsType.type === "TSParenthesizedType") {
+    const inner = (propsType as { typeAnnotation?: ASTNode }).typeAnnotation;
+    return inner ? containsUnresolvedExplicitTypeReference(emitter, inner) : false;
+  }
   if (propsType.type !== "TSTypeReference") {
     return false;
+  }
+  const typeNameText = emitter.stringifyTsType(propsType);
+  const params = getTypeReferenceParams(propsType);
+  if (isUtilityTypeReference(typeNameText)) {
+    return params.some((param) => containsUnresolvedExplicitTypeReference(emitter, param));
   }
   const typeName = resolveTypeIdentifierName(propsType);
   return typeName ? !emitter.typeExistsInFile(typeName) : true;
@@ -1414,6 +1434,26 @@ function omitExplicitAttrsIfNeeded(
 
 function buildOmitUnion(parts: string[]): string {
   return [...new Set(parts)].join(" | ");
+}
+
+function getTypeReferenceParams(type: ASTNode): ASTNode[] {
+  const typed = type as {
+    typeParameters?: { params?: ASTNode[] };
+    typeArguments?: { params?: ASTNode[] };
+  };
+  return typed.typeParameters?.params ?? typed.typeArguments?.params ?? [];
+}
+
+function isUtilityTypeReference(typeNameText: string | null): boolean {
+  return (
+    typeNameText === "React.PropsWithChildren" ||
+    typeNameText === "PropsWithChildren" ||
+    typeNameText === "Partial" ||
+    typeNameText === "Required" ||
+    typeNameText === "Readonly" ||
+    typeNameText === "Omit" ||
+    typeNameText === "Pick"
+  );
 }
 
 function normalizeStaticForwardedAsAttr(
@@ -1636,6 +1676,12 @@ function removeAttrsMembersInExistingType(
       for (const part of typed.types) {
         visitType(part);
       }
+      return;
+    }
+    if (typed.type === "TSTypeReference") {
+      for (const param of getTypeReferenceParams(node as ASTNode)) {
+        visitType(param);
+      }
     }
   };
   root
@@ -1649,6 +1695,59 @@ function removeAttrsMembersInExistingType(
         path.node.body.body = body.filter((member: unknown) => !shouldRemoveMember(member));
       }
     });
+}
+
+function isTypeNameUsedOutsideOwner(
+  emitter: WrapperEmitter,
+  typeName: string,
+  ownerLocalName: string,
+): boolean {
+  if (countTypeNameOccurrences(emitter.localSource, typeName) > 2) {
+    return true;
+  }
+  const { root, j } = emitter;
+  let usedElsewhere = false;
+  root
+    .find(j.TSTypeReference)
+    .filter((path: any) => {
+      const typeRefName = resolveTypeIdentifierName(path.node as ASTNode);
+      return typeRefName === typeName;
+    })
+    .forEach((path: any) => {
+      if (!isPathOwnedByLocalName(path, ownerLocalName)) {
+        usedElsewhere = true;
+      }
+    });
+  return usedElsewhere;
+}
+
+function countTypeNameOccurrences(source: string, typeName: string): number {
+  const escapedTypeName = typeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return source.match(new RegExp(`\\b${escapedTypeName}\\b`, "g"))?.length ?? 0;
+}
+
+function isPathOwnedByLocalName(path: { parentPath?: unknown }, ownerLocalName: string): boolean {
+  let current = path.parentPath as { node?: unknown; parentPath?: unknown } | undefined;
+  while (current) {
+    const node = current.node as
+      | {
+          type?: string;
+          id?: { type?: string; name?: string };
+        }
+      | undefined;
+    if (
+      node?.type === "VariableDeclarator" &&
+      node.id?.type === "Identifier" &&
+      node.id.name === ownerLocalName
+    ) {
+      return true;
+    }
+    if (node?.type === "FunctionDeclaration" && node.id?.name === ownerLocalName) {
+      return true;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return false;
 }
 
 function resolveTypeIdentifierName(type: ASTNode | null): string | null {

@@ -7,9 +7,15 @@ import { Flex } from "./lib/flex";
 type Props = {
   applyBackground?: boolean;
   gutter?: string;
-} & React.ComponentPropsWithRef<typeof Flex> & { sx?: stylex.StyleXStyles };
+};
 
-export function ScrollableFlex(props: Props) {
+type ScrollableFlexProps = Props & {
+  className?: string;
+  style?: React.CSSProperties;
+  sx?: stylex.StyleXStyles;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "$applyBackground">;
+
+export function ScrollableFlex(props: ScrollableFlexProps) {
   const { className, children, style, sx, applyBackground, tabIndex, ...rest } = props;
   return (
     <Flex
