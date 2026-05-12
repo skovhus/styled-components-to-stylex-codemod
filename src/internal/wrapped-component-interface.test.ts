@@ -660,6 +660,25 @@ export function Button(props: ButtonProps) { return null as any; }
     expect(check("Button", lib)).toBe(true);
   });
 
+  it("follows default imported prop type identifiers", () => {
+    writeLib(
+      "defaultIdentifierButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+type ButtonProps = { sx?: stylex.StyleXStyles };
+export default ButtonProps;
+`,
+    );
+    const lib = writeLib(
+      "defaultIdentifierTypeConsumer",
+      `
+import type ButtonProps from "./defaultIdentifierButtonTypes";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
   it("follows named barrels that re-export a default component", () => {
     writeLib(
       "defaultButton",

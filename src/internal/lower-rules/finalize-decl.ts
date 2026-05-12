@@ -195,13 +195,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleFnDecls,
     inlineStyleProps,
     staticInlineStyleProps,
+    baseRawCssVarProps: collectRawCssVarStyleObjectProps(styleObj),
     unsafeProps: collectStyleOverrideProps({
       afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
       cssHelperPropValues,
       extraStyleObjects,
       resolvedStyleObjects,
       variantBuckets,
-      styleFnDecls,
+      styleFnDecls: new Map(),
     }),
     j: state.j,
   });
@@ -730,6 +731,7 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
   styleFnDecls: Map<string, unknown>;
   inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
   staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  baseRawCssVarProps: ReadonlySet<string>;
   unsafeProps: ReadonlySet<string>;
   j: Parameters<typeof literalToAst>[0];
 }): void {
@@ -738,6 +740,7 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     styleFnDecls,
     inlineStyleProps,
     staticInlineStyleProps,
+    baseRawCssVarProps,
     unsafeProps,
     j,
   } = args;
@@ -746,6 +749,7 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     fnKeyUseCounts.set(entry.fnKey, (fnKeyUseCounts.get(entry.fnKey) ?? 0) + 1);
   }
   const staticInlineProps = new Set(staticInlineStyleProps.map((entry) => entry.prop));
+  const styleFnPropUseCounts = collectStyleFnPropUseCounts(styleFnDecls);
   const movedEntries: Array<{
     index: number;
     sourceOrder: number;
@@ -768,6 +772,8 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     if (
       !extracted ||
       unsafeProps.has(extracted.prop) ||
+      (styleFnPropUseCounts.get(extracted.prop) ?? 0) > 1 ||
+      baseRawCssVarProps.has(extracted.prop) ||
       staticInlineProps.has(extracted.prop) ||
       expressionContainsStyleConditionKey(extracted.value)
     ) {
@@ -804,6 +810,33 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     styleFnDecls.delete(moved.fnKey);
     styleFnFromProps.splice(moved.index, 1);
   }
+}
+
+function collectStyleFnPropUseCounts(styleFnDecls: Map<string, unknown>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const fnAst of styleFnDecls.values()) {
+    const props = new Set<string>();
+    collectObjectExpressionPropertyNames(fnAst, props);
+    for (const prop of props) {
+      counts.set(prop, (counts.get(prop) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function collectRawCssVarStyleObjectProps(styleObj: Record<string, unknown>): Set<string> {
+  const props = new Set<string>();
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (
+      !prop.startsWith("__") &&
+      !prop.startsWith("--") &&
+      typeof value === "string" &&
+      findCssVarCallsInString(value).length > 0
+    ) {
+      props.add(prop);
+    }
+  }
+  return props;
 }
 
 function extractSingleRawCssVarStyleFnProperty(fnAst: unknown): {

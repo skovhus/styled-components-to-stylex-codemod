@@ -7,7 +7,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
-import type { ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
+import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
+import type * as WrapperTypes from "./lib/sx-aware-imported-types";
+import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -121,6 +123,22 @@ type ImportedWrapperProps = ImportedWrapperSxProps & {
   label?: string;
 };
 
+type ImportedInterfaceWrapperProps = ImportedFlexProps & {
+  label?: string;
+};
+
+type NamespaceWrapperProps = WrapperTypes.ImportedWrapperSxProps & {
+  label?: string;
+};
+
+interface NamespaceInterfaceWrapperProps extends WrapperTypes.ImportedWrapperSxProps {
+  label?: string;
+}
+
+type BarrelWrapperProps = BarrelWrapperSxProps & {
+  label?: string;
+};
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
   button: {
@@ -191,6 +209,18 @@ const callerStyles = stylex.create({
   importedTypeWrapper: {
     color: "#6d28d9",
   },
+  importedInterfaceWrapper: {
+    color: "#7c3aed",
+  },
+  namespaceTypeWrapper: {
+    color: "#9333ea",
+  },
+  namespaceInterfaceWrapper: {
+    color: "#a855f7",
+  },
+  barrelTypeWrapper: {
+    color: "#c084fc",
+  },
 });
 
 const identifierRowStyle = {
@@ -237,6 +267,26 @@ export const App = () => (
       sx={[callerStyles.interfaceBase, callerStyles.importedTypeWrapper, callerStyles.caller]}
     >
       Imported type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.importedInterfaceWrapper, callerStyles.caller]}
+    >
+      Imported interface wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.namespaceTypeWrapper, callerStyles.caller]}
+    >
+      Namespace type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.namespaceInterfaceWrapper, callerStyles.caller]}
+    >
+      Namespace interface wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.barrelTypeWrapper, callerStyles.caller]}
+    >
+      Barrel type wrapper
     </SxAwareButton>
     <div style={identifierRowStyle}>
       <Text color="labelMuted" sx={callerStyles.identifier}>

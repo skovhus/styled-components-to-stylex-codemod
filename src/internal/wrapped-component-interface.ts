@@ -588,6 +588,7 @@ function defaultExportedTypeDeclarationMentionsSx(ctx: TypeWalkContext): boolean
     const declaration = statement.declaration as
       | {
           type?: string;
+          name?: string;
           body?: { body?: unknown[] };
           extends?: unknown[];
           typeAnnotation?: ASTNode;
@@ -605,6 +606,9 @@ function defaultExportedTypeDeclarationMentionsSx(ctx: TypeWalkContext): boolean
     }
     if (declaration.type === "TSTypeAliasDeclaration" && declaration.typeAnnotation) {
       return typeMentionsSxMember(ctx, declaration.typeAnnotation);
+    }
+    if (declaration.type === "Identifier" && typeof declaration.name === "string") {
+      return typeReferenceMentionsSx(ctx, declaration.name, { allowImported: true });
     }
   }
   return false;

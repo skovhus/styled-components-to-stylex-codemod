@@ -8,7 +8,9 @@ import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
-import type { ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
+import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
+import type * as WrapperTypes from "./lib/sx-aware-imported-types";
+import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
@@ -107,6 +109,38 @@ const ImportedTypeWrapper = styled(InterfaceBase)<ImportedWrapperProps>`
   color: #6d28d9;
 `;
 
+type ImportedInterfaceWrapperProps = ImportedFlexProps & {
+  label?: string;
+};
+
+const ImportedInterfaceWrapper = styled(InterfaceBase)<ImportedInterfaceWrapperProps>`
+  color: #7c3aed;
+`;
+
+type NamespaceWrapperProps = WrapperTypes.ImportedWrapperSxProps & {
+  label?: string;
+};
+
+const NamespaceTypeWrapper = styled(InterfaceBase)<NamespaceWrapperProps>`
+  color: #9333ea;
+`;
+
+interface NamespaceInterfaceWrapperProps extends WrapperTypes.ImportedWrapperSxProps {
+  label?: string;
+}
+
+const NamespaceInterfaceWrapper = styled(InterfaceBase)<NamespaceInterfaceWrapperProps>`
+  color: #a855f7;
+`;
+
+type BarrelWrapperProps = BarrelWrapperSxProps & {
+  label?: string;
+};
+
+const BarrelTypeWrapper = styled(InterfaceBase)<BarrelWrapperProps>`
+  color: #c084fc;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -142,6 +176,14 @@ export const App = () => (
     <StyledTooltip delay={100}>Imported tooltip</StyledTooltip>
     <InterfaceWrapper sx={callerStyles.caller}>Interface wrapper</InterfaceWrapper>
     <ImportedTypeWrapper sx={callerStyles.caller}>Imported type wrapper</ImportedTypeWrapper>
+    <ImportedInterfaceWrapper sx={callerStyles.caller}>
+      Imported interface wrapper
+    </ImportedInterfaceWrapper>
+    <NamespaceTypeWrapper sx={callerStyles.caller}>Namespace type wrapper</NamespaceTypeWrapper>
+    <NamespaceInterfaceWrapper sx={callerStyles.caller}>
+      Namespace interface wrapper
+    </NamespaceInterfaceWrapper>
+    <BarrelTypeWrapper sx={callerStyles.caller}>Barrel type wrapper</BarrelTypeWrapper>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>
       <span>Item title</span>

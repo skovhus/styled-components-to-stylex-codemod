@@ -10920,6 +10920,29 @@ export const App = () => <Box $width={120}>content</Box>;
     expect(result.code).not.toContain("style={{");
   });
 
+  it("should inline dynamic raw CSS variable values when no later style overrides the property", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $width?: number }>\`
+  width: \${(props) => \`var(--dynamic-width, \${props.$width ?? 0}px)\`};
+\`;
+
+export const App = () => <Box $width={120}>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "raw-var-dynamic-inline.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("style={{");
+    expect(result.code).toContain("width: `var(--dynamic-width, ${props.$width ?? 0}px)`");
+    expect(result.code).not.toContain("styles.boxWidth(props)");
+  });
+
   it("should drop --name definition from variant buckets when adapter returns dropDefinition: true", () => {
     const source = `
 import styled from "styled-components";
