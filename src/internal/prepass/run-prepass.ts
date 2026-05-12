@@ -351,8 +351,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       const jsxHits = rgJsxComponentFilter(uniqueAllFiles);
 
       const scanAndRecord = (filePath: string, source: string) => {
+        const jsxScan = scanConsumerJsxUsages(filePath, source, allStyledNames, parser);
         if (createExternalInterface) {
-          for (const result of scanConsumerProps(source, allStyledNames)) {
+          for (const result of jsxScan.propResults) {
             if (result.className || result.style || result.spreadProps) {
               addToSetMap(classNameStyleUsages, result.name, filePath);
             }
@@ -370,12 +371,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
             }
           }
         }
-        for (const usage of scanConsumerStaticPropUsages(
-          filePath,
-          source,
-          allStyledNames,
-          parser,
-        )) {
+        for (const usage of jsxScan.staticPropUsages) {
           const entries = propUsageCandidates.get(usage.name) ?? [];
           entries.push(usage);
           propUsageCandidates.set(usage.name, entries);
@@ -479,7 +475,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           }
 
           for (const usageFile of usageFiles) {
-            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
+            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)) {
               ensure(defFile, name)[field] = true;
               break;
             }
@@ -770,95 +766,164 @@ interface ConsumerStaticPropUsage {
   usage: ComponentPropUsageCandidate;
 }
 
+interface ConsumerJsxScanResult {
+  propResults: ConsumerPropResult[];
+  staticPropUsages: ConsumerStaticPropUsage[];
+}
+
 /**
  * Scan source for JSX usage of specific components with className, style,
  * element-specific props, or JSX spread.
- * Uses a two-step approach: first quick-checks for relevant JSX surface syntax,
- * then scans JSX open tags to match component names — avoids building a huge
- * alternation regex when there are hundreds of component names.
- * Handles aliased imports (e.g., `import { Alert as MyAlert }`) by resolving
- * local tag names back to their original exported names.
+ * Uses the prepass parser so comments and string literals cannot be mistaken
+ * for real JSX consumers.
  */
-function scanConsumerProps(
+function scanConsumerJsxUsages(
+  filePath: string,
   source: string,
   componentNames: ReadonlySet<string>,
-): ConsumerPropResult[] {
+  parser: ReturnType<typeof createPrepassParser>,
+): ConsumerJsxScanResult {
   if (!CONSUMER_PROPS_QUICK_RE.test(source)) {
-    return [];
+    return { propResults: [], staticPropUsages: [] };
   }
 
-  // Build alias map lazily — only if needed
-  let aliasMap: Map<string, string> | undefined;
+  let ast: AstNode;
+  try {
+    ast = parser.parse(source) as AstNode;
+  } catch {
+    return { propResults: [], staticPropUsages: [] };
+  }
 
-  // Accumulate per-component results (merge across multiple JSX tags)
+  const importNodes: AstNode[] = [];
+  const jsxOpenings: AstNode[] = [];
+  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
+  const importMap = buildImportMapFromNodes(importNodes);
+
   const resultMap = new Map<string, ConsumerPropResult>();
+  const staticPropUsages: ConsumerStaticPropUsage[] = [];
 
-  // Match JSX open tags: `<ComponentName ...>` or `<ComponentName ... />`
-  const tagRe = /<([A-Z][A-Za-z0-9]*)\b([^<>]*?)(?:\/>|>)/gs;
-  for (const m of source.matchAll(tagRe)) {
-    const tagName = m[1];
-    const attrText = m[2] ?? "";
-    if (!tagName) {
-      continue;
-    }
-
-    // Resolve to original component name
-    let resolvedName: string | undefined;
-    if (componentNames.has(tagName)) {
-      resolvedName = tagName;
-    } else {
-      aliasMap ??= buildLocalToImportedMap(source);
-      const originalName = aliasMap.get(tagName);
-      if (originalName && componentNames.has(originalName)) {
-        resolvedName = originalName;
-      }
-    }
+  for (const opening of jsxOpenings) {
+    const resolvedName = resolveJsxOpeningComponentName(
+      opening.name as AstNode | undefined,
+      importMap,
+      componentNames,
+    );
     if (!resolvedName) {
       continue;
     }
 
-    const className = /\bclassName\s*[={]/.test(attrText);
-    const style = /\bstyle\s*[={]/.test(attrText);
-    const spreadProps = /\{\.\.\./.test(attrText);
-    let elementProps = false;
-
-    // Check for element-specific props without treating styling/variant props
-    // like `tone` or `active` as DOM props.
-    // Matches:
-    // 1. prop= or prop{ - value prop
-    // 2. prop followed by whitespace and another prop - boolean shorthand
-    // 3. prop at end of attributes - boolean shorthand
-    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
-    for (const pm of attrText.matchAll(propRe)) {
-      const propName = pm[1]!;
-      if (isDomLikeConsumerProp(propName)) {
-        elementProps = true;
-        break;
+    const externalProps = readExternalConsumerProps(opening);
+    if (
+      externalProps.className ||
+      externalProps.style ||
+      externalProps.spreadProps ||
+      externalProps.elementProps
+    ) {
+      let entry = resultMap.get(resolvedName);
+      if (!entry) {
+        entry = {
+          name: resolvedName,
+          className: false,
+          style: false,
+          elementProps: false,
+          spreadProps: false,
+        };
+        resultMap.set(resolvedName, entry);
       }
+
+      entry.className ||= externalProps.className;
+      entry.style ||= externalProps.style;
+      entry.spreadProps ||= externalProps.spreadProps;
+      entry.elementProps ||= externalProps.elementProps;
     }
 
-    if (!className && !style && !spreadProps && !elementProps) {
+    staticPropUsages.push({
+      name: resolvedName,
+      filePath,
+      usage: readStaticPropUsage(opening),
+    });
+  }
+
+  return { propResults: [...resultMap.values()], staticPropUsages };
+}
+
+function resolveJsxOpeningComponentName(
+  name: AstNode | undefined,
+  importMap: ReadonlyMap<string, ImportEntry>,
+  componentNames: ReadonlySet<string>,
+): string | undefined {
+  const localName = getJsxOpeningIdentifierName(name);
+  if (localName) {
+    if (componentNames.has(localName)) {
+      return localName;
+    }
+
+    const importEntry = importMap.get(localName);
+    return importEntry && componentNames.has(importEntry.importedName)
+      ? importEntry.importedName
+      : undefined;
+  }
+
+  const memberName = getJsxMemberPropertyName(name);
+  return memberName && componentNames.has(memberName) ? memberName : undefined;
+}
+
+function readExternalConsumerProps(opening: AstNode): Omit<ConsumerPropResult, "name"> {
+  const result = {
+    className: false,
+    style: false,
+    elementProps: false,
+    spreadProps: false,
+  };
+
+  for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
+    if (!attr) {
+      continue;
+    }
+    if (attr.type === "JSXSpreadAttribute") {
+      result.spreadProps = true;
+      continue;
+    }
+    if (attr.type !== "JSXAttribute") {
       continue;
     }
 
-    let entry = resultMap.get(resolvedName);
-    if (!entry) {
-      entry = {
-        name: resolvedName,
-        className: false,
-        style: false,
-        elementProps: false,
-        spreadProps: false,
-      };
-      resultMap.set(resolvedName, entry);
+    const propName = getJsxAttributeName(attr.name as AstNode | undefined);
+    if (propName === "className") {
+      result.className = true;
+    } else if (propName === "style") {
+      result.style = true;
+    } else if (propName && isDomLikeConsumerProp(propName)) {
+      result.elementProps = true;
     }
-
-    entry.className ||= className;
-    entry.style ||= style;
-    entry.spreadProps ||= spreadProps;
-    entry.elementProps ||= elementProps;
   }
-  return [...resultMap.values()];
+
+  return result;
+}
+
+function readStaticPropUsage(opening: AstNode): ComponentPropUsageCandidate {
+  const props: ComponentPropUsageCandidate["props"] = {};
+  let hasSpread = false;
+  for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
+    if (!attr) {
+      continue;
+    }
+    if (attr.type === "JSXSpreadAttribute") {
+      hasSpread = true;
+      continue;
+    }
+    if (attr.type !== "JSXAttribute") {
+      continue;
+    }
+    const propName = getJsxAttributeName(attr.name as AstNode | undefined);
+    if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+      continue;
+    }
+    const value = readStaticJsxLiteral(attr);
+    props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+  }
+
+  return { props, hasSpread };
 }
 
 const DOM_LIKE_CONSUMER_PROPS = new Set([
@@ -927,71 +992,6 @@ function isDomLikeConsumerProp(propName: string): boolean {
   );
 }
 
-function scanConsumerStaticPropUsages(
-  filePath: string,
-  source: string,
-  componentNames: ReadonlySet<string>,
-  parser: ReturnType<typeof createPrepassParser>,
-): ConsumerStaticPropUsage[] {
-  if (!/<[A-Z]/.test(source)) {
-    return [];
-  }
-
-  let ast: AstNode;
-  try {
-    ast = parser.parse(source) as AstNode;
-  } catch {
-    return [];
-  }
-
-  const importNodes: AstNode[] = [];
-  const jsxOpenings: AstNode[] = [];
-  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
-  const importMap = buildImportMapFromNodes(importNodes);
-  const usages: ConsumerStaticPropUsage[] = [];
-
-  for (const opening of jsxOpenings) {
-    const tagName = getJsxOpeningIdentifierName(opening.name as AstNode | undefined);
-    if (!tagName) {
-      continue;
-    }
-    const importEntry = importMap.get(tagName);
-    const resolvedName = componentNames.has(tagName)
-      ? tagName
-      : importEntry && componentNames.has(importEntry.importedName)
-        ? importEntry.importedName
-        : undefined;
-    if (!resolvedName) {
-      continue;
-    }
-
-    const props: ComponentPropUsageCandidate["props"] = {};
-    let hasSpread = false;
-    for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
-      if (!attr) {
-        continue;
-      }
-      if (attr.type === "JSXSpreadAttribute") {
-        hasSpread = true;
-        continue;
-      }
-      if (attr.type !== "JSXAttribute") {
-        continue;
-      }
-      const propName = getJsxAttributeName(attr.name as AstNode | undefined);
-      if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
-        continue;
-      }
-      const value = readStaticJsxLiteral(attr);
-      props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
-    }
-
-    usages.push({ name: resolvedName, filePath, usage: { props, hasSpread } });
-  }
-
-  return usages;
-}
-
 function buildPropUsageByFile(args: {
   styledDefFiles: ReadonlyMap<string, ReadonlySet<string>>;
   propUsageCandidates: ReadonlyMap<string, readonly ConsumerStaticPropUsage[]>;
@@ -1013,7 +1013,7 @@ function buildPropUsageByFile(args: {
         const usageFile = candidate.filePath;
         if (
           usageFile !== defFile &&
-          !fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)
+          !fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)
         ) {
           continue;
         }
@@ -1098,6 +1098,16 @@ function getJsxOpeningIdentifierName(name: AstNode | undefined): string | null {
     return name.name;
   }
   return null;
+}
+
+function getJsxMemberPropertyName(name: AstNode | undefined): string | null {
+  if (!name || name.type !== "JSXMemberExpression") {
+    return null;
+  }
+  const property = name.property as AstNode | undefined;
+  return property?.type === "JSXIdentifier" && typeof property.name === "string"
+    ? property.name
+    : null;
 }
 
 function getJsxAttributeName(name: AstNode | undefined): string | null {

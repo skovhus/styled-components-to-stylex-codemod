@@ -166,16 +166,18 @@ export function fileImportsFrom(
   name: string,
   defFile: string,
   resolve: Resolve,
+  read?: (f: string) => string,
 ): boolean {
-  const [namedRe, defaultRe] = getFileImportsFromRes(name);
+  const [namedRe, defaultRe, namespaceRe] = getFileImportsFromRes(name);
   namedRe.lastIndex = 0;
   defaultRe.lastIndex = 0;
+  namespaceRe.lastIndex = 0;
 
   // Heuristic path fragments for fallback matching when resolution fails
   const stem = path.parse(defFile).name;
   const parent = path.basename(path.dirname(defFile));
 
-  for (const re of [namedRe, defaultRe]) {
+  for (const re of [namedRe, defaultRe, namespaceRe]) {
     for (const match of usageSrc.matchAll(re)) {
       const specifier = match[1];
       if (!specifier) {
@@ -183,7 +185,7 @@ export function fileImportsFrom(
       }
       // Resolve the import specifier from the usage file and compare to the definition file
       const resolved = resolve(specifier, usageFile);
-      if (resolved && path.resolve(resolved) === path.resolve(defFile)) {
+      if (resolved && importCanReferenceDefinition(resolved, name, defFile, resolve, read)) {
         return true;
       }
       // Fallback: heuristic path matching
@@ -200,13 +202,33 @@ export function fileImportsFrom(
   return false;
 }
 
-const fileImportsFromReCache = new Map<string, [RegExp, RegExp]>();
-function getFileImportsFromRes(name: string): [RegExp, RegExp] {
+function importCanReferenceDefinition(
+  resolvedImport: string,
+  name: string,
+  defFile: string,
+  resolve: Resolve,
+  read?: (f: string) => string,
+): boolean {
+  if (path.resolve(resolvedImport) === path.resolve(defFile)) {
+    return true;
+  }
+
+  if (!read) {
+    return false;
+  }
+
+  const reExportedFile = resolveBarrelReExport(resolvedImport, name, resolve, read);
+  return reExportedFile !== null && path.resolve(reExportedFile) === path.resolve(defFile);
+}
+
+const fileImportsFromReCache = new Map<string, [RegExp, RegExp, RegExp]>();
+function getFileImportsFromRes(name: string): [RegExp, RegExp, RegExp] {
   let cached = fileImportsFromReCache.get(name);
   if (!cached) {
     cached = [
       new RegExp(String.raw`import\s+\{[^}]*\b${name}\b[^}]*\}\s+from\s+["']([^"']+)["']`, "g"),
       new RegExp(String.raw`import\s+${name}(?:\s*,\s*\{[^}]*\})?\s+from\s+["']([^"']+)["']`, "g"),
+      new RegExp(String.raw`import\s+\*\s+as\s+\w+\s+from\s+["']([^"']+)["']`, "g"),
     ];
     fileImportsFromReCache.set(name, cached);
   }

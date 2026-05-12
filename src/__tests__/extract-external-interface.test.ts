@@ -717,6 +717,33 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import { SpreadOnly } from "../components/SpreadOnly";\nconst props = {};\nexport const App = () => <SpreadOnly {...props}>Spread</SpreadOnly>;',
     );
 
+    // JSX-looking comments and strings should not count as real consumers.
+    writeFileSync(
+      path.join(componentsDir, "Commented.tsx"),
+      'import styled from "styled-components";\nexport const Commented = styled.div`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "commented.tsx"),
+      [
+        'import { Commented } from "../components/Commented";',
+        'const example = \'<Commented className="ghost" />\';',
+        "/*",
+        '  <Commented style={{ color: "red" }} />',
+        "*/",
+        "export const App = () => null;",
+      ].join("\n"),
+    );
+
+    // Namespace/member JSX should still be attributed to the exported component.
+    writeFileSync(
+      path.join(componentsDir, "NamespaceButton.tsx"),
+      'import styled from "styled-components";\nexport const NamespaceButton = styled.button`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "namespace-member.tsx"),
+      'import * as Components from "../components/NamespaceButton";\nexport const App = () => <Components.NamespaceButton className="namespaced" data-testid="ns">NS</Components.NamespaceButton>;',
+    );
+
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
@@ -827,6 +854,22 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     });
   });
 
+  it("ignores JSX-looking comments and strings", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/Commented.tsx:Commented"]).toBeUndefined();
+  });
+
+  it("detects namespace member JSX consumers", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/NamespaceButton.tsx:NamespaceButton"]).toMatchObject({
+      className: true,
+      elementProps: true,
+      spreadProps: false,
+      style: false,
+      styles: true,
+    });
+  });
+
   it("full snapshot", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
@@ -865,6 +908,15 @@ describe("runPrepass createExternalInterface — className/style detection", () 
           "spreadProps": false,
           "style": false,
           "styles": false,
+        },
+        "components/NamespaceButton.tsx:NamespaceButton": {
+          "as": false,
+          "className": true,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": true,
         },
         "components/SameFile.tsx:SameFile": {
           "as": false,
@@ -1107,9 +1159,9 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "className": false,
           "elementProps": true,
           "ref": true,
-          "spreadProps": true,
+          "spreadProps": false,
           "style": false,
-          "styles": true,
+          "styles": false,
         },
         "test-cases/attrs-labelAs.input.tsx:Label": {
           "as": false,
@@ -1589,15 +1641,6 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": true,
         },
         "test-cases/variant-localObservedNumeric.input.tsx:Panel": {
-          "as": false,
-          "className": false,
-          "elementProps": true,
-          "ref": false,
-          "spreadProps": false,
-          "style": false,
-          "styles": false,
-        },
-        "test-cases/variant-localObservedNumeric.input.tsx:TransientPanel": {
           "as": false,
           "className": false,
           "elementProps": true,
