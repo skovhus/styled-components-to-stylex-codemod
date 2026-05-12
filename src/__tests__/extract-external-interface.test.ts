@@ -744,6 +744,36 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import * as Components from "../components/NamespaceButton";\nexport const App = () => <Components.NamespaceButton className="namespaced" data-testid="ns">NS</Components.NamespaceButton>;',
     );
 
+    // Valid DOM attrs should widen element props even when they are not explicitly listed.
+    writeFileSync(
+      path.join(componentsDir, "ResponsiveImage.tsx"),
+      'import styled from "styled-components";\nexport const ResponsiveImage = styled.img`display: block;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "responsive-image.tsx"),
+      'import { ResponsiveImage } from "../components/ResponsiveImage";\nexport const App = () => <ResponsiveImage srcSet="hero-2x.png 2x" sizes="100vw" />;',
+    );
+
+    // JSX passed through an attribute should still be scanned.
+    writeFileSync(
+      path.join(componentsDir, "SlottedButton.tsx"),
+      'import styled from "styled-components";\nexport const SlottedButton = styled.button`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "slotted-button.tsx"),
+      'import { SlottedButton } from "../components/SlottedButton";\nfunction Slot(props: { content: React.ReactNode }) { return <div>{props.content}</div>; }\nexport const App = () => <Slot content={<SlottedButton className="inside-slot">Slot</SlottedButton>} />;',
+    );
+
+    // Parse-failing consumers should fall back to conservative regex detection.
+    writeFileSync(
+      path.join(componentsDir, "ParseFallback.tsx"),
+      'import styled from "styled-components";\nexport const ParseFallback = styled.div`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "parse-fallback.tsx"),
+      'import { ParseFallback } from "../components/ParseFallback";\nexport const App = () => <ParseFallback className="from-invalid-file">Fallback</ParseFallback>;\nconst broken = ;',
+    );
+
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
@@ -870,6 +900,39 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     });
   });
 
+  it("treats unlisted DOM attributes as element props", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/ResponsiveImage.tsx:ResponsiveImage"]).toMatchObject({
+      className: false,
+      elementProps: true,
+      spreadProps: false,
+      style: false,
+      styles: false,
+    });
+  });
+
+  it("detects JSX consumers nested inside attribute expressions", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/SlottedButton.tsx:SlottedButton"]).toMatchObject({
+      className: true,
+      elementProps: false,
+      spreadProps: false,
+      style: false,
+      styles: true,
+    });
+  });
+
+  it("falls back to regex consumer detection when parsing fails", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/ParseFallback.tsx:ParseFallback"]).toMatchObject({
+      className: true,
+      elementProps: false,
+      spreadProps: false,
+      style: false,
+      styles: true,
+    });
+  });
+
   it("full snapshot", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
@@ -918,7 +981,34 @@ describe("runPrepass createExternalInterface — className/style detection", () 
           "style": false,
           "styles": true,
         },
+        "components/ParseFallback.tsx:ParseFallback": {
+          "as": false,
+          "className": true,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": true,
+        },
+        "components/ResponsiveImage.tsx:ResponsiveImage": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "components/SameFile.tsx:SameFile": {
+          "as": false,
+          "className": true,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": true,
+        },
+        "components/SlottedButton.tsx:SlottedButton": {
           "as": false,
           "className": true,
           "elementProps": false,
@@ -1154,11 +1244,29 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
     });
     expect(toSnapshot(prepassResult.consumerAnalysis!)).toMatchInlineSnapshot(`
       {
+        "test-cases/asProp-crossFile.input.tsx:HeaderTitle": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/asProp-exported.input.tsx:ContentViewContainer": {
           "as": false,
           "className": false,
           "elementProps": true,
           "ref": true,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/asProp-exported.input.tsx:StyledWrapper": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
           "spreadProps": false,
           "style": false,
           "styles": false,
@@ -1181,7 +1289,70 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/attrs-tabIndex.input.tsx:ScrollableDiv": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/attrs-tabIndex.input.tsx:ScrollableFlex": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/attrs.input.tsx:Background": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/attrs.input.tsx:FocusableScroll": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/attrs.input.tsx:ScrollableWithType": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/attrs.input.tsx:TextInput": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/basic-sharedBase.input.tsx:Absolute": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/basic-sharedBase.input.tsx:Relative": {
           "as": false,
           "className": false,
           "elementProps": true,
@@ -1208,6 +1379,24 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": true,
           "styles": true,
         },
+        "test-cases/conditional-nestedProp.input.tsx:Badge": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/conditional-propThemeFallback.input.tsx:ColorBadge": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/conditional-styleType.input.tsx:IconWithTransform": {
           "as": false,
           "className": false,
@@ -1226,10 +1415,28 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/cssHelper-conditionalIfBlock.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/cssHelper-conditionalProp.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/cssHelper-destructuredDefaultTemplateLiteral.input.tsx:Tile": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1238,7 +1445,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/cssHelper-dynamicPropertyNameNonProp.input.tsx:Stack": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1247,11 +1454,29 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/cssHelper-dynamicPropertyNamePropStatic.input.tsx:Strip": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
           "styles": true,
+        },
+        "test-cases/cssHelper-simple.input.tsx:BranchedContainer": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/cssHelper-simple.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
         },
         "test-cases/cssVariable-flexShrinkFallback.input.tsx:ColumnContainer": {
           "as": false,
@@ -1265,7 +1490,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/example-actionMenuDivider-exported.input.tsx:TextDividerContainer": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1274,7 +1499,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/example-flex.input.tsx:Flex": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1283,7 +1508,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/externalStyles-element.input.tsx:ColorBadge": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1298,10 +1523,19 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/helper-callPropArg.input.tsx:Box": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/htmlProp-element.input.tsx:TextColor": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1316,14 +1550,68 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/import-react.input.tsx:ChoiceButton": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/import-reactTypeOnly.input.tsx:ToolbarButton": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
           "styles": true,
+        },
+        "test-cases/inlineBase-booleanVariantKey.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/inlineBase-hyphenatedValue.input.tsx:SpacedRow": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/inlineBase-singletonBooleanWithTemplateExpr.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/inlineBase-stringVariantExported.input.tsx:Card": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/keyframes-nameCollision.input.tsx:MoveIcon": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
         },
         "test-cases/lib/action-menu-divider.tsx:ActionMenuGroupHeader": {
           "as": false,
@@ -1553,13 +1841,40 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/shouldForwardProp-dynamicDeclaration.input.tsx:FlexBox": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
           "styles": true,
         },
+        "test-cases/shouldForwardProp-exported.input.tsx:ExplicitFilterButton": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/shouldForwardProp-withAttrs.input.tsx:Text": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/staticProp-basic.input.tsx:CommandMenuGroupHeader": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/staticProp-basic.input.tsx:CommandMenuTextDivider": {
           "as": false,
           "className": false,
           "elementProps": true,
@@ -1586,7 +1901,34 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": true,
           "styles": true,
         },
+        "test-cases/theme-conditionalIndexed.input.tsx:Badge": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/transientProp-exportedRename.input.tsx:ColorChip": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/transientProp-notForwarded.input.tsx:Image": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/transientProp-notForwarded.input.tsx:Scrollable": {
           "as": false,
           "className": false,
           "elementProps": true,
@@ -1622,6 +1964,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/typeHandling-missingAnnotation.input.tsx:Box": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/typeHandling-missingAnnotation.input.tsx:Input": {
           "as": false,
           "className": false,
@@ -1634,13 +1985,76 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/typeHandling-preservedExports.input.tsx:Button": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": true,
           "style": false,
           "styles": true,
         },
+        "test-cases/variant-dynamicIndexAny.input.tsx:Badge": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/variant-localObservedNumeric.input.tsx:Fader": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/variant-localObservedNumeric.input.tsx:Panel": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-children.input.tsx:StyledDivider": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-childrenPassthrough.input.tsx:Container": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-conditionalPropForwarding.input.tsx:Card": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-mergerImported.input.tsx:StyledLoading": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-noChildren.input.tsx:StyledTextDivider": {
           "as": false,
           "className": false,
           "elementProps": true,
@@ -1661,7 +2075,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/wrapper-propsIncomplete.input.tsx:Highlight": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": false,
@@ -1670,7 +2084,7 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/wrapper-propsIncomplete.input.tsx:TextColor": {
           "as": false,
           "className": true,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
@@ -1688,11 +2102,47 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
         "test-cases/wrapper-samePropsType.input.tsx:Wrapper": {
           "as": false,
           "className": false,
-          "elementProps": false,
+          "elementProps": true,
           "ref": false,
           "spreadProps": false,
           "style": true,
           "styles": true,
+        },
+        "test-cases/wrapper-styleFnPropNotForwarded.input.tsx:Scrollable": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-sxAware.input.tsx:DraggableSxButton": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-sxAware.input.tsx:ExportedAccentButton": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/wrapper-sxAware.input.tsx:ExportedToggleButton": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
         },
       }
     `);

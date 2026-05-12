@@ -798,7 +798,10 @@ function scanConsumerJsxUsages(
   try {
     ast = parser.parse(source) as AstNode;
   } catch {
-    return { propResults: [], staticPropUsages: [] };
+    return {
+      propResults: scanConsumerPropsRegexFallback(source, componentNames),
+      staticPropUsages: [],
+    };
   }
 
   const importNodes: AstNode[] = [];
@@ -907,7 +910,7 @@ function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
       externalProps.className = true;
     } else if (propName === "style") {
       externalProps.style = true;
-    } else if (isDomLikeConsumerProp(propName)) {
+    } else if (isElementConsumerProp(propName)) {
       externalProps.elementProps = true;
     }
 
@@ -920,70 +923,73 @@ function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
   return { externalProps, staticUsage: { props, hasSpread } };
 }
 
-const DOM_LIKE_CONSUMER_PROPS = new Set([
-  "accept",
-  "action",
-  "alt",
-  "autoComplete",
-  "autoFocus",
-  "autoPlay",
-  "checked",
-  "cols",
-  "colSpan",
-  "controls",
-  "decoding",
-  "defaultChecked",
-  "defaultValue",
-  "disabled",
-  "download",
-  "draggable",
-  "form",
-  "height",
-  "hidden",
-  "href",
-  "htmlFor",
-  "id",
-  "inputMode",
-  "loading",
-  "loop",
-  "max",
-  "maxLength",
-  "method",
-  "min",
-  "minLength",
-  "multiple",
-  "muted",
-  "name",
-  "pattern",
-  "placeholder",
-  "playsInline",
-  "poster",
-  "readOnly",
-  "rel",
-  "required",
-  "role",
-  "rows",
-  "rowSpan",
-  "selected",
-  "src",
-  "tabIndex",
-  "target",
-  "title",
-  "type",
-  "value",
-  "width",
-]);
+function isElementConsumerProp(propName: string): boolean {
+  return !KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$");
+}
 
-function isDomLikeConsumerProp(propName: string): boolean {
-  if (KNOWN_NON_ELEMENT_PROPS.has(propName) || propName.startsWith("$")) {
-    return false;
+function scanConsumerPropsRegexFallback(
+  source: string,
+  componentNames: ReadonlySet<string>,
+): ConsumerPropResult[] {
+  const resultMap = new Map<string, ConsumerPropResult>();
+  let aliasMap: Map<string, string> | undefined;
+
+  const tagRe = /<([A-Z][A-Za-z0-9]*)\b([^<>]*?)(?:\/>|>)/gs;
+  for (const match of source.matchAll(tagRe)) {
+    const tagName = match[1];
+    const attrText = match[2] ?? "";
+    if (!tagName) {
+      continue;
+    }
+
+    const resolvedName = componentNames.has(tagName)
+      ? tagName
+      : (() => {
+          aliasMap ??= buildLocalToImportedMap(source);
+          const originalName = aliasMap.get(tagName);
+          return originalName && componentNames.has(originalName) ? originalName : undefined;
+        })();
+    if (!resolvedName) {
+      continue;
+    }
+
+    const className = /\bclassName\s*[={]/.test(attrText);
+    const style = /\bstyle\s*[={]/.test(attrText);
+    const spreadProps = /\{\.\.\./.test(attrText);
+    let elementProps = false;
+
+    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
+    for (const propMatch of attrText.matchAll(propRe)) {
+      const propName = propMatch[1]!;
+      if (isElementConsumerProp(propName)) {
+        elementProps = true;
+        break;
+      }
+    }
+
+    if (!className && !style && !spreadProps && !elementProps) {
+      continue;
+    }
+
+    let entry = resultMap.get(resolvedName);
+    if (!entry) {
+      entry = {
+        name: resolvedName,
+        className: false,
+        style: false,
+        elementProps: false,
+        spreadProps: false,
+      };
+      resultMap.set(resolvedName, entry);
+    }
+
+    entry.className ||= className;
+    entry.style ||= style;
+    entry.spreadProps ||= spreadProps;
+    entry.elementProps ||= elementProps;
   }
-  return (
-    propName.startsWith("aria-") ||
-    propName.startsWith("data-") ||
-    /^on[A-Z]/.test(propName) ||
-    DOM_LIKE_CONSUMER_PROPS.has(propName)
-  );
+
+  return [...resultMap.values()];
 }
 
 function buildPropUsageByFile(args: {
@@ -1060,7 +1066,6 @@ function walkForImportsAndJsxOpenings(
   }
   if (n.type === "JSXOpeningElement") {
     jsxOpenings.push(n);
-    return;
   }
   for (const key of Object.keys(n)) {
     if (
