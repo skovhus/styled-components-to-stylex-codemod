@@ -744,6 +744,35 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import * as Components from "../components/NamespaceButton";\nexport const App = () => <Components.NamespaceButton className="namespaced" data-testid="ns">NS</Components.NamespaceButton>;',
     );
 
+    // Member JSX should only match when the member object is the namespace import.
+    writeFileSync(
+      path.join(componentsDir, "MenuButton.tsx"),
+      'import styled from "styled-components";\nexport const MenuButton = styled.button`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "unrelated-member.tsx"),
+      [
+        'import { MenuButton } from "../components/MenuButton";',
+        "const Menu = { MenuButton: (props: { className?: string }) => <button {...props} /> };",
+        'export const App = () => <Menu.MenuButton className="local-menu" />;',
+      ].join("\n"),
+    );
+
+    // Namespace imports should not validate unrelated local JSX identifiers.
+    writeFileSync(
+      path.join(componentsDir, "NamespaceOnly.tsx"),
+      'import styled from "styled-components";\nexport const NamespaceOnly = styled.div`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "namespace-unrelated-local.tsx"),
+      [
+        'import * as NamespaceOnlyModule from "../components/NamespaceOnly";',
+        "const NamespaceOnly = (props: { className?: string }) => <div {...props} />;",
+        'export const App = () => <NamespaceOnly className="local-only" />;',
+        "void NamespaceOnlyModule;",
+      ].join("\n"),
+    );
+
     // Valid DOM attrs should widen element props even when they are not explicitly listed.
     writeFileSync(
       path.join(componentsDir, "ResponsiveImage.tsx"),
@@ -898,6 +927,16 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       style: false,
       styles: true,
     });
+  });
+
+  it("does not match unrelated member JSX by property name only", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/MenuButton.tsx:MenuButton"]).toBeUndefined();
+  });
+
+  it("does not let namespace imports validate unrelated local JSX identifiers", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/NamespaceOnly.tsx:NamespaceOnly"]).toBeUndefined();
   });
 
   it("treats unlisted DOM attributes as element props", () => {
