@@ -5855,6 +5855,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   animation-name: x1tbvpe3-B;
 }
 
+.x1wqsyf7:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
+  animation-play-state: paused;
+}
+
 .x1hl23lj:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):after {
   animation-timing-function: ease-in-out;
 }
