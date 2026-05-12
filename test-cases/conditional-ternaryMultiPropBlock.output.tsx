@@ -118,6 +118,6 @@ const styles = stylex.create({
   textAddBottomBorder: {
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: $colors.bgBorder,
+    borderBottomColor: $colors.bgBorderSolid,
   },
 });

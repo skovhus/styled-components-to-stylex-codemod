@@ -39,7 +39,7 @@ const StyledText = styled(Text).attrs({ gap: 16, column: true })<{
   ${(props) =>
     props.$addBottomBorder
       ? `
-      border-bottom: 1px solid ${props.theme.color.bgBorder};
+      border-bottom: 1px solid ${props.theme.color.bgBorderSolid};
       ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
     `
       : ""}
