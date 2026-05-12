@@ -13,12 +13,17 @@ const Flex = (
 };
 
 const Text = (
-  props: React.ComponentProps<"section"> & { focusIndex?: number; someAttribute?: boolean },
+  props: React.ComponentProps<"section"> & {
+    focusIndex?: number;
+    otherAttribute?: boolean;
+    someAttribute?: boolean;
+  },
 ) => {
-  const { focusIndex, someAttribute, ...rest } = props;
+  const { focusIndex, otherAttribute, someAttribute, ...rest } = props;
   return (
     <section
       data-focus-index={focusIndex}
+      data-other-attribute={otherAttribute ? "true" : "false"}
       data-some-attribute={someAttribute ? "true" : "false"}
       {...rest}
     />
@@ -44,6 +49,21 @@ interface SharedSectionProps {
   someAttribute?: boolean;
   tone?: "primary" | "secondary";
 }
+
+type PickSectionBaseProps = {
+  label?: string;
+  someAttribute?: boolean;
+};
+
+type PickSectionProps = Pick<PickSectionBaseProps, "label" | "someAttribute">;
+
+interface InheritedSectionProps extends ImportedSectionProps {
+  localLabel?: string;
+}
+
+type UnionSectionProps =
+  | { kind: "alpha"; someAttribute?: boolean }
+  | { kind: "beta"; someAttribute?: boolean };
 
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
@@ -140,6 +160,33 @@ export const FocusIndexSection = styled(Text).attrs((props: { focusIndex?: numbe
   tabIndex: props.focusIndex,
 }))<{ focusIndex?: number }>`
   color: #334155;
+`;
+
+// Pattern 3i: utility aliases that cannot be mutated should keep wrapper-specific attrs Omit
+export const PickSection = styled(Text).attrs({ someAttribute: true })<PickSectionProps>`
+  padding: 18px;
+  background-color: #eef2ff;
+`;
+
+// Pattern 3j: unresolved intersections should omit all attrs, including attrs hidden in imports
+export const MultiImportedSection = styled(Text).attrs({
+  otherAttribute: true,
+  someAttribute: true,
+})<ImportedSectionProps & { someAttribute?: boolean }>`
+  padding: 20px;
+  background-color: #f0fdf4;
+`;
+
+// Pattern 3k: local interfaces with imported heritage should keep wrapper-specific attrs Omit
+export const InheritedSection = styled(Text).attrs({ someAttribute: true })<InheritedSectionProps>`
+  padding: 22px;
+  background-color: #fff7ed;
+`;
+
+// Pattern 3l: union aliases should keep wrapper-specific attrs Omit when not mutated
+export const UnionSection = styled(Text).attrs({ someAttribute: true })<UnionSectionProps>`
+  padding: 24px;
+  background-color: #f8fafc;
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -369,6 +416,10 @@ export const App = () => (
       Imported intersection section content
     </ImportedIntersectionSection>
     <FocusIndexSection focusIndex={2}>Focus index section content</FocusIndexSection>
+    <PickSection label="pick-label">Pick section content</PickSection>
+    <MultiImportedSection label="multi-label">Multi imported section content</MultiImportedSection>
+    <InheritedSection localLabel="inherited-label">Inherited section content</InheritedSection>
+    <UnionSection kind="alpha">Union section content</UnionSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

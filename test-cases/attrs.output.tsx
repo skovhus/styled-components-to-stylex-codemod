@@ -13,12 +13,17 @@ const Flex = (
 };
 
 const Text = (
-  props: React.ComponentProps<"section"> & { focusIndex?: number; someAttribute?: boolean },
+  props: React.ComponentProps<"section"> & {
+    focusIndex?: number;
+    otherAttribute?: boolean;
+    someAttribute?: boolean;
+  },
 ) => {
-  const { focusIndex, someAttribute, ...rest } = props;
+  const { focusIndex, otherAttribute, someAttribute, ...rest } = props;
   return (
     <section
       data-focus-index={focusIndex}
+      data-other-attribute={otherAttribute ? "true" : "false"}
       data-some-attribute={someAttribute ? "true" : "false"}
       {...rest}
     />
@@ -48,6 +53,21 @@ interface SharedSectionProps {
   someAttribute?: boolean;
   tone?: "primary" | "secondary";
 }
+
+type PickSectionBaseProps = {
+  label?: string;
+  someAttribute?: boolean;
+};
+
+type PickSectionProps = Pick<PickSectionBaseProps, "label" | "someAttribute">;
+
+interface InheritedSectionProps extends ImportedSectionProps {
+  localLabel?: string;
+}
+
+type UnionSectionProps =
+  | { kind: "alpha"; someAttribute?: boolean }
+  | { kind: "beta"; someAttribute?: boolean };
 
 type InputProps = {
   padding?: string;
@@ -207,6 +227,53 @@ export function FocusIndexSection(props: FocusIndexSectionProps) {
       {children}
     </Text>
   );
+}
+
+// Pattern 3i: utility aliases that cannot be mutated should keep wrapper-specific attrs Omit
+export function PickSection(
+  props: Omit<PickSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.pickSection)} />;
+}
+
+type MultiImportedSectionProps = Omit<
+  ImportedSectionProps & {
+    someAttribute?: boolean;
+  },
+  "someAttribute"
+> &
+  Omit<
+    React.ComponentPropsWithRef<typeof Text>,
+    "className" | "style" | "otherAttribute" | "someAttribute"
+  >;
+
+// Pattern 3j: unresolved intersections should omit all attrs, including attrs hidden in imports
+export function MultiImportedSection(props: MultiImportedSectionProps) {
+  return (
+    <Text
+      {...props}
+      otherAttribute={true}
+      someAttribute={true}
+      {...stylex.props(styles.multiImportedSection)}
+    />
+  );
+}
+
+// Pattern 3k: local interfaces with imported heritage should keep wrapper-specific attrs Omit
+export function InheritedSection(
+  props: Omit<InheritedSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.inheritedSection)} />;
+}
+
+// Pattern 3l: union aliases should keep wrapper-specific attrs Omit when not mutated
+export function UnionSection(
+  props: Omit<UnionSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.unionSection)} />;
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -459,6 +526,10 @@ export const App = () => (
       Imported intersection section content
     </ImportedIntersectionSection>
     <FocusIndexSection focusIndex={2}>Focus index section content</FocusIndexSection>
+    <PickSection label="pick-label">Pick section content</PickSection>
+    <MultiImportedSection label="multi-label">Multi imported section content</MultiImportedSection>
+    <InheritedSection localLabel="inherited-label">Inherited section content</InheritedSection>
+    <UnionSection kind="alpha">Union section content</UnionSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -548,6 +619,22 @@ const styles = stylex.create({
   },
   focusIndexSection: {
     color: "#334155",
+  },
+  pickSection: {
+    padding: 18,
+    backgroundColor: "#eef2ff",
+  },
+  multiImportedSection: {
+    padding: 20,
+    backgroundColor: "#f0fdf4",
+  },
+  inheritedSection: {
+    padding: 22,
+    backgroundColor: "#fff7ed",
+  },
+  unionSection: {
+    padding: 24,
+    backgroundColor: "#f8fafc",
   },
   scrollable: {
     overflowY: "auto",

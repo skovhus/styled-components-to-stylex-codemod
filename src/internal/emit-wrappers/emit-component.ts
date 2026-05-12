@@ -377,9 +377,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       if (canMutateExplicitType && explicitTypeName) {
         renameTransientMembersInExistingType(emitter, explicitTypeName, d.transientPropRenames);
-        removeAttrsMembersInExistingType(emitter, explicitTypeName, attrsProvidedPropNames);
-        explicitAttrsOmitUnion = null;
+        const removedExplicitAttrs = explicitAttrsOmitUnion
+          ? removeAttrsMembersInExistingType(emitter, explicitTypeName, attrsProvidedPropNames)
+          : true;
+        if (removedExplicitAttrs) {
+          explicitAttrsOmitUnion = null;
+        }
       }
+      const canReuseExplicitType = canMutateExplicitType && !explicitAttrsOmitUnion;
 
       if (
         explicitTypeExists &&
@@ -387,7 +392,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
         !isSelfReferentialPropsType &&
-        canMutateExplicitType
+        canReuseExplicitType
       ) {
         // Pass explicitTypeName to avoid self-referential types when wrapper and wrapped
         // component share the same props type name (P1 fix)
@@ -1403,15 +1408,18 @@ function getExplicitAttrsOmitUnion(args: {
 function containsUnresolvedExplicitTypeReference(
   emitter: WrapperEmitter,
   propsType: ASTNode,
+  visitedTypeNames = new Set<string>(),
 ): boolean {
   if (propsType.type === "TSIntersectionType" || propsType.type === "TSUnionType") {
     return ((propsType as { types?: ASTNode[] }).types ?? []).some((part) =>
-      containsUnresolvedExplicitTypeReference(emitter, part),
+      containsUnresolvedExplicitTypeReference(emitter, part, new Set(visitedTypeNames)),
     );
   }
   if (propsType.type === "TSParenthesizedType") {
     const inner = (propsType as { typeAnnotation?: ASTNode }).typeAnnotation;
-    return inner ? containsUnresolvedExplicitTypeReference(emitter, inner) : false;
+    return inner
+      ? containsUnresolvedExplicitTypeReference(emitter, inner, visitedTypeNames)
+      : false;
   }
   if (propsType.type !== "TSTypeReference") {
     return false;
@@ -1419,10 +1427,73 @@ function containsUnresolvedExplicitTypeReference(
   const typeNameText = emitter.stringifyTsType(propsType);
   const params = getTypeReferenceParams(propsType);
   if (isUtilityTypeReference(typeNameText)) {
-    return params.some((param) => containsUnresolvedExplicitTypeReference(emitter, param));
+    return params.some((param) =>
+      containsUnresolvedExplicitTypeReference(emitter, param, new Set(visitedTypeNames)),
+    );
   }
   const typeName = resolveTypeIdentifierName(propsType);
-  return typeName ? !emitter.typeExistsInFile(typeName) : true;
+  if (!typeName) {
+    return true;
+  }
+  if (!emitter.typeExistsInFile(typeName)) {
+    return true;
+  }
+  if (visitedTypeNames.has(typeName)) {
+    return false;
+  }
+  visitedTypeNames.add(typeName);
+  return localTypeHasUnresolvedReferences(emitter, typeName, visitedTypeNames);
+}
+
+function localTypeHasUnresolvedReferences(
+  emitter: WrapperEmitter,
+  typeName: string,
+  visitedTypeNames: ReadonlySet<string>,
+): boolean {
+  const { root, j } = emitter;
+  let hasUnresolved = false;
+  root
+    .find(j.TSInterfaceDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => {
+      for (const heritage of path.node.extends ?? []) {
+        const heritageTypeName = resolveHeritageIdentifierName(heritage);
+        if (!heritageTypeName || !emitter.typeExistsInFile(heritageTypeName)) {
+          hasUnresolved = true;
+          return;
+        }
+        if (
+          !visitedTypeNames.has(heritageTypeName) &&
+          localTypeHasUnresolvedReferences(
+            emitter,
+            heritageTypeName,
+            new Set([...visitedTypeNames, heritageTypeName]),
+          )
+        ) {
+          hasUnresolved = true;
+        }
+      }
+    });
+  root
+    .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => {
+      if (
+        containsUnresolvedExplicitTypeReference(
+          emitter,
+          path.node.typeAnnotation as ASTNode,
+          new Set(visitedTypeNames),
+        )
+      ) {
+        hasUnresolved = true;
+      }
+    });
+  return hasUnresolved;
+}
+
+function resolveHeritageIdentifierName(heritage: unknown): string | null {
+  const typed = heritage as {
+    expression?: { type?: string; name?: string };
+  };
+  return typed.expression?.type === "Identifier" ? (typed.expression.name ?? null) : null;
 }
 
 function omitExplicitAttrsIfNeeded(
@@ -1644,11 +1715,12 @@ function removeAttrsMembersInExistingType(
   emitter: WrapperEmitter,
   typeName: string,
   attrsProvidedPropNames: ReadonlySet<string>,
-): void {
+): boolean {
   if (attrsProvidedPropNames.size === 0) {
-    return;
+    return true;
   }
   const { root, j } = emitter;
+  const removedNames = new Set<string>();
   const shouldRemoveMember = (member: unknown): boolean => {
     const typed = member as { type?: string; key?: unknown };
     if (typed.type !== "TSPropertySignature") {
@@ -1661,7 +1733,11 @@ function removeAttrsMembersInExistingType(
         : typeof key?.value === "string"
           ? key.value
           : undefined;
-    return typeof name === "string" && attrsProvidedPropNames.has(name);
+    if (typeof name === "string" && attrsProvidedPropNames.has(name)) {
+      removedNames.add(name);
+      return true;
+    }
+    return false;
   };
   const visitType = (node: unknown): void => {
     if (!node || typeof node !== "object") {
@@ -1695,6 +1771,7 @@ function removeAttrsMembersInExistingType(
         path.node.body.body = body.filter((member: unknown) => !shouldRemoveMember(member));
       }
     });
+  return [...attrsProvidedPropNames].every((name) => removedNames.has(name));
 }
 
 function isTypeNameUsedOutsideOwner(
