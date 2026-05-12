@@ -2,7 +2,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/flex";
 
-function List(props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">) {
+function List(
+  props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "column" | "as">,
+) {
   return <Flex {...props} column={true} {...stylex.props(styles.list)} />;
 }
 
