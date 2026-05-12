@@ -49,8 +49,14 @@ import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "../lower-rules/shared.js";
+import {
+  propCommentMetadataToAstComments,
+  SOURCE_CSS_PROPERTIES_KEY,
+  type PropCommentMetadata,
+} from "../transform/helpers.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
 
@@ -1321,7 +1327,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
               // Static merge: merge properties into the component's existing style object.
               const existing = ctx.resolvedStyleObjects.get(decl.styleKey);
               if (existing && typeof existing === "object" && !isAstNode(existing)) {
-                Object.assign(existing as Record<string, unknown>, entry.styleValue);
+                mergePromotedStaticStyleObject(
+                  existing as Record<string, unknown>,
+                  entry.styleValue,
+                );
               }
             }
           } else {
@@ -2780,6 +2789,19 @@ type PromotedParamType = "number" | "string" | "numberOrString";
 const LENGTH_LIKE_CSS_PROP_RE =
   /^(top|right|bottom|left|width|height|minWidth|maxWidth|minHeight|maxHeight|margin|padding|gap|inset|translate|fontSize|letterSpacing|lineHeight|borderWidth|borderRadius|outline)/;
 
+type PromotableStyleProperty = {
+  key: string;
+  staticValue: string | number | boolean | null;
+  dynamicExpr: unknown;
+  comments: PropCommentMetadata | null;
+};
+
+type PromotedDynamicParam = {
+  cssProp: string;
+  expr: unknown;
+  comments: PropCommentMetadata | null;
+};
+
 function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
   if (isStylexStringOnlyCssProp(cssProp) && typeof value === "number") {
     return String(value);
@@ -2895,11 +2917,7 @@ function analyzePromotableStyleProps(
       opening: any;
       children?: unknown[];
       styleAttr: any;
-      properties: Array<{
-        key: string;
-        staticValue: string | number | boolean | null;
-        dynamicExpr: unknown;
-      }>;
+      properties: PromotableStyleProperty[];
     }> = [];
 
     for (const { opening, children } of callSites) {
@@ -2960,11 +2978,7 @@ function analyzePromotableStyleProps(
       }
 
       const objExpr = styleValue.expression;
-      const properties: Array<{
-        key: string;
-        staticValue: string | number | boolean | null;
-        dynamicExpr: unknown;
-      }> = [];
+      const properties: PromotableStyleProperty[] = [];
 
       let siteBail = false;
       for (const prop of objExpr.properties ?? []) {
@@ -3001,6 +3015,7 @@ function analyzePromotableStyleProps(
           siteBail = true;
           break;
         }
+        const comments = extractInlineStylePropComments(prop);
         const staticVal = literalToStaticValue(prop.value);
         if (staticVal !== null) {
           // Route static values through the authoritative CSS → StyleX mapping so
@@ -3011,11 +3026,13 @@ function analyzePromotableStyleProps(
             siteBail = true;
             break;
           }
-          for (const entry of expanded) {
+          for (let i = 0; i < expanded.length; i++) {
+            const entry = expanded[i]!;
             properties.push({
               key: entry.key,
               staticValue: entry.value,
               dynamicExpr: null,
+              comments: i === 0 ? comments : null,
             });
           }
         } else {
@@ -3026,7 +3043,7 @@ function analyzePromotableStyleProps(
             siteBail = true;
             break;
           }
-          properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value });
+          properties.push({ key: keyName, staticValue: null, dynamicExpr: prop.value, comments });
         }
       }
 
@@ -3060,6 +3077,7 @@ function analyzePromotableStyleProps(
         const staticObj: Record<string, unknown> = {};
         for (const p of site.properties) {
           staticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
+          addStylePropComments(staticObj, p.key, p.comments);
         }
 
         // Single-use component with extending chain: merge into base style key,
@@ -3086,13 +3104,14 @@ function analyzePromotableStyleProps(
         // Mixed static+dynamic or all-dynamic: create a dynamic style function.
         // Build static part of the style object and collect dynamic params.
         const inlineStaticObj: Record<string, unknown> = {};
-        const dynamicParams: Array<{ cssProp: string; expr: unknown }> = [];
+        const dynamicParams: PromotedDynamicParam[] = [];
 
         for (const p of site.properties) {
           if (p.staticValue !== null) {
             inlineStaticObj[p.key] = coerceToStringForStyleX(p.key, p.staticValue);
+            addStylePropComments(inlineStaticObj, p.key, p.comments);
           } else {
-            dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr });
+            dynamicParams.push({ cssProp: p.key, expr: p.dynamicExpr, comments: p.comments });
           }
         }
 
@@ -3154,16 +3173,34 @@ function analyzePromotableStyleProps(
         // Collect all static properties (base + inline) for the merged function body.
         // Dynamic params override base properties with the same key, so filter them out.
         const dynamicPropKeys = new Set(dynamicParams.map((dp) => dp.cssProp));
-        const mergedStaticProps: Array<{ key: string; value: unknown }> = [];
+        const mergedStaticProps: Array<{
+          key: string;
+          value: unknown;
+          comments: PropCommentMetadata | null;
+        }> = [];
         if (canMergeDynamic) {
           for (const [k, v] of Object.entries(baseObj as Record<string, unknown>)) {
+            if (isPromotedStyleMetadataKey(k)) {
+              continue;
+            }
             if (!dynamicPropKeys.has(k)) {
-              mergedStaticProps.push({ key: k, value: v });
+              mergedStaticProps.push({
+                key: k,
+                value: v,
+                comments: getStoredPropComments(baseObj as Record<string, unknown>, k),
+              });
             }
           }
         }
         for (const [k, v] of Object.entries(inlineStaticObj)) {
-          mergedStaticProps.push({ key: k, value: v });
+          if (isPromotedStyleMetadataKey(k)) {
+            continue;
+          }
+          mergedStaticProps.push({
+            key: k,
+            value: v,
+            comments: getStoredPropComments(inlineStaticObj, k),
+          });
         }
 
         const styleKey = canMergeDynamic
@@ -3218,12 +3255,15 @@ function analyzePromotableStyleProps(
               : typeof sp.value === "number"
                 ? j.numericLiteral(sp.value)
                 : j.booleanLiteral(sp.value as boolean);
-          bodyProperties.push(j.property("init", j.identifier(sp.key), val));
+          const prop = j.property("init", j.identifier(sp.key), val);
+          attachStylePropComments(prop, sp.comments);
+          bodyProperties.push(prop);
         }
         for (const p of site.properties) {
           if (p.dynamicExpr !== null) {
             const prop = j.property("init", j.identifier(p.key), j.identifier(p.key));
             (prop as any).shorthand = true;
+            attachStylePropComments(prop, p.comments);
             bodyProperties.push(prop);
           }
         }
@@ -3269,6 +3309,160 @@ function analyzePromotableStyleProps(
       decl.promotedStyleProps = promotedEntries;
     }
   }
+}
+
+function extractInlineStylePropComments(prop: any): PropCommentMetadata | null {
+  const comments = collectUniqueComments([
+    prop.comments,
+    prop.leadingComments,
+    prop.trailingComments,
+  ]);
+  const leadingLines: string[] = [];
+  const leadingBlocks: string[] = [];
+  const trailingLines: string[] = [];
+
+  for (const comment of comments) {
+    const value = getCommentValue(comment);
+    if (!value) {
+      continue;
+    }
+    if (isTrailingLineComment(comment)) {
+      trailingLines.push(value);
+      continue;
+    }
+    if (!isLeadingComment(comment)) {
+      continue;
+    }
+    if (isLineComment(comment)) {
+      leadingLines.push(value);
+    } else if (isBlockComment(comment)) {
+      leadingBlocks.push(value);
+    }
+  }
+
+  const metadata: PropCommentMetadata = {};
+  if (leadingBlocks.length > 0) {
+    metadata.leading = leadingBlocks.join("\n");
+  }
+  if (leadingLines.length > 0) {
+    metadata.leadingLine = leadingLines.join("\n");
+  }
+  if (trailingLines.length > 0) {
+    metadata.trailingLine = trailingLines.join("\n");
+  }
+  return hasPropCommentMetadata(metadata) ? metadata : null;
+}
+
+function addStylePropComments(
+  target: Record<string, unknown>,
+  prop: string,
+  comments: PropCommentMetadata | null,
+): void {
+  if (!comments) {
+    return;
+  }
+  addPropComments(target, prop, comments);
+}
+
+function mergePromotedStaticStyleObject(
+  target: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): void {
+  for (const [key, value] of Object.entries(incoming)) {
+    if (key === "__propComments") {
+      mergeStoredPropComments(target, value);
+      continue;
+    }
+    if (isPromotedStyleMetadataKey(key)) {
+      continue;
+    }
+    target[key] = value;
+  }
+}
+
+function mergeStoredPropComments(target: Record<string, unknown>, commentsMap: unknown): void {
+  if (!commentsMap || typeof commentsMap !== "object" || Array.isArray(commentsMap)) {
+    return;
+  }
+  for (const [prop, comments] of Object.entries(commentsMap as Record<string, unknown>)) {
+    if (!comments || typeof comments !== "object" || Array.isArray(comments)) {
+      continue;
+    }
+    addPropComments(target, prop, comments as PropCommentMetadata);
+  }
+}
+
+function attachStylePropComments(prop: unknown, comments: PropCommentMetadata | null): void {
+  const astComments = propCommentMetadataToAstComments(comments);
+  if (astComments.length > 0) {
+    (prop as { comments?: unknown[] }).comments = astComments;
+  }
+}
+
+function getStoredPropComments(
+  target: Record<string, unknown>,
+  prop: string,
+): PropCommentMetadata | null {
+  const propComments = target.__propComments;
+  if (!propComments || typeof propComments !== "object" || Array.isArray(propComments)) {
+    return null;
+  }
+  const entry = (propComments as Record<string, unknown>)[prop];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    return null;
+  }
+  return entry as PropCommentMetadata;
+}
+
+function isPromotedStyleMetadataKey(key: string): boolean {
+  return key === "__propComments" || key === SOURCE_CSS_PROPERTIES_KEY;
+}
+
+function hasPropCommentMetadata(metadata: PropCommentMetadata): boolean {
+  return Boolean(metadata.leading || metadata.leadingLine || metadata.trailingLine);
+}
+
+function collectUniqueComments(commentGroups: unknown[]): Array<Record<string, unknown>> {
+  const result: Array<Record<string, unknown>> = [];
+  const seen = new Set<string>();
+  for (const group of commentGroups) {
+    if (!Array.isArray(group)) {
+      continue;
+    }
+    for (const comment of group) {
+      if (!comment || typeof comment !== "object") {
+        continue;
+      }
+      const record = comment as Record<string, unknown>;
+      const key = `${String(record.type)}\0${String(record.value)}\0${String(record.leading)}\0${String(record.trailing)}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      result.push(record);
+    }
+  }
+  return result;
+}
+
+function getCommentValue(comment: Record<string, unknown>): string | null {
+  return typeof comment.value === "string" && comment.value.trim() ? comment.value.trim() : null;
+}
+
+function isLeadingComment(comment: Record<string, unknown>): boolean {
+  return comment.trailing !== true && comment.leading !== false;
+}
+
+function isTrailingLineComment(comment: Record<string, unknown>): boolean {
+  return comment.trailing === true && isLineComment(comment);
+}
+
+function isLineComment(comment: Record<string, unknown>): boolean {
+  return comment.type === "CommentLine" || comment.type === "Line";
+}
+
+function isBlockComment(comment: Record<string, unknown>): boolean {
+  return comment.type === "CommentBlock" || comment.type === "Block";
 }
 
 /**
@@ -3426,6 +3620,9 @@ function hasPropertyOverlap(incoming: Record<string, unknown>, base: unknown): b
   }
   const baseObj = base as Record<string, unknown>;
   for (const key of Object.keys(incoming)) {
+    if (isPromotedStyleMetadataKey(key)) {
+      continue;
+    }
     if (key in baseObj) {
       return true;
     }

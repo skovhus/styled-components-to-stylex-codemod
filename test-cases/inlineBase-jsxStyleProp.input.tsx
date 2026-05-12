@@ -10,10 +10,22 @@ const Wrapper = styled.div`
 
 export function App({ accentColor = "#bf4f74" }: { accentColor?: string } = {}) {
   return (
-    <Wrapper>
+    <Wrapper
+      style={{
+        borderBottom: "none",
+        // min height keeps schedule variants from resizing the modal
+        minHeight: 200,
+      }}
+    >
       <Flex
         gap={24}
-        style={{ padding: "20px 0", alignItems: "flex-start", minWidth: 0, width: "100%" }}
+        style={{
+          padding: "20px 0",
+          alignItems: "flex-start",
+          // min width keeps flex children from expanding the container
+          minWidth: 0,
+          width: "100%",
+        }}
       >
         Directional shorthand
       </Flex>

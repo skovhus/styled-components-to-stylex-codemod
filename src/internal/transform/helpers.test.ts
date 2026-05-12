@@ -116,6 +116,17 @@ describe("objectToAst", () => {
     expect(colorProp.comments[1].type).toBe("CommentLine");
   });
 
+  it("attaches leading line comments from __propComments", () => {
+    const result = objectToAst(j, {
+      __propComments: { minHeight: { leadingLine: "keep the modal stable" } },
+      minHeight: 200,
+    });
+    const minHeightProp = result.properties.find((p: any) => p.key?.name === "minHeight");
+    expect(minHeightProp.comments).toHaveLength(1);
+    expect(minHeightProp.comments[0].type).toBe("CommentLine");
+    expect(minHeightProp.comments[0].leading).toBe(true);
+  });
+
   it("skips empty/whitespace-only comments", () => {
     const result = objectToAst(j, {
       __propComments: { color: { leading: "  ", trailingLine: "" } },
