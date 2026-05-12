@@ -822,7 +822,8 @@ function scanConsumerProps(
     const spreadProps = /\{\.\.\./.test(attrText);
     let elementProps = false;
 
-    // Check for element-specific props (lowercase props not in known set)
+    // Check for element-specific props without treating styling/variant props
+    // like `tone` or `active` as DOM props.
     // Matches:
     // 1. prop= or prop{ - value prop
     // 2. prop followed by whitespace and another prop - boolean shorthand
@@ -830,7 +831,7 @@ function scanConsumerProps(
     const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
     for (const pm of attrText.matchAll(propRe)) {
       const propName = pm[1]!;
-      if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
+      if (isDomLikeConsumerProp(propName)) {
         elementProps = true;
         break;
       }
@@ -858,6 +859,72 @@ function scanConsumerProps(
     entry.elementProps ||= elementProps;
   }
   return [...resultMap.values()];
+}
+
+const DOM_LIKE_CONSUMER_PROPS = new Set([
+  "accept",
+  "action",
+  "alt",
+  "autoComplete",
+  "autoFocus",
+  "autoPlay",
+  "checked",
+  "cols",
+  "colSpan",
+  "controls",
+  "decoding",
+  "defaultChecked",
+  "defaultValue",
+  "disabled",
+  "download",
+  "draggable",
+  "form",
+  "height",
+  "hidden",
+  "href",
+  "htmlFor",
+  "id",
+  "inputMode",
+  "loading",
+  "loop",
+  "max",
+  "maxLength",
+  "method",
+  "min",
+  "minLength",
+  "multiple",
+  "muted",
+  "name",
+  "pattern",
+  "placeholder",
+  "playsInline",
+  "poster",
+  "readOnly",
+  "rel",
+  "required",
+  "role",
+  "rows",
+  "rowSpan",
+  "selected",
+  "src",
+  "tabIndex",
+  "target",
+  "title",
+  "type",
+  "value",
+  "width",
+]);
+
+function isDomLikeConsumerProp(propName: string): boolean {
+  if (KNOWN_NON_ELEMENT_PROPS.has(propName) || propName.startsWith("$")) {
+    return false;
+  }
+  return (
+    propName.startsWith("aria-") ||
+    propName.startsWith("data-") ||
+    /^on[A-Z]/.test(propName) ||
+    DOM_LIKE_CONSUMER_PROPS.has(propName)
+  );
 }
 
 function scanConsumerStaticPropUsages(
