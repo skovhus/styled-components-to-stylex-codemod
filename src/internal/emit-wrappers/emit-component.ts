@@ -147,8 +147,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     if (explicitProps.has("sx")) {
       return true;
     }
-    const typeText = emitter.stringifyTsType(propsType);
-    if (typeText?.includes(`typeof ${wrappedComponent}`)) {
+    if (typeReferenceIsComponentPropsOfWrapped(propsType, wrappedComponent)) {
       return true;
     }
     if (propsType.type === "TSIntersectionType") {
@@ -202,7 +201,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
       for (const heritage of node.extends ?? []) {
         const heritageText = emitter.stringifyTsType(heritage as ASTNode);
-        if (heritageText?.includes(`typeof ${wrappedComponent}`)) {
+        if (
+          typeReferenceIsComponentPropsOfWrapped(heritage as ASTNode, wrappedComponent) ||
+          heritageText === `typeof ${wrappedComponent}`
+        ) {
           return true;
         }
         const heritageName = getHeritageTypeReferenceName(heritage);
@@ -1529,6 +1531,36 @@ function resolveTypeReferenceName(type: ASTNode | null): TypeReferenceName | nul
   return getTypeReferenceName(typeName);
 }
 
+function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent: string): boolean {
+  if (type.type !== "TSTypeReference") {
+    return false;
+  }
+  const node = type as {
+    typeName?: TypeReferenceNameNode;
+    typeParameters?: { params?: ASTNode[] };
+  };
+  const typeName = getTypeReferenceName(node.typeName);
+  if (!typeName) {
+    return false;
+  }
+  const isComponentProps =
+    (typeName.kind === "identifier" && typeName.name.startsWith("ComponentProps")) ||
+    (typeName.kind === "qualified" &&
+      typeName.namespace === "React" &&
+      typeName.name.startsWith("ComponentProps"));
+  if (!isComponentProps) {
+    return false;
+  }
+  return (node.typeParameters?.params ?? []).some((param) => {
+    const query = param as { type?: string; exprName?: { type?: string; name?: string } };
+    return (
+      query.type === "TSTypeQuery" &&
+      query.exprName?.type === "Identifier" &&
+      query.exprName.name === wrappedComponent
+    );
+  });
+}
+
 function getTypeReferenceName(
   typeName: TypeReferenceNameNode | undefined,
 ): TypeReferenceName | null {
@@ -1678,6 +1710,15 @@ function externalTypeReferenceExposesForwardedSx(args: {
     return false;
   }
   seenTypeNames.add(visitedKey);
+  if (typeName === "default") {
+    return externalDefaultExportedTypeExposesForwardedSx({
+      j,
+      root,
+      filePath,
+      wrappedComponent,
+      seenTypeNames,
+    });
+  }
   const localType = findLocalTypeDeclaration({ j, root }, typeName);
   if (localType) {
     return externalPropsTypeExposesForwardedSx({
@@ -1697,6 +1738,59 @@ function externalTypeReferenceExposesForwardedSx(args: {
     wrappedComponent,
     seenTypeNames,
   });
+}
+
+function externalDefaultExportedTypeExposesForwardedSx(args: {
+  j: typeof jscodeshift;
+  root: ReturnType<typeof jscodeshift>;
+  filePath: string;
+  wrappedComponent: string;
+  seenTypeNames: Set<string>;
+}): boolean {
+  const { j, root, filePath, wrappedComponent, seenTypeNames } = args;
+  const body = root.get().node.program.body;
+  for (const statement of body) {
+    if (statement.type !== "ExportDefaultDeclaration") {
+      continue;
+    }
+    const declaration = statement.declaration as
+      | {
+          type?: string;
+          name?: string;
+          body?: { body?: unknown[] };
+          extends?: unknown[];
+          typeAnnotation?: ASTNode;
+        }
+      | null
+      | undefined;
+    if (!declaration) {
+      continue;
+    }
+    if (
+      declaration.type === "TSInterfaceDeclaration" ||
+      declaration.type === "TSTypeAliasDeclaration"
+    ) {
+      return externalPropsTypeExposesForwardedSx({
+        j,
+        root,
+        filePath,
+        propsType: declaration as ASTNode,
+        wrappedComponent,
+        seenTypeNames,
+      });
+    }
+    if (declaration.type === "Identifier" && declaration.name) {
+      return externalTypeReferenceExposesForwardedSx({
+        j,
+        root,
+        filePath,
+        typeName: declaration.name,
+        wrappedComponent,
+        seenTypeNames,
+      });
+    }
+  }
+  return false;
 }
 
 function externalPropsTypeExposesForwardedSx(args: {
@@ -1729,8 +1823,7 @@ function externalPropsTypeExposesForwardedSx(args: {
   ) {
     return true;
   }
-  const typeText = j(propsType).toSource();
-  if (typeText.includes(`typeof ${wrappedComponent}`)) {
+  if (typeReferenceIsComponentPropsOfWrapped(propsType, wrappedComponent)) {
     return true;
   }
   if (propsType.type === "TSIntersectionType") {
@@ -1937,6 +2030,9 @@ function findImportedType(
         imported?: { name?: string; value?: unknown };
       };
       if (spec.local?.name !== localTypeName || spec.type !== "ImportSpecifier") {
+        if (spec.local?.name === localTypeName && spec.type === "ImportDefaultSpecifier") {
+          return { importedName: "default", source };
+        }
         continue;
       }
       const importedName =

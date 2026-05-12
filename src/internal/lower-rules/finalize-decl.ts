@@ -196,6 +196,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     inlineStyleProps,
     staticInlineStyleProps,
     baseRawCssVarProps: collectRawCssVarStyleObjectProps(styleObj),
+    rawCss: decl.rawCss,
     unsafeProps: collectStyleOverrideProps({
       afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
       cssHelperPropValues,
@@ -732,6 +733,7 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
   inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
   staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
   baseRawCssVarProps: ReadonlySet<string>;
+  rawCss: string | undefined;
   unsafeProps: ReadonlySet<string>;
   j: Parameters<typeof literalToAst>[0];
 }): void {
@@ -741,6 +743,7 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     inlineStyleProps,
     staticInlineStyleProps,
     baseRawCssVarProps,
+    rawCss,
     unsafeProps,
     j,
   } = args;
@@ -769,12 +772,14 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     }
     const fnAst = styleFnDecls.get(entry.fnKey);
     const extracted = extractSingleRawCssVarStyleFnProperty(fnAst);
+    const samePropStaticCanStayInline =
+      extracted && rawCssVarDeclarationOrderHasDynamicLast(rawCss, extracted.prop);
     if (
       !extracted ||
       unsafeProps.has(extracted.prop) ||
       (styleFnPropUseCounts.get(extracted.prop) ?? 0) > 1 ||
-      baseRawCssVarProps.has(extracted.prop) ||
-      staticInlineProps.has(extracted.prop) ||
+      (baseRawCssVarProps.has(extracted.prop) && !samePropStaticCanStayInline) ||
+      (staticInlineProps.has(extracted.prop) && !samePropStaticCanStayInline) ||
       expressionContainsStyleConditionKey(extracted.value)
     ) {
       continue;
@@ -837,6 +842,31 @@ function collectRawCssVarStyleObjectProps(styleObj: Record<string, unknown>): Se
     }
   }
   return props;
+}
+
+function rawCssVarDeclarationOrderHasDynamicLast(
+  rawCss: string | undefined,
+  stylexProp: string,
+): boolean {
+  if (!rawCss) {
+    return false;
+  }
+  const cssProp = stylexProp.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  const declarationPattern = /([-\w]+)\s*:\s*([^;{}]+);/g;
+  let last: "dynamic" | "static" | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = declarationPattern.exec(rawCss))) {
+    if (match[1] !== cssProp) {
+      continue;
+    }
+    const value = match[2] ?? "";
+    if (value.includes("__SC_EXPR_")) {
+      last = "dynamic";
+    } else if (findCssVarCallsInString(value).length > 0) {
+      last = "static";
+    }
+  }
+  return last === "dynamic";
 }
 
 function extractSingleRawCssVarStyleFnProperty(fnAst: unknown): {

@@ -11,6 +11,8 @@ import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
 import type * as WrapperTypes from "./lib/sx-aware-imported-types";
 import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
+import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
+import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
@@ -141,6 +143,30 @@ const BarrelTypeWrapper = styled(InterfaceBase)<BarrelWrapperProps>`
   color: #c084fc;
 `;
 
+type DefaultImportedWrapperProps = DefaultWrapperProps & {
+  label?: string;
+};
+
+const DefaultImportedTypeWrapper = styled(InterfaceBase)<DefaultImportedWrapperProps>`
+  color: #d8b4fe;
+`;
+
+type DefaultBarrelWrapperLocalProps = DefaultBarrelWrapperProps & {
+  label?: string;
+};
+
+const DefaultBarrelTypeWrapper = styled(InterfaceBase)<DefaultBarrelWrapperLocalProps>`
+  color: #e9d5ff;
+`;
+
+type OmitSxWrapperProps = Omit<React.ComponentProps<typeof InterfaceBase>, "sx"> & {
+  label?: string;
+};
+
+const OmitSxWrapper = styled(InterfaceBase)<OmitSxWrapperProps>`
+  color: #581c87;
+`;
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -184,6 +210,13 @@ export const App = () => (
       Namespace interface wrapper
     </NamespaceInterfaceWrapper>
     <BarrelTypeWrapper sx={callerStyles.caller}>Barrel type wrapper</BarrelTypeWrapper>
+    <DefaultImportedTypeWrapper sx={callerStyles.caller}>
+      Default imported type wrapper
+    </DefaultImportedTypeWrapper>
+    <DefaultBarrelTypeWrapper sx={callerStyles.caller}>
+      Default barrel type wrapper
+    </DefaultBarrelTypeWrapper>
+    <OmitSxWrapper>Omit sx wrapper</OmitSxWrapper>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>
       <span>Item title</span>

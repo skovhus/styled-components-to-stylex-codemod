@@ -10,6 +10,8 @@ import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
 import type * as WrapperTypes from "./lib/sx-aware-imported-types";
 import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
+import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
+import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -139,6 +141,18 @@ type BarrelWrapperProps = BarrelWrapperSxProps & {
   label?: string;
 };
 
+type DefaultImportedWrapperProps = DefaultWrapperProps & {
+  label?: string;
+};
+
+type DefaultBarrelWrapperLocalProps = DefaultBarrelWrapperProps & {
+  label?: string;
+};
+
+type OmitSxWrapperProps = Omit<React.ComponentProps<typeof InterfaceBase>, "sx"> & {
+  label?: string;
+};
+
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
   button: {
@@ -221,6 +235,15 @@ const callerStyles = stylex.create({
   barrelTypeWrapper: {
     color: "#c084fc",
   },
+  defaultImportedTypeWrapper: {
+    color: "#d8b4fe",
+  },
+  defaultBarrelTypeWrapper: {
+    color: "#e9d5ff",
+  },
+  omitSxWrapper: {
+    color: "#581c87",
+  },
 });
 
 const identifierRowStyle = {
@@ -287,6 +310,23 @@ export const App = () => (
       sx={[callerStyles.interfaceBase, callerStyles.barrelTypeWrapper, callerStyles.caller]}
     >
       Barrel type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[
+        callerStyles.interfaceBase,
+        callerStyles.defaultImportedTypeWrapper,
+        callerStyles.caller,
+      ]}
+    >
+      Default imported type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.defaultBarrelTypeWrapper, callerStyles.caller]}
+    >
+      Default barrel type wrapper
+    </SxAwareButton>
+    <SxAwareButton sx={[callerStyles.interfaceBase, callerStyles.omitSxWrapper]}>
+      Omit sx wrapper
     </SxAwareButton>
     <div style={identifierRowStyle}>
       <Text color="labelMuted" sx={callerStyles.identifier}>

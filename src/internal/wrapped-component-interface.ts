@@ -268,6 +268,14 @@ function findComponentPropsType(
       return;
     }
     for (const arg of node.arguments) {
+      const argNode = arg as { type?: string; name?: string };
+      if (argNode.type === "Identifier" && argNode.name) {
+        recordFromNamedDeclaration(argNode.name);
+        if (propsType) {
+          return;
+        }
+        continue;
+      }
       recordFromInit(arg);
       if (propsType) {
         return;

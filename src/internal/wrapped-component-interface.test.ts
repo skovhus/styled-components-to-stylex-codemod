@@ -726,6 +726,23 @@ export default Button;
     expect(check("IconButton", barrel)).toBe(true);
   });
 
+  it("follows identifiers inside default HOC exports", () => {
+    writeLib(
+      "defaultMemoIdentifierButton",
+      `
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+const Button = (props: { sx?: stylex.StyleXStyles }) => null as any;
+export default React.memo(Button);
+`,
+    );
+    const barrel = writeLib(
+      "defaultMemoIdentifierBarrel",
+      `export { default as IconButton } from "./defaultMemoIdentifierButton";`,
+    );
+    expect(check("IconButton", barrel)).toBe(true);
+  });
+
   it("breaks cycles while following star barrels", () => {
     writeLib("cycleA", `export * from "./cycleB";`);
     const cycleB = writeLib("cycleB", `export * from "./cycleA";`);
