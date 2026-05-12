@@ -29,6 +29,20 @@ function Ring(props: RingProps) {
   );
 }
 
+type AnimatedGroupProps = { isAnimated?: boolean } & Omit<
+  React.ComponentProps<"g">,
+  "className" | "style"
+>;
+
+function AnimatedGroup(props: AnimatedGroupProps) {
+  const { children, isAnimated, ...rest } = props;
+  return (
+    <g {...rest} sx={isAnimated ? styles.animatedGroupAnimated : styles.animatedGroupResting}>
+      {children}
+    </g>
+  );
+}
+
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
@@ -39,6 +53,9 @@ export function App() {
         <Circle isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
         <Ring isAnimated d="M20,90 Q105,20 190,90" />
+        <AnimatedGroup isAnimated>
+          <circle cx="24" cy="24" r="12" />
+        </AnimatedGroup>
       </svg>
     </div>
   );
@@ -84,6 +101,18 @@ const Dash = stylex.keyframes({
   },
 });
 
+const PrimaryMove = stylex.keyframes({
+  to: {
+    transform: "translateX(-18px)",
+  },
+});
+
+const SecondaryMove = stylex.keyframes({
+  to: {
+    transform: "translateX(-10px)",
+  },
+});
+
 const styles = stylex.create({
   fadeIn: {
     animationName: fadeIn,
@@ -122,5 +151,15 @@ const styles = stylex.create({
     animationDuration: "1.5s",
     animationTimingFunction: "ease-out",
     animationFillMode: "forwards",
+  },
+  animatedGroupAnimated: {
+    animationName: `${PrimaryMove}, ${SecondaryMove}`,
+    animationDuration: "1s, 1.4s",
+    animationTimingFunction: "ease-out, ease-in-out",
+    animationFillMode: "forwards, forwards",
+    animationDelay: "0s, 1s",
+  },
+  animatedGroupResting: {
+    transform: "translateX(-10px)",
   },
 });

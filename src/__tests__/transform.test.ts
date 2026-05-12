@@ -2248,6 +2248,53 @@ export const Panel = styled.div<{ height: 40 | 80 }>\`
     expect(result).not.toContain("heightVariants");
   });
 
+  it("does not emit JSX into .ts files", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Label = styled.span\`
+  color: tomato;
+\`;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "styledExports.ts", "ts");
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${scrollFadeMaskStyles(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: "scrollFadeMaskStyles(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);

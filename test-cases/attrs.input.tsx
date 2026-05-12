@@ -3,6 +3,9 @@ import styled from "styled-components";
 import { focusOutline } from "./lib/helpers";
 import { Icon } from "./lib/icon";
 import type { ImportedSectionProps } from "./lib/attrs-props";
+import { SxAwareButton } from "./lib/sx-aware-component";
+
+const attrsMarkerStyle = {};
 
 // Simulated imported component
 const Flex = (
@@ -397,6 +400,13 @@ const StyledIcon = styled(Icon).attrs({
   left: -3px;
 `;
 
+const AttrsSxButton = styled(SxAwareButton).attrs({
+  sx: attrsMarkerStyle,
+  type: "button",
+})`
+  color: #2563eb;
+`;
+
 export const App = () => (
   <>
     <Input $small placeholder="Small" />
@@ -437,5 +447,6 @@ export const App = () => (
     <ModuleScopeStyleText>Module scope style</ModuleScopeStyleText>
     <CallbackScopeStyleText>Callback scope style</CallbackScopeStyleText>
     <StyledIcon title="Attrs icon size" />
+    <AttrsSxButton>Attrs sx</AttrsSxButton>
   </>
 );
