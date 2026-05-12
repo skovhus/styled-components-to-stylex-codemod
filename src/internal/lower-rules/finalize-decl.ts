@@ -708,6 +708,18 @@ function alignComputedCallArgStyleFnParams(
 
 // --- Non-exported helpers ---
 
+type ComplementaryCompoundPair = {
+  parentWhen: string;
+  positiveWhen: string;
+  negativeWhen: string;
+};
+
+type TrailingBooleanConjunction = {
+  parentWhen: string;
+  propName: string;
+  negated: boolean;
+};
+
 function factorCommonStylesFromComplementaryCompoundVariants(args: {
   decl: StyledDecl;
   remainingBuckets: Map<string, Record<string, unknown>>;
@@ -751,11 +763,7 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
 
 function collectComplementaryCompoundPairs(
   remainingBuckets: Map<string, Record<string, unknown>>,
-): Array<{
-  parentWhen: string;
-  positiveWhen: string;
-  negativeWhen: string;
-}> {
+): ComplementaryCompoundPair[] {
   const candidates = new Map<
     string,
     {
@@ -794,9 +802,11 @@ function collectComplementaryCompoundPairs(
   );
 }
 
-function parseTrailingBooleanConjunction(
-  when: string,
-): { parentWhen: string; propName: string; negated: boolean } | null {
+function parseTrailingBooleanConjunction(when: string): TrailingBooleanConjunction | null {
+  if (when.includes("||") || when.includes("(") || when.includes(")")) {
+    return null;
+  }
+
   const parts = when.split(/\s+&&\s+/).map((part) => part.trim());
   if (parts.length < 2) {
     return null;
@@ -811,11 +821,15 @@ function parseTrailingBooleanConjunction(
   if (!match) {
     return null;
   }
+  const [, negation, propName] = match;
+  if (!propName) {
+    return null;
+  }
 
   return {
     parentWhen: parts.slice(0, -1).join(" && "),
-    propName: match[2]!,
-    negated: match[1] === "!",
+    propName,
+    negated: negation === "!",
   };
 }
 
