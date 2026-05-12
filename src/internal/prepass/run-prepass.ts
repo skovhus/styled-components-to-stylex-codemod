@@ -475,7 +475,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           }
 
           for (const usageFile of usageFiles) {
-            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)) {
+            if (
+              fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)
+            ) {
               ensure(defFile, name)[field] = true;
               break;
             }

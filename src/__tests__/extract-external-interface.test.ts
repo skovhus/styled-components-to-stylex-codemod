@@ -726,7 +726,7 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       path.join(consumersDir, "commented.tsx"),
       [
         'import { Commented } from "../components/Commented";',
-        'const example = \'<Commented className="ghost" />\';',
+        "const example = '<Commented className=\"ghost\" />';",
         "/*",
         '  <Commented style={{ color: "red" }} />',
         "*/",
