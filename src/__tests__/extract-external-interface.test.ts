@@ -1452,6 +1452,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/attrs-polymorphicAs.input.tsx:FixedHrefText": {
+          "as": true,
+          "className": false,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/attrs-polymorphicAs.input.tsx:Label": {
           "as": false,
           "className": false,

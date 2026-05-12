@@ -17,7 +17,7 @@ const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean
 };
 
 interface SectionProps {
-  someAttribute: boolean;
+  someAttribute?: boolean;
   label?: string;
 }
 
