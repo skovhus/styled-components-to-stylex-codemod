@@ -580,6 +580,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
 
+  factorCommonStylesFromComplementaryCompoundVariants({
+    decl,
+    remainingBuckets,
+    remainingStyleKeys,
+    variantSourceOrder,
+  });
+
   // Add remaining (compound/boolean) variants to resolvedStyleObjects
   for (const [when, obj] of remainingBuckets.entries()) {
     const key = remainingStyleKeys[when]!;
@@ -700,6 +707,174 @@ function alignComputedCallArgStyleFnParams(
 }
 
 // --- Non-exported helpers ---
+
+function factorCommonStylesFromComplementaryCompoundVariants(args: {
+  decl: StyledDecl;
+  remainingBuckets: Map<string, Record<string, unknown>>;
+  remainingStyleKeys: Record<string, string>;
+  variantSourceOrder: Record<string, number>;
+}): void {
+  const { decl, remainingBuckets, remainingStyleKeys, variantSourceOrder } = args;
+  const complementaryPairs = collectComplementaryCompoundPairs(remainingBuckets);
+
+  for (const pair of complementaryPairs) {
+    const positiveBucket = remainingBuckets.get(pair.positiveWhen);
+    const negativeBucket = remainingBuckets.get(pair.negativeWhen);
+    if (!positiveBucket || !negativeBucket) {
+      continue;
+    }
+
+    const parentBucket = remainingBuckets.get(pair.parentWhen) ?? {};
+    const commonStyles = extractMovableCommonStyles(positiveBucket, negativeBucket, parentBucket);
+    if (Object.keys(commonStyles).length === 0) {
+      continue;
+    }
+
+    mergeStyleObjects(parentBucket, commonStyles);
+    remainingBuckets.set(pair.parentWhen, parentBucket);
+    remainingStyleKeys[pair.parentWhen] ??= styleKeyWithSuffix(decl.styleKey, pair.parentWhen);
+
+    removeStyleProps(positiveBucket, commonStyles);
+    removeStyleProps(negativeBucket, commonStyles);
+    removeEmptyVariantBucket(pair.positiveWhen, remainingBuckets, remainingStyleKeys);
+    removeEmptyVariantBucket(pair.negativeWhen, remainingBuckets, remainingStyleKeys);
+
+    const sourceOrders = [
+      variantSourceOrder[pair.positiveWhen],
+      variantSourceOrder[pair.negativeWhen],
+    ].filter((order): order is number => typeof order === "number");
+    if (sourceOrders.length > 0 && variantSourceOrder[pair.parentWhen] === undefined) {
+      variantSourceOrder[pair.parentWhen] = Math.min(...sourceOrders) - 0.1;
+    }
+  }
+}
+
+function collectComplementaryCompoundPairs(
+  remainingBuckets: Map<string, Record<string, unknown>>,
+): Array<{
+  parentWhen: string;
+  positiveWhen: string;
+  negativeWhen: string;
+}> {
+  const candidates = new Map<
+    string,
+    {
+      parentWhen: string;
+      positiveWhen?: string;
+      negativeWhen?: string;
+    }
+  >();
+
+  for (const when of remainingBuckets.keys()) {
+    const parsed = parseTrailingBooleanConjunction(when);
+    if (!parsed) {
+      continue;
+    }
+
+    const key = `${parsed.parentWhen}\0${parsed.propName}`;
+    const candidate = candidates.get(key) ?? { parentWhen: parsed.parentWhen };
+    if (parsed.negated) {
+      candidate.negativeWhen = when;
+    } else {
+      candidate.positiveWhen = when;
+    }
+    candidates.set(key, candidate);
+  }
+
+  return [...candidates.values()].flatMap((candidate) =>
+    candidate.positiveWhen && candidate.negativeWhen
+      ? [
+          {
+            parentWhen: candidate.parentWhen,
+            positiveWhen: candidate.positiveWhen,
+            negativeWhen: candidate.negativeWhen,
+          },
+        ]
+      : [],
+  );
+}
+
+function parseTrailingBooleanConjunction(
+  when: string,
+): { parentWhen: string; propName: string; negated: boolean } | null {
+  const parts = when.split(/\s+&&\s+/).map((part) => part.trim());
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const leaf = parts[parts.length - 1];
+  if (!leaf) {
+    return null;
+  }
+
+  const match = leaf.match(/^(!)?([A-Za-z_$][A-Za-z0-9_$]*)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    parentWhen: parts.slice(0, -1).join(" && "),
+    propName: match[2]!,
+    negated: match[1] === "!",
+  };
+}
+
+function extractMovableCommonStyles(
+  positiveBucket: Record<string, unknown>,
+  negativeBucket: Record<string, unknown>,
+  parentBucket: Record<string, unknown>,
+): Record<string, unknown> {
+  const commonStyles: Record<string, unknown> = {};
+  for (const [prop, positiveValue] of Object.entries(positiveBucket)) {
+    if (!(prop in negativeBucket)) {
+      continue;
+    }
+
+    const negativeValue = negativeBucket[prop];
+    if (!styleValuesAreEqual(positiveValue, negativeValue)) {
+      continue;
+    }
+
+    const parentValue = parentBucket[prop];
+    if (parentValue !== undefined && !styleValuesAreEqual(parentValue, positiveValue)) {
+      continue;
+    }
+
+    commonStyles[prop] = positiveValue;
+  }
+  return commonStyles;
+}
+
+function styleValuesAreEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) {
+    return true;
+  }
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") {
+    return false;
+  }
+  return astShapeKey(a) === astShapeKey(b);
+}
+
+function removeStyleProps(
+  bucket: Record<string, unknown>,
+  stylesToRemove: Record<string, unknown>,
+): void {
+  for (const prop of Object.keys(stylesToRemove)) {
+    delete bucket[prop];
+  }
+}
+
+function removeEmptyVariantBucket(
+  when: string,
+  remainingBuckets: Map<string, Record<string, unknown>>,
+  remainingStyleKeys: Record<string, string>,
+): void {
+  const bucket = remainingBuckets.get(when);
+  if (bucket && Object.keys(bucket).length === 0) {
+    remainingBuckets.delete(when);
+    delete remainingStyleKeys[when];
+  }
+}
 
 function moveUnsafeRawCssVarPropsToInlineStyles(args: {
   styleObj: Record<string, unknown>;
