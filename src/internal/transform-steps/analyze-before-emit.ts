@@ -2802,6 +2802,12 @@ type PromotedDynamicParam = {
   comments: PropCommentMetadata | null;
 };
 
+type CommentableStylePropertyNode = {
+  comments?: unknown;
+  leadingComments?: unknown;
+  trailingComments?: unknown;
+};
+
 function coerceToStringForStyleX(cssProp: string, value: unknown): unknown {
   if (isStylexStringOnlyCssProp(cssProp) && typeof value === "number") {
     return String(value);
@@ -3311,7 +3317,9 @@ function analyzePromotableStyleProps(
   }
 }
 
-function extractInlineStylePropComments(prop: any): PropCommentMetadata | null {
+function extractInlineStylePropComments(
+  prop: CommentableStylePropertyNode,
+): PropCommentMetadata | null {
   const comments = collectUniqueComments([
     prop.comments,
     prop.leadingComments,
