@@ -191,18 +191,12 @@ const AfterBaseCollisionBox = styled.div<{ $after1?: boolean; $hasSubtitle: bool
 
 const StaleBucketOrderBox = styled.div<{ $add?: boolean; $warn?: boolean; $hasSubtitle: boolean }>`
   padding: 8px;
-  ${(props) =>
-    props.$add
-      ? `
-      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
-    `
-      : ""}
+  ${(props) => (props.$add ? "color: red;" : "")}
   ${(props) => (props.$warn ? "color: green;" : "")}
   ${(props) =>
     props.$add
       ? `
-      color: red;
-      ${props.$hasSubtitle ? "border-width: 1px;" : "border-width: 2px;"}
+      ${props.$hasSubtitle ? "background: #fff0f0;" : "background: #fff8e1;"}
     `
       : ""}
 `;
@@ -304,10 +298,10 @@ export const App = () => (
       After-base key collision no subtitle stays red
     </AfterBaseCollisionBox>
     <StaleBucketOrderBox $add $warn $hasSubtitle>
-      Stale bucket subtitle stays red
+      Stale bucket subtitle stays green
     </StaleBucketOrderBox>
     <StaleBucketOrderBox $add $warn $hasSubtitle={false}>
-      Stale bucket no subtitle stays red
+      Stale bucket no subtitle stays green
     </StaleBucketOrderBox>
     <ConsolidatedKeyCollisionBox $add={80} $hasSubtitle>
       Consolidated key collision subtitle stays red

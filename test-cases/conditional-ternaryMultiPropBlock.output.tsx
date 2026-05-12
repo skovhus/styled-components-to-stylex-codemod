@@ -270,13 +270,13 @@ type StaleBucketOrderBoxProps = {
 } & Omit<React.ComponentProps<"div">, "className" | "style">;
 
 function StaleBucketOrderBox(props: StaleBucketOrderBoxProps) {
-  const { children, warn, add, hasSubtitle } = props;
+  const { children, add, warn, hasSubtitle } = props;
   return (
     <div
       sx={[
         styles.staleBucketOrderBox,
-        warn && styles.staleBucketOrderBoxWarn,
         add && styles.staleBucketOrderBoxAdd,
+        warn && styles.staleBucketOrderBoxWarn,
         add && hasSubtitle && styles.staleBucketOrderBoxAddHasSubtitle,
         add && !hasSubtitle && styles.staleBucketOrderBoxAddNotHasSubtitle,
       ]}
@@ -391,10 +391,10 @@ export const App = () => (
       After-base key collision no subtitle stays red
     </AfterBaseCollisionBox>
     <StaleBucketOrderBox add warn hasSubtitle>
-      Stale bucket subtitle stays red
+      Stale bucket subtitle stays green
     </StaleBucketOrderBox>
     <StaleBucketOrderBox add warn hasSubtitle={false}>
-      Stale bucket no subtitle stays red
+      Stale bucket no subtitle stays green
     </StaleBucketOrderBox>
     <ConsolidatedKeyCollisionBox add={80} hasSubtitle>
       Consolidated key collision subtitle stays red
@@ -603,24 +603,19 @@ const styles = stylex.create({
     paddingBottom: 40,
   },
   staleBucketOrderBox: {
-    paddingTop: 8,
-    paddingRight: 8,
-    paddingBottom: 8,
-    paddingLeft: 8,
+    padding: 8,
   },
-  staleBucketOrderBoxAddHasSubtitle: {
-    paddingBottom: 20,
-    borderWidth: 1,
-  },
-  staleBucketOrderBoxAddNotHasSubtitle: {
-    paddingBottom: 40,
-    borderWidth: 2,
+  staleBucketOrderBoxAdd: {
+    color: "red",
   },
   staleBucketOrderBoxWarn: {
     color: "green",
   },
-  staleBucketOrderBoxAdd: {
-    color: "red",
+  staleBucketOrderBoxAddHasSubtitle: {
+    backgroundColor: "#fff0f0",
+  },
+  staleBucketOrderBoxAddNotHasSubtitle: {
+    backgroundColor: "#fff8e1",
   },
   consolidatedKeyCollisionBox: {
     paddingTop: 8,

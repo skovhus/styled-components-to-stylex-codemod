@@ -13,9 +13,9 @@ function FadingContent(props: FadingContentProps) {
     <div
       sx={[
         styles.fadingContent,
+        isLoading && styles.fadingContentLoading,
         gutter != null && gutterVariants[gutter],
         overflow ? styles.fadingContentOverflow(overflow) : undefined,
-        isLoading && styles.fadingContentLoading,
       ]}
     >
       {children}

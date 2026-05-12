@@ -64,30 +64,16 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     { defaultValue: unknown; entries: ComputedKeyEntry[] }
   >();
   const nestedSelectors: Record<string, Record<string, unknown>> = {};
-  const variantBucketsRaw = new Map<string, Record<string, unknown>>();
+  const variantBuckets = new Map<string, Record<string, unknown>>();
   const variantSourceOrder: Record<string, number> = {};
   /** Monotonically increasing counter for tracking CSS source order of variants and styleFns. */
   let dynamicSlotOrder = 0;
-  const variantBuckets = new Proxy(variantBucketsRaw, {
-    get(target, prop) {
-      if (prop === "set") {
-        return (when: string, bucket: Record<string, unknown>) => {
-          if (target.has(when)) {
-            variantSourceOrder[when] = dynamicSlotOrder++;
-          }
-          return target.set(when, bucket);
-        };
-      }
-      const value = Reflect.get(target, prop, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
   // Use a Proxy to automatically record source order when a variant key is first set.
   // This avoids changing every `variantStyleKeys[when] ??= ...` call site.
   const variantStyleKeysRaw: Record<string, string> = {};
   const variantStyleKeys: Record<string, string> = new Proxy(variantStyleKeysRaw, {
     set(target, prop, value) {
-      if (typeof prop === "string" && !(prop in target) && variantSourceOrder[prop] === undefined) {
+      if (typeof prop === "string" && !(prop in target)) {
         variantSourceOrder[prop] = dynamicSlotOrder++;
       }
       target[prop as string] = value;
