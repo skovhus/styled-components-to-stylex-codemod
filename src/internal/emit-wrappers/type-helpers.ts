@@ -145,6 +145,19 @@ export function getAttrsAsString(d: StyledDecl): string | null {
   return typeof v === "string" ? v : null;
 }
 
+export function collectAttrsProvidedPropNames(attrsInfo: StyledDecl["attrsInfo"]): Set<string> {
+  const names = new Set<string>();
+  for (const key of Object.keys(attrsInfo?.staticAttrs ?? {})) {
+    if (key !== "className" && key !== "style") {
+      names.add(key);
+    }
+  }
+  if (attrsInfo?.attrsAsTag) {
+    names.add("as");
+  }
+  return names;
+}
+
 export function injectRefPropIntoTypeLiteralString(
   typeText: string,
   refElementType: string,

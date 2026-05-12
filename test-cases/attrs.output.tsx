@@ -11,6 +11,11 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
+const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean }) => {
+  const { someAttribute, ...rest } = props;
+  return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
+};
+
 type InputProps = {
   padding?: string;
   small?: boolean;
@@ -47,7 +52,7 @@ export function TextInput(
 // This pattern passes static attrs as an object
 interface BackgroundProps extends Omit<
   React.ComponentPropsWithRef<typeof Flex>,
-  "className" | "style"
+  "className" | "style" | "column" | "center"
 > {
   loaded: boolean;
 }
@@ -64,6 +69,13 @@ export function Background(props: BackgroundProps) {
       {children}
     </Flex>
   );
+}
+
+// Pattern 3b: attrs-injected component props should be omitted from the wrapper type
+export function Section(
+  props: Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.section)} />;
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -252,7 +264,10 @@ function ButtonLike(props: ButtonLikeProps) {
 }
 
 function BaseToolbarButton(
-  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof ButtonLike>,
+    "className" | "style" | "size" | "variant"
+  >,
 ) {
   return (
     <ButtonLike
@@ -265,7 +280,10 @@ function BaseToolbarButton(
 }
 
 function ActiveToolbarButton(
-  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof ButtonLike>,
+    "className" | "style" | "size" | "variant"
+  >,
 ) {
   return (
     <ButtonLike
@@ -285,7 +303,9 @@ const CALLBACK_SCOPE_TEXT_COLOR = "#7c3aed";
 // Pattern 15: static attrs that reference module-scope values must be preserved
 const iconSize = 14;
 
-function StyledIcon(props: Omit<React.ComponentPropsWithRef<typeof Icon>, "className" | "style">) {
+function StyledIcon(
+  props: Omit<React.ComponentPropsWithRef<typeof Icon>, "className" | "style" | "size">,
+) {
   return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
 }
 
@@ -296,6 +316,7 @@ export const App = () => (
     <Input padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
+    <Section>Section content</Section>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -347,6 +368,10 @@ const styles = stylex.create({
   },
   backgroundLoaded: {
     opacity: 0,
+  },
+  section: {
+    padding: 16,
+    backgroundColor: "#f0f9ff",
   },
   scrollable: {
     overflowY: "auto",

@@ -11,6 +11,13 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
+const Text = (
+  props: React.ComponentProps<"section"> & { someAttribute?: boolean },
+) => {
+  const { someAttribute, ...rest } = props;
+  return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
+};
+
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
   type: "text",
@@ -56,6 +63,12 @@ export const Background = styled(Flex).attrs({
   top: 0;
   bottom: 0;
   opacity: ${(props) => (props.loaded ? 0 : 1)};
+`;
+
+// Pattern 3b: attrs-injected component props should be omitted from the wrapper type
+export const Section = styled(Text).attrs({ someAttribute: true })`
+  padding: 16px 16px;
+  background-color: #f0f9ff;
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -273,6 +286,7 @@ export const App = () => (
     <Input $padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
+    <Section>Section content</Section>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

@@ -24,6 +24,7 @@ import {
   type WrapperEmitter,
 } from "./wrapper-emitter.js";
 import {
+  collectAttrsProvidedPropNames,
   collectBooleanPropNames,
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
@@ -326,6 +327,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const forceStyleOptional = !!wrappedStyleRequired;
     const forwardedAsPropTypeText = renderedAsProp?.typeText ?? "React.ElementType";
     const propsIdForExpr = j.identifier("props");
+    const attrsProvidedPropNames = collectAttrsProvidedPropNames(d.attrsInfo);
+    const pushOmittedProp = (omitted: string[], propName: string): void => {
+      const omittedProp = JSON.stringify(propName);
+      if (!omitted.includes(omittedProp)) {
+        omitted.push(omittedProp);
+      }
+    };
+    const appendAttrsProvidedOmissions = (omitted: string[]): void => {
+      for (const propName of attrsProvidedPropNames) {
+        pushOmittedProp(omitted, propName);
+      }
+    };
     // Track which type name to use for the function parameter
     let functionParamTypeName: string | null = null;
     // Track inline type text for when we skip emitting a named type (no custom props)
@@ -371,6 +384,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (!allowStyleProp || forceStyleOptional) {
           omitted.push('"style"');
         }
+        appendAttrsProvidedOmissions(omitted);
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         const optionalProps: string[] = [];
         if (forceClassNameOptional) {
@@ -416,6 +430,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
+        appendAttrsProvidedOmissions(omitted);
         const intrinsicBase = defaultTag
           ? `Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${explicitTypeName}${omitted.length ? ` | ${omitted.join(" | ")}` : ""}>`
           : null;
@@ -443,6 +458,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (forceStyleOptional) {
             baseOmitted.push('"style"');
           }
+          appendAttrsProvidedOmissions(baseOmitted);
           const baseProps = baseOmitted.length
             ? `Omit<${basePropsRaw}, ${baseOmitted.join(" | ")}>`
             : basePropsRaw;
@@ -453,6 +469,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
+          appendAttrsProvidedOmissions(omitted);
           // Add optional className/style/sx when forcing optional or when sx is enabled
           const optionalStyleProps: string[] = [];
           if (forceClassNameOptional) {
