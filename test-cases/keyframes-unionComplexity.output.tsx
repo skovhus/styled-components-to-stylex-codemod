@@ -38,11 +38,11 @@ type StyledLoaderCaretProps = { noPadding?: boolean } & Omit<
 >;
 
 function StyledLoaderCaret(props: StyledLoaderCaretProps) {
-  const { noPadding, ...rest } = props;
+  const { sx, noPadding, ...rest } = props;
   return (
     <LoaderCaret
       {...rest}
-      sx={[styles.styledLoaderCaret, noPadding ? styles.styledLoaderCaretNoPadding : null]}
+      sx={[styles.styledLoaderCaret, noPadding ? styles.styledLoaderCaretNoPadding : null, sx]}
     />
   );
 }

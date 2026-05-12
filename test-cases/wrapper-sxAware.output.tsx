@@ -12,6 +12,7 @@ import type * as WrapperTypes from "./lib/sx-aware-imported-types";
 import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
+import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
 
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -121,6 +122,10 @@ interface InterfaceWrapperProps extends React.ComponentProps<typeof InterfaceBas
   label?: string;
 }
 
+type ExplicitWrapperProps = {
+  label?: string;
+};
+
 type ImportedWrapperProps = ImportedWrapperSxProps & {
   label?: string;
 };
@@ -146,6 +151,10 @@ type DefaultImportedWrapperProps = DefaultWrapperProps & {
 };
 
 type DefaultBarrelWrapperLocalProps = DefaultBarrelWrapperProps & {
+  label?: string;
+};
+
+type LocalDefaultWrapperLocalProps = LocalDefaultWrapperProps & {
   label?: string;
 };
 
@@ -220,6 +229,9 @@ const callerStyles = stylex.create({
   interfaceWrapper: {
     backgroundColor: "#f5f3ff",
   },
+  explicitWrapper: {
+    color: "#4c1d95",
+  },
   importedTypeWrapper: {
     color: "#6d28d9",
   },
@@ -240,6 +252,9 @@ const callerStyles = stylex.create({
   },
   defaultBarrelTypeWrapper: {
     color: "#e9d5ff",
+  },
+  localDefaultTypeWrapper: {
+    color: "#f3e8ff",
   },
   omitSxWrapper: {
     color: "#581c87",
@@ -324,6 +339,16 @@ export const App = () => (
       sx={[callerStyles.interfaceBase, callerStyles.defaultBarrelTypeWrapper, callerStyles.caller]}
     >
       Default barrel type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.localDefaultTypeWrapper, callerStyles.caller]}
+    >
+      Local default type wrapper
+    </SxAwareButton>
+    <SxAwareButton
+      sx={[callerStyles.interfaceBase, callerStyles.explicitWrapper, callerStyles.caller]}
+    >
+      Explicit wrapper
     </SxAwareButton>
     <SxAwareButton sx={[callerStyles.interfaceBase, callerStyles.omitSxWrapper]}>
       Omit sx wrapper

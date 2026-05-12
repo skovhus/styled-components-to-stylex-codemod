@@ -13,6 +13,7 @@ import type * as WrapperTypes from "./lib/sx-aware-imported-types";
 import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
+import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
@@ -103,6 +104,14 @@ const InterfaceWrapper = styled(InterfaceBase)<InterfaceWrapperProps>`
   background-color: #f5f3ff;
 `;
 
+type ExplicitWrapperProps = {
+  label?: string;
+};
+
+const ExplicitWrapper = styled(InterfaceBase)<ExplicitWrapperProps>`
+  color: #4c1d95;
+`;
+
 type ImportedWrapperProps = ImportedWrapperSxProps & {
   label?: string;
 };
@@ -157,6 +166,14 @@ type DefaultBarrelWrapperLocalProps = DefaultBarrelWrapperProps & {
 
 const DefaultBarrelTypeWrapper = styled(InterfaceBase)<DefaultBarrelWrapperLocalProps>`
   color: #e9d5ff;
+`;
+
+type LocalDefaultWrapperLocalProps = LocalDefaultWrapperProps & {
+  label?: string;
+};
+
+const LocalDefaultTypeWrapper = styled(InterfaceBase)<LocalDefaultWrapperLocalProps>`
+  color: #f3e8ff;
 `;
 
 type OmitSxWrapperProps = Omit<React.ComponentProps<typeof InterfaceBase>, "sx"> & {
@@ -216,6 +233,10 @@ export const App = () => (
     <DefaultBarrelTypeWrapper sx={callerStyles.caller}>
       Default barrel type wrapper
     </DefaultBarrelTypeWrapper>
+    <LocalDefaultTypeWrapper sx={callerStyles.caller}>
+      Local default type wrapper
+    </LocalDefaultTypeWrapper>
+    <ExplicitWrapper sx={callerStyles.caller}>Explicit wrapper</ExplicitWrapper>
     <OmitSxWrapper>Omit sx wrapper</OmitSxWrapper>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>

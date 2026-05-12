@@ -772,14 +772,15 @@ function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {
     }
     const fnAst = styleFnDecls.get(entry.fnKey);
     const extracted = extractSingleRawCssVarStyleFnProperty(fnAst);
-    const samePropStaticCanStayInline =
+    const dynamicDeclarationIsLast =
       extracted && rawCssVarDeclarationOrderHasDynamicLast(rawCss, extracted.prop);
     if (
       !extracted ||
       unsafeProps.has(extracted.prop) ||
       (styleFnPropUseCounts.get(extracted.prop) ?? 0) > 1 ||
-      (baseRawCssVarProps.has(extracted.prop) && !samePropStaticCanStayInline) ||
-      (staticInlineProps.has(extracted.prop) && !samePropStaticCanStayInline) ||
+      (rawCss !== undefined && !dynamicDeclarationIsLast) ||
+      (baseRawCssVarProps.has(extracted.prop) && !dynamicDeclarationIsLast) ||
+      (staticInlineProps.has(extracted.prop) && !dynamicDeclarationIsLast) ||
       expressionContainsStyleConditionKey(extracted.value)
     ) {
       continue;
@@ -862,7 +863,7 @@ function rawCssVarDeclarationOrderHasDynamicLast(
     const value = match[2] ?? "";
     if (value.includes("__SC_EXPR_")) {
       last = "dynamic";
-    } else if (findCssVarCallsInString(value).length > 0) {
+    } else {
       last = "static";
     }
   }

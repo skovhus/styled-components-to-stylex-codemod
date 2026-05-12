@@ -679,6 +679,25 @@ export function Button(props: ButtonProps) { return null as any; }
     expect(check("Button", lib)).toBe(true);
   });
 
+  it("follows source-less default type re-exports", () => {
+    writeLib(
+      "sourceLessDefaultButtonTypes",
+      `
+import * as stylex from "@stylexjs/stylex";
+type ButtonProps = { sx?: stylex.StyleXStyles };
+export type { ButtonProps as default };
+`,
+    );
+    const lib = writeLib(
+      "sourceLessDefaultTypeConsumer",
+      `
+import type ButtonProps from "./sourceLessDefaultButtonTypes";
+export function Button(props: ButtonProps) { return null as any; }
+`,
+    );
+    expect(check("Button", lib)).toBe(true);
+  });
+
   it("follows named barrels that re-export a default component", () => {
     writeLib(
       "defaultButton",
@@ -741,6 +760,18 @@ export default React.memo(Button);
       `export { default as IconButton } from "./defaultMemoIdentifierButton";`,
     );
     expect(check("IconButton", barrel)).toBe(true);
+  });
+
+  it("does not follow identifier arguments for unknown component factories", () => {
+    const lib = writeLib(
+      "factoryButton",
+      `
+import * as stylex from "@stylexjs/stylex";
+const IconRenderer = (props: { sx?: stylex.StyleXStyles }) => null as any;
+export const Button = createButton(IconRenderer, {});
+`,
+    );
+    expect(check("Button", lib)).toBe(false);
   });
 
   it("breaks cycles while following star barrels", () => {
@@ -929,6 +960,48 @@ export const Foo = (p: { sx?: stylex.StyleXStyles }) => null as any;
             `
 import * as stylex from "@stylexjs/stylex";
 export function Foo(props: { id?: string } & { sx?: stylex.StyleXStyles }) { return null as any; }
+`,
+          ],
+        ]),
+      }),
+    ).toBe(true);
+  });
+
+  it("re-walks barrels when source overrides update re-exported targets", () => {
+    const target = writeLib(
+      "barrelTarget",
+      `export const Foo = (p: { id?: string }) => null as any;`,
+    );
+    const barrel = writeLib("barrelWithTarget", `export * from "./barrelTarget";`);
+    const importMap = new Map([
+      [
+        "Foo",
+        {
+          importedName: "Foo",
+          source: {
+            kind: "absolutePath" as const,
+            value: barrel.replace(/\.(tsx|ts|jsx|js)$/, ""),
+          },
+        },
+      ],
+    ]);
+    const args = {
+      adapter: { useSxProp: true },
+      importMap,
+      componentLocalName: "Foo",
+      filePath: join(dir, "consumer.tsx"),
+    };
+
+    expect(isWrappedComponentSxAware(args)).toBe(false);
+    expect(
+      isWrappedComponentSxAware({
+        ...args,
+        sourceOverrides: new Map([
+          [
+            toRealPath(target),
+            `
+import * as stylex from "@stylexjs/stylex";
+export const Foo = (props: { sx?: stylex.StyleXStyles }) => null as any;
 `,
           ],
         ]),

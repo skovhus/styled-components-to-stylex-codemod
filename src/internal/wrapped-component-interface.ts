@@ -124,12 +124,16 @@ function detectExportedSxProp(
   }
 
   const cacheKey = `${absolutePath}\u0000${componentName}`;
-  const cached = detectionCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
+  if (!sourceOverrides) {
+    const cached = detectionCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
   }
-  const result = computeDetection(absolutePath, componentName, visited);
-  detectionCache.set(cacheKey, result);
+  const result = computeDetection(absolutePath, componentName, visited, sourceOverrides);
+  if (!sourceOverrides) {
+    detectionCache.set(cacheKey, result);
+  }
   return result;
 }
 
@@ -137,6 +141,7 @@ function computeDetection(
   absolutePath: string,
   componentName: string,
   visited: Set<string>,
+  sourceOverrides?: ReadonlyMap<string, string>,
 ): boolean {
   const resolved = resolveSourcePath(absolutePath);
   if (!resolved) {
@@ -150,7 +155,7 @@ function computeDetection(
     return false;
   }
 
-  return computeDetectionFromSource(source, componentName, resolved, undefined, visited);
+  return computeDetectionFromSource(source, componentName, resolved, sourceOverrides, visited);
 }
 
 function computeDetectionFromSource(
@@ -199,6 +204,28 @@ function parseSource(source: string): { j: JSCodeshift; root: ReturnType<JSCodes
   } catch {
     return null;
   }
+}
+
+function isKnownPropPreservingHocCallee(callee: unknown): boolean {
+  const node = callee as
+    | {
+        type?: string;
+        name?: string;
+        property?: { type?: string; name?: string };
+      }
+    | null
+    | undefined;
+  if (!node) {
+    return false;
+  }
+  if (node.type === "Identifier") {
+    return node.name === "memo" || node.name === "forwardRef";
+  }
+  return (
+    node.type === "MemberExpression" &&
+    node.property?.type === "Identifier" &&
+    (node.property.name === "memo" || node.property.name === "forwardRef")
+  );
 }
 
 function resolveSourcePath(absolutePath: string): string | null {
@@ -259,7 +286,12 @@ function findComponentPropsType(
     if (propsType || !init || typeof init !== "object") {
       return;
     }
-    const node = init as { type?: string; params?: unknown; arguments?: unknown[] };
+    const node = init as {
+      type?: string;
+      params?: unknown;
+      arguments?: unknown[];
+      callee?: unknown;
+    };
     if (node.type === "ArrowFunctionExpression" || node.type === "FunctionExpression") {
       recordFromParam(node.params);
       return;
@@ -267,9 +299,10 @@ function findComponentPropsType(
     if (node.type !== "CallExpression" || !Array.isArray(node.arguments)) {
       return;
     }
+    const canFollowIdentifierArguments = isKnownPropPreservingHocCallee(node.callee);
     for (const arg of node.arguments) {
       const argNode = arg as { type?: string; name?: string };
-      if (argNode.type === "Identifier" && argNode.name) {
+      if (canFollowIdentifierArguments && argNode.type === "Identifier" && argNode.name) {
         recordFromNamedDeclaration(argNode.name);
         if (propsType) {
           return;
@@ -666,9 +699,6 @@ function exportedTypeReferenceMentionsSx(ctx: TypeWalkContext, typeName: string)
       continue;
     }
     const source = (statement.source as { value?: unknown } | null | undefined)?.value;
-    if (typeof source !== "string") {
-      continue;
-    }
     for (const specifier of statement.specifiers ?? []) {
       const spec = specifier as {
         type?: string;
@@ -683,6 +713,12 @@ function exportedTypeReferenceMentionsSx(ctx: TypeWalkContext, typeName: string)
         continue;
       }
       const sourceName = getModuleName(spec.local) ?? exportedName;
+      if (typeof source !== "string") {
+        if (typeReferenceMentionsSx(ctx, sourceName, { allowImported: true })) {
+          return true;
+        }
+        continue;
+      }
       const resolvedPath = moduleResolver.resolve(ctx.filePath, source);
       if (!resolvedPath) {
         continue;

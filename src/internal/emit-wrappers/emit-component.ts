@@ -294,9 +294,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           propName: "sx",
           propsType: baseComponentPropsType,
         }));
+    const explicitPropsTypeRef = resolveTypeReferenceName(d.propsType ?? null);
+    const wrapperReusesWrappedPropsType =
+      explicitPropsTypeRef?.kind === "identifier" &&
+      explicitPropsTypeRef.name ===
+        emitter.resolveWrappedExplicitPropsTypeRef(renderedComponent)?.name;
     const wrapperPropsExposeSx =
       wrappedAcceptsSx &&
-      (propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
+      ((wrappedLocalDecl &&
+        d.propsType &&
+        !wrapperReusesWrappedPropsType &&
+        !propsTypeOmitsProp(d.propsType, "sx")) ||
+        propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
         !d.propsType ||
         !wrappedLocalDecl);
     // When the wrapped component has className/style as REQUIRED props, we must
@@ -1552,13 +1561,98 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
     return false;
   }
   return (node.typeParameters?.params ?? []).some((param) => {
-    const query = param as { type?: string; exprName?: { type?: string; name?: string } };
+    const query = param as { type?: string; exprName?: unknown };
     return (
       query.type === "TSTypeQuery" &&
-      query.exprName?.type === "Identifier" &&
-      query.exprName.name === wrappedComponent
+      getTypeQueryExpressionName(query.exprName) === wrappedComponent
     );
   });
+}
+
+function getTypeQueryExpressionName(exprName: unknown): string | null {
+  const node = exprName as
+    | {
+        type?: string;
+        name?: string;
+        left?: unknown;
+        right?: unknown;
+      }
+    | null
+    | undefined;
+  if (!node) {
+    return null;
+  }
+  if (node.type === "Identifier" && node.name) {
+    return node.name;
+  }
+  if (node.type !== "TSQualifiedName") {
+    return null;
+  }
+  const left = getTypeQueryExpressionName(node.left);
+  const right = getTypeQueryExpressionName(node.right);
+  return left && right ? `${left}.${right}` : null;
+}
+
+function propsTypeOmitsProp(propsType: ASTNode | undefined, propName: string): boolean {
+  if (!propsType) {
+    return false;
+  }
+  let found = false;
+  visitAst(propsType, (node) => {
+    if (found || node.type !== "TSTypeReference") {
+      return;
+    }
+    const typeReference = node as {
+      typeName?: TypeReferenceNameNode;
+      typeParameters?: { params?: ASTNode[] };
+    };
+    const typeName = getTypeReferenceName(typeReference.typeName);
+    if (typeName?.kind !== "identifier" || typeName.name !== "Omit") {
+      return;
+    }
+    if (
+      (typeReference.typeParameters?.params ?? []).some((param) =>
+        typeNodeContainsStringLiteral(param, propName),
+      )
+    ) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+function typeNodeContainsStringLiteral(node: unknown, value: string): boolean {
+  let found = false;
+  visitAst(node, (child) => {
+    if (found) {
+      return;
+    }
+    const typed = child as { type?: string; value?: unknown };
+    found =
+      (typed.type === "TSLiteralType" &&
+        (typed as { literal?: { value?: unknown } }).literal?.value === value) ||
+      ((typed.type === "StringLiteral" || typed.type === "Literal") && typed.value === value);
+  });
+  return found;
+}
+
+function visitAst(node: unknown, visitor: (node: { type?: string }) => void): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  visitor(node as { type?: string });
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "loc" || key === "comments" || key === "parentPath") {
+      continue;
+    }
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        visitAst(item, visitor);
+      }
+    } else if (child && typeof child === "object") {
+      visitAst(child, visitor);
+    }
+  }
 }
 
 function getTypeReferenceName(
@@ -1751,6 +1845,40 @@ function externalDefaultExportedTypeExposesForwardedSx(args: {
   const body = root.get().node.program.body;
   for (const statement of body) {
     if (statement.type !== "ExportDefaultDeclaration") {
+      if (statement.type !== "ExportNamedDeclaration") {
+        continue;
+      }
+      const source = (statement.source as { value?: unknown } | null | undefined)?.value;
+      if (typeof source === "string") {
+        continue;
+      }
+      for (const specifier of statement.specifiers ?? []) {
+        const spec = specifier as {
+          type?: string;
+          local?: { type?: string; name?: string; value?: unknown };
+          exported?: { type?: string; name?: string; value?: unknown };
+        };
+        if (spec.type !== "ExportSpecifier" && spec.type !== "ExportTypeSpecifier") {
+          continue;
+        }
+        if (getModuleName(spec.exported) !== "default") {
+          continue;
+        }
+        const sourceName = getModuleName(spec.local);
+        if (
+          sourceName &&
+          externalTypeReferenceExposesForwardedSx({
+            j,
+            root,
+            filePath,
+            typeName: sourceName,
+            wrappedComponent,
+            seenTypeNames,
+          })
+        ) {
+          return true;
+        }
+      }
       continue;
     }
     const declaration = statement.declaration as
@@ -1924,7 +2052,7 @@ function externalExportedTypeExposesForwardedSx(args: {
   wrappedComponent: string;
   seenTypeNames: Set<string>;
 }): boolean {
-  const { root, filePath, typeName, wrappedComponent, seenTypeNames } = args;
+  const { j, root, filePath, typeName, wrappedComponent, seenTypeNames } = args;
   const body = root.get().node.program.body;
   for (const statement of body) {
     if (statement.type === "ExportAllDeclaration") {
@@ -1947,9 +2075,6 @@ function externalExportedTypeExposesForwardedSx(args: {
       continue;
     }
     const source = (statement.source as { value?: unknown } | null | undefined)?.value;
-    if (typeof source !== "string") {
-      continue;
-    }
     for (const specifier of statement.specifiers ?? []) {
       const spec = specifier as {
         type?: string;
@@ -1964,6 +2089,21 @@ function externalExportedTypeExposesForwardedSx(args: {
         continue;
       }
       const sourceName = getModuleName(spec.local) ?? exportedName;
+      if (typeof source !== "string") {
+        if (
+          externalTypeReferenceExposesForwardedSx({
+            j,
+            root,
+            filePath,
+            typeName: sourceName,
+            wrappedComponent,
+            seenTypeNames,
+          })
+        ) {
+          return true;
+        }
+        continue;
+      }
       if (
         externalSourceTypeExposesForwardedSx({
           fromPath: filePath,
