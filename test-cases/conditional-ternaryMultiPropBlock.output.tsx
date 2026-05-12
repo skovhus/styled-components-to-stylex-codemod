@@ -275,9 +275,10 @@ function StaleBucketOrderBox(props: StaleBucketOrderBoxProps) {
     <div
       sx={[
         styles.staleBucketOrderBox,
+        warn && styles.staleBucketOrderBoxWarn,
+        add && styles.staleBucketOrderBoxAdd,
         add && hasSubtitle && styles.staleBucketOrderBoxAddHasSubtitle,
         add && !hasSubtitle && styles.staleBucketOrderBoxAddNotHasSubtitle,
-        warn && styles.staleBucketOrderBoxWarn,
       ]}
     >
       {children}
@@ -609,16 +610,17 @@ const styles = stylex.create({
   },
   staleBucketOrderBoxAddHasSubtitle: {
     paddingBottom: 20,
-    color: "red",
     borderWidth: 1,
   },
   staleBucketOrderBoxAddNotHasSubtitle: {
     paddingBottom: 40,
-    color: "red",
     borderWidth: 2,
   },
   staleBucketOrderBoxWarn: {
     color: "green",
+  },
+  staleBucketOrderBoxAdd: {
+    color: "red",
   },
   consolidatedKeyCollisionBox: {
     paddingTop: 8,
