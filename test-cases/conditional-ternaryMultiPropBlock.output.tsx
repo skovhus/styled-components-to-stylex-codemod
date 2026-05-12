@@ -263,6 +263,51 @@ function AfterBaseCollisionBox(props: AfterBaseCollisionBoxProps) {
   );
 }
 
+type StaleBucketOrderBoxProps = {
+  add?: boolean;
+  warn?: boolean;
+  hasSubtitle: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function StaleBucketOrderBox(props: StaleBucketOrderBoxProps) {
+  const { children, warn, add, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.staleBucketOrderBox,
+        add && hasSubtitle && styles.staleBucketOrderBoxAddHasSubtitle,
+        add && !hasSubtitle && styles.staleBucketOrderBoxAddNotHasSubtitle,
+        warn && styles.staleBucketOrderBoxWarn,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type ConsolidatedKeyCollisionBoxProps = React.PropsWithChildren<{
+  add?: number;
+  hasSubtitle: boolean;
+}>;
+
+function ConsolidatedKeyCollisionBox(props: ConsolidatedKeyCollisionBoxProps) {
+  const { children, add, hasSubtitle, ...rest } = props;
+  return (
+    <div
+      {...rest}
+      sx={[
+        styles.consolidatedKeyCollisionBox,
+        add != null && styles.consolidatedKeyCollisionBoxWidth(add),
+        add != null && styles.consolidatedKeyCollisionBoxHeight(add),
+        add && hasSubtitle ? styles.consolidatedKeyCollisionBoxAddHasSubtitle : undefined,
+        add && !hasSubtitle ? styles.consolidatedKeyCollisionBoxAddNotHasSubtitle : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div
     style={{
@@ -344,6 +389,18 @@ export const App = () => (
     <AfterBaseCollisionBox after1 hasSubtitle={false}>
       After-base key collision no subtitle stays red
     </AfterBaseCollisionBox>
+    <StaleBucketOrderBox add warn hasSubtitle>
+      Stale bucket subtitle stays red
+    </StaleBucketOrderBox>
+    <StaleBucketOrderBox add warn hasSubtitle={false}>
+      Stale bucket no subtitle stays red
+    </StaleBucketOrderBox>
+    <ConsolidatedKeyCollisionBox add={80} hasSubtitle>
+      Consolidated key collision subtitle stays red
+    </ConsolidatedKeyCollisionBox>
+    <ConsolidatedKeyCollisionBox add={80} hasSubtitle={false}>
+      Consolidated key collision no subtitle stays red
+    </ConsolidatedKeyCollisionBox>
   </div>
 );
 
@@ -544,4 +601,43 @@ const styles = stylex.create({
     color: "red",
     paddingBottom: 40,
   },
+  staleBucketOrderBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  staleBucketOrderBoxAddHasSubtitle: {
+    paddingBottom: 20,
+    color: "red",
+    borderWidth: 1,
+  },
+  staleBucketOrderBoxAddNotHasSubtitle: {
+    paddingBottom: 40,
+    color: "red",
+    borderWidth: 2,
+  },
+  staleBucketOrderBoxWarn: {
+    color: "green",
+  },
+  consolidatedKeyCollisionBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  consolidatedKeyCollisionBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  consolidatedKeyCollisionBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  consolidatedKeyCollisionBoxWidth: (width: number) => ({
+    width: `${width}px`,
+  }),
+  consolidatedKeyCollisionBoxHeight: (height: number) => ({
+    height: `${height}px`,
+  }),
 });

@@ -747,6 +747,7 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
     }
     const parentStyleKey = styleKeyWithSuffix(decl.styleKey, pair.parentWhen);
     const sourceOrders = getSafeFactoredSourceOrders({
+      decl,
       pair,
       parentStyleKey,
       variantSourceOrder,
@@ -782,6 +783,7 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
 }
 
 function getSafeFactoredSourceOrders(args: {
+  decl: StyledDecl;
   pair: ComplementaryCompoundPair;
   parentStyleKey: string;
   variantSourceOrder: Record<string, number>;
@@ -793,7 +795,8 @@ function getSafeFactoredSourceOrders(args: {
   attrBuckets: Map<string, Record<string, unknown>>;
   stateResolvedStyleObjects: Map<string, unknown>;
 }): [number, number] | null {
-  const { pair, variantSourceOrder, remainingBuckets, styleFnFromProps } = args;
+  const { decl, pair, parentStyleKey, variantSourceOrder, remainingBuckets, styleFnFromProps } =
+    args;
   if (remainingBuckets.has(pair.parentWhen)) {
     return null;
   }
@@ -804,6 +807,12 @@ function getSafeFactoredSourceOrders(args: {
     return null;
   }
   if (styleFnFromProps.some((entry) => entry.conditionWhen === pair.parentWhen)) {
+    return null;
+  }
+  if (styleFnFromProps.some((entry) => entry.jsxProp === pair.parentWhen)) {
+    return null;
+  }
+  if (hasPotentialConsolidatedStyleFnKey(parentStyleKey, decl, styleFnFromProps)) {
     return null;
   }
 
@@ -819,13 +828,13 @@ function getSafeFactoredSourceOrders(args: {
     if (when === pair.positiveWhen || when === pair.negativeWhen) {
       continue;
     }
-    if (order > startOrder && order < endOrder) {
+    if (order > startOrder && when !== pair.parentWhen) {
       return null;
     }
   }
   for (const entry of styleFnFromProps) {
     const order = entry.sourceOrder;
-    if (typeof order === "number" && order > startOrder && order < endOrder) {
+    if (typeof order === "number" && order > startOrder) {
       return null;
     }
   }
@@ -834,6 +843,7 @@ function getSafeFactoredSourceOrders(args: {
 }
 
 function isReservedFactoredStyleKey(args: {
+  decl: StyledDecl;
   pair: ComplementaryCompoundPair;
   parentStyleKey: string;
   remainingStyleKeys: Record<string, string>;
@@ -843,6 +853,7 @@ function isReservedFactoredStyleKey(args: {
   stateResolvedStyleObjects: Map<string, unknown>;
 }): boolean {
   const {
+    decl,
     pair,
     parentStyleKey,
     remainingStyleKeys,
@@ -857,6 +868,16 @@ function isReservedFactoredStyleKey(args: {
       return true;
     }
   }
+  for (const staticVariant of decl.staticBooleanVariants ?? []) {
+    if (staticVariant.styleKey === parentStyleKey) {
+      return true;
+    }
+  }
+  for (const combinedStyle of decl.callSiteCombinedStyles ?? []) {
+    if (combinedStyle.styleKey === parentStyleKey) {
+      return true;
+    }
+  }
 
   return (
     styleFnDecls.has(parentStyleKey) ||
@@ -864,6 +885,35 @@ function isReservedFactoredStyleKey(args: {
     attrBuckets.has(parentStyleKey) ||
     stateResolvedStyleObjects.has(parentStyleKey)
   );
+}
+
+function hasPotentialConsolidatedStyleFnKey(
+  parentStyleKey: string,
+  decl: StyledDecl,
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+): boolean {
+  if (!decl.shouldForwardProp) {
+    return false;
+  }
+
+  const countsByProp = new Map<string, number>();
+  for (const entry of styleFnFromProps) {
+    if (entry.jsxProp === "__props" || entry.conditionWhen || !entry.jsxProp.startsWith("$")) {
+      continue;
+    }
+    countsByProp.set(entry.jsxProp, (countsByProp.get(entry.jsxProp) ?? 0) + 1);
+  }
+
+  for (const [propName, count] of countsByProp) {
+    if (count < 2) {
+      continue;
+    }
+    const suffix = propName.slice(1).charAt(0).toUpperCase() + propName.slice(2);
+    if (`${decl.styleKey}${suffix}` === parentStyleKey) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasInverseVariantBucket(

@@ -189,6 +189,39 @@ const AfterBaseCollisionBox = styled.div<{ $after1?: boolean; $hasSubtitle: bool
       : ""}
 `;
 
+const StaleBucketOrderBox = styled.div<{ $add?: boolean; $warn?: boolean; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${(props) =>
+    props.$add
+      ? `
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+  ${(props) => (props.$warn ? "color: green;" : "")}
+  ${(props) =>
+    props.$add
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "border-width: 1px;" : "border-width: 2px;"}
+    `
+      : ""}
+`;
+
+const ConsolidatedKeyCollisionBox = styled.div.withConfig({
+  shouldForwardProp: (prop) => !prop.startsWith("$"),
+})<{ $add?: number; $hasSubtitle: boolean }>`
+  padding: 8px;
+  width: ${(props) => props.$add}px;
+  height: ${(props) => props.$add}px;
+  ${(props) =>
+    props.$add
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
 export const App = () => (
   <div
     style={{
@@ -270,5 +303,17 @@ export const App = () => (
     <AfterBaseCollisionBox $after1 $hasSubtitle={false}>
       After-base key collision no subtitle stays red
     </AfterBaseCollisionBox>
+    <StaleBucketOrderBox $add $warn $hasSubtitle>
+      Stale bucket subtitle stays red
+    </StaleBucketOrderBox>
+    <StaleBucketOrderBox $add $warn $hasSubtitle={false}>
+      Stale bucket no subtitle stays red
+    </StaleBucketOrderBox>
+    <ConsolidatedKeyCollisionBox $add={80} $hasSubtitle>
+      Consolidated key collision subtitle stays red
+    </ConsolidatedKeyCollisionBox>
+    <ConsolidatedKeyCollisionBox $add={80} $hasSubtitle={false}>
+      Consolidated key collision no subtitle stays red
+    </ConsolidatedKeyCollisionBox>
   </div>
 );
