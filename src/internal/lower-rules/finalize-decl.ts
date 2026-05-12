@@ -823,7 +823,6 @@ function getSafeFactoredSourceOrders(args: {
   }
 
   const startOrder = Math.min(positiveOrder, negativeOrder);
-  const endOrder = Math.max(positiveOrder, negativeOrder);
   for (const [when, order] of Object.entries(variantSourceOrder)) {
     if (when === pair.positiveWhen || when === pair.negativeWhen) {
       continue;
