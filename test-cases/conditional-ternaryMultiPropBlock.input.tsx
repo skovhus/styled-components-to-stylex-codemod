@@ -77,6 +77,60 @@ const SplitOrderBox = styled.div<{ $add?: boolean; $warn?: boolean; $hasSubtitle
       : ""}
 `;
 
+const DynamicOrderBox = styled.div<{ $add?: boolean; $warnColor?: string; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${(props) =>
+    props.$add && props.$hasSubtitle
+      ? `
+      color: red;
+      padding-bottom: 20px;
+    `
+      : ""}
+  ${(props) => (props.$warnColor ? `color: ${props.$warnColor};` : "")}
+  ${(props) =>
+    props.$add && !props.$hasSubtitle
+      ? `
+      color: red;
+      padding-bottom: 40px;
+    `
+      : ""}
+`;
+
+const StyleFnParentBox = styled.div<{
+  $add?: boolean;
+  $warn?: boolean;
+  $hasSubtitle: boolean;
+  $width: number;
+}>`
+  padding: 8px;
+  ${(props) => (props.$add ? `width: ${props.$width}px;` : "")}
+  ${(props) => (props.$warn ? "color: green;" : "")}
+  ${(props) =>
+    props.$add
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
+const InverseMergeBox = styled.div<{
+  tone: "primary" | "secondary";
+  $warn?: boolean;
+  $hasSubtitle: boolean;
+}>`
+  padding: 8px;
+  ${(props) =>
+    props.tone === "primary"
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+  ${(props) => (props.$warn ? "color: green;" : "")}
+  ${(props) => (props.tone !== "primary" ? "color: blue;" : "")}
+`;
+
 export const App = () => (
   <div
     style={{
@@ -110,5 +164,26 @@ export const App = () => (
     <SplitOrderBox $add $warn $hasSubtitle={false}>
       Split order no subtitle stays red
     </SplitOrderBox>
+    <DynamicOrderBox $add $warnColor="green" $hasSubtitle>
+      Dynamic order subtitle stays green
+    </DynamicOrderBox>
+    <DynamicOrderBox $add $warnColor="green" $hasSubtitle={false}>
+      Dynamic order no subtitle stays red
+    </DynamicOrderBox>
+    <StyleFnParentBox $add $warn $hasSubtitle $width={80}>
+      Style fn parent subtitle stays red
+    </StyleFnParentBox>
+    <StyleFnParentBox $add $warn $hasSubtitle={false} $width={80}>
+      Style fn parent no subtitle stays red
+    </StyleFnParentBox>
+    <InverseMergeBox tone="primary" $warn $hasSubtitle>
+      Primary inverse subtitle stays green
+    </InverseMergeBox>
+    <InverseMergeBox tone="primary" $warn $hasSubtitle={false}>
+      Primary inverse no subtitle stays green
+    </InverseMergeBox>
+    <InverseMergeBox tone="secondary" $warn={false} $hasSubtitle>
+      Secondary inverse stays blue
+    </InverseMergeBox>
   </div>
 );

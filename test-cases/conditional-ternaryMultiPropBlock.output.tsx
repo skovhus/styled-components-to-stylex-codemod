@@ -106,6 +106,75 @@ function SplitOrderBox(props: SplitOrderBoxProps) {
   );
 }
 
+type DynamicOrderBoxProps = React.PropsWithChildren<{
+  add?: boolean;
+  warnColor?: string;
+  hasSubtitle: boolean;
+}>;
+
+function DynamicOrderBox(props: DynamicOrderBoxProps) {
+  const { children, warnColor, add, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.dynamicOrderBox,
+        add && hasSubtitle && styles.dynamicOrderBoxAddHasSubtitle,
+        warnColor ? styles.dynamicOrderBoxColor(warnColor) : undefined,
+        add && !hasSubtitle && styles.dynamicOrderBoxAddNotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type StyleFnParentBoxProps = React.PropsWithChildren<{
+  add?: boolean;
+  warn?: boolean;
+  hasSubtitle: boolean;
+  width: number;
+}>;
+
+function StyleFnParentBox(props: StyleFnParentBoxProps) {
+  const { children, width, warn, add, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.styleFnParentBox,
+        add && styles.styleFnParentBoxWidth(`${width}px`),
+        warn && styles.styleFnParentBoxWarn,
+        add && hasSubtitle && styles.styleFnParentBoxAddHasSubtitle,
+        add && !hasSubtitle && styles.styleFnParentBoxAddNotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type InverseMergeBoxProps = React.PropsWithChildren<{
+  tone: "primary" | "secondary";
+  warn?: boolean;
+  hasSubtitle: boolean;
+}>;
+
+function InverseMergeBox(props: InverseMergeBoxProps) {
+  const { children, tone, hasSubtitle, warn } = props;
+  return (
+    <div
+      sx={[
+        styles.inverseMergeBox,
+        tone === "primary" && hasSubtitle && styles.inverseMergeBoxTonePrimaryHasSubtitle,
+        tone === "primary" && !hasSubtitle && styles.inverseMergeBoxTonePrimaryNotHasSubtitle,
+        warn && styles.inverseMergeBoxWarn,
+        tone !== "primary" && styles.inverseMergeBoxToneNotPrimary,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div
     style={{
@@ -139,6 +208,27 @@ export const App = () => (
     <SplitOrderBox add warn hasSubtitle={false}>
       Split order no subtitle stays red
     </SplitOrderBox>
+    <DynamicOrderBox add warnColor="green" hasSubtitle>
+      Dynamic order subtitle stays green
+    </DynamicOrderBox>
+    <DynamicOrderBox add warnColor="green" hasSubtitle={false}>
+      Dynamic order no subtitle stays red
+    </DynamicOrderBox>
+    <StyleFnParentBox add warn hasSubtitle width={80}>
+      Style fn parent subtitle stays red
+    </StyleFnParentBox>
+    <StyleFnParentBox add warn hasSubtitle={false} width={80}>
+      Style fn parent no subtitle stays red
+    </StyleFnParentBox>
+    <InverseMergeBox tone="primary" warn hasSubtitle>
+      Primary inverse subtitle stays green
+    </InverseMergeBox>
+    <InverseMergeBox tone="primary" warn hasSubtitle={false}>
+      Primary inverse no subtitle stays green
+    </InverseMergeBox>
+    <InverseMergeBox tone="secondary" warn={false} hasSubtitle>
+      Secondary inverse stays blue
+    </InverseMergeBox>
   </div>
 );
 
@@ -213,5 +303,62 @@ const styles = stylex.create({
   splitOrderBoxAddNotHasSubtitle: {
     color: "red",
     paddingBottom: 40,
+  },
+  dynamicOrderBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  dynamicOrderBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  dynamicOrderBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  dynamicOrderBoxColor: (color: string) => ({
+    color,
+  }),
+  styleFnParentBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  styleFnParentBoxWarn: {
+    color: "green",
+  },
+  styleFnParentBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  styleFnParentBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  styleFnParentBoxWidth: (width: string) => ({
+    width,
+  }),
+  inverseMergeBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  inverseMergeBoxTonePrimaryHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  inverseMergeBoxTonePrimaryNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  inverseMergeBoxWarn: {
+    color: "green",
+  },
+  inverseMergeBoxToneNotPrimary: {
+    color: "blue",
   },
 });

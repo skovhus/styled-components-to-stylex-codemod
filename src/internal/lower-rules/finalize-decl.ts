@@ -585,6 +585,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     remainingBuckets,
     remainingStyleKeys,
     variantSourceOrder,
+    styleFnFromProps,
   });
 
   // Add remaining (compound/boolean) variants to resolvedStyleObjects
@@ -725,8 +726,9 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
   remainingBuckets: Map<string, Record<string, unknown>>;
   remainingStyleKeys: Record<string, string>;
   variantSourceOrder: Record<string, number>;
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
 }): void {
-  const { decl, remainingBuckets, remainingStyleKeys, variantSourceOrder } = args;
+  const { decl, remainingBuckets, remainingStyleKeys, variantSourceOrder, styleFnFromProps } = args;
   const complementaryPairs = collectComplementaryCompoundPairs(remainingBuckets);
 
   for (const pair of complementaryPairs) {
@@ -735,7 +737,12 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
     if (!positiveBucket || !negativeBucket) {
       continue;
     }
-    const sourceOrders = getSafeFactoredSourceOrders(pair, variantSourceOrder, remainingBuckets);
+    const sourceOrders = getSafeFactoredSourceOrders({
+      pair,
+      variantSourceOrder,
+      remainingBuckets,
+      styleFnFromProps,
+    });
     if (!sourceOrders) {
       continue;
     }
@@ -759,12 +766,20 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
   }
 }
 
-function getSafeFactoredSourceOrders(
-  pair: ComplementaryCompoundPair,
-  variantSourceOrder: Record<string, number>,
-  remainingBuckets: Map<string, Record<string, unknown>>,
-): [number, number] | null {
+function getSafeFactoredSourceOrders(args: {
+  pair: ComplementaryCompoundPair;
+  variantSourceOrder: Record<string, number>;
+  remainingBuckets: Map<string, Record<string, unknown>>;
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+}): [number, number] | null {
+  const { pair, variantSourceOrder, remainingBuckets, styleFnFromProps } = args;
   if (remainingBuckets.has(pair.parentWhen)) {
+    return null;
+  }
+  if (hasInverseVariantBucket(pair.parentWhen, remainingBuckets)) {
+    return null;
+  }
+  if (styleFnFromProps.some((entry) => entry.conditionWhen === pair.parentWhen)) {
     return null;
   }
 
@@ -784,8 +799,58 @@ function getSafeFactoredSourceOrders(
       return null;
     }
   }
+  for (const entry of styleFnFromProps) {
+    const order = entry.sourceOrder;
+    if (typeof order === "number" && order > startOrder && order < endOrder) {
+      return null;
+    }
+  }
 
   return [positiveOrder, negativeOrder];
+}
+
+function hasInverseVariantBucket(
+  parentWhen: string,
+  remainingBuckets: Map<string, Record<string, unknown>>,
+): boolean {
+  for (const when of remainingBuckets.keys()) {
+    if (conditionsAreInverses(parentWhen, when)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function conditionsAreInverses(left: string, right: string): boolean {
+  const normalizedLeft = left.trim();
+  const normalizedRight = right.trim();
+  if (normalizedLeft === `!${normalizedRight}` || normalizedRight === `!${normalizedLeft}`) {
+    return true;
+  }
+
+  const leftComparison = parseSimpleComparison(normalizedLeft);
+  const rightComparison = parseSimpleComparison(normalizedRight);
+  return (
+    !!leftComparison &&
+    !!rightComparison &&
+    leftComparison.left === rightComparison.left &&
+    leftComparison.right === rightComparison.right &&
+    leftComparison.operator !== rightComparison.operator
+  );
+}
+
+function parseSimpleComparison(
+  condition: string,
+): { left: string; operator: "===" | "!=="; right: string } | null {
+  const match = condition.match(/^(.+?)\s*(===|!==)\s*(.+)$/);
+  if (!match) {
+    return null;
+  }
+  const [, left, operator, right] = match;
+  if (!left || !right || (operator !== "===" && operator !== "!==")) {
+    return null;
+  }
+  return { left: left.trim(), operator, right: right.trim() };
 }
 
 function collectComplementaryCompoundPairs(
