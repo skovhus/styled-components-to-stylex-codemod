@@ -12,10 +12,12 @@ interface TextProps {
 }
 
 /** A polymorphic Text component that accepts "as" prop */
-function Text(props: TextProps & { as?: React.ElementType }) {
-  const { as: Component = "span", children, className, style } = props;
+function Text<C extends React.ElementType = "span">(
+  props: TextProps & React.ComponentPropsWithRef<C> & { as?: C },
+) {
+  const { as: Component = "span", children, className, style, ...rest } = props;
   return (
-    <Component className={className} style={style}>
+    <Component className={className} style={style} {...rest}>
       {children}
     </Component>
   );
@@ -29,5 +31,21 @@ export const Label = styled(Text).attrs({ as: "label" })<{ htmlFor?: string }>`
   border-color: blue;
 `;
 
+/** Fixed href supplied by attrs should be omitted from polymorphic C props */
+export const FixedHrefText = styled(Text).attrs({ href: "/fixed" })`
+  text-decoration: underline;
+`;
+
+/** forwardedAs attrs normalize to an emitted "as" prop */
+export const ForwardedAsText = styled(Text).attrs({ forwardedAs: "em" })`
+  color: purple;
+`;
+
 // Usage with label-specific props
-export const App = () => <Label htmlFor="input-id">Click me</Label>;
+export const App = () => (
+  <>
+    <Label htmlFor="input-id">Click me</Label>
+    <FixedHrefText as="a">Fixed href</FixedHrefText>
+    <ForwardedAsText>Forwarded as emphasis</ForwardedAsText>
+  </>
+);

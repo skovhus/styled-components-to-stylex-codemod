@@ -24,6 +24,7 @@ import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import {
   appendAttrsProvidedPropOmissions,
+  type AttrsProvidedPropOptions,
   TAG_TO_HTML_ELEMENT,
   VOID_TAGS,
 } from "./type-helpers.js";
@@ -1526,6 +1527,7 @@ export class WrapperEmitter {
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
     forwardedAsPropTypeText?: string;
+    attrsProvidedPropOptions?: AttrsProvidedPropOptions;
   }): string {
     const {
       d,
@@ -1537,6 +1539,7 @@ export class WrapperEmitter {
       forceClassNameOptional,
       forceStyleOptional,
       forwardedAsPropTypeText = "React.ElementType",
+      attrsProvidedPropOptions,
     } = args;
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
@@ -1575,7 +1578,7 @@ export class WrapperEmitter {
     if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
-    appendAttrsProvidedPropOmissions(omitted, d.attrsInfo);
+    appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
     // When transient props are renamed ($prop → prop), omit the original $-prefixed
     // props from the base type and re-add them with their new names.
     // This is needed when the base component's type includes the $-prefixed prop

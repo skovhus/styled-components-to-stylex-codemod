@@ -16,6 +16,11 @@ const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean
   return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
 };
 
+interface SectionProps {
+  someAttribute: boolean;
+  label?: string;
+}
+
 type InputProps = {
   padding?: string;
   small?: boolean;
@@ -73,7 +78,8 @@ export function Background(props: BackgroundProps) {
 
 // Pattern 3b: attrs-injected component props should be omitted from the wrapper type
 export function Section(
-  props: Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+  props: Omit<SectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
 ) {
   return <Text {...props} someAttribute={true} {...stylex.props(styles.section)} />;
 }
@@ -316,7 +322,7 @@ export const App = () => (
     <Input padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
-    <Section>Section content</Section>
+    <Section label="section-label">Section content</Section>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

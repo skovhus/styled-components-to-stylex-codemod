@@ -25,6 +25,8 @@ import {
 } from "./wrapper-emitter.js";
 import {
   appendAttrsProvidedPropOmissions,
+  collectAttrsProvidedPropNames,
+  type AttrsProvidedPropOptions,
   collectBooleanPropNames,
   getAttrsAsString,
   injectRefPropIntoTypeLiteralString,
@@ -279,6 +281,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
+    const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
+      normalizeForwardedAs: !shouldLowerForwardedAs,
+    };
+    const attrsProvidedPropNames = collectAttrsProvidedPropNames(
+      d.attrsInfo,
+      attrsProvidedPropOptions,
+    );
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
@@ -333,6 +342,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     let inlineTypeText: string | undefined;
     {
       const explicit = emitter.stringifyTsType(d.propsType);
+      const explicitAttrsOmitUnion = getExplicitAttrsOmitUnion({
+        emitter,
+        propsType: d.propsType,
+        attrsProvidedPropNames,
+      });
 
       // Check if explicit type is a simple type reference (e.g., `TypeAliasProps`)
       // that exists in the file - if so, extend it directly instead of creating a new type
@@ -359,7 +373,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         explicit &&
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
-        !isSelfReferentialPropsType
+        !isSelfReferentialPropsType &&
+        !explicitAttrsOmitUnion
       ) {
         renameTransientMembersInExistingType(emitter, explicitTypeName, d.transientPropRenames);
         // Pass explicitTypeName to avoid self-referential types when wrapper and wrapped
@@ -372,7 +387,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (!allowStyleProp || forceStyleOptional) {
           omitted.push('"style"');
         }
-        appendAttrsProvidedPropOmissions(omitted, d.attrsInfo);
+        appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         const optionalProps: string[] = [];
         if (forceClassNameOptional) {
@@ -418,7 +433,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
-        appendAttrsProvidedPropOmissions(omitted, d.attrsInfo);
+        appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
         const intrinsicBase = defaultTag
           ? `Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${explicitTypeName}${omitted.length ? ` | ${omitted.join(" | ")}` : ""}>`
           : null;
@@ -431,7 +446,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
         // Build inline type for the function parameter (don't modify SharedProps)
         inlineTypeText = emitter.joinIntersection(
-          explicitTypeName,
+          omitExplicitAttrsIfNeeded(explicitTypeName, explicitAttrsOmitUnion),
           intrinsicBase,
           optionalProps.length > 0 ? `{ ${optionalProps.join("; ")} }` : null,
         );
@@ -446,7 +461,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (forceStyleOptional) {
             baseOmitted.push('"style"');
           }
-          appendAttrsProvidedPropOmissions(baseOmitted, d.attrsInfo);
+          appendAttrsProvidedPropOmissions(baseOmitted, d.attrsInfo, attrsProvidedPropOptions);
           const baseProps = baseOmitted.length
             ? `Omit<${basePropsRaw}, ${baseOmitted.join(" | ")}>`
             : basePropsRaw;
@@ -457,7 +472,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
-          appendAttrsProvidedPropOmissions(omitted, d.attrsInfo);
+          appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
           // Add optional className/style/sx when forcing optional or when sx is enabled
           const optionalStyleProps: string[] = [];
           if (forceClassNameOptional) {
@@ -471,12 +486,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           const typeText = [
             baseProps,
-            `Omit<React.ComponentPropsWithRef<C>, keyof ${basePropsRaw} | "className" | "style">`,
+            `Omit<React.ComponentPropsWithRef<C>, ${buildOmitUnion([
+              `keyof ${basePropsRaw}`,
+              '"className"',
+              '"style"',
+              ...[...attrsProvidedPropNames].map((name) => JSON.stringify(name)),
+            ])}>`,
             "{\n  as?: C;\n}",
             ...(hasForwardedAsUsage ? [`{ forwardedAs?: ${forwardedAsPropTypeText} }`] : []),
             ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
             // Include user's explicit props type if it exists
-            ...(explicit ? [explicit] : []),
+            ...(explicit ? [omitExplicitAttrsIfNeeded(explicit, explicitAttrsOmitUnion)] : []),
           ].join(" & ");
           emitNamedPropsType(
             d.localName,
@@ -502,6 +522,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             forceClassNameOptional,
             forceStyleOptional,
             forwardedAsPropTypeText,
+            attrsProvidedPropOptions,
           });
           // Add ref support when .attrs({ as: "element" }) is used
           const attrsAs = getAttrsAsString(d);
@@ -526,8 +547,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             });
           }
           const explicitWithRef =
-            explicitWithExtras ??
-            (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
+            (explicitWithExtras
+              ? omitExplicitAttrsIfNeeded(explicitWithExtras, explicitAttrsOmitUnion)
+              : null) ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
           // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
           // which carries `children` when the wrapped component accepts them. Wrapping the
           // explicit extra props in `PropsWithChildren` is redundant and can cause extra churn.
@@ -551,7 +573,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
                 `{ forwardedAs?: ${renderedAsProp.typeText} }`,
               ),
             );
-          } else if (hasNoCustomProps) {
+          } else if (hasNoCustomProps || (explicitAttrsOmitUnion && explicitTypeExists)) {
             inlineTypeText = typeText;
           } else {
             emitNamedPropsType(d.localName, typeText);
@@ -1343,6 +1365,35 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
 function shouldKeepStylePropSeparate(componentName: string): boolean {
   return componentName.startsWith("motion.") || componentName.startsWith("animated.");
+}
+
+function getExplicitAttrsOmitUnion(args: {
+  emitter: WrapperEmitter;
+  propsType: ASTNode | undefined;
+  attrsProvidedPropNames: ReadonlySet<string>;
+}): string | null {
+  const { attrsProvidedPropNames, emitter, propsType } = args;
+  if (!propsType || attrsProvidedPropNames.size === 0) {
+    return null;
+  }
+  const explicitPropNames = emitter.getExplicitPropNames(propsType, {
+    lookThroughPropsWithChildren: true,
+  });
+  const explicitAttrs = [...attrsProvidedPropNames].filter((name) => explicitPropNames.has(name));
+  return explicitAttrs.length > 0
+    ? buildOmitUnion(explicitAttrs.map((name) => JSON.stringify(name)))
+    : null;
+}
+
+function omitExplicitAttrsIfNeeded(
+  typeText: string,
+  explicitAttrsOmitUnion: string | null,
+): string {
+  return explicitAttrsOmitUnion ? `Omit<${typeText}, ${explicitAttrsOmitUnion}>` : typeText;
+}
+
+function buildOmitUnion(parts: string[]): string {
+  return [...new Set(parts)].join(" | ");
 }
 
 function normalizeStaticForwardedAsAttr(

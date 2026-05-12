@@ -16,6 +16,11 @@ const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean
   return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
 };
 
+interface SectionProps {
+  someAttribute: boolean;
+  label?: string;
+}
+
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
   type: "text",
@@ -64,7 +69,7 @@ export const Background = styled(Flex).attrs({
 `;
 
 // Pattern 3b: attrs-injected component props should be omitted from the wrapper type
-export const Section = styled(Text).attrs({ someAttribute: true })`
+export const Section = styled(Text).attrs({ someAttribute: true })<SectionProps>`
   padding: 16px 16px;
   background-color: #f0f9ff;
 `;
@@ -284,7 +289,7 @@ export const App = () => (
     <Input $padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
-    <Section>Section content</Section>
+    <Section label="section-label">Section content</Section>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

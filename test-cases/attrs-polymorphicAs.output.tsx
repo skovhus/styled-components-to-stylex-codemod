@@ -14,10 +14,12 @@ interface TextProps {
 }
 
 /** A polymorphic Text component that accepts "as" prop */
-function Text<C extends React.ElementType = "span">(props: TextProps & { as?: C }) {
-  const { as: Component = "span", children, className, style } = props;
+function Text<C extends React.ElementType = "span">(
+  props: TextProps & React.ComponentPropsWithRef<C> & { as?: C },
+) {
+  const { as: Component = "span", children, className, style, ...rest } = props;
   return (
-    <Component className={className} style={style}>
+    <Component className={className} style={style} {...rest}>
       {children}
     </Component>
   );
@@ -42,11 +44,58 @@ export function Label(props: LabelProps) {
   );
 }
 
+type FixedHrefTextProps<C extends React.ElementType = typeof Text> = Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "href"
+> &
+  Omit<
+    React.ComponentPropsWithRef<C>,
+    keyof React.ComponentPropsWithRef<typeof Text> | "className" | "style" | "href"
+  > & {
+    as?: C;
+  } & { sx?: stylex.StyleXStyles };
+
+/** Fixed href supplied by attrs should be omitted from polymorphic C props */
+export function FixedHrefText<C extends React.ElementType = typeof Text>(
+  props: FixedHrefTextProps<C>,
+) {
+  const { as: Component = Text, className, style, sx, ...rest } = props;
+  return (
+    <Component
+      {...rest}
+      href="/fixed"
+      {...mergedSx([styles.fixedHrefText, sx], className, style)}
+    />
+  );
+}
+
+/** forwardedAs attrs normalize to an emitted "as" prop */
+export function ForwardedAsText(props: Omit<React.ComponentPropsWithRef<typeof Text>, "as">) {
+  const { className, children, style, sx, ...rest } = props;
+  return (
+    <Text {...rest} as="em" {...mergedSx([styles.forwardedAsText, sx], className, style)}>
+      {children}
+    </Text>
+  );
+}
+
 // Usage with label-specific props
-export const App = () => <Label htmlFor="input-id">Click me</Label>;
+export const App = () => (
+  <>
+    <Label htmlFor="input-id">Click me</Label>
+    <FixedHrefText as="a">Fixed href</FixedHrefText>
+    <ForwardedAsText>Forwarded as emphasis</ForwardedAsText>
+  </>
+);
 
 const styles = stylex.create({
   label: {
     borderColor: "blue",
+  },
+  fixedHrefText: {
+    textDecoration: "underline",
+  },
+  forwardedAsText: {
+    color: "purple",
   },
 });
