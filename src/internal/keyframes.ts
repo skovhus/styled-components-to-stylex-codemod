@@ -1106,55 +1106,105 @@ export function expandStaticAnimationShorthand(
 ): boolean {
   // Use postcss-value-parser to properly handle function tokens like
   // cubic-bezier(0.1, 0.7, 1, 0.1) and steps(4, end) without splitting them.
-  const parsed = valueParser(value.trim());
-  const tokens = parsed.nodes
-    .filter((n) => n.type !== "space")
-    .map((n) => valueParser.stringify(n))
-    .filter(Boolean);
-  if (tokens.length === 0) {
+  const segments = parseAnimationSegments(value);
+  if (segments.length === 0) {
     return false;
   }
 
-  // Find the animation name: the first token that matches an inline keyframe name
-  const nameIdx = tokens.findIndex((t) => inlineKeyframeNames.has(t));
-  if (nameIdx < 0) {
-    return false;
+  const names: string[] = [];
+  const durations: Array<string | null> = [];
+  const delays: Array<string | null> = [];
+  const timings: Array<string | null> = [];
+  const directions: Array<string | null> = [];
+  const fillModes: Array<string | null> = [];
+  const playStates: Array<string | null> = [];
+  const iterations: Array<string | null> = [];
+
+  for (const tokens of segments) {
+    const nameIdx = tokens.findIndex((t) => inlineKeyframeNames.has(t));
+    if (nameIdx < 0) {
+      return false;
+    }
+    const cssName = tokens[nameIdx]!;
+    names.push(nameMap?.get(cssName) ?? cssKeyframeNameToIdentifier(cssName));
+    const remaining = tokens.filter((_, i) => i !== nameIdx);
+    const classified = classifyAnimationTokens(remaining);
+    if (!classified) {
+      return false;
+    }
+    durations.push(classified.duration);
+    delays.push(classified.delay);
+    timings.push(classified.timing);
+    directions.push(classified.direction);
+    fillModes.push(classified.fillMode);
+    playStates.push(classified.playState);
+    iterations.push(classified.iteration);
   }
 
-  const cssName = tokens[nameIdx]!;
-  const jsName = nameMap?.get(cssName) ?? cssKeyframeNameToIdentifier(cssName);
-  const remaining = tokens.filter((_, i) => i !== nameIdx);
+  styleObj.animationName =
+    names.length === 1 ? j.identifier(names[0]!) : buildAnimationNameTemplate(j, names);
 
-  const classified = classifyAnimationTokens(remaining);
-  if (!classified) {
-    return false;
-  }
-
-  styleObj.animationName = j.identifier(jsName);
-
-  if (classified.duration) {
-    styleObj.animationDuration = classified.duration;
-  }
-  if (classified.delay) {
-    styleObj.animationDelay = classified.delay;
-  }
-  if (classified.timing) {
-    styleObj.animationTimingFunction = classified.timing;
-  }
-  if (classified.direction) {
-    styleObj.animationDirection = classified.direction;
-  }
-  if (classified.fillMode) {
-    styleObj.animationFillMode = classified.fillMode;
-  }
-  if (classified.playState) {
-    styleObj.animationPlayState = classified.playState;
-  }
-  if (classified.iteration) {
-    styleObj.animationIterationCount = classified.iteration;
-  }
+  assignAnimationLonghand(styleObj, "animationDuration", durations, "0s");
+  assignAnimationLonghand(styleObj, "animationDelay", delays, "0s");
+  assignAnimationLonghand(styleObj, "animationTimingFunction", timings, "ease");
+  assignAnimationLonghand(styleObj, "animationDirection", directions, "normal");
+  assignAnimationLonghand(styleObj, "animationFillMode", fillModes, "none");
+  assignAnimationLonghand(styleObj, "animationPlayState", playStates, "running");
+  assignAnimationLonghand(styleObj, "animationIterationCount", iterations, "1");
 
   return true;
+}
+
+function parseAnimationSegments(value: string): string[][] {
+  const parsed = valueParser(value.trim());
+  const segments: valueParser.Node[][] = [];
+  let current: valueParser.Node[] = [];
+  for (const node of parsed.nodes) {
+    if (node.type === "div" && node.value === ",") {
+      if (current.length > 0) {
+        segments.push(current);
+      }
+      current = [];
+      continue;
+    }
+    current.push(node);
+  }
+  if (current.length > 0) {
+    segments.push(current);
+  }
+  return segments
+    .map((nodes) =>
+      nodes
+        .filter((node) => node.type !== "space")
+        .map((node) => valueParser.stringify(node))
+        .map((token) => token.trim())
+        .filter(Boolean),
+    )
+    .filter((tokens) => tokens.length > 0);
+}
+
+function buildAnimationNameTemplate(j: JSCodeshift, names: string[]): ExpressionKind {
+  const quasis = names.map((_, index) =>
+    j.templateElement({ raw: index === 0 ? "" : ", ", cooked: index === 0 ? "" : ", " }, false),
+  );
+  quasis.push(j.templateElement({ raw: "", cooked: "" }, true));
+  return j.templateLiteral(
+    quasis,
+    names.map((name) => j.identifier(name)),
+  ) as ExpressionKind;
+}
+
+function assignAnimationLonghand(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  values: Array<string | null>,
+  fallback: string,
+): void {
+  if (!values.some((entry) => entry !== null)) {
+    return;
+  }
+  styleObj[prop] =
+    values.length === 1 ? values[0] : values.map((entry) => entry ?? fallback).join(", ");
 }
 
 /**

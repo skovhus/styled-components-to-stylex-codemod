@@ -123,6 +123,7 @@ type LowerRulesResult = {
 
 function lowerRules(ctx: TransformContext): LowerRulesResult {
   const state = createLowerRulesState(ctx);
+  markPartialImportedComponentRoots(ctx, state);
   // Pre-scan all declarations for inline @keyframes definitions.
   // These must be registered before rule processing so animation properties
   // can reference them.
@@ -321,6 +322,17 @@ type StateSnapshot = {
   usedCssHelperFunctions: Set<string>;
   resolverImportKeys: Set<string>;
 };
+
+function markPartialImportedComponentRoots(ctx: TransformContext, state: LowerRulesState): void {
+  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
+    return;
+  }
+  for (const decl of state.styledDecls) {
+    if (decl.base.kind === "component" && state.importMap.has(decl.base.ident)) {
+      decl.skipTransform = true;
+    }
+  }
+}
 
 function snapshotStateForDecl(state: LowerRulesState): StateSnapshot {
   return {

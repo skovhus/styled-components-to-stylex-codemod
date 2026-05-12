@@ -331,6 +331,9 @@ export function buildUnsupportedCssWarnings(usages: UnsupportedCssUsage[]): Warn
 }
 
 function normalizeStaticCssValueWhitespace(raw: string, propName?: string): string {
+  if (propName?.startsWith("animation")) {
+    return raw.replace(/,(\S)/g, ", $1");
+  }
   // Preserve authored whitespace for most properties. Normalize only gradient
   // background-image values to avoid escaped \n sequences in generated output.
   if (propName !== "backgroundImage") {

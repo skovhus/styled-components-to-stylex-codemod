@@ -74,7 +74,7 @@ type FixtureCase = {
   outputPath: string;
   inputFile: string;
   outputFile: string;
-  parser: "tsx" | "babel" | "flow";
+  parser: "tsx" | "ts" | "babel" | "flow";
 };
 
 // Supported file extensions and their parsers
@@ -207,7 +207,7 @@ function runTransform(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "babel" | "flow" = "tsx",
+  parser: "tsx" | "ts" | "babel" | "flow" = "tsx",
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
@@ -226,7 +226,7 @@ function runTransformWithDiagnostics(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "babel" | "flow" = "tsx",
+  parser: "tsx" | "ts" | "babel" | "flow" = "tsx",
 ): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,

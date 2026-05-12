@@ -22,10 +22,10 @@ const styles = stylex.create({
       top: 10,
       height: 4,
       borderRadius: 999,
-      backgroundColor: "#cbd5e1",
-    },
-    ":hover::after": {
-      backgroundColor: "#64748b",
+      backgroundColor: {
+        default: "#cbd5e1",
+        ":hover": "#64748b",
+      },
     },
   },
   focusPanel: {
@@ -39,11 +39,11 @@ const styles = stylex.create({
       inset: -1,
       borderRadius: 9,
       pointerEvents: "none",
-      backgroundImage: "linear-gradient(to bottom, #cbd5e1, #e2e8f0)",
+      backgroundImage: {
+        default: "linear-gradient(to bottom, #cbd5e1, #e2e8f0)",
+        ":focus-within": "linear-gradient(to bottom, #6366f1, #a5b4fc)",
+      },
       transition: "background-image 120ms ease-out",
-    },
-    ":focus-within::before": {
-      backgroundImage: "linear-gradient(to bottom, #6366f1, #a5b4fc)",
     },
   },
 });

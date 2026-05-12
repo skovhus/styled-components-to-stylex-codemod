@@ -969,6 +969,7 @@ export function extractAndRemoveCssHelpers(args: {
       const localName = p.node.id.name;
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
+      const isExported = exportedLocalNames.has(localName);
 
       const template = init.quasi as TemplateLiteral;
       const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
@@ -985,10 +986,10 @@ export function extractAndRemoveCssHelpers(args: {
         rules,
         templateExpressions,
         rawCss,
+        isExported,
       });
 
       cssHelperNames.add(localName);
-      const isExported = exportedLocalNames.has(localName);
       const usedOutsideStyledTemplates = isIdentifierUsedOutsideStyledTemplates({
         root,
         j,

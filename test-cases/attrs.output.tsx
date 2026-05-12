@@ -513,7 +513,9 @@ function StyledIcon(
   return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
 }
 
-function AttrsSxButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
+function AttrsSxButton(
+  props: Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style">,
+) {
   const { children, sx, ...rest } = props;
   return (
     <SxAwareButton {...rest} type="button" sx={[attrsMarkerStyle, styles.attrsSxButton, sx]}>

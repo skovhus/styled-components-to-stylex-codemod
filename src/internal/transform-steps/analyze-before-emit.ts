@@ -880,7 +880,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // For exported components, cross-file consumer patching is also emitted.
   const resolverImportNames = collectResolverImportNames(ctx);
   for (const decl of styledDecls) {
-    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
+    const transientProps = collectDeclPropNames(root, j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       // Even if this wrapper has no $-prefixed props in its own styling data,
       // inherit transient prop renames from the base component so that the emitter
@@ -926,7 +926,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       }
       continue;
     }
-    const existingPropNames = collectDeclPropNames(j, decl, (n) => !n.startsWith("$"));
+    const existingPropNames = collectDeclPropNames(root, j, decl, (n) => !n.startsWith("$"));
     existingPropNames.add("className").add("style").add("children").add("ref").add("key").add("as");
     // Also check the base component's props for collisions (e.g., Base has `color`,
     // wrapper has `$color` — renaming to `color` would collide).
@@ -1052,7 +1052,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.transientPropRenames) {
       continue;
     }
-    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
+    const transientProps = collectDeclPropNames(root, j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       continue;
     }
@@ -1912,16 +1912,12 @@ function collectCallSiteAttrNames(
     }
   };
   root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: componentName },
-      },
-    } as any)
+    .find(j.JSXElement)
+    .filter((p: any) => jsxNameLastSegment(p.node.openingElement?.name) === componentName)
     .forEach((p: any) => collectFromElement(p.node.openingElement));
   root
-    .find(j.JSXSelfClosingElement, {
-      name: { type: "JSXIdentifier", name: componentName },
-    } as any)
+    .find(j.JSXSelfClosingElement)
+    .filter((p: any) => jsxNameLastSegment(p.node.name) === componentName)
     .forEach((p: any) => collectFromElement(p.node));
   if (!hasSpread) {
     return { hasSpread: false, explicitTransientAtSpreadSites: null };
@@ -1939,6 +1935,20 @@ function collectCallSiteAttrNames(
     }
   }
   return { hasSpread: true, explicitTransientAtSpreadSites: intersection };
+}
+
+function jsxNameLastSegment(name: unknown): string | null {
+  const node = name as { type?: string; name?: string; property?: unknown };
+  if (!node) {
+    return null;
+  }
+  if (node.type === "JSXIdentifier") {
+    return node.name ?? null;
+  }
+  if (node.type === "JSXMemberExpression") {
+    return jsxNameLastSegment(node.property);
+  }
+  return null;
 }
 
 /**
@@ -2066,6 +2076,7 @@ function isTypeNameUsedElsewhere(
  * keeping prop extraction consistent with the emit phase.
  */
 function collectDeclPropNames(
+  root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   decl: StyledDecl,
   filter: (name: string) => boolean,
@@ -2110,7 +2121,46 @@ function collectDeclPropNames(
   walkTypePropNames(decl.propsType, (name) => {
     addIfMatch(name);
   });
+  if (shouldResolveReferencedPropsForTransientRename(root, j, decl.propsType)) {
+    for (const name of collectResolvedTypePropNames(root, j, decl.propsType)) {
+      addIfMatch(name);
+    }
+  }
   return result;
+}
+
+function shouldResolveReferencedPropsForTransientRename(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  propsType: unknown,
+): boolean {
+  const typeRef = propsType as { type?: string; typeName?: { type?: string; name?: string } };
+  if (typeRef?.type !== "TSTypeReference" || typeRef.typeName?.type !== "Identifier") {
+    return false;
+  }
+  const typeName = typeRef.typeName.name;
+  const isNamespaced = (path: { parentPath?: unknown }): boolean => {
+    let cur = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+    while (cur) {
+      if (cur.node?.type === "TSModuleDeclaration") {
+        return true;
+      }
+      cur = cur.parentPath as typeof cur;
+    }
+    return false;
+  };
+  return (
+    root
+      .find(j.TSInterfaceDeclaration)
+      .filter(
+        (p) => p.node.id.type === "Identifier" && p.node.id.name === typeName && isNamespaced(p),
+      )
+      .size() > 0 ||
+    root
+      .find(j.TSTypeAliasDeclaration)
+      .filter((p) => p.node.id.name === typeName && isNamespaced(p))
+      .size() > 0
+  );
 }
 
 /**

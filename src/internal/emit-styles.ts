@@ -506,6 +506,9 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
+  const preservedCssHelperStyleKeys = new Set(
+    styledDecls.filter((decl) => decl.isCssHelper && decl.isExported).map((decl) => decl.styleKey),
+  );
   for (const [k, v] of resolvedStyleObjects.entries()) {
     if (v && typeof v === "object" && !isAstNode(v)) {
       if (Object.keys(v as Record<string, unknown>).length === 0) {
@@ -516,7 +519,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   // Insert `const styles = stylex.create(...)` (or stylexStyles if styles is already used) near top (after imports)
   const nonEmptyStyleEntries = [...resolvedStyleObjects.entries()].filter(
-    ([k]) => !emptyStyleKeys.has(k),
+    ([k]) => !emptyStyleKeys.has(k) && !preservedCssHelperStyleKeys.has(k),
   );
 
   const buildStyleEntryProperty = ([k, v]: [string, unknown]): any => {

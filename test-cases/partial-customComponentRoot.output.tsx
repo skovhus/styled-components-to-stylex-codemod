@@ -1,3 +1,4 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { Text } from "./lib/text";

@@ -1660,6 +1660,9 @@ function jsxNameReferencesStyledLocal(
   if (path.length === 0) {
     return false;
   }
+  if (path[path.length - 1] === localName) {
+    return true;
+  }
   if (path.length === 1) {
     const identifier = path[0]!;
     return (

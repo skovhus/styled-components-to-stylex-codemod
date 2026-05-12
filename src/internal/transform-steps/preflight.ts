@@ -13,6 +13,10 @@ import { TransformContext } from "../transform-context.js";
 export function preflight(ctx: TransformContext): StepResult {
   const { j, root } = ctx;
 
+  if (ctx.file.path.endsWith(".ts") && !ctx.file.path.endsWith(".d.ts")) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
   // NOTE: Check `.value` directly rather than relying on `.type === "StringLiteral"` since ESTree-style parsers

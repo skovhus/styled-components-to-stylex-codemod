@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 export namespace WidgetSet {
   type GridProps = {
@@ -7,12 +8,13 @@ export namespace WidgetSet {
     dense?: boolean;
   };
 
-  export function Grid(
-    props: GridProps & Omit<React.ComponentProps<"div">, "className" | "style">,
-  ) {
-    const { children, columnCount, dense, ...rest } = props;
+  export function Grid(props: GridProps & React.ComponentProps<"div">) {
+    const { className, children, style, dense, columnCount, ...rest } = props;
     return (
-      <div {...rest} sx={styles.grid({ columnCount, dense })}>
+      <div
+        {...rest}
+        {...mergedSx([styles.grid, styles.gridGridTemplateColumns(props)], className, style)}
+      >
         {children}
       </div>
     );
@@ -27,11 +29,13 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  grid: (props: { columnCount: number; dense?: boolean }) => ({
+  grid: {
     display: "grid",
+    gap: 4,
+  },
+  gridGridTemplateColumns: (props) => ({
     gridTemplateColumns: props.dense
       ? `repeat(${props.columnCount}, 6px 1fr)`
       : `repeat(${props.columnCount}, 16px 1fr)`,
-    gap: 4,
   }),
 });

@@ -29,15 +29,19 @@ function Ring(props: RingProps) {
   );
 }
 
-type AnimatedGroupProps = { isAnimated?: boolean } & Omit<
-  React.ComponentProps<"g">,
-  "className" | "style"
->;
+type AnimatedGroupProps = React.PropsWithChildren<{
+  isAnimated?: boolean;
+}>;
 
 function AnimatedGroup(props: AnimatedGroupProps) {
-  const { children, isAnimated, ...rest } = props;
+  const { children, isAnimated } = props;
   return (
-    <g {...rest} sx={isAnimated ? styles.animatedGroupAnimated : styles.animatedGroupResting}>
+    <g
+      sx={[
+        isAnimated && styles.animatedGroupAnimated,
+        !isAnimated && styles.animatedGroupNotAnimated,
+      ]}
+    >
       {children}
     </g>
   );
@@ -159,7 +163,7 @@ const styles = stylex.create({
     animationFillMode: "forwards, forwards",
     animationDelay: "0s, 1s",
   },
-  animatedGroupResting: {
+  animatedGroupNotAnimated: {
     transform: "translateX(-10px)",
   },
 });

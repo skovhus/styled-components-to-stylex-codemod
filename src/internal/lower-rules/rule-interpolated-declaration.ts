@@ -1494,6 +1494,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
+      if (isUnchangedImportedHelperStyleCall(res, exprAst)) {
+        warnings.push({
+          severity: "warning",
+          type: "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+          loc: decl.loc,
+          context: { localName: decl.localName, expr: res.expr },
+        });
+        bail = true;
+        break;
+      }
       // Track mixinOrder for correct cascade interleaving
       const hasStaticPropsBefore =
         Object.keys(styleObj).length > 0 || ctx.getBaseStyleTarget() !== styleObj;
@@ -3343,6 +3353,37 @@ function getNumericCssEmissionMode(stylexProp: string): NumericCssEmissionMode {
     return "cssText";
   }
   return UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp) ? "stylexNumber" : "cssText";
+}
+
+type ResolvedStylesCallMeta = {
+  resolveCallResult?: unknown;
+  resolveCallContext?: { calleeImportedName?: string };
+};
+
+function isUnchangedImportedHelperStyleCall(
+  res: ResolvedStylesCallMeta,
+  exprAst: unknown,
+): boolean {
+  const resolveResult = res.resolveCallResult;
+  const resolveContext = res.resolveCallContext;
+  const typedResult =
+    resolveResult && typeof resolveResult === "object"
+      ? (resolveResult as { cssText?: string; imports?: unknown[] })
+      : null;
+  if (
+    !typedResult ||
+    !resolveContext ||
+    typedResult.cssText ||
+    (typedResult.imports?.length ?? 0) > 0
+  ) {
+    return false;
+  }
+  const expression = exprAst as { type?: string; callee?: { type?: string; name?: string } } | null;
+  if (expression?.type !== "CallExpression") {
+    return false;
+  }
+  const callee = expression.callee;
+  return callee?.type === "Identifier" && callee.name === resolveContext.calleeImportedName;
 }
 
 function emitStaticObservedValue(
