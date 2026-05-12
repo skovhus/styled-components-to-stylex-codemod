@@ -49,6 +49,7 @@ const styles = stylex.create({
       },
       animationDuration: "3s",
       animationIterationCount: "infinite",
+      animationPlayState: "paused",
     },
   },
 });
