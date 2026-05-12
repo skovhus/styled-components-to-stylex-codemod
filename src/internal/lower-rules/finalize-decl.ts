@@ -735,6 +735,10 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
     if (!positiveBucket || !negativeBucket) {
       continue;
     }
+    const sourceOrders = getSafeFactoredSourceOrders(pair, variantSourceOrder, remainingBuckets);
+    if (!sourceOrders) {
+      continue;
+    }
 
     const parentBucket = remainingBuckets.get(pair.parentWhen) ?? {};
     const commonStyles = extractMovableCommonStyles(positiveBucket, negativeBucket, parentBucket);
@@ -751,14 +755,37 @@ function factorCommonStylesFromComplementaryCompoundVariants(args: {
     removeEmptyVariantBucket(pair.positiveWhen, remainingBuckets, remainingStyleKeys);
     removeEmptyVariantBucket(pair.negativeWhen, remainingBuckets, remainingStyleKeys);
 
-    const sourceOrders = [
-      variantSourceOrder[pair.positiveWhen],
-      variantSourceOrder[pair.negativeWhen],
-    ].filter((order): order is number => typeof order === "number");
-    if (sourceOrders.length > 0 && variantSourceOrder[pair.parentWhen] === undefined) {
-      variantSourceOrder[pair.parentWhen] = Math.min(...sourceOrders) - 0.1;
+    variantSourceOrder[pair.parentWhen] = Math.min(...sourceOrders) - 0.1;
+  }
+}
+
+function getSafeFactoredSourceOrders(
+  pair: ComplementaryCompoundPair,
+  variantSourceOrder: Record<string, number>,
+  remainingBuckets: Map<string, Record<string, unknown>>,
+): [number, number] | null {
+  if (remainingBuckets.has(pair.parentWhen)) {
+    return null;
+  }
+
+  const positiveOrder = variantSourceOrder[pair.positiveWhen];
+  const negativeOrder = variantSourceOrder[pair.negativeWhen];
+  if (typeof positiveOrder !== "number" || typeof negativeOrder !== "number") {
+    return null;
+  }
+
+  const startOrder = Math.min(positiveOrder, negativeOrder);
+  const endOrder = Math.max(positiveOrder, negativeOrder);
+  for (const [when, order] of Object.entries(variantSourceOrder)) {
+    if (when === pair.positiveWhen || when === pair.negativeWhen) {
+      continue;
+    }
+    if (order > startOrder && order < endOrder) {
+      return null;
     }
   }
+
+  return [positiveOrder, negativeOrder];
 }
 
 function collectComplementaryCompoundPairs(

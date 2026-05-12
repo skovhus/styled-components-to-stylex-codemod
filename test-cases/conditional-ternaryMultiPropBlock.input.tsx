@@ -45,6 +45,38 @@ const StyledText = styled(Text).attrs({ gap: 16, column: true })<{
       : ""}
 `;
 
+const OrderedBox = styled.div<{ $add?: boolean; $warn?: boolean; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${(props) => (props.$add ? "color: red;" : "")}
+  ${(props) => (props.$warn ? "color: green;" : "")}
+  ${(props) =>
+    props.$add
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
+const SplitOrderBox = styled.div<{ $add?: boolean; $warn?: boolean; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${(props) =>
+    props.$add && props.$hasSubtitle
+      ? `
+      color: red;
+      padding-bottom: 20px;
+    `
+      : ""}
+  ${(props) => (props.$warn ? "color: green;" : "")}
+  ${(props) =>
+    props.$add && !props.$hasSubtitle
+      ? `
+      color: red;
+      padding-bottom: 40px;
+    `
+      : ""}
+`;
+
 export const App = () => (
   <div
     style={{
@@ -66,5 +98,17 @@ export const App = () => (
     <StyledText variant="small" color="muted" $addBottomBorder $hasSubtitle={false}>
       Border without subtitle
     </StyledText>
+    <OrderedBox $add $warn $hasSubtitle>
+      Add + warn + subtitle stays red
+    </OrderedBox>
+    <OrderedBox $add $warn $hasSubtitle={false}>
+      Add + warn + no subtitle stays red
+    </OrderedBox>
+    <SplitOrderBox $add $warn $hasSubtitle>
+      Split order subtitle stays green
+    </SplitOrderBox>
+    <SplitOrderBox $add $warn $hasSubtitle={false}>
+      Split order no subtitle stays red
+    </SplitOrderBox>
   </div>
 );

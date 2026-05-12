@@ -61,6 +61,51 @@ function StyledText(props: StyledTextProps) {
   );
 }
 
+type OrderedBoxProps = {
+  add?: boolean;
+  warn?: boolean;
+  hasSubtitle: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function OrderedBox(props: OrderedBoxProps) {
+  const { children, add, warn, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.orderedBox,
+        add && styles.orderedBoxAdd,
+        warn && styles.orderedBoxWarn,
+        add && hasSubtitle && styles.orderedBoxAddHasSubtitle,
+        add && !hasSubtitle && styles.orderedBoxAddNotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type SplitOrderBoxProps = {
+  add?: boolean;
+  warn?: boolean;
+  hasSubtitle: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function SplitOrderBox(props: SplitOrderBoxProps) {
+  const { children, warn, add, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.splitOrderBox,
+        add && hasSubtitle && styles.splitOrderBoxAddHasSubtitle,
+        warn && styles.splitOrderBoxWarn,
+        add && !hasSubtitle && styles.splitOrderBoxAddNotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div
     style={{
@@ -82,6 +127,18 @@ export const App = () => (
     <StyledText variant="small" color="muted" addBottomBorder hasSubtitle={false}>
       Border without subtitle
     </StyledText>
+    <OrderedBox add warn hasSubtitle>
+      Add + warn + subtitle stays red
+    </OrderedBox>
+    <OrderedBox add warn hasSubtitle={false}>
+      Add + warn + no subtitle stays red
+    </OrderedBox>
+    <SplitOrderBox add warn hasSubtitle>
+      Split order subtitle stays green
+    </SplitOrderBox>
+    <SplitOrderBox add warn hasSubtitle={false}>
+      Split order no subtitle stays red
+    </SplitOrderBox>
   </div>
 );
 
@@ -119,5 +176,42 @@ const styles = stylex.create({
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgBorderSolid,
+  },
+  orderedBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  orderedBoxAdd: {
+    color: "red",
+  },
+  orderedBoxWarn: {
+    color: "green",
+  },
+  orderedBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  orderedBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  splitOrderBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  splitOrderBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  splitOrderBoxWarn: {
+    color: "green",
+  },
+  splitOrderBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
   },
 });
