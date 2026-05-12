@@ -793,7 +793,7 @@ function getSafeFactoredSourceOrders(args: {
   attrBuckets: Map<string, Record<string, unknown>>;
   stateResolvedStyleObjects: Map<string, unknown>;
 }): [number, number] | null {
-  const { pair, parentStyleKey, variantSourceOrder, remainingBuckets, styleFnFromProps } = args;
+  const { pair, variantSourceOrder, remainingBuckets, styleFnFromProps } = args;
   if (remainingBuckets.has(pair.parentWhen)) {
     return null;
   }
