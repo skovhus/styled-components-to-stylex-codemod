@@ -158,6 +158,15 @@ export function collectAttrsProvidedPropNames(attrsInfo: StyledDecl["attrsInfo"]
   return names;
 }
 
+export function appendAttrsProvidedPropOmissions(
+  omitted: string[],
+  attrsInfo: StyledDecl["attrsInfo"],
+): void {
+  for (const propName of collectAttrsProvidedPropNames(attrsInfo)) {
+    appendOmittedPropName(omitted, propName);
+  }
+}
+
 export function injectRefPropIntoTypeLiteralString(
   typeText: string,
   refElementType: string,
@@ -223,6 +232,13 @@ export function injectStylePropsIntoTypeLiteralString(
 // --- Non-exported helpers ---
 
 type AnyASTNode = { type?: string; [key: string]: unknown };
+
+function appendOmittedPropName(omitted: string[], propName: string): void {
+  const omittedProp = JSON.stringify(propName);
+  if (!omitted.includes(omittedProp)) {
+    omitted.push(omittedProp);
+  }
+}
 
 function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {
   for (const name of extractBooleanProps(node)) {
