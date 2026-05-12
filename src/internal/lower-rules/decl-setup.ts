@@ -69,7 +69,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   /** Monotonically increasing counter for tracking CSS source order of variants and styleFns. */
   let dynamicSlotOrder = 0;
   const variantBuckets = new Proxy(variantBucketsRaw, {
-    get(target, prop, receiver) {
+    get(target, prop) {
       if (prop === "set") {
         return (when: string, bucket: Record<string, unknown>) => {
           if (target.has(when)) {
