@@ -2291,6 +2291,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #fff;
 }
 
+.x1cro8gg:not(#\#):not(#\#):not(#\#) {
+  background-color: #fff0f0;
+}
+
 .x1rr6085:not(#\#):not(#\#):not(#\#) {
   background-color: #fff4e6;
 }
@@ -2301,6 +2305,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1obv3nd:not(#\#):not(#\#):not(#\#) {
   background-color: #fff7ed;
+}
+
+.x10ts81g:not(#\#):not(#\#):not(#\#) {
+  background-color: #fff8e1;
 }
 
 .x1pcab6s:not(#\#):not(#\#):not(#\#) {
@@ -4489,6 +4497,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   border-bottom-color: var(--xufgxy3);
 }
 
+.x1gffkt2:not(#\#):not(#\#):not(#\#):not(#\#) {
+  border-bottom-color: var(--xy9b778);
+}
+
 .x1bqy6mi:not(#\#):not(#\#):not(#\#):not(#\#) {
   border-bottom-left-radius: 6px;
 }
@@ -5131,6 +5143,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-bottom: 12px;
 }
 
+.xx6bls6:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 20px;
+}
+
+.x1t1ogtf:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-bottom: 40px;
+}
+
 .x1sgudl8:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-bottom: 48px;
 }
@@ -5159,6 +5179,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-left: 6px;
 }
 
+.x163pfp:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-left: 8px;
+}
+
 .x13e46o5:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-left: var(--x-paddingLeft);
 }
@@ -5179,6 +5203,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-right: 16px;
 }
 
+.xy13l1i:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-right: 8px;
+}
+
 .x1bnciah:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-right: var(--xpax1r4);
 }
@@ -5193,6 +5221,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x1iorvi4:not(#\#):not(#\#):not(#\#):not(#\#) {
   padding-top: 4px;
+}
+
+.x1y1aw1k:not(#\#):not(#\#):not(#\#):not(#\#) {
+  padding-top: 8px;
 }
 
 @media (width <= 640px) {
