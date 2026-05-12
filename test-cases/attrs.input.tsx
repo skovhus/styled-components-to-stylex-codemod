@@ -12,9 +12,17 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
-const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean }) => {
-  const { someAttribute, ...rest } = props;
-  return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
+const Text = (
+  props: React.ComponentProps<"section"> & { focusIndex?: number; someAttribute?: boolean },
+) => {
+  const { focusIndex, someAttribute, ...rest } = props;
+  return (
+    <section
+      data-focus-index={focusIndex}
+      data-some-attribute={someAttribute ? "true" : "false"}
+      {...rest}
+    />
+  );
 };
 
 export interface SectionProps {
@@ -131,7 +139,9 @@ export const ImportedIntersectionSection = styled(Text).attrs({
 export const FocusIndexSection = styled(Text).attrs((props: { focusIndex?: number }) => ({
   tabIndex: props.focusIndex,
 }))<{ focusIndex?: number }>`
-  outline: 1px solid #94a3b8;
+  outline-width: 1px;
+  outline-style: solid;
+  outline-color: #94a3b8;
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)

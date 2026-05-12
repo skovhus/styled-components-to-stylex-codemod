@@ -12,9 +12,17 @@ const Flex = (
   return <div data-focus-index={focusIndex} {...rest} />;
 };
 
-const Text = (props: React.ComponentProps<"section"> & { someAttribute?: boolean }) => {
-  const { someAttribute, ...rest } = props;
-  return <section data-some-attribute={someAttribute ? "true" : "false"} {...rest} />;
+const Text = (
+  props: React.ComponentProps<"section"> & { focusIndex?: number; someAttribute?: boolean },
+) => {
+  const { focusIndex, someAttribute, ...rest } = props;
+  return (
+    <section
+      data-focus-index={focusIndex}
+      data-some-attribute={someAttribute ? "true" : "false"}
+      {...rest}
+    />
+  );
 };
 
 export interface SectionProps extends Omit<
@@ -539,7 +547,9 @@ const styles = stylex.create({
     backgroundColor: "#fdf2f8",
   },
   focusIndexSection: {
-    outline: "1px solid #94a3b8",
+    outlineWidth: 1,
+    outlineStyle: "solid",
+    outlineColor: "#94a3b8",
   },
   scrollable: {
     overflowY: "auto",
