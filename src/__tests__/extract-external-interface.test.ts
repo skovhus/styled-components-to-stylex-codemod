@@ -695,6 +695,28 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import { Button } from "../components/Button";\nexport const App = () => <Button className="btn" disabled>Click</Button>;',
     );
 
+    // Consumer passes element props only. This should widen element props without enabling
+    // className/style/sx support.
+    writeFileSync(
+      path.join(componentsDir, "ElementOnly.tsx"),
+      'import styled from "styled-components";\nexport const ElementOnly = styled.div`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "element-only.tsx"),
+      'import { ElementOnly } from "../components/ElementOnly";\nexport const App = () => <ElementOnly onClick={() => undefined} aria-label="Element only">Click</ElementOnly>;',
+    );
+
+    // Consumer spreads unknown props. This stays conservative because the spread may contain
+    // className or style.
+    writeFileSync(
+      path.join(componentsDir, "SpreadOnly.tsx"),
+      'import styled from "styled-components";\nexport const SpreadOnly = styled.div`padding: 8px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "spread-only.tsx"),
+      'import { SpreadOnly } from "../components/SpreadOnly";\nconst props = {};\nexport const App = () => <SpreadOnly {...props}>Spread</SpreadOnly>;',
+    );
+
     const originalCwd = process.cwd();
     try {
       process.chdir(fixtureDir);
@@ -783,6 +805,28 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     });
   });
 
+  it("detects element-only consumers without enabling className/style support", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/ElementOnly.tsx:ElementOnly"]).toMatchObject({
+      className: false,
+      elementProps: true,
+      spreadProps: false,
+      style: false,
+      styles: false,
+    });
+  });
+
+  it("treats spread-only consumers as potential className/style usage", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/SpreadOnly.tsx:SpreadOnly"]).toMatchObject({
+      className: false,
+      elementProps: false,
+      spreadProps: true,
+      style: false,
+      styles: true,
+    });
+  });
+
   it("full snapshot", () => {
     expect(toSnapshot(result, fixtureDir)).toMatchInlineSnapshot(`
       {
@@ -813,12 +857,30 @@ describe("runPrepass createExternalInterface — className/style detection", () 
           "style": false,
           "styles": true,
         },
+        "components/ElementOnly.tsx:ElementOnly": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "components/SameFile.tsx:SameFile": {
           "as": false,
           "className": true,
           "elementProps": false,
           "ref": false,
           "spreadProps": false,
+          "style": false,
+          "styles": true,
+        },
+        "components/SpreadOnly.tsx:SpreadOnly": {
+          "as": false,
+          "className": false,
+          "elementProps": false,
+          "ref": false,
+          "spreadProps": true,
           "style": false,
           "styles": true,
         },

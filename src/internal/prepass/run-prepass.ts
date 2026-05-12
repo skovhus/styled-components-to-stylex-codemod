@@ -345,14 +345,17 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
 
     if (allStyledNames.size > 0) {
-      // Use targeted rg to find files containing className/style props (fast, small pattern)
+      // Use targeted rg to find files containing className/style props (fast, small pattern).
+      // The JSX filter covers spread-only and element-prop-only consumers.
       const rgHits = createExternalInterface ? rgClassNameStyleFilter(uniqueAllFiles) : undefined;
       const jsxHits = rgJsxComponentFilter(uniqueAllFiles);
 
       const scanAndRecord = (filePath: string, source: string) => {
         if (createExternalInterface) {
           for (const result of scanConsumerProps(source, allStyledNames)) {
-            addToSetMap(classNameStyleUsages, result.name, filePath);
+            if (result.className || result.style || result.spreadProps) {
+              addToSetMap(classNameStyleUsages, result.name, filePath);
+            }
             if (result.className) {
               addToSetMap(classNameUsages, result.name, filePath);
             }
@@ -727,8 +730,8 @@ function importTextMentionsIdentifier(importText: string, identifier: string): b
   return re.test(importText);
 }
 
-/** Quick pre-check: does this source mention className or style in a JSX prop context? */
-const CLASSNAME_STYLE_QUICK_RE = /\b(className|style)\s*[={]/;
+/** Quick pre-check: does this source mention JSX that might use external consumer props? */
+const CONSUMER_PROPS_QUICK_RE = /<[A-Z]|\b(className|style)\s*[={]|\{\.\.\./;
 
 /** Matches `import { Original as Local, ... }` — captures original and local names. */
 const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
@@ -770,7 +773,7 @@ interface ConsumerStaticPropUsage {
 /**
  * Scan source for JSX usage of specific components with className, style,
  * element-specific props, or JSX spread.
- * Uses a two-step approach: first quick-checks for className/style keywords,
+ * Uses a two-step approach: first quick-checks for relevant JSX surface syntax,
  * then scans JSX open tags to match component names — avoids building a huge
  * alternation regex when there are hundreds of component names.
  * Handles aliased imports (e.g., `import { Alert as MyAlert }`) by resolving
@@ -780,7 +783,7 @@ function scanConsumerProps(
   source: string,
   componentNames: ReadonlySet<string>,
 ): ConsumerPropResult[] {
-  if (!CLASSNAME_STYLE_QUICK_RE.test(source)) {
+  if (!CONSUMER_PROPS_QUICK_RE.test(source)) {
     return [];
   }
 
@@ -814,8 +817,26 @@ function scanConsumerProps(
       continue;
     }
 
-    // Skip tags that don't mention className or style at all
-    if (!/\b(?:className|style)\s*[={]/.test(attrText) && !/\{\.\.\./.test(attrText)) {
+    const className = /\bclassName\s*[={]/.test(attrText);
+    const style = /\bstyle\s*[={]/.test(attrText);
+    const spreadProps = /\{\.\.\./.test(attrText);
+    let elementProps = false;
+
+    // Check for element-specific props (lowercase props not in known set)
+    // Matches:
+    // 1. prop= or prop{ - value prop
+    // 2. prop followed by whitespace and another prop - boolean shorthand
+    // 3. prop at end of attributes - boolean shorthand
+    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
+    for (const pm of attrText.matchAll(propRe)) {
+      const propName = pm[1]!;
+      if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
+        elementProps = true;
+        break;
+      }
+    }
+
+    if (!className && !style && !spreadProps && !elementProps) {
       continue;
     }
 
@@ -831,29 +852,10 @@ function scanConsumerProps(
       resultMap.set(resolvedName, entry);
     }
 
-    if (/\bclassName\s*[={]/.test(attrText)) {
-      entry.className = true;
-    }
-    if (/\bstyle\s*[={]/.test(attrText)) {
-      entry.style = true;
-    }
-    if (/\{\.\.\./.test(attrText)) {
-      entry.spreadProps = true;
-    }
-
-    // Check for element-specific props (lowercase props not in known set)
-    // Matches:
-    // 1. prop= or prop{ - value prop
-    // 2. prop followed by whitespace and another prop - boolean shorthand
-    // 3. prop at end of attributes - boolean shorthand
-    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
-    for (const pm of attrText.matchAll(propRe)) {
-      const propName = pm[1]!;
-      if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
-        entry.elementProps = true;
-        break;
-      }
-    }
+    entry.className ||= className;
+    entry.style ||= style;
+    entry.spreadProps ||= spreadProps;
+    entry.elementProps ||= elementProps;
   }
   return [...resultMap.values()];
 }
