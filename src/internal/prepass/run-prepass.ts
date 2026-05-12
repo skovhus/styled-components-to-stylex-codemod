@@ -773,6 +773,11 @@ interface ConsumerJsxScanResult {
   staticPropUsages: ConsumerStaticPropUsage[];
 }
 
+interface ConsumerOpeningUsage {
+  externalProps: Omit<ConsumerPropResult, "name">;
+  staticUsage: ComponentPropUsageCandidate;
+}
+
 /**
  * Scan source for JSX usage of specific components with className, style,
  * element-specific props, or JSX spread.
@@ -814,7 +819,8 @@ function scanConsumerJsxUsages(
       continue;
     }
 
-    const externalProps = readExternalConsumerProps(opening);
+    const openingUsage = readConsumerOpeningUsage(opening);
+    const { externalProps } = openingUsage;
     if (
       externalProps.className ||
       externalProps.style ||
@@ -842,7 +848,7 @@ function scanConsumerJsxUsages(
     staticPropUsages.push({
       name: resolvedName,
       filePath,
-      usage: readStaticPropUsage(opening),
+      usage: openingUsage.staticUsage,
     });
   }
 
@@ -870,47 +876,22 @@ function resolveJsxOpeningComponentName(
   return memberName && componentNames.has(memberName) ? memberName : undefined;
 }
 
-function readExternalConsumerProps(opening: AstNode): Omit<ConsumerPropResult, "name"> {
-  const result = {
+function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
+  const externalProps = {
     className: false,
     style: false,
     elementProps: false,
     spreadProps: false,
   };
-
-  for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
-    if (!attr) {
-      continue;
-    }
-    if (attr.type === "JSXSpreadAttribute") {
-      result.spreadProps = true;
-      continue;
-    }
-    if (attr.type !== "JSXAttribute") {
-      continue;
-    }
-
-    const propName = getJsxAttributeName(attr.name as AstNode | undefined);
-    if (propName === "className") {
-      result.className = true;
-    } else if (propName === "style") {
-      result.style = true;
-    } else if (propName && isDomLikeConsumerProp(propName)) {
-      result.elementProps = true;
-    }
-  }
-
-  return result;
-}
-
-function readStaticPropUsage(opening: AstNode): ComponentPropUsageCandidate {
   const props: ComponentPropUsageCandidate["props"] = {};
   let hasSpread = false;
+
   for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
     if (!attr) {
       continue;
     }
     if (attr.type === "JSXSpreadAttribute") {
+      externalProps.spreadProps = true;
       hasSpread = true;
       continue;
     }
@@ -918,14 +899,25 @@ function readStaticPropUsage(opening: AstNode): ComponentPropUsageCandidate {
       continue;
     }
     const propName = getJsxAttributeName(attr.name as AstNode | undefined);
-    if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+    if (!propName) {
       continue;
     }
-    const value = readStaticJsxLiteral(attr);
-    props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+
+    if (propName === "className") {
+      externalProps.className = true;
+    } else if (propName === "style") {
+      externalProps.style = true;
+    } else if (isDomLikeConsumerProp(propName)) {
+      externalProps.elementProps = true;
+    }
+
+    if (!KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+      const value = readStaticJsxLiteral(attr);
+      props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+    }
   }
 
-  return { props, hasSpread };
+  return { externalProps, staticUsage: { props, hasSpread } };
 }
 
 const DOM_LIKE_CONSUMER_PROPS = new Set([
