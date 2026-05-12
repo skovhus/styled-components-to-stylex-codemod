@@ -547,9 +547,7 @@ const styles = stylex.create({
     backgroundColor: "#fdf2f8",
   },
   focusIndexSection: {
-    outlineWidth: 1,
-    outlineStyle: "solid",
-    outlineColor: "#94a3b8",
+    color: "#334155",
   },
   scrollable: {
     overflowY: "auto",

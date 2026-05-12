@@ -139,9 +139,7 @@ export const ImportedIntersectionSection = styled(Text).attrs({
 export const FocusIndexSection = styled(Text).attrs((props: { focusIndex?: number }) => ({
   tabIndex: props.focusIndex,
 }))<{ focusIndex?: number }>`
-  outline-width: 1px;
-  outline-style: solid;
-  outline-color: #94a3b8;
+  color: #334155;
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
