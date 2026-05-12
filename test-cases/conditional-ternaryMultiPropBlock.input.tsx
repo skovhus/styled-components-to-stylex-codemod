@@ -1,6 +1,7 @@
 // Ternary that returns multi-line CSS blocks (multiple declarations per branch).
 import * as React from "react";
 import styled from "styled-components";
+import { flexCenter } from "./lib/helpers";
 
 const Text = (
   props: React.ComponentProps<"span"> & {
@@ -131,6 +132,63 @@ const InverseMergeBox = styled.div<{
   ${(props) => (props.tone !== "primary" ? "color: blue;" : "")}
 `;
 
+const GroupedInverseBox = styled.div<{ $add?: boolean; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${(props) => (!props.$add ? "color: blue;" : "")}
+  ${(props) =>
+    props.$add
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
+const KeyCollisionBox = styled.div<{
+  $foo?: boolean;
+  $bar?: boolean;
+  $fooBar?: boolean;
+  $baz: boolean;
+}>`
+  padding: 8px;
+  ${(props) => (props.$fooBar ? "color: blue;" : "")}
+  ${(props) =>
+    props.$foo && props.$bar
+      ? `
+      color: red;
+      ${props.$baz ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
+const StyleFnKeyCollisionBox = styled.div<{
+  $color?: string;
+  $hasSubtitle: boolean;
+}>`
+  padding: 8px;
+  color: ${(props) => props.$color};
+  ${(props) =>
+    props.$color
+      ? `
+      border-color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
+const AfterBaseCollisionBox = styled.div<{ $after1?: boolean; $hasSubtitle: boolean }>`
+  padding: 8px;
+  ${flexCenter()}
+  background: white;
+  ${(props) =>
+    props.$after1
+      ? `
+      color: red;
+      ${props.$hasSubtitle ? "padding-bottom: 20px;" : "padding-bottom: 40px;"}
+    `
+      : ""}
+`;
+
 export const App = () => (
   <div
     style={{
@@ -185,5 +243,32 @@ export const App = () => (
     <InverseMergeBox tone="secondary" $warn={false} $hasSubtitle>
       Secondary inverse stays blue
     </InverseMergeBox>
+    <GroupedInverseBox $add $hasSubtitle>
+      Grouped inverse subtitle stays red
+    </GroupedInverseBox>
+    <GroupedInverseBox $add $hasSubtitle={false}>
+      Grouped inverse no subtitle stays red
+    </GroupedInverseBox>
+    <GroupedInverseBox $add={false} $hasSubtitle>
+      Grouped inverse no add stays blue
+    </GroupedInverseBox>
+    <KeyCollisionBox $foo $bar $baz $fooBar={false}>
+      Key collision factored branch stays red
+    </KeyCollisionBox>
+    <KeyCollisionBox $foo={false} $bar={false} $baz={false} $fooBar>
+      Key collision existing prop stays blue
+    </KeyCollisionBox>
+    <StyleFnKeyCollisionBox $color="green" $hasSubtitle>
+      Style fn key collision keeps green text
+    </StyleFnKeyCollisionBox>
+    <StyleFnKeyCollisionBox $color="green" $hasSubtitle={false}>
+      Style fn key collision no subtitle keeps green text
+    </StyleFnKeyCollisionBox>
+    <AfterBaseCollisionBox $after1 $hasSubtitle>
+      After-base key collision subtitle stays red
+    </AfterBaseCollisionBox>
+    <AfterBaseCollisionBox $after1 $hasSubtitle={false}>
+      After-base key collision no subtitle stays red
+    </AfterBaseCollisionBox>
   </div>
 );

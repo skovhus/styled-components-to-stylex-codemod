@@ -1,6 +1,7 @@
 // Ternary that returns multi-line CSS blocks (multiple declarations per branch).
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { helpers } from "./lib/helpers.stylex";
 import { $colors } from "./tokens.stylex";
 
 const Text = (
@@ -175,6 +176,93 @@ function InverseMergeBox(props: InverseMergeBoxProps) {
   );
 }
 
+type GroupedInverseBoxProps = {
+  add?: boolean;
+  hasSubtitle: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function GroupedInverseBox(props: GroupedInverseBoxProps) {
+  const { children, add, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.groupedInverseBox,
+        !add && styles.groupedInverseBoxNotAdd,
+        add && hasSubtitle && styles.groupedInverseBoxAddHasSubtitle,
+        add && !hasSubtitle && styles.groupedInverseBoxAddNotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type KeyCollisionBoxProps = {
+  foo?: boolean;
+  bar?: boolean;
+  fooBar?: boolean;
+  baz: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function KeyCollisionBox(props: KeyCollisionBoxProps) {
+  const { children, fooBar, foo, bar, baz } = props;
+  return (
+    <div
+      sx={[
+        styles.keyCollisionBox,
+        fooBar && styles.keyCollisionBoxFooBar,
+        foo && bar && baz && styles.keyCollisionBoxFooBarBaz,
+        foo && bar && !baz && styles.keyCollisionBoxFooBarNotBaz,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type StyleFnKeyCollisionBoxProps = React.PropsWithChildren<{
+  color?: string;
+  hasSubtitle: boolean;
+}>;
+
+function StyleFnKeyCollisionBox(props: StyleFnKeyCollisionBoxProps) {
+  const { children, color, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.styleFnKeyCollisionBox,
+        color != null && styles.styleFnKeyCollisionBoxColor(color),
+        color && hasSubtitle ? styles.styleFnKeyCollisionBoxColorHasSubtitle : undefined,
+        color && !hasSubtitle ? styles.styleFnKeyCollisionBoxColorNotHasSubtitle : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
+type AfterBaseCollisionBoxProps = {
+  after1?: boolean;
+  hasSubtitle: boolean;
+} & Omit<React.ComponentProps<"div">, "className" | "style">;
+
+function AfterBaseCollisionBox(props: AfterBaseCollisionBoxProps) {
+  const { children, after1, hasSubtitle } = props;
+  return (
+    <div
+      sx={[
+        styles.afterBaseCollisionBox,
+        helpers.flexCenter,
+        styles.afterBaseCollisionBoxAfter1,
+        after1 && hasSubtitle && styles.afterBaseCollisionBoxAfter1HasSubtitle,
+        after1 && !hasSubtitle && styles.afterBaseCollisionBoxAfter1NotHasSubtitle,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div
     style={{
@@ -229,6 +317,33 @@ export const App = () => (
     <InverseMergeBox tone="secondary" warn={false} hasSubtitle>
       Secondary inverse stays blue
     </InverseMergeBox>
+    <GroupedInverseBox add hasSubtitle>
+      Grouped inverse subtitle stays red
+    </GroupedInverseBox>
+    <GroupedInverseBox add hasSubtitle={false}>
+      Grouped inverse no subtitle stays red
+    </GroupedInverseBox>
+    <GroupedInverseBox add={false} hasSubtitle>
+      Grouped inverse no add stays blue
+    </GroupedInverseBox>
+    <KeyCollisionBox foo bar baz fooBar={false}>
+      Key collision factored branch stays red
+    </KeyCollisionBox>
+    <KeyCollisionBox foo={false} bar={false} baz={false} fooBar>
+      Key collision existing prop stays blue
+    </KeyCollisionBox>
+    <StyleFnKeyCollisionBox color="green" hasSubtitle>
+      Style fn key collision keeps green text
+    </StyleFnKeyCollisionBox>
+    <StyleFnKeyCollisionBox color="green" hasSubtitle={false}>
+      Style fn key collision no subtitle keeps green text
+    </StyleFnKeyCollisionBox>
+    <AfterBaseCollisionBox after1 hasSubtitle>
+      After-base key collision subtitle stays red
+    </AfterBaseCollisionBox>
+    <AfterBaseCollisionBox after1 hasSubtitle={false}>
+      After-base key collision no subtitle stays red
+    </AfterBaseCollisionBox>
   </div>
 );
 
@@ -360,5 +475,73 @@ const styles = stylex.create({
   },
   inverseMergeBoxToneNotPrimary: {
     color: "blue",
+  },
+  groupedInverseBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  groupedInverseBoxNotAdd: {
+    color: "blue",
+  },
+  groupedInverseBoxAddHasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  groupedInverseBoxAddNotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  keyCollisionBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  keyCollisionBoxFooBar: {
+    color: "blue",
+  },
+  keyCollisionBoxFooBarBaz: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  keyCollisionBoxFooBarNotBaz: {
+    color: "red",
+    paddingBottom: 40,
+  },
+  styleFnKeyCollisionBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  styleFnKeyCollisionBoxColorHasSubtitle: {
+    borderColor: "red",
+    paddingBottom: 20,
+  },
+  styleFnKeyCollisionBoxColorNotHasSubtitle: {
+    borderColor: "red",
+    paddingBottom: 40,
+  },
+  styleFnKeyCollisionBoxColor: (color: string) => ({
+    color,
+  }),
+  afterBaseCollisionBox: {
+    paddingTop: 8,
+    paddingRight: 8,
+    paddingBottom: 8,
+    paddingLeft: 8,
+  },
+  afterBaseCollisionBoxAfter1: {
+    backgroundColor: "white",
+  },
+  afterBaseCollisionBoxAfter1HasSubtitle: {
+    color: "red",
+    paddingBottom: 20,
+  },
+  afterBaseCollisionBoxAfter1NotHasSubtitle: {
+    color: "red",
+    paddingBottom: 40,
   },
 });
