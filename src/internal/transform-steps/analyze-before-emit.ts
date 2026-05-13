@@ -23,7 +23,7 @@ import {
   hasSpreadInJsx,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
-import { generateBridgeClassName } from "../utilities/bridge-classname.js";
+import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
   astNodesEqual,
   type ExpressionKind,
@@ -226,6 +226,29 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (isBridgeComponent) {
       const absPath = pathResolve(file.path);
       decl.bridgeClassName = generateBridgeClassName(absPath, decl.localName);
+    }
+  }
+
+  // styled(Base).attrs({ as: Other }) keeps Base's styled-components class on
+  // the rendered Other component. If Base needs a bridge class for unconverted
+  // selectors, the attrs wrapper must carry that selector identity too.
+  for (const decl of styledDecls) {
+    if (decl.base.kind !== "component" || !decl.attrsInfo?.attrsAsTag) {
+      continue;
+    }
+    const baseDecl = declByLocal.get(decl.base.ident);
+    if (!baseDecl?.bridgeClassName) {
+      continue;
+    }
+    const inheritedBridgeClass = bridgeClassVarName(baseDecl.localName);
+    const alreadyForwarded = (decl.extraClassNames ?? []).some(
+      (entry) => entry.expr.type === "Identifier" && entry.expr.name === inheritedBridgeClass,
+    );
+    if (!alreadyForwarded) {
+      decl.extraClassNames = [
+        ...(decl.extraClassNames ?? []),
+        { expr: j.identifier(inheritedBridgeClass) as ExpressionKind },
+      ];
     }
   }
 

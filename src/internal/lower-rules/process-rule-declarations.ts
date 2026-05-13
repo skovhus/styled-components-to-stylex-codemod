@@ -14,7 +14,7 @@ import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.j
 import { resolveExpressionToStaticString } from "./resolve-imported-static-string.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 
-type CommentSource = { leading?: string; trailingLine?: string } | null;
+type CommentSource = { leading?: string; leadingLine?: string; trailingLine?: string } | null;
 
 type RuleDeclarationContext = {
   ctx: DeclProcessingState;
@@ -92,6 +92,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
           state.inlineKeyframeNameMap?.get(rawName) ?? cssKeyframeNameToIdentifier(rawName);
         const commentSource = {
           leading: (d as any).leadingComment,
+          leadingLine: (d as any).leadingLineComment,
           trailingLine: (d as any).trailingLineComment,
         };
         applyResolvedPropValue("animationName", state.j.identifier(jsName), commentSource);
@@ -114,6 +115,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       ) {
         const commentSource = {
           leading: (d as any).leadingComment,
+          leadingLine: (d as any).leadingLineComment,
           trailingLine: (d as any).trailingLineComment,
         };
         let isFirst = true;
@@ -147,6 +149,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
         i === 0
           ? {
               leading: (d as any).leadingComment,
+              leadingLine: (d as any).leadingLineComment,
               trailingLine: (d as any).trailingLineComment,
             }
           : null;
