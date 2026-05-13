@@ -783,10 +783,6 @@ function consumerUsageReferencesDefinition(
   cachedRead: (path: string) => string,
   resolve: Resolve,
 ): boolean {
-  if (usage.filePath === defFile) {
-    return true;
-  }
-
   if (usage.importSource) {
     return importSourceReferencesDefinition(
       usage.importSource,
@@ -796,6 +792,10 @@ function consumerUsageReferencesDefinition(
       resolve,
       cachedRead,
     );
+  }
+
+  if (usage.filePath === defFile) {
+    return true;
   }
 
   return fileImportsFrom(
@@ -828,7 +828,8 @@ function importSourceReferencesDefinition(
 }
 
 /** Quick pre-check: does this source mention JSX that might use external consumer props? */
-const CONSUMER_PROPS_QUICK_RE = /<[A-Z]|\b(className|style)\s*[={]|\{\.\.\./;
+const CONSUMER_PROPS_QUICK_RE =
+  /<(?:[A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)|\b(className|style)\s*[={]|\{\.\.\./;
 
 /** Matches `import { Original as Local, ... }` — captures original and local names. */
 const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
@@ -1130,22 +1131,7 @@ function buildPropUsageByFile(args: {
         continue;
       }
       for (const candidate of candidates) {
-        const usageFile = candidate.filePath;
-        if (
-          usageFile !== defFile &&
-          !(
-            candidate.importSource &&
-            importSourceReferencesDefinition(
-              candidate.importSource,
-              usageFile,
-              name,
-              defFile,
-              resolve,
-              cachedRead,
-            )
-          ) &&
-          !fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)
-        ) {
+        if (!consumerUsageReferencesDefinition(candidate, name, defFile, cachedRead, resolve)) {
           continue;
         }
         const byComponent = getOrCreatePropUsageFileMap(propUsageByFile, toRealPath(defFile));
@@ -1291,7 +1277,7 @@ function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefin
   }
 }
 
-/** Use ripgrep to find files with PascalCase JSX tags. */
+/** Use ripgrep to find files with PascalCase or namespace JSX tags. */
 function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined {
   const dirs = deduplicateParentDirs(files);
   if (dirs.length === 0) {
@@ -1302,7 +1288,7 @@ function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined
     const globArgs = ["*.tsx", "*.jsx", "*.ts", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
-    const cmd = `rg -l ${shellQuote(String.raw`<[A-Z]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const cmd = `rg -l ${shellQuote(String.raw`<([A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
     const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     return new Set(
       output

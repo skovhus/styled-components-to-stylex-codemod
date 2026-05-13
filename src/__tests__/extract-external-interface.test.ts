@@ -139,6 +139,109 @@ describe("runPrepass prop usage inventory", () => {
       process.chdir(originalCwd);
     }
   });
+
+  it("keeps namespace-sourced static prop observations tied to their source", async () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "prop-usage-namespace-source-test-"));
+    writeFileSync(
+      path.join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { baseUrl: "." } }),
+    );
+    const componentsDir = path.join(fixtureDir, "components");
+    const consumersDir = path.join(fixtureDir, "consumers");
+    mkdirSync(componentsDir, { recursive: true });
+    mkdirSync(consumersDir, { recursive: true });
+
+    writeFileSync(
+      path.join(componentsDir, "A.tsx"),
+      'import styled from "styled-components";\nexport const Button = styled.button<{ size: number }>`font-size: ${p => p.size}px;`;',
+    );
+    writeFileSync(
+      path.join(componentsDir, "B.tsx"),
+      'import styled from "styled-components";\nexport const Button = styled.button<{ size: number }>`font-size: ${p => p.size}px;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "cross-file.tsx"),
+      [
+        'import * as A from "../components/A";',
+        'import { Button as BButton } from "../components/B";',
+        "export const App = () => (",
+        "  <>",
+        "    <A.Button size={1}>A</A.Button>",
+        "    <BButton>B</BButton>",
+        "  </>",
+        ");",
+      ].join("\n"),
+    );
+    writeFileSync(
+      path.join(componentsDir, "Other.tsx"),
+      'import styled from "styled-components";\nexport const Button = styled.button<{ size: number }>`font-size: ${p => p.size}px;`;',
+    );
+    writeFileSync(
+      path.join(componentsDir, "Local.tsx"),
+      [
+        'import styled from "styled-components";',
+        'import * as Other from "./Other";',
+        "export const Button = styled.button<{ size: number }>`font-size: ${p => p.size}px;`;",
+        "export const App = () => <Other.Button size={2}>Other</Other.Button>;",
+      ].join("\n"),
+    );
+
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(fixtureDir);
+      const resolver = createModuleResolver();
+      const prepassResult = await runPrepass({
+        filesToTransform: collectFiles(fixtureDir),
+        consumerPaths: [],
+        resolver,
+        createExternalInterface: false,
+      });
+
+      expect(propUsageToSnapshot(prepassResult.crossFileInfo.propUsageByFile!, fixtureDir))
+        .toMatchInlineSnapshot(`
+          {
+            "components/A.tsx:Button": {
+              "componentName": "Button",
+              "hasUnknownUsage": false,
+              "props": {
+                "size": {
+                  "hasUnknown": false,
+                  "omittedCount": 0,
+                  "usageCount": 1,
+                  "values": [
+                    1,
+                  ],
+                },
+              },
+              "usageCount": 1,
+            },
+            "components/B.tsx:Button": {
+              "componentName": "Button",
+              "hasUnknownUsage": false,
+              "props": {},
+              "usageCount": 1,
+            },
+            "components/Other.tsx:Button": {
+              "componentName": "Button",
+              "hasUnknownUsage": false,
+              "props": {
+                "size": {
+                  "hasUnknown": false,
+                  "omittedCount": 0,
+                  "usageCount": 1,
+                  "values": [
+                    2,
+                  ],
+                },
+              },
+              "usageCount": 1,
+            },
+          }
+        `);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
 });
 
 describe("runPrepass createExternalInterface", () => {
@@ -783,6 +886,16 @@ describe("runPrepass createExternalInterface — className/style detection", () 
       'import { ResponsiveImage } from "../components/ResponsiveImage";\nexport const App = () => <ResponsiveImage srcSet="hero-2x.png 2x" sizes="100vw" />;',
     );
 
+    // Lowercase namespace member JSX should still be scanned for element-only props.
+    writeFileSync(
+      path.join(componentsDir, "LowerNamespaceImage.tsx"),
+      'import styled from "styled-components";\nexport const LowerNamespaceImage = styled.img`display: block;`;',
+    );
+    writeFileSync(
+      path.join(consumersDir, "lower-namespace-image.tsx"),
+      'import * as ui from "../components/LowerNamespaceImage";\nexport const App = () => <ui.LowerNamespaceImage srcSet="hero-2x.png 2x" sizes="100vw" />;',
+    );
+
     // JSX passed through an attribute should still be scanned.
     writeFileSync(
       path.join(componentsDir, "SlottedButton.tsx"),
@@ -950,6 +1063,17 @@ describe("runPrepass createExternalInterface — className/style detection", () 
     });
   });
 
+  it("detects element-only props on lowercase namespace member JSX", () => {
+    const snapshot = toSnapshot(result, fixtureDir);
+    expect(snapshot["components/LowerNamespaceImage.tsx:LowerNamespaceImage"]).toMatchObject({
+      className: false,
+      elementProps: true,
+      spreadProps: false,
+      style: false,
+      styles: false,
+    });
+  });
+
   it("detects JSX consumers nested inside attribute expressions", () => {
     const snapshot = toSnapshot(result, fixtureDir);
     expect(snapshot["components/SlottedButton.tsx:SlottedButton"]).toMatchObject({
@@ -1003,6 +1127,15 @@ describe("runPrepass createExternalInterface — className/style detection", () 
           "styles": true,
         },
         "components/ElementOnly.tsx:ElementOnly": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "components/LowerNamespaceImage.tsx:LowerNamespaceImage": {
           "as": false,
           "className": false,
           "elementProps": true,
