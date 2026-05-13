@@ -66,8 +66,12 @@ interface InheritedSectionProps extends ImportedSectionProps {
 }
 
 type UnionSectionProps =
-  | { kind: "alpha"; someAttribute?: boolean }
-  | { kind: "beta"; someAttribute?: boolean };
+  | {
+      kind: "alpha";
+    }
+  | ({
+      kind: "beta";
+    } & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">);
 
 type InputProps = {
   padding?: string;
@@ -241,7 +245,7 @@ type MultiImportedSectionProps = Omit<
   ImportedSectionProps & {
     someAttribute?: boolean;
   },
-  "someAttribute"
+  "otherAttribute" | "someAttribute"
 > &
   Omit<
     React.ComponentPropsWithRef<typeof Text>,
@@ -269,10 +273,7 @@ export function InheritedSection(
 }
 
 // Pattern 3l: union aliases should keep wrapper-specific attrs Omit when not mutated
-export function UnionSection(
-  props: Omit<UnionSectionProps, "someAttribute"> &
-    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
-) {
+export function UnionSection(props: UnionSectionProps) {
   return <Text {...props} someAttribute={true} {...stylex.props(styles.unionSection)} />;
 }
 
