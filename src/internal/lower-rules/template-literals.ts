@@ -48,7 +48,6 @@ import {
 import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
-  hasMultipleInlineKeyframeAnimationSegments,
 } from "../keyframes.js";
 
 type ImportMeta = { importedName: string; source: ImportSource };
@@ -210,9 +209,6 @@ export function resolveTemplateLiteralBranch(
       if (d.value.kind === "static") {
         // Expand animation shorthand referencing inline @keyframes
         if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
-          if (hasMultipleInlineKeyframeAnimationSegments(d.valueRaw, ctx.keyframesNames)) {
-            return null;
-          }
           const expanded: Record<string, unknown> = {};
           if (
             expandStaticAnimationShorthand(

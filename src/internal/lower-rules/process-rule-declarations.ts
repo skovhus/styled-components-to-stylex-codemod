@@ -9,11 +9,7 @@ import {
   isUnsupportedBackgroundShorthandValue,
 } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
-import {
-  cssKeyframeNameToIdentifier,
-  expandStaticAnimationShorthand,
-  hasMultipleInlineKeyframeAnimationSegments,
-} from "../keyframes.js";
+import { cssKeyframeNameToIdentifier, expandStaticAnimationShorthand } from "../keyframes.js";
 import { handleInterpolatedDeclaration } from "./rule-interpolated-declaration.js";
 import { resolveExpressionToStaticString } from "./resolve-imported-static-string.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
@@ -106,13 +102,6 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
     // Handle static `animation` shorthand that references inline @keyframes.
     // Expand to longhand properties with an identifier reference for the name.
     if (d.property === "animation" && d.value.kind === "static" && state.keyframesNames.size > 0) {
-      if (hasMultipleInlineKeyframeAnimationSegments(d.valueRaw, state.keyframesNames)) {
-        ctx.state.bailUnsupported(
-          ctx.decl,
-          "Unsupported animation shorthand: multiple inline keyframes",
-        );
-        break;
-      }
       const expanded: Record<string, unknown> = {};
       if (
         expandStaticAnimationShorthand(

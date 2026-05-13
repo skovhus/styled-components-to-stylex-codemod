@@ -1,5 +1,4 @@
-// @expected-warning: Unsupported animation shorthand: multiple inline keyframes
-// Multiple inline keyframes in one animation shorthand cannot be emitted as static StyleX keyframes.
+// Multiple inline keyframes in one animation shorthand should emit comma-separated animation-name.
 import styled, { css } from "styled-components";
 
 const PrimaryMoveAnimation = css`

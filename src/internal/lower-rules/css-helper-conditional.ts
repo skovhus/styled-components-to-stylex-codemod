@@ -61,7 +61,6 @@ import {
 import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
-  hasMultipleInlineKeyframeAnimationSegments,
 } from "../keyframes.js";
 
 type CssHelperConditionalContext = Pick<
@@ -641,9 +640,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (d.value.kind === "static") {
             // Expand static animation shorthand referencing keyframes
             if (d.property === "animation" && ctx.keyframesNames && ctx.keyframesNames.size > 0) {
-              if (hasMultipleInlineKeyframeAnimationSegments(d.valueRaw, ctx.keyframesNames)) {
-                return null;
-              }
               const expanded: Record<string, unknown> = {};
               if (
                 expandStaticAnimationShorthand(

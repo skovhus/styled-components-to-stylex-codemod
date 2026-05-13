@@ -225,7 +225,6 @@ export function tryHandleAnimation(args: {
     value: unknown,
     commentSource: { leading?: string; trailingLine?: string } | null,
   ) => void;
-  bailUnsupportedMultipleKeyframes?: () => void;
   bailUnsupportedUnknownVar?: () => void;
 }): boolean {
   const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
@@ -501,11 +500,6 @@ export function tryHandleAnimation(args: {
       timelines.push(timeline ?? null);
     }
 
-    if (animNames.length > 1 && animNames.some((name) => name.kind === "ident")) {
-      args.bailUnsupportedMultipleKeyframes?.();
-      return false;
-    }
-
     const firstAnim = animNames[0];
     if (animNames.length === 1 && firstAnim && firstAnim.kind === "ident") {
       applyProp("animationName", j.identifier(firstAnim.name), null);
@@ -568,9 +562,13 @@ function buildCommaSeparatedValues(
   fallback: string,
 ): string | ExpressionKind {
   const parts = values.map((value) => value ?? fallback);
-  if (parts.length === 1) {
-    const first = parts[0]!;
-    return typeof first === "string" ? first : cloneAstNode(first);
+  const first = parts[0];
+  if (
+    parts.length === 1 ||
+    (first != null && typeof first === "string" && parts.every((part) => part === first))
+  ) {
+    const firstPart = parts[0]!;
+    return typeof firstPart === "string" ? firstPart : cloneAstNode(firstPart);
   }
   const quasis: any[] = [];
   const exprs: ExpressionKind[] = [];

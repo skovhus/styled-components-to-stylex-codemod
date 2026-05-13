@@ -638,11 +638,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         filePath,
         avoidNames,
         applyResolvedPropValue,
-        bailUnsupportedMultipleKeyframes: () =>
-          bailUnsupportedLocal(
-            decl,
-            "Unsupported animation shorthand: multiple keyframes in one animation declaration",
-          ),
         bailUnsupportedUnknownVar: () =>
           bailUnsupportedLocal(
             decl,
