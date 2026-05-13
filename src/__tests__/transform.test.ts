@@ -74,8 +74,10 @@ type FixtureCase = {
   outputPath: string;
   inputFile: string;
   outputFile: string;
-  parser: "tsx" | "ts" | "babel" | "flow";
+  parser: "tsx" | "babel" | "flow";
 };
+
+type TransformTestParser = FixtureCase["parser"] | "ts";
 
 // Supported file extensions and their parsers
 const FIXTURE_EXTENSIONS: {
@@ -207,7 +209,7 @@ function runTransform(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "ts" | "babel" | "flow" = "tsx",
+  parser: TransformTestParser = "tsx",
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
@@ -226,7 +228,7 @@ function runTransformWithDiagnostics(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "ts" | "babel" | "flow" = "tsx",
+  parser: TransformTestParser = "tsx",
 ): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
@@ -2293,6 +2295,112 @@ export const App = () => <MaskedPanel>Masked</MaskedPanel>;
     );
 
     expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy aliased styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles as mask } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${mask(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: "mask(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy member styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { helpers } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${helpers.scrollFadeMaskStyles(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (
+          ctx.calleeImportedName === "helpers" &&
+          ctx.calleeMemberPath?.join(".") === "scrollFadeMaskStyles"
+        ) {
+          return {
+            usage: "props",
+            expr: "helpers.scrollFadeMaskStyles(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not rename transient props on unrelated JSX member expressions", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <Other.Grid $active>Other grid</Other.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-member-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<WidgetSet.Grid active>");
+    expect(result).toContain("<Other.Grid $active>");
   });
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {

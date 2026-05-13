@@ -998,9 +998,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     );
     const attrsSxExpr = wrappedAcceptsSx ? staticSxAttrToExpression(j, staticAttrs.sx) : null;
     const staticAttrsForJsx = attrsSxExpr ? omitStaticAttr(staticAttrs, "sx") : staticAttrs;
-    if (attrsSxExpr) {
-      styleArgs.unshift(attrsSxExpr);
-    }
     const attrsStaticStyleExpr = attrsInfo?.attrsStaticStyleExpr as ExpressionKind | undefined;
     const needsSxVar =
       allowClassNameProp ||
@@ -1037,6 +1034,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       if (allowSxProp || wrapperPropsExposeSx) {
         styleArgs.push(sxId);
+      }
+      if (attrsSxExpr) {
+        styleArgs.push(attrsSxExpr);
       }
 
       // Add defaultAttrs props to destructureProps for nullish coalescing patterns

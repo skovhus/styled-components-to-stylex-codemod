@@ -40,6 +40,7 @@ import {
   isSingleBackgroundComponent,
   isValidIdentifierName,
 } from "../utilities/string-utils.js";
+import { jsxNameTargetsLocalBinding } from "../utilities/jsx-name-utils.js";
 import {
   cssDeclarationToStylexDeclarations,
   isStylexStringOnlyCssProp,
@@ -1913,11 +1914,25 @@ function collectCallSiteAttrNames(
   };
   root
     .find(j.JSXElement)
-    .filter((p: any) => jsxNameLastSegment(p.node.openingElement?.name) === componentName)
+    .filter((p: any) =>
+      jsxNameTargetsLocalBinding({
+        root,
+        j,
+        name: p.node.openingElement?.name,
+        localName: componentName,
+      }),
+    )
     .forEach((p: any) => collectFromElement(p.node.openingElement));
   root
     .find(j.JSXSelfClosingElement)
-    .filter((p: any) => jsxNameLastSegment(p.node.name) === componentName)
+    .filter((p: any) =>
+      jsxNameTargetsLocalBinding({
+        root,
+        j,
+        name: p.node.name,
+        localName: componentName,
+      }),
+    )
     .forEach((p: any) => collectFromElement(p.node));
   if (!hasSpread) {
     return { hasSpread: false, explicitTransientAtSpreadSites: null };
@@ -1935,20 +1950,6 @@ function collectCallSiteAttrNames(
     }
   }
   return { hasSpread: true, explicitTransientAtSpreadSites: intersection };
-}
-
-function jsxNameLastSegment(name: unknown): string | null {
-  const node = name as { type?: string; name?: string; property?: unknown };
-  if (!node) {
-    return null;
-  }
-  if (node.type === "JSXIdentifier") {
-    return node.name ?? null;
-  }
-  if (node.type === "JSXMemberExpression") {
-    return jsxNameLastSegment(node.property);
-  }
-  return null;
 }
 
 /**

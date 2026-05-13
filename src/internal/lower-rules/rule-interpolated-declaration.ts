@@ -1494,7 +1494,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
-      if (isUnchangedImportedHelperStyleCall(res, exprAst)) {
+      if (isUnchangedImportedHelperStyleCall(res, exprAst, expr)) {
         warnings.push({
           severity: "warning",
           type: "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
@@ -3363,6 +3363,7 @@ type ResolvedStylesCallMeta = {
 function isUnchangedImportedHelperStyleCall(
   res: ResolvedStylesCallMeta,
   exprAst: unknown,
+  originalExpr: unknown,
 ): boolean {
   const resolveResult = res.resolveCallResult;
   const resolveContext = res.resolveCallContext;
@@ -3378,12 +3379,39 @@ function isUnchangedImportedHelperStyleCall(
   ) {
     return false;
   }
-  const expression = exprAst as { type?: string; callee?: { type?: string; name?: string } } | null;
-  if (expression?.type !== "CallExpression") {
+  if (!isCallExpressionLike(exprAst) || !isCallExpressionLike(originalExpr)) {
     return false;
   }
-  const callee = expression.callee;
-  return callee?.type === "Identifier" && callee.name === resolveContext.calleeImportedName;
+  return calleeKey(exprAst.callee) === calleeKey(originalExpr.callee);
+}
+
+function isCallExpressionLike(node: unknown): node is { type: "CallExpression"; callee: unknown } {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
+  );
+}
+
+function calleeKey(callee: unknown): string | null {
+  const node = callee as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: { type?: string; name?: string };
+    computed?: boolean;
+  };
+  if (node?.type === "Identifier" && node.name) {
+    return node.name;
+  }
+  if (
+    node?.type === "MemberExpression" &&
+    node.computed !== true &&
+    node.property?.type === "Identifier" &&
+    node.property.name
+  ) {
+    const objectKey = calleeKey(node.object);
+    return objectKey ? `${objectKey}.${node.property.name}` : null;
+  }
+  return null;
 }
 
 function emitStaticObservedValue(

@@ -518,7 +518,7 @@ function AttrsSxButton(
 ) {
   const { children, sx, ...rest } = props;
   return (
-    <SxAwareButton {...rest} type="button" sx={[attrsMarkerStyle, styles.attrsSxButton, sx]}>
+    <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, sx, attrsMarkerStyle]}>
       {children}
     </SxAwareButton>
   );

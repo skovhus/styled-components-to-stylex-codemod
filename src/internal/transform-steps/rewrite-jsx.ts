@@ -16,6 +16,7 @@ import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
+import { jsxNamePath, namespaceDeclaresLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
@@ -1660,9 +1661,6 @@ function jsxNameReferencesStyledLocal(
   if (path.length === 0) {
     return false;
   }
-  if (path[path.length - 1] === localName) {
-    return true;
-  }
   if (path.length === 1) {
     const identifier = path[0]!;
     return (
@@ -1670,17 +1668,6 @@ function jsxNameReferencesStyledLocal(
     );
   }
   return memberPathReferencesLocal(path, localName, root, j);
-}
-
-function jsxNamePath(name: unknown): string[] {
-  const n = name as { type?: string; name?: string; object?: unknown; property?: unknown };
-  if (n?.type === "JSXIdentifier" && typeof n.name === "string") {
-    return [n.name];
-  }
-  if (n?.type === "JSXMemberExpression") {
-    return [...jsxNamePath(n.object), ...jsxNamePath(n.property)];
-  }
-  return [];
 }
 
 function identifierAliasReferencesLocal(
@@ -1720,7 +1707,12 @@ function memberPathReferencesLocal(
         references = true;
       }
     });
-  return references;
+  return (
+    references ||
+    (properties.length === 1 &&
+      properties[0] === localName &&
+      namespaceDeclaresLocal(root, j, rootName, localName))
+  );
 }
 
 function objectPathValue(expr: unknown, path: readonly string[]): unknown {
