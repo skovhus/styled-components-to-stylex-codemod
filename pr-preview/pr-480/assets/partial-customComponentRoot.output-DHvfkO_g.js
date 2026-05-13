@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-B83wAgEL.js";import{t as n}from"./text-BSDp4k93.js";t();var r=e(),i=()=>(0,r.jsx)(`div`,{className:`xe8ttls xmftpkk`,children:(0,r.jsx)(n,{variant:`small`,className:`x4c2zqf x1s688f`,children:`Imported custom root`})});export{i as App};
