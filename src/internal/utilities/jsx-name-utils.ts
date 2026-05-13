@@ -64,6 +64,9 @@ function tsModuleDeclaresLocal(node: unknown, localName: string): boolean {
 }
 
 function statementDeclaresLocal(statement: unknown, localName: string): boolean {
+  if (!statement || typeof statement !== "object") {
+    return false;
+  }
   const node = statement as {
     type?: string;
     declaration?: unknown;
@@ -79,11 +82,15 @@ function statementDeclaresLocal(statement: unknown, localName: string): boolean 
     if (statementDeclaresLocal(node.declaration, localName)) {
       return true;
     }
+    // Only match by the specifier's LOCAL binding. For `export { Other as Grid }`
+    // the namespace re-exports `Other`, not `Grid`, so `<Namespace.Grid>` resolves
+    // to `Other`. Matching by the exported alias would wrongly attribute the JSX
+    // member to an unrelated styled local named `Grid`.
     return (node.specifiers ?? []).some(
       (spec) =>
         spec.type === "ExportSpecifier" &&
-        ((spec.local?.type === "Identifier" && spec.local.name === localName) ||
-          (spec.exported?.type === "Identifier" && spec.exported.name === localName)),
+        spec.local?.type === "Identifier" &&
+        spec.local.name === localName,
     );
   }
   if (node.type === "VariableDeclaration") {

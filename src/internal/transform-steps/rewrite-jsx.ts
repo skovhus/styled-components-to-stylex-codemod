@@ -1777,23 +1777,83 @@ function scopeBindingShadowsName(
 }
 
 function paramIntroducesName(param: unknown, rootName: string): boolean {
-  const node = param as { type?: string; name?: string };
-  return node?.type === "Identifier" && node.name === rootName;
+  return bindingPatternIntroducesName(param, rootName);
 }
 
 function statementIntroducesName(stmt: unknown, rootName: string): boolean {
   const node = stmt as {
     type?: string;
-    declarations?: Array<{ id?: { type?: string; name?: string } }>;
+    declarations?: Array<{ id?: unknown }>;
     id?: { type?: string; name?: string };
   };
   if (node?.type === "VariableDeclaration") {
-    return (node.declarations ?? []).some(
-      (d) => d.id?.type === "Identifier" && d.id.name === rootName,
-    );
+    return (node.declarations ?? []).some((d) => bindingPatternIntroducesName(d.id, rootName));
   }
   if (node?.type === "FunctionDeclaration" || node?.type === "ClassDeclaration") {
     return node.id?.type === "Identifier" && node.id.name === rootName;
+  }
+  return false;
+}
+
+/**
+ * Walks a binding pattern (Identifier, ObjectPattern, ArrayPattern, AssignmentPattern,
+ * RestElement) to check whether it introduces `rootName` as a local binding. Needed
+ * so destructured bindings like `const { WidgetSet } = props` and renames like
+ * `const { Foo: WidgetSet } = props` are recognized as shadowing the namespace.
+ */
+function bindingPatternIntroducesName(pattern: unknown, rootName: string): boolean {
+  if (!pattern || typeof pattern !== "object") {
+    return false;
+  }
+  const node = pattern as {
+    type?: string;
+    name?: string;
+    properties?: unknown[];
+    elements?: unknown[];
+    left?: unknown;
+    argument?: unknown;
+    key?: { type?: string; name?: string; value?: string };
+    value?: unknown;
+    shorthand?: boolean;
+  };
+  if (node.type === "Identifier") {
+    return node.name === rootName;
+  }
+  if (node.type === "ObjectPattern") {
+    return (node.properties ?? []).some((prop) =>
+      objectPatternPropertyIntroducesName(prop, rootName),
+    );
+  }
+  if (node.type === "ArrayPattern") {
+    return (node.elements ?? []).some((el) => bindingPatternIntroducesName(el, rootName));
+  }
+  if (node.type === "AssignmentPattern") {
+    return bindingPatternIntroducesName(node.left, rootName);
+  }
+  if (node.type === "RestElement") {
+    return bindingPatternIntroducesName(node.argument, rootName);
+  }
+  return false;
+}
+
+function objectPatternPropertyIntroducesName(prop: unknown, rootName: string): boolean {
+  if (!prop || typeof prop !== "object") {
+    return false;
+  }
+  const node = prop as {
+    type?: string;
+    key?: { type?: string; name?: string; value?: string };
+    value?: unknown;
+    argument?: unknown;
+    shorthand?: boolean;
+  };
+  if (node.type === "RestElement") {
+    return bindingPatternIntroducesName(node.argument, rootName);
+  }
+  if (node.type === "Property" || node.type === "ObjectProperty") {
+    // Shorthand (`{ WidgetSet }`) and renamed (`{ Foo: WidgetSet }`) both bind the
+    // *value* side of the property — that's where the local name is introduced.
+    return bindingPatternIntroducesName(node.value, rootName);
   }
   return false;
 }

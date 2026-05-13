@@ -2484,6 +2484,137 @@ export const App = () => (
     expect(result).toContain("$active>Shadowed grid");
   });
 
+  it("does not rename transient props when a destructured binding shadows the namespace", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+function DestructuredShadowing(props: { WidgetSet: typeof Other }) {
+  const { WidgetSet } = props;
+  return <WidgetSet.Grid $active>Destructured shadow</WidgetSet.Grid>;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <DestructuredShadowing WidgetSet={Other} />
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-destructured.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level usage still resolves to namespace's Grid → renamed.
+    expect(result).toContain("<WidgetSet.Grid active>");
+    // Destructured-shadowed JSX resolves to the local destructured binding → not renamed.
+    expect(result).toContain("$active>Destructured shadow");
+  });
+
+  it("does not rename a namespace-local styled when an `as`-renamed re-export aliases the name", () => {
+    // `export { Other as Grid }` makes `<WidgetSet.Grid>` resolve to `Other`, not the
+    // styled local `Grid` elsewhere in the file. The JSX rewrite must not rename the
+    // unrelated component's transient props.
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Grid = styled.div<{ $active?: boolean }>\`
+  color: \${({ $active }) => ($active ? "green" : "gray")};
+\`;
+
+function Other(props: { $active?: boolean; children?: React.ReactNode }) {
+  return <section>{props.children}</section>;
+}
+
+export namespace WidgetSet {
+  export { Other as Grid };
+}
+
+export const App = () => (
+  <>
+    <Grid $active>Top-level grid</Grid>
+    <WidgetSet.Grid $active>Aliased re-export</WidgetSet.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-aliased-reexport.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level Grid (the styled one) was renamed.
+    expect(result).toContain("<Grid active>Top-level grid");
+    // WidgetSet.Grid is `Other`, an unrelated component → must not be renamed.
+    expect(result).toContain("$active>Aliased re-export");
+  });
+
+  it("renames prop types declared in a parent namespace for nested-namespace styled components", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace A {
+  type Props = {
+    $active?: boolean;
+  };
+
+  export namespace B {
+    export const Grid = styled.div<Props>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => <A.B.Grid>Nested</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-parent-type.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Type declaration in the parent namespace was renamed alongside the wrapper —
+    // before the fix the wrapper/style code renamed `$active` → `active` but the
+    // parent-namespace `Props` declaration stayed `$active`, breaking type checking.
+    expect(result).toContain("active?: boolean");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("does not rename a namespace-local type referenced from a nested namespace", () => {
+    // Type `Props` is declared in namespace `A` alongside styled `Button`. A nested
+    // namespace `Docs` initializes `Props` with `$active`. The codemod must treat
+    // `Props` as shared (not just owned by `Button`) so the rename is skipped.
+    const input = `
+import styled from "styled-components";
+
+export namespace A {
+  type Props = { $active?: boolean };
+  export const Button = styled.div<Props>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+  export namespace Docs {
+    export const p: Props = { $active: true };
+  }
+}
+
+export const App = () => <A.Button $active>Btn</A.Button>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-nested-usage.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Shared-type guard fired: $active is preserved everywhere.
+    expect(result).toContain("$active?: boolean");
+    expect(result).toContain("$active: true");
+    expect(result).toContain("<A.Button $active>");
+  });
+
   it("does not collect transient props from same-named types outside the namespace", () => {
     const input = `
 import * as React from "react";
