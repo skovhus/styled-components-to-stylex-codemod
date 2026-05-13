@@ -67,9 +67,11 @@ interface InheritedSectionProps extends ImportedSectionProps {
 
 type UnionSectionProps =
   | {
+      children?: React.ReactNode;
       kind: "alpha";
     }
   | ({
+      children?: React.ReactNode;
       kind: "beta";
     } & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">);
 

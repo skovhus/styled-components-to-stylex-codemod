@@ -62,8 +62,8 @@ interface InheritedSectionProps extends ImportedSectionProps {
 }
 
 type UnionSectionProps =
-  | { kind: "alpha"; someAttribute?: boolean }
-  | { kind: "beta"; someAttribute?: boolean };
+  | { children?: React.ReactNode; kind: "alpha"; someAttribute?: boolean }
+  | { children?: React.ReactNode; kind: "beta"; someAttribute?: boolean };
 
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
