@@ -166,6 +166,7 @@ export function fileImportsFrom(
   name: string,
   defFile: string,
   resolve: Resolve,
+  read?: (f: string) => string,
 ): boolean {
   const [namedRe, defaultRe] = getFileImportsFromRes(name);
   namedRe.lastIndex = 0;
@@ -183,7 +184,7 @@ export function fileImportsFrom(
       }
       // Resolve the import specifier from the usage file and compare to the definition file
       const resolved = resolve(specifier, usageFile);
-      if (resolved && path.resolve(resolved) === path.resolve(defFile)) {
+      if (resolved && importCanReferenceDefinition(resolved, name, defFile, resolve, read)) {
         return true;
       }
       // Fallback: heuristic path matching
@@ -198,6 +199,25 @@ export function fileImportsFrom(
   }
 
   return false;
+}
+
+function importCanReferenceDefinition(
+  resolvedImport: string,
+  name: string,
+  defFile: string,
+  resolve: Resolve,
+  read?: (f: string) => string,
+): boolean {
+  if (path.resolve(resolvedImport) === path.resolve(defFile)) {
+    return true;
+  }
+
+  if (!read) {
+    return false;
+  }
+
+  const reExportedFile = resolveBarrelReExport(resolvedImport, name, resolve, read);
+  return reExportedFile !== null && path.resolve(reExportedFile) === path.resolve(defFile);
 }
 
 const fileImportsFromReCache = new Map<string, [RegExp, RegExp]>();

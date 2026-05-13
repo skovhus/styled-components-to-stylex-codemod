@@ -297,6 +297,69 @@ describe("runTransform (e2e)", () => {
     expect(consumer).not.toContain("sx={styles.body}");
   });
 
+  it("auto external interface forwards element props without public className/style/sx", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-auto-element-props-"));
+    await mkdir(join(tmp, "src/components"), { recursive: true });
+    await mkdir(join(tmp, "src/views"), { recursive: true });
+    await writeFile(
+      join(tmp, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "preserve", moduleResolution: "bundler" } }),
+    );
+    await writeFile(
+      join(tmp, "src/components/ElementOnly.tsx"),
+      [
+        'import styled from "styled-components";',
+        "",
+        "export const ElementOnly = styled.div`",
+        "  background-color: papayawhip;",
+        "  padding: 8px;",
+        "`;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(tmp, "src/views/App.tsx"),
+      [
+        'import { ElementOnly } from "../components/ElementOnly";',
+        "",
+        "export function App() {",
+        '  return <ElementOnly onClick={() => undefined} aria-label="Element only">Click</ElementOnly>;',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runTransform({
+      files: join(tmp, "src/components/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter: defineAdapterFromIndex({
+        useSxProp: true,
+        externalInterface: "auto",
+        styleMerger: {
+          functionName: "mergedSx",
+          importSource: { kind: "specifier", value: "./mergedSx" },
+        },
+        resolveValue: () => undefined,
+        resolveCall: () => undefined,
+        resolveSelector: () => undefined,
+      }),
+      dryRun: false,
+      print: false,
+      parser: "tsx",
+      silent: true,
+    });
+
+    const component = await readFile(join(tmp, "src/components/ElementOnly.tsx"), "utf-8");
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(1);
+    expect(component).toContain('Omit<React.ComponentProps<"div">, "className" | "style">');
+    expect(component).toContain("<div {...rest} sx={styles.elementOnly}>");
+    expect(component).not.toContain("sx?: stylex.StyleXStyles");
+    expect(component).not.toContain("mergedSx");
+    expect(component).not.toContain("const { className");
+    expect(component).not.toContain("const { style");
+  });
+
   it("does not false-bail same-run wrappers when sx prop emission is disabled", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sequential-manual-interface-",

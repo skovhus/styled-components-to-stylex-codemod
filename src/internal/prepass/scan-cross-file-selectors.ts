@@ -434,6 +434,8 @@ export function buildImportMapFromNodes(importNodes: AstNode[]): Map<string, Imp
 
       if (spec.type === "ImportDefaultSpecifier") {
         map.set(localName, { source: sourceValue, importedName: "default" });
+      } else if (spec.type === "ImportNamespaceSpecifier") {
+        map.set(localName, { source: sourceValue, importedName: "*" });
       } else if (spec.type === "ImportSpecifier") {
         const importedName = getNodeName(spec.imported as AstNode | undefined) ?? localName;
         map.set(localName, { source: sourceValue, importedName });

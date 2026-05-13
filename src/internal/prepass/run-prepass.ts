@@ -29,6 +29,7 @@ import {
   fileExports,
   fileImportsFrom,
   findImportSource,
+  resolveBarrelReExportBinding,
   resolveBarrelReExport,
   type Resolve,
 } from "./extract-external-interface.js";
@@ -188,11 +189,11 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const refUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
-  const classNameStyleUsages = new Map<string, Set<string>>();
-  const classNameUsages = new Map<string, Set<string>>();
-  const styleUsages = new Map<string, Set<string>>();
-  const elementPropUsages = new Map<string, Set<string>>();
-  const spreadPropUsages = new Map<string, Set<string>>();
+  const classNameStyleUsages = new Map<string, ConsumerUsageRef[]>();
+  const classNameUsages = new Map<string, ConsumerUsageRef[]>();
+  const styleUsages = new Map<string, ConsumerUsageRef[]>();
+  const elementPropUsages = new Map<string, ConsumerUsageRef[]>();
+  const spreadPropUsages = new Map<string, ConsumerUsageRef[]>();
   const propUsageCandidates = new Map<string, ConsumerStaticPropUsage[]>();
   const styledWrapperUsages: { file: string; localStyledName: string; wrappedName: string }[] = [];
 
@@ -345,34 +346,34 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
 
     if (allStyledNames.size > 0) {
-      // Use targeted rg to find files containing className/style props (fast, small pattern)
+      // Use targeted rg to find files containing className/style props (fast, small pattern).
+      // The JSX filter covers spread-only and element-prop-only consumers.
       const rgHits = createExternalInterface ? rgClassNameStyleFilter(uniqueAllFiles) : undefined;
       const jsxHits = rgJsxComponentFilter(uniqueAllFiles);
 
       const scanAndRecord = (filePath: string, source: string) => {
+        const jsxScan = scanConsumerJsxUsages(filePath, source, allStyledNames, parser);
         if (createExternalInterface) {
-          for (const result of scanConsumerProps(source, allStyledNames)) {
-            addToSetMap(classNameStyleUsages, result.name, filePath);
+          for (const result of jsxScan.propResults) {
+            const usage = { filePath, importSource: result.importSource };
+            if (result.className || result.style || result.spreadProps) {
+              addConsumerUsage(classNameStyleUsages, result.name, usage);
+            }
             if (result.className) {
-              addToSetMap(classNameUsages, result.name, filePath);
+              addConsumerUsage(classNameUsages, result.name, usage);
             }
             if (result.style) {
-              addToSetMap(styleUsages, result.name, filePath);
+              addConsumerUsage(styleUsages, result.name, usage);
             }
             if (result.elementProps) {
-              addToSetMap(elementPropUsages, result.name, filePath);
+              addConsumerUsage(elementPropUsages, result.name, usage);
             }
             if (result.spreadProps) {
-              addToSetMap(spreadPropUsages, result.name, filePath);
+              addConsumerUsage(spreadPropUsages, result.name, usage);
             }
           }
         }
-        for (const usage of scanConsumerStaticPropUsages(
-          filePath,
-          source,
-          allStyledNames,
-          parser,
-        )) {
+        for (const usage of jsxScan.staticPropUsages) {
           const entries = propUsageCandidates.get(usage.name) ?? [];
           entries.push(usage);
           propUsageCandidates.set(usage.name, entries);
@@ -451,7 +452,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     // Match component definition files to consumer usage files and set flags.
     // Shared logic: for each usage map, iterate definitions, check exports,
     // verify same-file or cross-file import, and set the corresponding flag.
-    const matchUsagesToDefinitions = (
+    const matchUsageFilesToDefinitions = (
       usages: ReadonlyMap<string, ReadonlySet<string>>,
       field: keyof ExternalInterfaceResult,
     ) => {
@@ -476,7 +477,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
           }
 
           for (const usageFile of usageFiles) {
-            if (fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)) {
+            if (
+              fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve, cachedRead)
+            ) {
               ensure(defFile, name)[field] = true;
               break;
             }
@@ -485,13 +488,43 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     };
 
-    matchUsagesToDefinitions(asUsages, "as");
-    matchUsagesToDefinitions(refUsages, "ref");
-    matchUsagesToDefinitions(classNameStyleUsages, "styles");
-    matchUsagesToDefinitions(classNameUsages, "className");
-    matchUsagesToDefinitions(styleUsages, "style");
-    matchUsagesToDefinitions(elementPropUsages, "elementProps");
-    matchUsagesToDefinitions(spreadPropUsages, "spreadProps");
+    const matchConsumerUsagesToDefinitions = (
+      usages: ReadonlyMap<string, readonly ConsumerUsageRef[]>,
+      field: keyof ExternalInterfaceResult,
+    ) => {
+      if (usages.size === 0) {
+        return;
+      }
+      for (const [defFile, names] of styledDefFiles) {
+        const defSrc = cachedRead(defFile);
+        for (const name of names) {
+          const usageRefs = usages.get(name);
+          if (!usageRefs) {
+            continue;
+          }
+
+          if (!fileExports(defSrc, name)) {
+            continue;
+          }
+
+          if (
+            usageRefs.some((usageRef) =>
+              consumerUsageReferencesDefinition(usageRef, name, defFile, cachedRead, resolve),
+            )
+          ) {
+            ensure(defFile, name)[field] = true;
+          }
+        }
+      }
+    };
+
+    matchUsageFilesToDefinitions(asUsages, "as");
+    matchUsageFilesToDefinitions(refUsages, "ref");
+    matchConsumerUsagesToDefinitions(classNameStyleUsages, "styles");
+    matchConsumerUsagesToDefinitions(classNameUsages, "className");
+    matchConsumerUsagesToDefinitions(styleUsages, "style");
+    matchConsumerUsagesToDefinitions(elementPropUsages, "elementProps");
+    matchConsumerUsagesToDefinitions(spreadPropUsages, "spreadProps");
 
     // re-styled: resolve imports to find definition files
     {
@@ -727,8 +760,76 @@ function importTextMentionsIdentifier(importText: string, identifier: string): b
   return re.test(importText);
 }
 
-/** Quick pre-check: does this source mention className or style in a JSX prop context? */
-const CLASSNAME_STYLE_QUICK_RE = /\b(className|style)\s*[={]/;
+function addConsumerUsage(
+  map: Map<string, ConsumerUsageRef[]>,
+  name: string,
+  usage: ConsumerUsageRef,
+): void {
+  const entries = map.get(name) ?? [];
+  if (
+    !entries.some(
+      (entry) => entry.filePath === usage.filePath && entry.importSource === usage.importSource,
+    )
+  ) {
+    entries.push(usage);
+    map.set(name, entries);
+  }
+}
+
+function consumerUsageReferencesDefinition(
+  usage: ConsumerUsageRef,
+  name: string,
+  defFile: string,
+  cachedRead: (path: string) => string,
+  resolve: Resolve,
+): boolean {
+  if (usage.importSource) {
+    return importSourceReferencesDefinition(
+      usage.importSource,
+      usage.filePath,
+      name,
+      defFile,
+      resolve,
+      cachedRead,
+    );
+  }
+
+  if (usage.filePath === defFile) {
+    return true;
+  }
+
+  return fileImportsFrom(
+    cachedRead(usage.filePath),
+    usage.filePath,
+    name,
+    defFile,
+    resolve,
+    cachedRead,
+  );
+}
+
+function importSourceReferencesDefinition(
+  importSource: string,
+  usageFile: string,
+  name: string,
+  defFile: string,
+  resolve: Resolve,
+  cachedRead: (path: string) => string,
+): boolean {
+  const resolved = resolve(importSource, usageFile);
+  if (!resolved) {
+    return false;
+  }
+  if (pathResolve(resolved) === pathResolve(defFile)) {
+    return true;
+  }
+  const binding = resolveBarrelReExportBinding(resolved, name, resolve, cachedRead);
+  return binding !== null && pathResolve(binding.filePath) === pathResolve(defFile);
+}
+
+/** Quick pre-check: does this source mention JSX that might use external consumer props? */
+const CONSUMER_PROPS_QUICK_RE =
+  /<(?:[A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)|\b(className|style)\s*[={]|\{\.\.\./;
 
 /** Matches `import { Original as Local, ... }` — captures original and local names. */
 const IMPORT_ALIAS_ENTRY_RE = /\b(\w+)\s+as\s+(\w+)/g;
@@ -755,6 +856,7 @@ function buildLocalToImportedMap(source: string): Map<string, string> {
 
 interface ConsumerPropResult {
   name: string;
+  importSource?: string;
   className: boolean;
   style: boolean;
   elementProps: boolean;
@@ -764,58 +866,229 @@ interface ConsumerPropResult {
 interface ConsumerStaticPropUsage {
   name: string;
   filePath: string;
+  importSource?: string;
   usage: ComponentPropUsageCandidate;
+}
+
+interface ConsumerUsageRef {
+  filePath: string;
+  importSource?: string;
+}
+
+interface ResolvedConsumerComponent {
+  name: string;
+  importSource?: string;
+}
+
+interface ConsumerJsxScanResult {
+  propResults: ConsumerPropResult[];
+  staticPropUsages: ConsumerStaticPropUsage[];
+}
+
+interface ConsumerOpeningUsage {
+  externalProps: Omit<ConsumerPropResult, "name">;
+  staticUsage: ComponentPropUsageCandidate;
 }
 
 /**
  * Scan source for JSX usage of specific components with className, style,
  * element-specific props, or JSX spread.
- * Uses a two-step approach: first quick-checks for className/style keywords,
- * then scans JSX open tags to match component names — avoids building a huge
- * alternation regex when there are hundreds of component names.
- * Handles aliased imports (e.g., `import { Alert as MyAlert }`) by resolving
- * local tag names back to their original exported names.
+ * Uses the prepass parser so comments and string literals cannot be mistaken
+ * for real JSX consumers.
  */
-function scanConsumerProps(
+function scanConsumerJsxUsages(
+  filePath: string,
+  source: string,
+  componentNames: ReadonlySet<string>,
+  parser: ReturnType<typeof createPrepassParser>,
+): ConsumerJsxScanResult {
+  if (!CONSUMER_PROPS_QUICK_RE.test(source)) {
+    return { propResults: [], staticPropUsages: [] };
+  }
+
+  let ast: AstNode;
+  try {
+    ast = parser.parse(source) as AstNode;
+  } catch {
+    return {
+      propResults: scanConsumerPropsRegexFallback(source, componentNames),
+      staticPropUsages: [],
+    };
+  }
+
+  const importNodes: AstNode[] = [];
+  const jsxOpenings: AstNode[] = [];
+  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
+  const importMap = buildImportMapFromNodes(importNodes);
+
+  const resultMap = new Map<string, ConsumerPropResult>();
+  const staticPropUsages: ConsumerStaticPropUsage[] = [];
+
+  for (const opening of jsxOpenings) {
+    const resolvedComponent = resolveJsxOpeningComponent(
+      opening.name as AstNode | undefined,
+      importMap,
+      componentNames,
+    );
+    if (!resolvedComponent) {
+      continue;
+    }
+
+    const openingUsage = readConsumerOpeningUsage(opening);
+    const { externalProps } = openingUsage;
+    if (
+      externalProps.className ||
+      externalProps.style ||
+      externalProps.spreadProps ||
+      externalProps.elementProps
+    ) {
+      const key = `${resolvedComponent.name}\0${resolvedComponent.importSource ?? ""}`;
+      let entry = resultMap.get(key);
+      if (!entry) {
+        entry = {
+          name: resolvedComponent.name,
+          importSource: resolvedComponent.importSource,
+          className: false,
+          style: false,
+          elementProps: false,
+          spreadProps: false,
+        };
+        resultMap.set(key, entry);
+      }
+
+      entry.className ||= externalProps.className;
+      entry.style ||= externalProps.style;
+      entry.spreadProps ||= externalProps.spreadProps;
+      entry.elementProps ||= externalProps.elementProps;
+    }
+
+    staticPropUsages.push({
+      name: resolvedComponent.name,
+      filePath,
+      importSource: resolvedComponent.importSource,
+      usage: openingUsage.staticUsage,
+    });
+  }
+
+  return { propResults: [...resultMap.values()], staticPropUsages };
+}
+
+function resolveJsxOpeningComponent(
+  name: AstNode | undefined,
+  importMap: ReadonlyMap<string, ImportEntry>,
+  componentNames: ReadonlySet<string>,
+): ResolvedConsumerComponent | undefined {
+  const localName = getJsxOpeningIdentifierName(name);
+  if (localName) {
+    if (componentNames.has(localName)) {
+      return { name: localName };
+    }
+
+    const importEntry = importMap.get(localName);
+    return importEntry && componentNames.has(importEntry.importedName)
+      ? { name: importEntry.importedName, importSource: importEntry.source }
+      : undefined;
+  }
+
+  const member = getJsxMemberNameParts(name);
+  if (!member || !componentNames.has(member.propertyName)) {
+    return undefined;
+  }
+  const importEntry = importMap.get(member.objectName);
+  return importEntry?.importedName === "*"
+    ? { name: member.propertyName, importSource: importEntry.source }
+    : undefined;
+}
+
+function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
+  const externalProps = {
+    className: false,
+    style: false,
+    elementProps: false,
+    spreadProps: false,
+  };
+  const props: ComponentPropUsageCandidate["props"] = {};
+  let hasSpread = false;
+
+  for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
+    if (!attr) {
+      continue;
+    }
+    if (attr.type === "JSXSpreadAttribute") {
+      externalProps.spreadProps = true;
+      hasSpread = true;
+      continue;
+    }
+    if (attr.type !== "JSXAttribute") {
+      continue;
+    }
+    const propName = getJsxAttributeName(attr.name as AstNode | undefined);
+    if (!propName) {
+      continue;
+    }
+
+    if (propName === "className") {
+      externalProps.className = true;
+    } else if (propName === "style") {
+      externalProps.style = true;
+    } else if (isElementConsumerProp(propName)) {
+      externalProps.elementProps = true;
+    }
+
+    if (!KNOWN_NON_ELEMENT_PROPS.has(propName)) {
+      const value = readStaticJsxLiteral(attr);
+      props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
+    }
+  }
+
+  return { externalProps, staticUsage: { props, hasSpread } };
+}
+
+function isElementConsumerProp(propName: string): boolean {
+  return !KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$");
+}
+
+function scanConsumerPropsRegexFallback(
   source: string,
   componentNames: ReadonlySet<string>,
 ): ConsumerPropResult[] {
-  if (!CLASSNAME_STYLE_QUICK_RE.test(source)) {
-    return [];
-  }
-
-  // Build alias map lazily — only if needed
+  const resultMap = new Map<string, ConsumerPropResult>();
   let aliasMap: Map<string, string> | undefined;
 
-  // Accumulate per-component results (merge across multiple JSX tags)
-  const resultMap = new Map<string, ConsumerPropResult>();
-
-  // Match JSX open tags: `<ComponentName ...>` or `<ComponentName ... />`
   const tagRe = /<([A-Z][A-Za-z0-9]*)\b([^<>]*?)(?:\/>|>)/gs;
-  for (const m of source.matchAll(tagRe)) {
-    const tagName = m[1];
-    const attrText = m[2] ?? "";
+  for (const match of source.matchAll(tagRe)) {
+    const tagName = match[1];
+    const attrText = match[2] ?? "";
     if (!tagName) {
       continue;
     }
 
-    // Resolve to original component name
-    let resolvedName: string | undefined;
-    if (componentNames.has(tagName)) {
-      resolvedName = tagName;
-    } else {
-      aliasMap ??= buildLocalToImportedMap(source);
-      const originalName = aliasMap.get(tagName);
-      if (originalName && componentNames.has(originalName)) {
-        resolvedName = originalName;
-      }
-    }
+    const resolvedName = componentNames.has(tagName)
+      ? tagName
+      : (() => {
+          aliasMap ??= buildLocalToImportedMap(source);
+          const originalName = aliasMap.get(tagName);
+          return originalName && componentNames.has(originalName) ? originalName : undefined;
+        })();
     if (!resolvedName) {
       continue;
     }
 
-    // Skip tags that don't mention className or style at all
-    if (!/\b(?:className|style)\s*[={]/.test(attrText) && !/\{\.\.\./.test(attrText)) {
+    const className = /\bclassName\s*[={]/.test(attrText);
+    const style = /\bstyle\s*[={]/.test(attrText);
+    const spreadProps = /\{\.\.\./.test(attrText);
+    let elementProps = false;
+
+    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
+    for (const propMatch of attrText.matchAll(propRe)) {
+      const propName = propMatch[1]!;
+      if (isElementConsumerProp(propName)) {
+        elementProps = true;
+        break;
+      }
+    }
+
+    if (!className && !style && !spreadProps && !elementProps) {
       continue;
     }
 
@@ -831,96 +1104,13 @@ function scanConsumerProps(
       resultMap.set(resolvedName, entry);
     }
 
-    if (/\bclassName\s*[={]/.test(attrText)) {
-      entry.className = true;
-    }
-    if (/\bstyle\s*[={]/.test(attrText)) {
-      entry.style = true;
-    }
-    if (/\{\.\.\./.test(attrText)) {
-      entry.spreadProps = true;
-    }
-
-    // Check for element-specific props (lowercase props not in known set)
-    // Matches:
-    // 1. prop= or prop{ - value prop
-    // 2. prop followed by whitespace and another prop - boolean shorthand
-    // 3. prop at end of attributes - boolean shorthand
-    const propRe = /\b([a-z][a-zA-Z-]*)(?=\s*[={]|\s+[a-z]|\s*$)/gi;
-    for (const pm of attrText.matchAll(propRe)) {
-      const propName = pm[1]!;
-      if (!KNOWN_NON_ELEMENT_PROPS.has(propName) && !propName.startsWith("$")) {
-        entry.elementProps = true;
-        break;
-      }
-    }
+    entry.className ||= className;
+    entry.style ||= style;
+    entry.spreadProps ||= spreadProps;
+    entry.elementProps ||= elementProps;
   }
+
   return [...resultMap.values()];
-}
-
-function scanConsumerStaticPropUsages(
-  filePath: string,
-  source: string,
-  componentNames: ReadonlySet<string>,
-  parser: ReturnType<typeof createPrepassParser>,
-): ConsumerStaticPropUsage[] {
-  if (!/<[A-Z]/.test(source)) {
-    return [];
-  }
-
-  let ast: AstNode;
-  try {
-    ast = parser.parse(source) as AstNode;
-  } catch {
-    return [];
-  }
-
-  const importNodes: AstNode[] = [];
-  const jsxOpenings: AstNode[] = [];
-  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
-  const importMap = buildImportMapFromNodes(importNodes);
-  const usages: ConsumerStaticPropUsage[] = [];
-
-  for (const opening of jsxOpenings) {
-    const tagName = getJsxOpeningIdentifierName(opening.name as AstNode | undefined);
-    if (!tagName) {
-      continue;
-    }
-    const importEntry = importMap.get(tagName);
-    const resolvedName = componentNames.has(tagName)
-      ? tagName
-      : importEntry && componentNames.has(importEntry.importedName)
-        ? importEntry.importedName
-        : undefined;
-    if (!resolvedName) {
-      continue;
-    }
-
-    const props: ComponentPropUsageCandidate["props"] = {};
-    let hasSpread = false;
-    for (const attr of (opening.attributes as AstNode[] | undefined) ?? []) {
-      if (!attr) {
-        continue;
-      }
-      if (attr.type === "JSXSpreadAttribute") {
-        hasSpread = true;
-        continue;
-      }
-      if (attr.type !== "JSXAttribute") {
-        continue;
-      }
-      const propName = getJsxAttributeName(attr.name as AstNode | undefined);
-      if (!propName || KNOWN_NON_ELEMENT_PROPS.has(propName)) {
-        continue;
-      }
-      const value = readStaticJsxLiteral(attr);
-      props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
-    }
-
-    usages.push({ name: resolvedName, filePath, usage: { props, hasSpread } });
-  }
-
-  return usages;
 }
 
 function buildPropUsageByFile(args: {
@@ -941,11 +1131,7 @@ function buildPropUsageByFile(args: {
         continue;
       }
       for (const candidate of candidates) {
-        const usageFile = candidate.filePath;
-        if (
-          usageFile !== defFile &&
-          !fileImportsFrom(cachedRead(usageFile), usageFile, name, defFile, resolve)
-        ) {
+        if (!consumerUsageReferencesDefinition(candidate, name, defFile, cachedRead, resolve)) {
           continue;
         }
         const byComponent = getOrCreatePropUsageFileMap(propUsageByFile, toRealPath(defFile));
@@ -997,7 +1183,6 @@ function walkForImportsAndJsxOpenings(
   }
   if (n.type === "JSXOpeningElement") {
     jsxOpenings.push(n);
-    return;
   }
   for (const key of Object.keys(n)) {
     if (
@@ -1029,6 +1214,25 @@ function getJsxOpeningIdentifierName(name: AstNode | undefined): string | null {
     return name.name;
   }
   return null;
+}
+
+function getJsxMemberNameParts(
+  name: AstNode | undefined,
+): { objectName: string; propertyName: string } | null {
+  if (!name || name.type !== "JSXMemberExpression") {
+    return null;
+  }
+  const object = name.object as AstNode | undefined;
+  const property = name.property as AstNode | undefined;
+  if (
+    object?.type !== "JSXIdentifier" ||
+    typeof object.name !== "string" ||
+    property?.type !== "JSXIdentifier" ||
+    typeof property.name !== "string"
+  ) {
+    return null;
+  }
+  return { objectName: object.name, propertyName: property.name };
 }
 
 function getJsxAttributeName(name: AstNode | undefined): string | null {
@@ -1073,7 +1277,7 @@ function rgClassNameStyleFilter(files: readonly string[]): Set<string> | undefin
   }
 }
 
-/** Use ripgrep to find files with PascalCase JSX tags. */
+/** Use ripgrep to find files with PascalCase or namespace JSX tags. */
 function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined {
   const dirs = deduplicateParentDirs(files);
   if (dirs.length === 0) {
@@ -1084,7 +1288,7 @@ function rgJsxComponentFilter(files: readonly string[]): Set<string> | undefined
     const globArgs = ["*.tsx", "*.jsx", "*.ts", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
-    const cmd = `rg -l ${shellQuote(String.raw`<[A-Z]`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
+    const cmd = `rg -l ${shellQuote(String.raw`<([A-Z]|[A-Za-z_$][A-Za-z0-9_$]*\.)`)} ${globArgs} ${dirs.map(shellQuote).join(" ")}`;
     const output = execSync(cmd, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
     return new Set(
       output
