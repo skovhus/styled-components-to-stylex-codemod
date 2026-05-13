@@ -39,8 +39,9 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
     <button
       {...rest}
       sx={[
+        styles.explicitFilterButton,
         customProp != null && styles.explicitFilterButtonBackgroundColor(customProp),
-        styles.explicitFilterButton(anotherProp),
+        styles.explicitFilterButtonPadding(anotherProp),
       ]}
     >
       {children}
@@ -67,12 +68,14 @@ const styles = stylex.create({
   transientButtonVariantPrimary: {
     backgroundColor: "#BF4F74",
   },
-  explicitFilterButton: (anotherProp: number | undefined) => ({
+  explicitFilterButton: {
     backgroundColor: "#BF4F74",
     color: "white",
-    padding: (anotherProp || 16) + "px",
-  }),
+  },
   explicitFilterButtonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  explicitFilterButtonPadding: (anotherProp: number | undefined) => ({
+    padding: (anotherProp || 16) + "px",
   }),
 });

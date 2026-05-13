@@ -1783,6 +1783,13 @@ function mergeBaseIntoSingleStyleFn(args: {
     }
   }
 
+  // Base properties can only be folded into a dynamic function when that function
+  // is the sole dynamic entry. Otherwise the merged base may move after another
+  // dynamic override in `stylex.props()` and change CSS source-order semantics.
+  if (styleFnFromProps.length !== 1) {
+    return;
+  }
+
   // Find unconditional styleFn entries with "always" condition.
   // Entries with "truthy" condition are guarded (e.g. `prop ? styles.fn(prop) : undefined`),
   // so the base static properties must remain separate as defaults when the guard is false.
