@@ -10,7 +10,23 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, size } = props;
-  return <div sx={[styles.box, styles.boxWidth(props), styles.boxHeight(props)]}>{children}</div>;
+  return <div sx={[styles.box, styles.boxWidth(size), styles.boxHeight(size)]}>{children}</div>;
+}
+
+type FrameProps = React.PropsWithChildren<{
+  svgWidth?: number;
+  svgHeight?: number;
+}>;
+
+function Frame(props: FrameProps) {
+  const { children, svgWidth, svgHeight } = props;
+  return (
+    <div
+      sx={[styles.frame, styles.frameWidth(svgWidth), styles.frameAspectRatio(svgWidth, svgHeight)]}
+    >
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (
@@ -18,8 +34,16 @@ export const App = () => (
     <Box size={150}>150x150</Box>
     <Box size={100}>100x100</Box>
     <Box>Default (100x100)</Box>
+    <Frame svgWidth={160} svgHeight={90}>
+      16:9 frame
+    </Frame>
+    <Frame>Default frame</Frame>
   </div>
 );
+
+function getAspectRatio(svgWidth?: number, svgHeight?: number): string {
+  return svgWidth && svgHeight ? `${svgWidth} / ${svgHeight}` : "16 / 9";
+}
 
 const styles = stylex.create({
   box: {
@@ -33,10 +57,25 @@ const styles = stylex.create({
     justifyContent: "center",
     margin: 8,
   },
-  boxWidth: (props: BoxProps) => ({
-    width: `${props.size ?? 100}px`,
+  boxWidth: (size: number | undefined) => ({
+    width: `${size ?? 100}px`,
   }),
-  boxHeight: (props: BoxProps) => ({
-    height: `${props.size ?? 100}px`,
+  boxHeight: (size: number | undefined) => ({
+    height: `${size ?? 100}px`,
+  }),
+  frame: {
+    backgroundColor: "mistyrose",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "crimson",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  frameWidth: (svgWidth: number | undefined) => ({
+    width: svgWidth ? `${svgWidth}px` : "100%",
+  }),
+  frameAspectRatio: (svgWidth: number | undefined, svgHeight: number | undefined) => ({
+    aspectRatio: getAspectRatio(svgWidth, svgHeight),
   }),
 });

@@ -63,6 +63,27 @@ function ZoomPreviewImage(props: ZoomPreviewImageProps) {
   );
 }
 
+type MotionIframeWrapperProps = {
+  svgWidth?: number;
+  svgHeight?: number;
+} & Omit<React.ComponentPropsWithRef<typeof motion.div>, "className" | "style">;
+
+function MotionIframeWrapper(props: MotionIframeWrapperProps) {
+  const { children, svgWidth, svgHeight, ...rest } = props;
+  return (
+    <motion.div
+      {...rest}
+      {...stylex.props(
+        styles.motionIframeWrapper,
+        styles.motionIframeWrapperWidth(svgWidth),
+        styles.motionIframeWrapperAspectRatio(svgWidth, svgHeight),
+      )}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export const App = () => (
   <div>
     <ComponentWrapper
@@ -88,6 +109,10 @@ export const App = () => (
       alt="Dragging"
       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
     />
+    <MotionIframeWrapper svgWidth={160} svgHeight={90}>
+      16:9 iframe
+    </MotionIframeWrapper>
+    <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
     <HighlightedAvatar user="Alice" size="small" highlightColor="blue" />
     <HighlightedAvatar user="Bob" size="tiny" />
   </div>
@@ -96,6 +121,10 @@ export const App = () => (
 const visibleOpacity: MotionValue<number> = {
   get: () => 1,
 };
+
+function getAspectRatio(svgWidth?: number, svgHeight?: number): string {
+  return svgWidth && svgHeight ? `${svgWidth} / ${svgHeight}` : "16 / 9";
+}
 
 const styles = stylex.create({
   componentWrapper: {
@@ -122,4 +151,19 @@ const styles = stylex.create({
   zoomPreviewImage$isZoomableFalse: {
     cursor: "zoom-out",
   },
+  motionIframeWrapper: {
+    backgroundColor: "lavender",
+    borderWidth: 2,
+    borderStyle: "solid",
+    borderColor: "purple",
+  },
+  motionIframeWrapperWidth: (svgWidth: number | undefined) => ({
+    width: svgWidth ? `${svgWidth}px` : "100%",
+  }),
+  motionIframeWrapperAspectRatio: (
+    svgWidth: number | undefined,
+    svgHeight: number | undefined,
+  ) => ({
+    aspectRatio: getAspectRatio(svgWidth, svgHeight),
+  }),
 });

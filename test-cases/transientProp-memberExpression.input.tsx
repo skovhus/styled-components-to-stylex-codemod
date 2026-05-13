@@ -22,6 +22,16 @@ const ZoomPreviewImage = styled(motion.img)<{
   cursor: ${(props) => (props.$isDragging ? "grabbing" : props.$isZoomable ? "zoom-in" : "zoom-out")};
 `;
 
+const MotionIframeWrapper = styled(motion.div)<{
+  $svgWidth?: number;
+  $svgHeight?: number;
+}>`
+  width: ${(props) => (props.$svgWidth ? `${props.$svgWidth}px` : "100%")};
+  aspect-ratio: ${(props) => getAspectRatio(props.$svgWidth, props.$svgHeight)};
+  background: lavender;
+  border: 2px solid purple;
+`;
+
 export const App = () => (
   <div>
     <ComponentWrapper
@@ -47,6 +57,10 @@ export const App = () => (
       alt="Dragging"
       src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
     />
+    <MotionIframeWrapper $svgWidth={160} $svgHeight={90}>
+      16:9 iframe
+    </MotionIframeWrapper>
+    <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
     <HighlightedAvatar user="Alice" size="small" $highlightColor="blue" />
     <HighlightedAvatar user="Bob" size="tiny" />
   </div>
@@ -55,3 +69,7 @@ export const App = () => (
 const visibleOpacity: MotionValue<number> = {
   get: () => 1,
 };
+
+function getAspectRatio(svgWidth?: number, svgHeight?: number): string {
+  return svgWidth && svgHeight ? `${svgWidth} / ${svgHeight}` : "16 / 9";
+}
