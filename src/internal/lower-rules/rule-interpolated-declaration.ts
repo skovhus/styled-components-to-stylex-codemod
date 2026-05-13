@@ -148,6 +148,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     applyVariant,
     notifyResolvedStylesArg,
   } = ctx;
+  const annotateScalarParams = (params: unknown[], propNames: readonly string[]): void => {
+    if (!/\.(ts|tsx)$/.test(filePath)) {
+      return;
+    }
+    propNames.forEach((propName, paramIndex) => {
+      const param = params[paramIndex];
+      if (!param) {
+        return;
+      }
+      annotateParamFromJsxProp(param, propName);
+      if (isJsxPropOptional(propName)) {
+        addUndefinedToParamType(j, param);
+      }
+    });
+  };
   const {
     api,
     j,
@@ -2172,6 +2187,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         ensureShouldForwardPropDrop(decl, conditionProp);
 
         const conditionWhen = isStaticWhenFalse ? conditionProp : `!${conditionProp}`;
+        const scalarDynamic =
+          shouldUseScalarDynamicArgs(d.property, d.valueRaw) && dynamicProps.length > 0
+            ? scalarizePropsObjectDynamicValue({
+                j,
+                valueExpr: dynamicValueExpr,
+                paramName: "props",
+                propNames: dynamicProps,
+              })
+            : null;
+        const dynamicStyleValueExpr = scalarDynamic?.valueExpr ?? dynamicValueExpr;
+        const dynamicStyleParams = scalarDynamic
+          ? scalarDynamic.paramNames.map((propName) => j.identifier(propName))
+          : [j.identifier("props")];
+        if (scalarDynamic) {
+          annotateScalarParams(dynamicStyleParams, scalarDynamic.paramNames);
+        }
 
         // Build call argument: object shorthand for dynamic props only
         const callArg = j.objectExpression(
@@ -2211,43 +2242,62 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           // Add the new dynamic properties
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             properties.push(
-              j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+              j.property("init", makeCssPropKey(j, out.prop), dynamicStyleValueExpr as any),
             );
           }
 
-          const param = j.identifier("props");
           const body = j.objectExpression(properties as any);
-          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression([param], body));
+          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression(dynamicStyleParams, body));
 
           // Remove from variant buckets — now handled as a style function
           variantBuckets.delete(conditionProp);
           delete variantStyleKeys[conditionProp];
 
-          styleFnFromProps.push({
-            fnKey: existingFnKey,
-            jsxProp: "__props",
-            callArg,
-            conditionWhen,
-            ...(capturedSourceOrder !== undefined ? { sourceOrder: capturedSourceOrder } : {}),
-          });
+          const scalarEntry = scalarDynamic
+            ? scalarStyleFnEntryFromProps({
+                j,
+                fnKey: existingFnKey,
+                propNames: scalarDynamic.paramNames,
+                conditionWhen,
+                sourceOrder: capturedSourceOrder,
+              })
+            : null;
+          styleFnFromProps.push(
+            scalarEntry ?? {
+              fnKey: existingFnKey,
+              jsxProp: "__props",
+              callArg,
+              conditionWhen,
+              ...(capturedSourceOrder !== undefined ? { sourceOrder: capturedSourceOrder } : {}),
+            },
+          );
         } else {
           // --- Standalone path: create new conditional style function ---
           for (const out of cssDeclarationToStylexDeclarations(d)) {
             const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
             if (!styleFnDecls.has(fnKey)) {
-              const param = j.identifier("props");
               const body = j.objectExpression([
-                j.property("init", makeCssPropKey(j, out.prop), dynamicValueExpr as any),
+                j.property("init", makeCssPropKey(j, out.prop), dynamicStyleValueExpr as any),
               ]);
-              styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
+              styleFnDecls.set(fnKey, j.arrowFunctionExpression(dynamicStyleParams, body));
             }
             if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
-              styleFnFromProps.push({
-                fnKey,
-                jsxProp: "__props",
-                callArg,
-                conditionWhen,
-              });
+              const scalarEntry = scalarDynamic
+                ? scalarStyleFnEntryFromProps({
+                    j,
+                    fnKey,
+                    propNames: scalarDynamic.paramNames,
+                    conditionWhen,
+                  })
+                : null;
+              styleFnFromProps.push(
+                scalarEntry ?? {
+                  fnKey,
+                  jsxProp: "__props",
+                  callArg,
+                  conditionWhen,
+                },
+              );
             }
           }
         }
@@ -2402,15 +2452,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
               const isNamedTypeRef = propsTypeKind === "TSTypeReference";
               if (scalarProps) {
-                scalarProps.paramNames.forEach((propName, paramIndex) => {
-                  const param = params[paramIndex];
-                  if (param) {
-                    annotateParamFromJsxProp(param, propName);
-                    if (isJsxPropOptional(propName)) {
-                      addUndefinedToParamType(j, param);
-                    }
-                  }
-                });
+                annotateScalarParams(params, scalarProps.paramNames);
               } else if (helperCallArgs.length > 0) {
                 for (
                   let paramIndex = needsOriginalParam ? 1 : 0;
@@ -2880,15 +2922,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           ? scalarProps.paramNames.map((propName) => j.identifier(propName))
           : [finalParam];
         if (scalarProps && /\.(ts|tsx)$/.test(filePath)) {
-          scalarProps.paramNames.forEach((propName, paramIndex) => {
-            const param = params[paramIndex];
-            if (param) {
-              annotateParamFromJsxProp(param, propName);
-              if (isJsxPropOptional(propName)) {
-                addUndefinedToParamType(j, param);
-              }
-            }
-          });
+          annotateScalarParams(params, scalarProps.paramNames);
         } else if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
           (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
             j.tsStringKeyword(),
@@ -4141,6 +4175,8 @@ function scalarStyleFnEntryFromProps(args: {
   j: JSCodeshift;
   fnKey: string;
   propNames: readonly string[];
+  conditionWhen?: string;
+  sourceOrder?: number;
 }): NonNullable<StyledDecl["styleFnFromProps"]>[number] | null {
   const propNames = uniqueScalarPropNames(args.propNames);
   const [jsxProp, ...extraProps] = propNames;
@@ -4151,7 +4187,10 @@ function scalarStyleFnEntryFromProps(args: {
     fnKey: args.fnKey,
     jsxProp,
     callArg: args.j.identifier(jsxProp) as ExpressionKind,
-    condition: "always",
+    ...(args.conditionWhen
+      ? { conditionWhen: args.conditionWhen }
+      : { condition: "always" as const }),
+    ...(args.sourceOrder !== undefined ? { sourceOrder: args.sourceOrder } : {}),
     forceScalarArgs: true,
     ...(extraProps.length > 0
       ? {
@@ -4185,7 +4224,10 @@ function shouldUseScalarDynamicArgs(stylexProp: string, rawCssValue: string | un
   if (rawCssValue?.includes("var(")) {
     return false;
   }
-  return stylexProp === "width" || stylexProp === "height" || stylexProp === "aspectRatio";
+  if (stylexProp === "transition" || stylexProp.startsWith("--")) {
+    return false;
+  }
+  return true;
 }
 
 function expressionContainsStringFragment(node: unknown, fragment: string): boolean {

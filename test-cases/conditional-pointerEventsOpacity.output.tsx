@@ -17,10 +17,7 @@ function Container(props: ContainerProps) {
         styles.container,
         durationVariants[duration as keyof typeof durationVariants] ??
           styles.containerDuration(duration),
-        open &&
-          styles.containerOpen({
-            delay,
-          }),
+        open && styles.containerOpen(delay),
       )}
     >
       {children}
@@ -45,10 +42,10 @@ const styles = stylex.create({
     transitionDelay: "0ms",
     pointerEvents: "none",
   },
-  containerOpen: (props) => ({
+  containerOpen: (delay: number) => ({
     pointerEvents: "inherit",
     opacity: 1,
-    transitionDelay: `${props.delay}ms`,
+    transitionDelay: `${delay}ms`,
   }),
   containerDuration: (duration: number) => ({
     transition: `opacity ${duration}ms`,

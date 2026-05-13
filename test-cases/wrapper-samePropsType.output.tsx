@@ -21,7 +21,7 @@ function Base<C extends React.ElementType = "div">(
     <Component
       {...rest}
       {...mergedSx(
-        [styles.base, column ? styles.baseColumn : undefined, styles.baseGap(props), sx],
+        [styles.base(gap), column ? styles.baseColumn : undefined, sx],
         className,
         style,
       )}
@@ -58,11 +58,7 @@ export function Button(
   return (
     <button
       {...rest}
-      sx={[
-        styles.button,
-        variant === "primary" && styles.buttonVariantPrimary,
-        styles.buttonFontSize(props),
-      ]}
+      sx={[styles.button(size), variant === "primary" && styles.buttonVariantPrimary]}
     >
       {children}
     </button>
@@ -84,26 +80,22 @@ export function App() {
 }
 
 const styles = stylex.create({
-  base: {
+  base: (gap: number | undefined) => ({
     display: "flex",
     flexDirection: "row",
-  },
+    gap: gap ? `${gap}px` : "0",
+  }),
   baseColumn: {
     flexDirection: "column",
   },
-  baseGap: (props) => ({
-    gap: props.gap ? `${props.gap}px` : "0",
-  }),
   wrapper: {
     padding: 8,
   },
-  button: {
+  button: (size: number | undefined) => ({
     backgroundColor: "gray",
-  },
+    fontSize: size ? `${size}px` : "14px",
+  }),
   buttonVariantPrimary: {
     backgroundColor: "blue",
   },
-  buttonFontSize: (props) => ({
-    fontSize: props.size ? `${props.size}px` : "14px",
-  }),
 });

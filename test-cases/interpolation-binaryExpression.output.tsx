@@ -7,7 +7,7 @@ type BoxProps = React.PropsWithChildren<{
 
 function Box(props: BoxProps) {
   const { children, depth } = props;
-  return <div sx={[styles.box, styles.boxPaddingLeft(props)]}>{children}</div>;
+  return <div sx={styles.box(depth)}>{children}</div>;
 }
 
 export const App = () => (
@@ -20,12 +20,10 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  box: {
+  box: (depth: number) => ({
     backgroundColor: "red",
     padding: 8,
     color: "white",
-  },
-  boxPaddingLeft: (props: BoxProps) => ({
-    paddingLeft: `${props.depth * 16 + 4}px`,
+    paddingLeft: `${depth * 16 + 4}px`,
   }),
 });
