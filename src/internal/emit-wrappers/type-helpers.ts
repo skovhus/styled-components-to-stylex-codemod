@@ -85,7 +85,6 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
 
 export type AttrsProvidedPropOptions = {
   normalizeForwardedAs?: boolean;
-  preservePropNames?: ReadonlySet<string>;
 };
 
 /**
@@ -167,9 +166,6 @@ export function collectAttrsProvidedPropNames(
   const names = new Set<string>();
   const staticAttrs = attrsInfo?.staticAttrs ?? {};
   for (const key of Object.keys(staticAttrs)) {
-    if (options?.preservePropNames?.has(key)) {
-      continue;
-    }
     if (key === "className" || key === "style") {
       continue;
     }

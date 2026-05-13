@@ -520,8 +520,8 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       .filter(
         (decl) =>
           decl.isCssHelper &&
-          (decl.suppressCssHelperStyleEmission ||
-            (decl.isExported && !activeMixinStyleKeys.has(decl.styleKey))),
+          (decl.suppressCssHelperStyleEmission || decl.isExported) &&
+          !activeMixinStyleKeys.has(decl.styleKey),
       )
       .map((decl) => decl.styleKey),
   );

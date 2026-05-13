@@ -1060,8 +1060,15 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (transientProps.size === 0) {
       continue;
     }
-    // Collect prop names from the resolved type (may be a TSTypeReference)
-    const typePropNames = collectResolvedTypePropNames(root, j, decl.propsType);
+    // Collect prop names from the resolved type (may be a TSTypeReference). Scope
+    // the lookup to the decl's namespace so namespace-local shared types resolve to
+    // the right declaration when an earlier component already renamed it.
+    const typePropNames = collectResolvedTypePropNames(
+      root,
+      j,
+      decl.propsType,
+      getDeclNamespaceName(root, j, decl.localName),
+    );
     if (typePropNames.size === 0) {
       continue;
     }
@@ -2052,7 +2059,15 @@ function isTypeNameUsedElsewhere(
       const id = p.node.typeName;
       return id?.type === "Identifier" && id.name === typeName;
     })
-    .filter((p: any) => nearestNamespaceName(p) === namespaceName)
+    .filter((p: any) => {
+      // When the owner type lives at the top level, TypeScript name resolution lets
+      // nested namespaces refer to it by name. Count those references so we don't
+      // mistakenly treat the type as owned solely by the styled component.
+      if (namespaceName === null) {
+        return true;
+      }
+      return nearestNamespaceName(p) === namespaceName;
+    })
     .forEach((p: any) => {
       // Walk up to the nearest variable/function declaration to find the owner.
       // If the owner is the styled decl itself, don't count it.

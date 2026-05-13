@@ -299,15 +299,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }));
     const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
       normalizeForwardedAs: !shouldLowerForwardedAs,
-      ...(wrappedAcceptsSx ? { preservePropNames: new Set(["sx"]) } : {}),
     };
     const attrsProvidedPropNames = collectAttrsProvidedPropNames(
       d.attrsInfo,
       attrsProvidedPropOptions,
     );
-    if (wrappedAcceptsSx) {
-      attrsProvidedPropNames.delete("sx");
-    }
     const explicitPropsTypeRef = resolveTypeReferenceName(d.propsType ?? null);
     const wrapperReusesWrappedPropsType =
       explicitPropsTypeRef?.kind === "identifier" &&
@@ -315,6 +311,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         emitter.resolveWrappedExplicitPropsTypeRef(renderedComponent)?.name;
     const wrapperPropsExposeSx =
       wrappedAcceptsSx &&
+      !attrsProvidedPropNames.has("sx") &&
       ((wrappedLocalDecl &&
         d.propsType &&
         !wrapperReusesWrappedPropsType &&

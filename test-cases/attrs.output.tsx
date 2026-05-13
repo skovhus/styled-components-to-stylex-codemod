@@ -514,11 +514,14 @@ function StyledIcon(
 }
 
 function AttrsSxButton(
-  props: Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style" | "type">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof SxAwareButton>,
+    "className" | "style" | "sx" | "type"
+  >,
 ) {
-  const { children, sx, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, sx, attrsMarkerStyle]}>
+    <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]}>
       {children}
     </SxAwareButton>
   );

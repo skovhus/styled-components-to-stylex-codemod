@@ -617,6 +617,44 @@ export const App = () => <CustomFactoryComponent>safe</CustomFactoryComponent>;
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
   });
 
+  it("does not bail in partial migration when wrapping a styled-components imported root", () => {
+    // In partial migration, `styled(ImportedComponent)` decls are left as
+    // styled-components by `markPartialImportedComponentRoots` later in the pipeline.
+    // The cascade-conflict step must honor the same skip policy so unrelated local
+    // styled-components in the same file can still migrate.
+    const source = `
+import styled from "styled-components";
+import GroupHeader from "./lib/styled-group-header";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomGroupHeader label="test" id="t" />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-partial-imported-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+    // Local component migrated to StyleX.
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    // Imported root left as styled-components.
+    expect(result.code).toMatch(/const\s+CustomGroupHeader\s*=\s*styled\(GroupHeader\)`/);
+  });
+
   it("bails for non-relative barrel re-exports resolved by the configured resolver", () => {
     const source = `
 import styled from "styled-components";
@@ -2250,7 +2288,7 @@ export const Panel = styled.div<{ height: 40 | 80 }>\`
     expect(result).not.toContain("heightVariants");
   });
 
-  it("does not emit JSX into .ts files", () => {
+  it("does not emit JSX into .ts, .mts, or .cts files", () => {
     const input = `
 import styled from "styled-components";
 
@@ -2258,9 +2296,10 @@ export const Label = styled.span\`
   color: tomato;
 \`;
 `;
-    const diagnostics = runTransformWithDiagnostics(input, {}, "styledExports.ts", "ts");
-
-    expect(diagnostics.code).toBeNull();
+    for (const filename of ["styledExports.ts", "styledExports.mts", "styledExports.cts"]) {
+      const diagnostics = runTransformWithDiagnostics(input, {}, filename, "ts");
+      expect(diagnostics.code).toBeNull();
+    }
   });
 
   it("does not copy styled-components RuleSet helper calls into sx", () => {
@@ -2403,6 +2442,48 @@ export const App = () => (
     expect(result).toContain("<Other.Grid $active>");
   });
 
+  it("does not rename transient props when a nested scope shadows the namespace binding", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+function ShadowingX() {
+  const WidgetSet = Other;
+  return <WidgetSet.Grid $active>Shadowed grid</WidgetSet.Grid>;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <ShadowingX />
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-shadowed.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level JSX correctly resolves to the namespace's Grid → renamed.
+    expect(result).toContain("<WidgetSet.Grid active>");
+    // Shadowed JSX inside ShadowingX resolves to the local `WidgetSet = Other` → not renamed.
+    expect(result).toContain("$active>Shadowed grid");
+  });
+
   it("does not collect transient props from same-named types outside the namespace", () => {
     const input = `
 import * as React from "react";
@@ -2489,6 +2570,79 @@ export const App = () => (
     expect(result).toContain("const titleMixin = css");
     expect(result).toContain("const Title = styled(Text)");
     expect(result).toContain("<div sx={styles.notice}>");
+  });
+
+  it("emits css helper styles when the helper is referenced by both a converted component and a skipped imported root", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const sharedMixin = css\`
+  font-weight: 600;
+\`;
+
+const Notice = styled.div\`
+  \${sharedMixin}
+  padding: 8px;
+\`;
+
+const Title = styled(Text)\`
+  \${sharedMixin}
+  color: #1d4ed8;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root with shared helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    // Original helper declaration preserved for the skipped `styled(Text)` template.
+    expect(result).toContain("const sharedMixin = css");
+    // Skipped `styled(Text)` stays as-is and still references `sharedMixin`.
+    expect(result).toContain("const Title = styled(Text)");
+    // Converted `Notice` references `styles.sharedMixin` — the stylex.create entry
+    // must be emitted because the helper is an active mixin on a converted component.
+    expect(result).toMatch(/sharedMixin:\s*\{/);
+    expect(result).toContain("sx={[styles.notice, styles.sharedMixin]}");
+  });
+
+  it("preserves object-member css helpers referenced by skipped imported roots", () => {
+    // `mixins.root` is an object-member css helper. The skipped `styled(Text)` template
+    // still interpolates `${mixins.root}`, so the property must NOT be removed from the
+    // object literal — otherwise the preserved template references `mixins.root` which
+    // no longer exists.
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins.root}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with object-member helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    // The object literal preserves the `root` property because the skipped template references it.
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
+    // The skipped `styled(Text)` template still uses `mixins.root`.
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("${mixins.root}");
   });
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {

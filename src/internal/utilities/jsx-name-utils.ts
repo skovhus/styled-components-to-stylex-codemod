@@ -69,9 +69,22 @@ function statementDeclaresLocal(statement: unknown, localName: string): boolean 
     declaration?: unknown;
     declarations?: Array<{ id?: { type?: string; name?: string } }>;
     id?: { type?: string; name?: string };
+    specifiers?: Array<{
+      type?: string;
+      local?: { type?: string; name?: string };
+      exported?: { type?: string; name?: string };
+    }>;
   };
   if (node.type === "ExportNamedDeclaration") {
-    return statementDeclaresLocal(node.declaration, localName);
+    if (statementDeclaresLocal(node.declaration, localName)) {
+      return true;
+    }
+    return (node.specifiers ?? []).some(
+      (spec) =>
+        spec.type === "ExportSpecifier" &&
+        ((spec.local?.type === "Identifier" && spec.local.name === localName) ||
+          (spec.exported?.type === "Identifier" && spec.exported.name === localName)),
+    );
   }
   if (node.type === "VariableDeclaration") {
     return (node.declarations ?? []).some(

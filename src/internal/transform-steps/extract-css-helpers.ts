@@ -70,9 +70,76 @@ function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set
     }
     for (const expression of path.node.quasi.expressions ?? []) {
       collectIdentifiers(expression, names);
+      collectMemberExpressionPaths(expression, names);
     }
   });
   return names;
+}
+
+/**
+ * Collects qualified dot paths from `MemberExpression` nodes (e.g. `mixins.root`
+ * yields the string `"mixins.root"`). Lets the css-helper extractor recognize
+ * object-member helpers that a skipped imported-root template still references.
+ */
+function collectMemberExpressionPaths(node: unknown, out: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectMemberExpressionPaths(child, out);
+    }
+    return;
+  }
+  const typed = node as {
+    type?: string;
+    object?: unknown;
+    property?: { type?: string; name?: string };
+    computed?: boolean;
+  };
+  if (
+    typed.type === "MemberExpression" &&
+    typed.computed !== true &&
+    typed.property?.type === "Identifier" &&
+    typed.property.name
+  ) {
+    const objectPath = memberExpressionRoot(typed.object);
+    if (objectPath) {
+      out.add(`${objectPath}.${typed.property.name}`);
+    }
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    collectMemberExpressionPaths((node as Record<string, unknown>)[key], out);
+  }
+}
+
+function memberExpressionRoot(node: unknown): string | null {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  const typed = node as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: { type?: string; name?: string };
+    computed?: boolean;
+  };
+  if (typed.type === "Identifier" && typed.name) {
+    return typed.name;
+  }
+  if (
+    typed.type === "MemberExpression" &&
+    typed.computed !== true &&
+    typed.property?.type === "Identifier" &&
+    typed.property.name
+  ) {
+    const inner = memberExpressionRoot(typed.object);
+    return inner ? `${inner}.${typed.property.name}` : null;
+  }
+  return null;
 }
 
 function tagWrapsImportedComponent(

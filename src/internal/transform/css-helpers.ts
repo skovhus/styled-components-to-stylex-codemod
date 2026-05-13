@@ -1169,6 +1169,7 @@ export function extractAndRemoveCssHelpers(args: {
         const styleKey = toStyleKey(
           `${objectName}${propName.charAt(0).toUpperCase()}${propName.slice(1)}`,
         );
+        const preserveMember = preserveDeclarationOnlyNames?.has(qualifiedName) ?? false;
 
         const decl: StyledDecl = {
           localName: qualifiedName,
@@ -1178,6 +1179,8 @@ export function extractAndRemoveCssHelpers(args: {
           rules,
           templateExpressions: [],
           rawCss,
+          preserveCssHelperDeclaration: preserveMember,
+          suppressCssHelperStyleEmission: preserveMember,
         };
 
         memberMap.set(propName, decl);
@@ -1213,7 +1216,9 @@ export function extractAndRemoveCssHelpers(args: {
 
         cssHelperObjectMembers.set(objectName, memberMap);
 
-        // Remove the CSS helper properties from the object (unless exported)
+        // Remove the CSS helper properties from the object (unless exported, or
+        // unless the qualified path is in `preserveDeclarationOnlyNames` because a
+        // skipped imported-root template still interpolates `${objectName.propName}`).
         const isExported = exportedLocalNames.has(objectName);
         if (!isExported) {
           // Filter out the CSS helper properties
@@ -1224,7 +1229,11 @@ export function extractAndRemoveCssHelpers(args: {
             if (prop.key?.type !== "Identifier") {
               return true; // Keep computed or non-identifier keys
             }
-            return !cssHelperPropNames.has(prop.key.name);
+            const propName = prop.key.name;
+            if (!cssHelperPropNames.has(propName)) {
+              return true;
+            }
+            return preserveDeclarationOnlyNames?.has(`${objectName}.${propName}`) ?? false;
           });
 
           if (remainingProps.length === 0) {

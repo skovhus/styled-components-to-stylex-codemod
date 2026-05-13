@@ -137,7 +137,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         root
           .find(j.JSXElement)
           .filter((p: any) =>
-            jsxNameReferencesStyledLocal(p.node.openingElement.name, decl.localName, root, j),
+            jsxNameReferencesStyledLocal(p.node.openingElement.name, decl.localName, root, j, p),
           )
           .forEach((p) => {
             for (const attr of p.node.openingElement.attributes ?? []) {
@@ -1656,6 +1656,7 @@ function jsxNameReferencesStyledLocal(
   localName: string,
   root: TransformContext["root"],
   j: TransformContext["j"]["jscodeshift"],
+  jsxPath?: { parentPath?: unknown } | null,
 ): boolean {
   const path = jsxNamePath(name);
   if (path.length === 0) {
@@ -1667,7 +1668,7 @@ function jsxNameReferencesStyledLocal(
       identifier === localName || identifierAliasReferencesLocal(identifier, localName, root, j)
     );
   }
-  return memberPathReferencesLocal(path, localName, root, j);
+  return memberPathReferencesLocal(path, localName, root, j, jsxPath);
 }
 
 function identifierAliasReferencesLocal(
@@ -1692,6 +1693,7 @@ function memberPathReferencesLocal(
   localName: string,
   root: TransformContext["root"],
   j: TransformContext["j"]["jscodeshift"],
+  jsxPath?: { parentPath?: unknown } | null,
 ): boolean {
   const [rootName, ...properties] = path;
   if (!rootName || properties.length === 0) {
@@ -1707,12 +1709,93 @@ function memberPathReferencesLocal(
         references = true;
       }
     });
-  return (
-    references ||
-    (properties.length === 1 &&
-      properties[0] === localName &&
-      namespaceDeclaresLocal(root, j, rootName, localName))
-  );
+  if (references) {
+    return true;
+  }
+  if (properties.length !== 1 || properties[0] !== localName) {
+    return false;
+  }
+  if (!namespaceDeclaresLocal(root, j, rootName, localName)) {
+    return false;
+  }
+  // Refuse the namespace fallback when a nested scope shadows the namespace name
+  // (e.g. `function X() { const WidgetSet = Other; return <WidgetSet.Grid />; }`)
+  // because the JSX root resolves to the local binding, not the namespace.
+  return !rootNameIsShadowedAtJsxPath(jsxPath, rootName);
+}
+
+function rootNameIsShadowedAtJsxPath(
+  jsxPath: { parentPath?: unknown } | null | undefined,
+  rootName: string,
+): boolean {
+  let cur: { node?: unknown; parentPath?: unknown } | null | undefined = jsxPath;
+  while (cur) {
+    const node = cur.node as { type?: string; body?: unknown; params?: unknown[] } | undefined;
+    if (
+      node?.type === "FunctionDeclaration" ||
+      node?.type === "FunctionExpression" ||
+      node?.type === "ArrowFunctionExpression" ||
+      node?.type === "BlockStatement" ||
+      node?.type === "Program" ||
+      node?.type === "TSModuleBlock"
+    ) {
+      if (scopeBindingShadowsName(node, rootName)) {
+        return true;
+      }
+    }
+    cur = cur.parentPath as { node?: unknown; parentPath?: unknown } | null | undefined;
+  }
+  return false;
+}
+
+function scopeBindingShadowsName(
+  node: { type?: string; body?: unknown; params?: unknown[] } | undefined,
+  rootName: string,
+): boolean {
+  if (!node) {
+    return false;
+  }
+  if (Array.isArray(node.params)) {
+    for (const param of node.params) {
+      if (paramIntroducesName(param, rootName)) {
+        return true;
+      }
+    }
+  }
+  const body = (node as { body?: { type?: string; body?: unknown[] } | unknown[] }).body;
+  const statements = Array.isArray(body)
+    ? body
+    : Array.isArray((body as { body?: unknown[] })?.body)
+      ? ((body as { body?: unknown[] }).body as unknown[])
+      : [];
+  for (const stmt of statements) {
+    if (statementIntroducesName(stmt, rootName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function paramIntroducesName(param: unknown, rootName: string): boolean {
+  const node = param as { type?: string; name?: string };
+  return node?.type === "Identifier" && node.name === rootName;
+}
+
+function statementIntroducesName(stmt: unknown, rootName: string): boolean {
+  const node = stmt as {
+    type?: string;
+    declarations?: Array<{ id?: { type?: string; name?: string } }>;
+    id?: { type?: string; name?: string };
+  };
+  if (node?.type === "VariableDeclaration") {
+    return (node.declarations ?? []).some(
+      (d) => d.id?.type === "Identifier" && d.id.name === rootName,
+    );
+  }
+  if (node?.type === "FunctionDeclaration" || node?.type === "ClassDeclaration") {
+    return node.id?.type === "Identifier" && node.id.name === rootName;
+  }
+  return false;
 }
 
 function objectPathValue(expr: unknown, path: readonly string[]): unknown {
