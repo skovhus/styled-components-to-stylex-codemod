@@ -15,7 +15,14 @@ export const ContentViewContainer = styled.div`
 // 1. Include the user's explicit props (CustomProps)
 // 2. Add the generic `as?: C` prop
 // 3. Create a proper generic wrapper function
-const BaseComponent = (props: React.ComponentProps<"div">) => <div {...props} />;
+type BaseComponentProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> & {
+  as?: C;
+};
+
+const BaseComponent = <C extends React.ElementType = "div">(props: BaseComponentProps<C>) => {
+  const { as: Component = "div", ...rest } = props;
+  return <Component {...rest} />;
+};
 
 interface CustomProps {
   /** A custom prop specific to this wrapper */
@@ -27,11 +34,17 @@ export const StyledWrapper = styled(BaseComponent)<CustomProps>`
   background: ${(props) => (props.variant === "primary" ? "blue" : "gray")};
 `;
 
+export const StaticAsWrapper = styled(BaseComponent).attrs({ as: "a" })<CustomProps>`
+  padding: 12px;
+  background: ${(props) => (props.variant === "primary" ? "navy" : "slategray")};
+`;
+
 // When this is used externally we might both add a ref and use the "as"
 // <ContentViewContainer ref={...} onClick={e => {}} >
 export const App = () => (
   <>
     <ContentViewContainer onClick={() => {}} />
     <StyledWrapper variant="primary">Content</StyledWrapper>
+    <StaticAsWrapper variant="secondary">Static as content</StaticAsWrapper>
   </>
 );

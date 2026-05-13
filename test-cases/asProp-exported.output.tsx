@@ -17,7 +17,14 @@ export function ContentViewContainer<C extends React.ElementType = "div">(
 // 1. Include the user's explicit props (CustomProps)
 // 2. Add the generic `as?: C` prop
 // 3. Create a proper generic wrapper function
-const BaseComponent = (props: React.ComponentProps<"div">) => <div {...props} />;
+type BaseComponentProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> & {
+  as?: C;
+};
+
+const BaseComponent = <C extends React.ElementType = "div">(props: BaseComponentProps<C>) => {
+  const { as: Component = "div", ...rest } = props;
+  return <Component {...rest} />;
+};
 
 interface CustomProps {
   /** A custom prop specific to this wrapper */
@@ -45,12 +52,40 @@ export function StyledWrapper<C extends React.ElementType = typeof BaseComponent
   );
 }
 
+type StaticAsWrapperProps<C extends React.ElementType = typeof BaseComponent> = Omit<
+  React.ComponentPropsWithRef<typeof BaseComponent>,
+  "as"
+> &
+  Omit<
+    React.ComponentPropsWithRef<C>,
+    keyof React.ComponentPropsWithRef<typeof BaseComponent> | "className" | "style" | "as"
+  > & {
+    as?: never;
+  } & CustomProps;
+
+export function StaticAsWrapper<C extends React.ElementType = typeof BaseComponent>(
+  props: StaticAsWrapperProps<C>,
+) {
+  const { as: Component = BaseComponent, variant, ...rest } = props;
+  return (
+    <Component
+      {...rest}
+      as="a"
+      {...stylex.props(
+        styles.staticAsWrapper,
+        variant === "primary" && styles.staticAsWrapperVariantPrimary,
+      )}
+    />
+  );
+}
+
 // When this is used externally we might both add a ref and use the "as"
 // <ContentViewContainer ref={...} onClick={e => {}} >
 export const App = () => (
   <>
     <ContentViewContainer onClick={() => {}} />
     <StyledWrapper variant="primary">Content</StyledWrapper>
+    <StaticAsWrapper variant="secondary">Static as content</StaticAsWrapper>
   </>
 );
 
@@ -69,5 +104,12 @@ const styles = stylex.create({
   },
   wrapperVariantPrimary: {
     backgroundColor: "blue",
+  },
+  staticAsWrapper: {
+    padding: 12,
+    backgroundColor: "slategray",
+  },
+  staticAsWrapperVariantPrimary: {
+    backgroundColor: "navy",
   },
 });

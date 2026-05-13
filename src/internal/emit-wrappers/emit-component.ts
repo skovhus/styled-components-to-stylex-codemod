@@ -367,11 +367,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         wrappedPropsTypeName &&
         explicitTypeName === wrappedPropsTypeName
       );
+      const explicitTypeNeedsDistributiveOmit = !!(
+        d.propsType && explicitTypeMayBeUnion(emitter, d.propsType)
+      );
+      const explicitTransientPropRenames = getExplicitTransientPropRenames({
+        emitter,
+        propsType: d.propsType,
+        transientPropRenames: d.transientPropRenames,
+      });
       const canMutateExplicitType = !!(
         explicitTypeExists &&
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
         !isSelfReferentialPropsType &&
+        !explicitTypeNeedsDistributiveOmit &&
         !isTypeNameUsedOutsideOwner(emitter, explicitTypeName, d.localName)
       );
 
@@ -463,7 +472,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
         // Build inline type for the function parameter (don't modify SharedProps)
         inlineTypeText = emitter.joinIntersection(
-          omitExplicitAttrsIfNeeded(explicitTypeName, explicitAttrsOmitUnion),
+          transformExplicitPropsTypeText({
+            canMutateExplicitType,
+            explicitAttrsOmitUnion,
+            typeText: explicitTypeName,
+            useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+            transientPropRenames: explicitTransientPropRenames,
+          }),
           intrinsicBase,
           optionalProps.length > 0 ? `{ ${optionalProps.join("; ")} }` : null,
         );
@@ -509,11 +524,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               '"style"',
               ...[...attrsProvidedPropNames].map((name) => JSON.stringify(name)),
             ])}>`,
-            "{\n  as?: C;\n}",
+            attrsProvidedPropNames.has("as") ? "{\n  as?: never;\n}" : "{\n  as?: C;\n}",
             ...(hasForwardedAsUsage ? [`{ forwardedAs?: ${forwardedAsPropTypeText} }`] : []),
             ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
             // Include user's explicit props type if it exists
-            ...(explicit ? [omitExplicitAttrsIfNeeded(explicit, explicitAttrsOmitUnion)] : []),
+            ...(explicit
+              ? [
+                  transformExplicitPropsTypeText({
+                    canMutateExplicitType,
+                    explicitAttrsOmitUnion,
+                    typeText: explicit,
+                    useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+                    transientPropRenames: explicitTransientPropRenames,
+                  }),
+                ]
+              : []),
           ].join(" & ");
           emitNamedPropsType(
             d.localName,
@@ -565,7 +590,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           const explicitWithRef =
             (explicitWithExtras
-              ? omitExplicitAttrsIfNeeded(explicitWithExtras, explicitAttrsOmitUnion)
+              ? transformExplicitPropsTypeText({
+                  canMutateExplicitType,
+                  explicitAttrsOmitUnion,
+                  typeText: explicitWithExtras,
+                  useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+                  transientPropRenames: explicitTransientPropRenames,
+                })
               : null) ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
           // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
           // which carries `children` when the wrapped component accepts them. Wrapping the
@@ -748,60 +779,88 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // and only used for styling, it almost certainly doesn't belong on the base component.
     const wrapperExplicitPropNames = new Set<string>();
     {
+      const findMatchingPropsInTypeNode = (
+        typeNode: ASTNode | undefined,
+        predicate: (name: string) => boolean,
+        visitedTypeNames = new Set<string>(),
+      ): string[] => {
+        const found: string[] = [];
+        const collectFromTypeNode = (node: ASTNode | undefined) => {
+          if (!node) {
+            return;
+          }
+          if (node.type === "TSParenthesizedType") {
+            collectFromTypeNode((node as { typeAnnotation?: ASTNode }).typeAnnotation);
+            return;
+          }
+          if (node.type === "TSIntersectionType" || node.type === "TSUnionType") {
+            for (const part of (node as { types?: ASTNode[] }).types ?? []) {
+              collectFromTypeNode(part);
+            }
+            return;
+          }
+          if (node.type === "TSTypeLiteral") {
+            for (const member of (node as { members?: unknown[] }).members ?? []) {
+              const typed = member as { type?: string; key?: { type?: string; name?: string } };
+              if (typed.type !== "TSPropertySignature" || typed.key?.type !== "Identifier") {
+                continue;
+              }
+              const propName = typed.key.name;
+              if (propName && predicate(propName)) {
+                found.push(propName);
+              }
+            }
+            return;
+          }
+          if (node.type !== "TSTypeReference") {
+            return;
+          }
+          const typeName = resolveTypeIdentifierName(node);
+          if (!typeName) {
+            for (const param of getTypeReferenceParams(node)) {
+              collectFromTypeNode(param);
+            }
+            return;
+          }
+          if (visitedTypeNames.has(typeName)) {
+            return;
+          }
+          visitedTypeNames.add(typeName);
+          const interfaceDecl = root
+            .find(j.TSInterfaceDeclaration)
+            .filter((p: any) => (p.node as any).id?.name === typeName);
+          if (interfaceDecl.size() > 0) {
+            for (const member of interfaceDecl.get().node.body?.body ?? []) {
+              const typed = member as { type?: string; key?: { type?: string; name?: string } };
+              if (typed.type !== "TSPropertySignature" || typed.key?.type !== "Identifier") {
+                continue;
+              }
+              const propName = typed.key.name;
+              if (propName && predicate(propName)) {
+                found.push(propName);
+              }
+            }
+          }
+          const typeAlias = root
+            .find(j.TSTypeAliasDeclaration)
+            .filter((p: any) => (p.node as any).id?.name === typeName);
+          if (typeAlias.size() > 0) {
+            collectFromTypeNode(typeAlias.get().node.typeAnnotation as ASTNode);
+          }
+        };
+        collectFromTypeNode(typeNode);
+        return [...new Set(found)];
+      };
+
       // Finds prop names in a named type (interface or type alias) matching a predicate.
       const findMatchingPropsInTypeName = (
         typeName: string,
         predicate: (name: string) => boolean,
-      ): string[] => {
-        const found: string[] = [];
-        const collectFromTypeNode = (typeNode: any) => {
-          if (!typeNode) {
-            return;
-          }
-          if (typeNode.type === "TSParenthesizedType") {
-            collectFromTypeNode(typeNode.typeAnnotation);
-            return;
-          }
-          if (typeNode.type === "TSIntersectionType") {
-            for (const t of typeNode.types ?? []) {
-              collectFromTypeNode(t);
-            }
-            return;
-          }
-          if (typeNode.type === "TSTypeLiteral" && typeNode.members) {
-            for (const member of typeNode.members) {
-              if (
-                member.type === "TSPropertySignature" &&
-                member.key?.type === "Identifier" &&
-                predicate(member.key.name)
-              ) {
-                found.push(member.key.name);
-              }
-            }
-          }
-        };
-        const interfaceDecl = root
-          .find(j.TSInterfaceDeclaration)
-          .filter((p: any) => (p.node as any).id?.name === typeName);
-        if (interfaceDecl.size() > 0) {
-          for (const member of interfaceDecl.get().node.body?.body ?? []) {
-            if (
-              member.type === "TSPropertySignature" &&
-              member.key?.type === "Identifier" &&
-              predicate(member.key.name)
-            ) {
-              found.push(member.key.name);
-            }
-          }
-        }
-        const typeAlias = root
-          .find(j.TSTypeAliasDeclaration)
-          .filter((p: any) => (p.node as any).id?.name === typeName);
-        if (typeAlias.size() > 0) {
-          collectFromTypeNode(typeAlias.get().node.typeAnnotation);
-        }
-        return found;
-      };
+      ): string[] =>
+        findMatchingPropsInTypeNode(
+          j.tsTypeReference(j.identifier(typeName)) as ASTNode,
+          predicate,
+        );
 
       // Find all transient props in the explicit props type
       const explicit = d.propsType;
@@ -810,37 +869,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         ? new Set(d.transientPropRenames.values())
         : undefined;
 
-      // Check if explicit type is a type literal with members
-      if (explicit?.type === "TSTypeLiteral" && explicit.members) {
-        for (const member of explicit.members) {
-          if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
-            const memberName = member.key.name;
-            wrapperExplicitPropNames.add(memberName);
-            if (memberName.startsWith("$") || renamedTransientValues?.has(memberName)) {
-              transientProps.push(memberName);
-              wrapperOnlyTransientProps.push(memberName);
-            }
-          }
-        }
-      }
-      // Check if explicit type is a reference to an interface/type alias
-      else if (explicit?.type === "TSTypeReference" && explicit.typeName?.type === "Identifier") {
-        const typeName = explicit.typeName.name;
-        for (const p of findMatchingPropsInTypeName(typeName, () => true)) {
+      if (explicit) {
+        for (const p of findMatchingPropsInTypeNode(explicit, () => true)) {
           wrapperExplicitPropNames.add(p);
         }
-        transientProps = findMatchingPropsInTypeName(typeName, (n) => n.startsWith("$"));
-        // After interface renaming, $-prefixed members may have been renamed.
-        // Also find renamed-from-transient members.
-        if (renamedTransientValues) {
-          for (const p of findMatchingPropsInTypeName(typeName, (n) =>
-            renamedTransientValues.has(n),
-          )) {
-            if (!transientProps.includes(p)) {
-              transientProps.push(p);
-            }
-          }
-        }
+        transientProps = findMatchingPropsInTypeNode(
+          explicit,
+          (n) => n.startsWith("$") || !!renamedTransientValues?.has(n),
+        );
         wrapperOnlyTransientProps.push(...transientProps);
       }
 
@@ -1398,6 +1434,24 @@ function getExplicitAttrsOmitUnion(args: {
     : null;
 }
 
+function getExplicitTransientPropRenames(args: {
+  emitter: WrapperEmitter;
+  propsType: ASTNode | undefined;
+  transientPropRenames: ReadonlyMap<string, string> | undefined;
+}): ReadonlyMap<string, string> | undefined {
+  const { emitter, propsType, transientPropRenames } = args;
+  if (!propsType || !transientPropRenames || transientPropRenames.size === 0) {
+    return undefined;
+  }
+  const narrowed = new Map<string, string>();
+  for (const [original, renamed] of transientPropRenames) {
+    if (explicitTypeMayContainAttrs(emitter, propsType, new Set([original]))) {
+      narrowed.set(original, renamed);
+    }
+  }
+  return narrowed.size > 0 ? narrowed : undefined;
+}
+
 function explicitTypeMayContainAttrs(
   emitter: WrapperEmitter,
   propsType: ASTNode,
@@ -1421,10 +1475,9 @@ function explicitTypeMayContainAttrs(
   if (propsType.type !== "TSTypeReference") {
     return false;
   }
-  const typeNameText = emitter.stringifyTsType(propsType);
-  const params = getTypeReferenceParams(propsType);
-  if (isUtilityTypeReference(typeNameText)) {
-    return params.some((param) =>
+  const utilitySourceTypes = getUtilitySourceTypeParams(propsType);
+  if (utilitySourceTypes) {
+    return utilitySourceTypes.some((param) =>
       explicitTypeMayContainAttrs(
         emitter,
         param,
@@ -1445,6 +1498,49 @@ function explicitTypeMayContainAttrs(
   }
   visitedTypeNames.add(typeName);
   return localTypeMayContainAttrs(emitter, typeName, attrsProvidedPropNames, visitedTypeNames);
+}
+
+function explicitTypeMayBeUnion(
+  emitter: WrapperEmitter,
+  propsType: ASTNode,
+  visitedTypeNames = new Set<string>(),
+): boolean {
+  if (propsType.type === "TSUnionType") {
+    return true;
+  }
+  if (propsType.type === "TSIntersectionType") {
+    return ((propsType as { types?: ASTNode[] }).types ?? []).some((part) =>
+      explicitTypeMayBeUnion(emitter, part, new Set(visitedTypeNames)),
+    );
+  }
+  if (propsType.type === "TSParenthesizedType") {
+    const inner = (propsType as { typeAnnotation?: ASTNode }).typeAnnotation;
+    return inner ? explicitTypeMayBeUnion(emitter, inner, visitedTypeNames) : false;
+  }
+  if (propsType.type !== "TSTypeReference") {
+    return false;
+  }
+  const utilitySourceTypes = getUtilitySourceTypeParams(propsType);
+  if (utilitySourceTypes) {
+    return utilitySourceTypes.some((param) =>
+      explicitTypeMayBeUnion(emitter, param, new Set(visitedTypeNames)),
+    );
+  }
+  const typeName = resolveTypeIdentifierName(propsType);
+  if (!typeName || !emitter.typeExistsInFile(typeName) || visitedTypeNames.has(typeName)) {
+    return false;
+  }
+  visitedTypeNames.add(typeName);
+  let mayBeUnion = false;
+  const { root, j } = emitter;
+  root
+    .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => {
+      if (explicitTypeMayBeUnion(emitter, path.node.typeAnnotation as ASTNode, visitedTypeNames)) {
+        mayBeUnion = true;
+      }
+    });
+  return mayBeUnion;
 }
 
 function localTypeMayContainAttrs(
@@ -1509,7 +1605,7 @@ function typeLiteralHasAttrs(
 
 function typeMemberHasAttrs(member: unknown, attrsProvidedPropNames: ReadonlySet<string>): boolean {
   const typed = member as { type?: string; key?: unknown };
-  if (typed.type !== "TSPropertySignature") {
+  if (typed.type !== "TSPropertySignature" && typed.type !== "TSMethodSignature") {
     return false;
   }
   const name = typeKeyName(typed.key);
@@ -1523,15 +1619,68 @@ function resolveHeritageIdentifierName(heritage: unknown): string | null {
   return typed.expression?.type === "Identifier" ? (typed.expression.name ?? null) : null;
 }
 
-function omitExplicitAttrsIfNeeded(
-  typeText: string,
-  explicitAttrsOmitUnion: string | null,
-): string {
-  return explicitAttrsOmitUnion ? `Omit<${typeText}, ${explicitAttrsOmitUnion}>` : typeText;
-}
-
 function buildOmitUnion(parts: string[]): string {
   return [...new Set(parts)].join(" | ");
+}
+
+function transformExplicitPropsTypeText(args: {
+  canMutateExplicitType: boolean;
+  explicitAttrsOmitUnion: string | null;
+  typeText: string;
+  useDistributiveOmit: boolean;
+  transientPropRenames: ReadonlyMap<string, string> | undefined;
+}): string {
+  const { canMutateExplicitType, explicitAttrsOmitUnion, typeText, useDistributiveOmit } = args;
+  const omitKeys = [
+    ...(explicitAttrsOmitUnion ? [explicitAttrsOmitUnion] : []),
+    ...(!canMutateExplicitType && args.transientPropRenames
+      ? [...args.transientPropRenames.keys()].map((key) => JSON.stringify(key))
+      : []),
+  ];
+  const omitUnion = omitKeys.length > 0 ? buildOmitUnion(omitKeys) : null;
+  const transientPropRenames =
+    !canMutateExplicitType && args.transientPropRenames ? args.transientPropRenames : undefined;
+  if (useDistributiveOmit && omitUnion) {
+    return distributiveExplicitPropsTypeText({
+      omitUnion,
+      transientPropRenames,
+      typeText,
+    });
+  }
+  const base = omitUnion ? `Omit<${typeText}, ${omitUnion}>` : typeText;
+  const renamedProps = buildRenamedTransientPropTypes(
+    parenthesizeTypeForIndexedAccess(typeText),
+    transientPropRenames,
+  );
+  return [base, ...renamedProps].join(" & ");
+}
+
+function distributiveExplicitPropsTypeText(args: {
+  omitUnion: string;
+  transientPropRenames: ReadonlyMap<string, string> | undefined;
+  typeText: string;
+}): string {
+  const branchParts = [
+    `Omit<T, ${args.omitUnion}>`,
+    ...buildRenamedTransientPropTypes("T", args.transientPropRenames),
+  ];
+  return `((${args.typeText}) extends infer T ? T extends unknown ? ${branchParts.join(" & ")} : never : never)`;
+}
+
+function buildRenamedTransientPropTypes(
+  sourceTypeText: string,
+  transientPropRenames: ReadonlyMap<string, string> | undefined,
+): string[] {
+  return transientPropRenames
+    ? [...transientPropRenames].map(
+        ([original, renamed]) =>
+          `{ [K in Extract<"${original}", keyof ${sourceTypeText}> as "${renamed}"]: ${sourceTypeText}[K] }`,
+      )
+    : [];
+}
+
+function parenthesizeTypeForIndexedAccess(typeText: string): string {
+  return `(${typeText})`;
 }
 
 function getTypeReferenceParams(type: ASTNode): ASTNode[] {
@@ -1542,15 +1691,23 @@ function getTypeReferenceParams(type: ASTNode): ASTNode[] {
   return typed.typeParameters?.params ?? typed.typeArguments?.params ?? [];
 }
 
-function isUtilityTypeReference(typeNameText: string | null): boolean {
-  return (
-    typeNameText === "React.PropsWithChildren" ||
-    typeNameText === "PropsWithChildren" ||
-    typeNameText === "Partial" ||
-    typeNameText === "Required" ||
-    typeNameText === "Readonly" ||
-    typeNameText === "Omit" ||
-    typeNameText === "Pick"
+function getUtilitySourceTypeParams(type: ASTNode): ASTNode[] | null {
+  if (!isUtilityTypeReference(resolveTypeReferenceName(type))) {
+    return null;
+  }
+  const sourceType = getTypeReferenceParams(type)[0];
+  return sourceType ? [sourceType] : [];
+}
+
+function isUtilityTypeReference(typeName: TypeReferenceName | null): boolean {
+  if (!typeName) {
+    return false;
+  }
+  if (typeName.kind === "qualified") {
+    return typeName.namespace === "React" && typeName.name === "PropsWithChildren";
+  }
+  return ["PropsWithChildren", "Partial", "Required", "Readonly", "Omit", "Pick"].includes(
+    typeName.name,
   );
 }
 
@@ -1750,7 +1907,7 @@ function removeAttrsMembersInExistingType(
   const removedNames = new Set<string>();
   const shouldRemoveMember = (member: unknown): boolean => {
     const typed = member as { type?: string; key?: unknown };
-    if (typed.type !== "TSPropertySignature") {
+    if (typed.type !== "TSPropertySignature" && typed.type !== "TSMethodSignature") {
       return false;
     }
     const name = typeKeyName(typed.key);

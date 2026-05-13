@@ -66,14 +66,32 @@ interface InheritedSectionProps extends ImportedSectionProps {
 }
 
 type UnionSectionProps =
-  | {
-      children?: React.ReactNode;
-      kind: "alpha";
-    }
-  | ({
-      children?: React.ReactNode;
-      kind: "beta";
-    } & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">);
+  | { children?: React.ReactNode; kind: "alpha"; onlyAlpha?: number; someAttribute?: boolean }
+  | { children?: React.ReactNode; kind: "beta"; onlyBeta?: string; someAttribute?: boolean };
+
+type UtilityWrappedUnionSectionProps = React.PropsWithChildren<UnionSectionProps>;
+
+type TransientUnionSectionProps =
+  | { children?: React.ReactNode; kind: "alpha"; $tone?: "warm"; label?: string }
+  | { children?: React.ReactNode; kind: "beta"; $tone?: "cool"; label?: string };
+
+type TransientUnionExtraProps = {
+  detail?: string;
+};
+
+const noop = () => undefined;
+
+interface MethodSectionProps extends Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "onClick"
+> {
+  label?: string;
+}
+
+interface SharedTransientSectionProps {
+  active?: boolean;
+  label?: string;
+}
 
 type InputProps = {
   padding?: string;
@@ -275,8 +293,96 @@ export function InheritedSection(
 }
 
 // Pattern 3l: union aliases should keep wrapper-specific attrs Omit when not mutated
-export function UnionSection(props: UnionSectionProps) {
+export function UnionSection(
+  props: (UnionSectionProps extends infer T
+    ? T extends unknown
+      ? Omit<T, "someAttribute">
+      : never
+    : never) &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
   return <Text {...props} someAttribute={true} {...stylex.props(styles.unionSection)} />;
+}
+
+export function UtilityWrappedUnionSection(
+  props: (UtilityWrappedUnionSectionProps extends infer T
+    ? T extends unknown
+      ? Omit<T, "someAttribute">
+      : never
+    : never) &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return (
+    <Text {...props} someAttribute={true} {...stylex.props(styles.utilityWrappedUnionSection)} />
+  );
+}
+
+export function TransientUnionSection(
+  props: (TransientUnionSectionProps & TransientUnionExtraProps extends infer T
+    ? T extends unknown
+      ? Omit<T, "$tone"> & { [K in Extract<"$tone", keyof T> as "tone"]: T[K] }
+      : never
+    : never) &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$tone">,
+) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      {...stylex.props(
+        styles.transientUnionSection,
+        tone === "warm" && styles.transientUnionSectionToneWarm,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3m: method-signature attrs props should be omitted from explicit interfaces
+export function MethodSection(props: MethodSectionProps) {
+  return <Text {...props} onClick={noop} {...stylex.props(styles.methodSection)} />;
+}
+
+type SharedTransientAttrsSectionProps = SharedTransientSectionProps &
+  Omit<
+    React.ComponentPropsWithRef<typeof Text>,
+    "className" | "style" | "someAttribute" | "$active"
+  >;
+
+// Pattern 3n: shared transient aliases should keep shared alias and remap wrapper-local props
+export function SharedTransientAttrsSection(props: SharedTransientAttrsSectionProps) {
+  const { children, active, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      someAttribute={true}
+      {...stylex.props(
+        styles.sharedTransientAttrsSection,
+        active ? styles.sharedTransientAttrsSectionActive : undefined,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+type SharedTransientPlainSectionProps = SharedTransientSectionProps &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$active">;
+
+export function SharedTransientPlainSection(props: SharedTransientPlainSectionProps) {
+  const { children, active, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      {...stylex.props(
+        styles.sharedTransientPlainSection,
+        active ? styles.sharedTransientPlainSectionActive : undefined,
+      )}
+    >
+      {children}
+    </Text>
+  );
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -532,7 +638,22 @@ export const App = () => (
     <PickSection label="pick-label">Pick section content</PickSection>
     <MultiImportedSection label="multi-label">Multi imported section content</MultiImportedSection>
     <InheritedSection localLabel="inherited-label">Inherited section content</InheritedSection>
-    <UnionSection kind="alpha">Union section content</UnionSection>
+    <UnionSection kind="alpha" onlyAlpha={1}>
+      Union section content
+    </UnionSection>
+    <UtilityWrappedUnionSection kind="beta" onlyBeta="utility">
+      Utility wrapped union section content
+    </UtilityWrappedUnionSection>
+    <TransientUnionSection detail="branch" kind="alpha" tone="warm">
+      Transient union section content
+    </TransientUnionSection>
+    <MethodSection label="method-label">Method section content</MethodSection>
+    <SharedTransientAttrsSection active label="shared-transient-attrs">
+      Shared transient attrs section content
+    </SharedTransientAttrsSection>
+    <SharedTransientPlainSection active label="shared-transient-plain">
+      Shared transient plain section content
+    </SharedTransientPlainSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -638,6 +759,32 @@ const styles = stylex.create({
   unionSection: {
     padding: 24,
     backgroundColor: "#f8fafc",
+  },
+  utilityWrappedUnionSection: {
+    padding: 25,
+    backgroundColor: "#f1f5f9",
+  },
+  transientUnionSection: {
+    color: "#1d4ed8",
+  },
+  transientUnionSectionToneWarm: {
+    color: "#9f1239",
+  },
+  methodSection: {
+    padding: 26,
+    backgroundColor: "#eff6ff",
+  },
+  sharedTransientAttrsSection: {
+    color: "#475569",
+  },
+  sharedTransientAttrsSectionActive: {
+    color: "#0f766e",
+  },
+  sharedTransientPlainSection: {
+    backgroundColor: "#f8fafc",
+  },
+  sharedTransientPlainSectionActive: {
+    backgroundColor: "#ccfbf1",
   },
   scrollable: {
     overflowY: "auto",
