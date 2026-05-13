@@ -69,7 +69,7 @@ const noop = () => undefined;
 
 interface MethodSectionProps {
   label?: string;
-  onClick(): void;
+  onClick?(): void;
 }
 
 interface SharedTransientSectionProps {
@@ -452,7 +452,7 @@ export const App = () => (
       Union section content
     </UnionSection>
     <MethodSection label="method-label">Method section content</MethodSection>
-    <SharedTransientAttrsSection active label="shared-transient-attrs">
+    <SharedTransientAttrsSection $active label="shared-transient-attrs">
       Shared transient attrs section content
     </SharedTransientAttrsSection>
     <SharedTransientPlainSection $active label="shared-transient-plain">

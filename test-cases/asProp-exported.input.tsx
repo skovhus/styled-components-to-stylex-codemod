@@ -15,7 +15,14 @@ export const ContentViewContainer = styled.div`
 // 1. Include the user's explicit props (CustomProps)
 // 2. Add the generic `as?: C` prop
 // 3. Create a proper generic wrapper function
-const BaseComponent = (props: React.ComponentProps<"div">) => <div {...props} />;
+type BaseComponentProps<C extends React.ElementType = "div"> = React.ComponentPropsWithRef<C> & {
+  as?: C;
+};
+
+const BaseComponent = <C extends React.ElementType = "div">(props: BaseComponentProps<C>) => {
+  const { as: Component = "div", ...rest } = props;
+  return <Component {...rest} />;
+};
 
 interface CustomProps {
   /** A custom prop specific to this wrapper */

@@ -370,6 +370,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const explicitTypeNeedsDistributiveOmit = !!(
         d.propsType && explicitTypeMayBeUnion(emitter, d.propsType)
       );
+      const explicitTransientPropRenames = getExplicitTransientPropRenames({
+        emitter,
+        propsType: d.propsType,
+        transientPropRenames: d.transientPropRenames,
+      });
       const canMutateExplicitType = !!(
         explicitTypeExists &&
         explicitTypeName &&
@@ -472,7 +477,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             explicitAttrsOmitUnion,
             typeText: explicitTypeName,
             useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
-            transientPropRenames: d.transientPropRenames,
+            transientPropRenames: explicitTransientPropRenames,
           }),
           intrinsicBase,
           optionalProps.length > 0 ? `{ ${optionalProps.join("; ")} }` : null,
@@ -530,7 +535,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
                     explicitAttrsOmitUnion,
                     typeText: explicit,
                     useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
-                    transientPropRenames: d.transientPropRenames,
+                    transientPropRenames: explicitTransientPropRenames,
                   }),
                 ]
               : []),
@@ -590,7 +595,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
                   explicitAttrsOmitUnion,
                   typeText: explicitWithExtras,
                   useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
-                  transientPropRenames: d.transientPropRenames,
+                  transientPropRenames: explicitTransientPropRenames,
                 })
               : null) ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
           // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
@@ -1422,6 +1427,24 @@ function getExplicitAttrsOmitUnion(args: {
   return explicitTypeMayContainAttrs(emitter, propsType, attrsProvidedPropNames)
     ? buildOmitUnion([...attrsProvidedPropNames].map((name) => JSON.stringify(name)))
     : null;
+}
+
+function getExplicitTransientPropRenames(args: {
+  emitter: WrapperEmitter;
+  propsType: ASTNode | undefined;
+  transientPropRenames: ReadonlyMap<string, string> | undefined;
+}): ReadonlyMap<string, string> | undefined {
+  const { emitter, propsType, transientPropRenames } = args;
+  if (!propsType || !transientPropRenames || transientPropRenames.size === 0) {
+    return undefined;
+  }
+  const narrowed = new Map<string, string>();
+  for (const [original, renamed] of transientPropRenames) {
+    if (explicitTypeMayContainAttrs(emitter, propsType, new Set([original]))) {
+      narrowed.set(original, renamed);
+    }
+  }
+  return narrowed.size > 0 ? narrowed : undefined;
 }
 
 function explicitTypeMayContainAttrs(

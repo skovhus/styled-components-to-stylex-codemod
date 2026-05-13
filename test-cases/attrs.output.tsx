@@ -299,9 +299,8 @@ export function MethodSection(props: MethodSectionProps) {
   return <Text {...props} onClick={noop} {...stylex.props(styles.methodSection)} />;
 }
 
-type SharedTransientAttrsSectionProps = Omit<SharedTransientSectionProps, "$active"> & {
-  [K in "$active" as "active"]: SharedTransientSectionProps[K];
-} & Omit<
+type SharedTransientAttrsSectionProps = SharedTransientSectionProps &
+  Omit<
     React.ComponentPropsWithRef<typeof Text>,
     "className" | "style" | "someAttribute" | "$active"
   >;
@@ -323,9 +322,8 @@ export function SharedTransientAttrsSection(props: SharedTransientAttrsSectionPr
   );
 }
 
-type SharedTransientPlainSectionProps = Omit<SharedTransientSectionProps, "$active"> & {
-  [K in "$active" as "active"]: SharedTransientSectionProps[K];
-} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$active">;
+type SharedTransientPlainSectionProps = SharedTransientSectionProps &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$active">;
 
 export function SharedTransientPlainSection(props: SharedTransientPlainSectionProps) {
   const { children, active, ...rest } = props;
