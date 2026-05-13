@@ -1,12 +1,7 @@
-// Partial conversion must preserve callable helper imports used by remaining styled templates.
+import * as stylex from "@stylexjs/stylex";
+import { helpers } from "./lib/helpers.stylex";
 import styled from "styled-components";
 import { truncate } from "./lib/helpers";
-
-const ConvertedLabel = styled.span`
-  ${truncate()};
-  color: #2563eb;
-  max-width: 120px;
-`;
 
 const PreservedNav = styled.nav`
   ${truncate()};
@@ -22,6 +17,13 @@ export const App = () => (
     <a className="active" href="#">
       Active link
     </a>
-    <ConvertedLabel>Converted label with long text</ConvertedLabel>
+    <span sx={[styles.convertedLabel, helpers.truncate]}>Converted label with long text</span>
   </PreservedNav>
 );
+
+const styles = stylex.create({
+  convertedLabel: {
+    color: "#2563eb",
+    maxWidth: 120,
+  },
+});

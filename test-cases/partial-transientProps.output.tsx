@@ -1,10 +1,5 @@
-// Partial conversion must preserve generic transient prop types on styled components left behind.
+import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
-
-const ConvertedPanel = styled.div`
-  padding: 12px;
-  background: #e0f2fe;
-`;
 
 const PreservedList = styled.ul<{ $active?: boolean }>`
   color: ${(props) => (props.$active ? "#111827" : "#6b7280")};
@@ -17,9 +12,16 @@ const PreservedList = styled.ul<{ $active?: boolean }>`
 
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
-    <ConvertedPanel>Converted</ConvertedPanel>
+    <div sx={styles.convertedPanel}>Converted</div>
     <PreservedList $active>
       <li className="selected">Preserved transient prop</li>
     </PreservedList>
   </div>
 );
+
+const styles = stylex.create({
+  convertedPanel: {
+    padding: 12,
+    backgroundColor: "#e0f2fe",
+  },
+});
