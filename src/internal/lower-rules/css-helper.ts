@@ -24,7 +24,9 @@ import {
   parseStyledTemplateLiteral,
   terminateStandaloneInterpolationStatements,
 } from "../styled-css.js";
-import { parseSelector } from "../selectors.js";
+import { normalizeSpecificityHacks, parseSelector } from "../selectors.js";
+import { addPropComments } from "./comments.js";
+import { buildSpecificityStrippedComment } from "./specificity-comments.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import {
@@ -370,7 +372,15 @@ export function createCssHelperResolver(args: {
         }
       }
 
-      const selector = (rule.selector ?? "").trim();
+      const rawSelector = (rule.selector ?? "").trim();
+      const specificityResult = normalizeSpecificityHacks(rawSelector);
+      if (specificityResult.hasHigherTier) {
+        return bail(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+        );
+      }
+      const selector = specificityResult.normalized.trim();
+      const specificityStripped = specificityResult.wasStripped;
       const allowDynamicValues = selector === "&";
       let target = out;
       // Track pseudo-class context for property-first format (e.g., ":hover")
@@ -494,6 +504,11 @@ export function createCssHelperResolver(args: {
             let value = cssValueToJs(mapped.value, d.important, mapped.prop);
             if (mapped.prop === "content" && typeof value === "string") {
               value = normalizeCssContentValue(value);
+            }
+            if (specificityStripped) {
+              addPropComments(target, mapped.prop, {
+                leading: buildSpecificityStrippedComment(rawSelector, mapped.prop),
+              });
             }
             (target as any)[mapped.prop] = mergeIntoContext(
               value,

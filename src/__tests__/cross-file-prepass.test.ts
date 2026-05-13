@@ -526,6 +526,45 @@ export const App = () => <CollapseArrowIcon />;
     });
   });
 
+  it("forwards a wrapped component bridge class through attrs as component wrappers", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Flex(props: React.ComponentProps<"div"> & { column?: boolean }) {
+  const { column, ...rest } = props;
+  return <div data-column={column === true ? "" : undefined} {...rest} />;
+}
+
+export const DialogItem = styled.div\`\`;
+
+const DialogList = styled(DialogItem).attrs({ as: Flex, column: true })\`
+  background: white;
+  border-radius: 4px;
+\`;
+
+export const App = () => <DialogList>List</DialogList>;
+`;
+
+    const absPath = pathResolve("/src/dialog-components.tsx");
+    const result = transformWithWarnings({ source, path: "/src/dialog-components.tsx" }, api, {
+      adapter: fixtureAdapter,
+      crossFileInfo: {
+        selectorUsages: [],
+        bridgeComponentNames: new Set(["DialogItem"]),
+      },
+    });
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+    const internalVar = bridgeClassVarName("DialogItem");
+    expect(code).toContain(
+      `const ${internalVar} = "${generateBridgeClassName(absPath, "DialogItem")}"`,
+    );
+    expect(code).toContain("export const DialogItemGlobalSelector");
+    expect(code).toContain(`className={\`\${${internalVar}}\`}`);
+  });
+
   it("emits bridge for default-exported component when bridgeComponentNames has 'default'", () => {
     // Issue: scanner stores importedName: "default" for default imports, but
     // bridge matching checked decl.localName, silently missing default-exported components.

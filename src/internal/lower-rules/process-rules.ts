@@ -10,6 +10,7 @@ import type { CssDeclarationIR, CssValuePart } from "../css-ir.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
+import { buildSpecificityStrippedComment } from "./specificity-comments.js";
 import { processRuleDeclarations } from "./process-rule-declarations.js";
 import {
   normalizeSelectorForAttributePseudos,
@@ -281,6 +282,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       const isHasComponentSelector = HAS_COMPONENT_SELECTOR_STRICT_RE.test(selectorForAnalysis);
 
       if (hasInterpolatedPseudo && !isHasComponentSelector) {
+        annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0]);
+
         // Handle interpolated pseudo selectors like `&:${highlight}`.
         // Also supports prefix pseudo-classes before the interpolation,
         // e.g., `&:not(:disabled):${highlight}` → prefixPseudo = ":not(:disabled)".
@@ -1034,11 +1037,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // When a specificity hack is stripped, annotate the first declaration so the
     // output includes a comment explaining the change.
     if (specificityStripped && rule.declarations.length > 0) {
-      const first = rule.declarations[0];
-      if (first) {
-        const note = `Specificity hack stripped (was: ${rule.selector.trim()})`;
-        first.leadingComment = first.leadingComment ? `${note}\n${first.leadingComment}` : note;
-      }
+      annotateSpecificityStrippedDeclaration(rule.selector, rule.declarations[0]);
     }
 
     if (!media && isSupportedAtRule(selector.trim())) {
@@ -3428,4 +3427,17 @@ function isDirectAttrsPropValue(entry: AttrsDynamicStyleEntry): boolean {
   }
   const node = callArg as { type?: string; name?: string; left?: unknown };
   return node.type === "Identifier" && node.name === entry.jsxProp;
+}
+
+function annotateSpecificityStrippedDeclaration(
+  selector: string,
+  firstDecl: CssDeclarationIR | undefined,
+): void {
+  if (!firstDecl || !selector.includes("&&")) {
+    return;
+  }
+  const note = buildSpecificityStrippedComment(selector, firstDecl.property ?? "");
+  firstDecl.leadingComment = firstDecl.leadingComment
+    ? `${note}\n${firstDecl.leadingComment}`
+    : note;
 }
