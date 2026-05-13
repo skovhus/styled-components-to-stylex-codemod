@@ -2699,6 +2699,97 @@ export const App = () => <A.B.Grid>Nested</A.B.Grid>;
     expect(result).not.toContain("$active?: boolean");
   });
 
+  it("resolves nested namespace prop types by full namespace path", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace C {
+  export namespace B {
+    type Props = {
+      $unrelated?: boolean;
+    };
+  }
+}
+
+export namespace A {
+  export namespace B {
+    type Props = {
+      $active?: boolean;
+    };
+
+    export const Grid = styled.div<Props>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => <A.B.Grid $active>Nested</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-full-path-type.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("$unrelated?: boolean");
+    expect(result).toContain("active?: boolean");
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("renames transient props for dotted namespace declarations", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace A.B {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => <A.B.Grid $active>Dotted namespace</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-dotted.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active>Dotted namespace");
+  });
+
+  it("does not match same-named namespace exports from unrelated declarations", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace A {
+  export const Grid = Other.Grid;
+}
+
+export namespace B {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => (
+  <>
+    <A.Grid $active>Other grid</A.Grid>
+    <B.Grid $active>Styled grid</B.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-unrelated-export.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<A.Grid $active>Other grid");
+    expect(result).toContain("<B.Grid active>Styled grid");
+  });
+
   it("does not rename a namespace-local type referenced from a nested namespace", () => {
     // Type `Props` is declared in namespace `A` alongside styled `Button`. A nested
     // namespace `Docs` initializes `Props` with `$active`. The codemod must treat
@@ -2886,6 +2977,33 @@ export const App = () => <Title>Imported root with object-member helper</Title>;
     // The skipped `styled(Text)` template still uses `mixins.root`.
     expect(result).toContain("const Title = styled(Text)");
     expect(result).toContain("${mixins.root}");
+  });
+
+  it("preserves computed object-member css helpers referenced by skipped imported roots", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins["root"]}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with computed helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
+    expect(result).toContain('${mixins["root"]}');
   });
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {

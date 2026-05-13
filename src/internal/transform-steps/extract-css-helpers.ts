@@ -95,18 +95,14 @@ function collectMemberExpressionPaths(node: unknown, out: Set<string>): void {
   const typed = node as {
     type?: string;
     object?: unknown;
-    property?: { type?: string; name?: string };
+    property?: { type?: string; name?: string; value?: unknown };
     computed?: boolean;
   };
-  if (
-    typed.type === "MemberExpression" &&
-    typed.computed !== true &&
-    typed.property?.type === "Identifier" &&
-    typed.property.name
-  ) {
+  if (typed.type === "MemberExpression") {
+    const propertyName = memberPropertyName(typed.property, typed.computed === true);
     const objectPath = memberExpressionRoot(typed.object);
-    if (objectPath) {
-      out.add(`${objectPath}.${typed.property.name}`);
+    if (objectPath && propertyName) {
+      out.add(`${objectPath}.${propertyName}`);
     }
   }
   for (const key of Object.keys(node as Record<string, unknown>)) {
@@ -125,20 +121,36 @@ function memberExpressionRoot(node: unknown): string | null {
     type?: string;
     name?: string;
     object?: unknown;
-    property?: { type?: string; name?: string };
+    property?: { type?: string; name?: string; value?: unknown };
     computed?: boolean;
   };
   if (typed.type === "Identifier" && typed.name) {
     return typed.name;
   }
-  if (
-    typed.type === "MemberExpression" &&
-    typed.computed !== true &&
-    typed.property?.type === "Identifier" &&
-    typed.property.name
-  ) {
+  if (typed.type === "MemberExpression") {
+    const propertyName = memberPropertyName(typed.property, typed.computed === true);
+    if (!propertyName) {
+      return null;
+    }
     const inner = memberExpressionRoot(typed.object);
-    return inner ? `${inner}.${typed.property.name}` : null;
+    return inner ? `${inner}.${propertyName}` : null;
+  }
+  return null;
+}
+
+function memberPropertyName(
+  property: { type?: string; name?: string; value?: unknown } | undefined,
+  computed: boolean,
+): string | null {
+  if (!computed && property?.type === "Identifier" && property.name) {
+    return property.name;
+  }
+  if (
+    computed &&
+    (property?.type === "StringLiteral" || property?.type === "Literal") &&
+    typeof property.value === "string"
+  ) {
+    return property.value;
   }
   return null;
 }

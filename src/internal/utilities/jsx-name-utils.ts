@@ -71,7 +71,15 @@ function tsModulePathTargetsLocal(
   exportedName: string,
   localName: string,
 ): boolean {
-  const body = (node as { body?: { type?: string; body?: unknown[] } }).body;
+  const body = (node as { body?: { type?: string; body?: unknown[]; id?: unknown } }).body;
+  if (body?.type === "TSModuleDeclaration") {
+    const nestedModuleDecl = body as { id?: { type?: string; name?: string } };
+    const [nextNamespace, ...remaining] = nestedNamespaces;
+    if (!moduleDeclarationNameMatches(nestedModuleDecl, nextNamespace ?? "")) {
+      return false;
+    }
+    return tsModulePathTargetsLocal(nestedModuleDecl, remaining, exportedName, localName);
+  }
   if (body?.type !== "TSModuleBlock") {
     return false;
   }
@@ -105,9 +113,17 @@ function statementDeclaresNamespacePath(
   };
   return (
     moduleDecl?.type === "TSModuleDeclaration" &&
-    moduleDecl.id?.type === "Identifier" &&
-    moduleDecl.id.name === namespaceName &&
+    moduleDeclarationNameMatches(moduleDecl, namespaceName) &&
     tsModulePathTargetsLocal(moduleDecl, remainingNamespaces, exportedName, localName)
+  );
+}
+
+function moduleDeclarationNameMatches(
+  moduleDecl: { id?: { type?: string; name?: string } },
+  namespaceName: string,
+): boolean {
+  return (
+    !!namespaceName && moduleDecl.id?.type === "Identifier" && moduleDecl.id.name === namespaceName
   );
 }
 
@@ -127,7 +143,7 @@ function statementTargetsLocal(
   const node = statement as {
     type?: string;
     declaration?: unknown;
-    declarations?: Array<{ id?: { type?: string; name?: string } }>;
+    declarations?: Array<{ id?: { type?: string; name?: string }; init?: unknown }>;
     id?: { type?: string; name?: string };
     specifiers?: Array<{
       type?: string;
@@ -158,7 +174,10 @@ function statementTargetsLocal(
     return (
       exportedName === localName &&
       (node.declarations ?? []).some(
-        (decl) => decl.id?.type === "Identifier" && decl.id.name === localName,
+        (decl) =>
+          decl.id?.type === "Identifier" &&
+          decl.id.name === localName &&
+          initializerLooksLikeStyledComponent(decl.init),
       )
     );
   }
@@ -168,6 +187,39 @@ function statementTargetsLocal(
     node.id?.type === "Identifier" &&
     node.id.name === localName
   );
+}
+
+function initializerLooksLikeStyledComponent(init: unknown): boolean {
+  const node = init as { type?: string; tag?: unknown } | null | undefined;
+  if (!node) {
+    return false;
+  }
+  if (node.type === "TaggedTemplateExpression") {
+    return tagLooksLikeStyledComponent(node.tag);
+  }
+  return false;
+}
+
+function tagLooksLikeStyledComponent(tag: unknown): boolean {
+  const node = tag as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    callee?: unknown;
+  };
+  if (!node) {
+    return false;
+  }
+  if (node.type === "Identifier") {
+    return node.name === "styled";
+  }
+  if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+    return tagLooksLikeStyledComponent(node.object);
+  }
+  if (node.type === "CallExpression") {
+    return tagLooksLikeStyledComponent(node.callee);
+  }
+  return false;
 }
 
 function specifierExportedName(spec: {

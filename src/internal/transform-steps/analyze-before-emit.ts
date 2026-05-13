@@ -2164,7 +2164,7 @@ function getDeclNamespaceName(
       if (namespaceName) {
         return;
       }
-      namespaceName = nearestNamespaceName(path);
+      namespaceName = nearestNamespacePath(path);
     });
   return namespaceName;
 }
@@ -2173,7 +2173,7 @@ function getDeclNamespaceName(
  * Builds the chain of namespaces visible to a styled decl by TypeScript name
  * resolution, ordered innermost-first and terminated with `null` (top-level).
  * For `namespace A { namespace B { const Grid = styled.div ... } }`, returns
- * `["B", "A", null]`. Used so type references resolve to the closest enclosing
+ * `["A.B", "A", null]`. Used so type references resolve to the closest enclosing
  * declaration, matching how TS would resolve them at runtime.
  */
 function getDeclAncestorNamespaceChain(
@@ -2193,35 +2193,34 @@ function getDeclAncestorNamespaceChain(
   if (!declaratorPath) {
     return [null];
   }
+  const namespacePath = namespacePathForPath(declaratorPath);
   const chain: Array<string | null> = [];
-  let current = (declaratorPath as { parentPath?: unknown }).parentPath as
-    | { node?: { type?: string; id?: unknown }; parentPath?: unknown }
-    | undefined;
-  while (current) {
-    const node = current.node;
-    if (node?.type === "TSModuleDeclaration") {
-      const id = node.id as { type?: string; name?: string };
-      if (id?.type === "Identifier" && id.name) {
-        chain.push(id.name);
-      }
-    }
-    current = current.parentPath as typeof current;
+  for (let end = namespacePath.length; end > 0; end--) {
+    chain.push(namespacePath.slice(0, end).join("."));
   }
   chain.push(null);
   return chain;
 }
 
-function nearestNamespaceName(path: { parentPath?: unknown }): string | null {
+function nearestNamespacePath(path: { parentPath?: unknown }): string | null {
+  const namespacePath = namespacePathForPath(path);
+  return namespacePath.length > 0 ? namespacePath.join(".") : null;
+}
+
+function namespacePathForPath(path: { parentPath?: unknown }): string[] {
+  const names: string[] = [];
   let current = path.parentPath as { node?: { type?: string; id?: unknown }; parentPath?: unknown };
   while (current) {
     const node = current.node;
     if (node?.type === "TSModuleDeclaration") {
       const id = node.id as { type?: string; name?: string };
-      return id.type === "Identifier" ? (id.name ?? null) : null;
+      if (id.type === "Identifier" && id.name) {
+        names.push(id.name);
+      }
     }
     current = current.parentPath as typeof current;
   }
-  return null;
+  return names.reverse();
 }
 
 /**
@@ -2240,18 +2239,9 @@ function pathReachesNamespace(
   if (namespaceName === null) {
     return true;
   }
-  let current = path.parentPath as { node?: { type?: string; id?: unknown }; parentPath?: unknown };
-  while (current) {
-    const node = current.node;
-    if (node?.type === "TSModuleDeclaration") {
-      const id = node.id as { type?: string; name?: string };
-      if (id?.type === "Identifier" && id.name === namespaceName) {
-        return true;
-      }
-    }
-    current = current.parentPath as typeof current;
-  }
-  return false;
+  const target = namespaceName.split(".");
+  const current = namespacePathForPath(path);
+  return target.every((part, index) => current[index] === part);
 }
 
 function shouldResolveReferencedPropsForTransientRename(
@@ -2659,7 +2649,7 @@ function findFirstTypeDeclInChain(
     root
       .find(builder)
       .filter((p: any) => p.node?.id?.name === typeName)
-      .filter((p: any) => nearestNamespaceName(p) === ns)
+      .filter((p: any) => nearestNamespacePath(p) === ns)
       .forEach((p: any) => {
         if (!found) {
           found = p.node;

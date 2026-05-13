@@ -225,6 +225,7 @@ export function tryHandleAnimation(args: {
     value: unknown,
     commentSource: { leading?: string; trailingLine?: string } | null,
   ) => void;
+  bailUnsupportedMultipleKeyframes?: () => void;
   bailUnsupportedUnknownVar?: () => void;
 }): boolean {
   const { j, decl, d, keyframesNames, styleObj, styleFnDecls, styleFnFromProps } = args;
@@ -498,6 +499,11 @@ export function tryHandleAnimation(args: {
         );
       });
       timelines.push(timeline ?? null);
+    }
+
+    if (animNames.length > 1 && animNames.some((name) => name.kind === "ident")) {
+      args.bailUnsupportedMultipleKeyframes?.();
+      return false;
     }
 
     const firstAnim = animNames[0];

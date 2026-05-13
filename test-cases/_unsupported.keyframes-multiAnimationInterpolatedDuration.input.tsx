@@ -1,3 +1,4 @@
+// @expected-warning: Unsupported animation shorthand: multiple keyframes in one animation declaration
 // Multi-animation with interpolated duration in both segments
 import * as React from "react";
 import styled, { keyframes } from "styled-components";

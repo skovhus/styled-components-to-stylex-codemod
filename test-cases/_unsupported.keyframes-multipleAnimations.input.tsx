@@ -1,3 +1,5 @@
+// @expected-warning: Unsupported animation shorthand: multiple keyframes in one animation declaration
+// Multiple keyframe names in one animation shorthand cannot be emitted as static StyleX keyframes.
 import styled, { keyframes } from "styled-components";
 
 const fadeIn = keyframes`
