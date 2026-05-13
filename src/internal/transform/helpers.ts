@@ -59,7 +59,66 @@ export type ComputedKeyEntry = {
   prepend?: boolean;
 };
 
+export type PropCommentMetadata = {
+  leading?: string | null;
+  leadingLine?: string | null;
+  trailingLine?: string | null;
+};
+
 export const SOURCE_CSS_PROPERTIES_KEY = "__sourceCssProperties";
+
+export function propCommentMetadataToAstComments(
+  commentEntry: string | PropCommentMetadata | null | undefined,
+): any[] {
+  const leading =
+    typeof commentEntry === "string"
+      ? commentEntry
+      : commentEntry && typeof commentEntry === "object"
+        ? (commentEntry.leading as unknown)
+        : null;
+  const leadingLine =
+    commentEntry && typeof commentEntry === "object" ? (commentEntry.leadingLine as unknown) : null;
+  const trailingLine =
+    commentEntry && typeof commentEntry === "object"
+      ? (commentEntry.trailingLine as unknown)
+      : null;
+  const comments: any[] = [];
+  if (typeof leading === "string" && leading.trim()) {
+    const trimmed = leading.trim();
+    comments.push({
+      type: "CommentBlock",
+      value: ` ${trimmed} `,
+      leading: true,
+      trailing: false,
+    });
+  }
+  if (typeof leadingLine === "string" && leadingLine.trim()) {
+    for (const line of leadingLine.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      comments.push({
+        type: "CommentLine",
+        value: ` ${trimmed}`,
+        leading: true,
+        trailing: false,
+      });
+    }
+  }
+  if (typeof trailingLine === "string" && trailingLine.trim()) {
+    const trimmed = trailingLine.trim();
+    // NOTE: Recast/oxfmt will often render this as a standalone comment line above the property.
+    // We normalize it back to an inline trailing comment in `formatOutput`.
+    comments.push({
+      type: "CommentLine",
+      value: ` ${trimmed}`,
+      leading: false,
+      trailing: true,
+    });
+  }
+  return comments;
+}
 
 export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>): any {
   const spreadsRaw = obj.__spreads;
@@ -121,38 +180,7 @@ export function objectToAst(j: API["jscodeshift"], obj: Record<string, unknown>)
         : literalToAst(j, value),
     );
 
-    const commentEntry = propComments[key];
-    const leading =
-      typeof commentEntry === "string"
-        ? commentEntry
-        : commentEntry && typeof commentEntry === "object"
-          ? (commentEntry.leading as unknown)
-          : null;
-    const trailingLine =
-      commentEntry && typeof commentEntry === "object"
-        ? (commentEntry.trailingLine as unknown)
-        : null;
-    const comments: any[] = [];
-    if (typeof leading === "string" && leading.trim()) {
-      const trimmed = leading.trim();
-      comments.push({
-        type: "CommentBlock",
-        value: ` ${trimmed} `,
-        leading: true,
-        trailing: false,
-      });
-    }
-    if (typeof trailingLine === "string" && trailingLine.trim()) {
-      const trimmed = trailingLine.trim();
-      // NOTE: Recast/oxfmt will often render this as a standalone comment line above the property.
-      // We normalize it back to an inline trailing comment in `formatOutput`.
-      comments.push({
-        type: "CommentLine",
-        value: ` ${trimmed}`,
-        leading: false,
-        trailing: true,
-      });
-    }
+    const comments = propCommentMetadataToAstComments(propComments[key]);
     if (comments.length) {
       (prop as any).comments = comments;
     }

@@ -5,14 +5,15 @@
 export function addPropComments(
   target: any,
   prop: string,
-  comments: { leading?: string | null; trailingLine?: string | null },
+  comments: { leading?: string | null; leadingLine?: string | null; trailingLine?: string | null },
 ): void {
   if (!prop) {
     return;
   }
   const leading = comments.leading ?? null;
+  const leadingLine = comments.leadingLine ?? null;
   const trailingLine = comments.trailingLine ?? null;
-  if (!leading && !trailingLine) {
+  if (!leading && !leadingLine && !trailingLine) {
     return;
   }
   const key = "__propComments";
@@ -22,6 +23,9 @@ export function addPropComments(
   const prev = (map[prop] && typeof map[prop] === "object" ? map[prop] : {}) as any;
   if (leading) {
     prev.leading = leading;
+  }
+  if (leadingLine) {
+    prev.leadingLine = leadingLine;
   }
   if (trailingLine) {
     prev.trailingLine = trailingLine;

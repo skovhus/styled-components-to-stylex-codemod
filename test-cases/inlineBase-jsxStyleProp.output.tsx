@@ -29,6 +29,11 @@ const styles = stylex.create({
   wrapper: {
     padding: 16,
     backgroundColor: "#f0f5ff",
+    borderBottomWidth: 0,
+    borderBottomStyle: "none",
+    borderBottomColor: "initial",
+    // min height keeps schedule variants from resizing the modal
+    minHeight: 200,
   },
   flex: {
     display: "flex",
@@ -38,6 +43,7 @@ const styles = stylex.create({
     paddingBlock: "20px",
     paddingInline: 0,
     alignItems: "flex-start",
+    // min width keeps flex children from expanding the container
     minWidth: 0,
     width: "100%",
   },
