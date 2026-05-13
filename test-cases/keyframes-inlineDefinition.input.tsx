@@ -75,39 +75,6 @@ const Ring = styled.path<{ isAnimated?: boolean }>`
     `}
 `;
 
-const PrimaryMoveAnimation = css`
-  @keyframes PrimaryMove {
-    to {
-      transform: translateX(-18px);
-    }
-  }
-`;
-
-const SecondaryMoveAnimation = css`
-  @keyframes SecondaryMove {
-    to {
-      transform: translateX(-10px);
-    }
-  }
-`;
-
-const AnimatedGroup = styled.g<{ isAnimated?: boolean }>`
-  ${PrimaryMoveAnimation}
-  ${SecondaryMoveAnimation}
-
-  ${(props) =>
-    props.isAnimated
-      ? css`
-          animation:
-            PrimaryMove 1s ease-out forwards,
-            SecondaryMove 1.4s ease-in-out forwards;
-          animation-delay: 0s, 1s;
-        `
-      : css`
-          transform: translateX(-10px);
-        `}
-`;
-
 export function App() {
   return (
     <div style={{ display: "flex", gap: 16, padding: 20 }}>
@@ -118,9 +85,6 @@ export function App() {
         <Circle $isAnimated d="M10,80 Q95,10 180,80" />
         <Circle d="M10,80 Q95,10 180,80" />
         <Ring isAnimated d="M20,90 Q105,20 190,90" />
-        <AnimatedGroup isAnimated>
-          <circle cx="24" cy="24" r="12" />
-        </AnimatedGroup>
       </svg>
     </div>
   );

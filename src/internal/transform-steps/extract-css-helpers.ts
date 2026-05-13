@@ -7,6 +7,7 @@ import { extractAndRemoveCssHelpers } from "../transform/css-helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { buildUnsupportedCssWarnings, toStyleKey } from "../transform/helpers.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { isImportedComponentIdent } from "../utilities/partial-migration.js";
 
 /**
  * Extracts css helper blocks into style objects and validates supported usage.
@@ -65,7 +66,7 @@ function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set
   }
   const names = new Set<string>();
   ctx.root.find(ctx.j.TaggedTemplateExpression).forEach((path) => {
-    if (!tagWrapsImportedComponent(ctx, path.node.tag, importMap)) {
+    if (!tagWrapsImportedComponent(ctx, path.node.tag)) {
       return;
     }
     for (const expression of path.node.quasi.expressions ?? []) {
@@ -142,23 +143,19 @@ function memberExpressionRoot(node: unknown): string | null {
   return null;
 }
 
-function tagWrapsImportedComponent(
-  ctx: TransformContext,
-  tag: unknown,
-  importMap: Map<string, unknown>,
-): boolean {
+function tagWrapsImportedComponent(ctx: TransformContext, tag: unknown): boolean {
   const node = tag as { type?: string; callee?: unknown; arguments?: unknown[]; object?: unknown };
   if (!node) {
     return false;
   }
   if (node.type === "CallExpression") {
-    if (isStyledComponentCall(ctx, node, importMap)) {
+    if (isStyledComponentCall(ctx, node)) {
       return true;
     }
-    return tagWrapsImportedComponent(ctx, node.callee, importMap);
+    return tagWrapsImportedComponent(ctx, node.callee);
   }
   if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
-    return tagWrapsImportedComponent(ctx, node.object, importMap);
+    return tagWrapsImportedComponent(ctx, node.object);
   }
   return false;
 }
@@ -166,15 +163,36 @@ function tagWrapsImportedComponent(
 function isStyledComponentCall(
   ctx: TransformContext,
   node: { callee?: unknown; arguments?: unknown[] },
-  importMap: Map<string, unknown>,
 ): boolean {
   const callee = node.callee as { type?: string; name?: string } | null;
-  const firstArg = node.arguments?.[0] as { type?: string; name?: string } | undefined;
+  const firstArgIdent = expressionIdent(node.arguments?.[0]);
   return (
     !!callee &&
     ctx.isStyledTag(callee) &&
-    firstArg?.type === "Identifier" &&
-    !!firstArg.name &&
-    importMap.has(firstArg.name)
+    !!firstArgIdent &&
+    isImportedComponentIdent(ctx, firstArgIdent)
   );
+}
+
+function expressionIdent(node: unknown): string | null {
+  const typed = node as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: { type?: string; name?: string };
+    computed?: boolean;
+  };
+  if (typed?.type === "Identifier" && typed.name) {
+    return typed.name;
+  }
+  if (
+    typed?.type === "MemberExpression" &&
+    typed.computed !== true &&
+    typed.property?.type === "Identifier" &&
+    typed.property.name
+  ) {
+    const objectIdent = expressionIdent(typed.object);
+    return objectIdent ? `${objectIdent}.${typed.property.name}` : null;
+  }
+  return null;
 }

@@ -23,7 +23,10 @@ import {
   toStyleKey,
   type ComputedKeyEntry,
 } from "../transform/helpers.js";
-import { expandStaticAnimationShorthand } from "../keyframes.js";
+import {
+  expandStaticAnimationShorthand,
+  hasMultipleInlineKeyframeAnimationSegments,
+} from "../keyframes.js";
 
 export type DeclProcessingState = ReturnType<typeof createDeclProcessingState>;
 
@@ -323,6 +326,9 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
           d.value.kind === "static" &&
           state.keyframesNames.size > 0
         ) {
+          if (hasMultipleInlineKeyframeAnimationSegments(d.valueRaw, state.keyframesNames)) {
+            return null;
+          }
           const expanded: Record<string, unknown> = {};
           if (
             expandStaticAnimationShorthand(

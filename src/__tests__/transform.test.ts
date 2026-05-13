@@ -655,6 +655,81 @@ export const App = () => (
     expect(result.code).toMatch(/const\s+CustomGroupHeader\s*=\s*styled\(GroupHeader\)`/);
   });
 
+  it("skips imported member roots before unsupported-pattern checks in partial migration", () => {
+    const source = `
+import styled from "styled-components";
+import * as UI from "./lib/ui";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomText = styled(UI.Text)\`
+  color: red;
+\`;
+
+CustomText.defaultProps = {
+  theme: { mode: "dark" },
+};
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomText />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-imported-member-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(
+      "Theme prop overrides on styled components are not supported",
+    );
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    expect(result.code).toMatch(/const\s+CustomText\s*=\s*styled\(UI\.Text\)`/);
+    expect(result.code).not.toContain("customText:");
+  });
+
+  it("does not emit inline keyframes from skipped imported roots in partial migration", () => {
+    const source = `
+import styled from "styled-components";
+import ImportedPanel from "./lib/panel";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomPanel = styled(ImportedPanel)\`
+  @keyframes shimmer {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  animation: shimmer 1s linear infinite;
+\`;
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomPanel />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-imported-root-keyframes.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    expect(result.code).toMatch(/const\s+CustomPanel\s*=\s*styled\(ImportedPanel\)`/);
+    expect(result.code).not.toContain("stylex.keyframes");
+  });
+
   it("bails for non-relative barrel re-exports resolved by the configured resolver", () => {
     const source = `
 import styled from "styled-components";
@@ -2556,6 +2631,43 @@ export const App = () => (
     expect(result).toContain("<Grid active>Top-level grid");
     // WidgetSet.Grid is `Other`, an unrelated component → must not be renamed.
     expect(result).toContain("$active>Aliased re-export");
+  });
+
+  it("renames transient props for namespace export aliases and nested namespaces", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Grid = styled.div<{ $active?: boolean }>\`
+  color: \${({ $active }) => ($active ? "green" : "gray")};
+\`;
+
+export namespace WidgetSet {
+  export { Grid as Renamed };
+}
+
+export namespace A {
+  export namespace B {
+    export const Grid = styled.div<{ $active?: boolean }>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Renamed $active>Aliased grid</WidgetSet.Renamed>
+    <A.B.Grid $active>Nested grid</A.B.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-alias-nested.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<WidgetSet.Renamed active>");
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active>Aliased grid");
+    expect(result).not.toContain("$active>Nested grid");
   });
 
   it("renames prop types declared in a parent namespace for nested-namespace styled components", () => {

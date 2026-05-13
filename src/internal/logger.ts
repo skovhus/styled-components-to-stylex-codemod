@@ -74,6 +74,7 @@ export type WarningType =
   | "Unsupported interpolation: property"
   | "Unsupported interpolation: unknown"
   | "Unsupported nested conditional interpolation"
+  | "Unsupported animation shorthand: multiple inline keyframes"
   | "Unsupported prop-based inline style expression cannot be safely inlined"
   | "Unsupported prop-based inline style props.theme access is not supported"
   | "Unsupported selector interpolation: imported value in selector position"

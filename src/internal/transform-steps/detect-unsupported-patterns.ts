@@ -14,8 +14,7 @@ import { isMemberExpression } from "../lower-rules/utils.js";
  */
 export function detectUnsupportedPatternsStep(ctx: TransformContext): StepResult {
   const { root, j, warnings, styledLocalNames } = ctx;
-  const activeStyledNames =
-    ctx.options?.transformMode === "leavesOnly" ? getActiveStyledNames(ctx.styledDecls) : undefined;
+  const activeStyledNames = ctx.styledDecls ? getActiveStyledNames(ctx.styledDecls) : undefined;
 
   const unwrapExpression = (expr: any): any => {
     let current = expr;

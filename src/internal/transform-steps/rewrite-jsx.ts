@@ -16,7 +16,7 @@ import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
-import { jsxNamePath, namespaceDeclaresLocal } from "../utilities/jsx-name-utils.js";
+import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
@@ -1712,10 +1712,9 @@ function memberPathReferencesLocal(
   if (references) {
     return true;
   }
-  if (properties.length !== 1 || properties[0] !== localName) {
-    return false;
-  }
-  if (!namespaceDeclaresLocal(root, j, rootName, localName)) {
+  const memberName = properties[properties.length - 1];
+  const namespacePath = [rootName, ...properties.slice(0, -1)];
+  if (!namespaceMemberTargetsLocal(root, j, namespacePath, memberName ?? "", localName)) {
     return false;
   }
   // Refuse the namespace fallback when a nested scope shadows the namespace name

@@ -30,6 +30,7 @@ import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js"
 import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
+  hasMultipleInlineKeyframeAnimationSegments,
 } from "../keyframes.js";
 import {
   findInAst,
@@ -474,6 +475,9 @@ export function createCssHelperResolver(args: {
             args.keyframesNames.size > 0 &&
             args.j
           ) {
+            if (hasMultipleInlineKeyframeAnimationSegments(d.valueRaw, args.keyframesNames)) {
+              return bail("Unsupported animation shorthand: multiple inline keyframes");
+            }
             const expanded: Record<string, unknown> = {};
             if (
               expandStaticAnimationShorthand(

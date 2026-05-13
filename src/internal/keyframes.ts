@@ -1110,6 +1110,9 @@ export function expandStaticAnimationShorthand(
   if (segments.length === 0) {
     return false;
   }
+  if (segments.filter((tokens) => tokens.some((t) => inlineKeyframeNames.has(t))).length > 1) {
+    return false;
+  }
 
   const names: string[] = [];
   const durations: Array<string | null> = [];
@@ -1153,6 +1156,14 @@ export function expandStaticAnimationShorthand(
   assignAnimationLonghand(styleObj, "animationIterationCount", iterations, "1");
 
   return true;
+}
+
+export function hasMultipleInlineKeyframeAnimationSegments(
+  value: string,
+  inlineKeyframeNames: Set<string>,
+): boolean {
+  const segments = parseAnimationSegments(value);
+  return segments.filter((tokens) => tokens.some((t) => inlineKeyframeNames.has(t))).length > 1;
 }
 
 function parseAnimationSegments(value: string): string[][] {

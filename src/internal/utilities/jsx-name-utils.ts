@@ -28,42 +28,99 @@ export function jsxNameTargetsLocalBinding(args: {
   if (path.length === 1) {
     return path[0] === args.localName;
   }
-  const [namespaceName, memberName] = path;
-  return (
-    path.length === 2 &&
-    memberName === args.localName &&
-    !!namespaceName &&
-    namespaceDeclaresLocal(args.root, args.j, namespaceName, args.localName)
+  const memberName = path[path.length - 1];
+  const namespacePath = path.slice(0, -1);
+  return namespaceMemberTargetsLocal(
+    args.root,
+    args.j,
+    namespacePath,
+    memberName ?? "",
+    args.localName,
   );
 }
 
-export function namespaceDeclaresLocal(
+export function namespaceMemberTargetsLocal(
   root: Collection<ASTNode>,
   j: JSCodeshift,
-  namespaceName: string,
+  namespacePath: string[],
+  exportedName: string,
   localName: string,
 ): boolean {
+  if (namespacePath.length === 0 || !exportedName || !localName) {
+    return false;
+  }
+  const [rootNamespace, ...nestedNamespaces] = namespacePath;
+  if (!rootNamespace) {
+    return false;
+  }
   return (
     root
       .find(j.TSModuleDeclaration)
       .filter((p) => {
         const id = p.node.id;
-        return id.type === "Identifier" && id.name === namespaceName;
+        return id.type === "Identifier" && id.name === rootNamespace;
       })
-      .filter((p) => tsModuleDeclaresLocal(p.node, localName))
+      .filter((p) => tsModulePathTargetsLocal(p.node, nestedNamespaces, exportedName, localName))
       .size() > 0
   );
 }
 
-function tsModuleDeclaresLocal(node: unknown, localName: string): boolean {
+function tsModulePathTargetsLocal(
+  node: unknown,
+  nestedNamespaces: string[],
+  exportedName: string,
+  localName: string,
+): boolean {
   const body = (node as { body?: { type?: string; body?: unknown[] } }).body;
   if (body?.type !== "TSModuleBlock") {
     return false;
   }
-  return (body.body ?? []).some((statement) => statementDeclaresLocal(statement, localName));
+  if (nestedNamespaces.length === 0) {
+    return (body.body ?? []).some((statement) =>
+      statementTargetsLocal(statement, exportedName, localName),
+    );
+  }
+  const [nextNamespace, ...remaining] = nestedNamespaces;
+  return (body.body ?? []).some((statement) =>
+    statementDeclaresNamespacePath(
+      statement,
+      nextNamespace ?? "",
+      remaining,
+      exportedName,
+      localName,
+    ),
+  );
 }
 
-function statementDeclaresLocal(statement: unknown, localName: string): boolean {
+function statementDeclaresNamespacePath(
+  statement: unknown,
+  namespaceName: string,
+  remainingNamespaces: string[],
+  exportedName: string,
+  localName: string,
+): boolean {
+  const moduleDecl = unwrapExportedDeclaration(statement) as {
+    type?: string;
+    id?: { type?: string; name?: string };
+  };
+  return (
+    moduleDecl?.type === "TSModuleDeclaration" &&
+    moduleDecl.id?.type === "Identifier" &&
+    moduleDecl.id.name === namespaceName &&
+    tsModulePathTargetsLocal(moduleDecl, remainingNamespaces, exportedName, localName)
+  );
+}
+
+function unwrapExportedDeclaration(statement: unknown): unknown {
+  const node = statement as { type?: string; declaration?: unknown };
+  return node?.type === "ExportNamedDeclaration" ? node.declaration : statement;
+}
+
+function statementTargetsLocal(
+  statement: unknown,
+  exportedName: string,
+  localName: string,
+): boolean {
   if (!statement || typeof statement !== "object") {
     return false;
   }
@@ -79,7 +136,10 @@ function statementDeclaresLocal(statement: unknown, localName: string): boolean 
     }>;
   };
   if (node.type === "ExportNamedDeclaration") {
-    if (statementDeclaresLocal(node.declaration, localName)) {
+    if (
+      exportedName === localName &&
+      statementTargetsLocal(node.declaration, localName, localName)
+    ) {
       return true;
     }
     // Only match by the specifier's LOCAL binding. For `export { Other as Grid }`
@@ -90,17 +150,42 @@ function statementDeclaresLocal(statement: unknown, localName: string): boolean 
       (spec) =>
         spec.type === "ExportSpecifier" &&
         spec.local?.type === "Identifier" &&
-        spec.local.name === localName,
+        spec.local.name === localName &&
+        specifierExportedName(spec) === exportedName,
     );
   }
   if (node.type === "VariableDeclaration") {
-    return (node.declarations ?? []).some(
-      (decl) => decl.id?.type === "Identifier" && decl.id.name === localName,
+    return (
+      exportedName === localName &&
+      (node.declarations ?? []).some(
+        (decl) => decl.id?.type === "Identifier" && decl.id.name === localName,
+      )
     );
   }
   return (
+    exportedName === localName &&
     (node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") &&
     node.id?.type === "Identifier" &&
     node.id.name === localName
   );
+}
+
+function specifierExportedName(spec: {
+  local?: { type?: string; name?: string };
+  exported?: { type?: string; name?: string; value?: unknown };
+}): string | null {
+  const exported = spec.exported;
+  if (!exported) {
+    return spec.local?.type === "Identifier" ? (spec.local.name ?? null) : null;
+  }
+  if (exported.type === "Identifier") {
+    return exported.name ?? null;
+  }
+  if (
+    (exported.type === "StringLiteral" || exported.type === "Literal") &&
+    typeof exported.value === "string"
+  ) {
+    return exported.value;
+  }
+  return null;
 }

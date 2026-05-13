@@ -22,6 +22,7 @@ import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
+import { shouldSkipPartialImportedComponentRoot } from "../utilities/partial-migration.js";
 
 const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
 
@@ -131,6 +132,9 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
   // can reference them.
   const reservedNames = new Set(state.styledDecls.map((d) => d.localName));
   for (const decl of state.styledDecls) {
+    if (decl.skipTransform) {
+      continue;
+    }
     const inlineKfs = extractInlineKeyframes(decl.rules);
     for (const [cssName, frames] of inlineKfs) {
       let jsName = cssKeyframeNameToIdentifier(cssName);
@@ -326,11 +330,8 @@ type StateSnapshot = {
 };
 
 function markPartialImportedComponentRoots(ctx: TransformContext, state: LowerRulesState): void {
-  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
-    return;
-  }
   for (const decl of state.styledDecls) {
-    if (decl.base.kind === "component" && state.importMap.has(decl.base.ident)) {
+    if (shouldSkipPartialImportedComponentRoot(ctx, decl)) {
       decl.skipTransform = true;
     }
   }
