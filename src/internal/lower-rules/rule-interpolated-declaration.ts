@@ -2594,7 +2594,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         styleFnFromProps.push({ fnKey, jsxProp });
 
         if (!styleFnDecls.has(fnKey)) {
-          const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+          const outParamName = res.valueTransform
+            ? cssPropertyToIdentifier(out.prop, avoidNames)
+            : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
           const param = j.identifier(outParamName);
           if (jsxProp !== "__props") {
             annotateParamFromJsxProp(param, jsxProp);
@@ -2658,7 +2660,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // IMPORTANT: don't reuse the same Identifier node for both the function param and
             // expression positions. If the param identifier has a TS annotation, reusing it
             // in expression positions causes printers to emit `value: any` inside templates.
-            const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
+            const outParamName =
+              callArg || valueTransform
+                ? cssPropertyToIdentifier(out.prop, avoidNames)
+                : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
             const param = j.identifier(outParamName);
             const valueId = j.identifier(outParamName);
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
@@ -2802,7 +2807,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             const propKey = makeCssPropKey(j, out.prop);
             const p = j.property("init", propKey, getPropValue()) as any;
             // Only use shorthand if the key is an identifier (not a string literal for CSS vars)
-            const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
+            const paramName = outParamName;
             p.shorthand =
               propKey.type === "Identifier" &&
               valueExpr?.type === "Identifier" &&
@@ -4218,6 +4223,16 @@ function uniqueScalarPropNames(propNames: readonly string[]): string[] {
 
 function isValidStyleFnParamName(name: string): boolean {
   return /^[A-Za-z_$][\w$]*$/.test(name);
+}
+
+function styleFnParamNameForJsxProp(
+  jsxProp: string,
+  stylexProp: string,
+  avoidNames: Set<string>,
+): string {
+  return jsxProp !== "__props" && isValidStyleFnParamName(jsxProp)
+    ? jsxProp
+    : cssPropertyToIdentifier(stylexProp, avoidNames);
 }
 
 function shouldUseScalarDynamicArgs(stylexProp: string, rawCssValue: string | undefined): boolean {

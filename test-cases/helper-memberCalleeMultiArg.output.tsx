@@ -186,8 +186,8 @@ const styles = stylex.create({
   boxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
-  boxMargin: (margin: number) => ({
-    margin: `${margin}px`,
+  boxMargin: (m: number) => ({
+    margin: `${m}px`,
   }),
   tintedLabel: (backgroundColor: string) => ({
     paddingBlock: 2,

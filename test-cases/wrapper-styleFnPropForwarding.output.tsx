@@ -22,10 +22,10 @@ const styles = stylex.create({
   box: {
     padding: 8,
   },
-  boxBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  boxBackgroundColor: (bg: string) => ({
+    backgroundColor: bg,
   }),
-  boxColor: (color: string) => ({
-    color,
+  boxColor: (text: string) => ({
+    color: text,
   }),
 });

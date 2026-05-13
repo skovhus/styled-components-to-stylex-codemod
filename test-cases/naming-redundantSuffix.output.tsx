@@ -5,15 +5,21 @@ import * as stylex from "@stylexjs/stylex";
 export function App() {
   return (
     <div style={{ padding: "16px" }}>
-      <div sx={styles.myBorder(2)}>Bordered box</div>
+      <div
+        sx={styles.myBorder({
+          borderWidth: 2,
+        })}
+      >
+        Bordered box
+      </div>
     </div>
   );
 }
 
 const styles = stylex.create({
-  myBorder: (borderWidth: number) => ({
+  myBorder: (props: { borderWidth: number }) => ({
     borderStyle: "solid",
     borderColor: "black",
-    borderWidth: `${borderWidth}px`,
+    borderWidth: `${props.borderWidth}px`,
   }),
 });

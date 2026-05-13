@@ -33,7 +33,7 @@ const styles = stylex.create({
     cursor: "pointer",
     transition: "box-shadow 0.2s",
   },
-  swatchBackgroundColor: (backgroundColor: string) => ({
+  swatchBackgroundColor: (color: string) => ({
     backgroundColor: color,
   }),
   swatchBoxShadow: (color: string) => ({

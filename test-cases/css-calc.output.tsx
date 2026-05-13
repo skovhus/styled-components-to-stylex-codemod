@@ -34,7 +34,13 @@ export const App = () => (
     <aside sx={styles.sidebar}>Sidebar content</aside>
     <div sx={styles.complexCalc}>Complex calc</div>
     <div sx={styles.withVariables}>With variables</div>
-    <div sx={styles.withCssFunctions("300px")}>CSS functions</div>
+    <div
+      sx={styles.withCssFunctions({
+        dynamicHeight: "300px",
+      })}
+    >
+      CSS functions
+    </div>
     <NegativeOffset size={32}>Negative offset</NegativeOffset>
   </div>
 );
@@ -73,10 +79,10 @@ const styles = stylex.create({
     padding: `calc(${calcVars.baseSize} / 2)`,
   },
   // Interpolated expressions inside CSS math functions
-  withCssFunctions: (height: string) => ({
+  withCssFunctions: (props: { dynamicHeight: string }) => ({
     padding: 8,
     backgroundColor: "lightblue",
-    height: `max(100px, ${height})`,
+    height: `max(100px, ${props.dynamicHeight})`,
   }),
   negativeOffset: {
     height: "44px",

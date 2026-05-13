@@ -64,10 +64,10 @@ const styles = stylex.create({
   boxMargin: (margin: string) => ({
     margin,
   }),
-  textFontWeight: (fontWeight: string) => ({
-    fontWeight,
+  textFontWeight: (weight: string) => ({
+    fontWeight: weight,
   }),
-  textFontSize: (fontSize: string) => ({
-    fontSize,
+  textFontSize: (size: string) => ({
+    fontSize: size,
   }),
 });

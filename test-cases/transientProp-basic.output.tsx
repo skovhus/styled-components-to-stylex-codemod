@@ -110,7 +110,16 @@ function Fader(props: FaderProps) {
   return (
     <div
       {...rest}
-      {...mergedSx([styles.fader($duration), $open && styles.faderOpen], className, style)}
+      {...mergedSx(
+        [
+          styles.fader({
+            $duration,
+          }),
+          $open && styles.faderOpen,
+        ],
+        className,
+        style,
+      )}
     >
       {children}
     </div>
@@ -141,7 +150,12 @@ function Overlay() {
   const zIndexContainer = 1;
   const close = () => {};
   return (
-    <div onClick={close} sx={styles.overlayContainer(zIndexContainer)}>
+    <div
+      onClick={close}
+      sx={styles.overlayContainer({
+        zIndex: zIndexContainer,
+      })}
+    >
       hello
     </div>
   );
@@ -154,7 +168,16 @@ type SpreadOverlayProps = { zIndex: number } & React.ComponentProps<"div">;
 function SpreadOverlay(props: SpreadOverlayProps) {
   const { className, children, style, zIndex, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.spreadOverlay(zIndex), className, style)}>
+    <div
+      {...rest}
+      {...mergedSx(
+        styles.spreadOverlay({
+          zIndex,
+        }),
+        className,
+        style,
+      )}
+    >
       {children}
     </div>
   );
@@ -201,30 +224,30 @@ const styles = stylex.create({
   animatedContainer: {
     maxWidth: "90vw",
   },
-  fader: (transition: number) => ({
+  fader: (props: { $duration: number }) => ({
     opacity: 0,
     pointerEvents: "none",
-    transition: `opacity ${transition}ms`,
+    transition: `opacity ${props.$duration}ms`,
   }),
   faderOpen: {
     opacity: 1,
     pointerEvents: "inherit",
   },
   // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
-  overlayContainer: (zIndex: number) => ({
+  overlayContainer: (props: { zIndex: number }) => ({
     position: "fixed",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex,
+    zIndex: props.zIndex,
   }),
-  spreadOverlay: (zIndex: number) => ({
+  spreadOverlay: (props: { zIndex: number }) => ({
     position: "fixed",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex,
+    zIndex: props.zIndex,
   }),
 });

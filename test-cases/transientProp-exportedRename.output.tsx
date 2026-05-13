@@ -184,8 +184,8 @@ const styles = stylex.create({
     paddingInline: 8,
     borderRadius: 4,
   },
-  colorChipBackgroundColor: (backgroundColor: string) => ({
-    backgroundColor,
+  colorChipBackgroundColor: ($color: string) => ({
+    backgroundColor: $color,
   }),
   colorChipColor: (color: string) => ({
     color,

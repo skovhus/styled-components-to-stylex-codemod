@@ -10,7 +10,12 @@ function Position(props: PositionProps) {
   const { children, zIndex, disablePointerEvents } = props;
   return (
     <div
-      sx={[styles.position(zIndex), disablePointerEvents && styles.positionDisablePointerEvents]}
+      sx={[
+        styles.position({
+          zIndex,
+        }),
+        disablePointerEvents && styles.positionDisablePointerEvents,
+      ]}
     >
       {children}
     </div>
@@ -26,10 +31,10 @@ export function App() {
 }
 
 const styles = stylex.create({
-  position: (zIndex: number) => ({
+  position: (props: { zIndex: number }) => ({
     position: "fixed",
     pointerEvents: "auto",
-    zIndex,
+    zIndex: props.zIndex,
   }),
   positionDisablePointerEvents: {
     pointerEvents: "none",

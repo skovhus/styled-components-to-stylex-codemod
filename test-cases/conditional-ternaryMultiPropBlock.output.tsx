@@ -631,10 +631,10 @@ const styles = stylex.create({
     color: "red",
     paddingBottom: 40,
   },
-  consolidatedKeyCollisionBoxWidth: (width: number) => ({
-    width: `${width}px`,
+  consolidatedKeyCollisionBoxWidth: (add: number) => ({
+    width: `${add}px`,
   }),
-  consolidatedKeyCollisionBoxHeight: (height: number) => ({
-    height: `${height}px`,
+  consolidatedKeyCollisionBoxHeight: (add: number) => ({
+    height: `${add}px`,
   }),
 });
