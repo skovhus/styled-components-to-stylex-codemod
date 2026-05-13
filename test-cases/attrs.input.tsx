@@ -65,6 +65,16 @@ type UnionSectionProps =
   | { children?: React.ReactNode; kind: "alpha"; onlyAlpha?: number; someAttribute?: boolean }
   | { children?: React.ReactNode; kind: "beta"; onlyBeta?: string; someAttribute?: boolean };
 
+type UtilityWrappedUnionSectionProps = React.PropsWithChildren<UnionSectionProps>;
+
+type TransientUnionSectionProps =
+  | { children?: React.ReactNode; kind: "alpha"; $tone?: "warm"; label?: string }
+  | { children?: React.ReactNode; kind: "beta"; $tone?: "cool"; label?: string };
+
+type TransientUnionExtraProps = {
+  detail?: string;
+};
+
 const noop = () => undefined;
 
 interface MethodSectionProps {
@@ -199,6 +209,19 @@ export const InheritedSection = styled(Text).attrs({ someAttribute: true })<Inhe
 export const UnionSection = styled(Text).attrs({ someAttribute: true })<UnionSectionProps>`
   padding: 24px;
   background-color: #f8fafc;
+`;
+
+export const UtilityWrappedUnionSection = styled(Text).attrs({
+  someAttribute: true,
+})<UtilityWrappedUnionSectionProps>`
+  padding: 25px;
+  background-color: #f1f5f9;
+`;
+
+export const TransientUnionSection = styled(Text)<
+  TransientUnionSectionProps & TransientUnionExtraProps
+>`
+  color: ${(props) => (props.$tone === "warm" ? "#9f1239" : "#1d4ed8")};
 `;
 
 // Pattern 3m: method-signature attrs props should be omitted from explicit interfaces
@@ -451,6 +474,12 @@ export const App = () => (
     <UnionSection kind="alpha" onlyAlpha={1}>
       Union section content
     </UnionSection>
+    <UtilityWrappedUnionSection kind="beta" onlyBeta="utility">
+      Utility wrapped union section content
+    </UtilityWrappedUnionSection>
+    <TransientUnionSection detail="branch" kind="alpha" $tone="warm">
+      Transient union section content
+    </TransientUnionSection>
     <MethodSection label="method-label">Method section content</MethodSection>
     <SharedTransientAttrsSection $active label="shared-transient-attrs">
       Shared transient attrs section content

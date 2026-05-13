@@ -69,6 +69,16 @@ type UnionSectionProps =
   | { children?: React.ReactNode; kind: "alpha"; onlyAlpha?: number; someAttribute?: boolean }
   | { children?: React.ReactNode; kind: "beta"; onlyBeta?: string; someAttribute?: boolean };
 
+type UtilityWrappedUnionSectionProps = React.PropsWithChildren<UnionSectionProps>;
+
+type TransientUnionSectionProps =
+  | { children?: React.ReactNode; kind: "alpha"; $tone?: "warm"; label?: string }
+  | { children?: React.ReactNode; kind: "beta"; $tone?: "cool"; label?: string };
+
+type TransientUnionExtraProps = {
+  detail?: string;
+};
+
 const noop = () => undefined;
 
 interface MethodSectionProps extends Omit<
@@ -292,6 +302,41 @@ export function UnionSection(
     Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
 ) {
   return <Text {...props} someAttribute={true} {...stylex.props(styles.unionSection)} />;
+}
+
+export function UtilityWrappedUnionSection(
+  props: (UtilityWrappedUnionSectionProps extends infer T
+    ? T extends unknown
+      ? Omit<T, "someAttribute">
+      : never
+    : never) &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return (
+    <Text {...props} someAttribute={true} {...stylex.props(styles.utilityWrappedUnionSection)} />
+  );
+}
+
+export function TransientUnionSection(
+  props: (TransientUnionSectionProps & TransientUnionExtraProps extends infer T
+    ? T extends unknown
+      ? Omit<T, "$tone"> & { [K in Extract<"$tone", keyof T> as "tone"]: T[K] }
+      : never
+    : never) &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$tone">,
+) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      {...stylex.props(
+        styles.transientUnionSection,
+        tone === "warm" && styles.transientUnionSectionToneWarm,
+      )}
+    >
+      {children}
+    </Text>
+  );
 }
 
 // Pattern 3m: method-signature attrs props should be omitted from explicit interfaces
@@ -596,6 +641,12 @@ export const App = () => (
     <UnionSection kind="alpha" onlyAlpha={1}>
       Union section content
     </UnionSection>
+    <UtilityWrappedUnionSection kind="beta" onlyBeta="utility">
+      Utility wrapped union section content
+    </UtilityWrappedUnionSection>
+    <TransientUnionSection detail="branch" kind="alpha" tone="warm">
+      Transient union section content
+    </TransientUnionSection>
     <MethodSection label="method-label">Method section content</MethodSection>
     <SharedTransientAttrsSection active label="shared-transient-attrs">
       Shared transient attrs section content
@@ -708,6 +759,16 @@ const styles = stylex.create({
   unionSection: {
     padding: 24,
     backgroundColor: "#f8fafc",
+  },
+  utilityWrappedUnionSection: {
+    padding: 25,
+    backgroundColor: "#f1f5f9",
+  },
+  transientUnionSection: {
+    color: "#1d4ed8",
+  },
+  transientUnionSectionToneWarm: {
+    color: "#9f1239",
   },
   methodSection: {
     padding: 26,

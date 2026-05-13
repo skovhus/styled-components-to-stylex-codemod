@@ -1641,6 +1641,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/attrs.input.tsx:TransientUnionSection": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/attrs.input.tsx:UnionSection": {
           "as": false,
           "className": false,
@@ -1651,6 +1660,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": false,
         },
         "test-cases/attrs.input.tsx:UtilitySection": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/attrs.input.tsx:UtilityWrappedUnionSection": {
           "as": false,
           "className": false,
           "elementProps": true,
