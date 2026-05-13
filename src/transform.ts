@@ -34,6 +34,7 @@ import { detectStringMappingFnsStep } from "./internal/transform-steps/detect-st
 import { detectUnsupportedPatternsStep } from "./internal/transform-steps/detect-unsupported-patterns.js";
 import { resolveBaseComponentsStep } from "./internal/transform-steps/resolve-base-components.js";
 import { applyLeavesOnlyPolicyStep } from "./internal/transform-steps/apply-leaves-only-policy.js";
+import { markPartialImportedRootsStep } from "./internal/transform-steps/mark-partial-imported-roots.js";
 import { rewriteCssHelpersStep } from "./internal/transform-steps/rewrite-css-helpers.js";
 import { emitStylesStep } from "./internal/transform-steps/emit-styles.js";
 import { emitBridgeExportsStep } from "./internal/transform-steps/emit-bridge-exports.js";
@@ -151,6 +152,7 @@ export function transformWithWarnings(
     collectStyledDeclsStep,
     resolveBaseComponentsStep,
     applyLeavesOnlyPolicyStep,
+    markPartialImportedRootsStep,
     detectUnsupportedPatternsStep,
     detectCascadeConflictStep,
     lowerRulesStep,

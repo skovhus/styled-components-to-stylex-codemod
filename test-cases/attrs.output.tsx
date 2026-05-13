@@ -3,6 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { Icon } from "./lib/icon";
 import type { ImportedSectionProps } from "./lib/attrs-props";
+import { SxAwareButton } from "./lib/sx-aware-component";
+
+const attrsMarkerStyle = {};
 
 // Simulated imported component
 const Flex = (
@@ -616,6 +619,20 @@ function StyledIcon(
   return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
 }
 
+function AttrsSxButton(
+  props: Omit<
+    React.ComponentPropsWithRef<typeof SxAwareButton>,
+    "className" | "style" | "sx" | "type"
+  >,
+) {
+  const { children, ...rest } = props;
+  return (
+    <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]}>
+      {children}
+    </SxAwareButton>
+  );
+}
+
 export const App = () => (
   <>
     <Input small placeholder="Small" />
@@ -671,6 +688,7 @@ export const App = () => (
     <span sx={styles.moduleScopeStyleText}>Module scope style</span>
     <span sx={styles.callbackScopeStyleText}>Callback scope style</span>
     <StyledIcon title="Attrs icon size" />
+    <AttrsSxButton>Attrs sx</AttrsSxButton>
   </>
 );
 
@@ -884,5 +902,8 @@ const styles = stylex.create({
   icon: {
     position: "relative",
     left: -3,
+  },
+  attrsSxButton: {
+    color: "#2563eb",
   },
 });

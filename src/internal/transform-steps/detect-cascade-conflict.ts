@@ -39,6 +39,12 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
   const transformedFiles = ctx.options.crossFileInfo?.transformedFiles;
+  // In partial-migration mode, `markPartialImportedComponentRoots` in lower-rules
+  // marks every `styled(ImportedComponent)` decl as skipped before lowering. Honor
+  // the same policy here so the cascade-conflict check doesn't bail the whole file
+  // for a decl that will be left as styled-components anyway.
+  const skipImportedRoots =
+    ctx.options.allowPartialMigration === true && ctx.options.transformMode !== "leavesOnly";
 
   // Build lookup of locally defined styled-component names for exclusion
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
@@ -61,6 +67,10 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // Check if the base is an imported component
     const importEntry = importMap.get(baseIdent);
     if (!importEntry || importEntry.source.kind !== "absolutePath") {
+      continue;
+    }
+
+    if (skipImportedRoots) {
       continue;
     }
 

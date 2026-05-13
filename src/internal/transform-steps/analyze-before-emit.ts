@@ -40,6 +40,7 @@ import {
   isSingleBackgroundComponent,
   isValidIdentifierName,
 } from "../utilities/string-utils.js";
+import { jsxNameTargetsLocalBinding } from "../utilities/jsx-name-utils.js";
 import {
   cssDeclarationToStylexDeclarations,
   isStylexStringOnlyCssProp,
@@ -886,7 +887,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // For exported components, cross-file consumer patching is also emitted.
   const resolverImportNames = collectResolverImportNames(ctx);
   for (const decl of styledDecls) {
-    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
+    const transientProps = collectDeclPropNames(root, j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       // Even if this wrapper has no $-prefixed props in its own styling data,
       // inherit transient prop renames from the base component so that the emitter
@@ -926,13 +927,14 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
                   }
                 | undefined,
               decl.transientPropRenames,
+              getDeclAncestorNamespaceChain(root, j, decl.localName),
             );
           }
         }
       }
       continue;
     }
-    const existingPropNames = collectDeclPropNames(j, decl, (n) => !n.startsWith("$"));
+    const existingPropNames = collectDeclPropNames(root, j, decl, (n) => !n.startsWith("$"));
     existingPropNames.add("className").add("style").add("children").add("ref").add("key").add("as");
     // Also check the base component's props for collisions (e.g., Base has `color`,
     // wrapper has `$color` — renaming to `color` would collide).
@@ -971,6 +973,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       renames.set(prop, stripped);
     }
     if (renames.size > 0) {
+      const declNamespaceName = getDeclNamespaceName(root, j, decl.localName);
       // Don't rename props when the propsType references a named type (interface
       // or type alias) that is used elsewhere in the file — mutating the shared
       // declaration would break non-styled code that also references it.
@@ -980,7 +983,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (
         referencedTypeNames.some(
           (name) =>
-            isTypeNameUsedElsewhere(root, j, name, decl.localName) ||
+            isTypeNameUsedElsewhere(root, j, name, decl.localName, declNamespaceName) ||
             !isTypeLocallyDefined(root, j, name),
         )
       ) {
@@ -1032,6 +1035,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
             }
           | undefined,
         renames,
+        getDeclAncestorNamespaceChain(root, j, decl.localName),
       );
       // Also rename in resolvedStyleObjects (style function bodies may reference $-prefixed props)
       const resolvedStyleObjects = ctx.resolvedStyleObjects;
@@ -1058,12 +1062,20 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     if (decl.transientPropRenames) {
       continue;
     }
-    const transientProps = collectDeclPropNames(j, decl, (n) => n.startsWith("$"));
+    const transientProps = collectDeclPropNames(root, j, decl, (n) => n.startsWith("$"));
     if (transientProps.size === 0) {
       continue;
     }
-    // Collect prop names from the resolved type (may be a TSTypeReference)
-    const typePropNames = collectResolvedTypePropNames(root, j, decl.propsType);
+    // Collect prop names from the resolved type (may be a TSTypeReference). Walk the
+    // decl's full namespace chain (innermost to outermost) so namespace-local shared
+    // types and types declared in enclosing namespaces resolve to the closest
+    // declaration, matching how TS would resolve the reference.
+    const typePropNames = collectResolvedTypePropNames(
+      root,
+      j,
+      decl.propsType,
+      getDeclAncestorNamespaceChain(root, j, decl.localName),
+    );
     if (typePropNames.size === 0) {
       continue;
     }
@@ -1921,16 +1933,26 @@ function collectCallSiteAttrNames(
     }
   };
   root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: componentName },
-      },
-    } as any)
+    .find(j.JSXElement)
+    .filter((p: any) =>
+      jsxNameTargetsLocalBinding({
+        root,
+        j,
+        name: p.node.openingElement?.name,
+        localName: componentName,
+      }),
+    )
     .forEach((p: any) => collectFromElement(p.node.openingElement));
   root
-    .find(j.JSXSelfClosingElement, {
-      name: { type: "JSXIdentifier", name: componentName },
-    } as any)
+    .find(j.JSXSelfClosingElement)
+    .filter((p: any) =>
+      jsxNameTargetsLocalBinding({
+        root,
+        j,
+        name: p.node.name,
+        localName: componentName,
+      }),
+    )
     .forEach((p: any) => collectFromElement(p.node));
   if (!hasSpread) {
     return { hasSpread: false, explicitTransientAtSpreadSites: null };
@@ -2038,6 +2060,7 @@ function isTypeNameUsedElsewhere(
   j: JSCodeshift,
   typeName: string,
   ownerLocalName: string,
+  namespaceName: string | null,
 ): boolean {
   let count = 0;
   root
@@ -2046,6 +2069,11 @@ function isTypeNameUsedElsewhere(
       const id = p.node.typeName;
       return id?.type === "Identifier" && id.name === typeName;
     })
+    // TypeScript name resolution lets descendant namespaces (and top-level code,
+    // when the owner is top-level) reach the same declaration, so count those
+    // references too — otherwise the type appears solely owned by the styled
+    // component and we'd rename it out from under unrelated consumers.
+    .filter((p: any) => pathReachesNamespace(p, namespaceName))
     .forEach((p: any) => {
       // Walk up to the nearest variable/function declaration to find the owner.
       // If the owner is the styled decl itself, don't count it.
@@ -2075,6 +2103,7 @@ function isTypeNameUsedElsewhere(
  * keeping prop extraction consistent with the emit phase.
  */
 function collectDeclPropNames(
+  root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   decl: StyledDecl,
   filter: (name: string) => boolean,
@@ -2119,7 +2148,143 @@ function collectDeclPropNames(
   walkTypePropNames(decl.propsType, (name) => {
     addIfMatch(name);
   });
+  if (shouldResolveReferencedPropsForTransientRename(root, j, decl.propsType)) {
+    for (const name of collectResolvedTypePropNames(
+      root,
+      j,
+      decl.propsType,
+      getDeclAncestorNamespaceChain(root, j, decl.localName),
+    )) {
+      addIfMatch(name);
+    }
+  }
   return result;
+}
+
+function getDeclNamespaceName(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  localName: string,
+): string | null {
+  let namespaceName: string | null = null;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path: any) => {
+      if (namespaceName) {
+        return;
+      }
+      namespaceName = nearestNamespacePath(path);
+    });
+  return namespaceName;
+}
+
+/**
+ * Builds the chain of namespaces visible to a styled decl by TypeScript name
+ * resolution, ordered innermost-first and terminated with `null` (top-level).
+ * For `namespace A { namespace B { const Grid = styled.div ... } }`, returns
+ * `["A.B", "A", null]`. Used so type references resolve to the closest enclosing
+ * declaration, matching how TS would resolve them at runtime.
+ */
+function getDeclAncestorNamespaceChain(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  localName: string,
+): Array<string | null> {
+  let declaratorPath: { parentPath?: unknown } | null = null;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path: any) => {
+      if (declaratorPath) {
+        return;
+      }
+      declaratorPath = path;
+    });
+  if (!declaratorPath) {
+    return [null];
+  }
+  const namespacePath = namespacePathForPath(declaratorPath);
+  const chain: Array<string | null> = [];
+  for (let end = namespacePath.length; end > 0; end--) {
+    chain.push(namespacePath.slice(0, end).join("."));
+  }
+  chain.push(null);
+  return chain;
+}
+
+function nearestNamespacePath(path: { parentPath?: unknown }): string | null {
+  const namespacePath = namespacePathForPath(path);
+  return namespacePath.length > 0 ? namespacePath.join(".") : null;
+}
+
+function namespacePathForPath(path: { parentPath?: unknown }): string[] {
+  const names: string[] = [];
+  let current = path.parentPath as { node?: { type?: string; id?: unknown }; parentPath?: unknown };
+  while (current) {
+    const node = current.node;
+    if (node?.type === "TSModuleDeclaration") {
+      const id = node.id as { type?: string; name?: string };
+      if (id.type === "Identifier" && id.name) {
+        names.push(id.name);
+      }
+    }
+    current = current.parentPath as typeof current;
+  }
+  return names.reverse();
+}
+
+/**
+ * Returns true when `path` lives inside `namespaceName` or any namespace nested
+ * within it. `namespaceName === null` represents top-level scope, which all
+ * references reach via TypeScript name resolution.
+ *
+ * Used for the cross-namespace ownership/usage checks: a type declared in
+ * namespace `A` is reachable from `A.Sub.Inner` because TS resolves names
+ * outward through enclosing namespaces.
+ */
+function pathReachesNamespace(
+  path: { parentPath?: unknown },
+  namespaceName: string | null,
+): boolean {
+  if (namespaceName === null) {
+    return true;
+  }
+  const target = namespaceName.split(".");
+  const current = namespacePathForPath(path);
+  return target.every((part, index) => current[index] === part);
+}
+
+function shouldResolveReferencedPropsForTransientRename(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  propsType: unknown,
+): boolean {
+  const typeRef = propsType as { type?: string; typeName?: { type?: string; name?: string } };
+  if (typeRef?.type !== "TSTypeReference" || typeRef.typeName?.type !== "Identifier") {
+    return false;
+  }
+  const typeName = typeRef.typeName.name;
+  const isNamespaced = (path: { parentPath?: unknown }): boolean => {
+    let cur = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+    while (cur) {
+      if (cur.node?.type === "TSModuleDeclaration") {
+        return true;
+      }
+      cur = cur.parentPath as typeof cur;
+    }
+    return false;
+  };
+  return (
+    root
+      .find(j.TSInterfaceDeclaration)
+      .filter(
+        (p) => p.node.id.type === "Identifier" && p.node.id.name === typeName && isNamespaced(p),
+      )
+      .size() > 0 ||
+    root
+      .find(j.TSTypeAliasDeclaration)
+      .filter((p) => p.node.id.name === typeName && isNamespaced(p))
+      .size() > 0
+  );
 }
 
 /**
@@ -2422,6 +2587,7 @@ function renameTransientPropsInReferencedTypes(
       }
     | undefined,
   renames: Map<string, string>,
+  namespaceChain: ReadonlyArray<string | null>,
 ): void {
   if (!propsType) {
     return;
@@ -2431,38 +2597,78 @@ function renameTransientPropsInReferencedTypes(
     if (!typeName) {
       return;
     }
-    // Rename in interface declarations
-    root
-      .find(j.TSInterfaceDeclaration)
-      .filter((p: any) => (p.node as any).id?.name === typeName)
-      .forEach((p: any) => {
-        for (const member of (p.node.body?.body ?? []) as any[]) {
-          if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
-            const renamed = renames.get(member.key.name);
-            if (renamed) {
-              member.key.name = renamed;
-            }
+    const interfaceDecl = findFirstTypeDeclInChain(
+      root,
+      j.TSInterfaceDeclaration,
+      typeName,
+      namespaceChain,
+    );
+    if (interfaceDecl) {
+      for (const member of (interfaceDecl.body?.body ?? []) as any[]) {
+        if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+          const renamed = renames.get(member.key.name);
+          if (renamed) {
+            member.key.name = renamed;
           }
         }
+      }
+    }
+    const typeAliasDecl = findFirstTypeDeclInChain(
+      root,
+      j.TSTypeAliasDeclaration,
+      typeName,
+      namespaceChain,
+    );
+    if (typeAliasDecl) {
+      walkTypePropNames(typeAliasDecl.typeAnnotation, (name, keyNode) => {
+        const renamed = renames.get(name);
+        if (renamed) {
+          keyNode.name = renamed;
+        }
       });
-    // Rename in type alias declarations
-    root
-      .find(j.TSTypeAliasDeclaration)
-      .filter((p: any) => (p.node as any).id?.name === typeName)
-      .forEach((p: any) => {
-        walkTypePropNames(p.node.typeAnnotation, (name, keyNode) => {
-          const renamed = renames.get(name);
-          if (renamed) {
-            keyNode.name = renamed;
-          }
-        });
-      });
+    }
   }
   if (propsType.type === "TSIntersectionType" && Array.isArray(propsType.types)) {
     for (const t of propsType.types) {
-      renameTransientPropsInReferencedTypes(root, j, t as typeof propsType, renames);
+      renameTransientPropsInReferencedTypes(
+        root,
+        j,
+        t as typeof propsType,
+        renames,
+        namespaceChain,
+      );
     }
   }
+}
+
+/**
+ * Mirrors TypeScript name resolution: walks the namespace chain from the inside
+ * out and returns the first matching declaration. Used so a type reference inside
+ * a nested namespace resolves to the closest enclosing declaration rather than
+ * accidentally matching every same-named declaration in the file.
+ */
+function findFirstTypeDeclInChain(
+  root: ReturnType<JSCodeshift>,
+  builder: any,
+  typeName: string,
+  namespaceChain: ReadonlyArray<string | null>,
+): any {
+  for (const ns of namespaceChain) {
+    let found: any = null;
+    root
+      .find(builder)
+      .filter((p: any) => p.node?.id?.name === typeName)
+      .filter((p: any) => nearestNamespacePath(p) === ns)
+      .forEach((p: any) => {
+        if (!found) {
+          found = p.node;
+        }
+      });
+    if (found) {
+      return found;
+    }
+  }
+  return null;
 }
 
 type TypeNodeLike = { type?: string; members?: unknown[]; types?: unknown[] } | undefined;
@@ -2505,6 +2711,7 @@ function collectResolvedTypePropNames(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   propsType: unknown,
+  namespaceChain: ReadonlyArray<string | null> = [null],
 ): Set<string> {
   const names = new Set<string>();
   const visit = (node: unknown): void => {
@@ -2522,27 +2729,32 @@ function collectResolvedTypePropNames(
       }
     } else if (n.type === "TSTypeReference" && n.typeName?.type === "Identifier") {
       const typeName = n.typeName.name;
-      root
-        .find(j.TSInterfaceDeclaration)
-        .filter(
-          (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
-        )
-        .forEach((p: unknown) => {
-          const body = ((p as any).node.body?.body ?? []) as any[];
-          for (const member of body) {
-            if (member?.type === "TSPropertySignature" && member.key?.type === "Identifier") {
-              names.add(member.key.name);
-            }
+      if (!typeName) {
+        return;
+      }
+      const interfaceDecl = findFirstTypeDeclInChain(
+        root,
+        j.TSInterfaceDeclaration,
+        typeName,
+        namespaceChain,
+      );
+      if (interfaceDecl) {
+        const body = ((interfaceDecl as any).body?.body ?? []) as any[];
+        for (const member of body) {
+          if (member?.type === "TSPropertySignature" && member.key?.type === "Identifier") {
+            names.add(member.key.name);
           }
-        });
-      root
-        .find(j.TSTypeAliasDeclaration)
-        .filter(
-          (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
-        )
-        .forEach((p: unknown) => {
-          visit((p as any).node.typeAnnotation);
-        });
+        }
+      }
+      const typeAliasDecl = findFirstTypeDeclInChain(
+        root,
+        j.TSTypeAliasDeclaration,
+        typeName,
+        namespaceChain,
+      );
+      if (typeAliasDecl) {
+        visit((typeAliasDecl as any).typeAnnotation);
+      }
     }
   };
   visit(propsType);

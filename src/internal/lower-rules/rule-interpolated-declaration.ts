@@ -1494,6 +1494,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
+      if (isUnchangedImportedHelperStyleCall(res, exprAst, expr)) {
+        warnings.push({
+          severity: "warning",
+          type: "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+          loc: decl.loc,
+          context: { localName: decl.localName, expr: res.expr },
+        });
+        bail = true;
+        break;
+      }
       // Track mixinOrder for correct cascade interleaving
       const hasStaticPropsBefore =
         Object.keys(styleObj).length > 0 || ctx.getBaseStyleTarget() !== styleObj;
@@ -3343,6 +3353,65 @@ function getNumericCssEmissionMode(stylexProp: string): NumericCssEmissionMode {
     return "cssText";
   }
   return UNITLESS_NUMERIC_STYLEX_PROPS.has(stylexProp) ? "stylexNumber" : "cssText";
+}
+
+type ResolvedStylesCallMeta = {
+  resolveCallResult?: unknown;
+  resolveCallContext?: { calleeImportedName?: string };
+};
+
+function isUnchangedImportedHelperStyleCall(
+  res: ResolvedStylesCallMeta,
+  exprAst: unknown,
+  originalExpr: unknown,
+): boolean {
+  const resolveResult = res.resolveCallResult;
+  const resolveContext = res.resolveCallContext;
+  const typedResult =
+    resolveResult && typeof resolveResult === "object"
+      ? (resolveResult as { cssText?: string; imports?: unknown[] })
+      : null;
+  if (
+    !typedResult ||
+    !resolveContext ||
+    typedResult.cssText ||
+    (typedResult.imports?.length ?? 0) > 0
+  ) {
+    return false;
+  }
+  if (!isCallExpressionLike(exprAst) || !isCallExpressionLike(originalExpr)) {
+    return false;
+  }
+  return calleeKey(exprAst.callee) === calleeKey(originalExpr.callee);
+}
+
+function isCallExpressionLike(node: unknown): node is { type: "CallExpression"; callee: unknown } {
+  return (
+    !!node && typeof node === "object" && (node as { type?: string }).type === "CallExpression"
+  );
+}
+
+function calleeKey(callee: unknown): string | null {
+  const node = callee as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: { type?: string; name?: string };
+    computed?: boolean;
+  };
+  if (node?.type === "Identifier" && node.name) {
+    return node.name;
+  }
+  if (
+    node?.type === "MemberExpression" &&
+    node.computed !== true &&
+    node.property?.type === "Identifier" &&
+    node.property.name
+  ) {
+    const objectKey = calleeKey(node.object);
+    return objectKey ? `${objectKey}.${node.property.name}` : null;
+  }
+  return null;
 }
 
 function emitStaticObservedValue(

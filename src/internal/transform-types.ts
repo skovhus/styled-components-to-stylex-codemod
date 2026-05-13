@@ -656,6 +656,7 @@ export type StyledDecl = {
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
   preserveCssHelperDeclaration?: boolean;
+  suppressCssHelperStyleEmission?: boolean;
   isExported?: boolean;
   preResolvedFnDecls?: Record<string, unknown>;
   inlineStyleProps?: Array<{

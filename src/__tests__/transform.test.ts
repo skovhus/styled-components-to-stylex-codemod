@@ -77,6 +77,8 @@ type FixtureCase = {
   parser: "tsx" | "babel" | "flow";
 };
 
+type TransformTestParser = FixtureCase["parser"] | "ts";
+
 // Supported file extensions and their parsers
 const FIXTURE_EXTENSIONS: {
   inputSuffix: string;
@@ -207,7 +209,7 @@ function runTransform(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "babel" | "flow" = "tsx",
+  parser: TransformTestParser = "tsx",
 ): string {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
@@ -226,7 +228,7 @@ function runTransformWithDiagnostics(
   source: string,
   options: TestTransformOptions = {},
   filePath: string = "test.tsx",
-  parser: "tsx" | "babel" | "flow" = "tsx",
+  parser: TransformTestParser = "tsx",
 ): ReturnType<typeof transformWithWarnings> {
   const opts: TransformOptions = {
     adapter: fixtureAdapter,
@@ -613,6 +615,119 @@ export const App = () => <CustomFactoryComponent>safe</CustomFactoryComponent>;
 
     expect(result.code).not.toBeNull();
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("does not bail in partial migration when wrapping a styled-components imported root", () => {
+    // In partial migration, `styled(ImportedComponent)` decls are left as
+    // styled-components by `markPartialImportedComponentRoots` later in the pipeline.
+    // The cascade-conflict step must honor the same skip policy so unrelated local
+    // styled-components in the same file can still migrate.
+    const source = `
+import styled from "styled-components";
+import GroupHeader from "./lib/styled-group-header";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomGroupHeader label="test" id="t" />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-partial-imported-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+    // Local component migrated to StyleX.
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    // Imported root left as styled-components.
+    expect(result.code).toMatch(/const\s+CustomGroupHeader\s*=\s*styled\(GroupHeader\)`/);
+  });
+
+  it("skips imported member roots before unsupported-pattern checks in partial migration", () => {
+    const source = `
+import styled from "styled-components";
+import * as UI from "./lib/ui";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomText = styled(UI.Text)\`
+  color: red;
+\`;
+
+CustomText.defaultProps = {
+  theme: { mode: "dark" },
+};
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomText />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-imported-member-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(
+      "Theme prop overrides on styled components are not supported",
+    );
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    expect(result.code).toMatch(/const\s+CustomText\s*=\s*styled\(UI\.Text\)`/);
+    expect(result.code).not.toContain("customText:");
+  });
+
+  it("does not emit inline keyframes from skipped imported roots in partial migration", () => {
+    const source = `
+import styled from "styled-components";
+import ImportedPanel from "./lib/panel";
+
+const Notice = styled.div\`
+  padding: 12px;
+\`;
+
+const CustomPanel = styled(ImportedPanel)\`
+  @keyframes shimmer {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  animation: shimmer 1s linear infinite;
+\`;
+
+export const App = () => (
+  <>
+    <Notice>local</Notice>
+    <CustomPanel />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "partial-imported-root-keyframes.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter, allowPartialMigration: true },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(/sx=\{styles\.notice\}/);
+    expect(result.code).toMatch(/const\s+CustomPanel\s*=\s*styled\(ImportedPanel\)`/);
+    expect(result.code).not.toContain("stylex.keyframes");
   });
 
   it("bails for non-relative barrel re-exports resolved by the configured resolver", () => {
@@ -2246,6 +2361,649 @@ export const Panel = styled.div<{ height: 40 | 80 }>\`
     expect(result).toContain("panel: (height: 40 | 80) =>");
     expect(result).toContain("styles.panel(height)");
     expect(result).not.toContain("heightVariants");
+  });
+
+  it("does not emit JSX into .ts, .mts, or .cts files", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Label = styled.span\`
+  color: tomato;
+\`;
+`;
+    for (const filename of ["styledExports.ts", "styledExports.mts", "styledExports.cts"]) {
+      const diagnostics = runTransformWithDiagnostics(input, {}, filename, "ts");
+      expect(diagnostics.code).toBeNull();
+    }
+  });
+
+  it("does not copy styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${scrollFadeMaskStyles(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: "scrollFadeMaskStyles(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy aliased styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles as mask } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${mask(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: "mask(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy member styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { helpers } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${helpers.scrollFadeMaskStyles(12)}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (
+          ctx.calleeImportedName === "helpers" &&
+          ctx.calleeMemberPath?.join(".") === "scrollFadeMaskStyles"
+        ) {
+          return {
+            usage: "props",
+            expr: "helpers.scrollFadeMaskStyles(12)",
+            imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not rename transient props on unrelated JSX member expressions", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <Other.Grid $active>Other grid</Other.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-member-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<WidgetSet.Grid active>");
+    expect(result).toContain("<Other.Grid $active>");
+  });
+
+  it("does not rename transient props when a nested scope shadows the namespace binding", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+function ShadowingX() {
+  const WidgetSet = Other;
+  return <WidgetSet.Grid $active>Shadowed grid</WidgetSet.Grid>;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <ShadowingX />
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-shadowed.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level JSX correctly resolves to the namespace's Grid → renamed.
+    expect(result).toContain("<WidgetSet.Grid active>");
+    // Shadowed JSX inside ShadowingX resolves to the local `WidgetSet = Other` → not renamed.
+    expect(result).toContain("$active>Shadowed grid");
+  });
+
+  it("does not rename transient props when a destructured binding shadows the namespace", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace WidgetSet {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+function DestructuredShadowing(props: { WidgetSet: typeof Other }) {
+  const { WidgetSet } = props;
+  return <WidgetSet.Grid $active>Destructured shadow</WidgetSet.Grid>;
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>
+    <DestructuredShadowing WidgetSet={Other} />
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-destructured.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level usage still resolves to namespace's Grid → renamed.
+    expect(result).toContain("<WidgetSet.Grid active>");
+    // Destructured-shadowed JSX resolves to the local destructured binding → not renamed.
+    expect(result).toContain("$active>Destructured shadow");
+  });
+
+  it("does not rename a namespace-local styled when an `as`-renamed re-export aliases the name", () => {
+    // `export { Other as Grid }` makes `<WidgetSet.Grid>` resolve to `Other`, not the
+    // styled local `Grid` elsewhere in the file. The JSX rewrite must not rename the
+    // unrelated component's transient props.
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Grid = styled.div<{ $active?: boolean }>\`
+  color: \${({ $active }) => ($active ? "green" : "gray")};
+\`;
+
+function Other(props: { $active?: boolean; children?: React.ReactNode }) {
+  return <section>{props.children}</section>;
+}
+
+export namespace WidgetSet {
+  export { Other as Grid };
+}
+
+export const App = () => (
+  <>
+    <Grid $active>Top-level grid</Grid>
+    <WidgetSet.Grid $active>Aliased re-export</WidgetSet.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-aliased-reexport.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Top-level Grid (the styled one) was renamed.
+    expect(result).toContain("<Grid active>Top-level grid");
+    // WidgetSet.Grid is `Other`, an unrelated component → must not be renamed.
+    expect(result).toContain("$active>Aliased re-export");
+  });
+
+  it("renames transient props for namespace export aliases and nested namespaces", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Grid = styled.div<{ $active?: boolean }>\`
+  color: \${({ $active }) => ($active ? "green" : "gray")};
+\`;
+
+export namespace WidgetSet {
+  export { Grid as Renamed };
+}
+
+export namespace A {
+  export namespace B {
+    export const Grid = styled.div<{ $active?: boolean }>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => (
+  <>
+    <WidgetSet.Renamed $active>Aliased grid</WidgetSet.Renamed>
+    <A.B.Grid $active>Nested grid</A.B.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-alias-nested.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<WidgetSet.Renamed active>");
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active>Aliased grid");
+    expect(result).not.toContain("$active>Nested grid");
+  });
+
+  it("renames prop types declared in a parent namespace for nested-namespace styled components", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace A {
+  type Props = {
+    $active?: boolean;
+  };
+
+  export namespace B {
+    export const Grid = styled.div<Props>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => <A.B.Grid>Nested</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-parent-type.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Type declaration in the parent namespace was renamed alongside the wrapper —
+    // before the fix the wrapper/style code renamed `$active` → `active` but the
+    // parent-namespace `Props` declaration stayed `$active`, breaking type checking.
+    expect(result).toContain("active?: boolean");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("resolves nested namespace prop types by full namespace path", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace C {
+  export namespace B {
+    type Props = {
+      $unrelated?: boolean;
+    };
+  }
+}
+
+export namespace A {
+  export namespace B {
+    type Props = {
+      $active?: boolean;
+    };
+
+    export const Grid = styled.div<Props>\`
+      color: \${({ $active }) => ($active ? "green" : "gray")};
+    \`;
+  }
+}
+
+export const App = () => <A.B.Grid $active>Nested</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-full-path-type.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("$unrelated?: boolean");
+    expect(result).toContain("active?: boolean");
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("renames transient props for dotted namespace declarations", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+export namespace A.B {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => <A.B.Grid $active>Dotted namespace</A.B.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-dotted.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<A.B.Grid active>");
+    expect(result).not.toContain("$active>Dotted namespace");
+  });
+
+  it("does not match same-named namespace exports from unrelated declarations", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Other = {
+  Grid(props: { $active?: boolean; children?: React.ReactNode }) {
+    return <section>{props.children}</section>;
+  },
+};
+
+export namespace A {
+  export const Grid = Other.Grid;
+}
+
+export namespace B {
+  export const Grid = styled.div<{ $active?: boolean }>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const App = () => (
+  <>
+    <A.Grid $active>Other grid</A.Grid>
+    <B.Grid $active>Styled grid</B.Grid>
+  </>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-unrelated-export.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("<A.Grid $active>Other grid");
+    expect(result).toContain("<B.Grid active>Styled grid");
+  });
+
+  it("does not rename a namespace-local type referenced from a nested namespace", () => {
+    // Type `Props` is declared in namespace `A` alongside styled `Button`. A nested
+    // namespace `Docs` initializes `Props` with `$active`. The codemod must treat
+    // `Props` as shared (not just owned by `Button`) so the rename is skipped.
+    const input = `
+import styled from "styled-components";
+
+export namespace A {
+  type Props = { $active?: boolean };
+  export const Button = styled.div<Props>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+  export namespace Docs {
+    export const p: Props = { $active: true };
+  }
+}
+
+export const App = () => <A.Button $active>Btn</A.Button>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-nested-usage.tsx");
+    const result = diagnostics.code ?? "";
+
+    // Shared-type guard fired: $active is preserved everywhere.
+    expect(result).toContain("$active?: boolean");
+    expect(result).toContain("$active: true");
+    expect(result).toContain("<A.Button $active>");
+  });
+
+  it("does not collect transient props from same-named types outside the namespace", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+type GridProps = {
+  $unrelated?: boolean;
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const unrelatedProps: GridProps = { $unrelated: true };
+export const App = () => <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-member-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("$unrelated?: boolean");
+    expect(result).toContain("export const unrelatedProps: GridProps = { $unrelated: true };");
+    expect(result).toContain("active?: boolean");
+    expect(result).not.toContain("  unrelated?: boolean;");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("emits exported css helper styles when the helper is mixed into converted styles", () => {
+    const input = `
+import styled, { css } from "styled-components";
+
+export const exportedMixin = css\`
+  color: tomato;
+\`;
+
+const Box = styled.div\`
+  \${exportedMixin}
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Mixed</Box>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("export const exportedMixin = css");
+    expect(result).toContain("exportedMixin:");
+    expect(result).toContain("sx={[styles.box, styles.exportedMixin]}");
+  });
+
+  it("preserves css helpers referenced by skipped imported component roots during partial migration", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const titleMixin = css\`
+  font-weight: 600;
+\`;
+
+const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+const Title = styled(Text)\`
+  \${titleMixin}
+  color: #1d4ed8;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root with helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toContain("const titleMixin = css");
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("<div sx={styles.notice}>");
+  });
+
+  it("emits css helper styles when the helper is referenced by both a converted component and a skipped imported root", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const sharedMixin = css\`
+  font-weight: 600;
+\`;
+
+const Notice = styled.div\`
+  \${sharedMixin}
+  padding: 8px;
+\`;
+
+const Title = styled(Text)\`
+  \${sharedMixin}
+  color: #1d4ed8;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root with shared helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    // Original helper declaration preserved for the skipped `styled(Text)` template.
+    expect(result).toContain("const sharedMixin = css");
+    // Skipped `styled(Text)` stays as-is and still references `sharedMixin`.
+    expect(result).toContain("const Title = styled(Text)");
+    // Converted `Notice` references `styles.sharedMixin` — the stylex.create entry
+    // must be emitted because the helper is an active mixin on a converted component.
+    expect(result).toMatch(/sharedMixin:\s*\{/);
+    expect(result).toContain("sx={[styles.notice, styles.sharedMixin]}");
+  });
+
+  it("preserves object-member css helpers referenced by skipped imported roots", () => {
+    // `mixins.root` is an object-member css helper. The skipped `styled(Text)` template
+    // still interpolates `${mixins.root}`, so the property must NOT be removed from the
+    // object literal — otherwise the preserved template references `mixins.root` which
+    // no longer exists.
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins.root}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with object-member helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    // The object literal preserves the `root` property because the skipped template references it.
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
+    // The skipped `styled(Text)` template still uses `mixins.root`.
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("${mixins.root}");
+  });
+
+  it("preserves computed object-member css helpers referenced by skipped imported roots", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const mixins = {
+  root: css\`
+    font-weight: 600;
+  \`,
+};
+
+const Title = styled(Text)\`
+  \${mixins["root"]}
+  color: #1d4ed8;
+\`;
+
+export const App = () => <Title>Imported root with computed helper</Title>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toMatch(/const\s+mixins\s*=\s*\{/);
+    expect(result).toMatch(/root:\s*css`/);
+    expect(result).toContain('${mixins["root"]}');
   });
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {

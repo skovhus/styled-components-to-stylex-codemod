@@ -281,13 +281,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
-    const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
-      normalizeForwardedAs: !shouldLowerForwardedAs,
-    };
-    const attrsProvidedPropNames = collectAttrsProvidedPropNames(
-      d.attrsInfo,
-      attrsProvidedPropOptions,
-    );
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
@@ -304,6 +297,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           propName: "sx",
           propsType: baseComponentPropsType,
         }));
+    const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
+      normalizeForwardedAs: !shouldLowerForwardedAs,
+    };
+    const attrsProvidedPropNames = collectAttrsProvidedPropNames(
+      d.attrsInfo,
+      attrsProvidedPropOptions,
+    );
     const explicitPropsTypeRef = resolveTypeReferenceName(d.propsType ?? null);
     const wrapperReusesWrappedPropsType =
       explicitPropsTypeRef?.kind === "identifier" &&
@@ -311,6 +311,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         emitter.resolveWrappedExplicitPropsTypeRef(renderedComponent)?.name;
     const wrapperPropsExposeSx =
       wrappedAcceptsSx &&
+      !attrsProvidedPropNames.has("sx") &&
       ((wrappedLocalDecl &&
         d.propsType &&
         !wrapperReusesWrappedPropsType &&
@@ -1032,6 +1033,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       attrsInfo?.staticAttrs ?? {},
       shouldLowerForwardedAs,
     );
+    const attrsSxExpr = wrappedAcceptsSx ? staticSxAttrToExpression(j, staticAttrs.sx) : null;
+    const staticAttrsForJsx = attrsSxExpr ? omitStaticAttr(staticAttrs, "sx") : staticAttrs;
     const attrsStaticStyleExpr = attrsInfo?.attrsStaticStyleExpr as ExpressionKind | undefined;
     const needsSxVar =
       allowClassNameProp ||
@@ -1068,6 +1071,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       if (allowSxProp || wrapperPropsExposeSx) {
         styleArgs.push(sxId);
+      }
+      if (attrsSxExpr) {
+        styleArgs.push(attrsSxExpr);
       }
 
       // Add defaultAttrs props to destructureProps for nullish coalescing patterns
@@ -1148,20 +1154,20 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
       const openingAttrs: JsxAttr[] = [];
       const staticForwardedAsFallbackKey =
-        shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "as")
+        shouldLowerForwardedAs && Object.hasOwn(staticAttrsForJsx, "as")
           ? "as"
-          : shouldLowerForwardedAs && Object.hasOwn(staticAttrs, "forwardedAs")
+          : shouldLowerForwardedAs && Object.hasOwn(staticAttrsForJsx, "forwardedAs")
             ? "forwardedAs"
             : null;
       const hasStaticForwardedAsFallback = staticForwardedAsFallbackKey !== null;
       const staticForwardedAsFallback = hasStaticForwardedAsFallback
-        ? staticAttrs[staticForwardedAsFallbackKey]
+        ? staticAttrsForJsx[staticForwardedAsFallbackKey]
         : undefined;
       const staticAttrsWithoutForwardedAsFallback = (() => {
         if (!hasStaticForwardedAsFallback) {
-          return staticAttrs;
+          return staticAttrsForJsx;
         }
-        const { [staticForwardedAsFallbackKey]: _omitAs, ...restStaticAttrs } = staticAttrs;
+        const { [staticForwardedAsFallbackKey]: _omitAs, ...restStaticAttrs } = staticAttrsForJsx;
         return restStaticAttrs;
       })();
       // Use buildDefaultAttrsFromProps to preserve nullish coalescing (e.g., tabIndex ?? 0)
@@ -1373,7 +1379,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }),
       );
       openingAttrs.push(
-        ...emitter.buildStaticAttrsFromRecord(staticAttrs, { booleanTrueAsShorthand: false }),
+        ...emitter.buildStaticAttrsFromRecord(staticAttrsForJsx, { booleanTrueAsShorthand: false }),
       );
       // When the wrapped component accepts a StyleX `sx` prop, emit `sx={...}`
       // instead of `{...stylex.props(...)}` so the wrapped component can merge it
@@ -1723,6 +1729,36 @@ function normalizeStaticForwardedAsAttr(
     return restStaticAttrs;
   }
   return { ...restStaticAttrs, as: forwardedAs };
+}
+
+function omitStaticAttr(
+  staticAttrs: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> {
+  const { [key]: _omit, ...rest } = staticAttrs;
+  return rest;
+}
+
+function staticSxAttrToExpression(j: typeof jscodeshift, value: unknown): ExpressionKind | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as { type?: unknown }).type === "string"
+  ) {
+    return value as ExpressionKind;
+  }
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null
+  ) {
+    return j.literal(value) as ExpressionKind;
+  }
+  return null;
 }
 
 function resolveRenderedAsProp(args: {

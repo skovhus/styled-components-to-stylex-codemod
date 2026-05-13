@@ -49,6 +49,13 @@ function buildImportMap(args: {
         }
         continue;
       }
+      if (s.type === "ImportNamespaceSpecifier") {
+        const localName = s.local?.type === "Identifier" ? s.local.name : undefined;
+        if (localName) {
+          importMap.set(localName, { importedName: "*", source: resolvedSource });
+        }
+        continue;
+      }
       if (s.type !== "ImportSpecifier") {
         continue;
       }

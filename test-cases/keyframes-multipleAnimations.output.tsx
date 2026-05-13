@@ -57,7 +57,7 @@ const styles = stylex.create({
   animatedCard: {
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "0.3s, 0.5s",
-    animationTimingFunction: "ease-out, ease-out",
+    animationTimingFunction: "ease-out",
     padding: 20,
     backgroundColor: "white",
     borderRadius: 8,
@@ -74,7 +74,7 @@ const styles = stylex.create({
   sequentialAnimation: {
     animationName: `${fadeIn}, ${slideIn}`,
     animationDuration: "0.3s, 0.5s",
-    animationTimingFunction: "ease-out, ease-out",
+    animationTimingFunction: "ease-out",
     animationDelay: "0s, 0.3s",
   },
   // Shorthand with full property coverage
@@ -97,6 +97,6 @@ const styles = stylex.create({
     animationIterationCount: "1, infinite",
     animationDirection: "normal, reverse",
     animationFillMode: "both, forwards",
-    animationPlayState: "paused, paused",
+    animationPlayState: "paused",
   },
 });

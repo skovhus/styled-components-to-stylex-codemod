@@ -562,9 +562,13 @@ function buildCommaSeparatedValues(
   fallback: string,
 ): string | ExpressionKind {
   const parts = values.map((value) => value ?? fallback);
-  if (parts.length === 1) {
-    const first = parts[0]!;
-    return typeof first === "string" ? first : cloneAstNode(first);
+  const first = parts[0];
+  if (
+    parts.length === 1 ||
+    (first != null && typeof first === "string" && parts.every((part) => part === first))
+  ) {
+    const firstPart = parts[0]!;
+    return typeof firstPart === "string" ? firstPart : cloneAstNode(firstPart);
   }
   const quasis: any[] = [];
   const exprs: ExpressionKind[] = [];

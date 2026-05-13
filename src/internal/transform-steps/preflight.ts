@@ -13,6 +13,10 @@ import { TransformContext } from "../transform-context.js";
 export function preflight(ctx: TransformContext): StepResult {
   const { j, root } = ctx;
 
+  if (isNonJsxTypeScriptModule(ctx.file.path)) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // Preserve existing `import React ... from "react"` (default or namespace import) even if it becomes "unused"
   // after the transform. JSX runtime differences and local conventions can make this import intentionally present.
   // NOTE: Check `.value` directly rather than relying on `.type === "StringLiteral"` since ESTree-style parsers
@@ -66,4 +70,19 @@ export function preflight(ctx: TransformContext): StepResult {
   ctx.isStyledTag = (tag: any): boolean => isStyledTagImpl(styledLocalNames, tag);
 
   return CONTINUE;
+}
+
+/**
+ * TypeScript module files (`.ts`, `.mts`, `.cts`) cannot contain JSX. Bail before
+ * any step might rewrite the file into JSX-emitting output. Declaration files
+ * (`.d.ts`, `.d.mts`, `.d.cts`) never carry runtime code and pass through unchanged.
+ */
+function isNonJsxTypeScriptModule(path: string): boolean {
+  const extensions = [".ts", ".mts", ".cts"];
+  for (const ext of extensions) {
+    if (path.endsWith(ext) && !path.endsWith(`.d${ext}`)) {
+      return true;
+    }
+  }
+  return false;
 }

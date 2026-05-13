@@ -871,6 +871,7 @@ export function extractAndRemoveCssHelpers(args: {
   styledImports: Collection<any>;
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
+  preserveDeclarationOnlyNames?: Set<string>;
 }): {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
@@ -883,7 +884,7 @@ export function extractAndRemoveCssHelpers(args: {
   cssHelperTemplateReplacements: CssHelperTemplateReplacement[];
   changed: boolean;
 } {
-  const { root, j, styledImports, cssLocal, toStyleKey } = args;
+  const { root, j, styledImports, cssLocal, toStyleKey, preserveDeclarationOnlyNames } = args;
 
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
   const exportedLocalNames = buildExportedLocalNames(root, j);
@@ -969,6 +970,8 @@ export function extractAndRemoveCssHelpers(args: {
       const localName = p.node.id.name;
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
+      const isExported = exportedLocalNames.has(localName);
+      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       const template = init.quasi as TemplateLiteral;
       const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
@@ -985,10 +988,12 @@ export function extractAndRemoveCssHelpers(args: {
         rules,
         templateExpressions,
         rawCss,
+        isExported,
+        preserveCssHelperDeclaration: preserveDeclarationOnly,
+        suppressCssHelperStyleEmission: preserveDeclarationOnly,
       });
 
       cssHelperNames.add(localName);
-      const isExported = exportedLocalNames.has(localName);
       const usedOutsideStyledTemplates = isIdentifierUsedOutsideStyledTemplates({
         root,
         j,
@@ -996,14 +1001,14 @@ export function extractAndRemoveCssHelpers(args: {
         styledLocalNames,
         cssLocal,
       });
-      if (!isExported && usedOutsideStyledTemplates) {
+      if (!isExported && usedOutsideStyledTemplates && !preserveDeclarationOnly) {
         cssHelperReplacements.push({ localName, styleKey });
         const decl = cssHelperDecls[cssHelperDecls.length - 1];
         if (decl) {
           decl.preserveCssHelperDeclaration = true;
         }
       }
-      if (!isExported && !usedOutsideStyledTemplates) {
+      if (!isExported && !usedOutsideStyledTemplates && !preserveDeclarationOnly) {
         const decl = p.parentPath?.node;
         if (decl?.type === "VariableDeclaration") {
           decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);
@@ -1164,6 +1169,7 @@ export function extractAndRemoveCssHelpers(args: {
         const styleKey = toStyleKey(
           `${objectName}${propName.charAt(0).toUpperCase()}${propName.slice(1)}`,
         );
+        const preserveMember = preserveDeclarationOnlyNames?.has(qualifiedName) ?? false;
 
         const decl: StyledDecl = {
           localName: qualifiedName,
@@ -1173,6 +1179,8 @@ export function extractAndRemoveCssHelpers(args: {
           rules,
           templateExpressions: [],
           rawCss,
+          preserveCssHelperDeclaration: preserveMember,
+          suppressCssHelperStyleEmission: preserveMember,
         };
 
         memberMap.set(propName, decl);
@@ -1208,7 +1216,9 @@ export function extractAndRemoveCssHelpers(args: {
 
         cssHelperObjectMembers.set(objectName, memberMap);
 
-        // Remove the CSS helper properties from the object (unless exported)
+        // Remove the CSS helper properties from the object (unless exported, or
+        // unless the qualified path is in `preserveDeclarationOnlyNames` because a
+        // skipped imported-root template still interpolates `${objectName.propName}`).
         const isExported = exportedLocalNames.has(objectName);
         if (!isExported) {
           // Filter out the CSS helper properties
@@ -1219,7 +1229,11 @@ export function extractAndRemoveCssHelpers(args: {
             if (prop.key?.type !== "Identifier") {
               return true; // Keep computed or non-identifier keys
             }
-            return !cssHelperPropNames.has(prop.key.name);
+            const propName = prop.key.name;
+            if (!cssHelperPropNames.has(propName)) {
+              return true;
+            }
+            return preserveDeclarationOnlyNames?.has(`${objectName}.${propName}`) ?? false;
           });
 
           if (remainingProps.length === 0) {

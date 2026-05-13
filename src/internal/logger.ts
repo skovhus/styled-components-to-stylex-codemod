@@ -14,6 +14,7 @@ export type WarningType =
   | "Adapter resolveCall returned an unparseable styles expression"
   | "Adapter resolveCall returned an unparseable value expression"
   | "Adapter resolveCall returned StyleX styles for helper call where a CSS value was expected"
+  | "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper"
   | "Adapter resolveCall returned undefined for helper call"
   | "Adapter resolveBaseComponent threw an error"
   | "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules"
