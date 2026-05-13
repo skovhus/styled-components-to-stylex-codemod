@@ -62,8 +62,20 @@ interface InheritedSectionProps extends ImportedSectionProps {
 }
 
 type UnionSectionProps =
-  | { children?: React.ReactNode; kind: "alpha"; someAttribute?: boolean }
-  | { children?: React.ReactNode; kind: "beta"; someAttribute?: boolean };
+  | { children?: React.ReactNode; kind: "alpha"; onlyAlpha?: number; someAttribute?: boolean }
+  | { children?: React.ReactNode; kind: "beta"; onlyBeta?: string; someAttribute?: boolean };
+
+const noop = () => undefined;
+
+interface MethodSectionProps {
+  label?: string;
+  onClick(): void;
+}
+
+interface SharedTransientSectionProps {
+  $active?: boolean;
+  label?: string;
+}
 
 // Pattern 1: styled.input.attrs (dot notation)
 const Input = styled.input.attrs<{ $padding?: string; $small?: boolean }>((props) => ({
@@ -187,6 +199,23 @@ export const InheritedSection = styled(Text).attrs({ someAttribute: true })<Inhe
 export const UnionSection = styled(Text).attrs({ someAttribute: true })<UnionSectionProps>`
   padding: 24px;
   background-color: #f8fafc;
+`;
+
+// Pattern 3m: method-signature attrs props should be omitted from explicit interfaces
+export const MethodSection = styled(Text).attrs({ onClick: noop })<MethodSectionProps>`
+  padding: 26px;
+  background-color: #eff6ff;
+`;
+
+// Pattern 3n: shared transient aliases should keep shared alias and remap wrapper-local props
+export const SharedTransientAttrsSection = styled(Text).attrs({
+  someAttribute: true,
+})<SharedTransientSectionProps>`
+  color: ${(props) => (props.$active ? "#0f766e" : "#475569")};
+`;
+
+export const SharedTransientPlainSection = styled(Text)<SharedTransientSectionProps>`
+  background-color: ${(props) => (props.$active ? "#ccfbf1" : "#f8fafc")};
 `;
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -419,7 +448,16 @@ export const App = () => (
     <PickSection label="pick-label">Pick section content</PickSection>
     <MultiImportedSection label="multi-label">Multi imported section content</MultiImportedSection>
     <InheritedSection localLabel="inherited-label">Inherited section content</InheritedSection>
-    <UnionSection kind="alpha">Union section content</UnionSection>
+    <UnionSection kind="alpha" onlyAlpha={1}>
+      Union section content
+    </UnionSection>
+    <MethodSection label="method-label">Method section content</MethodSection>
+    <SharedTransientAttrsSection active label="shared-transient-attrs">
+      Shared transient attrs section content
+    </SharedTransientAttrsSection>
+    <SharedTransientPlainSection $active label="shared-transient-plain">
+      Shared transient plain section content
+    </SharedTransientPlainSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>

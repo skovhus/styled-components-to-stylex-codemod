@@ -367,11 +367,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         wrappedPropsTypeName &&
         explicitTypeName === wrappedPropsTypeName
       );
+      const explicitTypeNeedsDistributiveOmit = !!(
+        d.propsType && explicitTypeMayBeUnion(emitter, d.propsType)
+      );
       const canMutateExplicitType = !!(
         explicitTypeExists &&
         explicitTypeName &&
         !isPolymorphicComponentWrapper &&
         !isSelfReferentialPropsType &&
+        !explicitTypeNeedsDistributiveOmit &&
         !isTypeNameUsedOutsideOwner(emitter, explicitTypeName, d.localName)
       );
 
@@ -463,7 +467,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
         // Build inline type for the function parameter (don't modify SharedProps)
         inlineTypeText = emitter.joinIntersection(
-          omitExplicitAttrsIfNeeded(explicitTypeName, explicitAttrsOmitUnion),
+          transformExplicitPropsTypeText({
+            canMutateExplicitType,
+            explicitAttrsOmitUnion,
+            typeText: explicitTypeName,
+            useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+            transientPropRenames: d.transientPropRenames,
+          }),
           intrinsicBase,
           optionalProps.length > 0 ? `{ ${optionalProps.join("; ")} }` : null,
         );
@@ -509,11 +519,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               '"style"',
               ...[...attrsProvidedPropNames].map((name) => JSON.stringify(name)),
             ])}>`,
-            "{\n  as?: C;\n}",
+            attrsProvidedPropNames.has("as") ? "{\n  as?: never;\n}" : "{\n  as?: C;\n}",
             ...(hasForwardedAsUsage ? [`{ forwardedAs?: ${forwardedAsPropTypeText} }`] : []),
             ...(optionalStyleProps.length > 0 ? [`{ ${optionalStyleProps.join("; ")} }`] : []),
             // Include user's explicit props type if it exists
-            ...(explicit ? [omitExplicitAttrsIfNeeded(explicit, explicitAttrsOmitUnion)] : []),
+            ...(explicit
+              ? [
+                  transformExplicitPropsTypeText({
+                    canMutateExplicitType,
+                    explicitAttrsOmitUnion,
+                    typeText: explicit,
+                    useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+                    transientPropRenames: d.transientPropRenames,
+                  }),
+                ]
+              : []),
           ].join(" & ");
           emitNamedPropsType(
             d.localName,
@@ -565,7 +585,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           }
           const explicitWithRef =
             (explicitWithExtras
-              ? omitExplicitAttrsIfNeeded(explicitWithExtras, explicitAttrsOmitUnion)
+              ? transformExplicitPropsTypeText({
+                  canMutateExplicitType,
+                  explicitAttrsOmitUnion,
+                  typeText: explicitWithExtras,
+                  useDistributiveOmit: explicitTypeNeedsDistributiveOmit,
+                  transientPropRenames: d.transientPropRenames,
+                })
               : null) ?? (refElementType ? `{ ref?: React.Ref<${refElementType}>; }` : null);
           // NOTE: `inferred` already includes `React.ComponentProps<typeof WrappedComponent>`,
           // which carries `children` when the wrapped component accepts them. Wrapping the
@@ -1447,6 +1473,50 @@ function explicitTypeMayContainAttrs(
   return localTypeMayContainAttrs(emitter, typeName, attrsProvidedPropNames, visitedTypeNames);
 }
 
+function explicitTypeMayBeUnion(
+  emitter: WrapperEmitter,
+  propsType: ASTNode,
+  visitedTypeNames = new Set<string>(),
+): boolean {
+  if (propsType.type === "TSUnionType") {
+    return true;
+  }
+  if (propsType.type === "TSIntersectionType") {
+    return ((propsType as { types?: ASTNode[] }).types ?? []).some((part) =>
+      explicitTypeMayBeUnion(emitter, part, new Set(visitedTypeNames)),
+    );
+  }
+  if (propsType.type === "TSParenthesizedType") {
+    const inner = (propsType as { typeAnnotation?: ASTNode }).typeAnnotation;
+    return inner ? explicitTypeMayBeUnion(emitter, inner, visitedTypeNames) : false;
+  }
+  if (propsType.type !== "TSTypeReference") {
+    return false;
+  }
+  const typeNameText = emitter.stringifyTsType(propsType);
+  const params = getTypeReferenceParams(propsType);
+  if (isUtilityTypeReference(typeNameText)) {
+    return params.some((param) =>
+      explicitTypeMayBeUnion(emitter, param, new Set(visitedTypeNames)),
+    );
+  }
+  const typeName = resolveTypeIdentifierName(propsType);
+  if (!typeName || !emitter.typeExistsInFile(typeName) || visitedTypeNames.has(typeName)) {
+    return false;
+  }
+  visitedTypeNames.add(typeName);
+  let mayBeUnion = false;
+  const { root, j } = emitter;
+  root
+    .find(j.TSTypeAliasDeclaration, { id: { type: "Identifier", name: typeName } } as any)
+    .forEach((path: any) => {
+      if (explicitTypeMayBeUnion(emitter, path.node.typeAnnotation as ASTNode, visitedTypeNames)) {
+        mayBeUnion = true;
+      }
+    });
+  return mayBeUnion;
+}
+
 function localTypeMayContainAttrs(
   emitter: WrapperEmitter,
   typeName: string,
@@ -1509,7 +1579,7 @@ function typeLiteralHasAttrs(
 
 function typeMemberHasAttrs(member: unknown, attrsProvidedPropNames: ReadonlySet<string>): boolean {
   const typed = member as { type?: string; key?: unknown };
-  if (typed.type !== "TSPropertySignature") {
+  if (typed.type !== "TSPropertySignature" && typed.type !== "TSMethodSignature") {
     return false;
   }
   const name = typeKeyName(typed.key);
@@ -1523,15 +1593,41 @@ function resolveHeritageIdentifierName(heritage: unknown): string | null {
   return typed.expression?.type === "Identifier" ? (typed.expression.name ?? null) : null;
 }
 
-function omitExplicitAttrsIfNeeded(
-  typeText: string,
-  explicitAttrsOmitUnion: string | null,
-): string {
-  return explicitAttrsOmitUnion ? `Omit<${typeText}, ${explicitAttrsOmitUnion}>` : typeText;
-}
-
 function buildOmitUnion(parts: string[]): string {
   return [...new Set(parts)].join(" | ");
+}
+
+function transformExplicitPropsTypeText(args: {
+  canMutateExplicitType: boolean;
+  explicitAttrsOmitUnion: string | null;
+  typeText: string;
+  useDistributiveOmit: boolean;
+  transientPropRenames: ReadonlyMap<string, string> | undefined;
+}): string {
+  const { canMutateExplicitType, explicitAttrsOmitUnion, typeText, useDistributiveOmit } = args;
+  const omitKeys = [
+    ...(explicitAttrsOmitUnion ? [explicitAttrsOmitUnion] : []),
+    ...(!canMutateExplicitType && args.transientPropRenames
+      ? [...args.transientPropRenames.keys()].map((key) => JSON.stringify(key))
+      : []),
+  ];
+  const omitUnion = omitKeys.length > 0 ? buildOmitUnion(omitKeys) : null;
+  const base = omitUnion
+    ? useDistributiveOmit
+      ? distributiveOmitTypeText(typeText, omitUnion)
+      : `Omit<${typeText}, ${omitUnion}>`
+    : typeText;
+  const renamedProps =
+    !canMutateExplicitType && args.transientPropRenames
+      ? [...args.transientPropRenames].map(
+          ([original, renamed]) => `{ [K in "${original}" as "${renamed}"]: ${typeText}[K] }`,
+        )
+      : [];
+  return [base, ...renamedProps].join(" & ");
+}
+
+function distributiveOmitTypeText(typeText: string, omitUnion: string): string {
+  return `((${typeText}) extends infer T ? T extends unknown ? Omit<T, ${omitUnion}> : never : never)`;
 }
 
 function getTypeReferenceParams(type: ASTNode): ASTNode[] {
@@ -1750,7 +1846,7 @@ function removeAttrsMembersInExistingType(
   const removedNames = new Set<string>();
   const shouldRemoveMember = (member: unknown): boolean => {
     const typed = member as { type?: string; key?: unknown };
-    if (typed.type !== "TSPropertySignature") {
+    if (typed.type !== "TSPropertySignature" && typed.type !== "TSMethodSignature") {
       return false;
     }
     const name = typeKeyName(typed.key);

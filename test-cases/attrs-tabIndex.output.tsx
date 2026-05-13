@@ -9,10 +9,12 @@ type Props = {
   gutter?: string;
 };
 
-type ScrollableFlexProps = Props & {
-  className?: string;
-  style?: React.CSSProperties;
-  sx?: stylex.StyleXStyles;
+type ScrollableFlexProps = Omit<
+  Props & { className?: string; style?: React.CSSProperties; sx?: stylex.StyleXStyles },
+  "$applyBackground"
+> & {
+  [K in "$applyBackground" as "applyBackground"]: Props &
+    { className?: string; style?: React.CSSProperties; sx?: stylex.StyleXStyles }[K];
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "$applyBackground">;
 
 export function ScrollableFlex(props: ScrollableFlexProps) {

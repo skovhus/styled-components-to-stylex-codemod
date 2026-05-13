@@ -27,11 +27,17 @@ export const StyledWrapper = styled(BaseComponent)<CustomProps>`
   background: ${(props) => (props.variant === "primary" ? "blue" : "gray")};
 `;
 
+export const StaticAsWrapper = styled(BaseComponent).attrs({ as: "a" })<CustomProps>`
+  padding: 12px;
+  background: ${(props) => (props.variant === "primary" ? "navy" : "slategray")};
+`;
+
 // When this is used externally we might both add a ref and use the "as"
 // <ContentViewContainer ref={...} onClick={e => {}} >
 export const App = () => (
   <>
     <ContentViewContainer onClick={() => {}} />
     <StyledWrapper variant="primary">Content</StyledWrapper>
+    <StaticAsWrapper variant="secondary">Static as content</StaticAsWrapper>
   </>
 );
