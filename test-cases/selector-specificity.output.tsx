@@ -35,7 +35,7 @@ export const App = () => (
 
 const styles = stylex.create({
   thing: {
-    /* Specificity hack stripped (was: &&) */
+    // TODO: Specificity hack stripped, carefully test (was: &&)
     color: "red",
     padding: 8,
   },
@@ -51,8 +51,8 @@ const styles = stylex.create({
     backgroundColor: "#dbeafe",
   },
   specificActionNotActive: {
-    /* Specificity hack stripped (was: &&:hover)
-    TODO: Validate the default background color; StyleX requires an explicit default for conditional backgroundColor. */
+    // TODO: Specificity hack stripped, carefully test (was: &&:hover)
+    // TODO: Validate the default background color; StyleX requires an explicit default for conditional backgroundColor.
     backgroundColor: {
       default: null,
       ":hover": "#fee2e2",

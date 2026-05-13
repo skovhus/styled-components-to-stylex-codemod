@@ -85,7 +85,7 @@ import {
   callArgsFromNode,
   extractIndexedThemeLookupInfo,
 } from "../builtin-handlers/resolver-utils.js";
-type CommentSource = { leading?: string; trailingLine?: string } | null;
+type CommentSource = { leading?: string; leadingLine?: string; trailingLine?: string } | null;
 type ResolvedImportedValue = {
   resolved: ExpressionKind;
   imports?: ImportSpec[];
@@ -1597,6 +1597,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           i === 0
             ? {
                 leading: (d as any).leadingComment,
+                leadingLine: (d as any).leadingLineComment,
                 trailingLine: (d as any).trailingLineComment,
               }
             : null;

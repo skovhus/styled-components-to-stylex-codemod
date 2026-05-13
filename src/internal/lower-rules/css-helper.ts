@@ -507,7 +507,7 @@ export function createCssHelperResolver(args: {
             }
             if (specificityStripped) {
               addPropComments(target, mapped.prop, {
-                leading: buildSpecificityStrippedComment(rawSelector, mapped.prop),
+                leadingLine: buildSpecificityStrippedComment(rawSelector, mapped.prop),
               });
             }
             (target as any)[mapped.prop] = mergeIntoContext(

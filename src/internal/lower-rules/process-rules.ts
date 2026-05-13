@@ -1290,7 +1290,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const applyResolvedPropValue = (
       prop: string,
       value: unknown,
-      commentSource: { leading?: string; trailingLine?: string } | null,
+      commentSource: { leading?: string; leadingLine?: string; trailingLine?: string } | null,
       sourceCssProperty?: string,
     ): void => {
       const noteSourceCssProperty = (target: Record<string, unknown>): void => {
@@ -1316,6 +1316,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           if (commentSource) {
             addPropComments(nested, prop, {
               leading: commentSource.leading,
+              leadingLine: commentSource.leadingLine,
               trailingLine: commentSource.trailingLine,
             });
           }
@@ -1326,6 +1327,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         if (commentSource) {
           addPropComments(attrTarget, prop, {
             leading: commentSource.leading,
+            leadingLine: commentSource.leadingLine,
             trailingLine: commentSource.trailingLine,
           });
         }
@@ -1447,6 +1449,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           if (commentSource) {
             addPropComments(target, prop, {
               leading: commentSource.leading,
+              leadingLine: commentSource.leadingLine,
               trailingLine: commentSource.trailingLine,
             });
           }
@@ -1549,6 +1552,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             if (commentSource) {
               addPropComments(pseudoSelector, prop, {
                 leading: commentSource.leading,
+                leadingLine: commentSource.leadingLine,
                 trailingLine: commentSource.trailingLine,
               });
             }
@@ -1565,6 +1569,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       if (commentSource) {
         addPropComments(target, prop, {
           leading: commentSource.leading,
+          leadingLine: commentSource.leadingLine,
           trailingLine: commentSource.trailingLine,
         });
       }
@@ -3437,7 +3442,7 @@ function annotateSpecificityStrippedDeclaration(
     return;
   }
   const note = buildSpecificityStrippedComment(selector, firstDecl.property ?? "");
-  firstDecl.leadingComment = firstDecl.leadingComment
-    ? `${note}\n${firstDecl.leadingComment}`
+  firstDecl.leadingLineComment = firstDecl.leadingLineComment
+    ? `${note}\n${firstDecl.leadingLineComment}`
     : note;
 }

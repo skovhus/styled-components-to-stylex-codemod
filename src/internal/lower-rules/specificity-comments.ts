@@ -3,7 +3,7 @@
  */
 
 export function buildSpecificityStrippedComment(selector: string, prop: string): string {
-  const base = `Specificity hack stripped (was: ${selector.trim()})`;
+  const base = `TODO: Specificity hack stripped, carefully test (was: ${selector.trim()})`;
   if (!isBackgroundProperty(prop)) {
     return base;
   }

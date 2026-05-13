@@ -239,8 +239,11 @@ export function tryHandleInterpolatedStringValue(args: {
       const out = outputs[i]!;
       setValue(out.prop, themeResolved ?? wrappedExpr);
       // Add leading comment if present (e.g., for inlined static member expressions)
-      if (i === 0 && (d as any).leadingComment) {
-        addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+      if (i === 0 && ((d as any).leadingComment || (d as any).leadingLineComment)) {
+        addPropComments(styleObj, out.prop, {
+          leading: (d as any).leadingComment,
+          leadingLine: (d as any).leadingLineComment,
+        });
       }
     }
     return true;
@@ -263,8 +266,11 @@ export function tryHandleInterpolatedStringValue(args: {
     const out = outputs[i]!;
     setValue(out.prop, tl as any);
     // Add leading comment if present (e.g., for inlined static member expressions)
-    if (i === 0 && (d as any).leadingComment) {
-      addPropComments(styleObj, out.prop, { leading: (d as any).leadingComment });
+    if (i === 0 && ((d as any).leadingComment || (d as any).leadingLineComment)) {
+      addPropComments(styleObj, out.prop, {
+        leading: (d as any).leadingComment,
+        leadingLine: (d as any).leadingLineComment,
+      });
     }
   }
   return true;
