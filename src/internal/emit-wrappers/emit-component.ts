@@ -281,13 +281,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const shouldAllowStyle = emitter.shouldAllowStyleProp(d);
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
-    const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
-      normalizeForwardedAs: !shouldLowerForwardedAs,
-    };
-    const attrsProvidedPropNames = collectAttrsProvidedPropNames(
-      d.attrsInfo,
-      attrsProvidedPropOptions,
-    );
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
     const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
@@ -304,6 +297,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           propName: "sx",
           propsType: baseComponentPropsType,
         }));
+    const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
+      normalizeForwardedAs: !shouldLowerForwardedAs,
+      ...(wrappedAcceptsSx ? { preservePropNames: new Set(["sx"]) } : {}),
+    };
+    const attrsProvidedPropNames = collectAttrsProvidedPropNames(
+      d.attrsInfo,
+      attrsProvidedPropOptions,
+    );
+    if (wrappedAcceptsSx) {
+      attrsProvidedPropNames.delete("sx");
+    }
     const explicitPropsTypeRef = resolveTypeReferenceName(d.propsType ?? null);
     const wrapperReusesWrappedPropsType =
       explicitPropsTypeRef?.kind === "identifier" &&
