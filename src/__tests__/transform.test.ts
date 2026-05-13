@@ -11003,7 +11003,8 @@ export const App = () => <Box $depth={2}>Content</Box>;
 `;
     const result = runTransformWithDiagnostics(source);
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("props.depth * 16 + 4");
+    expect(result.code).toContain("depth * 16 + 4");
+    expect(result.code).toContain("styles.boxPaddingLeft(depth)");
   });
 });
 
