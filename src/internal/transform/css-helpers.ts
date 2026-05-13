@@ -871,6 +871,7 @@ export function extractAndRemoveCssHelpers(args: {
   styledImports: Collection<any>;
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
+  preserveDeclarationOnlyNames?: Set<string>;
 }): {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
@@ -883,7 +884,7 @@ export function extractAndRemoveCssHelpers(args: {
   cssHelperTemplateReplacements: CssHelperTemplateReplacement[];
   changed: boolean;
 } {
-  const { root, j, styledImports, cssLocal, toStyleKey } = args;
+  const { root, j, styledImports, cssLocal, toStyleKey, preserveDeclarationOnlyNames } = args;
 
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
   const exportedLocalNames = buildExportedLocalNames(root, j);
@@ -970,6 +971,7 @@ export function extractAndRemoveCssHelpers(args: {
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
       const isExported = exportedLocalNames.has(localName);
+      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       const template = init.quasi as TemplateLiteral;
       const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
@@ -987,6 +989,8 @@ export function extractAndRemoveCssHelpers(args: {
         templateExpressions,
         rawCss,
         isExported,
+        preserveCssHelperDeclaration: preserveDeclarationOnly,
+        suppressCssHelperStyleEmission: preserveDeclarationOnly,
       });
 
       cssHelperNames.add(localName);
@@ -997,14 +1001,14 @@ export function extractAndRemoveCssHelpers(args: {
         styledLocalNames,
         cssLocal,
       });
-      if (!isExported && usedOutsideStyledTemplates) {
+      if (!isExported && usedOutsideStyledTemplates && !preserveDeclarationOnly) {
         cssHelperReplacements.push({ localName, styleKey });
         const decl = cssHelperDecls[cssHelperDecls.length - 1];
         if (decl) {
           decl.preserveCssHelperDeclaration = true;
         }
       }
-      if (!isExported && !usedOutsideStyledTemplates) {
+      if (!isExported && !usedOutsideStyledTemplates && !preserveDeclarationOnly) {
         const decl = p.parentPath?.node;
         if (decl?.type === "VariableDeclaration") {
           decl.declarations = decl.declarations.filter((dcl: any) => dcl !== p.node);

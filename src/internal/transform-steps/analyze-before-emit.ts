@@ -921,6 +921,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
                   }
                 | undefined,
               decl.transientPropRenames,
+              getDeclNamespaceName(root, j, decl.localName),
             );
           }
         }
@@ -966,6 +967,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       renames.set(prop, stripped);
     }
     if (renames.size > 0) {
+      const declNamespaceName = getDeclNamespaceName(root, j, decl.localName);
       // Don't rename props when the propsType references a named type (interface
       // or type alias) that is used elsewhere in the file — mutating the shared
       // declaration would break non-styled code that also references it.
@@ -975,7 +977,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       if (
         referencedTypeNames.some(
           (name) =>
-            isTypeNameUsedElsewhere(root, j, name, decl.localName) ||
+            isTypeNameUsedElsewhere(root, j, name, decl.localName, declNamespaceName) ||
             !isTypeLocallyDefined(root, j, name),
         )
       ) {
@@ -1027,6 +1029,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
             }
           | undefined,
         renames,
+        declNamespaceName,
       );
       // Also rename in resolvedStyleObjects (style function bodies may reference $-prefixed props)
       const resolvedStyleObjects = ctx.resolvedStyleObjects;
@@ -2040,6 +2043,7 @@ function isTypeNameUsedElsewhere(
   j: JSCodeshift,
   typeName: string,
   ownerLocalName: string,
+  namespaceName: string | null,
 ): boolean {
   let count = 0;
   root
@@ -2048,6 +2052,7 @@ function isTypeNameUsedElsewhere(
       const id = p.node.typeName;
       return id?.type === "Identifier" && id.name === typeName;
     })
+    .filter((p: any) => nearestNamespaceName(p) === namespaceName)
     .forEach((p: any) => {
       // Walk up to the nearest variable/function declaration to find the owner.
       // If the owner is the styled decl itself, don't count it.
@@ -2123,11 +2128,46 @@ function collectDeclPropNames(
     addIfMatch(name);
   });
   if (shouldResolveReferencedPropsForTransientRename(root, j, decl.propsType)) {
-    for (const name of collectResolvedTypePropNames(root, j, decl.propsType)) {
+    for (const name of collectResolvedTypePropNames(
+      root,
+      j,
+      decl.propsType,
+      getDeclNamespaceName(root, j, decl.localName),
+    )) {
       addIfMatch(name);
     }
   }
   return result;
+}
+
+function getDeclNamespaceName(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  localName: string,
+): string | null {
+  let namespaceName: string | null = null;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path: any) => {
+      if (namespaceName) {
+        return;
+      }
+      namespaceName = nearestNamespaceName(path);
+    });
+  return namespaceName;
+}
+
+function nearestNamespaceName(path: { parentPath?: unknown }): string | null {
+  let current = path.parentPath as { node?: { type?: string; id?: unknown }; parentPath?: unknown };
+  while (current) {
+    const node = current.node;
+    if (node?.type === "TSModuleDeclaration") {
+      const id = node.id as { type?: string; name?: string };
+      return id.type === "Identifier" ? (id.name ?? null) : null;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return null;
 }
 
 function shouldResolveReferencedPropsForTransientRename(
@@ -2464,6 +2504,7 @@ function renameTransientPropsInReferencedTypes(
       }
     | undefined,
   renames: Map<string, string>,
+  namespaceName: string | null,
 ): void {
   if (!propsType) {
     return;
@@ -2477,6 +2518,7 @@ function renameTransientPropsInReferencedTypes(
     root
       .find(j.TSInterfaceDeclaration)
       .filter((p: any) => (p.node as any).id?.name === typeName)
+      .filter((p: any) => nearestNamespaceName(p) === namespaceName)
       .forEach((p: any) => {
         for (const member of (p.node.body?.body ?? []) as any[]) {
           if (member.type === "TSPropertySignature" && member.key?.type === "Identifier") {
@@ -2491,6 +2533,7 @@ function renameTransientPropsInReferencedTypes(
     root
       .find(j.TSTypeAliasDeclaration)
       .filter((p: any) => (p.node as any).id?.name === typeName)
+      .filter((p: any) => nearestNamespaceName(p) === namespaceName)
       .forEach((p: any) => {
         walkTypePropNames(p.node.typeAnnotation, (name, keyNode) => {
           const renamed = renames.get(name);
@@ -2502,7 +2545,7 @@ function renameTransientPropsInReferencedTypes(
   }
   if (propsType.type === "TSIntersectionType" && Array.isArray(propsType.types)) {
     for (const t of propsType.types) {
-      renameTransientPropsInReferencedTypes(root, j, t as typeof propsType, renames);
+      renameTransientPropsInReferencedTypes(root, j, t as typeof propsType, renames, namespaceName);
     }
   }
 }
@@ -2547,6 +2590,7 @@ function collectResolvedTypePropNames(
   root: ReturnType<JSCodeshift>,
   j: JSCodeshift,
   propsType: unknown,
+  namespaceName: string | null = null,
 ): Set<string> {
   const names = new Set<string>();
   const visit = (node: unknown): void => {
@@ -2569,6 +2613,9 @@ function collectResolvedTypePropNames(
         .filter(
           (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
         )
+        .filter(
+          (p: unknown) => nearestNamespaceName(p as { parentPath?: unknown }) === namespaceName,
+        )
         .forEach((p: unknown) => {
           const body = ((p as any).node.body?.body ?? []) as any[];
           for (const member of body) {
@@ -2581,6 +2628,9 @@ function collectResolvedTypePropNames(
         .find(j.TSTypeAliasDeclaration)
         .filter(
           (p: unknown) => (p as { node?: { id?: { name?: string } } }).node?.id?.name === typeName,
+        )
+        .filter(
+          (p: unknown) => nearestNamespaceName(p as { parentPath?: unknown }) === namespaceName,
         )
         .forEach((p: unknown) => {
           visit((p as any).node.typeAnnotation);

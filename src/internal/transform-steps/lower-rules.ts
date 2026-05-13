@@ -72,14 +72,16 @@ export function lowerRulesStep(ctx: TransformContext): StepResult {
     //      interpolates a helper (`${helper}`) — the helper's source was extracted,
     //      so the surviving identifier is undefined.
     // Either case must bail the whole file so the original stays intact.
-    const helperLocalNames = new Set<string>();
+    const removedHelperLocalNames = new Set<string>();
     for (const d of ctx.styledDecls) {
-      if (d.isCssHelper) {
-        helperLocalNames.add(d.localName);
+      if (d.isCssHelper && !d.isExported && !d.preserveCssHelperDeclaration) {
+        removedHelperLocalNames.add(d.localName);
       }
     }
     const unsafeSkip = ctx.styledDecls.find(
-      (d) => d.skipTransform && (d.isCssHelper || skippedDeclReferencesHelper(d, helperLocalNames)),
+      (d) =>
+        d.skipTransform &&
+        (d.isCssHelper || skippedDeclReferencesHelper(d, removedHelperLocalNames)),
     );
     if (unsafeSkip) {
       return returnResult({ code: null, warnings: ctx.warnings }, "bail");

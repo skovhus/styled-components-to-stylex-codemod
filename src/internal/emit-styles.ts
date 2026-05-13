@@ -506,8 +506,24 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   // Compute the set of empty style keys (style objects with no properties)
   const emptyStyleKeys = new Set<string>();
+  const activeMixinStyleKeys = new Set<string>();
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.isCssHelper) {
+      continue;
+    }
+    for (const key of decl.extraStyleKeys ?? []) {
+      activeMixinStyleKeys.add(key);
+    }
+  }
   const preservedCssHelperStyleKeys = new Set(
-    styledDecls.filter((decl) => decl.isCssHelper && decl.isExported).map((decl) => decl.styleKey),
+    styledDecls
+      .filter(
+        (decl) =>
+          decl.isCssHelper &&
+          (decl.suppressCssHelperStyleEmission ||
+            (decl.isExported && !activeMixinStyleKeys.has(decl.styleKey))),
+      )
+      .map((decl) => decl.styleKey),
   );
   for (const [k, v] of resolvedStyleObjects.entries()) {
     if (v && typeof v === "object" && !isAstNode(v)) {

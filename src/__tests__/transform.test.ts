@@ -2403,6 +2403,94 @@ export const App = () => (
     expect(result).toContain("<Other.Grid $active>");
   });
 
+  it("does not collect transient props from same-named types outside the namespace", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+type GridProps = {
+  $unrelated?: boolean;
+};
+
+export namespace WidgetSet {
+  type GridProps = {
+    $active?: boolean;
+  };
+
+  export const Grid = styled.div<GridProps>\`
+    color: \${({ $active }) => ($active ? "green" : "gray")};
+  \`;
+}
+
+export const unrelatedProps: GridProps = { $unrelated: true };
+export const App = () => <WidgetSet.Grid $active>Styled grid</WidgetSet.Grid>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "namespace-member-transient.tsx");
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("$unrelated?: boolean");
+    expect(result).toContain("export const unrelatedProps: GridProps = { $unrelated: true };");
+    expect(result).toContain("active?: boolean");
+    expect(result).not.toContain("  unrelated?: boolean;");
+    expect(result).not.toContain("$active?: boolean");
+  });
+
+  it("emits exported css helper styles when the helper is mixed into converted styles", () => {
+    const input = `
+import styled, { css } from "styled-components";
+
+export const exportedMixin = css\`
+  color: tomato;
+\`;
+
+const Box = styled.div\`
+  \${exportedMixin}
+  padding: 8px;
+\`;
+
+export const App = () => <Box>Mixed</Box>;
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(result).toContain("export const exportedMixin = css");
+    expect(result).toContain("exportedMixin:");
+    expect(result).toContain("sx={[styles.box, styles.exportedMixin]}");
+  });
+
+  it("preserves css helpers referenced by skipped imported component roots during partial migration", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const titleMixin = css\`
+  font-weight: 600;
+\`;
+
+const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+const Title = styled(Text)\`
+  \${titleMixin}
+  color: #1d4ed8;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root with helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toContain("const titleMixin = css");
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("<div sx={styles.notice}>");
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath);
