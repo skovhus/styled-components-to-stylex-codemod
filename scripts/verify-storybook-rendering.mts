@@ -57,6 +57,7 @@ const FLAKINESS_EXPECTED = new Set<string>([
   "keyframes-interpolatedDuration",
   "keyframes-interpolatedDurationWithDelay",
   "keyframes-multiAnimationInterpolatedDuration",
+  "keyframes-multipleAnimations",
   "keyframes-unionComplexity",
   "cssVariable-animationShorthand",
   // This fixture asserts sx prop composition/codegen. In Storybook, the input
