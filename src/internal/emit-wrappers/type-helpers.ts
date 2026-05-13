@@ -83,6 +83,10 @@ export const TAG_TO_HTML_ELEMENT: Record<string, string> = {
   use: "SVGUseElement",
 };
 
+export type AttrsProvidedPropOptions = {
+  normalizeForwardedAs?: boolean;
+};
+
 /**
  * Builds a map from prop name to TypeScript type text for static single-key variants.
  * Boolean variants get type `boolean`; non-boolean get a string literal type (e.g., `"column"`).
@@ -143,6 +147,47 @@ export function collectBooleanPropNames(d: StyledDecl): ReadonlySet<string> {
 export function getAttrsAsString(d: StyledDecl): string | null {
   const v = d.attrsInfo?.staticAttrs?.as;
   return typeof v === "string" ? v : null;
+}
+
+export function appendAttrsProvidedPropOmissions(
+  omitted: string[],
+  attrsInfo: StyledDecl["attrsInfo"],
+  options?: AttrsProvidedPropOptions,
+): void {
+  for (const propName of collectAttrsProvidedPropNames(attrsInfo, options)) {
+    appendOmittedPropName(omitted, propName);
+  }
+}
+
+export function collectAttrsProvidedPropNames(
+  attrsInfo: StyledDecl["attrsInfo"],
+  options?: AttrsProvidedPropOptions,
+): Set<string> {
+  const names = new Set<string>();
+  const staticAttrs = attrsInfo?.staticAttrs ?? {};
+  for (const key of Object.keys(staticAttrs)) {
+    if (key === "className" || key === "style") {
+      continue;
+    }
+    if (
+      key === "forwardedAs" &&
+      options?.normalizeForwardedAs === true &&
+      !Object.hasOwn(staticAttrs, "as")
+    ) {
+      names.add("as");
+      continue;
+    }
+    names.add(key);
+  }
+  if (attrsInfo?.attrsAsTag) {
+    names.add("as");
+  }
+  for (const attr of attrsInfo?.dynamicAttrs ?? []) {
+    if (attr.attrName !== attr.jsxProp) {
+      names.add(attr.attrName);
+    }
+  }
+  return names;
 }
 
 export function injectRefPropIntoTypeLiteralString(
@@ -210,6 +255,13 @@ export function injectStylePropsIntoTypeLiteralString(
 // --- Non-exported helpers ---
 
 type AnyASTNode = { type?: string; [key: string]: unknown };
+
+function appendOmittedPropName(omitted: string[], propName: string): void {
+  const omittedProp = JSON.stringify(propName);
+  if (!omitted.includes(omittedProp)) {
+    omitted.push(omittedProp);
+  }
+}
 
 function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {
   for (const name of extractBooleanProps(node)) {

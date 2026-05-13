@@ -2,6 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { Icon } from "./lib/icon";
+import type { ImportedSectionProps } from "./lib/attrs-props";
 
 // Simulated imported component
 const Flex = (
@@ -10,6 +11,69 @@ const Flex = (
   const { column, center, focusIndex, ...rest } = props;
   return <div data-focus-index={focusIndex} {...rest} />;
 };
+
+const Text = (
+  props: React.ComponentProps<"section"> & {
+    focusIndex?: number;
+    otherAttribute?: boolean;
+    someAttribute?: boolean;
+  },
+) => {
+  const { focusIndex, otherAttribute, someAttribute, ...rest } = props;
+  return (
+    <section
+      data-focus-index={focusIndex}
+      data-other-attribute={otherAttribute ? "true" : "false"}
+      data-some-attribute={someAttribute ? "true" : "false"}
+      {...rest}
+    />
+  );
+};
+
+export interface SectionProps extends Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "someAttribute"
+> {
+  label?: string;
+}
+
+interface HighlightSectionProps extends Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "someAttribute"
+> {
+  active?: boolean;
+}
+
+type UtilitySectionProps = React.PropsWithChildren<{
+  tone?: "info" | "success";
+}> &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">;
+
+interface SharedSectionProps {
+  someAttribute?: boolean;
+  tone?: "primary" | "secondary";
+}
+
+type PickSectionBaseProps = {
+  label?: string;
+  someAttribute?: boolean;
+};
+
+type PickSectionProps = Pick<PickSectionBaseProps, "label" | "someAttribute">;
+
+interface InheritedSectionProps extends ImportedSectionProps {
+  localLabel?: string;
+}
+
+type UnionSectionProps =
+  | {
+      children?: React.ReactNode;
+      kind: "alpha";
+    }
+  | ({
+      children?: React.ReactNode;
+      kind: "beta";
+    } & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">);
 
 type InputProps = {
   padding?: string;
@@ -47,7 +111,7 @@ export function TextInput(
 // This pattern passes static attrs as an object
 interface BackgroundProps extends Omit<
   React.ComponentPropsWithRef<typeof Flex>,
-  "className" | "style"
+  "className" | "style" | "column" | "center"
 > {
   loaded: boolean;
 }
@@ -64,6 +128,155 @@ export function Background(props: BackgroundProps) {
       {children}
     </Flex>
   );
+}
+
+// Pattern 3b: attrs-injected component props should be omitted from the wrapper type
+export function Section(props: SectionProps) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.section)} />;
+}
+
+// Pattern 3c: imported explicit attrs props should be omitted even when unresolved
+export function ImportedSection(
+  props: Omit<ImportedSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.importedSection)} />;
+}
+
+// Pattern 3d: transient prop renames should still apply when explicit props overlap attrs
+export function HighlightSection(props: HighlightSectionProps) {
+  const { children, active, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      someAttribute={true}
+      {...stylex.props(styles.highlightSection, active ? styles.highlightSectionActive : undefined)}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3e: utility-wrapped explicit attrs props should be omitted from the local alias
+export function UtilitySection(props: UtilitySectionProps) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      someAttribute={true}
+      {...stylex.props(
+        styles.utilitySection,
+        tone === "success" && styles.utilitySectionToneSuccess,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3f: shared explicit aliases must not be mutated by attrs omission
+export function SharedAttrsSection(
+  props: Omit<SharedSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.sharedAttrsSection)} />;
+}
+
+type SharedPlainSectionProps = SharedSectionProps &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
+
+export function SharedPlainSection(props: SharedPlainSectionProps) {
+  const { children, tone, ...rest } = props;
+  return (
+    <Text
+      {...rest}
+      {...stylex.props(
+        styles.sharedPlainSection,
+        tone === "secondary" && styles.sharedPlainSectionToneSecondary,
+      )}
+    >
+      {children}
+    </Text>
+  );
+}
+
+type ImportedIntersectionSectionProps = Omit<
+  ImportedSectionProps & {
+    localLabel?: string;
+  },
+  "someAttribute"
+> &
+  Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">;
+
+// Pattern 3g: unresolved imported props inside intersections should still omit attrs props
+export function ImportedIntersectionSection(props: ImportedIntersectionSectionProps) {
+  return (
+    <Text {...props} someAttribute={true} {...stylex.props(styles.importedIntersectionSection)} />
+  );
+}
+
+type FocusIndexSectionProps = { focusIndex?: number } & Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "className" | "style" | "tabIndex"
+>;
+
+// Pattern 3h: dynamic attrs emitted after rest should omit the overwritten target prop
+export function FocusIndexSection(props: FocusIndexSectionProps) {
+  const { children, focusIndex, ...rest } = props;
+  return (
+    <Text
+      focusIndex={focusIndex}
+      {...rest}
+      tabIndex={focusIndex}
+      {...stylex.props(styles.focusIndexSection)}
+    >
+      {children}
+    </Text>
+  );
+}
+
+// Pattern 3i: utility aliases that cannot be mutated should keep wrapper-specific attrs Omit
+export function PickSection(
+  props: Omit<PickSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.pickSection)} />;
+}
+
+type MultiImportedSectionProps = Omit<
+  ImportedSectionProps & {
+    someAttribute?: boolean;
+  },
+  "otherAttribute" | "someAttribute"
+> &
+  Omit<
+    React.ComponentPropsWithRef<typeof Text>,
+    "className" | "style" | "otherAttribute" | "someAttribute"
+  >;
+
+// Pattern 3j: unresolved intersections should omit all attrs, including attrs hidden in imports
+export function MultiImportedSection(props: MultiImportedSectionProps) {
+  return (
+    <Text
+      {...props}
+      otherAttribute={true}
+      someAttribute={true}
+      {...stylex.props(styles.multiImportedSection)}
+    />
+  );
+}
+
+// Pattern 3k: local interfaces with imported heritage should keep wrapper-specific attrs Omit
+export function InheritedSection(
+  props: Omit<InheritedSectionProps, "someAttribute"> &
+    Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "someAttribute">,
+) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.inheritedSection)} />;
+}
+
+// Pattern 3l: union aliases should keep wrapper-specific attrs Omit when not mutated
+export function UnionSection(props: UnionSectionProps) {
+  return <Text {...props} someAttribute={true} {...stylex.props(styles.unionSection)} />;
 }
 
 // Pattern 4: styled(Component).attrs with function (from Scrollable.tsx)
@@ -252,7 +465,10 @@ function ButtonLike(props: ButtonLikeProps) {
 }
 
 function BaseToolbarButton(
-  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof ButtonLike>,
+    "className" | "style" | "size" | "variant"
+  >,
 ) {
   return (
     <ButtonLike
@@ -265,7 +481,10 @@ function BaseToolbarButton(
 }
 
 function ActiveToolbarButton(
-  props: Omit<React.ComponentPropsWithRef<typeof ButtonLike>, "className" | "style">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof ButtonLike>,
+    "className" | "style" | "size" | "variant"
+  >,
 ) {
   return (
     <ButtonLike
@@ -285,7 +504,9 @@ const CALLBACK_SCOPE_TEXT_COLOR = "#7c3aed";
 // Pattern 15: static attrs that reference module-scope values must be preserved
 const iconSize = 14;
 
-function StyledIcon(props: Omit<React.ComponentPropsWithRef<typeof Icon>, "className" | "style">) {
+function StyledIcon(
+  props: Omit<React.ComponentPropsWithRef<typeof Icon>, "className" | "style" | "size">,
+) {
   return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
 }
 
@@ -296,6 +517,22 @@ export const App = () => (
     <Input padding="2em" placeholder="Padded" />
     <TextInput placeholder="Text input" />
     <Background loaded={false}>Content</Background>
+    <Section label="section-label">Section content</Section>
+    <ImportedSection label="imported-section-label">Imported section content</ImportedSection>
+    <HighlightSection active>Highlighted section content</HighlightSection>
+    <UtilitySection tone="success">Utility section content</UtilitySection>
+    <SharedAttrsSection tone="primary">Shared attrs section content</SharedAttrsSection>
+    <SharedPlainSection someAttribute={false} tone="secondary">
+      Shared plain section content
+    </SharedPlainSection>
+    <ImportedIntersectionSection localLabel="local-label">
+      Imported intersection section content
+    </ImportedIntersectionSection>
+    <FocusIndexSection focusIndex={2}>Focus index section content</FocusIndexSection>
+    <PickSection label="pick-label">Pick section content</PickSection>
+    <MultiImportedSection label="multi-label">Multi imported section content</MultiImportedSection>
+    <InheritedSection localLabel="inherited-label">Inherited section content</InheritedSection>
+    <UnionSection kind="alpha">Union section content</UnionSection>
     <Scrollable>Scrollable content</Scrollable>
     <ScrollableWithType gutter="stable">Type alias scrollable</ScrollableWithType>
     <FocusableScroll focusIndex={5}>Focus content</FocusableScroll>
@@ -347,6 +584,60 @@ const styles = stylex.create({
   },
   backgroundLoaded: {
     opacity: 0,
+  },
+  section: {
+    padding: 16,
+    backgroundColor: "#f0f9ff",
+  },
+  importedSection: {
+    padding: 12,
+    backgroundColor: "#ecfdf5",
+  },
+  highlightSection: {
+    color: "#64748b",
+  },
+  highlightSectionActive: {
+    color: "#1d4ed8",
+  },
+  utilitySection: {
+    padding: 10,
+    backgroundColor: "#dbeafe",
+  },
+  utilitySectionToneSuccess: {
+    backgroundColor: "#dcfce7",
+  },
+  sharedAttrsSection: {
+    padding: 14,
+    backgroundColor: "#fef3c7",
+  },
+  sharedPlainSection: {
+    color: "#1e3a8a",
+  },
+  sharedPlainSectionToneSecondary: {
+    color: "#7c2d12",
+  },
+  importedIntersectionSection: {
+    padding: 6,
+    backgroundColor: "#fdf2f8",
+  },
+  focusIndexSection: {
+    color: "#334155",
+  },
+  pickSection: {
+    padding: 18,
+    backgroundColor: "#eef2ff",
+  },
+  multiImportedSection: {
+    padding: 20,
+    backgroundColor: "#f0fdf4",
+  },
+  inheritedSection: {
+    padding: 22,
+    backgroundColor: "#fff7ed",
+  },
+  unionSection: {
+    padding: 24,
+    backgroundColor: "#f8fafc",
   },
   scrollable: {
     overflowY: "auto",

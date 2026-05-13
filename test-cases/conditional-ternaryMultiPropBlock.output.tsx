@@ -41,7 +41,7 @@ function ErrorMessage(props: ErrorMessageProps) {
 type StyledTextProps = {
   addBottomBorder?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "gap" | "column">;
 
 function StyledText(props: StyledTextProps) {
   const { children, addBottomBorder, hasSubtitle, ...rest } = props;

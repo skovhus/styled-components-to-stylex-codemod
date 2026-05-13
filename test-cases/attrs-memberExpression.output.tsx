@@ -4,7 +4,7 @@ import { animated } from "./lib/react-spring";
 
 // styled(Component.sub).attrs() - MemberExpression with attrs
 function AnimatedBox(
-  props: Omit<React.ComponentPropsWithRef<typeof animated.div>, "className" | "style">,
+  props: Omit<React.ComponentPropsWithRef<typeof animated.div>, "className" | "style" | "role">,
 ) {
   return <animated.div {...props} role="region" {...stylex.props(styles.animatedBox)} />;
 }

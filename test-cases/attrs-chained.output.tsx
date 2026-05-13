@@ -14,8 +14,9 @@ function Text<C extends React.ElementType = "span">(
   );
 }
 
-type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & React.ComponentPropsWithRef<
-  typeof Text
+type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
+  React.ComponentPropsWithRef<typeof Text>,
+  "as"
 >;
 
 // B has .attrs({ as: "button" }) but is only used as a base for A.
@@ -28,7 +29,7 @@ function StyledButton(props: StyledButtonProps) {
 
 type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
   React.ComponentPropsWithRef<typeof StyledButton>,
-  "className" | "style"
+  "className" | "style" | "as"
 >;
 
 // A extends B - this MUST preserve B's as="button" semantics

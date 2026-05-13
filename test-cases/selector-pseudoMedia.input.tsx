@@ -41,6 +41,7 @@ const Placeholder = styled.div`
     transform: translateX(-100%);
     background-image: linear-gradient(90deg, transparent, #f8fafc, transparent);
     animation: ${shimmer} 3s infinite;
+    animation-play-state: paused;
 
     @media (prefers-reduced-motion: reduce) {
       animation: none;

@@ -22,7 +22,12 @@ import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
-import { TAG_TO_HTML_ELEMENT, VOID_TAGS } from "./type-helpers.js";
+import {
+  appendAttrsProvidedPropOmissions,
+  type AttrsProvidedPropOptions,
+  TAG_TO_HTML_ELEMENT,
+  VOID_TAGS,
+} from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
@@ -1522,6 +1527,7 @@ export class WrapperEmitter {
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
     forwardedAsPropTypeText?: string;
+    attrsProvidedPropOptions?: AttrsProvidedPropOptions;
   }): string {
     const {
       d,
@@ -1533,6 +1539,7 @@ export class WrapperEmitter {
       forceClassNameOptional,
       forceStyleOptional,
       forwardedAsPropTypeText = "React.ElementType",
+      attrsProvidedPropOptions,
     } = args;
     const lines: string[] = [];
     // When external styles are EXPLICITLY enabled via adapter (d.supportsExternalStyles) and
@@ -1571,6 +1578,7 @@ export class WrapperEmitter {
     if (!allowStyleProp || forceStyleOptional) {
       omitted.push('"style"');
     }
+    appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
     // When transient props are renamed ($prop → prop), omit the original $-prefixed
     // props from the base type and re-add them with their new names.
     // This is needed when the base component's type includes the $-prefixed prop
