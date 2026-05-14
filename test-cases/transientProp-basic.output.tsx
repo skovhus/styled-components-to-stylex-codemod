@@ -110,16 +110,7 @@ function Fader(props: FaderProps) {
   return (
     <div
       {...rest}
-      {...mergedSx(
-        [
-          styles.fader({
-            $duration,
-          }),
-          $open && styles.faderOpen,
-        ],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.fader($duration), $open && styles.faderOpen], className, style)}
     >
       {children}
     </div>
@@ -150,12 +141,7 @@ function Overlay() {
   const zIndexContainer = 1;
   const close = () => {};
   return (
-    <div
-      onClick={close}
-      sx={styles.overlayContainer({
-        zIndex: zIndexContainer,
-      })}
-    >
+    <div onClick={close} sx={styles.overlayContainer(zIndexContainer)}>
       hello
     </div>
   );
@@ -168,16 +154,7 @@ type SpreadOverlayProps = { zIndex: number } & React.ComponentProps<"div">;
 function SpreadOverlay(props: SpreadOverlayProps) {
   const { className, children, style, zIndex, ...rest } = props;
   return (
-    <div
-      {...rest}
-      {...mergedSx(
-        styles.spreadOverlay({
-          zIndex,
-        }),
-        className,
-        style,
-      )}
-    >
+    <div {...rest} {...mergedSx(styles.spreadOverlay(zIndex), className, style)}>
       {children}
     </div>
   );
@@ -224,30 +201,30 @@ const styles = stylex.create({
   animatedContainer: {
     maxWidth: "90vw",
   },
-  fader: (props: { $duration: number }) => ({
+  fader: (transition: number) => ({
     opacity: 0,
     pointerEvents: "none",
-    transition: `opacity ${props.$duration}ms`,
+    transition: `opacity ${transition}ms`,
   }),
   faderOpen: {
     opacity: 1,
     pointerEvents: "inherit",
   },
   // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
-  overlayContainer: (props: { zIndex: number }) => ({
+  overlayContainer: (zIndex: number) => ({
     position: "fixed",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex: props.zIndex,
+    zIndex,
   }),
-  spreadOverlay: (props: { zIndex: number }) => ({
+  spreadOverlay: (zIndex: number) => ({
     position: "fixed",
     top: 0,
     right: 0,
     bottom: 0,
     left: 0,
-    zIndex: props.zIndex,
+    zIndex,
   }),
 });

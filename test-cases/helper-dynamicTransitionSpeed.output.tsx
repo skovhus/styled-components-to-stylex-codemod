@@ -9,16 +9,7 @@ type AnimatedPathProps = { width: number } & Omit<React.ComponentProps<"path">, 
 function AnimatedPath(props: AnimatedPathProps) {
   const { children, style, width, ...rest } = props;
   return (
-    <path
-      {...rest}
-      {...mergedSx(
-        styles.animatedPath({
-          width,
-        }),
-        undefined,
-        style,
-      )}
-    >
+    <path {...rest} {...mergedSx(styles.animatedPath(width), undefined, style)}>
       {children}
     </path>
   );
@@ -51,11 +42,11 @@ export const App = () => {
 };
 
 const styles = stylex.create({
-  animatedPath: (props: { width: number }) => ({
+  animatedPath: (strokeWidth: number) => ({
     transitionProperty: "opacity",
     transitionDuration: transitionSpeed.slow,
     stroke: "#bf4f74",
     fill: "none",
-    strokeWidth: `${props.width}px`,
+    strokeWidth: `${strokeWidth}px`,
   }),
 });
