@@ -2591,12 +2591,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
         // Add dynamic style function (same as emitStyleFunction)
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
-        styleFnFromProps.push({ fnKey, jsxProp });
+        const outParamName = res.valueTransform
+          ? cssPropertyToIdentifier(out.prop, avoidNames)
+          : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
+        const scalarCallArg = scalarCallArgForParamName(
+          j,
+          jsxProp,
+          outParamName,
+          decl.transientPropRenames?.get(jsxProp),
+        );
+        styleFnFromProps.push({
+          fnKey,
+          jsxProp,
+          ...(scalarCallArg ? { callArg: scalarCallArg } : {}),
+        });
 
         if (!styleFnDecls.has(fnKey)) {
-          const outParamName = res.valueTransform
-            ? cssPropertyToIdentifier(out.prop, avoidNames)
-            : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
           const param = j.identifier(outParamName);
           if (jsxProp !== "__props") {
             annotateParamFromJsxProp(param, jsxProp);
@@ -2636,13 +2646,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const out = outs[i]!;
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           const valueTransform = (res as { valueTransform?: CallValueTransform }).valueTransform;
-          const callArg = buildResolvedValueTransformCallArg({
+          const resolvedCallArg = buildResolvedValueTransformCallArg({
             j,
             jsxProp,
             valueTransform,
             parseExpr,
             addResolverImports,
           });
+          const outParamName =
+            resolvedCallArg || valueTransform
+              ? cssPropertyToIdentifier(out.prop, avoidNames)
+              : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
+          const scalarCallArg = scalarCallArgForParamName(
+            j,
+            jsxProp,
+            outParamName,
+            decl.transientPropRenames?.get(jsxProp),
+          );
+          const callArg = resolvedCallArg ?? scalarCallArg;
           // Only mark as "always" (no null guard) when we can prove the prop
           // is required via an explicit type annotation.  Without propsType,
           // isJsxPropOptional returns false by default, but the prop may still
@@ -2660,10 +2681,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // IMPORTANT: don't reuse the same Identifier node for both the function param and
             // expression positions. If the param identifier has a TS annotation, reusing it
             // in expression positions causes printers to emit `value: any` inside templates.
-            const outParamName =
-              callArg || valueTransform
-                ? cssPropertyToIdentifier(out.prop, avoidNames)
-                : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
             const param = j.identifier(outParamName);
             const valueId = j.identifier(outParamName);
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
@@ -2671,7 +2688,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             if (jsxProp !== "__props") {
               annotateParamFromJsxProp(param, jsxProp);
             }
-            if (callArg && /\.(ts|tsx)$/.test(filePath)) {
+            if (resolvedCallArg && /\.(ts|tsx)$/.test(filePath)) {
               (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
                 j.tsStringKeyword(),
               );
@@ -4236,6 +4253,18 @@ function styleFnParamNameForJsxProp(
     isValidStyleFnParamName(jsxProp)
     ? jsxProp
     : cssPropertyToIdentifier(stylexProp, avoidNames);
+}
+
+function scalarCallArgForParamName(
+  j: JSCodeshift,
+  jsxProp: string,
+  paramName: string,
+  renamedJsxProp?: string,
+): ExpressionKind | undefined {
+  const effectiveJsxProp = renamedJsxProp ?? jsxProp;
+  return jsxProp !== "__props" && effectiveJsxProp !== paramName && isValidStyleFnParamName(jsxProp)
+    ? (j.identifier(jsxProp) as ExpressionKind)
+    : undefined;
 }
 
 function shouldUseScalarDynamicArgs(stylexProp: string, rawCssValue: string | undefined): boolean {

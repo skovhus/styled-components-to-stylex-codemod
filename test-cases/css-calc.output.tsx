@@ -6,6 +6,16 @@ function FlexItem(props: React.PropsWithChildren<{}>) {
   return <div sx={styles.flexItem}>{props.children}</div>;
 }
 
+type WithCssFunctionsProps = React.PropsWithChildren<{
+  dynamicHeight: string;
+}>;
+
+// Interpolated expressions inside CSS math functions
+function WithCssFunctions(props: WithCssFunctionsProps) {
+  const { children, dynamicHeight } = props;
+  return <div sx={styles.withCssFunctions(dynamicHeight)}>{children}</div>;
+}
+
 type NegativeOffsetProps = React.PropsWithChildren<{
   size?: number;
 }>;
@@ -34,7 +44,7 @@ export const App = () => (
     <aside sx={styles.sidebar}>Sidebar content</aside>
     <div sx={styles.complexCalc}>Complex calc</div>
     <div sx={styles.withVariables}>With variables</div>
-    <div sx={styles.withCssFunctions("300px")}>CSS functions</div>
+    <WithCssFunctions dynamicHeight="300px">CSS functions</WithCssFunctions>
     <NegativeOffset size={32}>Negative offset</NegativeOffset>
   </div>
 );
@@ -72,7 +82,6 @@ const styles = stylex.create({
     width: `calc(${calcVars.baseSize} * 10)`,
     padding: `calc(${calcVars.baseSize} / 2)`,
   },
-  // Interpolated expressions inside CSS math functions
   withCssFunctions: (height: string) => ({
     padding: 8,
     backgroundColor: "lightblue",

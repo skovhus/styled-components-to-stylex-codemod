@@ -1,17 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 
-export const App = () => (
-  <button
-    sx={styles.button({
-      glowColor: "rgba(0,128,255,0.3)",
-    })}
-  >
-    Hover me
-  </button>
-);
+export const App = () => <button sx={styles.button("rgba(0,128,255,0.3)")}>Hover me</button>;
 
 const styles = stylex.create({
-  button: (props: { glowColor: string }) => ({
+  button: (glowColor: string) => ({
     position: "relative",
     paddingBlock: 8,
     paddingInline: 16,
@@ -27,7 +19,7 @@ const styles = stylex.create({
       },
       backgroundColor: {
         default: null,
-        ":hover": props.glowColor,
+        ":hover": glowColor,
       },
     },
   }),
