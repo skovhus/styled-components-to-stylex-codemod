@@ -72,16 +72,16 @@ const styles = stylex.create({
   containerLight: {
     color: $colors.bgBase,
   },
-  containerWidth: (size: number) => ({
-    width: `${size}px`,
+  containerWidth: (width: number) => ({
+    width: `${width}px`,
   }),
-  containerHeight: (size: number) => ({
-    height: `${size}px`,
+  containerHeight: (height: number) => ({
+    height: `${height}px`,
   }),
   containerFontSize: (fontSize: string) => ({
     fontSize: fontSize,
   }),
-  containerLineHeight: (size: number) => ({
-    lineHeight: `${size}px`,
+  containerLineHeight: (lineHeight: number) => ({
+    lineHeight: `${lineHeight}px`,
   }),
 });

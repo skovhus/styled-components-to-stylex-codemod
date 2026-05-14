@@ -178,7 +178,6 @@ const styles = stylex.create({
   privateLabelBold: {
     fontWeight: 700,
   },
-  // Collision: $color cannot be renamed because `color` already exists as a prop
   colorChip: {
     paddingBlock: 4,
     paddingInline: 8,

@@ -2594,12 +2594,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const outParamName = res.valueTransform
           ? cssPropertyToIdentifier(out.prop, avoidNames)
           : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
-        const scalarCallArg = scalarCallArgForParamName(
-          j,
-          jsxProp,
-          outParamName,
-          decl.transientPropRenames?.get(jsxProp),
-        );
+        const scalarCallArg = res.valueTransform
+          ? undefined
+          : scalarCallArgForParamName(
+              j,
+              jsxProp,
+              outParamName,
+              decl.transientPropRenames?.get(jsxProp),
+            );
         styleFnFromProps.push({
           fnKey,
           jsxProp,
@@ -2657,12 +2659,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             resolvedCallArg || valueTransform
               ? cssPropertyToIdentifier(out.prop, avoidNames)
               : styleFnParamNameForJsxProp(jsxProp, out.prop, avoidNames);
-          const scalarCallArg = scalarCallArgForParamName(
-            j,
-            jsxProp,
-            outParamName,
-            decl.transientPropRenames?.get(jsxProp),
-          );
+          const scalarCallArg = valueTransform
+            ? undefined
+            : scalarCallArgForParamName(
+                j,
+                jsxProp,
+                outParamName,
+                decl.transientPropRenames?.get(jsxProp),
+              );
           const callArg = resolvedCallArg ?? scalarCallArg;
           // Only mark as "always" (no null guard) when we can prove the prop
           // is required via an explicit type annotation.  Without propsType,
