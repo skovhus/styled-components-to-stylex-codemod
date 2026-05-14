@@ -1873,6 +1873,9 @@ function mergeBaseIntoSingleStyleFn(args: {
     styleFnDecls.set(decl.styleKey, fnAst);
     entry.fnKey = decl.styleKey;
   }
+  if (entry.jsxProp !== "__props" && !entry.propsObjectKey) {
+    entry.forceScalarArgs = true;
+  }
 
   // The merged function now contains base properties that must come before
   // any variant overrides in the sx array.  Set sourceOrder to -1 so it
