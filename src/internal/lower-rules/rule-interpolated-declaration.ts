@@ -4230,7 +4230,10 @@ function styleFnParamNameForJsxProp(
   stylexProp: string,
   avoidNames: Set<string>,
 ): string {
-  return jsxProp !== "__props" && jsxProp !== "className" && isValidStyleFnParamName(jsxProp)
+  return jsxProp !== "__props" &&
+    !jsxProp.startsWith("$") &&
+    jsxProp !== "className" &&
+    isValidStyleFnParamName(jsxProp)
     ? jsxProp
     : cssPropertyToIdentifier(stylexProp, avoidNames);
 }
