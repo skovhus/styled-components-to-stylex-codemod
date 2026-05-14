@@ -5799,6 +5799,63 @@ export const App = () => <Box level="high">Hello</Box>;
     expect(code).not.toContain("computeBoxShadow");
   });
 
+  it("should preserve distinct resolved helper bindings for the same dynamic prop", () => {
+    const source = `
+import styled from "styled-components";
+import { shadow } from "./lib/helpers.ts";
+
+const Box = styled.div<{ tone?: string }>\`
+  box-shadow: \${(props) => \`\${shadow(props.tone ?? "light")} inset \${shadow(props.tone ?? "dark")}\`};
+\`;
+
+export const App = () => <Box tone="muted">Hello</Box>;
+`;
+
+    const adapterWithShadowResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: { calleeImportedName: string }) {
+        if (ctx.calleeImportedName === "shadow") {
+          return {
+            usage: "create" as const,
+            expr: "getShadow",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./shadow-utils" },
+                names: [{ imported: "getShadow" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-distinctResolvedBindings.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithShadowResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('getShadow(tone ?? "light")');
+    expect(code).toContain('getShadow(tone ?? "dark")');
+    expect(code).toContain("boxShadow: `${shadowTone} inset ${shadowTone2}`");
+  });
+
   it("should not bail when adapter returns undefined for optional prop-arg helper resolution", () => {
     const source = `
 import styled from "styled-components";

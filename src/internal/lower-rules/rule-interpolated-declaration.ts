@@ -4409,6 +4409,37 @@ function resolveHelperCallsInDynamicValue(
 
   let failed = false;
   const resolutions: DynamicHelperCallArgument[] = [];
+  const registeredBindings = new Map<string, Array<{ callArgKey: string; paramName: string }>>();
+  const registerBinding = (
+    binding: DynamicHelperCallArgument,
+  ): { binding: DynamicHelperCallArgument; isNew: boolean } => {
+    const callArgKey = astShapeKey(binding.callArg);
+    const existing = registeredBindings.get(binding.paramName) ?? [];
+    const sameArg = existing.find((entry) => entry.callArgKey === callArgKey);
+    if (sameArg) {
+      return {
+        binding: { ...binding, paramName: sameArg.paramName },
+        isNew: false,
+      };
+    }
+
+    let paramName = binding.paramName;
+    if (existing.length > 0) {
+      let suffix = existing.length + 1;
+      const used = new Set(existing.map((entry) => entry.paramName));
+      do {
+        paramName = `${binding.paramName}${suffix}`;
+        suffix++;
+      } while (used.has(paramName));
+    }
+
+    existing.push({ callArgKey, paramName });
+    registeredBindings.set(binding.paramName, existing);
+    return {
+      binding: { ...binding, paramName },
+      isNew: true,
+    };
+  };
   const visit = (node: unknown): unknown => {
     if (!node || typeof node !== "object" || failed) {
       return node;
@@ -4429,8 +4460,11 @@ function resolveHelperCallsInDynamicValue(
         return node;
       }
       if (resolved) {
-        resolutions.push(resolved.binding);
-        return resolved.value;
+        const registered = registerBinding(resolved.binding);
+        if (registered.isNew) {
+          resolutions.push(registered.binding);
+        }
+        return ctx.j.identifier(registered.binding.paramName);
       }
       const directResolved = tryResolveDirectHelperCall(record as CallExpressionLike, ctx);
       if (directResolved === null) {
@@ -4438,8 +4472,11 @@ function resolveHelperCallsInDynamicValue(
         return node;
       }
       if (directResolved) {
-        resolutions.push(directResolved.binding);
-        return directResolved.value;
+        const registered = registerBinding(directResolved.binding);
+        if (registered.isNew) {
+          resolutions.push(registered.binding);
+        }
+        return ctx.j.identifier(registered.binding.paramName);
       }
     }
 
@@ -4460,6 +4497,28 @@ function resolveHelperCallsInDynamicValue(
     return null;
   }
   return { expr, args: resolutions };
+}
+
+function astShapeKey(node: unknown): string {
+  const seen = new WeakSet<object>();
+  return JSON.stringify(node, (key, value) => {
+    if (
+      key === "loc" ||
+      key === "comments" ||
+      key === "tokens" ||
+      key === "start" ||
+      key === "end"
+    ) {
+      return undefined;
+    }
+    if (value && typeof value === "object") {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  });
 }
 
 function isUnsupportedCurriedHelperCall(
