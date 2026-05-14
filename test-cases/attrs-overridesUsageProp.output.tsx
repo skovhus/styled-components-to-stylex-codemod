@@ -61,7 +61,7 @@ const styles = stylex.create({
     borderColor: "#222",
     borderRadius: 4,
   },
-  classNameBoxColor: (className: string) => ({
-    color: className,
+  classNameBoxColor: (color: string) => ({
+    color,
   }),
 });
