@@ -1,0 +1,20 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{c as t,d as n,p as r}from"./index-s5GNFfTS.js";import{g as i}from"./helpers-DAVcc8a9.js";r();var a=e(),o=t.div`
+  padding: 8px;
+  background-color: #f0f0f0;
+
+  &:${i} {
+    background-color: #e0e0e0;
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
+`,s=t.div`
+  padding: 12px;
+
+  ${e=>e.$interactive?n`
+          cursor: pointer;
+
+          &:${i} {
+            background-color: #e0f2fe;
+          }
+        `:void 0}
+`;function c(){return(0,a.jsxs)(`div`,{style:{display:`flex`,gap:16,padding:16},children:[(0,a.jsx)(o,{children:`Mixed: base + condition-only`}),(0,a.jsx)(s,{$interactive:!0,children:`Prop-gated condition-only`})]})}export{c as App};
