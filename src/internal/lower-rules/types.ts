@@ -76,6 +76,21 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
 } {
   const { root, j, decl } = args;
 
+  const parseTypeText = (typeText: string | undefined): unknown => {
+    if (!typeText) {
+      return null;
+    }
+    try {
+      return j(`type __Type = ${typeText};`).get().node.program.body[0].typeAnnotation;
+    } catch {
+      return null;
+    }
+  };
+
+  const findCompilerPropTsType = (jsxProp: string): unknown => {
+    return parseTypeText(decl.typeScriptPropTypes?.get(jsxProp));
+  };
+
   // Helper to find a type declaration by name (interface or type alias)
   const findTypeDeclaration = (typeName: string): { body?: any; typeAnnotation?: any } | null => {
     // Try interface first
@@ -186,7 +201,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
   const findJsxPropTsType = (jsxProp: string): unknown => {
     const pt: any = (decl as any).propsType;
     if (!pt) {
-      return null;
+      return findCompilerPropTsType(jsxProp);
     }
 
     // Helper to find prop type in a type literal (interface body)
@@ -233,7 +248,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       }
     }
 
-    return null;
+    return findCompilerPropTsType(jsxProp);
   };
 
   // Variant extraction wants literal union values, so we *optionally* unwrap local type aliases here.
@@ -262,6 +277,11 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
 
   // Check if a JSX prop is optional (has ? in its type annotation)
   const isJsxPropOptional = (jsxProp: string): boolean => {
+    const compilerOptional = decl.typeScriptOptionalProps?.has(jsxProp);
+    if (compilerOptional !== undefined) {
+      return compilerOptional;
+    }
+
     const pt: any = (decl as any).propsType;
     if (!pt) {
       return false;

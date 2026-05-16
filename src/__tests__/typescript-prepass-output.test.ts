@@ -119,4 +119,46 @@ describe("TypeScript prepass output refinement", () => {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
   });
+
+  it("uses imported prop metadata for optional dynamic style functions", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-style-fn-output-"));
+    const typesPath = path.join(fixtureDir, "types.ts");
+    const boxPath = path.join(fixtureDir, "Box.tsx");
+    writeFileSync(typesPath, "export type SizeProps = { size?: number };");
+    const source = [
+      'import styled from "styled-components";',
+      'import type { SizeProps } from "./types";',
+      "",
+      "export const Box = styled.div<SizeProps>`",
+      "  width: ${(props) => props.size}px;",
+      "`;",
+      "",
+      "export const App = () => <Box>Box</Box>;",
+    ].join("\n");
+    writeFileSync(boxPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [typesPath, boxPath],
+        cwd: fixtureDir,
+      });
+      const before = transformWithWarnings({ source, path: boxPath }, api, {
+        adapter: fixtureAdapter,
+      });
+      const after = transformWithWarnings({ source, path: boxPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(before.code).toContain("sx={styles.boxWidth(size)}");
+      expect(before.code).toContain("boxWidth: (size: string)");
+      expect(after.code).toContain("sx={size != null && styles.boxWidth(size)}");
+      expect(after.code).toContain("boxWidth: (size: number)");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -46,7 +46,7 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
-import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
+import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
@@ -1413,17 +1413,7 @@ function applyTypeScriptMetadata(
   exportName: string | undefined,
 ): void {
   const names = exportName ? [decl.localName, exportName] : [decl.localName];
-  const typedComponent = findTypeScriptComponentMetadata(
-    ctx.options.crossFileInfo?.typeScriptMetadata,
-    ctx.file.path,
-    names,
-  );
-  if (!typedComponent) {
-    return;
-  }
-  decl.typeScriptPropNames = new Set(typedComponent.props.map((prop) => prop.name));
-  decl.typeScriptHasIndexSignature = typedComponent.hasIndexSignature;
-  decl.typeScriptSupportsSxProp = typedComponent.supportsSxProp;
+  applyTypeScriptMetadataToDecl(ctx, decl, names);
 }
 
 function typedComponentHasProp(decl: StyledDecl, propName: string): boolean {

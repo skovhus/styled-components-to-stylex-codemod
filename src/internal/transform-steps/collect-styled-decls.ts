@@ -9,6 +9,7 @@ import { findUncollectedStyledTemplateLoc } from "../utilities/uncollected-style
 import { formatOutput } from "../utilities/format-output.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
 
 /**
  * Collects styled declarations and merges extracted css helper declarations.
@@ -55,6 +56,9 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   });
 
   const styledDecls = collected.styledDecls;
+  for (const decl of styledDecls) {
+    applyTypeScriptMetadataToDecl(ctx, decl, [decl.localName]);
+  }
   let hasUniversalSelectors = collected.hasUniversalSelectors;
   let universalSelectorLoc = collected.universalSelectorLoc;
 

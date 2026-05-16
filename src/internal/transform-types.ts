@@ -568,6 +568,10 @@ export type StyledDecl = {
   propsType?: ASTNode;
   /** Prop names resolved by the opt-in TypeScript prepass for this component's public props. */
   typeScriptPropNames?: Set<string>;
+  /** Prop type text resolved by the TypeScript compiler prepass, keyed by public prop name. */
+  typeScriptPropTypes?: Map<string, string>;
+  /** Optional prop names resolved by the TypeScript compiler prepass. */
+  typeScriptOptionalProps?: Set<string>;
   /** True when the opt-in TypeScript prepass found an index signature on the public props type. */
   typeScriptHasIndexSignature?: boolean;
   /** True when the opt-in TypeScript prepass found an `sx` prop on the public props type. */
