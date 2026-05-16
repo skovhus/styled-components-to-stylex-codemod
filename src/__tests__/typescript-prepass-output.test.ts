@@ -64,4 +64,59 @@ describe("TypeScript prepass output refinement", () => {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
   });
+
+  it("uses imported component prop metadata when typing component wrappers", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-imported-output-"));
+    const basePath = path.join(fixtureDir, "Base.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    writeFileSync(
+      basePath,
+      [
+        "export type BaseProps = { className: string; label: string };",
+        "export function Base(props: BaseProps) {",
+        "  return <button className={props.className}>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const adapter = {
+        ...fixtureAdapter,
+        externalInterface: () => ({ styles: false, as: false, ref: false }),
+      };
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [basePath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      const before = transformWithWarnings({ source, path: wrapperPath }, api, { adapter });
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./Base" ? basePath : path.resolve(path.dirname(fromFile), specifier),
+      });
+
+      expect(before.code).not.toContain("className?: string");
+      expect(after.code).toContain(
+        'Omit<React.ComponentPropsWithRef<typeof Base>, "className" | "style">',
+      );
+      expect(after.code).toContain("className?: string");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
 });

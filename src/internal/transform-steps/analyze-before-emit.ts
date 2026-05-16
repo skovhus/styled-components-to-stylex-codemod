@@ -867,6 +867,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Determine supportsExternalStyles and supportsAsProp for each decl
   // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
+    applyTypeScriptMetadata(ctx, decl, exportedComponents.get(decl.localName)?.exportName);
+
     // 1. If extended by another styled component in this file -> enable external styles
     //    Leave supportsAsProp unset (undefined) so the emitter can auto-derive `as`
     //    support for intrinsic-based components.
@@ -895,16 +897,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
-    const typedComponent = findTypeScriptComponentMetadata(
-      ctx.options.crossFileInfo?.typeScriptMetadata,
-      file.path,
-      [decl.localName, exportInfo.exportName],
-    );
-    if (typedComponent) {
-      decl.typeScriptPropNames = new Set(typedComponent.props.map((prop) => prop.name));
-      decl.typeScriptHasIndexSignature = typedComponent.hasIndexSignature;
-      decl.typeScriptSupportsSxProp = typedComponent.supportsSxProp;
-    }
     decl.supportsExternalStyles = extResult.styles;
     decl.supportsAsProp = extResult.as || typedComponentHasProp(decl, "as");
     decl.supportsRefProp = extResult.ref || typedComponentHasProp(decl, "ref");
@@ -1414,6 +1406,25 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+function applyTypeScriptMetadata(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  exportName: string | undefined,
+): void {
+  const names = exportName ? [decl.localName, exportName] : [decl.localName];
+  const typedComponent = findTypeScriptComponentMetadata(
+    ctx.options.crossFileInfo?.typeScriptMetadata,
+    ctx.file.path,
+    names,
+  );
+  if (!typedComponent) {
+    return;
+  }
+  decl.typeScriptPropNames = new Set(typedComponent.props.map((prop) => prop.name));
+  decl.typeScriptHasIndexSignature = typedComponent.hasIndexSignature;
+  decl.typeScriptSupportsSxProp = typedComponent.supportsSxProp;
+}
 
 function typedComponentHasProp(decl: StyledDecl, propName: string): boolean {
   return decl.typeScriptPropNames?.has(propName) === true;

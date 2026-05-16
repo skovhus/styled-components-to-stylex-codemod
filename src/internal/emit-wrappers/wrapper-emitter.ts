@@ -20,6 +20,12 @@ import type {
 } from "../../adapter.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
+import type {
+  TypeScriptComponentMetadata,
+  TypeScriptPrepassMetadata,
+  TypeScriptPropMetadata,
+} from "../prepass/typescript-analysis.js";
+import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import {
@@ -71,6 +77,7 @@ type WrapperEmitterArgs = {
    * hooks about wrapped imported components. */
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
   sourceOverrides?: ReadonlyMap<string, string>;
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
   /** Optional adapter hook describing the public interface of an imported component
    * being wrapped via `styled(Component)`. */
   wrappedComponentInterface?: (ctx: {
@@ -102,6 +109,7 @@ export class WrapperEmitter {
   readonly useSxProp: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
   readonly sourceOverrides?: ReadonlyMap<string, string>;
+  readonly typeScriptMetadata?: TypeScriptPrepassMetadata;
   readonly wrappedComponentInterface?: (ctx: {
     localName: string;
     importSource: string;
@@ -141,6 +149,7 @@ export class WrapperEmitter {
     this.useSxProp = args.useSxProp;
     this.importMap = args.importMap ?? new Map();
     this.sourceOverrides = args.sourceOverrides;
+    this.typeScriptMetadata = args.typeScriptMetadata;
     this.wrappedComponentInterface = args.wrappedComponentInterface;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
@@ -398,11 +407,47 @@ export class WrapperEmitter {
     return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
   }
 
+  typedComponentHasProp(componentLocalName: string, propName: string): boolean {
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (!metadata) {
+      return false;
+    }
+    return metadata.hasIndexSignature || metadata.props.some((prop) => prop.name === propName);
+  }
+
+  typedComponentProp(componentLocalName: string, propName: string): TypeScriptPropMetadata | null {
+    return (
+      this.typeScriptComponentMetadataFor(componentLocalName)?.props.find(
+        (prop) => prop.name === propName,
+      ) ?? null
+    );
+  }
+
   private spreadMayContainProp(d: StyledDecl, propName: string): boolean {
     if (!d.typeScriptPropNames) {
       return true;
     }
     return d.typeScriptHasIndexSignature === true || d.typeScriptPropNames.has(propName);
+  }
+
+  private typeScriptComponentMetadataFor(
+    componentLocalName: string,
+  ): TypeScriptComponentMetadata | undefined {
+    const importInfo = this.importMap.get(componentLocalName);
+    if (importInfo?.source.kind === "absolutePath") {
+      const names =
+        importInfo.importedName === "default"
+          ? [componentLocalName, importInfo.importedName]
+          : [importInfo.importedName];
+      return findTypeScriptComponentMetadata(
+        this.typeScriptMetadata,
+        importInfo.source.value,
+        names,
+      );
+    }
+    return findTypeScriptComponentMetadata(this.typeScriptMetadata, this.filePath, [
+      componentLocalName,
+    ]);
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {

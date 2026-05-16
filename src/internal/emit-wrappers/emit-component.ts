@@ -129,11 +129,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const { componentName, propName, lookThroughPropsWithChildren } = args;
     const propsType = args.propsType ?? findComponentPropsType(componentName);
     if (!propsType) {
-      // Component is not defined locally or has no typed props - assume it doesn't have the prop
-      return false;
+      return emitter.typedComponentHasProp(componentName, propName);
     }
     const explicitProps = emitter.getExplicitPropNames(propsType, { lookThroughPropsWithChildren });
-    return explicitProps.has(propName);
+    return explicitProps.has(propName) || emitter.typedComponentHasProp(componentName, propName);
   };
 
   const propsTypeExposesForwardedSx = (
@@ -327,12 +326,14 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // sites pass className, the wrapper should accept it as optional.
     const wrappedClassNameRequired =
       wrappedHasClassName &&
-      baseComponentPropsType &&
-      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className");
+      (baseComponentPropsType
+        ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className")
+        : emitter.typedComponentProp(wrappedComponent, "className")?.optional === false);
     const wrappedStyleRequired =
       wrappedHasStyle &&
-      baseComponentPropsType &&
-      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style");
+      (baseComponentPropsType
+        ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style")
+        : emitter.typedComponentProp(wrappedComponent, "style")?.optional === false);
     const forceClassNameOptional = !!wrappedClassNameRequired;
     const forceStyleOptional = !!wrappedStyleRequired;
     const forwardedAsPropTypeText = renderedAsProp?.typeText ?? "React.ElementType";
