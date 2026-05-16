@@ -38,7 +38,11 @@ export function ensureShouldForwardPropDrop(decl: StyledDecl, propName: string):
  * Handles TSNumberKeyword, TSStringKeyword, TSTypeReference, TSUnionType, TSLiteralType.
  */
 export function resolveTypeNodeFromTsType(
-  j: { tsNumberKeyword: () => unknown; tsStringKeyword: () => unknown },
+  j: {
+    tsBooleanKeyword: () => unknown;
+    tsNumberKeyword: () => unknown;
+    tsStringKeyword: () => unknown;
+  },
   tsType: unknown,
 ): unknown {
   if (!tsType || typeof tsType !== "object") {
@@ -50,6 +54,9 @@ export function resolveTypeNodeFromTsType(
   }
   if (typeType === "TSStringKeyword") {
     return j.tsStringKeyword();
+  }
+  if (typeType === "TSBooleanKeyword") {
+    return j.tsBooleanKeyword();
   }
   if (
     typeType === "TSTypeReference" ||

@@ -664,10 +664,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styledDecls: state.styledDecls,
   });
 
-  // Convert single-positional-param style functions to use a named `props`
-  // object parameter, but only when the function key IS the base style key
-  // (i.e., merged base). Separate derived keys like `boxBoxShadow` already
-  // encode the parameter name, so positional args are clearer there.
+  // Keep legacy object-param conversion for merged-base functions unless the
+  // lowering step already supplied explicit scalar call args.
   convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
   alignComputedCallArgStyleFnParams(styleFnDecls, styleFnFromProps);
 
@@ -1785,6 +1783,13 @@ function mergeBaseIntoSingleStyleFn(args: {
     }
   }
 
+  // Base properties can only be folded into a dynamic function when that function
+  // is the sole dynamic entry. Otherwise the merged base may move after another
+  // dynamic override in `stylex.props()` and change CSS source-order semantics.
+  if (styleFnFromProps.length !== 1) {
+    return;
+  }
+
   // Find unconditional styleFn entries with "always" condition.
   // Entries with "truthy" condition are guarded (e.g. `prop ? styles.fn(prop) : undefined`),
   // so the base static properties must remain separate as defaults when the guard is false.
@@ -1868,6 +1873,9 @@ function mergeBaseIntoSingleStyleFn(args: {
     styleFnDecls.set(decl.styleKey, fnAst);
     entry.fnKey = decl.styleKey;
   }
+  if (entry.jsxProp !== "__props" && !entry.propsObjectKey) {
+    entry.forceScalarArgs = true;
+  }
 
   // The merged function now contains base properties that must come before
   // any variant overrides in the sx array.  Set sourceOrder to -1 so it
@@ -1898,20 +1906,17 @@ function convertStyleFnsToPropsPattern(
   styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
   baseStyleKey: string,
 ): void {
-  // Build a set of fnKeys that have matching styleFnFromProps entries.
-  // Only convert functions whose call sites are managed via styleFnFromProps;
-  // functions with inline call sites (e.g., in extraStylexPropsArgs) cannot be
-  // updated and must keep their positional parameter.
   const managedFnKeys = new Set(styleFnFromProps.map((p) => p.fnKey));
 
   for (const [fnKey, fnAst] of styleFnDecls.entries()) {
-    // Only convert merged-base functions (fnKey === baseStyleKey). Separate
-    // derived keys like `boxBoxShadow` already encode the parameter name,
-    // so positional args are clearer: `styles.boxBoxShadow(shadow)`.
     if (fnKey !== baseStyleKey) {
       continue;
     }
     if (!managedFnKeys.has(fnKey)) {
+      continue;
+    }
+    const managedEntries = styleFnFromProps.filter((entry) => entry.fnKey === fnKey);
+    if (managedEntries.some((entry) => entry.forceScalarArgs)) {
       continue;
     }
     if (!fnAst || typeof fnAst !== "object") {
@@ -1929,18 +1934,12 @@ function convertStyleFnsToPropsPattern(
 
     const paramName = param.name;
     const paramTypeAnnotation = param.typeAnnotation;
-    // Extract the function body
     const body = getFunctionBodyExpr(fn);
     if (!body || (body as { type?: string }).type !== "ObjectExpression") {
       continue;
     }
     const bodyObj = body as { properties?: ASTProperty[] };
 
-    // Skip conversion when the parameter name is itself a CSS property key
-    // in the function body (e.g. `(backgroundColor) => ({ ..., backgroundColor })`).
-    // The positional form keeps a bare Identifier that the StyleX ESLint plugin
-    // recognises as an intentionally dynamic value; converting to `props.X`
-    // (a MemberExpression) would trigger a false-positive validation error.
     if (
       Array.isArray(bodyObj.properties) &&
       bodyObj.properties.some((p) => (p.key?.name ?? p.key?.value) === paramName)
@@ -1948,13 +1947,10 @@ function convertStyleFnsToPropsPattern(
       continue;
     }
 
-    // Replace all references to paramName with props.paramName in the body
     replaceIdentifierInAst(j, body, paramName);
 
-    // Build the new `props` parameter with type `{ paramName: type }`
     const propsParam = j.identifier("props");
     if (paramTypeAnnotation) {
-      // Extract the inner type from the old param's annotation
       const innerType = (paramTypeAnnotation as { typeAnnotation?: unknown }).typeAnnotation;
       if (innerType) {
         const propSignature = j.tsPropertySignature(
@@ -1969,9 +1965,8 @@ function convertStyleFnsToPropsPattern(
 
     fn.params[0] = propsParam;
 
-    // Set propsObjectKey on the matching styleFnFromProps entry
-    for (const entry of styleFnFromProps) {
-      if (entry.fnKey === fnKey && !entry.propsObjectKey) {
+    for (const entry of managedEntries) {
+      if (!entry.propsObjectKey) {
         entry.propsObjectKey = paramName;
       }
     }

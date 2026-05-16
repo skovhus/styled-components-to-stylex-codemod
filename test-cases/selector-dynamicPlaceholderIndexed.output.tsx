@@ -11,14 +11,7 @@ type InputProps = { placeholderColor: Color } & Omit<
 
 function Input(props: InputProps) {
   const { placeholderColor, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      sx={styles.input({
-        placeholderColor,
-      })}
-    />
-  );
+  return <input {...rest} sx={styles.input(placeholderColor)} />;
 }
 
 type BadgeProps = React.PropsWithChildren<{
@@ -28,15 +21,7 @@ type BadgeProps = React.PropsWithChildren<{
 // Indexed theme lookup in ::after pseudo-element
 function Badge(props: BadgeProps) {
   const { children, indicatorColor } = props;
-  return (
-    <span
-      sx={styles.badge({
-        indicatorColor,
-      })}
-    >
-      {children}
-    </span>
-  );
+  return <span sx={styles.badge(indicatorColor)}>{children}</span>;
 }
 
 export const App = () => (
@@ -49,16 +34,16 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  input: (props: { placeholderColor: Color }) => ({
+  input: (placeholderColor: Color) => ({
     padding: 12,
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
     "::placeholder": {
-      color: $colors[props.placeholderColor],
+      color: $colors[placeholderColor],
     },
   }),
-  badge: (props: { indicatorColor: Color }) => ({
+  badge: (indicatorColor: Color) => ({
     position: "relative",
     paddingBlock: 4,
     paddingInline: 8,
@@ -67,7 +52,7 @@ const styles = stylex.create({
       content: '""',
       display: "block",
       height: 3,
-      backgroundColor: $colors[props.indicatorColor],
+      backgroundColor: $colors[indicatorColor],
     },
   }),
 });

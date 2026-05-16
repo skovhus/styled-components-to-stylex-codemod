@@ -20,14 +20,7 @@ function Container(props: ContainerProps & React.ComponentProps<"div">) {
     <div
       {...rest}
       {...mergedSx(
-        [
-          styles.container,
-          $open
-            ? styles.containerOpen({
-                $delay,
-              })
-            : undefined,
-        ],
+        [styles.container, $open ? styles.containerOpen($delay) : undefined],
         className,
         style,
       )}
@@ -96,9 +89,9 @@ const styles = stylex.create({
     paddingInline: 20,
     borderRadius: 8,
   },
-  containerOpen: (props) => ({
+  containerOpen: ($delay: number | undefined) => ({
     opacity: 1,
-    transitionDelay: `${props.$delay}ms`,
+    transitionDelay: `${$delay}ms`,
   }),
   dynamicTransitionPanel: {
     opacity: 0,

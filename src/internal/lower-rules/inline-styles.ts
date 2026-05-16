@@ -329,6 +329,9 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
   if (param?.type === "Identifier") {
     const paramName = param.name;
     return mapAst(cloneAstNode(bodyExpr), (node, recurse) => {
+      if (isFunctionLikeNode(node) && functionBindsAnyName(node, new Set([paramName]))) {
+        return node;
+      }
       if (node.type === "Identifier" && node.name === paramName) {
         return j.identifier("props");
       }
@@ -344,7 +347,11 @@ export function inlineArrowFunctionBody(j: JSCodeshift, expr: any): ExpressionKi
 
   // Replace destructured identifiers with props.propName
   // If there's a default value, wrap with nullish coalescing: props.propName ?? defaultValue
+  const bindingNames = new Set(bindings.bindings.keys());
   return mapAst(cloneAstNode(bodyExpr), (node, recurse) => {
+    if (isFunctionLikeNode(node) && functionBindsAnyName(node, bindingNames)) {
+      return node;
+    }
     if (node.type === "Identifier" && bindings.bindings.has(node.name as string)) {
       const propName = bindings.bindings.get(node.name as string)!;
       const memberExpr = j.memberExpression(j.identifier("props"), j.identifier(propName));
@@ -471,6 +478,53 @@ function makePropsWithThemeObject(j: JSCodeshift) {
   const themeProperty = j.property("init", j.identifier("theme"), j.identifier("theme"));
   themeProperty.shorthand = true;
   return j.objectExpression([j.spreadElement(j.identifier("props")), themeProperty]);
+}
+
+function isFunctionLikeNode(node: Record<string, unknown>): boolean {
+  return (
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "FunctionExpression" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod"
+  );
+}
+
+function functionBindsAnyName(node: Record<string, unknown>, names: ReadonlySet<string>): boolean {
+  const params = node.params;
+  return Array.isArray(params) && params.some((param) => patternBindsAnyName(param, names));
+}
+
+function patternBindsAnyName(node: unknown, names: ReadonlySet<string>): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const record = node as Record<string, unknown>;
+  if (record.type === "Identifier") {
+    return typeof record.name === "string" && names.has(record.name);
+  }
+  if (record.type === "RestElement") {
+    return patternBindsAnyName(record.argument, names);
+  }
+  if (record.type === "AssignmentPattern") {
+    return patternBindsAnyName(record.left, names);
+  }
+  if (record.type === "ObjectPattern") {
+    return (
+      Array.isArray(record.properties) &&
+      record.properties.some((prop) => patternBindsAnyName(prop, names))
+    );
+  }
+  if (record.type === "ObjectProperty" || record.type === "Property") {
+    return patternBindsAnyName(record.value, names);
+  }
+  if (record.type === "ArrayPattern") {
+    return (
+      Array.isArray(record.elements) &&
+      record.elements.some((element) => patternBindsAnyName(element, names))
+    );
+  }
+  return false;
 }
 
 function collectCurriedCallKeys(node: unknown): Set<string> {

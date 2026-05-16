@@ -12,15 +12,7 @@ type BadgeProps = React.PropsWithChildren<{
  */
 function Badge(props: BadgeProps) {
   const { children, badgeColor } = props;
-  return (
-    <span
-      sx={styles.badge({
-        badgeColor,
-      })}
-    >
-      {children}
-    </span>
-  );
+  return <span sx={styles.badge(badgeColor)}>{children}</span>;
 }
 
 type TooltipProps = React.PropsWithChildren<{
@@ -65,14 +57,7 @@ type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Omit<
 
 function DynamicPlaceholder(props: DynamicPlaceholderProps) {
   const { placeholderColor, ...rest } = props;
-  return (
-    <input
-      {...rest}
-      sx={styles.dynamicPlaceholder({
-        placeholderColor,
-      })}
-    />
-  );
+  return <input {...rest} sx={styles.dynamicPlaceholder(placeholderColor)} />;
 }
 
 export const App = () => (
@@ -91,7 +76,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  badge: (props: { badgeColor: string }) => ({
+  badge: (badgeColor: string) => ({
     position: "relative",
     paddingBlock: 8,
     paddingInline: 16,
@@ -104,7 +89,7 @@ const styles = stylex.create({
       borderRadius: "50%",
       top: 0,
       right: 0,
-      backgroundColor: props.badgeColor,
+      backgroundColor: badgeColor,
     },
   }),
   tooltip: (props: { backgroundColor: string }) => ({
@@ -144,13 +129,13 @@ const styles = stylex.create({
       color: $colors.labelMuted,
     },
   },
-  dynamicPlaceholder: (props: { placeholderColor: PlaceholderColor }) => ({
+  dynamicPlaceholder: (placeholderColor: PlaceholderColor) => ({
     padding: 12,
     borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#ccc",
     "::placeholder": {
-      color: $colors[props.placeholderColor],
+      color: $colors[placeholderColor],
     },
   }),
 });

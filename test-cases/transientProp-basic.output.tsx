@@ -137,13 +137,28 @@ function FaderConsumerReversed(props: { children: React.ReactNode; style?: React
   );
 }
 
+type OverlayContainerProps = { zIndex: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style"
+>;
+
+// Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
+function OverlayContainer(props: OverlayContainerProps) {
+  const { children, zIndex, ...rest } = props;
+  return (
+    <div {...rest} sx={styles.overlayContainer(zIndex)}>
+      {children}
+    </div>
+  );
+}
+
 function Overlay() {
   const zIndexContainer = 1;
   const close = () => {};
   return (
-    <div onClick={close} sx={styles.overlayContainer(zIndexContainer)}>
+    <OverlayContainer zIndex={zIndexContainer} onClick={close}>
       hello
-    </div>
+    </OverlayContainer>
   );
 }
 
@@ -210,7 +225,6 @@ const styles = stylex.create({
     opacity: 1,
     pointerEvents: "inherit",
   },
-  // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
   overlayContainer: (zIndex: number) => ({
     position: "fixed",
     top: 0,

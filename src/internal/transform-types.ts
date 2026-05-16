@@ -531,6 +531,8 @@ export type StyledDecl = {
      * site must wrap the argument in `{ [propsObjectKey]: callArg }`.
      */
     propsObjectKey?: string;
+    /** Preserve scalar dynamic style args during finalization. */
+    forceScalarArgs?: boolean;
     /**
      * Additional call arguments for multi-param style functions.
      * Used when base and pseudo indexed lookups for the same CSS property

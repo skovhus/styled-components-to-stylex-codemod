@@ -5799,6 +5799,63 @@ export const App = () => <Box level="high">Hello</Box>;
     expect(code).not.toContain("computeBoxShadow");
   });
 
+  it("should preserve distinct resolved helper bindings for the same dynamic prop", () => {
+    const source = `
+import styled from "styled-components";
+import { shadow } from "./lib/helpers.ts";
+
+const Box = styled.div<{ tone?: string }>\`
+  box-shadow: \${(props) => \`\${shadow(props.tone ?? "light")} inset \${shadow(props.tone ?? "dark")}\`};
+\`;
+
+export const App = () => <Box tone="muted">Hello</Box>;
+`;
+
+    const adapterWithShadowResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: { calleeImportedName: string }) {
+        if (ctx.calleeImportedName === "shadow") {
+          return {
+            usage: "create" as const,
+            expr: "getShadow",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./shadow-utils" },
+                names: [{ imported: "getShadow" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-distinctResolvedBindings.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithShadowResolution },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain('getShadow(tone ?? "light")');
+    expect(code).toContain('getShadow(tone ?? "dark")');
+    expect(code).toContain("boxShadow: `${shadowTone} inset ${shadowTone2}`");
+  });
+
   it("should not bail when adapter returns undefined for optional prop-arg helper resolution", () => {
     const source = `
 import styled from "styled-components";
@@ -11003,7 +11060,43 @@ export const App = () => <Box $depth={2}>Content</Box>;
 `;
     const result = runTransformWithDiagnostics(source);
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain("props.depth * 16 + 4");
+    expect(result.code).toContain("depth * 16 + 4");
+    expect(result.code).toContain("styles.boxPaddingLeft(depth)");
+  });
+
+  it("should preserve props object access when a nested function shadows props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ width: string; items: Array<{ width: string }> }>\`
+  width: \${(props) => props.items.map((props) => props.width).join(",") || props.width};
+\`;
+
+export const App = () => <Box width="100%" items={[{ width: "50%" }]}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("props.items.map(props => props.width)");
+    expect(code).not.toContain("props.items.map(props => width)");
+  });
+
+  it("should preserve destructured local access when a nested function shadows it", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ width: string; items: string[] }>\`
+  width: \${({ width: w, items }) => items.map((w) => w).join(",") || w};
+\`;
+
+export const App = () => <Box width="100%" items={["50%"]}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("props.items.map(w => w)");
+    expect(code).toContain("|| props.width");
+    expect(code).not.toContain("items.map(w => width)");
   });
 });
 
