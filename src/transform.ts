@@ -17,6 +17,7 @@ import type {
   TransformResult,
   TransformStep,
 } from "./internal/transform-types.js";
+import type { TypeScriptPrepassMetadata } from "./internal/prepass/typescript-analysis.js";
 import { analyzeAfterEmitStep } from "./internal/transform-steps/analyze-after-emit.js";
 import { analyzeBeforeEmitStep } from "./internal/transform-steps/analyze-before-emit.js";
 import { applyPolicyGates } from "./internal/transform-steps/apply-policy-gates.js";
@@ -198,6 +199,7 @@ interface GlobalPrepassResult {
   styledDefFiles?: Map<string, Set<string>>;
   globalLeafKeys?: Set<string>;
   transformedFiles?: Set<string>;
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
 /**
@@ -231,6 +233,8 @@ function extractCrossFileInfoForFile(
   const hasPropUsage = propUsageByComponent && propUsageByComponent.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
   const hasTransformedFiles = prepass.transformedFiles !== undefined;
+  const hasTypeScriptMetadata =
+    prepass.typeScriptMetadata !== undefined && prepass.typeScriptMetadata.files.length > 0;
 
   if (
     (!selectorUsages || selectorUsages.length === 0) &&
@@ -238,7 +242,8 @@ function extractCrossFileInfoForFile(
     !hasPropUsage &&
     !hasStyledDefFiles &&
     !hasGlobalLeafKeys &&
-    !hasTransformedFiles
+    !hasTransformedFiles &&
+    !hasTypeScriptMetadata
   ) {
     return options;
   }
@@ -250,6 +255,7 @@ function extractCrossFileInfoForFile(
     styledDefFiles: prepass.styledDefFiles,
     globalLeafKeys: prepass.globalLeafKeys,
     transformedFiles: prepass.transformedFiles,
+    typeScriptMetadata: prepass.typeScriptMetadata,
   };
 
   return {

@@ -10,6 +10,7 @@ import type {
 } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
+import type { TypeScriptPrepassMetadata } from "./prepass/typescript-analysis.js";
 import type { TransformContext } from "./transform-context.js";
 
 /** A sidecar .stylex.ts file containing defineMarker() declarations. */
@@ -161,6 +162,8 @@ export interface CrossFileInfo {
   globalLeafKeys?: Set<string>;
   /** Files successfully converted in the current transform run. Used to avoid bailing on same-run bases. */
   transformedFiles?: Set<string>;
+  /** Opt-in TypeScript compiler metadata from the prepass. */
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
 export interface CrossFileSelectorUsage {

@@ -27,6 +27,10 @@ import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import type { TransformMode } from "./internal/transform-types.js";
+import type {
+  TypeScriptComponentMetadata,
+  TypeScriptPrepassMetadata,
+} from "./internal/prepass/typescript-analysis.js";
 import {
   resolveBarrelReExport,
   type Resolve,
@@ -92,6 +96,17 @@ export interface RunTransformOptions {
    * @default "tsx"
    */
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
+
+  /**
+   * Opt in to a TypeScript compiler-backed prepass when `parser` is `"ts"` or `"tsx"`.
+   *
+   * The typed prepass creates a real TypeScript Program/TypeChecker and attaches
+   * deterministic metadata about styled components, React components, prop types,
+   * generics, rest props, and sx support for later transform decisions.
+   *
+   * @default false
+   */
+  typescriptPrepass?: boolean;
 
   /**
    * Commands to run after transformation to format the output files.
@@ -276,6 +291,16 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     maxExamples,
   } = options;
 
+  if (options.typescriptPrepass === true && parser !== "ts" && parser !== "tsx") {
+    throw new Error(
+      [
+        "runTransform(options): `typescriptPrepass` requires the TypeScript parser.",
+        'Set parser to "ts" or "tsx", or omit `typescriptPrepass`.',
+        `Received: parser=${JSON.stringify(parser)}`,
+      ].join("\n"),
+    );
+  }
+
   if (maxExamples !== undefined) {
     Logger.setMaxExamples(maxExamples);
   }
@@ -424,6 +449,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       enableAstCache: true,
       leavesOnly,
       resolveBaseComponent: adapterInput.resolveBaseComponent,
+      enableTypeScriptAnalysis: options.typescriptPrepass === true,
     });
   } catch (err) {
     if (adapterInput.externalInterface === "auto") {
@@ -443,6 +469,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       },
       consumerAnalysis: undefined,
       forwardedAsConsumers: new Map(),
+      typeScriptMetadata: undefined,
     };
   }
 
@@ -455,6 +482,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
     transformedFiles,
+    typeScriptMetadata: prepassResult.typeScriptMetadata,
   };
 
   // Resolve "auto" externalInterface → concrete function using consumer analysis
@@ -551,7 +579,12 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
               sourceOverrides: transformedFileSources,
             }),
           );
-          if (hasTransformedSxSurface) {
+          const typedComponent = findTypedComponentMetadata(
+            prepassResult.typeScriptMetadata,
+            definitionSourcePath,
+            sourceComponentNames,
+          );
+          if (hasTransformedSxSurface || typedComponent?.supportsSxProp === true) {
             return { acceptsSx: true };
           }
           if (!transformedFiles.has(toRealPath(definitionSourcePath))) {
@@ -766,6 +799,21 @@ function createAutoPrepassFailureError(
       `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
     ].join("\n"),
   );
+}
+
+function findTypedComponentMetadata(
+  metadata: TypeScriptPrepassMetadata | undefined,
+  filePath: string,
+  componentNames: readonly string[],
+): TypeScriptComponentMetadata | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const names = new Set(componentNames);
+  const resolvedFilePath = toRealPath(filePath);
+  return metadata.files
+    .find((file) => file.filePath === resolvedFilePath)
+    ?.components.find((component) => names.has(component.name));
 }
 
 /**

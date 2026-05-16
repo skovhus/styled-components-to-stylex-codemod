@@ -57,6 +57,7 @@ import {
   extractStyledDefBasesFromSource,
   type StyledDefBasesMap,
 } from "./compute-leaf-set.js";
+import type { TypeScriptPrepassMetadata } from "./typescript-analysis.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -75,6 +76,8 @@ interface PrepassOptions {
   resolveBaseComponent?: (
     ctx: ResolveBaseComponentContext,
   ) => ResolveBaseComponentResult | undefined;
+  /** Opt-in compiler-backed TypeScript metadata extraction. Requires the ts/tsx parser. */
+  enableTypeScriptAnalysis?: boolean;
 }
 
 interface ForwardedAsConsumerEntry {
@@ -88,6 +91,8 @@ interface PrepassResult {
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
   /** Unconverted consumers that wrap converted components with styled() and use `as` prop */
   forwardedAsConsumers: Map<string, ForwardedAsConsumerEntry[]>;
+  /** Serializable TypeScript compiler metadata for later transform steps. */
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
@@ -124,6 +129,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     enableAstCache,
     leavesOnly,
     resolveBaseComponent,
+    enableTypeScriptAnalysis,
   } = options;
   const t0 = performance.now();
   const astCache = enableAstCache ? new Map<string, AstCacheEntry>() : undefined;
@@ -163,6 +169,12 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const allFilesSet = new Set(allFiles);
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
+  if (enableTypeScriptAnalysis && !isTypeScriptParser(parserName)) {
+    throw new Error("TypeScript analysis prepass requires the ts or tsx parser.");
+  }
+  const typeScriptMetadata = enableTypeScriptAnalysis
+    ? (await import("./typescript-analysis.js")).analyzeTypeScriptProgram({ files: uniqueAllFiles })
+    : undefined;
 
   const resolveCache = new Map<string, string | null>();
   const resolve: Resolve = (specifier, fromFile) => {
@@ -665,7 +677,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     logPrepassDebug(uniqueAllFiles, crossFileInfo, consumerAnalysis);
   }
 
-  return { crossFileInfo, consumerAnalysis, forwardedAsConsumers };
+  return { crossFileInfo, consumerAnalysis, forwardedAsConsumers, typeScriptMetadata };
 }
 
 /** Regex baseline for styled defs, then AST pass overrides/adds rows when parse succeeds. */
@@ -697,6 +709,10 @@ function mergeLeafStyledDefBasesForFile(
 
 function hasLeavesOnlyPrepassBlocker(source: string): boolean {
   return source.includes("shouldForwardProp") || hasUniversalSelectorCandidate(source);
+}
+
+function isTypeScriptParser(parserName: PrepassParserName | undefined): boolean {
+  return parserName === undefined || parserName === "ts" || parserName === "tsx";
 }
 
 function hasUniversalSelectorCandidate(source: string): boolean {
