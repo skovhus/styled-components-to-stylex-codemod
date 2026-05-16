@@ -1,5 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 import { motion, type MotionValue } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
@@ -26,17 +27,20 @@ function ComponentWrapper(props: ComponentWrapperProps) {
   );
 }
 
-type HighlightedAvatarProps = { highlightColor?: string } & Omit<
-  React.ComponentPropsWithRef<typeof UserAvatar>,
-  "className" | "style"
+type HighlightedAvatarProps = { highlightColor?: string } & React.ComponentPropsWithRef<
+  typeof UserAvatar
 >;
 
 function HighlightedAvatar(props: HighlightedAvatarProps) {
-  const { highlightColor, ...rest } = props;
+  const { className, style, highlightColor, ...rest } = props;
   return (
     <UserAvatar
       {...rest}
-      {...stylex.props(styles.highlightedAvatar(`0 0 0 2px ${highlightColor ?? "transparent"}`))}
+      {...mergedSx(
+        styles.highlightedAvatar(`0 0 0 2px ${highlightColor ?? "transparent"}`),
+        className,
+        style,
+      )}
     />
   );
 }

@@ -144,7 +144,7 @@ export function Background(props: BackgroundProps) {
       {...rest}
       column={true}
       center={true}
-      {...stylex.props(styles.background, loaded ? styles.backgroundLoaded : undefined)}
+      {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
     >
       {children}
     </Flex>
@@ -620,10 +620,7 @@ function StyledIcon(
 }
 
 function AttrsSxButton(
-  props: Omit<
-    React.ComponentPropsWithRef<typeof SxAwareButton>,
-    "className" | "style" | "sx" | "type"
-  >,
+  props: Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "sx" | "type">,
 ) {
   const { children, ...rest } = props;
   return (

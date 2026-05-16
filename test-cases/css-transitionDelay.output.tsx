@@ -19,11 +19,7 @@ function Container(props: ContainerProps & React.ComponentProps<"div">) {
   return (
     <div
       {...rest}
-      {...mergedSx(
-        [styles.container, $open ? styles.containerOpen($delay) : undefined],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.container, $open && styles.containerOpen($delay)], className, style)}
     >
       {children}
     </div>

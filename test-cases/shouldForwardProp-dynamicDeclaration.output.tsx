@@ -44,7 +44,7 @@ export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "cl
       {...rest}
       {...mergedSx(
         [
-          wrap ? styles.flexBoxWrap : undefined,
+          wrap && styles.flexBoxWrap,
           alignSelf ? styles.flexBoxAlignSelf(alignSelf) : undefined,
           typeof gap === "number" ? styles.flexBoxGap(gap) : undefined,
           typeof wrapGap === "number"

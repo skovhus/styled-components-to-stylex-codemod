@@ -18,7 +18,6 @@ import type {
   ThemeHookConfig,
   WrappedComponentInterfaceResult,
 } from "../../adapter.js";
-import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import type {
   TypeScriptComponentMetadata,
@@ -36,6 +35,7 @@ import {
 } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { toRealPath } from "../utilities/path-utils.js";
+import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -186,17 +186,17 @@ export class WrapperEmitter {
         return false;
       }
     }
-    return isWrappedComponentSxAware({
-      adapter: {
-        useSxProp: this.useSxProp,
-        wrappedComponentInterface: this.wrappedComponentInterface,
-      },
-      importMap: this.importMap,
-      componentLocalName,
-      filePath: this.filePath,
-      localSource: this.localSource,
-      sourceOverrides: this.sourceOverrides,
-    });
+    return (
+      importInfo?.source.kind === "absolutePath" &&
+      transformedComponentAcceptsSx({
+        absolutePath: importInfo.source.value,
+        componentNames:
+          importInfo.importedName === "default"
+            ? [componentLocalName, importInfo.importedName]
+            : [importInfo.importedName],
+        sourceOverrides: this.sourceOverrides,
+      })
+    );
   }
 
   propsTypeNameFor(localName: string): string {

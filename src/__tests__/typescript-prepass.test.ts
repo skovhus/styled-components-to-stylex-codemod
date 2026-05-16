@@ -12,30 +12,32 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
   const realBase = realpathSync(baseDir);
   return Object.fromEntries(
     metadata.files.flatMap((file) =>
-      file.components.map((component) => [
-        `${path.relative(realBase, file.filePath)}:${component.name}`,
-        {
-          kind: component.kind,
-          exported: component.exported,
-          typeParameters: component.typeParameters,
-          propType: component.propType,
-          props: component.props
-            .filter((prop) =>
-              ["as", "baseOnly", "inherited", "label", "requiredCount", "sx", "tone"].includes(
-                prop.name,
-              ),
-            )
-            .map((prop) => ({
-              name: prop.name,
-              optional: prop.optional,
-              readonly: prop.readonly,
-              type: prop.type,
-            })),
-          parameters: component.parameters,
-          restProps: component.restProps,
-          supportsSxProp: component.supportsSxProp,
-        },
-      ]),
+      file.components
+        .filter((component) => component.name !== "BodySx")
+        .map((component) => [
+          `${path.relative(realBase, file.filePath)}:${component.name}`,
+          {
+            kind: component.kind,
+            exported: component.exported,
+            typeParameters: component.typeParameters,
+            propType: component.propType,
+            props: component.props
+              .filter((prop) =>
+                ["as", "baseOnly", "inherited", "label", "requiredCount", "sx", "tone"].includes(
+                  prop.name,
+                ),
+              )
+              .map((prop) => ({
+                name: prop.name,
+                optional: prop.optional,
+                readonly: prop.readonly,
+                type: prop.type,
+              })),
+            parameters: component.parameters,
+            restProps: component.restProps,
+            supportsSxProp: component.supportsSxProp,
+          },
+        ]),
     ),
   );
 }
@@ -80,6 +82,11 @@ describe("TypeScript compiler prepass", () => {
         "}",
         "",
         "export const Card = <T extends string = 'section',>({ sx, ...rest }: ButtonProps<T>) => <section {...rest} />;",
+        "",
+        "export function BodySx(props: { label: string }) {",
+        "  const { sx, label } = props as { sx?: SxStyles; label: string };",
+        "  return <div>{label}{sx ? 'sx' : ''}</div>;",
+        "}",
       ].join("\n"),
     );
 
@@ -96,6 +103,11 @@ describe("TypeScript compiler prepass", () => {
       expect(JSON.parse(JSON.stringify(prepassResult.typeScriptMetadata))).toEqual(
         prepassResult.typeScriptMetadata,
       );
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "BodySx",
+        )?.supportsSxProp,
+      ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`
         {

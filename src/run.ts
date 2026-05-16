@@ -40,7 +40,7 @@ import {
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
-import { detectExportedComponentSxProp } from "./internal/wrapped-component-interface.js";
+import { transformedComponentAcceptsSx } from "./internal/utilities/sx-surface.js";
 
 export { mergeMarkerDeclarations };
 
@@ -562,14 +562,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           if (typedComponent?.supportsSxProp === true) {
             return { acceptsSx: true };
           }
-          const hasTransformedSxSurface = sourceComponentNames.some((name) =>
-            detectExportedComponentSxProp({
+          if (
+            transformedComponentAcceptsSx({
               absolutePath: definitionSourcePath,
-              componentName: name,
+              componentNames: sourceComponentNames,
               sourceOverrides: transformedFileSources,
-            }),
-          );
-          if (hasTransformedSxSurface) {
+            })
+          ) {
             return { acceptsSx: true };
           }
           if (!transformedFiles.has(toRealPath(definitionSourcePath))) {

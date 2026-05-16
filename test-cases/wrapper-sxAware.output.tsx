@@ -28,10 +28,7 @@ function StyledButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) 
   );
 }
 
-type StyledActiveProps = { active?: boolean } & Omit<
-  React.ComponentPropsWithRef<typeof SxAwareButton>,
-  "className" | "style"
->;
+type StyledActiveProps = { active?: boolean } & React.ComponentPropsWithRef<typeof SxAwareButton>;
 
 // Non-transient props used for styling must still be forwarded to sx-aware wrapped components
 // when the wrapped component explicitly accepts them.
@@ -52,13 +49,7 @@ function StyledActive(props: StyledActiveProps) {
 // externalInterface). Even when the wrapped component accepts `sx`, the
 // wrapper itself accepts an external `sx` prop and must compose it with the
 // internal `styles.exportedAccent` style.
-export function ExportedAccentButton(
-  props: {
-    className?: string;
-    style?: React.CSSProperties;
-    sx?: stylex.StyleXStyles;
-  } & React.ComponentPropsWithRef<typeof SxAwareButton>,
-) {
+export function ExportedAccentButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
   const { children, sx, ...rest } = props;
   return (
     <SxAwareButton {...rest} sx={[callerStyles.exportedAccentButton, sx]}>
@@ -68,8 +59,6 @@ export function ExportedAccentButton(
 }
 
 type ExportedToggleButtonProps = {
-  className?: string;
-  style?: React.CSSProperties;
   sx?: stylex.StyleXStyles;
   open?: boolean;
 } & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "type" | "$open">;
@@ -91,13 +80,7 @@ export function ExportedToggleButton(props: ExportedToggleButtonProps) {
   );
 }
 
-export function DraggableSxButton(
-  props: {
-    className?: string;
-    style?: React.CSSProperties;
-    sx?: stylex.StyleXStyles;
-  } & React.ComponentPropsWithRef<typeof SxAwareButton>,
-) {
+export function DraggableSxButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
   const { className, children, style, sx, ...rest } = props;
   return (
     <SxAwareButton

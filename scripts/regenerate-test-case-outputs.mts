@@ -57,8 +57,6 @@ const APP_LIKE_ADAPTER_FIXTURES = new Set([
   "bug-data-style-src-incompatible-component",
   "bug-external-styles-missing-classname",
 ]);
-const TYPESCRIPT_METADATA_FIXTURES = new Set(["wrapper-inlineStyleFnImported"]);
-
 function selectAdapter(name: string) {
   return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
 }
@@ -104,7 +102,7 @@ async function updateFixture(name: string, ext: string) {
   const crossFilePrepassResult = {
     selectorUsages: prepassResult.selectorUsages,
     componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
-    ...(parser === "tsx" && TYPESCRIPT_METADATA_FIXTURES.has(name) ? { typeScriptMetadata } : {}),
+    ...(parser === "tsx" ? { typeScriptMetadata } : {}),
   };
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(

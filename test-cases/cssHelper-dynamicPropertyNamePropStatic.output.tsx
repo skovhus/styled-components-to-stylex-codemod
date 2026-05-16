@@ -18,8 +18,8 @@ export function Strip(props: StripProps & Omit<React.ComponentProps<"div">, "cla
       {...mergedSx(
         [
           styles.strip,
-          enabled && column ? styles.stripEnabledColumn : undefined,
-          enabled && !column ? styles.stripEnabledNotColumn : undefined,
+          enabled && column && styles.stripEnabledColumn,
+          enabled && !column && styles.stripEnabledNotColumn,
         ],
         undefined,
         style,

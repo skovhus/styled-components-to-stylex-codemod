@@ -231,6 +231,7 @@ function readReactComponentFromFunction(
     propTypeNode: node.parameters[0]?.type,
     parameters: readParameters(node.parameters, checker),
     restProps: readRestProps(node.parameters[0], node.body),
+    bodySupportsSxProp: readsSxProp(node.parameters[0], node.body),
     checker,
     location: node,
   });
@@ -252,6 +253,7 @@ function readReactComponentFromVariable(
     propTypeNode: node.parameters[0]?.type,
     parameters: readParameters(node.parameters, checker),
     restProps: readRestProps(node.parameters[0], node.body),
+    bodySupportsSxProp: readsSxProp(node.parameters[0], node.body),
     checker,
     location: node,
   });
@@ -266,6 +268,7 @@ function buildComponentMetadata(args: {
   propTypeNode: ts.TypeNode | undefined;
   parameters: TypeScriptParameterMetadata[];
   restProps: TypeScriptRestPropMetadata[];
+  bodySupportsSxProp?: boolean;
   checker: ts.TypeChecker;
   location: ts.Node;
 }): TypeScriptComponentMetadata {
@@ -286,7 +289,7 @@ function buildComponentMetadata(args: {
     parameters: args.parameters,
     restProps: args.restProps,
     hasIndexSignature: propType ? hasIndexSignature(propType, args.checker) : false,
-    supportsSxProp: explicitPropNames.includes("sx"),
+    supportsSxProp: explicitPropNames.includes("sx") || args.bodySupportsSxProp === true,
   };
 }
 
@@ -391,10 +394,20 @@ function collectExplicitPropNamesInto(
     return;
   }
 
-  const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+  const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
   for (const declaration of symbol?.declarations ?? []) {
     collectExplicitPropNamesFromDeclaration(names, declaration, checker, visited);
   }
+}
+
+function resolveAliasedSymbol(
+  symbol: ts.Symbol | undefined,
+  checker: ts.TypeChecker,
+): ts.Symbol | undefined {
+  if (!symbol || (symbol.flags & ts.SymbolFlags.Alias) === 0) {
+    return symbol;
+  }
+  return checker.getAliasedSymbol(symbol);
 }
 
 function collectExplicitPropNamesFromDeclaration(
@@ -483,6 +496,70 @@ function readRestProps(
   };
   ts.forEachChild(body, visit);
   return restProps.sort(byName);
+}
+
+function readsSxProp(
+  parameter: ts.ParameterDeclaration | undefined,
+  body: ts.ConciseBody | undefined,
+): boolean {
+  if (parameter?.name && ts.isObjectBindingPattern(parameter.name)) {
+    if (bindingPatternHasName(parameter.name, "sx")) {
+      return true;
+    }
+  }
+  if (!body || !parameter?.name || !ts.isIdentifier(parameter.name)) {
+    return false;
+  }
+  const propsName = parameter.name.text;
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) {
+      return;
+    }
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === propsName &&
+      node.name.text === "sx"
+    ) {
+      found = true;
+      return;
+    }
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isObjectBindingPattern(node.name) &&
+      node.initializer &&
+      isIdentifierNamed(unwrapExpression(node.initializer), propsName) &&
+      bindingPatternHasName(node.name, "sx")
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(body, visit);
+  return found;
+}
+
+function bindingPatternHasName(pattern: ts.ObjectBindingPattern, name: string): boolean {
+  return pattern.elements.some((element) => element.name.getText() === name);
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isParenthesizedExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isIdentifierNamed(expression: ts.Expression, name: string): boolean {
+  return ts.isIdentifier(expression) && expression.text === name;
 }
 
 function describeTypeNode(typeNode: ts.TypeNode, checker: ts.TypeChecker): TypeScriptTypeMetadata {
@@ -717,7 +794,7 @@ function normalizeFilePaths(files: readonly string[]): string[] {
 }
 
 function resolveExistingFilePath(filePath: string): string {
-  const resolved = path.resolve(filePath);
+  const resolved = resolveExistingSourceFilePath(filePath);
   if (!existsSync(resolved)) {
     return resolved;
   }
@@ -726,6 +803,20 @@ function resolveExistingFilePath(filePath: string): string {
   } catch {
     return resolved;
   }
+}
+
+function resolveExistingSourceFilePath(filePath: string): string {
+  const resolved = path.resolve(filePath);
+  if (existsSync(resolved)) {
+    return resolved;
+  }
+  for (const extension of [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"]) {
+    const candidate = `${resolved}${extension}`;
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return resolved;
 }
 
 function normalizeFilePath(filePath: string): string {

@@ -15,11 +15,11 @@ import {
 import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
-import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { toRealPath } from "../utilities/path-utils.js";
+import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
 function shouldDropProp(decl: StyledDecl, propName: string): boolean {
@@ -117,14 +117,17 @@ function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName
     }
   }
 
-  return isWrappedComponentSxAware({
-    adapter: ctx.adapter,
-    importMap: ctx.importMap,
-    componentLocalName,
-    filePath: ctx.file.path,
-    localSource: ctx.file.source,
-    sourceOverrides: ctx.options.transformedFileSources,
-  });
+  return (
+    importInfo?.source.kind === "absolutePath" &&
+    transformedComponentAcceptsSx({
+      absolutePath: importInfo.source.value,
+      componentNames:
+        importInfo.importedName === "default"
+          ? [componentLocalName, importInfo.importedName]
+          : [importInfo.importedName],
+      sourceOverrides: ctx.options.transformedFileSources,
+    })
+  );
 }
 
 /**

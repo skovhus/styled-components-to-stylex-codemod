@@ -8,7 +8,7 @@ type ExpandableButtonProps = React.PropsWithChildren<{
   disabled?: boolean;
   sx?: stylex.StyleXStyles;
 }> &
-  Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style">;
+  React.ComponentPropsWithRef<typeof SxAwareButton>;
 
 function ExpandableButton(props: ExpandableButtonProps) {
   const { children, sx, expanded, ...rest } = props;

@@ -19,6 +19,8 @@ function PanelBase(props: PanelBaseProps) {
 }
 
 type ResponsivePanelProps = {
+  className?: string;
+  style?: React.CSSProperties;
   sx?: stylex.StyleXStyles;
   asCard?: boolean;
   columnCount?: number;

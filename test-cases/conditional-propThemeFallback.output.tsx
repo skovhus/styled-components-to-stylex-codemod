@@ -19,8 +19,8 @@ export function ColorBadge(
       {...rest}
       sx={[
         styles.colorBadge,
-        hollow ? styles.colorBadgeHollow : undefined,
-        hollow ? styles.colorBadgeBorderColor(color ? color : $colors.labelMuted) : undefined,
+        hollow && styles.colorBadgeHollow,
+        hollow && styles.colorBadgeBorderColor(color ? color : $colors.labelMuted),
         !hollow && styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
         sizeVariants[size],
       ]}

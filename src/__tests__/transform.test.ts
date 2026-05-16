@@ -33,7 +33,6 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 /** Test cases that intentionally keep specific styled-components APIs after migration. */
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
-const TYPESCRIPT_METADATA_FIXTURES = new Set(["wrapper-inlineStyleFnImported"]);
 
 const PRESERVED_FIXTURES = new Set(["selector-pseudoElementConditionalValue"]);
 
@@ -167,16 +166,12 @@ function collectTypeScriptFiles(dir: string): string[] {
 
 /** Extract per-file cross-file info from the prepass result. */
 function getCrossFileInfo(
-  name: string,
   filePath: string,
   parser: TransformTestParser,
 ): CrossFileInfo | undefined {
   const absPath = pathResolve(filePath);
   const usages = prepassResult.selectorUsages.get(absPath);
-  const typeScriptMetadata =
-    parser === "tsx" && TYPESCRIPT_METADATA_FIXTURES.has(name)
-      ? testCaseTypeScriptMetadata
-      : undefined;
+  const typeScriptMetadata = parser === "tsx" ? testCaseTypeScriptMetadata : undefined;
   if ((!usages || usages.length === 0) && !typeScriptMetadata) {
     return undefined;
   }
@@ -3034,7 +3029,7 @@ export const App = () => <Title>Imported root with computed helper</Title>;
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
-    const crossFileInfo = getCrossFileInfo(name, inputPath, parser);
+    const crossFileInfo = getCrossFileInfo(inputPath, parser);
     const diagnostics = runTransformWithDiagnostics(
       input,
       { crossFileInfo, allowPartialMigration: isPartialFixture(name) },
