@@ -607,7 +607,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   }
 
   const typeScriptMetadata = enableTypeScriptAnalysis
-    ? (await import("./typescript-analysis.js")).analyzeTypeScriptProgram({
+    ? (await loadTypeScriptAnalysis()).analyzeTypeScriptProgram({
         files: collectTypeScriptAnalysisFiles({
           transformSet,
           styledCallUsages,
@@ -717,6 +717,26 @@ function hasLeavesOnlyPrepassBlocker(source: string): boolean {
 
 function isTypeScriptParser(parserName: PrepassParserName | undefined): boolean {
   return parserName === undefined || parserName === "ts" || parserName === "tsx";
+}
+
+async function loadTypeScriptAnalysis(): Promise<typeof import("./typescript-analysis.js")> {
+  try {
+    return await import("./typescript-analysis.js");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const missingTypeScript =
+      message.includes("typescript") &&
+      (message.includes("Cannot find") || message.includes("ERR_MODULE_NOT_FOUND"));
+    if (missingTypeScript) {
+      throw new Error(
+        [
+          "TypeScript parser runs require the optional `typescript` package for compiler metadata.",
+          "Install TypeScript in the project (supported range: >=5.0.0 <6), or use a non-TypeScript parser.",
+        ].join("\n"),
+      );
+    }
+    throw err;
+  }
 }
 
 function collectTypeScriptAnalysisFiles(args: {
