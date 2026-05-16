@@ -4148,6 +4148,9 @@ function scalarizePropsObjectDynamicValue(args: {
   if (expressionContainsStringFragment(args.valueExpr, "var(")) {
     return null;
   }
+  if (expressionContainsFunctionBindingName(args.valueExpr, args.paramName)) {
+    return null;
+  }
 
   const propParams = new Map(propNames.map((propName) => [propName, propName]));
   const rewritten = mapAst(cloneAstNode(args.valueExpr), (node, recurse) => {
@@ -4311,6 +4314,75 @@ function isObjectPropertyLike(
   node: Record<string, unknown>,
 ): node is Record<string, unknown> & { computed?: boolean; key?: unknown; value?: unknown } {
   return node.type === "Property" || node.type === "ObjectProperty";
+}
+
+function expressionContainsFunctionBindingName(node: unknown, name: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (Array.isArray(node)) {
+    return node.some((item) => expressionContainsFunctionBindingName(item, name));
+  }
+
+  const record = node as Record<string, unknown>;
+  if (isFunctionLikeNode(record)) {
+    const params = record.params;
+    if (Array.isArray(params) && params.some((param) => patternBindsName(param, name))) {
+      return true;
+    }
+  }
+
+  for (const key of Object.keys(record)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    if (expressionContainsFunctionBindingName(record[key], name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isFunctionLikeNode(node: Record<string, unknown>): boolean {
+  return (
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "FunctionExpression" ||
+    node.type === "FunctionDeclaration" ||
+    node.type === "ObjectMethod" ||
+    node.type === "ClassMethod"
+  );
+}
+
+function patternBindsName(node: unknown, name: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const record = node as Record<string, unknown>;
+  if (record.type === "Identifier") {
+    return record.name === name;
+  }
+  if (record.type === "RestElement") {
+    return patternBindsName(record.argument, name);
+  }
+  if (record.type === "AssignmentPattern") {
+    return patternBindsName(record.left, name);
+  }
+  if (record.type === "ObjectPattern") {
+    return (
+      Array.isArray(record.properties) &&
+      record.properties.some((prop) => patternBindsName(prop, name))
+    );
+  }
+  if (record.type === "ObjectProperty" || record.type === "Property") {
+    return patternBindsName(record.value, name);
+  }
+  if (record.type === "ArrayPattern") {
+    return (
+      Array.isArray(record.elements) &&
+      record.elements.some((element) => patternBindsName(element, name))
+    );
+  }
+  return false;
 }
 
 function addUndefinedToParamType(j: JSCodeshift, param: unknown): void {

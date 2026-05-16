@@ -11063,6 +11063,23 @@ export const App = () => <Box $depth={2}>Content</Box>;
     expect(result.code).toContain("depth * 16 + 4");
     expect(result.code).toContain("styles.boxPaddingLeft(depth)");
   });
+
+  it("should preserve props object access when a nested function shadows props", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ width: string; items: Array<{ width: string }> }>\`
+  width: \${(props) => props.items.map((props) => props.width).join(",") || props.width};
+\`;
+
+export const App = () => <Box width="100%" items={[{ width: "50%" }]}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("props.items.map(props => props.width)");
+    expect(code).not.toContain("props.items.map(props => width)");
+  });
 });
 
 describe("indexed theme lookup shorthand safety", () => {
