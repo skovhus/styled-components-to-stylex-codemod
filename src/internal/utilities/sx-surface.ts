@@ -33,55 +33,18 @@ function sourcePathCandidates(absolutePath: string): string[] {
 }
 
 function componentHasSxProp(source: string, componentName: string): boolean {
-  return functionParamHasSx(source, componentName) || typedParamHasSx(source, componentName);
-}
-
-function functionParamHasSx(source: string, componentName: string): boolean {
   const name = escapeRegex(componentName);
   const functionPattern = new RegExp(
-    `(?:export\\s+)?function\\s+${name}\\s*\\(\\s*props\\s*:\\s*([\\s\\S]*?)\\)\\s*\\{`,
+    `(?:export\\s+)?function\\s+${name}\\s*\\(\\s*props\\s*:\\s*[\\s\\S]*?sx\\?:\\s*stylex\\.StyleXStyles`,
   );
-  const functionMatch = source.match(functionPattern);
-  if (functionMatch?.[1]?.includes("sx?: stylex.StyleXStyles")) {
+  if (functionPattern.test(source)) {
     return true;
   }
 
   const arrowPattern = new RegExp(
-    `(?:export\\s+)?(?:const|let|var)\\s+${name}\\s*=\\s*\\(\\s*props\\s*:\\s*([\\s\\S]*?)\\)\\s*=>`,
+    `(?:export\\s+)?(?:const|let|var)\\s+${name}\\s*=\\s*\\(\\s*props\\s*:\\s*[\\s\\S]*?sx\\?:\\s*stylex\\.StyleXStyles`,
   );
-  const arrowMatch = source.match(arrowPattern);
-  return arrowMatch?.[1]?.includes("sx?: stylex.StyleXStyles") === true;
-}
-
-function typedParamHasSx(source: string, componentName: string): boolean {
-  const name = escapeRegex(componentName);
-  const functionPattern = new RegExp(
-    `(?:export\\s+)?function\\s+${name}\\s*\\(\\s*props\\s*:\\s*([A-Za-z_$][\\w$]*)`,
-  );
-  const arrowPattern = new RegExp(
-    `(?:export\\s+)?(?:const|let|var)\\s+${name}\\s*=\\s*\\(\\s*props\\s*:\\s*([A-Za-z_$][\\w$]*)`,
-  );
-  const typeName = source.match(functionPattern)?.[1] ?? source.match(arrowPattern)?.[1];
-  return typeName ? typeAliasHasSx(source, typeName) : false;
-}
-
-function typeAliasHasSx(source: string, typeName: string): boolean {
-  const typePattern = new RegExp(`type\\s+${escapeRegex(typeName)}\\b[\\s\\S]*?;`, "g");
-  for (const match of source.matchAll(typePattern)) {
-    if (match[0].includes("sx?: stylex.StyleXStyles")) {
-      return true;
-    }
-  }
-  const interfacePattern = new RegExp(
-    `interface\\s+${escapeRegex(typeName)}\\b[\\s\\S]*?\\n\\}`,
-    "g",
-  );
-  for (const match of source.matchAll(interfacePattern)) {
-    if (match[0].includes("sx?: stylex.StyleXStyles")) {
-      return true;
-    }
-  }
-  return false;
+  return arrowPattern.test(source);
 }
 
 function escapeRegex(value: string): string {
