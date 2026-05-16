@@ -26,7 +26,7 @@ export interface TypeScriptComponentMetadata {
   supportsSxProp: boolean;
 }
 
-export interface TypeScriptFunctionMetadata {
+interface TypeScriptFunctionMetadata {
   name: string;
   exported: boolean;
   defaultExport: boolean;
