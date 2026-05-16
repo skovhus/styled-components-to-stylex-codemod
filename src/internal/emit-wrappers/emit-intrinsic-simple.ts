@@ -679,7 +679,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             k !== "style" &&
             k !== "as" &&
             k !== "forwardedAs" &&
-            (!explicitPropNames.has(k) || variantDimByProp.has(k)),
+            (!explicitPropNames.has(k) ||
+              (variantDimByProp.has(k) && !d.typeScriptPropTypes?.has(k))),
         );
         if (filtered.length === 0) {
           return "{}";

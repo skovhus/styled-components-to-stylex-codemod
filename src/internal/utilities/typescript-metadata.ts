@@ -17,6 +17,7 @@ export function applyTypeScriptMetadataToDecl(
   }
 
   decl.typeScriptPropNames = new Set(typedComponent.props.map((prop) => prop.name));
+  decl.typeScriptExplicitPropNames = new Set(typedComponent.explicitPropNames);
   decl.typeScriptPropTypes = new Map(typedComponent.props.map((prop) => [prop.name, prop.type]));
   decl.typeScriptOptionalProps = new Set(
     typedComponent.props.filter((prop) => prop.optional).map((prop) => prop.name),

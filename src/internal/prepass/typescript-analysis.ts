@@ -21,6 +21,7 @@ export interface TypeScriptComponentMetadata {
   typeParameters: string[];
   propType: TypeScriptTypeMetadata | null;
   props: TypeScriptPropMetadata[];
+  explicitPropNames: string[];
   parameters: TypeScriptParameterMetadata[];
   restProps: TypeScriptRestPropMetadata[];
   hasIndexSignature: boolean;
@@ -270,6 +271,9 @@ function buildComponentMetadata(args: {
 }): TypeScriptComponentMetadata {
   const propType = args.propTypeNode ? args.checker.getTypeFromTypeNode(args.propTypeNode) : null;
   const props = propType ? readPropsFromType(propType, args.checker, args.location) : [];
+  const explicitPropNames = args.propTypeNode
+    ? collectExplicitPropNames(args.propTypeNode, args.checker)
+    : [];
   return {
     name: args.name,
     kind: args.kind,
@@ -278,10 +282,11 @@ function buildComponentMetadata(args: {
     typeParameters: args.typeParameters,
     propType: args.propTypeNode ? describeTypeNode(args.propTypeNode, args.checker) : null,
     props,
+    explicitPropNames,
     parameters: args.parameters,
     restProps: args.restProps,
     hasIndexSignature: propType ? hasIndexSignature(propType, args.checker) : false,
-    supportsSxProp: props.some((prop) => prop.name === "sx"),
+    supportsSxProp: explicitPropNames.includes("sx"),
   };
 }
 
@@ -324,6 +329,121 @@ function hasIndexSignature(type: ts.Type, checker: ts.TypeChecker): boolean {
     checker.getIndexTypeOfType(type, ts.IndexKind.String) !== undefined ||
     checker.getIndexTypeOfType(type, ts.IndexKind.Number) !== undefined
   );
+}
+
+function collectExplicitPropNames(
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited = new Set<ts.Declaration>(),
+): string[] {
+  const names = new Set<string>();
+  collectExplicitPropNamesInto(names, typeNode, checker, visited);
+  return [...names].sort();
+}
+
+function collectExplicitPropNamesInto(
+  names: Set<string>,
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (ts.isTypeLiteralNode(typeNode)) {
+    for (const member of typeNode.members) {
+      if (ts.isPropertySignature(member)) {
+        const name = propertyNameText(member.name);
+        if (name) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+
+  if (ts.isIntersectionTypeNode(typeNode)) {
+    for (const part of typeNode.types) {
+      collectExplicitPropNamesInto(names, part, checker, visited);
+    }
+    return;
+  }
+
+  if (ts.isUnionTypeNode(typeNode)) {
+    let commonNames: Set<string> | undefined;
+    for (const part of typeNode.types) {
+      const branchNames = new Set<string>();
+      collectExplicitPropNamesInto(branchNames, part, checker, new Set(visited));
+      if (commonNames === undefined) {
+        commonNames = branchNames;
+      } else {
+        for (const name of commonNames) {
+          if (!branchNames.has(name)) {
+            commonNames.delete(name);
+          }
+        }
+      }
+    }
+    for (const name of commonNames ?? []) {
+      names.add(name);
+    }
+    return;
+  }
+
+  if (!ts.isTypeReferenceNode(typeNode) || isIntrinsicReactPropReference(typeNode)) {
+    return;
+  }
+
+  const symbol = checker.getSymbolAtLocation(typeNode.typeName);
+  for (const declaration of symbol?.declarations ?? []) {
+    collectExplicitPropNamesFromDeclaration(names, declaration, checker, visited);
+  }
+}
+
+function collectExplicitPropNamesFromDeclaration(
+  names: Set<string>,
+  declaration: ts.Declaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (visited.has(declaration)) {
+    return;
+  }
+  visited.add(declaration);
+
+  if (ts.isTypeAliasDeclaration(declaration)) {
+    collectExplicitPropNamesInto(names, declaration.type, checker, visited);
+    return;
+  }
+
+  if (!ts.isInterfaceDeclaration(declaration)) {
+    return;
+  }
+
+  for (const member of declaration.members) {
+    if (ts.isPropertySignature(member)) {
+      const name = propertyNameText(member.name);
+      if (name) {
+        names.add(name);
+      }
+    }
+  }
+  for (const clause of declaration.heritageClauses ?? []) {
+    for (const heritageType of clause.types) {
+      collectExplicitPropNamesInto(names, heritageType, checker, visited);
+    }
+  }
+}
+
+function isIntrinsicReactPropReference(typeNode: ts.TypeReferenceNode): boolean {
+  const typeName = typeNode.typeName.getText();
+  return /^(?:React\.)?(?:ComponentProps|ComponentPropsWithRef|ComponentPropsWithoutRef|HTMLAttributes|ButtonHTMLAttributes|AnchorHTMLAttributes|InputHTMLAttributes|SVGProps)$/.test(
+    typeName,
+  );
+}
+
+function propertyNameText(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  return null;
 }
 
 function readRestProps(

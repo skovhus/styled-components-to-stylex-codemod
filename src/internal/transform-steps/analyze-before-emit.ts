@@ -1417,7 +1417,16 @@ function applyTypeScriptMetadata(
 }
 
 function typedComponentHasProp(decl: StyledDecl, propName: string): boolean {
+  if (isSpecialSurfaceProp(propName)) {
+    return decl.typeScriptExplicitPropNames?.has(propName) === true;
+  }
   return decl.typeScriptPropNames?.has(propName) === true;
+}
+
+function isSpecialSurfaceProp(propName: string): boolean {
+  return (
+    propName === "className" || propName === "style" || propName === "sx" || propName === "ref"
+  );
 }
 
 function typeAwareExternalStyleFallback(

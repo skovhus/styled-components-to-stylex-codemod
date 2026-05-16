@@ -440,8 +440,8 @@ export class WrapperEmitter {
     if (metadata.kind === "styled" && isExternalStylePropName(propName)) {
       return false;
     }
-    if (isIntrinsicPassthroughPropType(metadata) && isExternalStyleOrSxPropName(propName)) {
-      return false;
+    if (isExternalStyleOrSxPropName(propName)) {
+      return metadata.explicitPropNames.includes(propName);
     }
     return metadata.hasIndexSignature || metadata.props.some((prop) => prop.name === propName);
   }
@@ -455,7 +455,7 @@ export class WrapperEmitter {
     if (
       !metadata ||
       (metadata.kind === "styled" && isExternalStylePropName(propName)) ||
-      (isIntrinsicPassthroughPropType(metadata) && isExternalStyleOrSxPropName(propName))
+      (isExternalStyleOrSxPropName(propName) && !metadata.explicitPropNames.includes(propName))
     ) {
       return null;
     }
@@ -2356,13 +2356,6 @@ function isExternalStylePropName(propName: string): boolean {
 
 function isExternalStyleOrSxPropName(propName: string): boolean {
   return isExternalStylePropName(propName) || propName === "sx";
-}
-
-function isIntrinsicPassthroughPropType(metadata: TypeScriptComponentMetadata): boolean {
-  const text = metadata.propType?.text ?? "";
-  return /\b(?:React\.)?(?:ComponentProps|ComponentPropsWithRef|HTMLAttributes|ButtonHTMLAttributes|AnchorHTMLAttributes|InputHTMLAttributes)<"/.test(
-    text,
-  );
 }
 
 function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
