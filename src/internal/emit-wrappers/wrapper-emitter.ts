@@ -35,6 +35,7 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
+import { toRealPath } from "../utilities/path-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -177,8 +178,13 @@ export class WrapperEmitter {
       }
     }
     const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
-    if (typedComponent?.supportsSxProp === true) {
-      return true;
+    if (typedComponent) {
+      if (typedComponent.supportsSxProp) {
+        return true;
+      }
+      if (!this.hasSourceOverrideFor(componentLocalName)) {
+        return false;
+      }
     }
     return isWrappedComponentSxAware({
       adapter: {
@@ -434,12 +440,23 @@ export class WrapperEmitter {
     if (metadata.kind === "styled" && isExternalStylePropName(propName)) {
       return false;
     }
+    if (isIntrinsicPassthroughPropType(metadata) && isExternalStyleOrSxPropName(propName)) {
+      return false;
+    }
     return metadata.hasIndexSignature || metadata.props.some((prop) => prop.name === propName);
+  }
+
+  hasTypeScriptComponentMetadata(componentLocalName: string): boolean {
+    return this.typeScriptComponentMetadataFor(componentLocalName) !== undefined;
   }
 
   typedComponentProp(componentLocalName: string, propName: string): TypeScriptPropMetadata | null {
     const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
-    if (!metadata || (metadata.kind === "styled" && isExternalStylePropName(propName))) {
+    if (
+      !metadata ||
+      (metadata.kind === "styled" && isExternalStylePropName(propName)) ||
+      (isIntrinsicPassthroughPropType(metadata) && isExternalStyleOrSxPropName(propName))
+    ) {
       return null;
     }
     return metadata.props.find((prop) => prop.name === propName) ?? null;
@@ -450,6 +467,14 @@ export class WrapperEmitter {
       return true;
     }
     return d.typeScriptHasIndexSignature === true || d.typeScriptPropNames.has(propName);
+  }
+
+  private hasSourceOverrideFor(componentLocalName: string): boolean {
+    const importInfo = this.importMap.get(componentLocalName);
+    return (
+      importInfo?.source.kind === "absolutePath" &&
+      this.sourceOverrides?.has(toRealPath(importInfo.source.value)) === true
+    );
   }
 
   private typeScriptComponentMetadataFor(
@@ -2327,6 +2352,17 @@ const UNIVERSAL_PROP_TYPES: Record<string, string> = {
 
 function isExternalStylePropName(propName: string): boolean {
   return propName === "className" || propName === "style";
+}
+
+function isExternalStyleOrSxPropName(propName: string): boolean {
+  return isExternalStylePropName(propName) || propName === "sx";
+}
+
+function isIntrinsicPassthroughPropType(metadata: TypeScriptComponentMetadata): boolean {
+  const text = metadata.propType?.text ?? "";
+  return /\b(?:React\.)?(?:ComponentProps|ComponentPropsWithRef|HTMLAttributes|ButtonHTMLAttributes|AnchorHTMLAttributes|InputHTMLAttributes)<"/.test(
+    text,
+  );
 }
 
 function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {

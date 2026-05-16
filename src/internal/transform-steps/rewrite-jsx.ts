@@ -19,6 +19,7 @@ import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+import { toRealPath } from "../utilities/path-utils.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
 function shouldDropProp(decl: StyledDecl, propName: string): boolean {
@@ -104,8 +105,16 @@ function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName
       [componentLocalName],
     );
   })();
-  if (typedComponent?.supportsSxProp === true) {
-    return true;
+  if (typedComponent) {
+    if (typedComponent.supportsSxProp) {
+      return true;
+    }
+    if (
+      importInfo?.source.kind !== "absolutePath" ||
+      ctx.options.transformedFileSources?.has(toRealPath(importInfo.source.value)) !== true
+    ) {
+      return false;
+    }
   }
 
   return isWrappedComponentSxAware({

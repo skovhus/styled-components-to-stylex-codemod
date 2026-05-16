@@ -54,6 +54,41 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("does not treat intrinsic pass-through props as explicit sx support on custom components", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-intrinsic-props-"));
+    const filePath = path.join(fixtureDir, "IconButton.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      'const IconButton = (props: React.ComponentProps<"button">) => <button {...props} />;',
+      "",
+      "const StyledIconButton = styled(IconButton)<{ useRoundStyle?: boolean }>`",
+      '  ${(props) => props.useRoundStyle !== false && "border-radius: 100%;"}',
+      "  padding: 4px;",
+      "`;",
+      "",
+      "export const App = () => <StyledIconButton>Icon</StyledIconButton>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain("{...stylex.props(");
+      expect(after.code).not.toContain("<IconButton\n      {...rest}\n      sx=");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not widen closed spread-only props to className/style support", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-output-"));
     const filePath = path.join(fixtureDir, "Box.tsx");

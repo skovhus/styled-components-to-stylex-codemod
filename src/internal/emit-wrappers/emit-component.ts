@@ -127,6 +127,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     lookThroughPropsWithChildren?: boolean;
   }): boolean => {
     const { componentName, propName, lookThroughPropsWithChildren } = args;
+    if (
+      (propName === "sx" || propName === "className" || propName === "style") &&
+      emitter.hasTypeScriptComponentMetadata(componentName)
+    ) {
+      return emitter.typedComponentHasProp(componentName, propName);
+    }
     const propsType = args.propsType ?? findComponentPropsType(componentName);
     if (!propsType) {
       return emitter.typedComponentHasProp(componentName, propName);
@@ -287,15 +293,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // wrapper passes className/style through unchanged via `{...rest}` and the
     // wrapped component merges them with its `sx` itself. The wrapper still
     // accepts className/style in its type, but does not destructure them.
+    const wrappedPropsAreOnlyIntrinsic = baseComponentPropsType
+      ? isIntrinsicPassthroughType(emitter, baseComponentPropsType)
+      : false;
     const wrappedAcceptsSx =
       emitter.useSxProp &&
       ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
-        emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
-        localComponentHasProp({
-          componentName: wrappedComponent,
-          propName: "sx",
-          propsType: baseComponentPropsType,
-        }));
+        (!wrappedPropsAreOnlyIntrinsic && emitter.wrappedComponentAcceptsSxProp(wrappedComponent)));
     const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
       normalizeForwardedAs: !shouldLowerForwardedAs,
     };
@@ -2100,6 +2104,11 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
       getTypeQueryExpressionName(query.exprName) === wrappedComponent
     );
   });
+}
+
+function isIntrinsicPassthroughType(emitter: WrapperEmitter, type: ASTNode): boolean {
+  const text = emitter.stringifyTsType(type);
+  return text !== null && /^React\.ComponentProps(?:WithRef)?<"[^"]+">$/.test(text);
 }
 
 function getTypeQueryExpressionName(exprName: unknown): string | null {
