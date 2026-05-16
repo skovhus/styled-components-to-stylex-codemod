@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
-import type { TypeScriptPrepassMetadata } from "../internal/prepass/typescript-analysis.js";
+import {
+  findTypeScriptComponentMetadata,
+  type TypeScriptPrepassMetadata,
+} from "../internal/prepass/typescript-analysis.js";
 import { runTransform } from "../run.js";
 
 function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string) {
@@ -13,7 +16,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
   return Object.fromEntries(
     metadata.files.flatMap((file) =>
       file.components
-        .filter((component) => component.name !== "BodySx")
+        .filter((component) => component.name !== "BodySx" && component.name !== "DefaultAlias")
         .map((component) => [
           `${path.relative(realBase, file.filePath)}:${component.name}`,
           {
@@ -43,6 +46,58 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
 }
 
 describe("TypeScript compiler prepass", () => {
+  it("does not use default-export metadata for named import lookups", () => {
+    const metadata: TypeScriptPrepassMetadata = {
+      version: 1,
+      files: [
+        {
+          filePath: path.resolve("/tmp/components.tsx"),
+          functions: [],
+          components: [
+            {
+              name: "DefaultButton",
+              kind: "react",
+              exported: true,
+              defaultExport: true,
+              typeParameters: [],
+              propType: null,
+              props: [],
+              explicitPropNames: ["sx"],
+              parameters: [],
+              restProps: [],
+              hasIndexSignature: false,
+              supportsSxProp: true,
+            },
+            {
+              name: "Plain",
+              kind: "react",
+              exported: true,
+              defaultExport: false,
+              typeParameters: [],
+              propType: null,
+              props: [],
+              explicitPropNames: [],
+              parameters: [],
+              restProps: [],
+              hasIndexSignature: false,
+              supportsSxProp: false,
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(findTypeScriptComponentMetadata(metadata, "/tmp/components.tsx", ["Plain"])?.name).toBe(
+      "Plain",
+    );
+    expect(findTypeScriptComponentMetadata(metadata, "/tmp/components.tsx", ["Missing"])).toBe(
+      undefined,
+    );
+    expect(
+      findTypeScriptComponentMetadata(metadata, "/tmp/components.tsx", ["Alias", "default"])?.name,
+    ).toBe("DefaultButton");
+  });
+
   it("extracts serializable component metadata automatically for TypeScript parsers", async () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-"));
     const componentsDir = path.join(fixtureDir, "components");
@@ -87,6 +142,9 @@ describe("TypeScript compiler prepass", () => {
         "  const { sx, label } = props as { sx?: SxStyles; label: string };",
         "  return <div>{label}{sx ? 'sx' : ''}</div>;",
         "}",
+        "",
+        "const DefaultAlias = (props: { sx?: SxStyles }) => <div>{props.sx ? 'sx' : ''}</div>;",
+        "export default DefaultAlias;",
       ].join("\n"),
     );
 
@@ -107,6 +165,11 @@ describe("TypeScript compiler prepass", () => {
         prepassResult.typeScriptMetadata!.files[0]!.components.find(
           (component) => component.name === "BodySx",
         )?.supportsSxProp,
+      ).toBe(true);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "DefaultAlias",
+        )?.defaultExport,
       ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`

@@ -241,6 +241,35 @@ describe("runTransform (e2e)", () => {
     });
   });
 
+  it("uses sx for aliased default-exported variable components with sx props", async () => {
+    expectAutoSxWrapperResult({
+      ...(await runAutoSxWrapperFixture({
+        tmpPrefix: "styledx-run-sx-aware-default-variable-alias-",
+        componentLines: [
+          'import * as React from "react";',
+          'import type { StyleXStyles } from "@stylexjs/stylex";',
+          "",
+          "const ContentViewContainer = (props: {",
+          "  sx?: StyleXStyles;",
+          "  children?: React.ReactNode;",
+          "}) => {",
+          "  return <section>{props.children}</section>;",
+          "};",
+          "",
+          "export default ContentViewContainer;",
+          "",
+        ],
+        importLine: 'import Base from "../../components/ContentViewContainer";',
+        wrappedName: "Base",
+        bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+      })),
+      wrappedName: "Base",
+      transformed: 1,
+      skipped: 1,
+      containerSxText: "sx?: StyleXStyles",
+    });
+  });
+
   it("uses sx for wrappers of components with imported StyleXStyles props", async () => {
     const { result, container, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-imported-sx-type-",

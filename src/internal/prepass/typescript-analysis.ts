@@ -105,7 +105,7 @@ function defaultExportMatches(
   component: TypeScriptComponentMetadata,
   names: ReadonlySet<string>,
 ): boolean {
-  return component.defaultExport && (names.has("default") || names.size > 0);
+  return component.defaultExport && names.has("default");
 }
 
 function analyzeSourceFile(
@@ -113,6 +113,7 @@ function analyzeSourceFile(
   checker: ts.TypeChecker,
 ): TypeScriptFileMetadata {
   const exportedNames = getExportedNames(sourceFile, checker);
+  const defaultExportedLocalNames = getDefaultExportedLocalNames(sourceFile);
   const components: TypeScriptComponentMetadata[] = [];
   const functions: TypeScriptFunctionMetadata[] = [];
 
@@ -121,7 +122,9 @@ function analyzeSourceFile(
       const fn = readFunctionDeclaration(node, checker, exportedNames);
       functions.push(fn);
       if (isReactComponentFunction(node, checker)) {
-        components.push(readReactComponentFromFunction(node, checker, exportedNames));
+        components.push(
+          readReactComponentFromFunction(node, checker, exportedNames, defaultExportedLocalNames),
+        );
       }
       return;
     }
@@ -151,6 +154,7 @@ function analyzeSourceFile(
                 node,
                 checker,
                 exportedNames,
+                defaultExportedLocalNames,
               ),
             );
           }
@@ -229,13 +233,14 @@ function readReactComponentFromFunction(
   node: ts.FunctionDeclaration,
   checker: ts.TypeChecker,
   exportedNames: ReadonlySet<string>,
+  defaultExportedLocalNames: ReadonlySet<string>,
 ): TypeScriptComponentMetadata {
   const name = node.name?.text ?? "default";
   return buildComponentMetadata({
     name,
     kind: "react",
     exported: exportedNames.has(name),
-    defaultExport: isDefaultExport(node),
+    defaultExport: isDefaultExport(node) || defaultExportedLocalNames.has(name),
     typeParameters: readTypeParameters(node.typeParameters),
     propTypeNode: node.parameters[0]?.type,
     parameters: readParameters(node.parameters, checker),
@@ -252,12 +257,13 @@ function readReactComponentFromVariable(
   statement: ts.VariableStatement,
   checker: ts.TypeChecker,
   exportedNames: ReadonlySet<string>,
+  defaultExportedLocalNames: ReadonlySet<string>,
 ): TypeScriptComponentMetadata {
   return buildComponentMetadata({
     name,
     kind: "react",
     exported: exportedNames.has(name) || isExported(statement),
-    defaultExport: false,
+    defaultExport: defaultExportedLocalNames.has(name),
     typeParameters: readTypeParameters(node.typeParameters),
     propTypeNode: node.parameters[0]?.type,
     parameters: readParameters(node.parameters, checker),
@@ -735,6 +741,17 @@ function getExportedNames(sourceFile: ts.SourceFile, checker: ts.TypeChecker): S
     return new Set();
   }
   return new Set(checker.getExportsOfModule(moduleSymbol).map((symbol) => symbol.getName()));
+}
+
+function getDefaultExportedLocalNames(sourceFile: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExportAssignment(statement) || !ts.isIdentifier(statement.expression)) {
+      continue;
+    }
+    names.add(statement.expression.text);
+  }
+  return names;
 }
 
 function isExported(node: ts.Node): boolean {
