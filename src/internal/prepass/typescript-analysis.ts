@@ -138,19 +138,19 @@ function analyzeSourceFile(
           components.push(readStyledComponent(declaration, node, checker, exportedNames));
           continue;
         }
-        if (
-          declaration.initializer &&
-          (ts.isArrowFunction(declaration.initializer) ||
-            ts.isFunctionExpression(declaration.initializer))
-        ) {
+        const componentInitializer = declaration.initializer
+          ? getComponentFunctionInitializerInfo(declaration.initializer)
+          : undefined;
+        if (componentInitializer) {
           functions.push(
-            readVariableFunction(declaration.name.text, declaration.initializer, node, checker),
+            readVariableFunction(declaration.name.text, componentInitializer.fn, node, checker),
           );
-          if (isReactComponentName(declaration.name.text) || returnsJsx(declaration.initializer)) {
+          if (isReactComponentName(declaration.name.text) || returnsJsx(componentInitializer.fn)) {
             components.push(
               readReactComponentFromVariable(
                 declaration.name.text,
-                declaration.initializer,
+                componentInitializer.fn,
+                componentInitializer.propTypeNode,
                 node,
                 checker,
                 exportedNames,
@@ -254,6 +254,7 @@ function readReactComponentFromFunction(
 function readReactComponentFromVariable(
   name: string,
   node: ts.ArrowFunction | ts.FunctionExpression,
+  propTypeNode: ts.TypeNode | undefined,
   statement: ts.VariableStatement,
   checker: ts.TypeChecker,
   exportedNames: ReadonlySet<string>,
@@ -265,7 +266,7 @@ function readReactComponentFromVariable(
     exported: exportedNames.has(name) || isExported(statement),
     defaultExport: defaultExportedLocalNames.has(name),
     typeParameters: readTypeParameters(node.typeParameters),
-    propTypeNode: node.parameters[0]?.type,
+    propTypeNode: propTypeNode ?? node.parameters[0]?.type,
     parameters: readParameters(node.parameters, checker),
     restProps: readRestProps(node.parameters[0], node.body),
     bodySupportsSxProp: readsSxProp(node.parameters[0], node.body),
@@ -649,6 +650,52 @@ function findStyledPropsTypeNode(node: ts.Expression): ts.TypeNode | undefined {
     return findStyledPropsTypeNode(node.expression);
   }
   return undefined;
+}
+
+function getComponentFunctionInitializerInfo(
+  node: ts.Expression,
+): { fn: ts.ArrowFunction | ts.FunctionExpression; propTypeNode?: ts.TypeNode } | undefined {
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
+    return { fn: node };
+  }
+  if (!ts.isCallExpression(node) || !isKnownPropPreservingHocCallee(node.expression)) {
+    return undefined;
+  }
+  for (const arg of node.arguments) {
+    if (ts.isArrowFunction(arg) || ts.isFunctionExpression(arg)) {
+      return { fn: arg, propTypeNode: getHocPropsTypeNode(node) };
+    }
+    if (ts.isIdentifier(arg)) {
+      continue;
+    }
+    const nested = getComponentFunctionInitializerInfo(arg as ts.Expression);
+    if (nested) {
+      return { ...nested, propTypeNode: nested.propTypeNode ?? getHocPropsTypeNode(node) };
+    }
+  }
+  return undefined;
+}
+
+function getHocPropsTypeNode(node: ts.CallExpression): ts.TypeNode | undefined {
+  const calleeName = ts.isPropertyAccessExpression(node.expression)
+    ? node.expression.name.text
+    : ts.isIdentifier(node.expression)
+      ? node.expression.text
+      : undefined;
+  if (calleeName !== "forwardRef") {
+    return undefined;
+  }
+  return node.typeArguments?.[1];
+}
+
+function isKnownPropPreservingHocCallee(node: ts.Expression): boolean {
+  if (ts.isIdentifier(node)) {
+    return node.text === "memo" || node.text === "forwardRef";
+  }
+  return (
+    ts.isPropertyAccessExpression(node) &&
+    (node.name.text === "memo" || node.name.text === "forwardRef")
+  );
 }
 
 function isStyledComponentInitializer(node: ts.Expression): boolean {

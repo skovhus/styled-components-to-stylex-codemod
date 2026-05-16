@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { toRealPath } from "./path-utils.js";
 
 export function transformedComponentAcceptsSx(args: {
@@ -16,13 +17,17 @@ function readTransformedSource(
   absolutePath: string,
   sourceOverrides: ReadonlyMap<string, string> | undefined,
 ): string | undefined {
-  if (!sourceOverrides) {
-    return undefined;
-  }
   for (const candidate of sourcePathCandidates(absolutePath)) {
-    const source = sourceOverrides.get(toRealPath(candidate));
+    const source = sourceOverrides?.get(toRealPath(candidate));
     if (source !== undefined) {
       return source;
+    }
+    if (existsSync(candidate)) {
+      try {
+        return readFileSync(candidate, "utf8");
+      } catch {
+        return undefined;
+      }
     }
   }
   return undefined;

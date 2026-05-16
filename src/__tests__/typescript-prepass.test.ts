@@ -17,6 +17,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
     metadata.files.flatMap((file) =>
       file.components
         .filter((component) => component.name !== "BodySx" && component.name !== "DefaultAlias")
+        .filter((component) => component.name !== "MemoSx" && component.name !== "ForwardRefSx")
         .map((component) => [
           `${path.relative(realBase, file.filePath)}:${component.name}`,
           {
@@ -145,6 +146,9 @@ describe("TypeScript compiler prepass", () => {
         "",
         "const DefaultAlias = (props: { sx?: SxStyles }) => <div>{props.sx ? 'sx' : ''}</div>;",
         "export default DefaultAlias;",
+        "",
+        "export const MemoSx = React.memo((props: { sx?: SxStyles; label?: string }) => <div>{props.label}</div>);",
+        "export const ForwardRefSx = React.forwardRef<HTMLDivElement, { sx?: SxStyles; label?: string }>((props, ref) => <div ref={ref}>{props.label}</div>);",
       ].join("\n"),
     );
 
@@ -170,6 +174,16 @@ describe("TypeScript compiler prepass", () => {
         prepassResult.typeScriptMetadata!.files[0]!.components.find(
           (component) => component.name === "DefaultAlias",
         )?.defaultExport,
+      ).toBe(true);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "MemoSx",
+        )?.supportsSxProp,
+      ).toBe(true);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "ForwardRefSx",
+        )?.supportsSxProp,
       ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`
