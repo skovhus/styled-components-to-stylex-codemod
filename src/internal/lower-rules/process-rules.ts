@@ -256,7 +256,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     // - Compound class selectors: `&.card.highlighted { ... }`
     // - Class-conditioned rules: `&.active { ... }` (requires runtime class/prop gating)
     // - Descendant element selectors: `& a { ... }`, `& h1, & h2 { ... }`
-    // - Descendant pseudo selectors with whitespace before the pseudo
+    // - Chained pseudos like `:not(...)`
     //
     // NOTE: normalize interpolated component selectors before the complex selector checks
     // to avoid skipping bails for selectors like `${Other} .child &`.
@@ -1512,28 +1512,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       }
 
       if (pseudos?.length) {
-        if (
-          !media &&
-          !pseudoElement &&
-          !pseudoElementsList &&
-          pseudos.every(isLastChildPseudoSelector)
-        ) {
-          for (const ps of pseudos) {
-            nestedSelectors[ps] ??= {};
-            const pseudoTarget = nestedSelectors[ps]!;
-            pseudoTarget[prop] = value;
-            noteSourceCssProperty(pseudoTarget);
-            if (commentSource) {
-              addPropComments(pseudoTarget, prop, {
-                leading: commentSource.leading,
-                leadingLine: commentSource.leadingLine,
-                trailingLine: commentSource.trailingLine,
-              });
-            }
-          }
-          return;
-        }
-
         perPropPseudo[prop] ??= {};
         const existing = perPropPseudo[prop]!;
         noteSourceCssProperty(existing);
@@ -1622,10 +1600,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
 
 function getFirstAncestorPseudo(ancestorPseudos: string | string[] | null): string | null {
   return Array.isArray(ancestorPseudos) ? (ancestorPseudos[0] ?? null) : ancestorPseudos;
-}
-
-function isLastChildPseudoSelector(pseudo: string): boolean {
-  return pseudo === ":last-child" || pseudo === ":not(:last-child)";
 }
 
 function copyWrittenPropsToRemainingAncestorPseudoBuckets(args: {

@@ -81,7 +81,7 @@ import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
-import { styleKeyWithSuffix } from "../transform/helpers.js";
+import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { isMemberExpression, mapAst } from "./utils.js";
 import {
@@ -739,8 +739,54 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         prefix,
         suffix,
       );
+      // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
+      // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
+      // within the pseudo-element's nested selector bucket.
+      if (pseudoElement) {
+        for (const out of cssDeclarationToStylexDeclarations(d)) {
+          applyResolvedPropValue(out.prop, finalValue, null);
+        }
+        return true;
+      }
       for (const out of cssDeclarationToStylexDeclarations(d)) {
-        applyResolvedPropValue(out.prop, finalValue, null);
+        perPropPseudo[out.prop] ??= {};
+        const existing = perPropPseudo[out.prop]!;
+        if (!("default" in existing)) {
+          const existingVal = (styleObj as Record<string, unknown>)[out.prop];
+          if (existingVal !== undefined) {
+            existing.default = existingVal;
+          } else if (cssHelperPropValues.has(out.prop)) {
+            // Use the css helper's value as the default
+            const helperVal = cssHelperPropValues.get(out.prop);
+            if (
+              helperVal &&
+              typeof helperVal === "object" &&
+              "__cssHelperDynamicValue" in helperVal
+            ) {
+              // Dynamic value - need to resolve from already-processed css helper
+              const helperDecl = (helperVal as { decl?: StyledDecl }).decl;
+              if (helperDecl) {
+                const resolvedHelper = state.resolvedStyleObjects.get(
+                  toStyleKey(helperDecl.localName),
+                );
+                if (resolvedHelper && typeof resolvedHelper === "object") {
+                  existing.default = (resolvedHelper as Record<string, unknown>)[out.prop] ?? null;
+                } else {
+                  existing.default = null;
+                }
+              } else {
+                existing.default = null;
+              }
+            } else {
+              existing.default = helperVal;
+            }
+          } else {
+            existing.default = null;
+          }
+        }
+        for (const ps of pseudos) {
+          existing[ps] = finalValue;
+        }
       }
       return true;
     };
