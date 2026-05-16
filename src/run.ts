@@ -92,21 +92,14 @@ export interface RunTransformOptions {
   print?: boolean;
 
   /**
-   * jscodeshift parser to use
+   * jscodeshift parser to use.
+   *
+   * When set to `"ts"` or `"tsx"` (including the default), runTransform also
+   * builds TypeScript compiler metadata for more accurate wrapper interfaces.
+   *
    * @default "tsx"
    */
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
-
-  /**
-   * Opt in to a TypeScript compiler-backed prepass when `parser` is `"ts"` or `"tsx"`.
-   *
-   * The typed prepass creates a real TypeScript Program/TypeChecker and attaches
-   * deterministic metadata about styled components, React components, prop types,
-   * generics, rest props, and sx support for later transform decisions.
-   *
-   * @default false
-   */
-  typescriptPrepass?: boolean;
 
   /**
    * Commands to run after transformation to format the output files.
@@ -291,16 +284,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     maxExamples,
   } = options;
 
-  if (options.typescriptPrepass === true && parser !== "ts" && parser !== "tsx") {
-    throw new Error(
-      [
-        "runTransform(options): `typescriptPrepass` requires the TypeScript parser.",
-        'Set parser to "ts" or "tsx", or omit `typescriptPrepass`.',
-        `Received: parser=${JSON.stringify(parser)}`,
-      ].join("\n"),
-    );
-  }
-
   if (maxExamples !== undefined) {
     Logger.setMaxExamples(maxExamples);
   }
@@ -449,7 +432,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       enableAstCache: true,
       leavesOnly,
       resolveBaseComponent: adapterInput.resolveBaseComponent,
-      enableTypeScriptAnalysis: options.typescriptPrepass === true,
     });
   } catch (err) {
     if (adapterInput.externalInterface === "auto") {
@@ -572,6 +554,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
                   (name): name is string => typeof name === "string",
                 )
               : [ctx.importedName];
+          const typedComponent = findTypedComponentMetadata(
+            prepassResult.typeScriptMetadata,
+            definitionSourcePath,
+            sourceComponentNames,
+          );
+          if (typedComponent?.supportsSxProp === true) {
+            return { acceptsSx: true };
+          }
           const hasTransformedSxSurface = sourceComponentNames.some((name) =>
             detectExportedComponentSxProp({
               absolutePath: definitionSourcePath,
@@ -579,12 +569,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
               sourceOverrides: transformedFileSources,
             }),
           );
-          const typedComponent = findTypedComponentMetadata(
-            prepassResult.typeScriptMetadata,
-            definitionSourcePath,
-            sourceComponentNames,
-          );
-          if (hasTransformedSxSurface || typedComponent?.supportsSxProp === true) {
+          if (hasTransformedSxSurface) {
             return { acceptsSx: true };
           }
           if (!transformedFiles.has(toRealPath(definitionSourcePath))) {

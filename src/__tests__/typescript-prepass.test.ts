@@ -41,7 +41,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
 }
 
 describe("TypeScript compiler prepass", () => {
-  it("extracts serializable component metadata when opted in", async () => {
+  it("extracts serializable component metadata automatically for TypeScript parsers", async () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-"));
     const componentsDir = path.join(fixtureDir, "components");
     mkdirSync(componentsDir, { recursive: true });
@@ -90,7 +90,6 @@ describe("TypeScript compiler prepass", () => {
         resolver: createModuleResolver(),
         parserName: "tsx",
         createExternalInterface: false,
-        enableTypeScriptAnalysis: true,
       });
 
       expect(prepassResult.typeScriptMetadata).toBeDefined();
@@ -345,7 +344,7 @@ describe("TypeScript compiler prepass", () => {
     }
   });
 
-  it("does not run unless opted in", async () => {
+  it("does not run for non-TypeScript parsers", async () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-off-"));
     const sourcePath = path.join(fixtureDir, "component.tsx");
     writeFileSync(
@@ -358,7 +357,7 @@ describe("TypeScript compiler prepass", () => {
         filesToTransform: [sourcePath],
         consumerPaths: [],
         resolver: createModuleResolver(),
-        parserName: "tsx",
+        parserName: "babel",
         createExternalInterface: false,
       });
 
@@ -368,24 +367,22 @@ describe("TypeScript compiler prepass", () => {
     }
   });
 
-  it("requires a TypeScript parser when enabled through runTransform", async () => {
-    await expect(
-      runTransform({
-        files: "src/__tests__/fixtures/cross-file/no-styled.tsx",
-        consumerPaths: null,
-        parser: "babel",
-        typescriptPrepass: true,
-        adapter: {
-          resolveValue: () => undefined,
-          resolveCall: () => undefined,
-          resolveSelector: () => undefined,
-          externalInterface: () => ({ styles: false, as: false, ref: false }),
-          styleMerger: null,
-          useSxProp: false,
-        },
-        dryRun: true,
-        silent: true,
-      }),
-    ).rejects.toThrowError(/typescriptPrepass.*TypeScript parser/);
+  it("runTransform accepts non-TypeScript parsers without TypeScript metadata", async () => {
+    const result = await runTransform({
+      files: "src/__tests__/fixtures/cross-file/no-styled.tsx",
+      consumerPaths: null,
+      parser: "babel",
+      adapter: {
+        resolveValue: () => undefined,
+        resolveCall: () => undefined,
+        resolveSelector: () => undefined,
+        externalInterface: () => ({ styles: false, as: false, ref: false }),
+        styleMerger: null,
+        useSxProp: false,
+      },
+      dryRun: true,
+      silent: true,
+    });
+    expect(result.errors).toBe(0);
   });
 });

@@ -161,6 +161,25 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
+    if (!this.useSxProp) {
+      return false;
+    }
+    const importInfo = this.importMap.get(componentLocalName);
+    if (importInfo) {
+      const adapterResult = this.wrappedComponentInterface?.({
+        localName: componentLocalName,
+        importSource: importInfo.source.value,
+        importedName: importInfo.importedName,
+        filePath: this.filePath,
+      });
+      if (adapterResult !== undefined) {
+        return adapterResult.acceptsSx === true;
+      }
+    }
+    const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (typedComponent?.supportsSxProp === true) {
+      return true;
+    }
     return isWrappedComponentSxAware({
       adapter: {
         useSxProp: this.useSxProp,

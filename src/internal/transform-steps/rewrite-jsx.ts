@@ -16,6 +16,7 @@ import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
 import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
+import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 
@@ -65,6 +66,56 @@ function substituteStyleFnCallArg(
     return node;
   };
   return visit(cloneAstNode(callArg)) as ExpressionKind;
+}
+
+function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName: string): boolean {
+  if (!ctx.adapter.useSxProp) {
+    return false;
+  }
+
+  const importInfo = ctx.importMap?.get(componentLocalName);
+  if (importInfo) {
+    const adapterResult = ctx.adapter.wrappedComponentInterface?.({
+      localName: componentLocalName,
+      importSource: importInfo.source.value,
+      importedName: importInfo.importedName,
+      filePath: ctx.file.path,
+    });
+    if (adapterResult !== undefined) {
+      return adapterResult.acceptsSx === true;
+    }
+  }
+
+  const typedComponent = (() => {
+    if (importInfo?.source.kind === "absolutePath") {
+      const names =
+        importInfo.importedName === "default"
+          ? [componentLocalName, importInfo.importedName]
+          : [importInfo.importedName];
+      return findTypeScriptComponentMetadata(
+        ctx.options.crossFileInfo?.typeScriptMetadata,
+        importInfo.source.value,
+        names,
+      );
+    }
+    return findTypeScriptComponentMetadata(
+      ctx.options.crossFileInfo?.typeScriptMetadata,
+      ctx.file.path,
+      [componentLocalName],
+    );
+  })();
+  if (typedComponent?.supportsSxProp === true) {
+    return true;
+  }
+
+  return isWrappedComponentSxAware({
+    adapter: ctx.adapter,
+    importMap: ctx.importMap,
+    componentLocalName,
+    filePath: ctx.file.path,
+    localSource: ctx.file.source,
+    sourceOverrides: ctx.options.transformedFileSources,
+  });
 }
 
 /**
@@ -959,15 +1010,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // prop (already migrated to StyleX). When wrapping such a component, emit
         // `sx={...}` on the wrapped tag instead of `{...stylex.props(...)}`.
         const wrappedAcceptsSxProp =
-          !isIntrinsicTag &&
-          isWrappedComponentSxAware({
-            adapter: ctx.adapter,
-            importMap: ctx.importMap,
-            componentLocalName: finalTag,
-            filePath: ctx.file.path,
-            localSource: ctx.file.source,
-            sourceOverrides: ctx.options.transformedFileSources,
-          });
+          !isIntrinsicTag && wrappedComponentAcceptsSxProp(ctx, finalTag);
 
         // When NOT using sx prop, CSS module classNames must be merged into
         // the stylex.props spread (via classNameAttr) to avoid a duplicate

@@ -76,8 +76,6 @@ interface PrepassOptions {
   resolveBaseComponent?: (
     ctx: ResolveBaseComponentContext,
   ) => ResolveBaseComponentResult | undefined;
-  /** Opt-in compiler-backed TypeScript metadata extraction. Requires the ts/tsx parser. */
-  enableTypeScriptAnalysis?: boolean;
 }
 
 interface ForwardedAsConsumerEntry {
@@ -91,7 +89,7 @@ interface PrepassResult {
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
   /** Unconverted consumers that wrap converted components with styled() and use `as` prop */
   forwardedAsConsumers: Map<string, ForwardedAsConsumerEntry[]>;
-  /** Serializable TypeScript compiler metadata for later transform steps. */
+  /** Serializable TypeScript compiler metadata for later transform steps when parser is ts/tsx. */
   typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
@@ -129,7 +127,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     enableAstCache,
     leavesOnly,
     resolveBaseComponent,
-    enableTypeScriptAnalysis,
   } = options;
   const t0 = performance.now();
   const astCache = enableAstCache ? new Map<string, AstCacheEntry>() : undefined;
@@ -169,9 +166,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const allFilesSet = new Set(allFiles);
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
-  if (enableTypeScriptAnalysis && !isTypeScriptParser(parserName)) {
-    throw new Error("TypeScript analysis prepass requires the ts or tsx parser.");
-  }
+  const enableTypeScriptAnalysis = isTypeScriptParser(parserName);
 
   const resolveCache = new Map<string, string | null>();
   const resolve: Resolve = (specifier, fromFile) => {
