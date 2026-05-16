@@ -46,6 +46,7 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
+import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
@@ -894,11 +895,23 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportName: exportInfo.exportName,
       isDefaultExport: exportInfo.isDefault,
     });
+    const typedComponent = findTypeScriptComponentMetadata(
+      ctx.options.crossFileInfo?.typeScriptMetadata,
+      file.path,
+      [decl.localName, exportInfo.exportName],
+    );
+    if (typedComponent) {
+      decl.typeScriptPropNames = new Set(typedComponent.props.map((prop) => prop.name));
+      decl.typeScriptHasIndexSignature = typedComponent.hasIndexSignature;
+      decl.typeScriptSupportsSxProp = typedComponent.supportsSxProp;
+    }
     decl.supportsExternalStyles = extResult.styles;
-    decl.supportsAsProp = extResult.as;
-    decl.supportsRefProp = extResult.ref;
-    decl.consumerUsesClassName = extResult.className ?? extResult.styles;
-    decl.consumerUsesStyle = extResult.style ?? extResult.styles;
+    decl.supportsAsProp = extResult.as || typedComponentHasProp(decl, "as");
+    decl.supportsRefProp = extResult.ref || typedComponentHasProp(decl, "ref");
+    decl.consumerUsesClassName =
+      extResult.className ?? typeAwareExternalStyleFallback(decl, extResult.styles, "className");
+    decl.consumerUsesStyle =
+      extResult.style ?? typeAwareExternalStyleFallback(decl, extResult.styles, "style");
     decl.consumerUsesElementProps = extResult.elementProps ?? extResult.styles;
     decl.consumerUsesSpread = extResult.spreadProps ?? extResult.styles;
   }
@@ -1401,6 +1414,24 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+function typedComponentHasProp(decl: StyledDecl, propName: string): boolean {
+  return decl.typeScriptPropNames?.has(propName) === true;
+}
+
+function typeAwareExternalStyleFallback(
+  decl: StyledDecl,
+  fallback: boolean,
+  propName: "className" | "style",
+): boolean {
+  if (!fallback) {
+    return false;
+  }
+  if (!decl.typeScriptPropNames) {
+    return true;
+  }
+  return decl.typeScriptHasIndexSignature === true || decl.typeScriptPropNames.has(propName);
+}
 
 /** True if any skipped decl in the file extends the given component via `styled(name)`. */
 function extendedBySkippedDecl(allStyledDecls: StyledDecl[], name: string): boolean {

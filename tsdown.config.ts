@@ -8,6 +8,6 @@ export default defineConfig({
   sourcemap: false,
   outDir: "dist",
   deps: {
-    neverBundle: ["jscodeshift", "oxc-resolver"],
+    neverBundle: ["jscodeshift", "oxc-resolver", "typescript"],
   },
 });

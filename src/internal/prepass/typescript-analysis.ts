@@ -23,6 +23,7 @@ export interface TypeScriptComponentMetadata {
   props: TypeScriptPropMetadata[];
   parameters: TypeScriptParameterMetadata[];
   restProps: TypeScriptRestPropMetadata[];
+  hasIndexSignature: boolean;
   supportsSxProp: boolean;
 }
 
@@ -80,6 +81,21 @@ export function analyzeTypeScriptProgram(options: {
     .sort((a, b) => a.filePath.localeCompare(b.filePath));
 
   return { version: 1, files };
+}
+
+export function findTypeScriptComponentMetadata(
+  metadata: TypeScriptPrepassMetadata | undefined,
+  filePath: string,
+  componentNames: readonly string[],
+): TypeScriptComponentMetadata | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const names = new Set(componentNames);
+  const resolvedFilePath = resolveExistingFilePath(filePath);
+  return metadata.files
+    .find((file) => file.filePath === resolvedFilePath)
+    ?.components.find((component) => names.has(component.name));
 }
 
 function analyzeSourceFile(
@@ -252,13 +268,8 @@ function buildComponentMetadata(args: {
   checker: ts.TypeChecker;
   location: ts.Node;
 }): TypeScriptComponentMetadata {
-  const props = args.propTypeNode
-    ? readPropsFromType(
-        args.checker.getTypeFromTypeNode(args.propTypeNode),
-        args.checker,
-        args.location,
-      )
-    : [];
+  const propType = args.propTypeNode ? args.checker.getTypeFromTypeNode(args.propTypeNode) : null;
+  const props = propType ? readPropsFromType(propType, args.checker, args.location) : [];
   return {
     name: args.name,
     kind: args.kind,
@@ -269,6 +280,7 @@ function buildComponentMetadata(args: {
     props,
     parameters: args.parameters,
     restProps: args.restProps,
+    hasIndexSignature: propType ? hasIndexSignature(propType, args.checker) : false,
     supportsSxProp: props.some((prop) => prop.name === "sx"),
   };
 }
@@ -305,6 +317,13 @@ function readParameters(
       ? parameter.type.getText()
       : checker.typeToString(checker.getTypeAtLocation(parameter), parameter),
   }));
+}
+
+function hasIndexSignature(type: ts.Type, checker: ts.TypeChecker): boolean {
+  return (
+    checker.getIndexTypeOfType(type, ts.IndexKind.String) !== undefined ||
+    checker.getIndexTypeOfType(type, ts.IndexKind.Number) !== undefined
+  );
 }
 
 function readRestProps(

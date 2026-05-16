@@ -566,6 +566,12 @@ export type StyledDecl = {
    * Stored as a TS type node (best-effort) so wrapper emission can reuse it.
    */
   propsType?: ASTNode;
+  /** Prop names resolved by the opt-in TypeScript prepass for this component's public props. */
+  typeScriptPropNames?: Set<string>;
+  /** True when the opt-in TypeScript prepass found an index signature on the public props type. */
+  typeScriptHasIndexSignature?: boolean;
+  /** True when the opt-in TypeScript prepass found an `sx` prop on the public props type. */
+  typeScriptSupportsSxProp?: boolean;
 
   /**
    * Maps original `$`-prefixed transient prop names to their stripped versions.

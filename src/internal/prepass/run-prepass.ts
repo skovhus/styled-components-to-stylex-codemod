@@ -172,9 +172,6 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   if (enableTypeScriptAnalysis && !isTypeScriptParser(parserName)) {
     throw new Error("TypeScript analysis prepass requires the ts or tsx parser.");
   }
-  const typeScriptMetadata = enableTypeScriptAnalysis
-    ? (await import("./typescript-analysis.js")).analyzeTypeScriptProgram({ files: uniqueAllFiles })
-    : undefined;
 
   const resolveCache = new Map<string, string | null>();
   const resolve: Resolve = (specifier, fromFile) => {
@@ -295,7 +292,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    if (createExternalInterface && hasStyled) {
+    if ((createExternalInterface || enableTypeScriptAnalysis) && hasStyled) {
       // Detect styled(Component) calls
       STYLED_CALL_RE.lastIndex = 0;
       for (const m of source.matchAll(STYLED_CALL_RE)) {
@@ -614,6 +611,18 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     }
   }
 
+  const typeScriptMetadata = enableTypeScriptAnalysis
+    ? (await import("./typescript-analysis.js")).analyzeTypeScriptProgram({
+        files: collectTypeScriptAnalysisFiles({
+          transformSet,
+          styledCallUsages,
+          styledWrapperUsages,
+          cachedRead,
+          resolve,
+        }),
+      })
+    : undefined;
+
   const propUsageByFile = buildPropUsageByFile({
     styledDefFiles,
     propUsageCandidates,
@@ -713,6 +722,30 @@ function hasLeavesOnlyPrepassBlocker(source: string): boolean {
 
 function isTypeScriptParser(parserName: PrepassParserName | undefined): boolean {
   return parserName === undefined || parserName === "ts" || parserName === "tsx";
+}
+
+function collectTypeScriptAnalysisFiles(args: {
+  transformSet: ReadonlySet<string>;
+  styledCallUsages: readonly { file: string; name: string }[];
+  styledWrapperUsages: readonly { file: string; wrappedName: string }[];
+  cachedRead: (path: string) => string;
+  resolve: Resolve;
+}): string[] {
+  const { transformSet, styledCallUsages, styledWrapperUsages, cachedRead, resolve } = args;
+  const files = new Set(transformSet);
+  for (const { file, name } of styledCallUsages) {
+    const definition = resolveDefinitionFile({ file, localName: name, cachedRead, resolve });
+    if (definition) {
+      files.add(definition.defFile);
+    }
+  }
+  for (const { file, wrappedName } of styledWrapperUsages) {
+    const definition = resolveDefinitionFile({ file, localName: wrappedName, cachedRead, resolve });
+    if (definition) {
+      files.add(definition.defFile);
+    }
+  }
+  return [...files].sort();
 }
 
 function hasUniversalSelectorCandidate(source: string): boolean {

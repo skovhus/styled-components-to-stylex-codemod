@@ -371,7 +371,7 @@ export class WrapperEmitter {
       return true;
     }
     if (d.consumerUsesSpread) {
-      return true;
+      return this.spreadMayContainProp(d, "className");
     }
     if (this.isUsedAsValue(d)) {
       return true;
@@ -385,7 +385,7 @@ export class WrapperEmitter {
       return true;
     }
     if (d.consumerUsesSpread) {
-      return true;
+      return this.spreadMayContainProp(d, "style");
     }
     if (this.isUsedAsValue(d)) {
       return true;
@@ -395,7 +395,14 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
-    return d.supportsExternalStyles ?? false;
+    return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
+  }
+
+  private spreadMayContainProp(d: StyledDecl, propName: string): boolean {
+    if (!d.typeScriptPropNames) {
+      return true;
+    }
+    return d.typeScriptHasIndexSignature === true || d.typeScriptPropNames.has(propName);
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {

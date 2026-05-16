@@ -35,6 +35,9 @@ importers:
       stylis:
         specifier: ^4.3.6
         version: 4.3.6
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
     devDependencies:
       '@codemirror/lang-javascript':
         specifier: ^6.2.5
@@ -138,9 +141,6 @@ importers:
       tsdown:
         specifier: ^0.21.10
         version: 0.21.10(oxc-resolver@11.19.1)(publint@0.3.16)(synckit@0.11.11)(typescript@5.9.3)
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
       vite:
         specifier: ^8.0.10
         version: 8.0.10(@types/node@25.6.0)(esbuild@0.27.4)(jiti@2.6.1)(yaml@2.8.2)
