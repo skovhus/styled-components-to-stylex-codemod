@@ -12,6 +12,48 @@ const j = jscodeshift.withParser("tsx");
 const api = { jscodeshift: j, j, stats: () => {}, report: () => {} };
 
 describe("TypeScript prepass output refinement", () => {
+  it("does not expose className/style from a local styled base when external styles are disabled", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-styled-base-"));
+    const filePath = path.join(fixtureDir, "Label.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "type TextProps = React.PropsWithChildren<{",
+      "  as?: React.ElementType;",
+      "  className?: string;",
+      "  style?: React.CSSProperties;",
+      "}>;",
+      "",
+      "const Text = styled.span<TextProps>`",
+      "  line-height: 1.5;",
+      "`;",
+      "",
+      'export const Label = styled(Text).attrs({ as: "label" })<{ htmlFor?: string }>`',
+      "  cursor: pointer;",
+      "`;",
+      "",
+      'export const App = () => <Label htmlFor="input-id">Label</Label>;',
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain('"className" | "style" | "as"');
+      expect(after.code).not.toContain('Omit<React.ComponentPropsWithRef<typeof Text>, "as">');
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not widen closed spread-only props to className/style support", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-output-"));
     const filePath = path.join(fixtureDir, "Box.tsx");

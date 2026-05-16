@@ -431,15 +431,18 @@ export class WrapperEmitter {
     if (!metadata) {
       return false;
     }
+    if (metadata.kind === "styled" && isExternalStylePropName(propName)) {
+      return false;
+    }
     return metadata.hasIndexSignature || metadata.props.some((prop) => prop.name === propName);
   }
 
   typedComponentProp(componentLocalName: string, propName: string): TypeScriptPropMetadata | null {
-    return (
-      this.typeScriptComponentMetadataFor(componentLocalName)?.props.find(
-        (prop) => prop.name === propName,
-      ) ?? null
-    );
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (!metadata || (metadata.kind === "styled" && isExternalStylePropName(propName))) {
+      return null;
+    }
+    return metadata.props.find((prop) => prop.name === propName) ?? null;
   }
 
   private spreadMayContainProp(d: StyledDecl, propName: string): boolean {
@@ -2321,6 +2324,10 @@ const UNIVERSAL_PROP_TYPES: Record<string, string> = {
   className: "className?: string",
   style: "style?: React.CSSProperties",
 };
+
+function isExternalStylePropName(propName: string): boolean {
+  return propName === "className" || propName === "style";
+}
 
 function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
   if (!typeText) {
