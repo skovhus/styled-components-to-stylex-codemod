@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { ExternalComponent } from "./lib/external-component";
+import type { ImportedSizeProps } from "./lib/imported-size-props";
 
 export function App() {
   return (
@@ -13,6 +14,8 @@ export function App() {
         )}
       />
       <ExternalComponent isOpen={false} {...stylex.props(styles.external)} />
+      <ExternalComponent isOpen {...stylex.props(styles.sizedExternalWidth(24))} />
+      <ExternalComponent isOpen={false} />
     </div>
   );
 }
@@ -28,5 +31,8 @@ const styles = stylex.create({
   }),
   externalPadding: (padding: string) => ({
     padding,
+  }),
+  sizedExternalWidth: (tabIndex: number | undefined) => ({
+    width: tabIndex,
   }),
 });
