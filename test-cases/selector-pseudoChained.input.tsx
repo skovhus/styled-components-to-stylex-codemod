@@ -49,6 +49,10 @@ const ListItem = styled.div`
   padding: 8px;
   &:not(:last-child) {
     border-bottom: 1px solid ${(props) => props.theme.color.bgBorderSolid};
+    margin-right: 5px;
+  }
+  &:last-child {
+    color: #64748b;
   }
 `;
 

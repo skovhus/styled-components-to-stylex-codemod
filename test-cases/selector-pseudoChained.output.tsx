@@ -86,17 +86,14 @@ const styles = stylex.create({
   },
   listItem: {
     padding: 8,
-    borderBottomWidth: {
-      default: null,
-      ":not(:last-child)": "1px",
+    ":not(:last-child)": {
+      borderBottomWidth: "1px",
+      borderBottomStyle: "solid",
+      borderBottomColor: $colors.bgBorderSolid,
+      marginRight: 5,
     },
-    borderBottomStyle: {
-      default: null,
-      ":not(:last-child)": "solid",
-    },
-    borderBottomColor: {
-      default: null,
-      ":not(:last-child)": $colors.bgBorderSolid,
+    ":last-child": {
+      color: "#64748b",
     },
   },
   dialogRow: {
@@ -107,17 +104,10 @@ const styles = stylex.create({
     paddingRight: 10,
     paddingBottom: 0,
     paddingLeft: 6,
-    borderBottomWidth: {
-      default: null,
-      ":not(:last-child)": 1,
-    },
-    borderBottomStyle: {
-      default: null,
-      ":not(:last-child)": "solid",
-    },
-    borderBottomColor: {
-      default: null,
-      ":not(:last-child)": "#cbd5e1",
+    ":not(:last-child)": {
+      borderBottomWidth: 1,
+      borderBottomStyle: "solid",
+      borderBottomColor: "#cbd5e1",
     },
   },
 });
