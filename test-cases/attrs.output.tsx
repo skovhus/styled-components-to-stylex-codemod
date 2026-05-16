@@ -620,7 +620,10 @@ function StyledIcon(
 }
 
 function AttrsSxButton(
-  props: Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "sx" | "type">,
+  props: Omit<
+    React.ComponentPropsWithRef<typeof SxAwareButton>,
+    "className" | "style" | "sx" | "type"
+  >,
 ) {
   const { children, ...rest } = props;
   return (

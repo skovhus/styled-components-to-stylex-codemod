@@ -1,6 +1,5 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 const Link = ({
   className,
@@ -16,13 +15,8 @@ const Link = ({
   </a>
 );
 
-function StyledLink(props: Omit<React.ComponentPropsWithRef<typeof Link>, "style">) {
-  const { className, children, ...rest } = props;
-  return (
-    <Link {...rest} {...mergedSx(styles.link, className)}>
-      {children}
-    </Link>
-  );
+function StyledLink(props: Omit<React.ComponentPropsWithRef<typeof Link>, "className" | "style">) {
+  return <Link {...props} {...stylex.props(styles.link)} />;
 }
 
 export const App = () => <StyledLink href="https://example.com">Visit Example</StyledLink>;

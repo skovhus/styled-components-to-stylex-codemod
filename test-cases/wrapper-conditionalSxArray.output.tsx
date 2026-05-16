@@ -4,7 +4,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
-type CompactButtonProps = { compact?: boolean } & React.ComponentPropsWithRef<typeof SxAwareButton>;
+type CompactButtonProps = { compact?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof SxAwareButton>,
+  "className" | "style"
+>;
 
 function CompactButton(props: CompactButtonProps) {
   const { children, sx, compact, ...rest } = props;

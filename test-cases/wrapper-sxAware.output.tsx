@@ -28,7 +28,10 @@ function StyledButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) 
   );
 }
 
-type StyledActiveProps = { active?: boolean } & React.ComponentPropsWithRef<typeof SxAwareButton>;
+type StyledActiveProps = { active?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof SxAwareButton>,
+  "className" | "style"
+>;
 
 // Non-transient props used for styling must still be forwarded to sx-aware wrapped components
 // when the wrapped component explicitly accepts them.

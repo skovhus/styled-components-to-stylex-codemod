@@ -191,7 +191,7 @@ describe("TypeScript prepass output refinement", () => {
       expect(after.code).toContain(
         'Omit<React.ComponentPropsWithRef<typeof Base>, "className" | "style">',
       );
-      expect(after.code).toContain("className?: string");
+      expect(after.code).not.toContain("className?: string");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

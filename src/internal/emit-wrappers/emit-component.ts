@@ -266,8 +266,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       ((hasOwnAsUsage || Boolean(propsTypeHasAs)) && !hasStaticAsAttr) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     // Check if the wrapped component's props explicitly include className/style.
-    // When true, the wrapper should accept and forward these props so the wrapped
-    // component's className/style are not silently dropped by the styled() layer.
+    // This is used to avoid redeclaring props the base already owns. It must not
+    // by itself widen this wrapper's public surface; consumer usage/externalInterface
+    // still decides whether this wrapper should accept className/style.
     const shouldLookThroughWrappedPropsWithChildren =
       !!d.transientPropRenames && d.transientPropRenames.size > 0;
     const wrappedHasClassName = localComponentHasProp({
@@ -287,8 +288,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const allowSxProp = emitter.shouldAllowSxProp(d);
-    const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
-    const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
+    const allowClassNameProp = shouldAllowClassName;
+    const allowStyleProp = shouldAllowStyle;
     // When the wrapped component accepts a StyleX `sx` prop (per adapter), the
     // wrapper passes className/style through unchanged via `{...rest}` and the
     // wrapped component merges them with its `sx` itself. The wrapper still
@@ -322,18 +323,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
         !d.propsType ||
         !wrappedLocalDecl);
-    // When the wrapped component has className/style as REQUIRED props, we must
-    // force them to be optional in the wrapper's type. Otherwise, the wrapper would
-    // inherit the requiredness, breaking call sites that don't pass className/style
-    // (styled-components injects them automatically).
-    // This applies regardless of whether allowClassNameProp is true - even if call
-    // sites pass className, the wrapper should accept it as optional.
+    // When the wrapper intentionally exposes className/style and the wrapped component
+    // requires them, force the exposed props to be optional. If this wrapper does not
+    // expose className/style, they are omitted from the inherited base type instead.
     const wrappedClassNameRequired =
+      allowClassNameProp &&
       wrappedHasClassName &&
       (baseComponentPropsType
         ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className")
         : emitter.typedComponentProp(wrappedComponent, "className")?.optional === false);
     const wrappedStyleRequired =
+      allowStyleProp &&
       wrappedHasStyle &&
       (baseComponentPropsType
         ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style")
