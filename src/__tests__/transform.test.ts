@@ -11080,6 +11080,23 @@ export const App = () => <Box width="100%" items={[{ width: "50%" }]}>Content</B
     expect(code).toContain("props.items.map(props => props.width)");
     expect(code).not.toContain("props.items.map(props => width)");
   });
+
+  it("should preserve destructured local access when a nested function shadows it", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ width: string; items: string[] }>\`
+  width: \${({ width: w, items }) => items.map((w) => w).join(",") || w};
+\`;
+
+export const App = () => <Box width="100%" items={["50%"]}>Content</Box>;
+`;
+    const result = runTransformWithDiagnostics(source);
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toContain("items.map(w => w)");
+    expect(code).not.toContain("items.map(w => width)");
+  });
 });
 
 describe("indexed theme lookup shorthand safety", () => {

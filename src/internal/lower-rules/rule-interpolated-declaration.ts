@@ -4148,11 +4148,13 @@ function scalarizePropsObjectDynamicValue(args: {
   if (expressionContainsStringFragment(args.valueExpr, "var(")) {
     return null;
   }
-  if (expressionContainsFunctionBindingName(args.valueExpr, args.paramName)) {
-    return null;
-  }
 
   const propParams = new Map(propNames.map((propName) => [propName, propName]));
+  const bindingNames = scalarReplacementBindingNames(args.bindings, propNames);
+  bindingNames.add(args.paramName);
+  if (expressionContainsFunctionBindingName(args.valueExpr, bindingNames)) {
+    return null;
+  }
   const rewritten = mapAst(cloneAstNode(args.valueExpr), (node, recurse) => {
     if (isMemberExpression(node)) {
       const object = node.object as { type?: string; name?: string } | undefined;
@@ -4316,18 +4318,35 @@ function isObjectPropertyLike(
   return node.type === "Property" || node.type === "ObjectProperty";
 }
 
-function expressionContainsFunctionBindingName(node: unknown, name: string): boolean {
+function scalarReplacementBindingNames(
+  bindings: ArrowFnParamBindings | undefined,
+  propNames: readonly string[],
+): Set<string> {
+  const names = new Set<string>();
+  if (bindings?.kind !== "destructured") {
+    return names;
+  }
+  const props = new Set(propNames);
+  for (const [bindingName, propName] of bindings.bindings) {
+    if (props.has(propName)) {
+      names.add(bindingName);
+    }
+  }
+  return names;
+}
+
+function expressionContainsFunctionBindingName(node: unknown, names: ReadonlySet<string>): boolean {
   if (!node || typeof node !== "object") {
     return false;
   }
   if (Array.isArray(node)) {
-    return node.some((item) => expressionContainsFunctionBindingName(item, name));
+    return node.some((item) => expressionContainsFunctionBindingName(item, names));
   }
 
   const record = node as Record<string, unknown>;
   if (isFunctionLikeNode(record)) {
     const params = record.params;
-    if (Array.isArray(params) && params.some((param) => patternBindsName(param, name))) {
+    if (Array.isArray(params) && params.some((param) => patternBindsAnyName(param, names))) {
       return true;
     }
   }
@@ -4336,7 +4355,7 @@ function expressionContainsFunctionBindingName(node: unknown, name: string): boo
     if (key === "loc" || key === "comments") {
       continue;
     }
-    if (expressionContainsFunctionBindingName(record[key], name)) {
+    if (expressionContainsFunctionBindingName(record[key], names)) {
       return true;
     }
   }
@@ -4353,33 +4372,33 @@ function isFunctionLikeNode(node: Record<string, unknown>): boolean {
   );
 }
 
-function patternBindsName(node: unknown, name: string): boolean {
+function patternBindsAnyName(node: unknown, names: ReadonlySet<string>): boolean {
   if (!node || typeof node !== "object") {
     return false;
   }
   const record = node as Record<string, unknown>;
   if (record.type === "Identifier") {
-    return record.name === name;
+    return typeof record.name === "string" && names.has(record.name);
   }
   if (record.type === "RestElement") {
-    return patternBindsName(record.argument, name);
+    return patternBindsAnyName(record.argument, names);
   }
   if (record.type === "AssignmentPattern") {
-    return patternBindsName(record.left, name);
+    return patternBindsAnyName(record.left, names);
   }
   if (record.type === "ObjectPattern") {
     return (
       Array.isArray(record.properties) &&
-      record.properties.some((prop) => patternBindsName(prop, name))
+      record.properties.some((prop) => patternBindsAnyName(prop, names))
     );
   }
   if (record.type === "ObjectProperty" || record.type === "Property") {
-    return patternBindsName(record.value, name);
+    return patternBindsAnyName(record.value, names);
   }
   if (record.type === "ArrayPattern") {
     return (
       Array.isArray(record.elements) &&
-      record.elements.some((element) => patternBindsName(element, name))
+      record.elements.some((element) => patternBindsAnyName(element, names))
     );
   }
   return false;
