@@ -96,7 +96,16 @@ export function findTypeScriptComponentMetadata(
   const resolvedFilePath = resolveExistingFilePath(filePath);
   return metadata.files
     .find((file) => file.filePath === resolvedFilePath)
-    ?.components.find((component) => names.has(component.name));
+    ?.components.find(
+      (component) => names.has(component.name) || defaultExportMatches(component, names),
+    );
+}
+
+function defaultExportMatches(
+  component: TypeScriptComponentMetadata,
+  names: ReadonlySet<string>,
+): boolean {
+  return component.defaultExport && (names.has("default") || names.size > 0);
 }
 
 function analyzeSourceFile(

@@ -24,6 +24,7 @@ async function runAutoSxWrapperFixture(args: {
   tmpPrefix: string;
   componentLines: string[];
   importLine: string;
+  wrappedName?: string;
   bodyRuleLines: string[];
   externalInterface?: AdapterInput["externalInterface"];
   useSxProp?: boolean;
@@ -64,7 +65,7 @@ async function runAutoSxWrapperFixture(args: {
       'import styled from "styled-components";',
       args.importLine,
       "",
-      "const Body = styled(ContentViewContainer)`",
+      `const Body = styled(${args.wrappedName ?? "ContentViewContainer"})\``,
       ...args.bodyRuleLines,
       "`;",
       "",
@@ -109,12 +110,18 @@ function expectAutoSxWrapperResult(args: {
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
   consumer: string;
+  wrappedName?: string;
+  transformed?: number;
+  skipped?: number;
+  containerSxText?: string;
 }): void {
   expect(args.result.errors).toBe(0);
-  expect(args.result.transformed).toBe(2);
-  expect(args.result.skipped).toBe(0);
-  expect(args.container).toContain("sx?: stylex.StyleXStyles");
-  expect(args.consumer).toContain("return <ContentViewContainer sx={styles.body} />");
+  expect(args.result.transformed).toBe(args.transformed ?? 2);
+  expect(args.result.skipped).toBe(args.skipped ?? 0);
+  expect(args.container).toContain(args.containerSxText ?? "sx?: stylex.StyleXStyles");
+  expect(args.consumer).toContain(
+    `return <${args.wrappedName ?? "ContentViewContainer"} sx={styles.body} />`,
+  );
   expect(args.consumer).not.toContain("stylex.props(styles.body)");
 }
 
@@ -205,6 +212,33 @@ describe("runTransform (e2e)", () => {
         bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
       }),
     );
+  });
+
+  it("uses sx for aliased default-exported function components with sx props", async () => {
+    expectAutoSxWrapperResult({
+      ...(await runAutoSxWrapperFixture({
+        tmpPrefix: "styledx-run-sx-aware-default-function-alias-",
+        componentLines: [
+          'import * as React from "react";',
+          'import type { StyleXStyles } from "@stylexjs/stylex";',
+          "",
+          "export default function ContentViewContainer(props: {",
+          "  sx?: StyleXStyles;",
+          "  children?: React.ReactNode;",
+          "}) {",
+          "  return <section>{props.children}</section>;",
+          "}",
+          "",
+        ],
+        importLine: 'import Base from "../../components/ContentViewContainer";',
+        wrappedName: "Base",
+        bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+      })),
+      wrappedName: "Base",
+      transformed: 1,
+      skipped: 1,
+      containerSxText: "sx?: StyleXStyles",
+    });
   });
 
   it("uses sx for wrappers of components with imported StyleXStyles props", async () => {
