@@ -24,7 +24,6 @@ import type {
   TypeScriptPrepassMetadata,
   TypeScriptPropMetadata,
 } from "../prepass/typescript-analysis.js";
-import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import {
@@ -36,6 +35,7 @@ import {
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { toRealPath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
+import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -534,18 +534,6 @@ export class WrapperEmitter {
     ]);
     if (local) {
       return local;
-    }
-    // Imports via TS path aliases (e.g. `~/assets/icons/CycleIcon`) or bare
-    // package specifiers don't reach the absolutePath branch above. The TS
-    // prepass DID analyze the imported file (the TS Program resolves aliases
-    // through tsconfig paths), but we can't match by file path here.
-    // Fall back to a name-based search across all analyzed files. Component
-    // names in real apps are nearly always unique by file; if two files
-    // export same-named components, we conservatively take the first match.
-    if (importInfo) {
-      const lookupName =
-        importInfo.importedName === "default" ? componentLocalName : importInfo.importedName;
-      return this.findTypeScriptComponentMetadataByName([lookupName]);
     }
     return undefined;
   }

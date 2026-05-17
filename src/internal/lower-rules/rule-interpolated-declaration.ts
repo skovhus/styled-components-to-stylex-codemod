@@ -53,6 +53,9 @@ import {
   literalToStaticValue,
   markDeclNeedsUseThemeHook,
 } from "./types.js";
+
+type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
+
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
@@ -2197,7 +2200,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               })
             : null;
         const dynamicStyleValueExpr = scalarDynamic?.valueExpr ?? dynamicValueExpr;
-        const dynamicStyleParams = scalarDynamic
+        const dynamicStyleParams: ArrowFunctionParams = scalarDynamic
           ? scalarDynamic.paramNames.map((propName) => j.identifier(propName))
           : [j.identifier("props")];
         if (scalarDynamic) {
@@ -5396,12 +5399,11 @@ function markThemeHookForVariants(
  */
 function unionStyleFnParams(
   existingFn: unknown,
-  newParams: ExpressionKind[],
-): ExpressionKind[] {
+  newParams: ArrowFunctionParams,
+): ArrowFunctionParams {
   type ParamNode = { type?: string; name?: string };
-  const existingParams = (
-    (existingFn as { params?: readonly ParamNode[] } | undefined)?.params ?? []
-  ) as ParamNode[];
+  const existingParams = ((existingFn as { params?: readonly ParamNode[] } | undefined)?.params ??
+    []) as ParamNode[];
   const merged: ParamNode[] = [];
   const seen = new Set<string>();
   const pushIfNew = (param: ParamNode): void => {
@@ -5421,5 +5423,5 @@ function unionStyleFnParams(
   if (merged.length === 0) {
     return newParams;
   }
-  return merged as unknown as ExpressionKind[];
+  return merged as ArrowFunctionParams;
 }

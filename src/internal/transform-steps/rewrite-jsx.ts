@@ -15,11 +15,11 @@ import {
 import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
-import { findTypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { toRealPath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
+import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
 function shouldDropProp(decl: StyledDecl, propName: string): boolean {

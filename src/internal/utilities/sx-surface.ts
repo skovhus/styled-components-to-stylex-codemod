@@ -38,18 +38,48 @@ function sourcePathCandidates(absolutePath: string): string[] {
 }
 
 function componentHasSxProp(source: string, componentName: string): boolean {
-  const name = escapeRegex(componentName);
-  const functionPattern = new RegExp(
-    `(?:export\\s+)?function\\s+${name}\\s*\\(\\s*props\\s*:\\s*[\\s\\S]*?sx\\?:\\s*stylex\\.StyleXStyles`,
+  return (
+    readFunctionPropsType(source, componentName)?.includes("sx?: stylex.StyleXStyles") === true ||
+    readArrowFunctionPropsType(source, componentName)?.includes("sx?: stylex.StyleXStyles") === true
   );
-  if (functionPattern.test(source)) {
-    return true;
-  }
+}
 
-  const arrowPattern = new RegExp(
-    `(?:export\\s+)?(?:const|let|var)\\s+${name}\\s*=\\s*\\(\\s*props\\s*:\\s*[\\s\\S]*?sx\\?:\\s*stylex\\.StyleXStyles`,
+function readFunctionPropsType(source: string, componentName: string): string | undefined {
+  const match = source.match(
+    new RegExp(`(?:export\\s+)?function\\s+${escapeRegex(componentName)}\\s*\\(`),
   );
-  return arrowPattern.test(source);
+  return match?.index === undefined
+    ? undefined
+    : readFirstPropsType(source, match.index + match[0].length);
+}
+
+function readArrowFunctionPropsType(source: string, componentName: string): string | undefined {
+  const match = source.match(
+    new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${escapeRegex(componentName)}\\s*=\\s*\\(`),
+  );
+  return match?.index === undefined
+    ? undefined
+    : readFirstPropsType(source, match.index + match[0].length);
+}
+
+function readFirstPropsType(source: string, startIndex: number): string | undefined {
+  const prefix = source.slice(startIndex).match(/^\s*props\s*:\s*/);
+  if (!prefix) {
+    return undefined;
+  }
+  let depth = 0;
+  const typeStart = startIndex + prefix[0].length;
+  for (let i = typeStart; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "{" || ch === "<" || ch === "[" || ch === "(") {
+      depth++;
+    } else if (ch === "}" || ch === ">" || ch === "]" || (ch === ")" && depth > 0)) {
+      depth--;
+    } else if ((ch === "," || ch === ")") && depth <= 0) {
+      return source.slice(typeStart, i);
+    }
+  }
+  return undefined;
 }
 
 function escapeRegex(value: string): string {

@@ -763,9 +763,7 @@ function unionStyleFnParamsFromStyleFnFromProps(
       continue;
     }
     const existingParamNames = new Set(
-      params
-        .map((p) => p?.name)
-        .filter((name): name is string => typeof name === "string"),
+      params.map((p) => p?.name).filter((name): name is string => typeof name === "string"),
     );
     for (const required of requiredParams) {
       if (!existingParamNames.has(required)) {

@@ -1,6 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 
 export interface TypeScriptPrepassMetadata {
   version: 1;
@@ -92,29 +93,7 @@ export function analyzeTypeScriptProgram(options: {
   return { version: 1, files };
 }
 
-export function findTypeScriptComponentMetadata(
-  metadata: TypeScriptPrepassMetadata | undefined,
-  filePath: string,
-  componentNames: readonly string[],
-): TypeScriptComponentMetadata | undefined {
-  if (!metadata) {
-    return undefined;
-  }
-  const names = new Set(componentNames);
-  const resolvedFilePath = resolveExistingFilePath(filePath);
-  return metadata.files
-    .find((file) => file.filePath === resolvedFilePath)
-    ?.components.find(
-      (component) => names.has(component.name) || defaultExportMatches(component, names),
-    );
-}
-
-function defaultExportMatches(
-  component: TypeScriptComponentMetadata,
-  names: ReadonlySet<string>,
-): boolean {
-  return component.defaultExport && names.has("default");
-}
+export { findTypeScriptComponentMetadata };
 
 function analyzeSourceFile(
   sourceFile: ts.SourceFile,
@@ -122,6 +101,7 @@ function analyzeSourceFile(
 ): TypeScriptFileMetadata {
   const exportedNames = getExportedNames(sourceFile, checker);
   const defaultExportedLocalNames = getDefaultExportedLocalNames(sourceFile);
+  const localFunctionInitializers = collectLocalFunctionInitializers(sourceFile);
   const components: TypeScriptComponentMetadata[] = [];
   const functions: TypeScriptFunctionMetadata[] = [];
 
@@ -147,7 +127,7 @@ function analyzeSourceFile(
           continue;
         }
         const componentInitializer = declaration.initializer
-          ? getComponentFunctionInitializerInfo(declaration.initializer)
+          ? getComponentFunctionInitializerInfo(declaration.initializer, localFunctionInitializers)
           : undefined;
         if (componentInitializer) {
           functions.push(
@@ -200,7 +180,7 @@ function readFunctionDeclaration(
 
 function readVariableFunction(
   name: string,
-  node: ts.ArrowFunction | ts.FunctionExpression,
+  node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
   statement: ts.VariableStatement,
   checker: ts.TypeChecker,
 ): TypeScriptFunctionMetadata {
@@ -261,7 +241,7 @@ function readReactComponentFromFunction(
 
 function readReactComponentFromVariable(
   name: string,
-  node: ts.ArrowFunction | ts.FunctionExpression,
+  node: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression,
   propTypeNode: ts.TypeNode | undefined,
   statement: ts.VariableStatement,
   checker: ts.TypeChecker,
@@ -762,9 +742,49 @@ function findStyledPropsTypeNode(node: ts.Expression): ts.TypeNode | undefined {
   return undefined;
 }
 
+type ComponentFunctionInitializerInfo = {
+  fn: ts.FunctionDeclaration | ts.ArrowFunction | ts.FunctionExpression;
+  propTypeNode?: ts.TypeNode;
+};
+
+function collectLocalFunctionInitializers(
+  sourceFile: ts.SourceFile,
+): Map<string, ComponentFunctionInitializerInfo> {
+  const initializers = new Map<string, ComponentFunctionInitializerInfo>();
+  for (const statement of sourceFile.statements) {
+    const declaration =
+      ts.isExportDeclaration(statement) || ts.isExportAssignment(statement) ? undefined : statement;
+    if (declaration && ts.isFunctionDeclaration(declaration) && declaration.name) {
+      initializers.set(declaration.name.text, {
+        fn: declaration,
+        propTypeNode: declaration.parameters[0]?.type,
+      });
+      continue;
+    }
+    if (!declaration || !ts.isVariableStatement(declaration)) {
+      continue;
+    }
+    for (const variableDeclaration of declaration.declarationList.declarations) {
+      if (
+        ts.isIdentifier(variableDeclaration.name) &&
+        variableDeclaration.initializer &&
+        (ts.isArrowFunction(variableDeclaration.initializer) ||
+          ts.isFunctionExpression(variableDeclaration.initializer))
+      ) {
+        initializers.set(variableDeclaration.name.text, {
+          fn: variableDeclaration.initializer,
+          propTypeNode: variableDeclaration.initializer.parameters[0]?.type,
+        });
+      }
+    }
+  }
+  return initializers;
+}
+
 function getComponentFunctionInitializerInfo(
   node: ts.Expression,
-): { fn: ts.ArrowFunction | ts.FunctionExpression; propTypeNode?: ts.TypeNode } | undefined {
+  localFunctionInitializers: ReadonlyMap<string, ComponentFunctionInitializerInfo>,
+): ComponentFunctionInitializerInfo | undefined {
   if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
     return { fn: node };
   }
@@ -776,9 +796,16 @@ function getComponentFunctionInitializerInfo(
       return { fn: arg, propTypeNode: getHocPropsTypeNode(node) };
     }
     if (ts.isIdentifier(arg)) {
+      const local = localFunctionInitializers.get(arg.text);
+      if (local) {
+        return { ...local, propTypeNode: getHocPropsTypeNode(node) ?? local.propTypeNode };
+      }
       continue;
     }
-    const nested = getComponentFunctionInitializerInfo(arg as ts.Expression);
+    const nested = getComponentFunctionInitializerInfo(
+      arg as ts.Expression,
+      localFunctionInitializers,
+    );
     if (nested) {
       return { ...nested, propTypeNode: nested.propTypeNode ?? getHocPropsTypeNode(node) };
     }
