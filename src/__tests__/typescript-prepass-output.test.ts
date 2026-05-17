@@ -264,6 +264,46 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("falls back to disk source through local sx prop type aliases", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-disk-alias-sx-"));
+    const basePath = path.join(fixtureDir, "Base.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    writeFileSync(
+      basePath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "type BaseProps = { sx?: stylex.StyleXStyles; label?: string };",
+        "export function Base(props: BaseProps) {",
+        "  return <button>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter: fixtureAdapter,
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./Base" ? basePath : path.resolve(path.dirname(fromFile), specifier),
+      });
+
+      expect(after.code).toContain("<Base {...rest} sx={[styles.wrapped, sx]}");
+      expect(after.code).not.toContain("{...stylex.props(styles.wrapped)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not use same-named TypeScript metadata for unresolved package imports", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-package-name-"));
     const localPath = path.join(fixtureDir, "LocalButton.tsx");

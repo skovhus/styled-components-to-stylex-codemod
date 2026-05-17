@@ -38,10 +38,10 @@ function sourcePathCandidates(absolutePath: string): string[] {
 }
 
 function componentHasSxProp(source: string, componentName: string): boolean {
-  return (
-    readFunctionPropsType(source, componentName)?.includes("sx?: stylex.StyleXStyles") === true ||
-    readArrowFunctionPropsType(source, componentName)?.includes("sx?: stylex.StyleXStyles") === true
-  );
+  const propsType =
+    readFunctionPropsType(source, componentName) ??
+    readArrowFunctionPropsType(source, componentName);
+  return propsType ? typeTextHasSx(source, propsType, new Set()) : false;
 }
 
 function readFunctionPropsType(source: string, componentName: string): string | undefined {
@@ -77,6 +77,70 @@ function readFirstPropsType(source: string, startIndex: number): string | undefi
       depth--;
     } else if ((ch === "," || ch === ")") && depth <= 0) {
       return source.slice(typeStart, i);
+    }
+  }
+  return undefined;
+}
+
+function typeTextHasSx(source: string, typeText: string, visited: Set<string>): boolean {
+  if (typeText.includes("sx?: stylex.StyleXStyles")) {
+    return true;
+  }
+  const typeName = typeText.trim().match(/^([A-Za-z_$][\w$]*)$/)?.[1];
+  if (!typeName || visited.has(typeName)) {
+    return false;
+  }
+  visited.add(typeName);
+  const declaration = readTypeAlias(source, typeName) ?? readInterfaceBody(source, typeName);
+  return declaration ? typeTextHasSx(source, declaration, visited) : false;
+}
+
+function readTypeAlias(source: string, typeName: string): string | undefined {
+  const match = source.match(new RegExp(`type\\s+${escapeRegex(typeName)}\\b\\s*=\\s*`));
+  if (match?.index === undefined) {
+    return undefined;
+  }
+  return readUntilTopLevelTerminator(source, match.index + match[0].length, ";");
+}
+
+function readInterfaceBody(source: string, typeName: string): string | undefined {
+  const match = source.match(new RegExp(`interface\\s+${escapeRegex(typeName)}\\b[^{]*\\{`));
+  if (match?.index === undefined) {
+    return undefined;
+  }
+  return readUntilMatchingBrace(source, match.index + match[0].length - 1);
+}
+
+function readUntilTopLevelTerminator(
+  source: string,
+  startIndex: number,
+  terminator: string,
+): string | undefined {
+  let depth = 0;
+  for (let i = startIndex; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "{" || ch === "<" || ch === "[" || ch === "(") {
+      depth++;
+    } else if (ch === "}" || ch === ">" || ch === "]" || (ch === ")" && depth > 0)) {
+      depth--;
+    } else if (ch === terminator && depth <= 0) {
+      return source.slice(startIndex, i);
+    }
+  }
+  return undefined;
+}
+
+function readUntilMatchingBrace(source: string, braceIndex: number): string | undefined {
+  let depth = 0;
+  for (let i = braceIndex; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return source.slice(braceIndex + 1, i);
+      }
     }
   }
   return undefined;
