@@ -970,6 +970,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // `props.propName`, so destructuring is unnecessary for styling.
     // Transient props ($-prefixed or renamed from $-prefixed) MUST stay destructured to
     // prevent them from leaking to the base component.
+    const splicedStyleFnProps = new Set<string>();
     if (!baseComponentPropsType) {
       const renamedTransientValues = d.transientPropRenames
         ? new Set(d.transientPropRenames.values())
@@ -985,9 +986,72 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const idx = destructureProps.indexOf(prop);
           if (idx !== -1) {
             destructureProps.splice(idx, 1);
+            splicedStyleFnProps.add(prop);
           }
           styleOnlyConditionProps.delete(prop);
         }
+      }
+    }
+    // When a style-fn prop is spliced out of destructure (so it flows to the
+    // base component via `...rest`), any bare-identifier references to it in
+    // styleArgs are no longer in scope — TS2304 "Cannot find name 'X'". Rewrite
+    // those bare references to `props.X` so the style fn call site keeps
+    // working without relying on the (now absent) destructured binding.
+    if (splicedStyleFnProps.size > 0) {
+      const rewriteBareIdentifiersToPropsAccess = (node: unknown): void => {
+        if (!node || typeof node !== "object") {
+          return;
+        }
+        const n = node as { type?: string; [key: string]: unknown };
+        if (
+          n.type === "Identifier" &&
+          typeof n.name === "string" &&
+          splicedStyleFnProps.has(n.name)
+        ) {
+          // Transmute this Identifier into `props.<name>`. We mutate in place
+          // because parent nodes hold a direct reference and we can't rewrite
+          // those reverse links without losing them.
+          const replacement = j.memberExpression(j.identifier("props"), j.identifier(n.name));
+          for (const key of Object.keys(n)) {
+            delete (n as Record<string, unknown>)[key];
+          }
+          Object.assign(n, replacement);
+          return;
+        }
+        // MemberExpression: only recurse into the `object` side. Skipping
+        // `property` avoids rewriting the `gutter` inside `props.gutter` —
+        // which would turn it into `props.props.gutter` and recurse infinitely.
+        // For computed access `obj[expr]`, the expr IS a value position, so we
+        // do recurse into property only when `computed` is true.
+        if (n.type === "MemberExpression") {
+          rewriteBareIdentifiersToPropsAccess(n.object);
+          if (n.computed) {
+            rewriteBareIdentifiersToPropsAccess(n.property);
+          }
+          return;
+        }
+        // Property keys in ObjectExpression / Property nodes are name positions,
+        // not value positions. Skip the key, walk the value.
+        if (n.type === "Property" || n.type === "ObjectProperty") {
+          if (n.computed) {
+            rewriteBareIdentifiersToPropsAccess(n.key);
+          }
+          rewriteBareIdentifiersToPropsAccess(n.value);
+          return;
+        }
+        for (const key of Object.keys(n)) {
+          const value = (n as Record<string, unknown>)[key];
+          if (Array.isArray(value)) {
+            for (const item of value) {
+              rewriteBareIdentifiersToPropsAccess(item);
+            }
+          } else if (value && typeof value === "object") {
+            rewriteBareIdentifiersToPropsAccess(value);
+          }
+        }
+      };
+      for (const arg of styleArgs) {
+        rewriteBareIdentifiersToPropsAccess(arg);
       }
     }
 
@@ -1127,6 +1191,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
       const destructureSx = allowSxProp || wrapperPropsExposeSx;
+      // When the wrapper will emit `const theme = useTheme()`, don't also
+      // destructure `theme` from props — the redeclaration produces TS2451
+      // ("Cannot redeclare block-scoped variable 'theme'"). The theme
+      // identifier is owned by the useTheme call site; any `props.theme`
+      // references in the original source were already rewritten to use this
+      // local `theme` binding.
+      const destructurePropsForPattern = needsUseTheme
+        ? destructureProps.filter((name) => name !== "theme")
+        : destructureProps;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1145,7 +1218,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ...((d.supportsRefProp ?? false) ? [patternProp("ref", refId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
-        destructureProps,
+        destructureProps: destructurePropsForPattern,
         propDefaults,
         includeRest: true,
         restId,

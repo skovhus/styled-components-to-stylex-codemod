@@ -1103,6 +1103,14 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         }
       }
 
+      // When the wrapper emits `const theme = useTheme()`, don't also
+      // destructure `theme` from props — the redeclaration produces TS2451.
+      // The theme identifier is owned by the useTheme call site; original
+      // `props.theme` references were already rewritten to use the local
+      // `theme` binding.
+      const destructurePropsForPattern = needsUseTheme
+        ? destructureProps.filter((name) => name !== "theme")
+        : destructureProps;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(useAsProp
@@ -1124,7 +1132,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
-        destructureProps,
+        destructureProps: destructurePropsForPattern,
         propDefaults,
         includeRest: Boolean(restId),
         restId: restId ?? undefined,
