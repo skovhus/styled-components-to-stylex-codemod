@@ -187,247 +187,247 @@ describe("TypeScript compiler prepass", () => {
       ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`
-        {
-          "components/typed.tsx:Button": {
-            "exported": true,
-            "kind": "styled",
-            "parameters": [],
-            "propType": {
-              "inheritedTypes": [],
-              "intersectionTypes": [
-                "ButtonBaseProps",
-                "VariantProps",
-                "{ as?: T; requiredCount: number }",
+          {
+            "components/typed.tsx:Button": {
+              "exported": true,
+              "kind": "styled",
+              "parameters": [],
+              "propType": {
+                "inheritedTypes": [],
+                "intersectionTypes": [
+                  "ButtonBaseProps",
+                  "VariantProps",
+                  "{ as?: T; requiredCount: number }",
+                ],
+                "text": "ButtonProps",
+                "unionTypes": [],
+              },
+              "props": [
+                {
+                  "name": "as",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "T | undefined",
+                },
+                {
+                  "name": "baseOnly",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "string | undefined",
+                },
+                {
+                  "name": "inherited",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "boolean | undefined",
+                },
+                {
+                  "name": "requiredCount",
+                  "optional": false,
+                  "readonly": false,
+                  "type": "number",
+                },
+                {
+                  "name": "sx",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "SxStyles | undefined",
+                },
+                {
+                  "name": "tone",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "'primary' | 'secondary' | undefined",
+                },
               ],
-              "text": "ButtonProps",
-              "unionTypes": [],
+              "restProps": [],
+              "supportsSxProp": true,
+              "typeParameters": [],
             },
-            "props": [
-              {
-                "name": "as",
-                "optional": true,
-                "readonly": false,
-                "type": ""button" | undefined",
-              },
-              {
-                "name": "baseOnly",
-                "optional": true,
-                "readonly": false,
-                "type": "string | undefined",
-              },
-              {
-                "name": "inherited",
-                "optional": true,
-                "readonly": false,
-                "type": "boolean | undefined",
-              },
-              {
-                "name": "requiredCount",
-                "optional": false,
-                "readonly": false,
-                "type": "number",
-              },
-              {
-                "name": "sx",
-                "optional": true,
-                "readonly": false,
-                "type": "SxStyles | undefined",
-              },
-              {
-                "name": "tone",
-                "optional": true,
-                "readonly": false,
-                "type": ""primary" | "secondary" | undefined",
-              },
-            ],
-            "restProps": [],
-            "supportsSxProp": true,
-            "typeParameters": [],
-          },
-          "components/typed.tsx:Card": {
-            "exported": true,
-            "kind": "react",
-            "parameters": [
-              {
-                "name": "{ sx, ...rest }",
-                "optional": false,
-                "rest": false,
-                "type": "ButtonProps<T>",
-              },
-            ],
-            "propType": {
-              "inheritedTypes": [],
-              "intersectionTypes": [
-                "ButtonBaseProps",
-                "VariantProps",
-                "{ as?: T; requiredCount: number }",
+            "components/typed.tsx:Card": {
+              "exported": true,
+              "kind": "react",
+              "parameters": [
+                {
+                  "name": "{ sx, ...rest }",
+                  "optional": false,
+                  "rest": false,
+                  "type": "ButtonProps<T>",
+                },
               ],
-              "text": "ButtonProps<T>",
-              "unionTypes": [],
-            },
-            "props": [
-              {
-                "name": "as",
-                "optional": true,
-                "readonly": false,
-                "type": "T | undefined",
+              "propType": {
+                "inheritedTypes": [],
+                "intersectionTypes": [
+                  "ButtonBaseProps",
+                  "VariantProps",
+                  "{ as?: T; requiredCount: number }",
+                ],
+                "text": "ButtonProps<T>",
+                "unionTypes": [],
               },
-              {
-                "name": "baseOnly",
-                "optional": true,
-                "readonly": false,
-                "type": "string | undefined",
-              },
-              {
-                "name": "inherited",
-                "optional": true,
-                "readonly": false,
-                "type": "boolean | undefined",
-              },
-              {
-                "name": "requiredCount",
-                "optional": false,
-                "readonly": false,
-                "type": "number",
-              },
-              {
-                "name": "sx",
-                "optional": true,
-                "readonly": false,
-                "type": "SxStyles | undefined",
-              },
-              {
-                "name": "tone",
-                "optional": true,
-                "readonly": false,
-                "type": ""primary" | "secondary" | undefined",
-              },
-            ],
-            "restProps": [
-              {
-                "name": "rest",
-                "source": "parameter",
-              },
-            ],
-            "supportsSxProp": true,
-            "typeParameters": [
-              "T extends string = 'section'",
-            ],
-          },
-          "components/typed.tsx:Inherited": {
-            "exported": true,
-            "kind": "react",
-            "parameters": [
-              {
-                "name": "props",
-                "optional": false,
-                "rest": false,
-                "type": "ButtonBaseProps",
-              },
-            ],
-            "propType": {
-              "inheritedTypes": [
-                "BaseProps",
+              "props": [
+                {
+                  "name": "as",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "T | undefined",
+                },
+                {
+                  "name": "baseOnly",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "string | undefined",
+                },
+                {
+                  "name": "inherited",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "boolean | undefined",
+                },
+                {
+                  "name": "requiredCount",
+                  "optional": false,
+                  "readonly": false,
+                  "type": "number",
+                },
+                {
+                  "name": "sx",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "SxStyles | undefined",
+                },
+                {
+                  "name": "tone",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "'primary' | 'secondary' | undefined",
+                },
               ],
-              "intersectionTypes": [],
-              "text": "ButtonBaseProps",
-              "unionTypes": [],
-            },
-            "props": [
-              {
-                "name": "baseOnly",
-                "optional": true,
-                "readonly": false,
-                "type": "string | undefined",
-              },
-              {
-                "name": "inherited",
-                "optional": true,
-                "readonly": false,
-                "type": "boolean | undefined",
-              },
-            ],
-            "restProps": [],
-            "supportsSxProp": false,
-            "typeParameters": [],
-          },
-          "components/typed.tsx:Panel": {
-            "exported": true,
-            "kind": "react",
-            "parameters": [
-              {
-                "name": "props",
-                "optional": false,
-                "rest": false,
-                "type": "ButtonProps<T> & { label: T }",
-              },
-            ],
-            "propType": {
-              "inheritedTypes": [],
-              "intersectionTypes": [
-                "ButtonProps<T>",
-                "{ label: T }",
+              "restProps": [
+                {
+                  "name": "rest",
+                  "source": "parameter",
+                },
               ],
-              "text": "ButtonProps<T> & { label: T }",
-              "unionTypes": [],
+              "supportsSxProp": true,
+              "typeParameters": [
+                "T extends string = 'section'",
+              ],
             },
-            "props": [
-              {
-                "name": "as",
-                "optional": true,
-                "readonly": false,
-                "type": "T | undefined",
+            "components/typed.tsx:Inherited": {
+              "exported": true,
+              "kind": "react",
+              "parameters": [
+                {
+                  "name": "props",
+                  "optional": false,
+                  "rest": false,
+                  "type": "ButtonBaseProps",
+                },
+              ],
+              "propType": {
+                "inheritedTypes": [
+                  "BaseProps",
+                ],
+                "intersectionTypes": [],
+                "text": "ButtonBaseProps",
+                "unionTypes": [],
               },
-              {
-                "name": "baseOnly",
-                "optional": true,
-                "readonly": false,
-                "type": "string | undefined",
+              "props": [
+                {
+                  "name": "baseOnly",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "string | undefined",
+                },
+                {
+                  "name": "inherited",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "boolean | undefined",
+                },
+              ],
+              "restProps": [],
+              "supportsSxProp": false,
+              "typeParameters": [],
+            },
+            "components/typed.tsx:Panel": {
+              "exported": true,
+              "kind": "react",
+              "parameters": [
+                {
+                  "name": "props",
+                  "optional": false,
+                  "rest": false,
+                  "type": "ButtonProps<T> & { label: T }",
+                },
+              ],
+              "propType": {
+                "inheritedTypes": [],
+                "intersectionTypes": [
+                  "ButtonProps<T>",
+                  "{ label: T }",
+                ],
+                "text": "ButtonProps<T> & { label: T }",
+                "unionTypes": [],
               },
-              {
-                "name": "inherited",
-                "optional": true,
-                "readonly": false,
-                "type": "boolean | undefined",
-              },
-              {
-                "name": "label",
-                "optional": false,
-                "readonly": false,
-                "type": "T",
-              },
-              {
-                "name": "requiredCount",
-                "optional": false,
-                "readonly": false,
-                "type": "number",
-              },
-              {
-                "name": "sx",
-                "optional": true,
-                "readonly": false,
-                "type": "SxStyles | undefined",
-              },
-              {
-                "name": "tone",
-                "optional": true,
-                "readonly": false,
-                "type": ""primary" | "secondary" | undefined",
-              },
-            ],
-            "restProps": [
-              {
-                "name": "rest",
-                "source": "destructure",
-              },
-            ],
-            "supportsSxProp": true,
-            "typeParameters": [
-              "T extends string",
-            ],
-          },
-        }
-      `);
+              "props": [
+                {
+                  "name": "as",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "T | undefined",
+                },
+                {
+                  "name": "baseOnly",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "string | undefined",
+                },
+                {
+                  "name": "inherited",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "boolean | undefined",
+                },
+                {
+                  "name": "label",
+                  "optional": false,
+                  "readonly": false,
+                  "type": "T",
+                },
+                {
+                  "name": "requiredCount",
+                  "optional": false,
+                  "readonly": false,
+                  "type": "number",
+                },
+                {
+                  "name": "sx",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "SxStyles | undefined",
+                },
+                {
+                  "name": "tone",
+                  "optional": true,
+                  "readonly": false,
+                  "type": "'primary' | 'secondary' | undefined",
+                },
+              ],
+              "restProps": [
+                {
+                  "name": "rest",
+                  "source": "destructure",
+                },
+              ],
+              "supportsSxProp": true,
+              "typeParameters": [
+                "T extends string",
+              ],
+            },
+          }
+        `);
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

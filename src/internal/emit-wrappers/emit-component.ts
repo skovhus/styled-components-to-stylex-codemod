@@ -569,6 +569,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             hasExplicitPropsType,
             forceClassNameOptional,
             forceStyleOptional,
+            wrappedComponent,
             forwardedAsPropTypeText,
             attrsProvidedPropOptions,
           });
@@ -587,10 +588,32 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           // enabled via adapter (d.supportsExternalStyles).
           // className/style are skipped when the wrapped component already has them.
           // sx is always injected when allowSxProp is true (it's a new StyleX-specific prop).
-          if (explicitWithExtras && d.supportsExternalStyles) {
+          //
+          // Also inject when the wrapper will destructure className/style from `props`
+          // but the wrapped component's prepass metadata proves it doesn't accept them.
+          // Without this lift the wrapper's prop type (an intersection with
+          // `React.ComponentPropsWithRef<typeof Wrapped>`) lacks those keys, and the
+          // destructure produces TS2339 — same fix as in `inferredComponentWrapperPropsTypeText`,
+          // applied to the explicit-propsType code path.
+          const wrappedRejectsClassName =
+            !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "className");
+          const wrappedRejectsStyle =
+            !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "style");
+          const shouldLiftClassNameOntoExplicit =
+            !skipStyleProps && allowClassNameProp && wrappedRejectsClassName;
+          const shouldLiftStyleOntoExplicit =
+            !skipStyleProps && allowStyleProp && wrappedRejectsStyle;
+          if (
+            explicitWithExtras &&
+            (d.supportsExternalStyles ||
+              shouldLiftClassNameOntoExplicit ||
+              shouldLiftStyleOntoExplicit)
+          ) {
             explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
-              className: !skipStyleProps && allowClassNameProp && !wrappedHasClassName,
-              style: !skipStyleProps && allowStyleProp && !wrappedHasStyle,
+              className:
+                !skipStyleProps && allowClassNameProp && (!wrappedHasClassName || wrappedRejectsClassName),
+              style:
+                !skipStyleProps && allowStyleProp && (!wrappedHasStyle || wrappedRejectsStyle),
               sx: allowSxProp,
             });
           }

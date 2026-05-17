@@ -450,6 +450,39 @@ export class WrapperEmitter {
     return this.typeScriptComponentMetadataFor(componentLocalName) !== undefined;
   }
 
+  /**
+   * Returns true when the wrapped component's prepass metadata proves it does
+   * NOT accept the given style prop (className/style) — i.e. the prop is
+   * missing from both explicit and resolved props AND the component has no
+   * index signature. Used to decide whether to lift the prop onto the wrapper.
+   *
+   * `typedComponentHasProp` intentionally checks only `explicitPropNames` for
+   * style props (we don't want every HTML-derived component treated as
+   * "having" className), but for the lift decision we need the broader view:
+   * even if className isn't explicitly declared, ExternalComponent that
+   * extends `React.HTMLAttributes` still accepts it via inheritance, so no
+   * lift is needed.
+   *
+   * Returns false when metadata is unavailable (conservative — defer to
+   * existing emission logic rather than incorrectly lifting).
+   */
+  wrappedRejectsStyleProp(componentLocalName: string, propName: "className" | "style"): boolean {
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (!metadata) {
+      return false;
+    }
+    if (metadata.hasIndexSignature) {
+      return false;
+    }
+    if (metadata.explicitPropNames.includes(propName)) {
+      return false;
+    }
+    if (metadata.props.some((prop) => prop.name === propName)) {
+      return false;
+    }
+    return true;
+  }
+
   typedComponentProp(componentLocalName: string, propName: string): TypeScriptPropMetadata | null {
     const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
     if (
@@ -486,15 +519,51 @@ export class WrapperEmitter {
         importInfo.importedName === "default"
           ? [componentLocalName, importInfo.importedName]
           : [importInfo.importedName];
-      return findTypeScriptComponentMetadata(
+      const byPath = findTypeScriptComponentMetadata(
         this.typeScriptMetadata,
         importInfo.source.value,
         names,
       );
+      if (byPath) {
+        return byPath;
+      }
+      return this.findTypeScriptComponentMetadataByName(names);
     }
-    return findTypeScriptComponentMetadata(this.typeScriptMetadata, this.filePath, [
+    const local = findTypeScriptComponentMetadata(this.typeScriptMetadata, this.filePath, [
       componentLocalName,
     ]);
+    if (local) {
+      return local;
+    }
+    // Imports via TS path aliases (e.g. `~/assets/icons/CycleIcon`) or bare
+    // package specifiers don't reach the absolutePath branch above. The TS
+    // prepass DID analyze the imported file (the TS Program resolves aliases
+    // through tsconfig paths), but we can't match by file path here.
+    // Fall back to a name-based search across all analyzed files. Component
+    // names in real apps are nearly always unique by file; if two files
+    // export same-named components, we conservatively take the first match.
+    if (importInfo) {
+      const lookupName =
+        importInfo.importedName === "default" ? componentLocalName : importInfo.importedName;
+      return this.findTypeScriptComponentMetadataByName([lookupName]);
+    }
+    return undefined;
+  }
+
+  private findTypeScriptComponentMetadataByName(
+    names: readonly string[],
+  ): TypeScriptComponentMetadata | undefined {
+    if (!this.typeScriptMetadata) {
+      return undefined;
+    }
+    const nameSet = new Set(names);
+    for (const file of this.typeScriptMetadata.files) {
+      const match = file.components.find((component) => nameSet.has(component.name));
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
@@ -1625,6 +1694,7 @@ export class WrapperEmitter {
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
+    wrappedComponent?: string;
     forwardedAsPropTypeText?: string;
     attrsProvidedPropOptions?: AttrsProvidedPropOptions;
   }): string {
@@ -1637,6 +1707,7 @@ export class WrapperEmitter {
       hasExplicitPropsType,
       forceClassNameOptional,
       forceStyleOptional,
+      wrappedComponent,
       forwardedAsPropTypeText = "React.ElementType",
       attrsProvidedPropOptions,
     } = args;
@@ -1651,13 +1722,44 @@ export class WrapperEmitter {
     // Skip adding here if there's an explicit props type - it will be merged there instead.
     const shouldAddStyleProps =
       d.supportsExternalStyles && !wrappedComponentIsInternalWrapper && !hasExplicitPropsType;
+    // Lift className/style onto the wrapper's prop type when the wrapper will
+    // destructure them from `props` (allowClassNameProp/allowStyleProp) but the
+    // wrapped component's prepass metadata proves it does NOT accept them.
+    // Without this, the inherited `React.ComponentPropsWithRef<typeof Wrapped>`
+    // lacks those keys and the destructure produces TS2339. Only applies when
+    // no explicit propsType (with one, the lift happens via
+    // injectStylePropsIntoTypeLiteralString in emit-component.ts).
+    //
+    // Uses `wrappedRejectsStyleProp` (broad check: explicitPropNames + props
+    // array + hasIndexSignature) rather than `typedComponentHasProp` (narrow:
+    // explicitPropNames only). The narrow check would incorrectly lift onto
+    // any component extending React.HTMLAttributes — which DOES accept
+    // className via inheritance even though it isn't explicitly declared.
+    const liftableContext =
+      !hasExplicitPropsType && !wrappedComponentIsInternalWrapper && Boolean(wrappedComponent);
+    const liftClassNameForUnsupportedWrapped =
+      liftableContext &&
+      allowClassNameProp &&
+      this.wrappedRejectsStyleProp(wrappedComponent!, "className");
+    const liftStyleForUnsupportedWrapped =
+      liftableContext &&
+      allowStyleProp &&
+      this.wrappedRejectsStyleProp(wrappedComponent!, "style");
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.
-    if ((shouldAddStyleProps && allowClassNameProp) || forceClassNameOptional) {
+    if (
+      (shouldAddStyleProps && allowClassNameProp) ||
+      forceClassNameOptional ||
+      liftClassNameForUnsupportedWrapped
+    ) {
       lines.push("className?: string");
     }
-    if ((shouldAddStyleProps && allowStyleProp) || forceStyleOptional) {
+    if (
+      (shouldAddStyleProps && allowStyleProp) ||
+      forceStyleOptional ||
+      liftStyleForUnsupportedWrapped
+    ) {
       lines.push("style?: React.CSSProperties");
     }
     if (shouldAddStyleProps && allowSxProp) {

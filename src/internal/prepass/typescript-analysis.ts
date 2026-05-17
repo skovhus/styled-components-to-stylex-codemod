@@ -74,6 +74,14 @@ export function analyzeTypeScriptProgram(options: {
   const program = createProgram(rootNames, options.cwd ?? process.cwd());
   const checker = program.getTypeChecker();
   const rootNameSet = new Set(rootNames.map((filePath) => path.resolve(filePath)));
+  // TS adds `| undefined` to optional prop types only when strictNullChecks is
+  // on (or its parent flag `strict`). We mirror that gating so the cheap
+  // syntactic-type path matches the resolved-type behavior the prior
+  // implementation produced via `getTypeOfSymbolAtLocation` + `typeToString`.
+  const compilerOptions = program.getCompilerOptions();
+  strictNullChecksOnForCurrentRun = Boolean(
+    compilerOptions.strictNullChecks ?? compilerOptions.strict,
+  );
   const files = program
     .getSourceFiles()
     .filter((sourceFile) => rootNameSet.has(path.resolve(sourceFile.fileName)))
@@ -318,15 +326,88 @@ function readPropsFromType(
     .getPropertiesOfType(type)
     .map((symbol) => {
       const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0] ?? location;
-      const propType = checker.getTypeOfSymbolAtLocation(symbol, declaration);
+      const optional = (symbol.flags & ts.SymbolFlags.Optional) !== 0;
       return {
         name: symbol.getName(),
-        optional: (symbol.flags & ts.SymbolFlags.Optional) !== 0,
+        optional,
         readonly: isReadonlyProperty(symbol),
-        type: checker.typeToString(propType, location, ts.TypeFormatFlags.NoTruncation),
+        type: withOptionalUndefined(
+          readPropTypeString(symbol, declaration, checker, location),
+          optional,
+        ),
       };
     })
     .sort(byName);
+}
+
+/**
+ * TS's resolved type for an optional property includes `| undefined` (because
+ * the `?` modifier widens it). Syntactic type nodes don't — `?: number` has
+ * `type === number`, not `number | undefined`. Downstream consumers
+ * (lower-rules/types.ts) rely on the `| undefined` suffix to gate certain
+ * emit decisions (e.g. wrapping a possibly-undefined value in a template
+ * string). Reconstruct it here so the syntactic fast path stays
+ * behaviorally equivalent to the typeToString path it replaced.
+ */
+function withOptionalUndefined(typeText: string, optional: boolean): string {
+  if (!optional || !strictNullChecksOnForCurrentRun) {
+    return typeText;
+  }
+  if (/\bundefined\b/.test(typeText)) {
+    return typeText;
+  }
+  return `${typeText} | undefined`;
+}
+
+/**
+ * Per-run capture of strictNullChecks. Set by `analyzeTypeScriptProgram` before
+ * any per-file work runs; read by `withOptionalUndefined` to decide whether to
+ * append `| undefined` to optional props. Module-scoped to avoid threading the
+ * boolean through ~6 helper signatures for a single read site.
+ */
+let strictNullChecksOnForCurrentRun = false;
+
+/**
+ * Returns the prop's TS type as a string. Prefers the syntactic type annotation
+ * from the declaration AST (cheap, no checker call) and only falls back to
+ * `checker.typeToString` when the declaration has no usable type node — typically
+ * synthesized properties (mapped/intersection/spread-derived) where the checker
+ * is the only source of truth.
+ *
+ * Why: typeToString with NoTruncation dominated the prepass at 39s / 723K calls.
+ * For the consumers downstream (lower-rules/types.ts parseTypeText), the
+ * syntactic representation is what they want anyway — they only handle
+ * TSTypeReference / TSUnionType / TSLiteralType shapes.
+ */
+function readPropTypeString(
+  symbol: ts.Symbol,
+  declaration: ts.Node,
+  checker: ts.TypeChecker,
+  location: ts.Node,
+): string {
+  const typeNode = getDeclarationTypeNode(declaration);
+  if (typeNode) {
+    return typeNode.getText();
+  }
+  // No syntactic type node — this is a synthesized property (mapped/intersection
+  // /inherited from a typed ancestor). Fall back to checker.typeToString WITHOUT
+  // NoTruncation: the consumer (lower-rules/types.ts parseTypeText) can only
+  // round-trip a handful of shapes (TSTypeReference/TSUnionType/TSLiteralType);
+  // if the rendered type is so complex that it would need NoTruncation to be
+  // representable, parseTypeText will reject it anyway.
+  const propType = checker.getTypeOfSymbolAtLocation(symbol, declaration);
+  return checker.typeToString(propType, location);
+}
+
+function getDeclarationTypeNode(declaration: ts.Node): ts.TypeNode | undefined {
+  if (
+    ts.isPropertySignature(declaration) ||
+    ts.isPropertyDeclaration(declaration) ||
+    ts.isParameter(declaration)
+  ) {
+    return declaration.type;
+  }
+  return undefined;
 }
 
 function readParameters(
@@ -688,13 +769,22 @@ function getHocPropsTypeNode(node: ts.CallExpression): ts.TypeNode | undefined {
   return node.typeArguments?.[1];
 }
 
+/**
+ * HOCs that wrap a React component and preserve the original prop type.
+ * `observer` (mobx) is the most common one in real apps after React's own
+ * `memo`/`forwardRef`. Without it, the prepass loses prop metadata for every
+ * mobx-wrapped component, which downstream means the codemod can't decide
+ * whether to lift className/style and emits destructures that produce TS2339.
+ */
+const KNOWN_PROP_PRESERVING_HOC_NAMES = new Set(["memo", "forwardRef", "observer"]);
+
 function isKnownPropPreservingHocCallee(node: ts.Expression): boolean {
   if (ts.isIdentifier(node)) {
-    return node.text === "memo" || node.text === "forwardRef";
+    return KNOWN_PROP_PRESERVING_HOC_NAMES.has(node.text);
   }
   return (
     ts.isPropertyAccessExpression(node) &&
-    (node.name.text === "memo" || node.name.text === "forwardRef")
+    KNOWN_PROP_PRESERVING_HOC_NAMES.has(node.name.text)
   );
 }
 
