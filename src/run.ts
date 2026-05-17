@@ -422,6 +422,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
 
   let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
+  const prepassStartedAt = performance.now();
+  Logger.info(
+    `Prepass: starting (${absoluteFiles.length} file${absoluteFiles.length === 1 ? "" : "s"}, ${absoluteConsumers.length} consumer${absoluteConsumers.length === 1 ? "" : "s"}, parser=${parser})\n`,
+  );
   try {
     prepassResult = await runPrepass({
       filesToTransform: absoluteFiles,
@@ -433,13 +437,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       leavesOnly,
       resolveBaseComponent: adapterInput.resolveBaseComponent,
     });
+    Logger.info(`Prepass: completed in ${formatElapsedSeconds(prepassStartedAt)}s\n`);
   } catch (err) {
     if (adapterInput.externalInterface === "auto") {
       throw createAutoPrepassFailureError(err, consumerPatterns, parser);
     }
 
     Logger.warn(
-      `Prepass failed, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
+      `Prepass failed after ${formatElapsedSeconds(prepassStartedAt)}s, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
     );
     prepassResult = {
       crossFileInfo: {
@@ -783,6 +788,10 @@ function createAutoPrepassFailureError(
       `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
     ].join("\n"),
   );
+}
+
+function formatElapsedSeconds(startedAt: number): string {
+  return ((performance.now() - startedAt) / 1000).toFixed(1);
 }
 
 function findTypedComponentMetadata(

@@ -8,6 +8,7 @@ const PREPASS_FAILURE_MESSAGE = "simulated prepass crash";
 
 function createLoggerMock(warnMock: ReturnType<typeof vi.fn>) {
   return {
+    info: vi.fn(),
     warn: warnMock,
     setMaxExamples: vi.fn(),
     setFileCount: vi.fn(),
@@ -238,8 +239,9 @@ describe("runTransform prepass failure contract", () => {
     });
 
     expect(result.errors).toBe(0);
+    expect(warnMock).toHaveBeenCalledWith(expect.stringContaining("Prepass failed after"));
     expect(warnMock).toHaveBeenCalledWith(
-      expect.stringContaining("Prepass failed, continuing without cross-file analysis"),
+      expect.stringContaining("continuing without cross-file analysis"),
     );
   });
 });
