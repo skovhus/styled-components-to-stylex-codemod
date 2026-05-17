@@ -901,9 +901,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     decl.supportsAsProp = extResult.as || typedComponentHasProp(decl, "as");
     decl.supportsRefProp = extResult.ref || typedComponentHasProp(decl, "ref");
     decl.consumerUsesClassName =
-      extResult.className ?? typeAwareExternalStyleFallback(decl, extResult.styles, "className");
-    decl.consumerUsesStyle =
-      extResult.style ?? typeAwareExternalStyleFallback(decl, extResult.styles, "style");
+      extResult.className ?? typeAwareExternalStyleFallback(extResult.styles);
+    decl.consumerUsesStyle = extResult.style ?? typeAwareExternalStyleFallback(extResult.styles);
     decl.consumerUsesElementProps = extResult.elementProps ?? extResult.styles;
     decl.consumerUsesSpread = extResult.spreadProps ?? extResult.styles;
   }
@@ -1429,18 +1428,11 @@ function isSpecialSurfaceProp(propName: string): boolean {
   );
 }
 
-function typeAwareExternalStyleFallback(
-  decl: StyledDecl,
-  fallback: boolean,
-  propName: "className" | "style",
-): boolean {
+function typeAwareExternalStyleFallback(fallback: boolean): boolean {
   if (!fallback) {
     return false;
   }
-  if (!decl.typeScriptPropNames) {
-    return true;
-  }
-  return decl.typeScriptHasIndexSignature === true || decl.typeScriptPropNames.has(propName);
+  return true;
 }
 
 /** True if any skipped decl in the file extends the given component via `styled(name)`. */

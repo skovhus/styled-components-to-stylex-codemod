@@ -562,6 +562,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
         const entry = ensure(defFile, exportedName);
         entry.styles = true;
+        entry.className = true;
+        entry.style = true;
         // Re-styling: conservative fallback — can't see all consumers of the wrapper
         entry.elementProps = true;
         entry.spreadProps = true;

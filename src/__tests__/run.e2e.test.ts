@@ -423,6 +423,71 @@ describe("runTransform (e2e)", () => {
     expect(component).not.toContain("const { style");
   });
 
+  it("auto external interface keeps className/style merging for restyled typed components", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-auto-restyled-typed-"));
+    await mkdir(join(tmp, "src/components"), { recursive: true });
+    await mkdir(join(tmp, "src/views"), { recursive: true });
+    await writeFile(
+      join(tmp, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "preserve", moduleResolution: "bundler" } }),
+    );
+    await writeFile(
+      join(tmp, "src/components/Button.tsx"),
+      [
+        'import styled from "styled-components";',
+        "",
+        "export const Button = styled.button<{ tone?: 'primary' | 'secondary' }>`",
+        "  color: ${(props) => (props.tone === 'primary' ? 'blue' : 'gray')};",
+        "`;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(tmp, "src/views/App.tsx"),
+      [
+        'import styled from "styled-components";',
+        'import { Button } from "../components/Button";',
+        "",
+        "const FancyButton = styled(Button)`",
+        "  font-weight: bold;",
+        "`;",
+        "",
+        "export function App() {",
+        '  return <FancyButton tone="primary">Restyled</FancyButton>;',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runTransform({
+      files: join(tmp, "src/components/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter: defineAdapterFromIndex({
+        useSxProp: true,
+        externalInterface: "auto",
+        styleMerger: {
+          functionName: "mergedSx",
+          importSource: { kind: "specifier", value: "./mergedSx" },
+        },
+        resolveValue: () => undefined,
+        resolveCall: () => undefined,
+        resolveSelector: () => undefined,
+      }),
+      dryRun: false,
+      print: false,
+      parser: "tsx",
+      silent: true,
+    });
+
+    const component = await readFile(join(tmp, "src/components/Button.tsx"), "utf-8");
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(1);
+    expect(component).toContain('React.ComponentProps<"button">');
+    expect(component).toContain("const {\n    className,");
+    expect(component).toContain("style,");
+    expect(component).toContain("mergedSx");
+  });
+
   it("does not false-bail same-run wrappers when sx prop emission is disabled", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sequential-manual-interface-",
