@@ -1742,9 +1742,7 @@ export class WrapperEmitter {
       allowClassNameProp &&
       this.wrappedRejectsStyleProp(wrappedComponent!, "className");
     const liftStyleForUnsupportedWrapped =
-      liftableContext &&
-      allowStyleProp &&
-      this.wrappedRejectsStyleProp(wrappedComponent!, "style");
+      liftableContext && allowStyleProp && this.wrappedRejectsStyleProp(wrappedComponent!, "style");
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.

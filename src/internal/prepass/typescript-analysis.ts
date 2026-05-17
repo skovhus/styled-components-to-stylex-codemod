@@ -537,13 +537,38 @@ function collectExplicitPropNamesFromDeclaration(
   }
   for (const clause of declaration.heritageClauses ?? []) {
     for (const heritageType of clause.types) {
-      collectExplicitPropNamesInto(names, heritageType, checker, visited);
+      collectExplicitPropNamesFromHeritage(names, heritageType, checker, visited);
     }
+  }
+}
+
+function collectExplicitPropNamesFromHeritage(
+  names: Set<string>,
+  heritageType: ts.ExpressionWithTypeArguments,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (isIntrinsicReactHeritageReference(heritageType)) {
+    return;
+  }
+  const symbol = resolveAliasedSymbol(
+    checker.getSymbolAtLocation(heritageType.expression),
+    checker,
+  );
+  for (const declaration of symbol?.declarations ?? []) {
+    collectExplicitPropNamesFromDeclaration(names, declaration, checker, visited);
   }
 }
 
 function isIntrinsicReactPropReference(typeNode: ts.TypeReferenceNode): boolean {
   const typeName = typeNode.typeName.getText();
+  return /^(?:React\.)?(?:ComponentProps|ComponentPropsWithRef|ComponentPropsWithoutRef|HTMLAttributes|ButtonHTMLAttributes|AnchorHTMLAttributes|InputHTMLAttributes|SVGProps)$/.test(
+    typeName,
+  );
+}
+
+function isIntrinsicReactHeritageReference(heritageType: ts.ExpressionWithTypeArguments): boolean {
+  const typeName = heritageType.expression.getText();
   return /^(?:React\.)?(?:ComponentProps|ComponentPropsWithRef|ComponentPropsWithoutRef|HTMLAttributes|ButtonHTMLAttributes|AnchorHTMLAttributes|InputHTMLAttributes|SVGProps)$/.test(
     typeName,
   );
@@ -782,10 +807,7 @@ function isKnownPropPreservingHocCallee(node: ts.Expression): boolean {
   if (ts.isIdentifier(node)) {
     return KNOWN_PROP_PRESERVING_HOC_NAMES.has(node.text);
   }
-  return (
-    ts.isPropertyAccessExpression(node) &&
-    KNOWN_PROP_PRESERVING_HOC_NAMES.has(node.name.text)
-  );
+  return ts.isPropertyAccessExpression(node) && KNOWN_PROP_PRESERVING_HOC_NAMES.has(node.name.text);
 }
 
 function isStyledComponentInitializer(node: ts.Expression): boolean {

@@ -18,6 +18,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
       file.components
         .filter((component) => component.name !== "BodySx" && component.name !== "DefaultAlias")
         .filter((component) => component.name !== "MemoSx" && component.name !== "ForwardRefSx")
+        .filter((component) => component.name !== "InheritedSx")
         .map((component) => [
           `${path.relative(realBase, file.filePath)}:${component.name}`,
           {
@@ -149,6 +150,11 @@ describe("TypeScript compiler prepass", () => {
         "",
         "export const MemoSx = React.memo((props: { sx?: SxStyles; label?: string }) => <div>{props.label}</div>);",
         "export const ForwardRefSx = React.forwardRef<HTMLDivElement, { sx?: SxStyles; label?: string }>((props, ref) => <div ref={ref}>{props.label}</div>);",
+        "",
+        "interface InheritedSxProps extends VariantProps { label?: string }",
+        "export function InheritedSx(props: InheritedSxProps) {",
+        "  return <div>{props.label}</div>;",
+        "}",
       ].join("\n"),
     );
 
@@ -183,6 +189,11 @@ describe("TypeScript compiler prepass", () => {
       expect(
         prepassResult.typeScriptMetadata!.files[0]!.components.find(
           (component) => component.name === "ForwardRefSx",
+        )?.supportsSxProp,
+      ).toBe(true);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "InheritedSx",
         )?.supportsSxProp,
       ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))

@@ -611,9 +611,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ) {
             explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
               className:
-                !skipStyleProps && allowClassNameProp && (!wrappedHasClassName || wrappedRejectsClassName),
-              style:
-                !skipStyleProps && allowStyleProp && (!wrappedHasStyle || wrappedRejectsStyle),
+                !skipStyleProps &&
+                allowClassNameProp &&
+                (!wrappedHasClassName || wrappedRejectsClassName),
+              style: !skipStyleProps && allowStyleProp && (!wrappedHasStyle || wrappedRejectsStyle),
               sx: allowSxProp,
             });
           }
