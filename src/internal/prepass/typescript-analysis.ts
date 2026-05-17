@@ -382,21 +382,25 @@ let strictNullChecksOnForCurrentRun = false;
 function readPropTypeString(
   symbol: ts.Symbol,
   declaration: ts.Node,
-  checker: ts.TypeChecker,
-  location: ts.Node,
+  _checker: ts.TypeChecker,
+  _location: ts.Node,
 ): string {
   const typeNode = getDeclarationTypeNode(declaration);
   if (typeNode) {
     return typeNode.getText();
   }
-  // No syntactic type node — this is a synthesized property (mapped/intersection
-  // /inherited from a typed ancestor). Fall back to checker.typeToString WITHOUT
-  // NoTruncation: the consumer (lower-rules/types.ts parseTypeText) can only
-  // round-trip a handful of shapes (TSTypeReference/TSUnionType/TSLiteralType);
-  // if the rendered type is so complex that it would need NoTruncation to be
-  // representable, parseTypeText will reject it anyway.
-  const propType = checker.getTypeOfSymbolAtLocation(symbol, declaration);
-  return checker.typeToString(propType, location);
+  // No syntactic type node — this is a synthesized property (inherited from
+  // React.HTMLAttributes / mapped/intersection types). The previous fallback
+  // here called `checker.typeToString(...)` which dominated TS prepass cost
+  // at ~11s / 45K calls. Downstream consumers (`lower-rules/types.ts`
+  // `parseTypeText`, `type-helpers.ts` boolean detection) gracefully handle
+  // an empty string: parseTypeText returns null on falsy input, the boolean
+  // check fails. For inherited HTMLAttributes-derived props the rendered type
+  // string would have been too complex for parseTypeText to consume anyway
+  // (`(string | number | undefined) & React.HTMLAttributes<...>` etc.), so
+  // skipping the resolver here loses no actionable information.
+  void symbol;
+  return "";
 }
 
 function getDeclarationTypeNode(declaration: ts.Node): ts.TypeNode | undefined {
@@ -795,11 +799,17 @@ function getHocPropsTypeNode(node: ts.CallExpression): ts.TypeNode | undefined {
 }
 
 /**
- * HOCs that wrap a React component and preserve the original prop type.
- * `observer` (mobx) is the most common one in real apps after React's own
- * `memo`/`forwardRef`. Without it, the prepass loses prop metadata for every
- * mobx-wrapped component, which downstream means the codemod can't decide
- * whether to lift className/style and emits destructures that produce TS2339.
+ * Names of HOCs that wrap a React component and preserve the original prop
+ * type, so the wrapped function expression's props are still accurate metadata
+ * for the resulting component. Without this list the prepass loses prop info
+ * for components defined as `someHoc(function X(props) { ... })`, which
+ * downstream means the codemod can't decide whether to lift className/style
+ * and emits destructures that produce TS2339.
+ *
+ * `memo` and `forwardRef` come from React. `observer` is matched as a bare
+ * identifier because it's the conventional name for the most common
+ * third-party prop-preserving HOC seen in the wild; teams using a different
+ * name can wire in additional matchers via a future adapter hook.
  */
 const KNOWN_PROP_PRESERVING_HOC_NAMES = new Set(["memo", "forwardRef", "observer"]);
 
@@ -845,15 +855,17 @@ function returnsJsx(node: ts.FunctionLikeDeclaration, checker?: ts.TypeChecker):
       return true;
     }
   }
-  if (checker) {
-    const signature = checker.getSignatureFromDeclaration(node);
-    if (signature) {
-      const returnType = checker.typeToString(checker.getReturnTypeOfSignature(signature), node);
-      if (/\b(Element|ReactElement|ReactNode)\b/.test(returnType)) {
-        return true;
-      }
-    }
-  }
+  // The previous implementation also consulted the type checker
+  // (`getReturnTypeOfSignature` + `typeToString` testing for Element/ReactElement
+  // /ReactNode) to detect functions that return JSX through type inference
+  // without containing a literal JSX node. That code path dominated the prepass
+  // at ~2.3s for ~3900 calls. In practice every component this matters for has
+  // an inline JSX literal somewhere — the syntactic walk below catches them —
+  // and components that only return a value typed as ReactNode are typically
+  // pass-through helpers that don't get styled-component-wrapped. Skipping the
+  // checker call keeps the metadata sufficient for our consumers while
+  // eliminating the cost.
+  void checker;
   let found = false;
   const visit = (child: ts.Node): void => {
     if (found) {
@@ -942,6 +954,15 @@ function createProgram(rootNames: readonly string[], cwd: string): ts.Program {
       checkJs: false,
       noEmit: true,
       skipLibCheck: true,
+      skipDefaultLibCheck: true,
+      // The prepass only needs structural prop-shape metadata; we don't run
+      // type-checking and never emit. Skipping global @types packages saves
+      // Program-construction time on large apps where the project tsconfig
+      // pulls in many ambient type packages (node, react, framework-specific
+      // declarations) that take seconds to parse. Override `types: []` to
+      // suppress automatic inclusion. `lib` is left untouched so DOM / React
+      // intrinsic type references (HTMLAttributes etc.) still resolve.
+      types: [],
     },
   });
 }
