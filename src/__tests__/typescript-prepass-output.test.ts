@@ -390,4 +390,44 @@ describe("TypeScript prepass output refinement", () => {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
   });
+
+  it("does not emit private imported prop type aliases in style function params", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-private-alias-"));
+    const typesPath = path.join(fixtureDir, "types.ts");
+    const boxPath = path.join(fixtureDir, "Box.tsx");
+    writeFileSync(
+      typesPath,
+      ["type Width = number;", "export interface BoxProps { width: Width }"].join("\n"),
+    );
+    const source = [
+      'import styled from "styled-components";',
+      'import type { BoxProps } from "./types";',
+      "",
+      "export const Box = styled.div<BoxProps>`",
+      "  width: ${(props) => props.width}px;",
+      "`;",
+      "",
+      "export const App = () => <Box width={12}>Box</Box>;",
+    ].join("\n");
+    writeFileSync(boxPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [typesPath, boxPath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: boxPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain("boxWidth: (width: string)");
+      expect(after.code).not.toContain("(width: Width)");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
 });
