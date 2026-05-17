@@ -2247,7 +2247,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
 
           const body = j.objectExpression(properties as any);
-          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression(dynamicStyleParams, body));
+          // Union params with any previously-declared params on this fnKey.
+          // The merge path is called per-CSS-property, and each iteration's
+          // `dynamicStyleParams` only reflects props referenced by THIS
+          // property. Without unioning, the last iteration's params overwrite
+          // the others — leaving any props used only by earlier-merged
+          // properties referenced as dangling bare identifiers in the body
+          // (TS2304) and producing TS2554 on the call site (too many args).
+          const mergedParams = unionStyleFnParams(
+            styleFnDecls.get(existingFnKey),
+            dynamicStyleParams,
+          );
+          styleFnDecls.set(existingFnKey, j.arrowFunctionExpression(mergedParams, body));
 
           // Remove from variant buckets — now handled as a style function
           variantBuckets.delete(conditionProp);
@@ -5374,4 +5385,41 @@ function markThemeHookForVariants(
   if (needsTheme) {
     markDeclNeedsUseThemeHook(decl);
   }
+}
+
+/**
+ * Returns a merged parameter list combining the params from an existing arrow
+ * function (if any) with new params, deduplicated by identifier name.
+ * Type annotations are preserved from whichever source provided them first.
+ * Used by the variant-merge path so that adding more dynamic CSS properties
+ * to an already-declared style function preserves all required params.
+ */
+function unionStyleFnParams(
+  existingFn: unknown,
+  newParams: ExpressionKind[],
+): ExpressionKind[] {
+  type ParamNode = { type?: string; name?: string };
+  const existingParams = (
+    (existingFn as { params?: readonly ParamNode[] } | undefined)?.params ?? []
+  ) as ParamNode[];
+  const merged: ParamNode[] = [];
+  const seen = new Set<string>();
+  const pushIfNew = (param: ParamNode): void => {
+    const name = param.name;
+    if (typeof name !== "string" || seen.has(name)) {
+      return;
+    }
+    seen.add(name);
+    merged.push(param);
+  };
+  for (const p of existingParams) {
+    pushIfNew(p);
+  }
+  for (const p of newParams as ParamNode[]) {
+    pushIfNew(p);
+  }
+  if (merged.length === 0) {
+    return newParams;
+  }
+  return merged as unknown as ExpressionKind[];
 }

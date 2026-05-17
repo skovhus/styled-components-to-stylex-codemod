@@ -668,6 +668,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // lowering step already supplied explicit scalar call args.
   convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
   alignComputedCallArgStyleFnParams(styleFnDecls, styleFnFromProps);
+  unionStyleFnParamsFromStyleFnFromProps(state.j, styleFnDecls, styleFnFromProps);
 
   insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
     styleKey: decl.styleKey,
@@ -706,6 +707,72 @@ function alignComputedCallArgStyleFnParams(
       continue;
     }
     renameIdentifierInAst(fnAst, entry.jsxProp, paramName);
+  }
+}
+
+/**
+ * Ensures every style-fn declaration declares all the parameters the call site
+ * will pass. When `styleFnFromProps` reports that a single fnKey is called
+ * with both a primary jsxProp and extra call args (e.g.
+ * `styles.panel(compact, isExpanded)`), but the function definition only
+ * declares the primary as a parameter, the body's references to the extras
+ * become dangling identifiers — TS2304 "Cannot find name 'isExpanded'" plus
+ * TS2554 "Expected 1 arguments, but got 2" on the call site.
+ *
+ * This post-process step inspects all styleFnFromProps entries for each fnKey,
+ * collects the union of jsxProps referenced as primary + extra args, and adds
+ * any missing identifiers as additional parameters at the end of the
+ * function's parameter list.
+ */
+function unionStyleFnParamsFromStyleFnFromProps(
+  j: { identifier: (name: string) => unknown },
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+): void {
+  const requiredParamsByFn = new Map<string, string[]>();
+  for (const entry of styleFnFromProps) {
+    if (entry.jsxProp === "__props" || entry.jsxProp === "__helper") {
+      continue;
+    }
+    const requiredParams = requiredParamsByFn.get(entry.fnKey) ?? [];
+    if (!requiredParams.includes(entry.jsxProp)) {
+      requiredParams.push(entry.jsxProp);
+    }
+    if (entry.extraCallArgs) {
+      for (const extra of entry.extraCallArgs) {
+        if (extra.jsxProp === "__props" || extra.jsxProp === "__helper") {
+          continue;
+        }
+        if (!requiredParams.includes(extra.jsxProp)) {
+          requiredParams.push(extra.jsxProp);
+        }
+      }
+    }
+    requiredParamsByFn.set(entry.fnKey, requiredParams);
+  }
+  for (const [fnKey, requiredParams] of requiredParamsByFn) {
+    if (requiredParams.length < 2) {
+      continue;
+    }
+    const fnAst = styleFnDecls.get(fnKey);
+    if (!fnAst || typeof fnAst !== "object") {
+      continue;
+    }
+    const params = (fnAst as { params?: Array<{ name?: string }> }).params;
+    if (!Array.isArray(params)) {
+      continue;
+    }
+    const existingParamNames = new Set(
+      params
+        .map((p) => p?.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    for (const required of requiredParams) {
+      if (!existingParamNames.has(required)) {
+        params.push(j.identifier(required) as never);
+        existingParamNames.add(required);
+      }
+    }
   }
 }
 
