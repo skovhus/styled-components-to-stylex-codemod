@@ -40,6 +40,23 @@ describe("TypeScript prepass output refinement", () => {
     ).toBe(true);
   });
 
+  it("detects anonymous default function sx props in fallback source scanning", () => {
+    const source = [
+      'import type { StyleXStyles } from "@stylexjs/stylex";',
+      "export default function(props: { sx?: StyleXStyles; label?: string }) {",
+      "  return <button>{props.label}</button>;",
+      "}",
+    ].join("\n");
+
+    expect(
+      transformedComponentAcceptsSx({
+        absolutePath: "/tmp/components.tsx",
+        componentNames: ["default"],
+        sourceOverrides: new Map([["/tmp/components.tsx", source]]),
+      }),
+    ).toBe(true);
+  });
+
   it("does not expose className/style from a local styled base when external styles are disabled", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-styled-base-"));
     const filePath = path.join(fixtureDir, "Label.tsx");
@@ -112,6 +129,43 @@ describe("TypeScript prepass output refinement", () => {
 
       expect(after.code).toContain("{...stylex.props(");
       expect(after.code).not.toContain("<IconButton\n      {...rest}\n      sx=");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat nested shadowed props.sx reads as wrapper sx support", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-shadowed-sx-"));
+    const filePath = path.join(fixtureDir, "Panel.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "type SxStyles = { readonly __stylex?: string };",
+      "function Panel(props: { items: Array<{ sx?: SxStyles }>; children?: React.ReactNode }) {",
+      "  return <section>{props.items.map((props) => props.sx ? 'sx' : '')}{props.children}</section>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Panel)`",
+      "  color: red;",
+      "`;",
+      "",
+      "export const App = () => <Wrapped items={[{}]}>Panel</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain("{...stylex.props(");
+      expect(after.code).not.toContain("<Panel\n      {...rest}\n      sx=");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

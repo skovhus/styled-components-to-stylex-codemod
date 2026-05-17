@@ -45,6 +45,12 @@ function componentHasSxProp(source: string, componentName: string): boolean {
 }
 
 function readFunctionPropsType(source: string, componentName: string): string | undefined {
+  if (componentName === "default") {
+    const defaultMatch = source.match(/export\s+default\s+function\s*\(/);
+    if (defaultMatch?.index !== undefined) {
+      return readFirstPropsType(source, defaultMatch.index + defaultMatch[0].length);
+    }
+  }
   const match = source.match(
     new RegExp(`(?:export\\s+)?function\\s+${escapeRegex(componentName)}\\s*\\(`),
   );
@@ -83,7 +89,7 @@ function readFirstPropsType(source: string, startIndex: number): string | undefi
 }
 
 function typeTextHasSx(source: string, typeText: string, visited: Set<string>): boolean {
-  if (typeText.includes("sx?: stylex.StyleXStyles")) {
+  if (/\bsx\??\s*:\s*(?:stylex\.)?StyleXStyles\b/.test(typeText)) {
     return true;
   }
   const typeName = typeText.trim().match(/^([A-Za-z_$][\w$]*)$/)?.[1];

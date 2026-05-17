@@ -106,7 +106,7 @@ function analyzeSourceFile(
   const functions: TypeScriptFunctionMetadata[] = [];
 
   const visit = (node: ts.Node): void => {
-    if (ts.isFunctionDeclaration(node) && node.name) {
+    if (ts.isFunctionDeclaration(node) && (node.name || isDefaultExport(node))) {
       const fn = readFunctionDeclaration(node, checker, exportedNames);
       functions.push(fn);
       if (isReactComponentFunction(node, checker)) {
@@ -623,6 +623,12 @@ function readsSxProp(
       return;
     }
     if (
+      isFunctionWithParameterNamed(node, propsName) ||
+      isFunctionWithParameterDestructuringName(node, "sx")
+    ) {
+      return;
+    }
+    if (
       ts.isPropertyAccessExpression(node) &&
       ts.isIdentifier(node.expression) &&
       node.expression.text === propsName &&
@@ -645,6 +651,40 @@ function readsSxProp(
   };
   ts.forEachChild(body, visit);
   return found;
+}
+
+function isFunctionWithParameterNamed(node: ts.Node, name: string): boolean {
+  return isFunctionWithParameters(node)
+    ? node.parameters.some((parameter) => isBindingNameNamed(parameter.name, name))
+    : false;
+}
+
+function isFunctionWithParameterDestructuringName(node: ts.Node, name: string): boolean {
+  return isFunctionWithParameters(node)
+    ? node.parameters.some(
+        (parameter) =>
+          ts.isObjectBindingPattern(parameter.name) && bindingPatternHasName(parameter.name, name),
+      )
+    : false;
+}
+
+function isFunctionWithParameters(
+  node: ts.Node,
+): node is
+  | ts.FunctionDeclaration
+  | ts.FunctionExpression
+  | ts.ArrowFunction
+  | ts.MethodDeclaration {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node) ||
+    ts.isMethodDeclaration(node)
+  );
+}
+
+function isBindingNameNamed(name: ts.BindingName, expected: string): boolean {
+  return ts.isIdentifier(name) && name.text === expected;
 }
 
 function bindingPatternHasName(pattern: ts.ObjectBindingPattern, name: string): boolean {
@@ -868,7 +908,7 @@ function isStyledTag(node: ts.Expression): boolean {
 }
 
 function isReactComponentFunction(node: ts.FunctionDeclaration, checker: ts.TypeChecker): boolean {
-  return Boolean(node.name && (isReactComponentName(node.name.text) || returnsJsx(node, checker)));
+  return Boolean((node.name && isReactComponentName(node.name.text)) || returnsJsx(node, checker));
 }
 
 function returnsJsx(node: ts.FunctionLikeDeclaration, checker?: ts.TypeChecker): boolean {

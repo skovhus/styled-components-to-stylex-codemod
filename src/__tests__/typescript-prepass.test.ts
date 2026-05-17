@@ -19,6 +19,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
         .filter((component) => component.name !== "InnerMemoSx")
         .filter((component) => component.name !== "MemoIdentifierSx")
         .filter((component) => component.name !== "InheritedSx")
+        .filter((component) => component.name !== "ShadowedProps")
         .map((component) => [
           `${path.relative(realBase, file.filePath)}:${component.name}`,
           {
@@ -159,6 +160,10 @@ describe("TypeScript compiler prepass", () => {
         "export function InheritedSx(props: InheritedSxProps) {",
         "  return <div>{props.label}</div>;",
         "}",
+        "",
+        "export function ShadowedProps(props: { items: Array<{ sx?: SxStyles }> }) {",
+        "  return <div>{props.items.map((props) => props.sx ? 'sx' : '')}</div>;",
+        "}",
       ].join("\n"),
     );
 
@@ -205,6 +210,11 @@ describe("TypeScript compiler prepass", () => {
           (component) => component.name === "InheritedSx",
         )?.supportsSxProp,
       ).toBe(true);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "ShadowedProps",
+        )?.supportsSxProp,
+      ).toBe(false);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`
           {
@@ -471,6 +481,38 @@ describe("TypeScript compiler prepass", () => {
       });
 
       expect(prepassResult.typeScriptMetadata).toBeUndefined();
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts sx support from anonymous default function components", async () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-default-fn-"));
+    const sourcePath = path.join(fixtureDir, "component.tsx");
+    writeFileSync(
+      sourcePath,
+      [
+        "type SxStyles = { readonly __stylex?: string };",
+        "export default function(props: { sx?: SxStyles; label?: string }) {",
+        "  return <div>{props.label}</div>;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const prepassResult = await runPrepass({
+        filesToTransform: [sourcePath],
+        consumerPaths: [],
+        resolver: createModuleResolver(),
+        parserName: "tsx",
+        createExternalInterface: false,
+      });
+      const anonymousDefault = prepassResult.typeScriptMetadata?.files[0]?.components.find(
+        (component) => component.name === "default",
+      );
+
+      expect(anonymousDefault?.defaultExport).toBe(true);
+      expect(anonymousDefault?.supportsSxProp).toBe(true);
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
