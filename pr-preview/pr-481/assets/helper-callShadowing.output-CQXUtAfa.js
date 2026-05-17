@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-CFsFCiqh.js";t();var n=e();function r(){let e=e=>`#${e}`;function t(t){let{className:r,children:i,style:a}=t;return(0,n.jsx)(`div`,{className:r,style:{backgroundColor:e(`ff0000`),...a},children:i})}return t}var i=()=>(0,n.jsx)(r(),{children:`Colored text`});export{i as App};
