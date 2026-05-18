@@ -36,4 +36,10 @@ describe("rewriteBarePropIdentifiersToPropsAccess", () => {
         })"
       `);
   });
+
+  it("renames nested props bindings before rewriting to outer props access", () => {
+    expect(rewriteExpression("items.map((props) => props.label + gutter)", ["gutter"])).toBe(
+      "items.map((propsArg) => propsArg.label + props.gutter)",
+    );
+  });
 });
