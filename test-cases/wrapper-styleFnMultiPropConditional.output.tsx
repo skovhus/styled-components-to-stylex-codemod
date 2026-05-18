@@ -26,7 +26,7 @@ export const App = (props: { compact: boolean; isExpanded: boolean }) => (
 );
 
 const styles = stylex.create({
-  panel: (compact: boolean, isExpanded) => ({
+  panel: (compact: boolean, isExpanded: boolean) => ({
     borderRadius: 0,
     backgroundColor: "unset",
     overflowY: compact && isExpanded ? "auto" : "hidden",

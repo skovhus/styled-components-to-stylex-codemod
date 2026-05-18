@@ -11,6 +11,7 @@ import {
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
 import type { StyledDecl } from "../transform-types.js";
+import type { JSCodeshift } from "jscodeshift";
 import {
   extractUnionLiteralValues,
   groupVariantBucketsIntoDimensions,
@@ -668,7 +669,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   // lowering step already supplied explicit scalar call args.
   convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
   alignComputedCallArgStyleFnParams(styleFnDecls, styleFnFromProps);
-  unionStyleFnParamsFromStyleFnFromProps(state.j, styleFnDecls, styleFnFromProps);
+  unionStyleFnParamsFromStyleFnFromProps(state.j, decl, styleFnDecls, styleFnFromProps);
 
   insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
     styleKey: decl.styleKey,
@@ -725,7 +726,8 @@ function alignComputedCallArgStyleFnParams(
  * function's parameter list.
  */
 function unionStyleFnParamsFromStyleFnFromProps(
-  j: { identifier: (name: string) => unknown },
+  j: StyleFnParamBuilderJ,
+  decl: StyledDecl,
   styleFnDecls: Map<string, unknown>,
   styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
 ): void {
@@ -767,11 +769,50 @@ function unionStyleFnParamsFromStyleFnFromProps(
     );
     for (const required of requiredParams) {
       if (!existingParamNames.has(required)) {
-        params.push(j.identifier(required) as never);
+        params.push(buildStyleFnParam(j, decl, required) as never);
         existingParamNames.add(required);
       }
     }
   }
+}
+
+type StyleFnParamBuilderJ = {
+  identifier: JSCodeshift["identifier"];
+  tsBooleanKeyword: JSCodeshift["tsBooleanKeyword"];
+  tsNumberKeyword: JSCodeshift["tsNumberKeyword"];
+  tsStringKeyword: JSCodeshift["tsStringKeyword"];
+  tsTypeAnnotation: JSCodeshift["tsTypeAnnotation"];
+};
+type StyleFnParamTypeNode = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
+
+function buildStyleFnParam(
+  j: StyleFnParamBuilderJ,
+  decl: StyledDecl,
+  propName: string,
+): ReturnType<JSCodeshift["identifier"]> {
+  const param = j.identifier(propName);
+  const typeNode = typeNodeFromPropTypeText(j, decl.typeScriptPropTypes?.get(propName));
+  if (typeNode) {
+    param.typeAnnotation = j.tsTypeAnnotation(typeNode);
+  }
+  return param;
+}
+
+function typeNodeFromPropTypeText(
+  j: StyleFnParamBuilderJ,
+  typeText: string | undefined,
+): StyleFnParamTypeNode | null {
+  const normalized = typeText?.replace(/\|\s*undefined\b/g, "").trim();
+  if (normalized === "boolean") {
+    return j.tsBooleanKeyword() as StyleFnParamTypeNode;
+  }
+  if (normalized === "number") {
+    return j.tsNumberKeyword() as StyleFnParamTypeNode;
+  }
+  if (normalized === "string") {
+    return j.tsStringKeyword() as StyleFnParamTypeNode;
+  }
+  return null;
 }
 
 // --- Non-exported helpers ---
