@@ -51,6 +51,7 @@ import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -2290,6 +2291,7 @@ function normalizeEnabledPseudoForSupportedIntrinsic(
   if (
     decl.base.kind !== "intrinsic" ||
     !ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) ||
+    hasPolymorphicAsPropType(decl, root, j) ||
     hasNonFormControlAsUsage(decl.localName, root, j)
   ) {
     return selector;
@@ -2325,6 +2327,14 @@ function hasNonFormControlAsUsage(
       }
     });
   return unsafe;
+}
+
+function hasPolymorphicAsPropType(
+  decl: StyledDecl,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  return !!decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType });
 }
 
 function containsEnabledPseudo(selector: string): boolean {

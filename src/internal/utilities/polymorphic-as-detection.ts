@@ -77,7 +77,8 @@ const collectElementTypeTypeParams = (typeParamsDecl: any): Set<string> => {
   const names = new Set<string>();
   const params: any[] = typeParamsDecl?.params ?? [];
   for (const p of params) {
-    const name = p?.name?.type === "Identifier" ? p.name.name : null;
+    const name =
+      typeof p?.name === "string" ? p.name : p?.name?.type === "Identifier" ? p.name.name : null;
     const constraint = p?.constraint;
     if (name && isReactElementTypeRef(constraint)) {
       names.add(name);
