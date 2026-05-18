@@ -662,7 +662,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformMode: leavesOnly ? "leavesOnly" : (options.transformMode ?? "all"),
     globalLeafKeys: crossFilePrepassResult.globalLeafKeys,
     resolveModule: (fromFile: string, specifier: string) =>
-      sharedResolver.resolve(fromFile, specifier),
+      sharedResolver.resolve(resolve(fromFile), specifier),
     // Programmatic use passes an Adapter object (functions). That cannot be
     // serialized across process boundaries, so we must run in-band.
     runInBand: true,
