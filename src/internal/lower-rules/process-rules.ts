@@ -50,6 +50,7 @@ import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
+import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -1018,7 +1019,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
-    selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl);
+    selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl, root, j);
     if (hasEnabledCompoundPseudoSelector(selector)) {
       state.markBail();
       warnings.push({
@@ -2280,11 +2281,50 @@ const ENABLED_PSEUDO_INTRINSIC_TAGS = new Set([
   "textarea",
 ]);
 
-function normalizeEnabledPseudoForSupportedIntrinsic(selector: string, decl: StyledDecl): string {
-  if (decl.base.kind !== "intrinsic" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName)) {
+function normalizeEnabledPseudoForSupportedIntrinsic(
+  selector: string,
+  decl: StyledDecl,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): string {
+  if (
+    decl.base.kind !== "intrinsic" ||
+    !ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) ||
+    hasNonFormControlAsUsage(decl.localName, root, j)
+  ) {
     return selector;
   }
   return selector.replace(/(^|[,&]\s*):enabled(?=[:\s,{]|$)/g, "$1:not(:disabled)");
+}
+
+function hasNonFormControlAsUsage(
+  componentName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  let unsafe = false;
+  root
+    .find(j.JSXElement, {
+      openingElement: {
+        name: { type: "JSXIdentifier", name: componentName },
+      },
+    } as any)
+    .forEach((path) => {
+      if (unsafe) {
+        return;
+      }
+      for (const attr of path.node.openingElement.attributes ?? []) {
+        if (attr.type !== "JSXAttribute" || attr.name.name !== "as") {
+          continue;
+        }
+        const value = readStaticJsxLiteral(attr);
+        if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
+          unsafe = true;
+          return;
+        }
+      }
+    });
+  return unsafe;
 }
 
 function containsEnabledPseudo(selector: string): boolean {
