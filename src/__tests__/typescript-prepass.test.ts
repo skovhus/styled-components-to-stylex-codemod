@@ -20,6 +20,7 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
         .filter((component) => component.name !== "MemoIdentifierSx")
         .filter((component) => component.name !== "InheritedSx")
         .filter((component) => component.name !== "ShadowedProps")
+        .filter((component) => component.name !== "MappedSx")
         .map((component) => [
           `${path.relative(realBase, file.filePath)}:${component.name}`,
           {
@@ -164,6 +165,11 @@ describe("TypeScript compiler prepass", () => {
         "export function ShadowedProps(props: { items: Array<{ sx?: SxStyles }> }) {",
         "  return <div>{props.items.map((props) => props.sx ? 'sx' : '')}</div>;",
         "}",
+        "",
+        "type MappedSxProps = Pick<VariantProps, 'sx'> & { label?: string };",
+        "export function MappedSx(props: MappedSxProps) {",
+        "  return <div>{props.label}</div>;",
+        "}",
       ].join("\n"),
     );
 
@@ -215,6 +221,11 @@ describe("TypeScript compiler prepass", () => {
           (component) => component.name === "ShadowedProps",
         )?.supportsSxProp,
       ).toBe(false);
+      expect(
+        prepassResult.typeScriptMetadata!.files[0]!.components.find(
+          (component) => component.name === "MappedSx",
+        )?.supportsSxProp,
+      ).toBe(true);
       expect(componentSnapshot(prepassResult.typeScriptMetadata!, fixtureDir))
         .toMatchInlineSnapshot(`
           {

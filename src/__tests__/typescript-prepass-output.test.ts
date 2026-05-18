@@ -171,6 +171,45 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("uses sx for wrapped components with mapped sx props", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-mapped-sx-"));
+    const filePath = path.join(fixtureDir, "Panel.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "type SxStyles = { readonly __stylex?: string };",
+      "type SxProps = { sx?: SxStyles };",
+      "type PanelProps = Pick<SxProps, 'sx'> & { label?: string; children?: React.ReactNode };",
+      "function Panel(props: PanelProps) {",
+      "  return <section>{props.label}{props.children}</section>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Panel)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Panel">Panel</Wrapped>;',
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain("<Panel {...rest} sx={[styles.wrapped, sx]}>");
+      expect(after.code).not.toContain("{...stylex.props(styles.wrapped)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("does not widen closed spread-only props to className/style support", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-output-"));
     const filePath = path.join(fixtureDir, "Box.tsx");

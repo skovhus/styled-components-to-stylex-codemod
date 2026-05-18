@@ -281,6 +281,10 @@ function buildComponentMetadata(args: {
   const explicitPropNames = args.propTypeNode
     ? collectExplicitPropNames(args.propTypeNode, args.checker)
     : [];
+  const supportsResolvedSxProp =
+    props.some((prop) => prop.name === "sx") &&
+    args.propTypeNode !== undefined &&
+    typeNodeHasResolvableSxSurface(args.propTypeNode, args.checker, new Set());
   return {
     name: args.name,
     kind: args.kind,
@@ -293,7 +297,10 @@ function buildComponentMetadata(args: {
     parameters: args.parameters,
     restProps: args.restProps,
     hasIndexSignature: propType ? hasIndexSignature(propType, args.checker) : false,
-    supportsSxProp: explicitPropNames.includes("sx") || args.bodySupportsSxProp === true,
+    supportsSxProp:
+      explicitPropNames.includes("sx") ||
+      supportsResolvedSxProp ||
+      args.bodySupportsSxProp === true,
   };
 }
 
@@ -479,6 +486,116 @@ function collectExplicitPropNamesInto(
   for (const declaration of symbol?.declarations ?? []) {
     collectExplicitPropNamesFromDeclaration(names, declaration, checker, visited);
   }
+}
+
+function typeNodeHasResolvableSxSurface(
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): boolean {
+  if (ts.isTypeLiteralNode(typeNode)) {
+    return typeNode.members.some(
+      (member) => ts.isPropertySignature(member) && propertyNameText(member.name) === "sx",
+    );
+  }
+
+  if (ts.isIntersectionTypeNode(typeNode)) {
+    return typeNode.types.some((part) => typeNodeHasResolvableSxSurface(part, checker, visited));
+  }
+
+  if (ts.isUnionTypeNode(typeNode)) {
+    return typeNode.types.every((part) => typeNodeHasResolvableSxSurface(part, checker, visited));
+  }
+
+  if (!ts.isTypeReferenceNode(typeNode) || isIntrinsicReactPropReference(typeNode)) {
+    return false;
+  }
+
+  const utilityTypeName = typeNode.typeName.getText();
+  const typeArgs = typeNode.typeArguments ?? [];
+  if (utilityTypeName === "Pick") {
+    return typeArgs.length >= 2 && typeNodeKeyIncludes(typeArgs[1], "sx");
+  }
+  if (utilityTypeName === "Omit") {
+    const baseType = typeArgs[0];
+    return (
+      baseType !== undefined &&
+      typeArgs.length >= 2 &&
+      !typeNodeKeyIncludes(typeArgs[1], "sx") &&
+      typeNodeHasResolvableSxSurface(baseType, checker, visited)
+    );
+  }
+  if (["Partial", "Required", "Readonly"].includes(utilityTypeName)) {
+    const baseType = typeArgs[0];
+    return baseType !== undefined && typeNodeHasResolvableSxSurface(baseType, checker, visited);
+  }
+
+  const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+  return (symbol?.declarations ?? []).some((declaration) =>
+    declarationHasResolvableSxSurface(declaration, checker, visited),
+  );
+}
+
+function declarationHasResolvableSxSurface(
+  declaration: ts.Declaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): boolean {
+  if (visited.has(declaration)) {
+    return false;
+  }
+  visited.add(declaration);
+
+  if (ts.isTypeAliasDeclaration(declaration)) {
+    return typeNodeHasResolvableSxSurface(declaration.type, checker, visited);
+  }
+
+  if (!ts.isInterfaceDeclaration(declaration)) {
+    return false;
+  }
+
+  if (
+    declaration.members.some(
+      (member) => ts.isPropertySignature(member) && propertyNameText(member.name) === "sx",
+    )
+  ) {
+    return true;
+  }
+
+  return (declaration.heritageClauses ?? []).some((clause) =>
+    clause.types.some(
+      (heritageType) =>
+        !isIntrinsicReactHeritageReference(heritageType) &&
+        declarationHeritageHasResolvableSxSurface(heritageType, checker, visited),
+    ),
+  );
+}
+
+function declarationHeritageHasResolvableSxSurface(
+  heritageType: ts.ExpressionWithTypeArguments,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): boolean {
+  const symbol = resolveAliasedSymbol(
+    checker.getSymbolAtLocation(heritageType.expression),
+    checker,
+  );
+  return (symbol?.declarations ?? []).some((declaration) =>
+    declarationHasResolvableSxSurface(declaration, checker, visited),
+  );
+}
+
+function typeNodeKeyIncludes(typeNode: ts.TypeNode | undefined, key: string): boolean {
+  if (!typeNode) {
+    return false;
+  }
+  if (ts.isLiteralTypeNode(typeNode) && ts.isStringLiteral(typeNode.literal)) {
+    return typeNode.literal.text === key;
+  }
+  if (ts.isUnionTypeNode(typeNode)) {
+    return typeNode.types.some((part) => typeNodeKeyIncludes(part, key));
+  }
+  return false;
 }
 
 function resolveAliasedSymbol(
