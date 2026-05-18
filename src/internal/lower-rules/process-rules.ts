@@ -2288,7 +2288,7 @@ function normalizeEnabledPseudoForSupportedIntrinsic(selector: string, decl: Sty
 }
 
 function containsEnabledPseudo(selector: string): boolean {
-  return /(^|[,&]\s*):enabled(?=[:\s,{]|$)/.test(selector);
+  return extractPseudoTokens(selector).includes("enabled");
 }
 
 function hasEnabledCompoundPseudoSelector(selector: string): boolean {
