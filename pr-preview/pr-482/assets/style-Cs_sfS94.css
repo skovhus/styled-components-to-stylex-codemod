@@ -4057,7 +4057,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #d0d0ff;
 }
 
-.x1083ipf:not(:disabled):hover:not(#\#):not(#\#):not(#\#) {
+.x1083ipf:not(:disabled):hover:not(#\#):not(#\#):not(#\#), .x7nslxh:not(:enabled):active:not(#\#):not(#\#):not(#\#), .xzccpak:not(:disabled):active:not(#\#):not(#\#):not(#\#) {
   background-color: #dbeafe;
 }
 
@@ -5904,6 +5904,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 @media (hover: hover) {
   .xnk339x.xnk339x:not(:disabled):hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
     background-color: #d0d0ff;
+  }
+
+  .x15iq1pc.x15iq1pc:not(:enabled):hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#), .xrjq7jp.xrjq7jp:not(:disabled):hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
+    background-color: #dbeafe;
   }
 
   .x9fi45m.x9fi45m:not(:disabled):hover:not(#\#):not(#\#):not(#\#):not(#\#):not(#\#):not(#\#) {
