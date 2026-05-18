@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-Ou7-5ndn.js";import{t as n}from"./text-Ci2UxH4K.js";t();var r=e();function i(e){return(0,r.jsx)(n,{...e,variant:`title2`})}var a=()=>(0,r.jsx)(`div`,{style:{padding:`16px`},children:(0,r.jsx)(i,{children:`Hello World`})});export{a as App};
