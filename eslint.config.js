@@ -83,7 +83,11 @@ export default [
   {
     // Compound pseudo selectors: the rule doesn't recognize compound pseudos
     // like ":not(:disabled):active" as valid conditional style keys.
-    files: ["test-cases/selector-pseudoExpand.output.tsx"],
+    files: [
+      "test-cases/selector-enabledPseudoInterpolation.output.tsx",
+      "test-cases/selector-enabledPseudoInterpolationNegated.output.tsx",
+      "test-cases/selector-pseudoExpand.output.tsx",
+    ],
     rules: { "stylex/valid-styles": "off" },
   },
   {

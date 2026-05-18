@@ -2215,7 +2215,7 @@ function tryResolveInterpolatedPseudo(
   ctx: DeclProcessingState,
   prefixPseudo?: string | null,
 ): "bail" | void {
-  const { state } = ctx;
+  const { state, decl } = ctx;
   const { resolveSelector, resolveImportInScope } = state;
 
   if (!slotExpr) {
@@ -2256,10 +2256,17 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoExpand") {
-    if (prefixPseudo && containsEnabledPseudo(prefixPseudo)) {
+    const resolvedPrefixPseudo = prefixPseudo
+      ? normalizeEnabledPseudoForSupportedIntrinsic(prefixPseudo, decl, state.root, state.j)
+      : prefixPseudo;
+    if (
+      resolvedPrefixPseudo &&
+      containsEnabledPseudo(resolvedPrefixPseudo) &&
+      !canUseEnabledPseudoForSupportedIntrinsic(decl, state.root, state.j)
+    ) {
       return "bail";
     }
-    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
+    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, resolvedPrefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
@@ -2288,15 +2295,23 @@ function normalizeEnabledPseudoForSupportedIntrinsic(
   root: DeclProcessingState["state"]["root"],
   j: JSCodeshift,
 ): string {
-  if (
-    decl.base.kind !== "intrinsic" ||
-    !ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) ||
-    hasPolymorphicAsPropType(decl, root, j) ||
-    hasNonFormControlAsUsage(decl.localName, root, j)
-  ) {
+  if (!canUseEnabledPseudoForSupportedIntrinsic(decl, root, j)) {
     return selector;
   }
   return selector.replace(/(^|[,&]\s*):enabled(?=[:\s,{]|$)/g, "$1:not(:disabled)");
+}
+
+function canUseEnabledPseudoForSupportedIntrinsic(
+  decl: StyledDecl,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  return (
+    decl.base.kind === "intrinsic" &&
+    ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) &&
+    !hasPolymorphicAsPropType(decl, root, j) &&
+    !hasNonFormControlAsUsage(decl.localName, root, j)
+  );
 }
 
 function hasNonFormControlAsUsage(
