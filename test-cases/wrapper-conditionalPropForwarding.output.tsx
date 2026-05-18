@@ -1,7 +1,6 @@
 // styled(Component) with conditional styles - props used in conditions must still be forwarded
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 interface BaseProps {
   /** Label text to display */
@@ -29,20 +28,20 @@ function BaseCard(props: BaseProps) {
 type CardProps = {
   compact?: boolean;
   highlighted?: boolean;
-} & React.ComponentPropsWithRef<typeof BaseCard>;
+} & Omit<React.ComponentPropsWithRef<typeof BaseCard>, "className" | "style">;
 
 /** Styled wrapper that adds conditional transform based on props, but the base component also needs those props */
 export function Card(props: CardProps) {
-  const { className, style, compact, highlighted, ...rest } = props;
+  const { compact, highlighted, ...rest } = props;
   return (
     <BaseCard
       compact={compact}
       highlighted={highlighted}
       {...rest}
-      {...mergedSx(
-        [styles.card, compact && styles.cardCompact, highlighted && styles.cardHighlighted],
-        className,
-        style,
+      {...stylex.props(
+        styles.card,
+        compact && styles.cardCompact,
+        highlighted && styles.cardHighlighted,
       )}
     />
   );

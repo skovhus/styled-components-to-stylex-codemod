@@ -6,9 +6,7 @@ type Props = { enabled?: boolean };
 
 function StatusBadge(props: React.PropsWithChildren<Props>) {
   const { children, enabled } = props;
-  return (
-    <div sx={[styles.statusBadge, enabled ? styles.statusBadgeEnabled : undefined]}>{children}</div>
-  );
+  return <div sx={[styles.statusBadge, enabled && styles.statusBadgeEnabled]}>{children}</div>;
 }
 
 export const App = () => (

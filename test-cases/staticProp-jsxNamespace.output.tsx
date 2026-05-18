@@ -1,6 +1,5 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 // Static subcomponents referenced only via JSX namespaces.
 const BaseMenu = (props: { children: React.ReactNode; className?: string }) => (
@@ -31,9 +30,10 @@ BaseMenu.Separator = () => (
   <div style={{ height: 2, backgroundColor: "#d0d7e2", borderRadius: 999 }} />
 );
 
-function StyledMenu(props: Omit<React.ComponentPropsWithRef<typeof BaseMenu>, "style">) {
-  const { className, ...rest } = props;
-  return <BaseMenu {...rest} {...mergedSx(styles.menu, className)} />;
+function StyledMenu(
+  props: Omit<React.ComponentPropsWithRef<typeof BaseMenu>, "className" | "style">,
+) {
+  return <BaseMenu {...props} {...stylex.props(styles.menu)} />;
 }
 
 StyledMenu.Section = (BaseMenu as any).Section;

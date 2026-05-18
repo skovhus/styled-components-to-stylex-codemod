@@ -48,7 +48,7 @@ export function ChoiceButton(
 ) {
   const { children, active, ...rest } = props;
   return (
-    <button {...rest} sx={[styles.choiceButton, active ? styles.choiceButtonActive : undefined]}>
+    <button {...rest} sx={[styles.choiceButton, active && styles.choiceButtonActive]}>
       {children}
     </button>
   );
@@ -62,10 +62,7 @@ function LocalChoiceButton(
 ) {
   const { children, active, ...rest } = props;
   return (
-    <button
-      {...rest}
-      sx={[styles.localChoiceButton, active ? styles.localChoiceButtonActive : undefined]}
-    >
+    <button {...rest} sx={[styles.localChoiceButton, active && styles.localChoiceButtonActive]}>
       {children}
     </button>
   );

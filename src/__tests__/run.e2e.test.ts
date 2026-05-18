@@ -24,6 +24,7 @@ async function runAutoSxWrapperFixture(args: {
   tmpPrefix: string;
   componentLines: string[];
   importLine: string;
+  wrappedName?: string;
   bodyRuleLines: string[];
   externalInterface?: AdapterInput["externalInterface"];
   useSxProp?: boolean;
@@ -64,7 +65,7 @@ async function runAutoSxWrapperFixture(args: {
       'import styled from "styled-components";',
       args.importLine,
       "",
-      "const Body = styled(ContentViewContainer)`",
+      `const Body = styled(${args.wrappedName ?? "ContentViewContainer"})\``,
       ...args.bodyRuleLines,
       "`;",
       "",
@@ -109,12 +110,18 @@ function expectAutoSxWrapperResult(args: {
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
   consumer: string;
+  wrappedName?: string;
+  transformed?: number;
+  skipped?: number;
+  containerSxText?: string;
 }): void {
   expect(args.result.errors).toBe(0);
-  expect(args.result.transformed).toBe(2);
-  expect(args.result.skipped).toBe(0);
-  expect(args.container).toContain("sx?: stylex.StyleXStyles");
-  expect(args.consumer).toContain("return <ContentViewContainer sx={styles.body} />");
+  expect(args.result.transformed).toBe(args.transformed ?? 2);
+  expect(args.result.skipped).toBe(args.skipped ?? 0);
+  expect(args.container).toContain(args.containerSxText ?? "sx?: stylex.StyleXStyles");
+  expect(args.consumer).toContain(
+    `return <${args.wrappedName ?? "ContentViewContainer"} sx={styles.body} />`,
+  );
   expect(args.consumer).not.toContain("stylex.props(styles.body)");
 }
 
@@ -205,6 +212,62 @@ describe("runTransform (e2e)", () => {
         bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
       }),
     );
+  });
+
+  it("uses sx for aliased default-exported function components with sx props", async () => {
+    expectAutoSxWrapperResult({
+      ...(await runAutoSxWrapperFixture({
+        tmpPrefix: "styledx-run-sx-aware-default-function-alias-",
+        componentLines: [
+          'import * as React from "react";',
+          'import type { StyleXStyles } from "@stylexjs/stylex";',
+          "",
+          "export default function ContentViewContainer(props: {",
+          "  sx?: StyleXStyles;",
+          "  children?: React.ReactNode;",
+          "}) {",
+          "  return <section>{props.children}</section>;",
+          "}",
+          "",
+        ],
+        importLine: 'import Base from "../../components/ContentViewContainer";',
+        wrappedName: "Base",
+        bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+      })),
+      wrappedName: "Base",
+      transformed: 1,
+      skipped: 1,
+      containerSxText: "sx?: StyleXStyles",
+    });
+  });
+
+  it("uses sx for aliased default-exported variable components with sx props", async () => {
+    expectAutoSxWrapperResult({
+      ...(await runAutoSxWrapperFixture({
+        tmpPrefix: "styledx-run-sx-aware-default-variable-alias-",
+        componentLines: [
+          'import * as React from "react";',
+          'import type { StyleXStyles } from "@stylexjs/stylex";',
+          "",
+          "const ContentViewContainer = (props: {",
+          "  sx?: StyleXStyles;",
+          "  children?: React.ReactNode;",
+          "}) => {",
+          "  return <section>{props.children}</section>;",
+          "};",
+          "",
+          "export default ContentViewContainer;",
+          "",
+        ],
+        importLine: 'import Base from "../../components/ContentViewContainer";',
+        wrappedName: "Base",
+        bodyRuleLines: ["  display: grid;", "  gap: 16px;"],
+      })),
+      wrappedName: "Base",
+      transformed: 1,
+      skipped: 1,
+      containerSxText: "sx?: StyleXStyles",
+    });
   });
 
   it("uses sx for wrappers of components with imported StyleXStyles props", async () => {
@@ -358,6 +421,71 @@ describe("runTransform (e2e)", () => {
     expect(component).not.toContain("mergedSx");
     expect(component).not.toContain("const { className");
     expect(component).not.toContain("const { style");
+  });
+
+  it("auto external interface keeps className/style merging for restyled typed components", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "styledx-run-auto-restyled-typed-"));
+    await mkdir(join(tmp, "src/components"), { recursive: true });
+    await mkdir(join(tmp, "src/views"), { recursive: true });
+    await writeFile(
+      join(tmp, "tsconfig.json"),
+      JSON.stringify({ compilerOptions: { jsx: "preserve", moduleResolution: "bundler" } }),
+    );
+    await writeFile(
+      join(tmp, "src/components/Button.tsx"),
+      [
+        'import styled from "styled-components";',
+        "",
+        "export const Button = styled.button<{ tone?: 'primary' | 'secondary' }>`",
+        "  color: ${(props) => (props.tone === 'primary' ? 'blue' : 'gray')};",
+        "`;",
+        "",
+      ].join("\n"),
+    );
+    await writeFile(
+      join(tmp, "src/views/App.tsx"),
+      [
+        'import styled from "styled-components";',
+        'import { Button } from "../components/Button";',
+        "",
+        "const FancyButton = styled(Button)`",
+        "  font-weight: bold;",
+        "`;",
+        "",
+        "export function App() {",
+        '  return <FancyButton tone="primary">Restyled</FancyButton>;',
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await runTransform({
+      files: join(tmp, "src/components/**/*.tsx"),
+      consumerPaths: join(tmp, "src/**/*.tsx"),
+      adapter: defineAdapterFromIndex({
+        useSxProp: true,
+        externalInterface: "auto",
+        styleMerger: {
+          functionName: "mergedSx",
+          importSource: { kind: "specifier", value: "./mergedSx" },
+        },
+        resolveValue: () => undefined,
+        resolveCall: () => undefined,
+        resolveSelector: () => undefined,
+      }),
+      dryRun: false,
+      print: false,
+      parser: "tsx",
+      silent: true,
+    });
+
+    const component = await readFile(join(tmp, "src/components/Button.tsx"), "utf-8");
+    expect(result.errors).toBe(0);
+    expect(result.transformed).toBe(1);
+    expect(component).toContain('React.ComponentProps<"button">');
+    expect(component).toContain("const {\n    className,");
+    expect(component).toContain("style,");
+    expect(component).toContain("mergedSx");
   });
 
   it("does not false-bail same-run wrappers when sx prop emission is disabled", async () => {

@@ -46,9 +46,9 @@ function Highlight(props: React.PropsWithChildren<HighlightProps>) {
     <div
       sx={[
         styles.highlight,
-        highlighted ? styles.highlightHighlighted : undefined,
+        highlighted && styles.highlightHighlighted,
         highlighted && theme.isDark ? styles.highlightHighlightedThemeIsDark : undefined,
-        highlighted && !theme.isDark ? styles.highlightHighlightedNotThemeIsDark : undefined,
+        highlighted && !theme.isDark && styles.highlightHighlightedNotThemeIsDark,
       ]}
     >
       {children}

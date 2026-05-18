@@ -10,6 +10,7 @@ import type {
 } from "../adapter.js";
 import type { CssRuleIR } from "./css-ir.js";
 import type { WarningLog } from "./logger.js";
+import type { TypeScriptPrepassMetadata } from "./prepass/typescript-analysis.js";
 import type { TransformContext } from "./transform-context.js";
 
 /** A sidecar .stylex.ts file containing defineMarker() declarations. */
@@ -161,6 +162,8 @@ export interface CrossFileInfo {
   globalLeafKeys?: Set<string>;
   /** Files successfully converted in the current transform run. Used to avoid bailing on same-run bases. */
   transformedFiles?: Set<string>;
+  /** Opt-in TypeScript compiler metadata from the prepass. */
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
 export interface CrossFileSelectorUsage {
@@ -563,6 +566,18 @@ export type StyledDecl = {
    * Stored as a TS type node (best-effort) so wrapper emission can reuse it.
    */
   propsType?: ASTNode;
+  /** Prop names resolved by the opt-in TypeScript prepass for this component's public props. */
+  typeScriptPropNames?: Set<string>;
+  /** Prop names explicitly declared by the component's public prop type (excluding intrinsic helpers). */
+  typeScriptExplicitPropNames?: Set<string>;
+  /** Prop type text resolved by the TypeScript compiler prepass, keyed by public prop name. */
+  typeScriptPropTypes?: Map<string, string>;
+  /** Optional prop names resolved by the TypeScript compiler prepass. */
+  typeScriptOptionalProps?: Set<string>;
+  /** True when the opt-in TypeScript prepass found an index signature on the public props type. */
+  typeScriptHasIndexSignature?: boolean;
+  /** True when the opt-in TypeScript prepass found an `sx` prop on the public props type. */
+  typeScriptSupportsSxProp?: boolean;
 
   /**
    * Maps original `$`-prefixed transient prop names to their stripped versions.

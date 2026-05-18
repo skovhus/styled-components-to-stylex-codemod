@@ -21,10 +21,12 @@ function BaseButton(props: BaseButtonProps) {
   );
 }
 
-export function ToolbarButton(props: React.ComponentPropsWithRef<typeof BaseButton>) {
-  const { className, children, style, ...rest } = props;
+export function ToolbarButton(
+  props: Omit<React.ComponentPropsWithRef<typeof BaseButton>, "className">,
+) {
+  const { children, style, ...rest } = props;
   return (
-    <BaseButton {...rest} {...mergedSx(styles.toolbarButton, className, style)}>
+    <BaseButton {...rest} {...mergedSx(styles.toolbarButton, undefined, style)}>
       {children}
     </BaseButton>
   );

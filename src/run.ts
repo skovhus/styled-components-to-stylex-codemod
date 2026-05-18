@@ -27,6 +27,10 @@ import { Logger, type CollectedWarning } from "./internal/logger.js";
 import { assertValidAdapterInput, describeValue } from "./internal/public-api-validation.js";
 import { mergeMarkerDeclarations } from "./internal/merge-markers.js";
 import type { TransformMode } from "./internal/transform-types.js";
+import type {
+  TypeScriptComponentMetadata,
+  TypeScriptPrepassMetadata,
+} from "./internal/prepass/typescript-analysis.js";
 import {
   resolveBarrelReExport,
   type Resolve,
@@ -36,7 +40,7 @@ import {
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
-import { detectExportedComponentSxProp } from "./internal/wrapped-component-interface.js";
+import { transformedComponentAcceptsSx } from "./internal/utilities/sx-surface.js";
 
 export { mergeMarkerDeclarations };
 
@@ -88,7 +92,11 @@ export interface RunTransformOptions {
   print?: boolean;
 
   /**
-   * jscodeshift parser to use
+   * jscodeshift parser to use.
+   *
+   * When set to `"ts"` or `"tsx"` (including the default), runTransform also
+   * builds TypeScript compiler metadata for more accurate wrapper interfaces.
+   *
    * @default "tsx"
    */
   parser?: "babel" | "babylon" | "flow" | "ts" | "tsx";
@@ -414,6 +422,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const absoluteConsumers = consumerFilePaths.map((f) => resolve(f));
 
   let prepassResult: Awaited<ReturnType<typeof runPrepass>>;
+  const prepassStartedAt = performance.now();
+  Logger.info(
+    `Prepass: starting (${absoluteFiles.length} file${absoluteFiles.length === 1 ? "" : "s"}, ${absoluteConsumers.length} consumer${absoluteConsumers.length === 1 ? "" : "s"}, parser=${parser})\n`,
+  );
   try {
     prepassResult = await runPrepass({
       filesToTransform: absoluteFiles,
@@ -425,13 +437,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       leavesOnly,
       resolveBaseComponent: adapterInput.resolveBaseComponent,
     });
+    Logger.info(`Prepass: completed in ${formatElapsedSeconds(prepassStartedAt)}s\n`);
   } catch (err) {
     if (adapterInput.externalInterface === "auto") {
       throw createAutoPrepassFailureError(err, consumerPatterns, parser);
     }
 
     Logger.warn(
-      `Prepass failed, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
+      `Prepass failed after ${formatElapsedSeconds(prepassStartedAt)}s, continuing without cross-file analysis: ${err instanceof Error ? err.message : String(err)}`,
     );
     prepassResult = {
       crossFileInfo: {
@@ -443,6 +456,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       },
       consumerAnalysis: undefined,
       forwardedAsConsumers: new Map(),
+      typeScriptMetadata: undefined,
     };
   }
 
@@ -455,6 +469,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
     transformedFiles,
+    typeScriptMetadata: prepassResult.typeScriptMetadata,
   };
 
   // Resolve "auto" externalInterface → concrete function using consumer analysis
@@ -544,14 +559,21 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
                   (name): name is string => typeof name === "string",
                 )
               : [ctx.importedName];
-          const hasTransformedSxSurface = sourceComponentNames.some((name) =>
-            detectExportedComponentSxProp({
-              absolutePath: definitionSourcePath,
-              componentName: name,
-              sourceOverrides: transformedFileSources,
-            }),
+          const typedComponent = findTypedComponentMetadata(
+            prepassResult.typeScriptMetadata,
+            definitionSourcePath,
+            sourceComponentNames,
           );
-          if (hasTransformedSxSurface) {
+          if (typedComponent?.supportsSxProp === true) {
+            return { acceptsSx: true };
+          }
+          if (
+            transformedComponentAcceptsSx({
+              absolutePath: definitionSourcePath,
+              componentNames: sourceComponentNames,
+              sourceOverrides: transformedFileSources,
+            })
+          ) {
             return { acceptsSx: true };
           }
           if (!transformedFiles.has(toRealPath(definitionSourcePath))) {
@@ -766,6 +788,25 @@ function createAutoPrepassFailureError(
       `consumerPaths: ${consumerPatterns.length > 0 ? consumerPatterns.join(", ") : "(none)"}`,
     ].join("\n"),
   );
+}
+
+function formatElapsedSeconds(startedAt: number): string {
+  return ((performance.now() - startedAt) / 1000).toFixed(1);
+}
+
+function findTypedComponentMetadata(
+  metadata: TypeScriptPrepassMetadata | undefined,
+  filePath: string,
+  componentNames: readonly string[],
+): TypeScriptComponentMetadata | undefined {
+  if (!metadata) {
+    return undefined;
+  }
+  const names = new Set(componentNames);
+  const resolvedFilePath = toRealPath(filePath);
+  return metadata.files
+    .find((file) => file.filePath === resolvedFilePath)
+    ?.components.find((component) => names.has(component.name));
 }
 
 /**

@@ -52,6 +52,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     useSxProp: ctx.adapter.useSxProp,
     importMap: ctx.importMap,
     sourceOverrides: ctx.options.transformedFileSources,
+    typeScriptMetadata: ctx.options.crossFileInfo?.typeScriptMetadata,
     wrappedComponentInterface: ctx.adapter.wrappedComponentInterface?.bind(ctx.adapter),
   });
 

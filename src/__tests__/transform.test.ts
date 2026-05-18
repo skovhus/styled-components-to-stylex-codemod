@@ -11,6 +11,7 @@ import { customAdapter, fixtureAdapter } from "./fixture-adapters.js";
 import type { Adapter, CallResolveContext, ResolveValueContext } from "../adapter.js";
 import { scanCrossFileSelectors } from "../internal/prepass/scan-cross-file-selectors.js";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
+import { analyzeTypeScriptProgram } from "../internal/prepass/typescript-analysis.js";
 import type { CrossFileInfo } from "../internal/transform-types.js";
 import {
   computeGlobalLeafKeys,
@@ -146,15 +147,35 @@ const prepassResult = scanCrossFileSelectors(
   [],
   prepassResolver,
 );
+const testCaseTypeScriptMetadata = analyzeTypeScriptProgram({
+  files: collectTypeScriptFiles(testCasesDir),
+});
+
+function collectTypeScriptFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectTypeScriptFiles(fullPath));
+    } else if (/\.(tsx?|jsx?)$/.test(entry.name)) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
 
 /** Extract per-file cross-file info from the prepass result. */
-function getCrossFileInfo(filePath: string): CrossFileInfo | undefined {
+function getCrossFileInfo(
+  filePath: string,
+  parser: TransformTestParser,
+): CrossFileInfo | undefined {
   const absPath = pathResolve(filePath);
   const usages = prepassResult.selectorUsages.get(absPath);
-  if (!usages || usages.length === 0) {
+  const typeScriptMetadata = parser === "tsx" ? testCaseTypeScriptMetadata : undefined;
+  if ((!usages || usages.length === 0) && !typeScriptMetadata) {
     return undefined;
   }
-  return { selectorUsages: usages };
+  return { selectorUsages: usages ?? [], typeScriptMetadata };
 }
 
 function readTestCase(
@@ -3008,7 +3029,7 @@ export const App = () => <Title>Imported root with computed helper</Title>;
 
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
-    const crossFileInfo = getCrossFileInfo(inputPath);
+    const crossFileInfo = getCrossFileInfo(inputPath, parser);
     const diagnostics = runTransformWithDiagnostics(
       input,
       { crossFileInfo, allowPartialMigration: isPartialFixture(name) },

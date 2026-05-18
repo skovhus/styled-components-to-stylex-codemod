@@ -110,10 +110,15 @@ export function buildVariantDimPropTypeMap(d: StyledDecl): Map<string, string> {
   return new Map(
     (d.variantDimensions ?? [])
       .filter(
-        (dim) => dim.propTypeFromKeyof || (!dim.fallbackFnKey && hasFiniteNumericVariantKey(dim)),
+        (dim) =>
+          d.typeScriptPropTypes?.has(dim.propName) ||
+          dim.propTypeFromKeyof ||
+          (!dim.fallbackFnKey && hasFiniteNumericVariantKey(dim)),
       )
       .map((dim) => {
-        const typeText = dim.isBooleanProp ? "boolean" : `keyof typeof ${dim.variantObjectName}`;
+        const typeText =
+          d.typeScriptPropTypes?.get(dim.propName) ??
+          (dim.isBooleanProp ? "boolean" : `keyof typeof ${dim.variantObjectName}`);
         return [dim.propName, typeText];
       }),
   );
@@ -138,6 +143,11 @@ export function collectBooleanPropNames(d: StyledDecl): ReadonlySet<string> {
   for (const dim of d.variantDimensions ?? []) {
     if (dim.isBooleanProp) {
       result.add(dim.propName);
+    }
+  }
+  for (const [propName, typeText] of d.typeScriptPropTypes ?? []) {
+    if (stripUndefinedFromTypeText(typeText).trim() === "boolean") {
+      result.add(propName);
     }
   }
   collectBooleanPropsFromTypeLiteral(d.propsType, result);
@@ -261,6 +271,14 @@ function appendOmittedPropName(omitted: string[], propName: string): void {
   if (!omitted.includes(omittedProp)) {
     omitted.push(omittedProp);
   }
+}
+
+function stripUndefinedFromTypeText(typeText: string): string {
+  return typeText
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part) => part !== "undefined")
+    .join(" | ");
 }
 
 function collectBooleanPropsFromTypeLiteral(node: unknown, result: Set<string>): void {

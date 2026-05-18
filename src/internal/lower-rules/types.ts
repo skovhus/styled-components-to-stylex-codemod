@@ -76,6 +76,22 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
 } {
   const { root, j, decl } = args;
 
+  const parseTypeText = (typeText: string | undefined): unknown => {
+    if (!typeText) {
+      return null;
+    }
+    try {
+      const typeNode = j(`type __Type = ${typeText};`).get().node.program.body[0].typeAnnotation;
+      return typeReferencesAreInScope(typeNode) ? typeNode : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const findCompilerPropTsType = (jsxProp: string): unknown => {
+    return parseTypeText(decl.typeScriptPropTypes?.get(jsxProp));
+  };
+
   // Helper to find a type declaration by name (interface or type alias)
   const findTypeDeclaration = (typeName: string): { body?: any; typeAnnotation?: any } | null => {
     // Try interface first
@@ -93,6 +109,93 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       return typeAliases.get(0).node;
     }
     return null;
+  };
+
+  const typeReferenceGlobals = new Set([
+    "Array",
+    "ConstructorParameters",
+    "Date",
+    "Exclude",
+    "Extract",
+    "InstanceType",
+    "Iterable",
+    "Map",
+    "NonNullable",
+    "Omit",
+    "Parameters",
+    "Partial",
+    "Pick",
+    "Promise",
+    "Readonly",
+    "ReadonlyArray",
+    "ReadonlyMap",
+    "ReadonlySet",
+    "Record",
+    "RegExp",
+    "Required",
+    "ReturnType",
+    "Set",
+    "WeakMap",
+    "WeakSet",
+  ]);
+
+  const importedTypeNameIsInScope = (typeName: string): boolean => {
+    return (
+      root
+        .find(j.ImportDeclaration)
+        .filter((p: any) =>
+          (p.node.specifiers ?? []).some((specifier: any) => specifier.local?.name === typeName),
+        )
+        .size() > 0
+    );
+  };
+
+  const typeNameRootText = (typeName: any): string | null => {
+    if (!typeName || typeof typeName !== "object") {
+      return null;
+    }
+    if (typeName.type === "Identifier" || typeName.type === "TSQualifiedName") {
+      return typeName.type === "Identifier" ? typeName.name : typeNameRootText(typeName.left);
+    }
+    return null;
+  };
+
+  const collectTypeReferenceRoots = (node: unknown, roots: Set<string>): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    const n = node as { type?: string; [key: string]: unknown };
+    if (n.type === "TSTypeReference") {
+      const typeName = typeNameRootText(n.typeName);
+      if (typeName) {
+        roots.add(typeName);
+      }
+    }
+    for (const value of Object.values(n)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          collectTypeReferenceRoots(item, roots);
+        }
+      } else if (value && typeof value === "object") {
+        collectTypeReferenceRoots(value, roots);
+      }
+    }
+  };
+
+  const typeReferencesAreInScope = (typeNode: unknown): boolean => {
+    const roots = new Set<string>();
+    collectTypeReferenceRoots(typeNode, roots);
+    for (const typeName of roots) {
+      if (
+        typeReferenceGlobals.has(typeName) ||
+        findTypeDeclaration(typeName) ||
+        importedTypeNameIsInScope(typeName)
+      ) {
+        continue;
+      }
+      return false;
+    }
+    return true;
   };
 
   // Helper to find a property type in a type literal
@@ -186,7 +289,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
   const findJsxPropTsType = (jsxProp: string): unknown => {
     const pt: any = (decl as any).propsType;
     if (!pt) {
-      return null;
+      return findCompilerPropTsType(jsxProp);
     }
 
     // Helper to find prop type in a type literal (interface body)
@@ -233,7 +336,7 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
       }
     }
 
-    return null;
+    return findCompilerPropTsType(jsxProp);
   };
 
   // Variant extraction wants literal union values, so we *optionally* unwrap local type aliases here.
@@ -262,6 +365,11 @@ export function createTypeInferenceHelpers(args: { root: any; j: any; decl: Styl
 
   // Check if a JSX prop is optional (has ? in its type annotation)
   const isJsxPropOptional = (jsxProp: string): boolean => {
+    const compilerOptional = decl.typeScriptOptionalProps?.has(jsxProp);
+    if (compilerOptional !== undefined) {
+      return compilerOptional;
+    }
+
     const pt: any = (decl as any).propsType;
     if (!pt) {
       return false;

@@ -631,6 +631,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs.push(sxId);
     }
 
+    // When `const theme = useTheme()` is emitted below, drop `theme` from the
+    // destructure pattern to avoid TS2451 redeclaration.
+    const destructurePartsForPattern = needsUseTheme
+      ? destructureParts.filter((name) => name !== "theme")
+      : destructureParts;
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
@@ -641,7 +646,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
       ],
-      destructureProps: destructureParts,
+      destructureProps: destructurePartsForPattern,
       propDefaults,
       includeRest,
       restId,

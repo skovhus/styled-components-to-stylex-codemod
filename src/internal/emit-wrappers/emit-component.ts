@@ -35,11 +35,12 @@ import {
 } from "./type-helpers.js";
 import {
   getDeclaratorId,
-  isFunctionNode,
   isIdentifierNode,
+  isFunctionNode,
 } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
+import { rewriteBarePropIdentifiersToPropsAccess } from "./rewrite-prop-identifiers.js";
 import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
@@ -127,13 +128,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     lookThroughPropsWithChildren?: boolean;
   }): boolean => {
     const { componentName, propName, lookThroughPropsWithChildren } = args;
+    if (
+      (propName === "sx" || propName === "className" || propName === "style") &&
+      emitter.hasTypeScriptComponentMetadata(componentName)
+    ) {
+      return emitter.typedComponentHasProp(componentName, propName);
+    }
     const propsType = args.propsType ?? findComponentPropsType(componentName);
     if (!propsType) {
-      // Component is not defined locally or has no typed props - assume it doesn't have the prop
-      return false;
+      return emitter.typedComponentHasProp(componentName, propName);
     }
     const explicitProps = emitter.getExplicitPropNames(propsType, { lookThroughPropsWithChildren });
-    return explicitProps.has(propName);
+    return explicitProps.has(propName) || emitter.typedComponentHasProp(componentName, propName);
   };
 
   const propsTypeExposesForwardedSx = (
@@ -261,8 +267,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       ((hasOwnAsUsage || Boolean(propsTypeHasAs)) && !hasStaticAsAttr) || supportsAsProp;
     const isPolymorphicComponentWrapper = shouldAllowAsProp && !wrappedComponentHasAs;
     // Check if the wrapped component's props explicitly include className/style.
-    // When true, the wrapper should accept and forward these props so the wrapped
-    // component's className/style are not silently dropped by the styled() layer.
+    // This is used to avoid redeclaring props the base already owns. It must not
+    // by itself widen this wrapper's public surface; consumer usage/externalInterface
+    // still decides whether this wrapper should accept className/style.
     const shouldLookThroughWrappedPropsWithChildren =
       !!d.transientPropRenames && d.transientPropRenames.size > 0;
     const wrappedHasClassName = localComponentHasProp({
@@ -282,21 +289,19 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const hasForwardedAsUsage = emitter.hasForwardedAsUsage(d.localName);
     const shouldLowerForwardedAs = hasForwardedAsUsage && !wrappedComponentHasAs;
     const allowSxProp = emitter.shouldAllowSxProp(d);
-    const allowClassNameProp = shouldAllowClassName || wrappedHasClassName;
-    const allowStyleProp = shouldAllowStyle || wrappedHasStyle;
+    const allowClassNameProp = shouldAllowClassName;
+    const allowStyleProp = shouldAllowStyle;
     // When the wrapped component accepts a StyleX `sx` prop (per adapter), the
     // wrapper passes className/style through unchanged via `{...rest}` and the
     // wrapped component merges them with its `sx` itself. The wrapper still
     // accepts className/style in its type, but does not destructure them.
+    const wrappedPropsAreOnlyIntrinsic = baseComponentPropsType
+      ? isIntrinsicPassthroughType(emitter, baseComponentPropsType)
+      : false;
     const wrappedAcceptsSx =
       emitter.useSxProp &&
       ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
-        emitter.wrappedComponentAcceptsSxProp(wrappedComponent) ||
-        localComponentHasProp({
-          componentName: wrappedComponent,
-          propName: "sx",
-          propsType: baseComponentPropsType,
-        }));
+        (!wrappedPropsAreOnlyIntrinsic && emitter.wrappedComponentAcceptsSxProp(wrappedComponent)));
     const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
       normalizeForwardedAs: !shouldLowerForwardedAs,
     };
@@ -319,20 +324,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
         !d.propsType ||
         !wrappedLocalDecl);
-    // When the wrapped component has className/style as REQUIRED props, we must
-    // force them to be optional in the wrapper's type. Otherwise, the wrapper would
-    // inherit the requiredness, breaking call sites that don't pass className/style
-    // (styled-components injects them automatically).
-    // This applies regardless of whether allowClassNameProp is true - even if call
-    // sites pass className, the wrapper should accept it as optional.
+    // When the wrapper intentionally exposes className/style and the wrapped component
+    // requires them, force the exposed props to be optional. If this wrapper does not
+    // expose className/style, they are omitted from the inherited base type instead.
     const wrappedClassNameRequired =
+      allowClassNameProp &&
       wrappedHasClassName &&
-      baseComponentPropsType &&
-      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className");
+      (baseComponentPropsType
+        ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "className")
+        : emitter.typedComponentProp(wrappedComponent, "className")?.optional === false);
     const wrappedStyleRequired =
+      allowStyleProp &&
       wrappedHasStyle &&
-      baseComponentPropsType &&
-      emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style");
+      (baseComponentPropsType
+        ? emitter.isPropRequiredInPropsTypeLiteral(baseComponentPropsType, "style")
+        : emitter.typedComponentProp(wrappedComponent, "style")?.optional === false);
     const forceClassNameOptional = !!wrappedClassNameRequired;
     const forceStyleOptional = !!wrappedStyleRequired;
     const forwardedAsPropTypeText = renderedAsProp?.typeText ?? "React.ElementType";
@@ -564,6 +570,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             hasExplicitPropsType,
             forceClassNameOptional,
             forceStyleOptional,
+            wrappedComponent,
             forwardedAsPropTypeText,
             attrsProvidedPropOptions,
           });
@@ -582,10 +589,33 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           // enabled via adapter (d.supportsExternalStyles).
           // className/style are skipped when the wrapped component already has them.
           // sx is always injected when allowSxProp is true (it's a new StyleX-specific prop).
-          if (explicitWithExtras && d.supportsExternalStyles) {
+          //
+          // Also inject when the wrapper will destructure className/style from `props`
+          // but the wrapped component's prepass metadata proves it doesn't accept them.
+          // Without this lift the wrapper's prop type (an intersection with
+          // `React.ComponentPropsWithRef<typeof Wrapped>`) lacks those keys, and the
+          // destructure produces TS2339 — same fix as in `inferredComponentWrapperPropsTypeText`,
+          // applied to the explicit-propsType code path.
+          const wrappedRejectsClassName =
+            !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "className");
+          const wrappedRejectsStyle =
+            !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "style");
+          const shouldLiftClassNameOntoExplicit =
+            !skipStyleProps && allowClassNameProp && wrappedRejectsClassName;
+          const shouldLiftStyleOntoExplicit =
+            !skipStyleProps && allowStyleProp && wrappedRejectsStyle;
+          if (
+            explicitWithExtras &&
+            (d.supportsExternalStyles ||
+              shouldLiftClassNameOntoExplicit ||
+              shouldLiftStyleOntoExplicit)
+          ) {
             explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
-              className: !skipStyleProps && allowClassNameProp && !wrappedHasClassName,
-              style: !skipStyleProps && allowStyleProp && !wrappedHasStyle,
+              className:
+                !skipStyleProps &&
+                allowClassNameProp &&
+                (!wrappedHasClassName || wrappedRejectsClassName),
+              style: !skipStyleProps && allowStyleProp && (!wrappedHasStyle || wrappedRejectsStyle),
               sx: allowSxProp,
             });
           }
@@ -941,6 +971,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // `props.propName`, so destructuring is unnecessary for styling.
     // Transient props ($-prefixed or renamed from $-prefixed) MUST stay destructured to
     // prevent them from leaking to the base component.
+    const splicedStyleFnProps = new Set<string>();
     if (!baseComponentPropsType) {
       const renamedTransientValues = d.transientPropRenames
         ? new Set(d.transientPropRenames.values())
@@ -956,9 +987,24 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           const idx = destructureProps.indexOf(prop);
           if (idx !== -1) {
             destructureProps.splice(idx, 1);
+            splicedStyleFnProps.add(prop);
           }
           styleOnlyConditionProps.delete(prop);
         }
+      }
+    }
+    // When a style-fn prop is spliced out of destructure (so it flows to the
+    // base component via `...rest`), any bare-identifier references to it in
+    // styleArgs are no longer in scope — TS2304 "Cannot find name 'X'". Rewrite
+    // those bare references to `props.X` so the style fn call site keeps
+    // working without relying on the (now absent) destructured binding.
+    if (splicedStyleFnProps.size > 0) {
+      for (const arg of styleArgs) {
+        rewriteBarePropIdentifiersToPropsAccess({
+          j,
+          node: arg,
+          propNames: splicedStyleFnProps,
+        });
       }
     }
 
@@ -1098,6 +1144,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
       const destructureSx = allowSxProp || wrapperPropsExposeSx;
+      // When the wrapper will emit `const theme = useTheme()`, don't also
+      // destructure `theme` from props — the redeclaration produces TS2451
+      // ("Cannot redeclare block-scoped variable 'theme'"). The theme
+      // identifier is owned by the useTheme call site; any `props.theme`
+      // references in the original source were already rewritten to use this
+      // local `theme` binding.
+      const destructurePropsForPattern = needsUseTheme
+        ? destructureProps.filter((name) => name !== "theme")
+        : destructureProps;
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1116,7 +1171,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ...((d.supportsRefProp ?? false) ? [patternProp("ref", refId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
         ],
-        destructureProps,
+        destructureProps: destructurePropsForPattern,
         propDefaults,
         includeRest: true,
         restId,
@@ -2099,6 +2154,11 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
       getTypeQueryExpressionName(query.exprName) === wrappedComponent
     );
   });
+}
+
+function isIntrinsicPassthroughType(emitter: WrapperEmitter, type: ASTNode): boolean {
+  const text = emitter.stringifyTsType(type);
+  return text !== null && /^React\.ComponentProps(?:WithRef)?<"[^"]+">$/.test(text);
 }
 
 function getTypeQueryExpressionName(exprName: unknown): string | null {

@@ -2,7 +2,6 @@
 // The wrapper must forward props used by the inner component, not just use them for StyleX.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { mergedSx } from "./lib/mergedSx";
 
 function Badge_({
   selected,
@@ -27,15 +26,15 @@ function Badge_({
 type BadgeProps = {
   selected?: boolean;
   highlighted?: boolean;
-} & React.ComponentPropsWithRef<typeof Badge_>;
+} & Omit<React.ComponentPropsWithRef<typeof Badge_>, "className" | "style">;
 
 function Badge(props: BadgeProps) {
-  const { className, children, style, highlighted, ...rest } = props;
+  const { children, highlighted, ...rest } = props;
   return (
     <Badge_
       highlighted={highlighted}
       {...rest}
-      {...mergedSx([styles.badge, highlighted && styles.badgeHighlighted], className, style)}
+      {...stylex.props(styles.badge, highlighted && styles.badgeHighlighted)}
     >
       {children}
     </Badge_>

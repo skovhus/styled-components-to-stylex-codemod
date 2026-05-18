@@ -16,11 +16,14 @@ const Link = ({ className, text, ...props }: { className?: string; text: string 
   </a>
 );
 
-type StyledLinkProps = { red?: boolean } & Omit<React.ComponentPropsWithRef<typeof Link>, "style">;
+type StyledLinkProps = { red?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof Link>,
+  "className" | "style"
+>;
 
 function StyledLink(props: StyledLinkProps) {
-  const { className, red, ...rest } = props;
-  return <Link {...rest} {...mergedSx([styles.link, red && styles.linkRed], className)} />;
+  const { red, ...rest } = props;
+  return <Link {...rest} {...stylex.props(styles.link, red && styles.linkRed)} />;
 }
 
 // Pattern 4: styled(Component) where base component declares the transient prop
@@ -93,9 +96,10 @@ function AnimatedContainer(props: AnimatedContainerProps) {
   );
 }
 
-function StyledAnimatedContainer(props: React.ComponentPropsWithRef<typeof AnimatedContainer>) {
-  const { className, style, ...rest } = props;
-  return <AnimatedContainer {...rest} {...mergedSx(styles.animatedContainer, className, style)} />;
+function StyledAnimatedContainer(
+  props: Omit<React.ComponentPropsWithRef<typeof AnimatedContainer>, "className" | "style">,
+) {
+  return <AnimatedContainer {...props} {...stylex.props(styles.animatedContainer)} />;
 }
 
 type FaderProps = {

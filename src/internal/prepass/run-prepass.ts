@@ -57,6 +57,7 @@ import {
   extractStyledDefBasesFromSource,
   type StyledDefBasesMap,
 } from "./compute-leaf-set.js";
+import type { TypeScriptPrepassMetadata } from "./typescript-analysis.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
 
@@ -88,6 +89,8 @@ interface PrepassResult {
   consumerAnalysis: Map<string, ExternalInterfaceResult> | undefined;
   /** Unconverted consumers that wrap converted components with styled() and use `as` prop */
   forwardedAsConsumers: Map<string, ForwardedAsConsumerEntry[]>;
+  /** Serializable TypeScript compiler metadata for later transform steps when parser is ts/tsx. */
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
 /** Cached AST-derived data for a single file, keyed by content hash. */
@@ -163,6 +166,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const allFilesSet = new Set(allFiles);
   const uniqueAllFiles = [...allFilesSet];
   const parser = createPrepassParser(parserName);
+  const enableTypeScriptAnalysis = isTypeScriptParser(parserName);
 
   const resolveCache = new Map<string, string | null>();
   const resolve: Resolve = (specifier, fromFile) => {
@@ -283,7 +287,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       }
     }
 
-    if (createExternalInterface && hasStyled) {
+    if ((createExternalInterface || enableTypeScriptAnalysis) && hasStyled) {
       // Detect styled(Component) calls
       STYLED_CALL_RE.lastIndex = 0;
       for (const m of source.matchAll(STYLED_CALL_RE)) {
@@ -558,6 +562,8 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
 
         const entry = ensure(defFile, exportedName);
         entry.styles = true;
+        entry.className = true;
+        entry.style = true;
         // Re-styling: conservative fallback — can't see all consumers of the wrapper
         entry.elementProps = true;
         entry.spreadProps = true;
@@ -601,6 +607,18 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
       entries.push({ localStyledName, targetPath: defFile });
     }
   }
+
+  const typeScriptMetadata = enableTypeScriptAnalysis
+    ? (await loadTypeScriptAnalysis()).analyzeTypeScriptProgram({
+        files: collectTypeScriptAnalysisFiles({
+          transformSet,
+          styledCallUsages,
+          styledWrapperUsages,
+          cachedRead,
+          resolve,
+        }),
+      })
+    : undefined;
 
   const propUsageByFile = buildPropUsageByFile({
     styledDefFiles,
@@ -665,7 +683,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     logPrepassDebug(uniqueAllFiles, crossFileInfo, consumerAnalysis);
   }
 
-  return { crossFileInfo, consumerAnalysis, forwardedAsConsumers };
+  return { crossFileInfo, consumerAnalysis, forwardedAsConsumers, typeScriptMetadata };
 }
 
 /** Regex baseline for styled defs, then AST pass overrides/adds rows when parse succeeds. */
@@ -697,6 +715,54 @@ function mergeLeafStyledDefBasesForFile(
 
 function hasLeavesOnlyPrepassBlocker(source: string): boolean {
   return source.includes("shouldForwardProp") || hasUniversalSelectorCandidate(source);
+}
+
+function isTypeScriptParser(parserName: PrepassParserName | undefined): boolean {
+  return parserName === undefined || parserName === "ts" || parserName === "tsx";
+}
+
+async function loadTypeScriptAnalysis(): Promise<typeof import("./typescript-analysis.js")> {
+  try {
+    return await import("./typescript-analysis.js");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const missingTypeScript =
+      message.includes("typescript") &&
+      (message.includes("Cannot find") || message.includes("ERR_MODULE_NOT_FOUND"));
+    if (missingTypeScript) {
+      throw new Error(
+        [
+          "TypeScript parser runs require the optional `typescript` package for compiler metadata.",
+          "Install TypeScript in the project (supported range: >=5.0.0 <6), or use a non-TypeScript parser.",
+        ].join("\n"),
+      );
+    }
+    throw err;
+  }
+}
+
+function collectTypeScriptAnalysisFiles(args: {
+  transformSet: ReadonlySet<string>;
+  styledCallUsages: readonly { file: string; name: string }[];
+  styledWrapperUsages: readonly { file: string; wrappedName: string }[];
+  cachedRead: (path: string) => string;
+  resolve: Resolve;
+}): string[] {
+  const { transformSet, styledCallUsages, styledWrapperUsages, cachedRead, resolve } = args;
+  const files = new Set(transformSet);
+  for (const { file, name } of styledCallUsages) {
+    const definition = resolveDefinitionFile({ file, localName: name, cachedRead, resolve });
+    if (definition) {
+      files.add(definition.defFile);
+    }
+  }
+  for (const { file, wrappedName } of styledWrapperUsages) {
+    const definition = resolveDefinitionFile({ file, localName: wrappedName, cachedRead, resolve });
+    if (definition) {
+      files.add(definition.defFile);
+    }
+  }
+  return [...files].sort();
 }
 
 function hasUniversalSelectorCandidate(source: string): boolean {

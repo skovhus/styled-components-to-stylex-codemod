@@ -46,6 +46,7 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
+import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
@@ -866,6 +867,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Determine supportsExternalStyles and supportsAsProp for each decl
   // (before emitStylesAndImports for merger import and wrapper generation)
   for (const decl of styledDecls) {
+    applyTypeScriptMetadata(ctx, decl, exportedComponents.get(decl.localName)?.exportName);
+
     // 1. If extended by another styled component in this file -> enable external styles
     //    Leave supportsAsProp unset (undefined) so the emitter can auto-derive `as`
     //    support for intrinsic-based components.
@@ -895,10 +898,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       isDefaultExport: exportInfo.isDefault,
     });
     decl.supportsExternalStyles = extResult.styles;
-    decl.supportsAsProp = extResult.as;
-    decl.supportsRefProp = extResult.ref;
-    decl.consumerUsesClassName = extResult.className ?? extResult.styles;
-    decl.consumerUsesStyle = extResult.style ?? extResult.styles;
+    decl.supportsAsProp = extResult.as || typedComponentHasProp(decl, "as");
+    decl.supportsRefProp = extResult.ref || typedComponentHasProp(decl, "ref");
+    decl.consumerUsesClassName =
+      extResult.className ?? typeAwareExternalStyleFallback(extResult.styles);
+    decl.consumerUsesStyle = extResult.style ?? typeAwareExternalStyleFallback(extResult.styles);
     decl.consumerUsesElementProps = extResult.elementProps ?? extResult.styles;
     decl.consumerUsesSpread = extResult.spreadProps ?? extResult.styles;
   }
@@ -1401,6 +1405,35 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 }
 
 // --- Non-exported helpers ---
+
+function applyTypeScriptMetadata(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  exportName: string | undefined,
+): void {
+  const names = exportName ? [decl.localName, exportName] : [decl.localName];
+  applyTypeScriptMetadataToDecl(ctx, decl, names);
+}
+
+function typedComponentHasProp(decl: StyledDecl, propName: string): boolean {
+  if (isSpecialSurfaceProp(propName)) {
+    return decl.typeScriptExplicitPropNames?.has(propName) === true;
+  }
+  return decl.typeScriptPropNames?.has(propName) === true;
+}
+
+function isSpecialSurfaceProp(propName: string): boolean {
+  return (
+    propName === "className" || propName === "style" || propName === "sx" || propName === "ref"
+  );
+}
+
+function typeAwareExternalStyleFallback(fallback: boolean): boolean {
+  if (!fallback) {
+    return false;
+  }
+  return true;
+}
 
 /** True if any skipped decl in the file extends the given component via `styled(name)`. */
 function extendedBySkippedDecl(allStyledDecls: StyledDecl[], name: string): boolean {

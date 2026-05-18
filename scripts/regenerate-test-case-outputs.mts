@@ -28,6 +28,7 @@ const [
   { fixtureAdapter, appLikeAdapter },
   { scanCrossFileSelectors },
   { createModuleResolver },
+  { analyzeTypeScriptProgram },
   { Logger },
   { mergeMarkerDeclarations },
 ] = await Promise.all([
@@ -35,6 +36,7 @@ const [
   import("../src/__tests__/fixture-adapters.ts"),
   import("../src/internal/prepass/scan-cross-file-selectors.ts"),
   import("../src/internal/prepass/resolve-imports.ts"),
+  import("../src/internal/prepass/typescript-analysis.ts"),
   import("../src/internal/logger.ts"),
   import("../src/run.ts"),
 ]);
@@ -55,7 +57,6 @@ const APP_LIKE_ADAPTER_FIXTURES = new Set([
   "bug-data-style-src-incompatible-component",
   "bug-external-styles-missing-classname",
 ]);
-
 function selectAdapter(name: string) {
   return APP_LIKE_ADAPTER_FIXTURES.has(name) ? appLikeAdapter : fixtureAdapter;
 }
@@ -101,6 +102,7 @@ async function updateFixture(name: string, ext: string) {
   const crossFilePrepassResult = {
     selectorUsages: prepassResult.selectorUsages,
     componentsNeedingGlobalSelectorBridge: prepassResult.componentsNeedingGlobalSelectorBridge,
+    ...(parser === "tsx" ? { typeScriptMetadata } : {}),
   };
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
@@ -133,6 +135,23 @@ const allFixtures = await listFixtureNames();
 const prepassResolver = createModuleResolver();
 const allInputPaths = allFixtures.map((f) => join(testCasesDir, `${f.name}.input.${f.ext}`));
 const prepassResult = scanCrossFileSelectors(allInputPaths, [], prepassResolver);
+const typeScriptMetadata = analyzeTypeScriptProgram({
+  files: await collectTypeScriptFiles(testCasesDir),
+});
+
+async function collectTypeScriptFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectTypeScriptFiles(fullPath)));
+    } else if (/\.(tsx?|jsx?)$/.test(entry.name)) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
 
 const targetFixtures = (() => {
   if (only) {

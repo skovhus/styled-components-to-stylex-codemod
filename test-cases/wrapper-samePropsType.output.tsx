@@ -20,11 +20,7 @@ function Base<C extends React.ElementType = "div">(
   return (
     <Component
       {...rest}
-      {...mergedSx(
-        [styles.base(gap), column ? styles.baseColumn : undefined, sx],
-        className,
-        style,
-      )}
+      {...mergedSx([styles.base(gap), column && styles.baseColumn, sx], className, style)}
     >
       {children}
     </Component>

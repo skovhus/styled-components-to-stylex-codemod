@@ -18,8 +18,12 @@ import type {
   ThemeHookConfig,
   WrappedComponentInterfaceResult,
 } from "../../adapter.js";
-import { isWrappedComponentSxAware } from "../wrapped-component-interface.js";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
+import type {
+  TypeScriptComponentMetadata,
+  TypeScriptPrepassMetadata,
+  TypeScriptPropMetadata,
+} from "../prepass/typescript-analysis.js";
 import { emitStyleMerging } from "./style-merger.js";
 import type { ExportInfo, ExpressionKind, InlineStyleProp, WrapperPropDefaults } from "./types.js";
 import {
@@ -29,6 +33,9 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
+import { toRealPath } from "../utilities/path-utils.js";
+import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
+import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -71,6 +78,7 @@ type WrapperEmitterArgs = {
    * hooks about wrapped imported components. */
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
   sourceOverrides?: ReadonlyMap<string, string>;
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
   /** Optional adapter hook describing the public interface of an imported component
    * being wrapped via `styled(Component)`. */
   wrappedComponentInterface?: (ctx: {
@@ -102,6 +110,7 @@ export class WrapperEmitter {
   readonly useSxProp: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
   readonly sourceOverrides?: ReadonlyMap<string, string>;
+  readonly typeScriptMetadata?: TypeScriptPrepassMetadata;
   readonly wrappedComponentInterface?: (ctx: {
     localName: string;
     importSource: string;
@@ -141,6 +150,7 @@ export class WrapperEmitter {
     this.useSxProp = args.useSxProp;
     this.importMap = args.importMap ?? new Map();
     this.sourceOverrides = args.sourceOverrides;
+    this.typeScriptMetadata = args.typeScriptMetadata;
     this.wrappedComponentInterface = args.wrappedComponentInterface;
     this.emitTypes = this.filePath.endsWith(".ts") || this.filePath.endsWith(".tsx");
   }
@@ -152,17 +162,41 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
-    return isWrappedComponentSxAware({
-      adapter: {
-        useSxProp: this.useSxProp,
-        wrappedComponentInterface: this.wrappedComponentInterface,
-      },
-      importMap: this.importMap,
-      componentLocalName,
-      filePath: this.filePath,
-      localSource: this.localSource,
-      sourceOverrides: this.sourceOverrides,
-    });
+    if (!this.useSxProp) {
+      return false;
+    }
+    const importInfo = this.importMap.get(componentLocalName);
+    if (importInfo) {
+      const adapterResult = this.wrappedComponentInterface?.({
+        localName: componentLocalName,
+        importSource: importInfo.source.value,
+        importedName: importInfo.importedName,
+        filePath: this.filePath,
+      });
+      if (adapterResult !== undefined) {
+        return adapterResult.acceptsSx === true;
+      }
+    }
+    const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (typedComponent) {
+      if (typedComponent.supportsSxProp) {
+        return true;
+      }
+      if (!this.hasSourceOverrideFor(componentLocalName)) {
+        return false;
+      }
+    }
+    return (
+      importInfo?.source.kind === "absolutePath" &&
+      transformedComponentAcceptsSx({
+        absolutePath: importInfo.source.value,
+        componentNames:
+          importInfo.importedName === "default"
+            ? [componentLocalName, importInfo.importedName]
+            : [importInfo.importedName],
+        sourceOverrides: this.sourceOverrides,
+      })
+    );
   }
 
   propsTypeNameFor(localName: string): string {
@@ -371,7 +405,7 @@ export class WrapperEmitter {
       return true;
     }
     if (d.consumerUsesSpread) {
-      return true;
+      return this.spreadMayContainProp(d, "className");
     }
     if (this.isUsedAsValue(d)) {
       return true;
@@ -385,7 +419,7 @@ export class WrapperEmitter {
       return true;
     }
     if (d.consumerUsesSpread) {
-      return true;
+      return this.spreadMayContainProp(d, "style");
     }
     if (this.isUsedAsValue(d)) {
       return true;
@@ -395,7 +429,129 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
-    return d.supportsExternalStyles ?? false;
+    return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
+  }
+
+  typedComponentHasProp(componentLocalName: string, propName: string): boolean {
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (!metadata) {
+      return false;
+    }
+    if (metadata.kind === "styled" && isExternalStylePropName(propName)) {
+      return false;
+    }
+    if (isExternalStyleOrSxPropName(propName)) {
+      return metadata.explicitPropNames.includes(propName);
+    }
+    return metadata.hasIndexSignature || metadata.props.some((prop) => prop.name === propName);
+  }
+
+  hasTypeScriptComponentMetadata(componentLocalName: string): boolean {
+    return this.typeScriptComponentMetadataFor(componentLocalName) !== undefined;
+  }
+
+  /**
+   * Returns true when the wrapped component's prepass metadata proves it does
+   * NOT accept the given style prop (className/style) — i.e. the prop is
+   * missing from both explicit and resolved props AND the component has no
+   * index signature. Used to decide whether to lift the prop onto the wrapper.
+   *
+   * `typedComponentHasProp` intentionally checks only `explicitPropNames` for
+   * style props (we don't want every HTML-derived component treated as
+   * "having" className), but for the lift decision we need the broader view:
+   * even if className isn't explicitly declared, ExternalComponent that
+   * extends `React.HTMLAttributes` still accepts it via inheritance, so no
+   * lift is needed.
+   *
+   * Returns false when metadata is unavailable (conservative — defer to
+   * existing emission logic rather than incorrectly lifting).
+   */
+  wrappedRejectsStyleProp(componentLocalName: string, propName: "className" | "style"): boolean {
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (!metadata) {
+      return false;
+    }
+    if (metadata.hasIndexSignature) {
+      return false;
+    }
+    if (metadata.explicitPropNames.includes(propName)) {
+      return false;
+    }
+    if (metadata.props.some((prop) => prop.name === propName)) {
+      return false;
+    }
+    return true;
+  }
+
+  typedComponentProp(componentLocalName: string, propName: string): TypeScriptPropMetadata | null {
+    const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
+    if (
+      !metadata ||
+      (metadata.kind === "styled" && isExternalStylePropName(propName)) ||
+      (isExternalStyleOrSxPropName(propName) && !metadata.explicitPropNames.includes(propName))
+    ) {
+      return null;
+    }
+    return metadata.props.find((prop) => prop.name === propName) ?? null;
+  }
+
+  private spreadMayContainProp(d: StyledDecl, propName: string): boolean {
+    if (!d.typeScriptPropNames) {
+      return true;
+    }
+    return d.typeScriptHasIndexSignature === true || d.typeScriptPropNames.has(propName);
+  }
+
+  private hasSourceOverrideFor(componentLocalName: string): boolean {
+    const importInfo = this.importMap.get(componentLocalName);
+    return (
+      importInfo?.source.kind === "absolutePath" &&
+      this.sourceOverrides?.has(toRealPath(importInfo.source.value)) === true
+    );
+  }
+
+  private typeScriptComponentMetadataFor(
+    componentLocalName: string,
+  ): TypeScriptComponentMetadata | undefined {
+    const importInfo = this.importMap.get(componentLocalName);
+    if (importInfo?.source.kind === "absolutePath") {
+      const names =
+        importInfo.importedName === "default"
+          ? [componentLocalName, importInfo.importedName]
+          : [importInfo.importedName];
+      const byPath = findTypeScriptComponentMetadata(
+        this.typeScriptMetadata,
+        importInfo.source.value,
+        names,
+      );
+      if (byPath) {
+        return byPath;
+      }
+      return this.findTypeScriptComponentMetadataByName(names);
+    }
+    const local = findTypeScriptComponentMetadata(this.typeScriptMetadata, this.filePath, [
+      componentLocalName,
+    ]);
+    if (local) {
+      return local;
+    }
+    return undefined;
+  }
+
+  private findTypeScriptComponentMetadataByName(
+    names: readonly string[],
+  ): TypeScriptComponentMetadata | undefined {
+    if (!this.typeScriptMetadata) {
+      return undefined;
+    }
+    const nameSet = new Set(names);
+    for (const file of this.typeScriptMetadata.files) {
+      const match = file.components.find((component) => nameSet.has(component.name));
+      if (match) {
+        return match;
+      }
+    }
+    return undefined;
   }
 
   shouldAllowAsPropForIntrinsic(d: StyledDecl, tagName: string): boolean {
@@ -1526,6 +1682,7 @@ export class WrapperEmitter {
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
+    wrappedComponent?: string;
     forwardedAsPropTypeText?: string;
     attrsProvidedPropOptions?: AttrsProvidedPropOptions;
   }): string {
@@ -1538,6 +1695,7 @@ export class WrapperEmitter {
       hasExplicitPropsType,
       forceClassNameOptional,
       forceStyleOptional,
+      wrappedComponent,
       forwardedAsPropTypeText = "React.ElementType",
       attrsProvidedPropOptions,
     } = args;
@@ -1552,13 +1710,42 @@ export class WrapperEmitter {
     // Skip adding here if there's an explicit props type - it will be merged there instead.
     const shouldAddStyleProps =
       d.supportsExternalStyles && !wrappedComponentIsInternalWrapper && !hasExplicitPropsType;
+    // Lift className/style onto the wrapper's prop type when the wrapper will
+    // destructure them from `props` (allowClassNameProp/allowStyleProp) but the
+    // wrapped component's prepass metadata proves it does NOT accept them.
+    // Without this, the inherited `React.ComponentPropsWithRef<typeof Wrapped>`
+    // lacks those keys and the destructure produces TS2339. Only applies when
+    // no explicit propsType (with one, the lift happens via
+    // injectStylePropsIntoTypeLiteralString in emit-component.ts).
+    //
+    // Uses `wrappedRejectsStyleProp` (broad check: explicitPropNames + props
+    // array + hasIndexSignature) rather than `typedComponentHasProp` (narrow:
+    // explicitPropNames only). The narrow check would incorrectly lift onto
+    // any component extending React.HTMLAttributes — which DOES accept
+    // className via inheritance even though it isn't explicitly declared.
+    const liftableContext =
+      !hasExplicitPropsType && !wrappedComponentIsInternalWrapper && Boolean(wrappedComponent);
+    const liftClassNameForUnsupportedWrapped =
+      liftableContext &&
+      allowClassNameProp &&
+      this.wrappedRejectsStyleProp(wrappedComponent!, "className");
+    const liftStyleForUnsupportedWrapped =
+      liftableContext && allowStyleProp && this.wrappedRejectsStyleProp(wrappedComponent!, "style");
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.
-    if ((shouldAddStyleProps && allowClassNameProp) || forceClassNameOptional) {
+    if (
+      (shouldAddStyleProps && allowClassNameProp) ||
+      forceClassNameOptional ||
+      liftClassNameForUnsupportedWrapped
+    ) {
       lines.push("className?: string");
     }
-    if ((shouldAddStyleProps && allowStyleProp) || forceStyleOptional) {
+    if (
+      (shouldAddStyleProps && allowStyleProp) ||
+      forceStyleOptional ||
+      liftStyleForUnsupportedWrapped
+    ) {
       lines.push("style?: React.CSSProperties");
     }
     if (shouldAddStyleProps && allowSxProp) {
@@ -2250,6 +2437,14 @@ const UNIVERSAL_PROP_TYPES: Record<string, string> = {
   className: "className?: string",
   style: "style?: React.CSSProperties",
 };
+
+function isExternalStylePropName(propName: string): boolean {
+  return propName === "className" || propName === "style";
+}
+
+function isExternalStyleOrSxPropName(propName: string): boolean {
+  return isExternalStylePropName(propName) || propName === "sx";
+}
 
 function inlineTypeNeedsElementGeneric(typeText: string | undefined): boolean {
   if (!typeText) {

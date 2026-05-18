@@ -16,7 +16,7 @@ export function Text(props: TextProps & Omit<React.ComponentProps<"span">, "clas
       sx={[
         styles.text,
         align ? styles.textTextAlign(align) : undefined,
-        selectable ? styles.textSelectable : undefined,
+        selectable && styles.textSelectable,
       ]}
     >
       {children}
