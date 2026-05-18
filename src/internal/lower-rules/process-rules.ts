@@ -1019,6 +1019,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
     selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl);
+    if (hasEnabledCompoundPseudoSelector(selector)) {
+      state.markBail();
+      warnings.push({
+        severity: "warning",
+        type: "Unsupported selector: compound pseudo selector",
+        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+      });
+      break;
+    }
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
     const { normalized: selectorNormalized, wasStripped: specificityStripped } =
@@ -2280,6 +2289,23 @@ function normalizeEnabledPseudoForSupportedIntrinsic(selector: string, decl: Sty
 
 function containsEnabledPseudo(selector: string): boolean {
   return /(^|[,&]\s*):enabled(?=[:\s,{]|$)/.test(selector);
+}
+
+function hasEnabledCompoundPseudoSelector(selector: string): boolean {
+  return selector.split(",").some((part) => {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith("&")) {
+      return false;
+    }
+    const pseudoTokens = extractPseudoTokens(trimmed);
+    return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
+  });
+}
+
+function extractPseudoTokens(selector: string): string[] {
+  return [...selector.matchAll(/:(?!:)([a-zA-Z][a-zA-Z0-9-]*)/g)]
+    .map((match) => match[1])
+    .filter((value): value is string => value !== undefined);
 }
 
 /**
