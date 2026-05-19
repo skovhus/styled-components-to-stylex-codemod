@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Adapter, ImportSource } from "../adapter.js";
 import { createResolveAdapterSafe } from "../internal/transform-resolve-value.js";
+import { importSourceToModuleSpecifier } from "../internal/utilities/import-source.js";
 
 function stubAdapter(overrides?: Partial<Adapter>): Adapter {
   return {
@@ -24,6 +25,16 @@ const NON_STYLEX: ImportSource = { kind: "absolutePath", value: "/project/src/li
 const NON_STYLEX_SPEC: ImportSource = { kind: "specifier", value: "./lib/helpers" };
 
 describe("stylex import resolution — skip adapter for .stylex sources", () => {
+  it("strips TypeScript extensions from emitted absolute-path import specifiers", () => {
+    expect(
+      importSourceToModuleSpecifier(
+        { kind: "absolutePath", value: "/project/src/lib/helpers.tsx" },
+        "/project/src/App.tsx",
+        { stripTsExtension: true },
+      ),
+    ).toBe("./lib/helpers");
+  });
+
   describe("resolveValue (importedValue)", () => {
     it("returns passthrough for a .stylex absolute path", () => {
       const adapter = stubAdapter();

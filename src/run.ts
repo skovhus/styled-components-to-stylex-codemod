@@ -144,6 +144,15 @@ export interface RunTransformOptions {
    * @default false
    */
   allowPartialMigration?: boolean;
+
+  /**
+   * Also collect per-file outcomes as if each file were transformed by itself,
+   * while reusing the same prepass. Useful for candidate finders that recommend
+   * files to run individually.
+   *
+   * @default false
+   */
+  collectStandaloneFileResults?: boolean;
 }
 
 export interface RunTransformResult {
@@ -159,6 +168,10 @@ export interface RunTransformResult {
   timeElapsed: number;
   /** Warnings emitted during transformation */
   warnings: CollectedWarning[];
+  /** Per-file outcomes from isolated transforms, populated when requested. */
+  standaloneFileResults?: TransformFileResult[];
+  /** Warnings from isolated transforms, populated when requested. */
+  standaloneWarnings?: CollectedWarning[];
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -669,6 +682,30 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     silent: options.silent ?? false,
   };
 
+  let standaloneResult: SequentialRunResult | undefined;
+  let standaloneWarnings: CollectedWarning[] | undefined;
+  if (options.collectStandaloneFileResults === true) {
+    standaloneResult = await runTransformSequentially(transformModule, filePaths, {
+      ...runnerOptions,
+      dry: true,
+      print: false,
+      sidecarFiles: new Map(),
+      bridgeResults: new Map(),
+      transformedFiles: new Set(),
+      transformedFileSources: new Map(),
+      transientPropRenames: new Map(),
+      crossFilePrepassResult: {
+        ...crossFilePrepassResult,
+        transformedFiles: new Set(),
+      },
+      silent: true,
+      isolateFiles: true,
+    });
+    standaloneWarnings = Logger.createReport().getWarnings();
+    Logger._clearCollected();
+    Logger.setFileCount(filePaths.length);
+  }
+
   // Worker.js processes a chunk with async.each even when jscodeshift runs in-band.
   // Several transform decisions read the live transformedFiles set, so call the
   // transform directly in dependency order instead of re-entering Runner per file.
@@ -762,6 +799,8 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     transformed: result.ok,
     timeElapsed: parseFloat(result.timeElapsed) || 0,
     warnings: report.getWarnings(),
+    standaloneFileResults: standaloneResult?.files,
+    standaloneWarnings,
   };
 }
 
@@ -911,7 +950,10 @@ type SequentialRunOptions = import("./internal/transform-types.js").TransformOpt
   dry: boolean;
   print: boolean;
   silent: boolean;
+  transformedFiles: Set<string>;
   transformedFileSources: Map<string, string>;
+  crossFilePrepassResult?: { transformedFiles?: Set<string> };
+  isolateFiles?: boolean;
 };
 
 type SequentialRunResult = {
@@ -920,6 +962,12 @@ type SequentialRunResult = {
   skip: number;
   ok: number;
   timeElapsed: string;
+  files: TransformFileResult[];
+};
+
+export type TransformFileResult = {
+  filePath: string;
+  status: "error" | "skipped" | "unchanged" | "transformed";
 };
 
 async function runTransformSequentially(
@@ -934,6 +982,7 @@ async function runTransformSequentially(
     skip: 0,
     ok: 0,
     timeElapsed: "0",
+    files: [],
   };
   const startedAt = performance.now();
   const j = jscodeshift.withParser(options.parser);
@@ -949,12 +998,19 @@ async function runTransformSequentially(
   };
 
   for (const filePath of filePaths) {
+    if (options.isolateFiles === true) {
+      options.transformedFiles.clear();
+      options.transformedFileSources.clear();
+      options.crossFilePrepassResult?.transformedFiles?.clear();
+    }
+
     let source: string;
     try {
       source = await readFile(filePath, "utf-8");
     } catch (err) {
       Logger.logError(`File error: ${err instanceof Error ? err.message : String(err)}`, filePath);
       aggregate.error += 1;
+      aggregate.files.push({ filePath, status: "error" });
       continue;
     }
 
@@ -965,10 +1021,12 @@ async function runTransformSequentially(
       }
       if (output === null) {
         aggregate.skip += 1;
+        aggregate.files.push({ filePath, status: "skipped" });
         continue;
       }
       if (output === source) {
         aggregate.nochange += 1;
+        aggregate.files.push({ filePath, status: "unchanged" });
         continue;
       }
       if (options.print) {
@@ -978,6 +1036,7 @@ async function runTransformSequentially(
         await writeFile(filePath, output, "utf-8");
       }
       aggregate.ok += 1;
+      aggregate.files.push({ filePath, status: "transformed" });
     } catch (err) {
       if (!Logger.isErrorLogged(err)) {
         Logger.logError(
@@ -986,6 +1045,7 @@ async function runTransformSequentially(
         );
       }
       aggregate.error += 1;
+      aggregate.files.push({ filePath, status: "error" });
     }
   }
 

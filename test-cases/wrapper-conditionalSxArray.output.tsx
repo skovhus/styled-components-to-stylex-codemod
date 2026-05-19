@@ -4,17 +4,21 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
-type CompactButtonProps = { compact?: boolean } & Omit<
-  React.ComponentPropsWithRef<typeof SxAwareButton>,
-  "className" | "style"
->;
+type CompactButtonProps = {
+  compact?: boolean;
+  width?: number;
+} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style">;
 
 function CompactButton(props: CompactButtonProps) {
-  const { children, sx, compact, ...rest } = props;
+  const { children, sx, compact, width, ...rest } = props;
   return (
     <SxAwareButton
       {...rest}
-      sx={[callerStyles.compactButton, compact ? callerStyles.compactButtonCompact : null, sx]}
+      sx={[
+        callerStyles.compactButton(`${width ?? 120}px`),
+        compact ? callerStyles.compactButtonCompact : null,
+        sx,
+      ]}
     >
       {children}
     </SxAwareButton>
@@ -25,9 +29,10 @@ const callerStyles = stylex.create({
   caller: {
     textDecorationLine: "underline",
   },
-  compactButton: {
+  compactButton: (width: string) => ({
     color: "#0f172a",
-  },
+    width,
+  }),
   compactButtonCompact: {
     fontWeight: "bold",
   },
@@ -36,7 +41,7 @@ const callerStyles = stylex.create({
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 12 }}>
     <CompactButton>Default</CompactButton>
-    <CompactButton compact sx={callerStyles.caller}>
+    <CompactButton compact width={96} sx={callerStyles.caller}>
       Compact
     </CompactButton>
   </div>

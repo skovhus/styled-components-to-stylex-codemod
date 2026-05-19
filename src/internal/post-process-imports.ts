@@ -128,7 +128,7 @@ export function collectNewImportMetadata(
   const newImportSourcesByLocal = new Map<string, Set<string>>();
 
   for (const imp of resolverImports.values()) {
-    const source = importSourceToModuleSpecifier(imp.from, filePath);
+    const source = importSourceToModuleSpecifier(imp.from, filePath, { stripTsExtension: true });
     for (const n of imp.names ?? []) {
       const local = n.local ?? n.imported;
       if (local) {

@@ -405,7 +405,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   {
     const toModuleSpecifier = (from: ImportSpec["from"]): string => {
       assertValidImportSource(from, "import");
-      return importSourceToModuleSpecifier(from, String(filePath));
+      return importSourceToModuleSpecifier(from, String(filePath), { stripTsExtension: true });
     };
 
     const insertImportDecl = (decl: any): void => {

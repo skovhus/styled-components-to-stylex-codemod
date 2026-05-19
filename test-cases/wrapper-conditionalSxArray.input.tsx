@@ -3,8 +3,9 @@ import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
-const CompactButton = styled(SxAwareButton)<{ $compact?: boolean }>`
+const CompactButton = styled(SxAwareButton)<{ $compact?: boolean; $width?: number }>`
   color: #0f172a;
+  width: ${(props) => props.$width ?? 120}px;
 
   ${(props) =>
     props.$compact
@@ -23,7 +24,7 @@ const callerStyles = stylex.create({
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 12 }}>
     <CompactButton>Default</CompactButton>
-    <CompactButton $compact sx={callerStyles.caller}>
+    <CompactButton $compact $width={96} sx={callerStyles.caller}>
       Compact
     </CompactButton>
   </div>
