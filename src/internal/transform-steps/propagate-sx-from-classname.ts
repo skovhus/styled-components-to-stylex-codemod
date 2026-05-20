@@ -46,7 +46,6 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       fn: component.fn,
       fnPath: component.fnPath,
       convertedWrapperBindings: convertedWrappers.bindings,
-      localBindingNames: collectLocalBindingNames(component.fn),
       propsBinding,
       sxExpression,
     });
@@ -83,7 +82,7 @@ type JsxExpression = Parameters<JSCodeshift["jsxExpressionContainer"]>[0];
 
 type ConvertedWrappers = {
   names: Set<string>;
-  bindings: Map<string, object>;
+  bindings: Map<string, ScopedAstPath>;
 };
 
 type ScopedAstPath = ASTPath<any> & {
@@ -119,35 +118,31 @@ function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
 
   return {
     names,
-    bindings: collectTopLevelBindingScopes(ctx, names),
+    bindings: collectTopLevelBindingPaths(ctx, names),
   };
 }
 
-function collectTopLevelBindingScopes(
+function collectTopLevelBindingPaths(
   ctx: TransformContext,
   names: Set<string>,
-): Map<string, object> {
-  const bindings = new Map<string, object>();
+): Map<string, ScopedAstPath> {
+  const bindings = new Map<string, ScopedAstPath>();
   const { root, j } = ctx;
 
   root.find(j.FunctionDeclaration).forEach((path: ScopedAstPath) => {
     const name = path.node.id?.name;
-    if (!name || !names.has(name) || !path.parentPath?.scope?.isGlobal) {
+    if (!name || !names.has(name) || !isTopLevelValueBindingPath(path)) {
       return;
     }
-    if (path.parentPath.scope) {
-      bindings.set(name, path.parentPath.scope);
-    }
+    bindings.set(name, path);
   });
 
   root.find(j.VariableDeclarator).forEach((path: ScopedAstPath) => {
     const name = path.node.id?.type === "Identifier" ? path.node.id.name : undefined;
-    if (!name || !names.has(name) || path.scope?.isGlobal !== true) {
+    if (!name || !names.has(name) || !isTopLevelValueBindingPath(path)) {
       return;
     }
-    if (path.scope) {
-      bindings.set(name, path.scope);
-    }
+    bindings.set(name, path);
   });
 
   return bindings;
@@ -401,20 +396,11 @@ function addSxToForwardedChildren(args: {
   ctx: TransformContext;
   fn: FunctionLike;
   fnPath: ScopedAstPath;
-  convertedWrapperBindings: Map<string, object>;
-  localBindingNames: Set<string>;
+  convertedWrapperBindings: Map<string, ScopedAstPath>;
   propsBinding: PropsBinding;
   sxExpression: JsxExpression;
 }): boolean {
-  const {
-    ctx,
-    fn,
-    fnPath,
-    convertedWrapperBindings,
-    localBindingNames,
-    propsBinding,
-    sxExpression,
-  } = args;
+  const { ctx, fn, fnPath, convertedWrapperBindings, propsBinding, sxExpression } = args;
   const body = fn.body as ASTNode | undefined;
   if (!body) {
     return false;
@@ -435,7 +421,7 @@ function addSxToForwardedChildren(args: {
       if (
         !childName ||
         !convertedBindingScope ||
-        !isConvertedChildBinding(path, childName, convertedBindingScope, localBindingNames) ||
+        !isConvertedChildBinding(ctx, path, childName, convertedBindingScope) ||
         hasJsxAttr(opening, "sx")
       ) {
         return;
@@ -464,16 +450,77 @@ function addSxToForwardedChildren(args: {
 }
 
 function isConvertedChildBinding(
+  ctx: TransformContext,
   path: ScopedAstPath,
   childName: string,
-  convertedBindingScope: object,
-  localBindingNames: Set<string>,
+  convertedBindingPath: ScopedAstPath,
 ): boolean {
-  const childBindingScope = findBindingScope(path, childName);
-  if (childBindingScope) {
-    return childBindingScope === convertedBindingScope;
-  }
-  return !localBindingNames.has(childName);
+  return findNearestValueBindingPath(ctx, path, childName)?.node === convertedBindingPath.node;
+}
+
+function findNearestValueBindingPath(
+  ctx: TransformContext,
+  referencePath: ScopedAstPath,
+  name: string,
+): ScopedAstPath | null {
+  let bestPath: ScopedAstPath | null = null;
+  let bestDepth = -1;
+  const considerBindingPath = (
+    bindingPath: ScopedAstPath,
+    containerPath: ScopedAstPath | null,
+  ): void => {
+    if (!containerPath || !pathContains(containerPath, referencePath)) {
+      return;
+    }
+    const depth = pathDepth(containerPath);
+    if (depth > bestDepth) {
+      bestPath = bindingPath;
+      bestDepth = depth;
+    }
+  };
+
+  ctx.root.find(ctx.j.FunctionDeclaration).forEach((path: ScopedAstPath) => {
+    if (path.node.id?.name === name) {
+      considerBindingPath(path, getLexicalContainerPath(path));
+    }
+    if (functionHasParamBinding(path.node, name)) {
+      considerBindingPath(path, path);
+    }
+  });
+
+  ctx.root.find(ctx.j.FunctionExpression).forEach((path: ScopedAstPath) => {
+    if (functionHasParamBinding(path.node, name)) {
+      considerBindingPath(path, path);
+    }
+  });
+
+  ctx.root.find(ctx.j.ArrowFunctionExpression).forEach((path: ScopedAstPath) => {
+    if (functionHasParamBinding(path.node, name)) {
+      considerBindingPath(path, path);
+    }
+  });
+
+  ctx.root.find(ctx.j.VariableDeclarator).forEach((path: ScopedAstPath) => {
+    if (patternHasBindingName(path.node.id, name)) {
+      considerBindingPath(path, getLexicalContainerPath(path));
+    }
+  });
+
+  return bestPath;
+}
+
+function isTopLevelValueBindingPath(path: ScopedAstPath): boolean {
+  return getLexicalContainerPath(path)?.node?.type === "Program";
+}
+
+function functionHasParamBinding(fn: FunctionLike, name: string): boolean {
+  return (fn.params ?? []).some((param) => patternHasBindingName(param, name));
+}
+
+function patternHasBindingName(node: unknown, name: string): boolean {
+  const names = new Set<string>();
+  collectPatternBindingNames(node, names);
+  return names.has(name);
 }
 
 function findPropsBindingScope(fnPath: ScopedAstPath, propsBinding: PropsBinding): object | null {
@@ -609,12 +656,6 @@ function getAvailableSxLocalName(fn: FunctionLike): string {
     suffix++;
   }
   return `sxProp${suffix}`;
-}
-
-function collectLocalBindingNames(fn: FunctionLike): Set<string> {
-  const names = new Set<string>();
-  collectBindingNames(fn.body, names);
-  return names;
 }
 
 function collectBindingNames(
