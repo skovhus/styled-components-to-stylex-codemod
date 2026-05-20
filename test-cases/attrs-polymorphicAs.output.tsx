@@ -29,7 +29,7 @@ type LabelProps = {
   sx?: stylex.StyleXStyles;
   htmlFor?: string;
   ref?: React.Ref<HTMLLabelElement>;
-} & { sx?: stylex.StyleXStyles } & Omit<React.ComponentPropsWithRef<typeof Text>, "as">;
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "as">;
 
 /**
  * Label component using .attrs to set as="label"

@@ -7,10 +7,7 @@ import { SxAwareButton } from "./lib/sx-aware-component";
 type CompactButtonProps = {
   compact?: boolean;
   width?: number;
-} & { sx?: stylex.StyleXStyles } & Omit<
-    React.ComponentPropsWithRef<typeof SxAwareButton>,
-    "className" | "style"
-  >;
+} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style">;
 
 function CompactButton(props: CompactButtonProps) {
   const { children, sx, compact, width, ...rest } = props;

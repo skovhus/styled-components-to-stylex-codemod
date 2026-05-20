@@ -3,10 +3,10 @@ import * as stylex from "@stylexjs/stylex";
 import { motion, type MotionValue } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
-type ComponentWrapperProps = { isOpen: boolean } & { sx?: stylex.StyleXStyles } & Omit<
-    React.ComponentPropsWithRef<typeof motion.div>,
-    "className"
-  >;
+type ComponentWrapperProps = { isOpen: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof motion.div>,
+  "className"
+>;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
   const { children, style, sx, isOpen, ...rest } = props;

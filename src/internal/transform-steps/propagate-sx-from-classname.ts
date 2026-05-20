@@ -27,7 +27,7 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       continue;
     }
 
-    const propsType = getPropsType(ctx, propsBinding.typeName);
+    const propsType = getPropsType(ctx, propsBinding.typeName, component.fnPath);
     if (!propsType) {
       continue;
     }
@@ -232,38 +232,98 @@ function getTypeReferenceName(typeAnnotation: any): string | null {
 function getPropsType(
   ctx: TransformContext,
   typeName: string,
+  referencePath: ScopedAstPath,
 ): { members: any[]; replaceMembers: (members: any[]) => void } | null {
   const { root, j } = ctx;
+
+  let bestPath: ScopedAstPath | null | undefined;
+  let bestDepth = -1;
+  const considerTypePath = (path: ScopedAstPath): void => {
+    const containerPath = getLexicalContainerPath(path);
+    if (!containerPath || !pathContains(containerPath, referencePath)) {
+      return;
+    }
+    const depth = pathDepth(containerPath);
+    if (depth > bestDepth) {
+      bestPath = path;
+      bestDepth = depth;
+    }
+  };
 
   const interfaces = root.find(j.TSInterfaceDeclaration, {
     id: { type: "Identifier", name: typeName },
   } as any);
-  if (interfaces.size() > 0) {
-    const iface = interfaces.at(0).nodes()[0] as any;
-    return {
-      members: iface.body?.body ?? [],
-      replaceMembers(members) {
-        iface.body.body = members;
-      },
-    };
-  }
+  interfaces.forEach((path: ScopedAstPath) => {
+    considerTypePath(path);
+  });
 
   const aliases = root.find(j.TSTypeAliasDeclaration, {
     id: { type: "Identifier", name: typeName },
   } as any);
-  if (aliases.size() === 0) {
+  aliases.forEach((path: ScopedAstPath) => {
+    considerTypePath(path);
+  });
+
+  const matched = bestPath?.node as any;
+  if (!matched) {
     return null;
   }
-  const alias = aliases.at(0).nodes()[0] as any;
-  if (alias.typeAnnotation?.type !== "TSTypeLiteral") {
+  if (matched.type === "TSInterfaceDeclaration") {
+    return {
+      members: matched.body?.body ?? [],
+      replaceMembers(members) {
+        matched.body.body = members;
+      },
+    };
+  }
+  if (
+    matched.type !== "TSTypeAliasDeclaration" ||
+    matched.typeAnnotation?.type !== "TSTypeLiteral"
+  ) {
     return null;
   }
   return {
-    members: alias.typeAnnotation.members ?? [],
+    members: matched.typeAnnotation.members ?? [],
     replaceMembers(members) {
-      alias.typeAnnotation.members = members;
+      matched.typeAnnotation.members = members;
     },
   };
+}
+
+function getLexicalContainerPath(path: ScopedAstPath): ScopedAstPath | null {
+  let current = path.parentPath;
+  while (current) {
+    if (
+      current.node?.type === "Program" ||
+      current.node?.type === "BlockStatement" ||
+      current.node?.type === "TSModuleBlock"
+    ) {
+      return current;
+    }
+    current = current.parentPath;
+  }
+  return null;
+}
+
+function pathContains(containerPath: ScopedAstPath, descendantPath: ScopedAstPath): boolean {
+  let current: ScopedAstPath | undefined = descendantPath;
+  while (current) {
+    if (current.node === containerPath.node) {
+      return true;
+    }
+    current = current.parentPath;
+  }
+  return false;
+}
+
+function pathDepth(path: ScopedAstPath): number {
+  let depth = 0;
+  let current = path.parentPath;
+  while (current) {
+    depth++;
+    current = current.parentPath;
+  }
+  return depth;
 }
 
 function propsTypeHasProp(members: any[], propName: string): boolean {

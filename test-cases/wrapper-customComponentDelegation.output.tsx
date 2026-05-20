@@ -12,10 +12,7 @@ function SurfaceBase(props: SurfaceBaseProps) {
 }
 
 export function RelativeSurface(
-  props: { sx?: stylex.StyleXStyles } & Omit<
-    React.ComponentPropsWithRef<typeof SurfaceBase>,
-    "className" | "style"
-  >,
+  props: Omit<React.ComponentPropsWithRef<typeof SurfaceBase>, "className" | "style">,
 ) {
   const { children, sx, ...rest } = props;
   return (

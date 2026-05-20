@@ -9542,6 +9542,44 @@ export const App = () => <Wrapper />;
     expect(output).toContain("<Box className={className}>local</Box>");
     expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
   });
+
+  it("adds sx to the wrapper props type from the matching lexical scope", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  label?: string;
+};
+
+function Parent() {
+  type WrapperProps = {
+    className?: string;
+    count: number;
+  };
+
+  function Wrapper({ className, count }: WrapperProps) {
+    return <Box className={className}>{count}</Box>;
+  }
+
+  return <Wrapper count={1} />;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Parent />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  label?: string;\n};");
+    expect(output).toContain(
+      "type WrapperProps = {\n    className?: string;\n    sx?: stylex.StyleXStyles;\n    count: number;\n  };",
+    );
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*count,\s*sx,\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sx}>{count}</Box>");
+  });
 });
 
 describe("usePhysicalProperties adapter option", () => {

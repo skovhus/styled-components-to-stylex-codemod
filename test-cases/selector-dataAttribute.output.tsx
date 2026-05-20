@@ -4,12 +4,7 @@ import { motion } from "./lib/framer-motion";
 
 export const DataAnimatingAttribute = `data-animating`;
 
-function StyledMotionDiv(
-  props: { sx?: stylex.StyleXStyles } & Omit<
-    React.ComponentPropsWithRef<typeof motion.div>,
-    "className"
-  >,
-) {
+function StyledMotionDiv(props: Omit<React.ComponentPropsWithRef<typeof motion.div>, "className">) {
   const { children, style, sx, ...rest } = props;
   const _sx = stylex.props(styles.motionDiv, sx);
 

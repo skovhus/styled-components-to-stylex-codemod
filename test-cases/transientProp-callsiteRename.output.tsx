@@ -25,7 +25,7 @@ type ResponsivePanelProps = {
   asCard?: boolean;
   columnCount?: number;
   floatingOffset?: number;
-} & { sx?: stylex.StyleXStyles } & React.ComponentPropsWithRef<typeof PanelBase>;
+} & React.ComponentPropsWithRef<typeof PanelBase>;
 
 function ResponsivePanel(props: ResponsivePanelProps) {
   const { className, children, style, sx, asCard, columnCount, floatingOffset, ...rest } = props;
@@ -50,10 +50,7 @@ function ResponsivePanel(props: ResponsivePanelProps) {
 }
 
 function CompactPanel(
-  props: { sx?: stylex.StyleXStyles } & Omit<
-    React.ComponentPropsWithRef<typeof ResponsivePanel>,
-    "asCard" | "floatingOffset"
-  >,
+  props: Omit<React.ComponentPropsWithRef<typeof ResponsivePanel>, "asCard" | "floatingOffset">,
 ) {
   const { children, sx, ...rest } = props;
   return (

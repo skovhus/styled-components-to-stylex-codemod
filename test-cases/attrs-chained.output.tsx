@@ -26,9 +26,10 @@ function StyledButton(props: StyledButtonProps) {
   return <Text {...rest} as="button" {...mergedSx([styles.button, sx], className, style)} />;
 }
 
-type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & {
-  sx?: stylex.StyleXStyles;
-} & Omit<React.ComponentPropsWithRef<typeof StyledButton>, "className" | "style" | "as">;
+type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
+  React.ComponentPropsWithRef<typeof StyledButton>,
+  "className" | "style" | "as"
+>;
 
 // A extends B - this MUST preserve B's as="button" semantics
 export function ClickableText(props: ClickableTextProps) {

@@ -1687,6 +1687,7 @@ export class WrapperEmitter {
     allowStyleProp: boolean;
     allowSxProp?: boolean;
     wrappedComponentIsInternalWrapper?: boolean;
+    wrappedComponentIsStyledWrapper?: boolean;
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
@@ -1700,6 +1701,7 @@ export class WrapperEmitter {
       allowStyleProp,
       allowSxProp,
       wrappedComponentIsInternalWrapper,
+      wrappedComponentIsStyledWrapper,
       hasExplicitPropsType,
       forceClassNameOptional,
       forceStyleOptional,
@@ -1739,7 +1741,10 @@ export class WrapperEmitter {
       this.wrappedRejectsStyleProp(wrappedComponent!, "className");
     const liftStyleForUnsupportedWrapped =
       liftableContext && allowStyleProp && this.wrappedRejectsStyleProp(wrappedComponent!, "style");
-    const liftSxForUnsupportedWrapped = allowSxProp && d.typeScriptSupportsSxProp !== true;
+    const liftableSxContext =
+      !hasExplicitPropsType && !wrappedComponentIsStyledWrapper && Boolean(wrappedComponent);
+    const liftSxForUnsupportedWrapped =
+      liftableSxContext && allowSxProp && this.wrappedRejectsStyleProp(wrappedComponent!, "sx");
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.
