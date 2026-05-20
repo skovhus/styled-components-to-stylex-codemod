@@ -55,7 +55,7 @@ const styles = stylex.create({
   containerWrapper: {
     overflow: "hidden",
   },
-  containerWrapperWithComponentWidth: (width: number | undefined) => ({
+  containerWrapperWithComponentWidth: (width: number) => ({
     "--component-width": `${width}px`,
   }),
   container: {

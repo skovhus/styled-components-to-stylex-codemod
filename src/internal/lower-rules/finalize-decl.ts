@@ -670,6 +670,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   convertStyleFnsToPropsPattern(state.j, styleFnDecls, styleFnFromProps, decl.styleKey);
   alignComputedCallArgStyleFnParams(styleFnDecls, styleFnFromProps);
   unionStyleFnParamsFromStyleFnFromProps(state.j, decl, styleFnDecls, styleFnFromProps);
+  narrowGuardedStyleFnParamTypes(state.j, decl, styleFnDecls, styleFnFromProps);
 
   insertStyleFnDeclsAfterComponent(resolvedStyleObjects, styleFnDecls, {
     styleKey: decl.styleKey,
@@ -776,14 +777,332 @@ function unionStyleFnParamsFromStyleFnFromProps(
   }
 }
 
+function narrowGuardedStyleFnParamTypes(
+  j: StyleFnParamBuilderJ,
+  decl: StyledDecl,
+  styleFnDecls: Map<string, unknown>,
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>,
+): void {
+  const entriesByFnKey = new Map<string, NonNullable<StyledDecl["styleFnFromProps"]>>();
+  for (const entry of styleFnFromProps) {
+    const entries = entriesByFnKey.get(entry.fnKey) ?? [];
+    entries.push(entry);
+    entriesByFnKey.set(entry.fnKey, entries);
+  }
+
+  for (const fnKey of styleFnDecls.keys()) {
+    const fnAst = styleFnDecls.get(fnKey);
+    if (!isArrowFunctionWithParams(fnAst)) {
+      continue;
+    }
+    const firstParam = fnAst.params[0];
+    if (!firstParam) {
+      continue;
+    }
+    const entries = entriesByFnKey.get(fnKey);
+    const paramName = readParamName(firstParam);
+    const variantWhens = Object.entries(decl.variantStyleKeys ?? {})
+      .filter(([, key]) => key === fnKey)
+      .map(([when]) => when);
+    const extraStylexCalls = collectExtraStylexPropsArgCalls(decl, fnKey);
+    const variantCallIsGuarded =
+      paramName !== null &&
+      variantWhens.length > 0 &&
+      variantWhens.every((when) => conditionWhenGuardsProp(when, paramName));
+    const extraStylexCallIsGuarded =
+      extraStylexCalls.length > 0 &&
+      extraStylexCalls.every((call) => extraStylexCallGuardsPrimaryArg(call));
+    const isGuarded = entries
+      ? entries.every(styleFnEntryGuardsPrimaryArg)
+      : variantCallIsGuarded || extraStylexCallIsGuarded;
+    if (!isGuarded) {
+      continue;
+    }
+    removeUndefinedFromParamType(j, firstParam);
+  }
+}
+
+function styleFnEntryGuardsPrimaryArg(
+  entry: NonNullable<StyledDecl["styleFnFromProps"]>[number],
+): boolean {
+  if (entry.jsxProp === "__props" || entry.jsxProp === "__helper") {
+    return false;
+  }
+  if (!styleFnEntryPrimaryArgIsProp(entry)) {
+    return false;
+  }
+  if (entry.condition === "truthy") {
+    return true;
+  }
+  if (entry.condition === "always") {
+    return false;
+  }
+  return entry.conditionWhen ? conditionWhenGuardsProp(entry.conditionWhen, entry.jsxProp) : false;
+}
+
+function styleFnEntryPrimaryArgIsProp(
+  entry: NonNullable<StyledDecl["styleFnFromProps"]>[number],
+): boolean {
+  if (!entry.callArg) {
+    return true;
+  }
+  const argName = readIdentifierLikeName(entry.callArg);
+  return argName !== null && normalizePropName(argName) === normalizePropName(entry.jsxProp);
+}
+
+function conditionWhenGuardsProp(when: string, propName: string): boolean {
+  const prop = escapeRegExp(normalizePropName(propName));
+  const trimmed = when.trim();
+  return (
+    new RegExp(`^${prop}$`).test(trimmed) ||
+    new RegExp(`^${prop}\\s*\\|\\|\\s*false$`).test(trimmed) ||
+    new RegExp(`^${prop}\\s*!=\\s*null$`).test(trimmed) ||
+    new RegExp(`^${prop}\\s*!==?\\s*undefined$`).test(trimmed)
+  );
+}
+
+function collectExtraStylexPropsArgCalls(
+  decl: StyledDecl,
+  fnKey: string,
+): Array<{ when: string | undefined; condition: ExpressionKind | null; argName: string | null }> {
+  const calls: Array<{
+    when: string | undefined;
+    condition: ExpressionKind | null;
+    argName: string | null;
+  }> = [];
+  for (const entry of decl.extraStylexPropsArgs ?? []) {
+    const call = readExtraStylexPropsArgCall(entry.expr);
+    if (call?.fnKey === fnKey) {
+      calls.push({ when: entry.when, condition: call.condition, argName: call.argName });
+    }
+  }
+  return calls;
+}
+
+function extraStylexCallGuardsPrimaryArg(call: {
+  when: string | undefined;
+  condition: ExpressionKind | null;
+  argName: string | null;
+}): boolean {
+  if (call.argName === null) {
+    return false;
+  }
+  if (call.when !== undefined) {
+    return conditionWhenGuardsProp(call.when, call.argName);
+  }
+  return call.condition !== null && conditionExprGuardsProp(call.condition, call.argName);
+}
+
+function readExtraStylexPropsArgCall(
+  expr: ExpressionKind,
+): { fnKey: string; argName: string | null; condition: ExpressionKind | null } | null {
+  const direct = readStyleFnCall(expr);
+  if (direct) {
+    return { ...direct, condition: null };
+  }
+  if (
+    !expr ||
+    typeof expr !== "object" ||
+    (expr as { type?: string }).type !== "ConditionalExpression"
+  ) {
+    return null;
+  }
+  const conditional = expr as { test?: ExpressionKind; consequent?: ExpressionKind };
+  if (!conditional.test || !conditional.consequent) {
+    return null;
+  }
+  const consequentCall = readStyleFnCall(conditional.consequent);
+  return consequentCall ? { ...consequentCall, condition: conditional.test } : null;
+}
+
+function readStyleFnCall(expr: ExpressionKind): { fnKey: string; argName: string | null } | null {
+  if (!expr || typeof expr !== "object" || (expr as { type?: string }).type !== "CallExpression") {
+    return null;
+  }
+  const call = expr as { callee?: unknown; arguments?: ExpressionKind[] };
+  const callee = call.callee;
+  if (!callee || typeof callee !== "object") {
+    return null;
+  }
+  const member = callee as { type?: string; property?: unknown; computed?: boolean };
+  if (member.type !== "MemberExpression" || member.computed) {
+    return null;
+  }
+  const property = member.property;
+  const fnKey =
+    property &&
+    typeof property === "object" &&
+    (property as { type?: string }).type === "Identifier"
+      ? ((property as { name?: string }).name ?? null)
+      : null;
+  if (!fnKey) {
+    return null;
+  }
+  return {
+    fnKey,
+    argName: call.arguments?.[0] ? readIdentifierLikeName(call.arguments[0]) : null,
+  };
+}
+
+function conditionExprGuardsProp(condition: ExpressionKind, propName: string): boolean {
+  if (!condition || typeof condition !== "object") {
+    return false;
+  }
+  const normalizedProp = normalizePropName(propName);
+  const conditionName = readIdentifierLikeName(condition);
+  if (conditionName !== null) {
+    return normalizePropName(conditionName) === normalizedProp;
+  }
+  const typed = condition as {
+    type?: string;
+    operator?: string;
+    left?: ExpressionKind;
+    right?: ExpressionKind;
+  };
+  if (typed.type === "LogicalExpression" && typed.operator === "||") {
+    return (
+      typed.left !== undefined &&
+      typed.right !== undefined &&
+      conditionExprGuardsProp(typed.left, propName) &&
+      isFalseLiteral(typed.right)
+    );
+  }
+  if (typed.type === "BinaryExpression" && typed.left && typed.right) {
+    const leftName = readIdentifierLikeName(typed.left);
+    const leftMatches = leftName !== null && normalizePropName(leftName) === normalizedProp;
+    if (!leftMatches) {
+      return false;
+    }
+    return (
+      (typed.operator === "!=" && isNullLiteral(typed.right)) ||
+      ((typed.operator === "!==" || typed.operator === "!=") && isUndefinedIdentifier(typed.right))
+    );
+  }
+  return false;
+}
+
+function isFalseLiteral(node: ExpressionKind): boolean {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    (((node as { type?: string; value?: unknown }).type === "BooleanLiteral" &&
+      (node as { value?: unknown }).value === false) ||
+      ((node as { type?: string; value?: unknown }).type === "Literal" &&
+        (node as { value?: unknown }).value === false))
+  );
+}
+
+function isNullLiteral(node: ExpressionKind): boolean {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    ((node as { type?: string }).type === "NullLiteral" ||
+      ((node as { type?: string; value?: unknown }).type === "Literal" &&
+        (node as { value?: unknown }).value === null))
+  );
+}
+
+function isUndefinedIdentifier(node: ExpressionKind): boolean {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    (node as { type?: string }).type === "Identifier" &&
+    (node as { name?: string }).name === "undefined"
+  );
+}
+
+function readIdentifierLikeName(node: ExpressionKind): string | null {
+  let current: ExpressionKind | undefined = node;
+  while (current && typeof current === "object") {
+    const typed = current as {
+      type?: string;
+      name?: string;
+      expression?: ExpressionKind;
+      expressions?: ExpressionKind[];
+    };
+    if (typed.type === "Identifier") {
+      return typed.name ?? null;
+    }
+    if (
+      typed.type === "ParenthesizedExpression" ||
+      typed.type === "TSAsExpression" ||
+      typed.type === "TSNonNullExpression"
+    ) {
+      current = typed.expression;
+      continue;
+    }
+    if (typed.type === "TemplateLiteral" && typed.expressions?.length === 1) {
+      current = typed.expressions[0];
+      continue;
+    }
+    break;
+  }
+  return null;
+}
+
+function normalizePropName(name: string): string {
+  return name.startsWith("$") ? name.slice(1) : name;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isArrowFunctionWithParams(node: unknown): node is {
+  type: "ArrowFunctionExpression";
+  params: unknown[];
+} {
+  return (
+    !!node &&
+    typeof node === "object" &&
+    (node as { type?: string }).type === "ArrowFunctionExpression" &&
+    Array.isArray((node as { params?: unknown }).params)
+  );
+}
+
+function readParamName(param: unknown): string | null {
+  return param && typeof param === "object" && (param as { type?: string }).type === "Identifier"
+    ? ((param as { name?: string }).name ?? null)
+    : null;
+}
+
+function removeUndefinedFromParamType(j: StyleFnParamBuilderJ, param: unknown): void {
+  const typedParam = param as { typeAnnotation?: { typeAnnotation?: unknown } };
+  const typeAnnotation = typedParam.typeAnnotation?.typeAnnotation;
+  if (!typeAnnotation || typeof typeAnnotation !== "object") {
+    return;
+  }
+  const typeNode = typeAnnotation as { type?: string; types?: unknown[] };
+  if (typeNode.type !== "TSUnionType" || !typeNode.types) {
+    return;
+  }
+  const narrowedTypes = typeNode.types.filter(
+    (member) =>
+      !(
+        member &&
+        typeof member === "object" &&
+        (member as { type?: string }).type === "TSUndefinedKeyword"
+      ),
+  );
+  if (narrowedTypes.length === typeNode.types.length || narrowedTypes.length === 0) {
+    return;
+  }
+  typedParam.typeAnnotation =
+    narrowedTypes.length === 1
+      ? j.tsTypeAnnotation(narrowedTypes[0] as StyleFnUnionMemberTypeNode)
+      : j.tsTypeAnnotation(j.tsUnionType(narrowedTypes as StyleFnUnionMemberTypeNode[]));
+}
+
 type StyleFnParamBuilderJ = {
   identifier: JSCodeshift["identifier"];
   tsBooleanKeyword: JSCodeshift["tsBooleanKeyword"];
   tsNumberKeyword: JSCodeshift["tsNumberKeyword"];
   tsStringKeyword: JSCodeshift["tsStringKeyword"];
   tsTypeAnnotation: JSCodeshift["tsTypeAnnotation"];
+  tsUnionType: JSCodeshift["tsUnionType"];
 };
 type StyleFnParamTypeNode = Parameters<JSCodeshift["tsTypeAnnotation"]>[0];
+type StyleFnUnionMemberTypeNode = Parameters<JSCodeshift["tsUnionType"]>[0][number];
 
 function buildStyleFnParam(
   j: StyleFnParamBuilderJ,
