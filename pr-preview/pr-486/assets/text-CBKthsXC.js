@@ -1,0 +1,1 @@
+import{s as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-dXt-2wH5.js";var n=e(t(),1);function r(e){let{variant:t,color:r,...i}=e;return n.createElement(`span`,i)}export{r as t};
