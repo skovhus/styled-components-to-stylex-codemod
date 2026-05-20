@@ -203,7 +203,7 @@ Every test case `App` component must render **visibly** in Storybook so input an
 
 ## Storybook Visual Testing
 
-Storybook renders all test cases side-by-side (input with styled-components, output with StyleX) to visually verify the transformation produces identical styles.
+Storybook renders all test cases side-by-side (input with styled-components, output with StyleX) to visually verify the transformation produces identical styles. Visual verification is pixel-perfect: input and output must match exactly, and any pixel-level variation is a failure that must be fixed rather than accepted.
 
 - **Auto-discovery**: Test cases are automatically discovered from `test-cases/*.input.tsx` and `*.output.tsx` files
 - **"All" story**: Shows all test cases on a single page at `http://localhost:6006/?path=/story/test-cases--all`
@@ -211,7 +211,7 @@ Storybook renders all test cases side-by-side (input with styled-components, out
 
 Run `pnpm storybook` to start the dev server and visually compare transformations.
 
-To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches.
+To verify rendering programmatically, run `node scripts/verify-storybook-rendering.mts`. The script is self-contained: it builds Storybook, starts a static file server, and auto-installs Playwright Chromium. Use `--only-changed` to check only test cases changed on the current branch, or `--save-diffs` to save diff images for mismatches. Do not approve or merge a visual verification run with pixel diffs; there is no acceptable tolerance for visual drift.
 
 ## Environment Variables
 

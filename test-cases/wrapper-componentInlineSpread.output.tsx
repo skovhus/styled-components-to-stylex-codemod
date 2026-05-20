@@ -5,9 +5,11 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { ExternalComponent } from "./lib/external-component";
 
-function StyledExternal(props: React.ComponentPropsWithRef<typeof ExternalComponent>) {
-  const { className, style, ...rest } = props;
-  return <ExternalComponent {...rest} {...mergedSx(styles.external, className, style)} />;
+function StyledExternal(
+  props: { sx?: stylex.StyleXStyles } & React.ComponentPropsWithRef<typeof ExternalComponent>,
+) {
+  const { className, style, sx, ...rest } = props;
+  return <ExternalComponent {...rest} {...mergedSx([styles.external, sx], className, style)} />;
 }
 
 // Wrapper receives props from a parent that includes className and style.
