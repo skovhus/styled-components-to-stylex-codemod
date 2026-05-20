@@ -74,7 +74,6 @@ type WrapperEmitterArgs = {
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
   parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
-  inferSxPropFromClassName: boolean;
   /** Import map of local identifiers to their import source. Used to query adapter
    * hooks about wrapped imported components. */
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
@@ -109,7 +108,6 @@ export class WrapperEmitter {
   readonly siblingMarkerKeys: Set<string>;
   readonly parentsNeedingDefaultMarker: Set<string>;
   readonly useSxProp: boolean;
-  readonly inferSxPropFromClassName: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
   readonly sourceOverrides?: ReadonlyMap<string, string>;
   readonly typeScriptMetadata?: TypeScriptPrepassMetadata;
@@ -150,7 +148,6 @@ export class WrapperEmitter {
     this.siblingMarkerKeys = args.siblingMarkerKeys ?? new Set<string>();
     this.parentsNeedingDefaultMarker = args.parentsNeedingDefaultMarker ?? new Set<string>();
     this.useSxProp = args.useSxProp;
-    this.inferSxPropFromClassName = args.inferSxPropFromClassName;
     this.importMap = args.importMap ?? new Map();
     this.sourceOverrides = args.sourceOverrides;
     this.typeScriptMetadata = args.typeScriptMetadata;
@@ -435,8 +432,8 @@ export class WrapperEmitter {
     return (
       (d.supportsExternalStyles ?? false) ||
       d.typeScriptSupportsSxProp === true ||
-      (this.inferSxPropFromClassName &&
-        (this.shouldAllowClassNameProp(d) || this.shouldAllowStyleProp(d)))
+      this.shouldAllowClassNameProp(d) ||
+      this.shouldAllowStyleProp(d)
     );
   }
 

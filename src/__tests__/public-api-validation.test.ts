@@ -104,12 +104,6 @@ describe("assertValidAdapter", () => {
       assertValidAdapter({ ...makeMinimalAdapter(), themeHook: "invalid" }, "test"),
     ).toThrow(/themeHook must be an object/);
   });
-
-  it("validates inferSxPropFromClassName shape", () => {
-    expect(() =>
-      assertValidAdapter({ ...makeMinimalAdapter(), inferSxPropFromClassName: "invalid" }, "test"),
-    ).toThrow(/inferSxPropFromClassName must be a boolean/);
-  });
 });
 
 describe("assertValidAdapterInput", () => {

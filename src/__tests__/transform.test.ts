@@ -9451,7 +9451,7 @@ export const App = () => <Box>test</Box>;
   });
 });
 
-describe("inferSxPropFromClassName adapter option", () => {
+describe("sx propagation from forwarded className", () => {
   it("inserts inferred sx before object rest props in destructured wrapper params", () => {
     const source = `
 import * as React from "react";
@@ -9512,37 +9512,6 @@ export const App = () => <Wrapper items={[{ label: "inner", className: "item" }]
     expect(output).toContain("<Box className={className} sx={sx}>outer</Box>");
     expect(output).toContain("<Box key={label} className={className}>");
     expect(output.match(/sx=\{sx\}/g)).toHaveLength(1);
-  });
-
-  it("does not infer sx pass-through when disabled", () => {
-    const source = `
-import styled from "styled-components";
-
-type WrapperProps = {
-  className?: string;
-  size: number;
-};
-
-function Wrapper({ className, size }: WrapperProps) {
-  return <Box $size={size} className={className}>wrapped</Box>;
-}
-
-const Box = styled.div<{ $size: number }>\`
-  width: \${(props) => props.$size}px;
-  color: red;
-\`;
-
-export const App = () => <Wrapper size={16} />;
-`;
-    const output = runTransform(source, {
-      adapter: {
-        ...fixtureAdapter,
-        inferSxPropFromClassName: false,
-      },
-    });
-
-    expect(output).not.toContain("sx?: stylex.StyleXStyles");
-    expect(output).not.toContain("sx={");
   });
 });
 

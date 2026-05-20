@@ -11,10 +11,6 @@ import type { TransformContext } from "../transform-context.js";
  * prop through to converted styled-component wrappers.
  */
 export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult {
-  if (ctx.adapter.inferSxPropFromClassName === false) {
-    return CONTINUE;
-  }
-
   const convertedWrapperNames = collectConvertedWrapperNames(ctx);
   if (convertedWrapperNames.size === 0) {
     return CONTINUE;
