@@ -9628,6 +9628,30 @@ export const App = () => <Wrapper />;
     expect(output).toContain("<Box sx={sx} {...childProps} className={className}>spread</Box>");
   });
 
+  it("propagates sx through component props aliases that already include sx", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type WrapperProps = React.ComponentProps<typeof Box>;
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>alias</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = React.ComponentProps<typeof Box>;");
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*sx,?\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sx}>alias</Box>");
+  });
+
   it("does not shadow captured sx identifiers when adding sx destructuring", () => {
     const source = `
 import styled from "styled-components";

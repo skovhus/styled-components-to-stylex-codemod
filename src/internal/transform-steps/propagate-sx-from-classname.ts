@@ -27,16 +27,25 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       continue;
     }
 
-    const propsType = getPropsType(ctx, propsBinding.typeName, component.fnPath);
+    const propsType = getPropsType(
+      ctx,
+      propsBinding.typeName,
+      component.fnPath,
+      convertedWrappers.names,
+    );
     if (!propsType) {
       continue;
     }
 
-    const propsTypeAlreadyHasSx = propsTypeHasProp(propsType.members, "sx");
-    const classNameMember = propsType.members.find(
-      (member) => getMemberName(member) === "className",
-    );
-    if (!classNameMember) {
+    const classNameMember =
+      propsType.kind === "mutable"
+        ? propsType.members.find((member) => getMemberName(member) === "className")
+        : null;
+    const propsTypeAlreadyHasSx =
+      propsType.kind === "mutable" ? propsTypeHasProp(propsType.members, "sx") : propsType.hasSx;
+    const propsTypeHasClassName =
+      propsType.kind === "mutable" ? Boolean(classNameMember) : propsType.hasClassName;
+    if (!propsTypeHasClassName) {
       continue;
     }
 
@@ -53,7 +62,7 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       continue;
     }
 
-    if (!propsTypeAlreadyHasSx) {
+    if (propsType.kind === "mutable" && classNameMember && !propsTypeAlreadyHasSx) {
       addSxMemberAfterClassName({
         j: ctx.j,
         propsType,
@@ -106,6 +115,25 @@ type PropsBinding =
       propsLocal: string;
       typeName: string;
     };
+
+type MutablePropsType = {
+  kind: "mutable";
+  members: any[];
+  replaceMembers: (members: any[]) => void;
+};
+
+type ReadonlyPropsType = {
+  kind: "readonly";
+  hasClassName: boolean;
+  hasSx: boolean;
+};
+
+type PropsType = MutablePropsType | ReadonlyPropsType;
+
+type PropsSurface = {
+  hasClassName: boolean;
+  hasSx: boolean;
+};
 
 function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
   const names = new Set<string>();
@@ -228,7 +256,8 @@ function getPropsType(
   ctx: TransformContext,
   typeName: string,
   referencePath: ScopedAstPath,
-): { members: any[]; replaceMembers: (members: any[]) => void } | null {
+  convertedWrapperNames: Set<string>,
+): PropsType | null {
   if (isTypeParameterInScope(referencePath, typeName)) {
     return null;
   }
@@ -269,24 +298,183 @@ function getPropsType(
   }
   if (matched.type === "TSInterfaceDeclaration") {
     return {
+      kind: "mutable",
       members: matched.body?.body ?? [],
       replaceMembers(members) {
         matched.body.body = members;
       },
     };
   }
-  if (
-    matched.type !== "TSTypeAliasDeclaration" ||
-    matched.typeAnnotation?.type !== "TSTypeLiteral"
-  ) {
+  if (matched.type !== "TSTypeAliasDeclaration") {
     return null;
   }
+  if (matched.typeAnnotation?.type !== "TSTypeLiteral") {
+    return getReadonlyAliasPropsType(matched.typeAnnotation, convertedWrapperNames);
+  }
   return {
+    kind: "mutable",
     members: matched.typeAnnotation.members ?? [],
     replaceMembers(members) {
       matched.typeAnnotation.members = members;
     },
   };
+}
+
+function getReadonlyAliasPropsType(
+  typeAnnotation: any,
+  convertedWrapperNames: Set<string>,
+): ReadonlyPropsType | null {
+  const surface = getPropsSurface(typeAnnotation, convertedWrapperNames);
+  if (!surface?.hasClassName || !surface.hasSx) {
+    return null;
+  }
+  return {
+    kind: "readonly",
+    hasClassName: true,
+    hasSx: true,
+  };
+}
+
+function getPropsSurface(
+  typeAnnotation: any,
+  convertedWrapperNames: Set<string>,
+): PropsSurface | null {
+  if (!typeAnnotation) {
+    return null;
+  }
+
+  if (isComponentPropsOfConvertedWrapper(typeAnnotation, convertedWrapperNames)) {
+    return { hasClassName: true, hasSx: true };
+  }
+
+  if (typeAnnotation.type === "TSIntersectionType") {
+    let hasSurface = false;
+    let hasClassName = false;
+    let hasSx = false;
+    for (const part of typeAnnotation.types ?? []) {
+      const partSurface = getPropsSurface(part, convertedWrapperNames);
+      if (!partSurface) {
+        continue;
+      }
+      hasSurface = true;
+      hasClassName ||= partSurface.hasClassName;
+      hasSx ||= partSurface.hasSx;
+    }
+    return hasSurface ? { hasClassName, hasSx } : null;
+  }
+
+  if (typeAnnotation.type === "TSParenthesizedType") {
+    return getPropsSurface(typeAnnotation.typeAnnotation, convertedWrapperNames);
+  }
+
+  if (isOmitTypeReference(typeAnnotation)) {
+    const params = getTypeReferenceParams(typeAnnotation);
+    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames);
+    const omittedProps = getStringLiteralTypeNames(params[1]);
+    if (!sourceSurface || !omittedProps) {
+      return null;
+    }
+    return {
+      hasClassName: sourceSurface.hasClassName && !omittedProps.has("className"),
+      hasSx: sourceSurface.hasSx && !omittedProps.has("sx"),
+    };
+  }
+
+  if (isPickTypeReference(typeAnnotation)) {
+    const params = getTypeReferenceParams(typeAnnotation);
+    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames);
+    const pickedProps = getStringLiteralTypeNames(params[1]);
+    if (!sourceSurface || !pickedProps) {
+      return null;
+    }
+    return {
+      hasClassName: sourceSurface.hasClassName && pickedProps.has("className"),
+      hasSx: sourceSurface.hasSx && pickedProps.has("sx"),
+    };
+  }
+
+  return null;
+}
+
+function isComponentPropsOfConvertedWrapper(
+  typeAnnotation: any,
+  convertedWrapperNames: Set<string>,
+): boolean {
+  if (typeAnnotation?.type !== "TSTypeReference" || !isComponentPropsTypeName(typeAnnotation)) {
+    return false;
+  }
+  return getTypeReferenceParams(typeAnnotation).some((param) => {
+    if (param?.type !== "TSTypeQuery") {
+      return false;
+    }
+    const componentName = getTypeQueryExpressionName(param.exprName);
+    return componentName ? convertedWrapperNames.has(componentName) : false;
+  });
+}
+
+function isComponentPropsTypeName(typeReference: any): boolean {
+  const typeName = typeReference.typeName;
+  if (typeName?.type === "Identifier") {
+    return typeName.name.startsWith("ComponentProps");
+  }
+  return (
+    typeName?.type === "TSQualifiedName" &&
+    typeName.left?.type === "Identifier" &&
+    typeName.left.name === "React" &&
+    typeName.right?.type === "Identifier" &&
+    typeName.right.name.startsWith("ComponentProps")
+  );
+}
+
+function isOmitTypeReference(typeAnnotation: any): boolean {
+  return isUtilityTypeReference(typeAnnotation, "Omit");
+}
+
+function isPickTypeReference(typeAnnotation: any): boolean {
+  return isUtilityTypeReference(typeAnnotation, "Pick");
+}
+
+function isUtilityTypeReference(typeAnnotation: any, name: string): boolean {
+  return (
+    typeAnnotation?.type === "TSTypeReference" &&
+    typeAnnotation.typeName?.type === "Identifier" &&
+    typeAnnotation.typeName.name === name
+  );
+}
+
+function getTypeReferenceParams(typeReference: any): any[] {
+  return typeReference.typeParameters?.params ?? typeReference.typeArguments?.params ?? [];
+}
+
+function getTypeQueryExpressionName(exprName: any): string | null {
+  if (exprName?.type === "Identifier") {
+    return exprName.name;
+  }
+  return null;
+}
+
+function getStringLiteralTypeNames(typeAnnotation: any): Set<string> | null {
+  if (!typeAnnotation) {
+    return null;
+  }
+  if (typeAnnotation.type === "TSLiteralType") {
+    const value = typeAnnotation.literal?.value;
+    return typeof value === "string" ? new Set([value]) : null;
+  }
+  if (typeAnnotation.type === "TSUnionType") {
+    const names = new Set<string>();
+    for (const part of typeAnnotation.types ?? []) {
+      const partNames = getStringLiteralTypeNames(part);
+      if (!partNames) {
+        return null;
+      }
+      for (const name of partNames) {
+        names.add(name);
+      }
+    }
+    return names;
+  }
+  return null;
 }
 
 function getLexicalContainerPath(path: ScopedAstPath): ScopedAstPath | null {
