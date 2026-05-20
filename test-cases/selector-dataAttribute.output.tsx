@@ -5,15 +5,15 @@ import { motion } from "./lib/framer-motion";
 export const DataAnimatingAttribute = `data-animating`;
 
 function StyledMotionDiv(props: Omit<React.ComponentPropsWithRef<typeof motion.div>, "className">) {
-  const { children, style, sx, ...rest } = props;
-  const _sx = stylex.props(styles.motionDiv, sx);
+  const { children, style, ...rest } = props;
+  const sx = stylex.props(styles.motionDiv);
 
   return (
     <motion.div
       {...rest}
-      {..._sx}
+      {...sx}
       style={{
-        ..._sx.style,
+        ...sx.style,
         ...style,
       }}
     >

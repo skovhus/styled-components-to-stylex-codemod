@@ -15,7 +15,7 @@ type ScrollableFlexProps = Props & { className?: string; style?: React.CSSProper
   >;
 
 export function ScrollableFlex(props: ScrollableFlexProps) {
-  const { className, children, style, sx, applyBackground, tabIndex, ...rest } = props;
+  const { className, children, style, applyBackground, tabIndex, ...rest } = props;
   return (
     <Flex
       tabIndex={tabIndex ?? 0}
@@ -25,7 +25,6 @@ export function ScrollableFlex(props: ScrollableFlexProps) {
           styles.scrollableFlex,
           applyBackground ? styles.scrollableFlexApplyBackground : undefined,
           props.gutter != null && styles.scrollableFlexScrollbarGutter(props.gutter),
-          sx,
         ],
         className,
         style,

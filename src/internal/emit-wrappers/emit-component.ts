@@ -302,6 +302,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       emitter.useSxProp &&
       ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
         (!wrappedPropsAreOnlyIntrinsic && emitter.wrappedComponentAcceptsSxProp(wrappedComponent)));
+    const wrappedRejectsSx =
+      !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "sx");
+    const canExposeInferredSxProp = wrappedAcceptsSx || wrappedRejectsSx;
     const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
       normalizeForwardedAs: !shouldLowerForwardedAs,
     };
@@ -324,7 +327,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
         !d.propsType ||
         !wrappedLocalDecl);
-    const exposeSxProp = allowSxProp || wrapperPropsExposeSx;
+    const exposeSxProp = wrapperPropsExposeSx || (allowSxProp && canExposeInferredSxProp);
     // When the wrapper intentionally exposes className/style and the wrapped component
     // requires them, force the exposed props to be optional. If this wrapper does not
     // expose className/style, they are omitted from the inherited base type instead.
@@ -602,8 +605,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "className");
           const wrappedRejectsStyle =
             !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "style");
-          const wrappedRejectsSx =
-            !!wrappedComponent && emitter.wrappedRejectsStyleProp(wrappedComponent, "sx");
           const shouldLiftClassNameOntoExplicit =
             !skipStyleProps && allowClassNameProp && wrappedRejectsClassName;
           const shouldLiftStyleOntoExplicit =

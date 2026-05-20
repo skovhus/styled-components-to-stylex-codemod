@@ -9,15 +9,15 @@ type ComponentWrapperProps = { isOpen: boolean } & Omit<
 >;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
-  const { children, style, sx, isOpen, ...rest } = props;
-  const _sx = stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen, sx);
+  const { children, style, isOpen, ...rest } = props;
+  const sx = stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen);
 
   return (
     <motion.div
       {...rest}
-      {..._sx}
+      {...sx}
       style={{
-        ..._sx.style,
+        ...sx.style,
         ...style,
       }}
     >

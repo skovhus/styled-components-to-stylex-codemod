@@ -9543,6 +9543,37 @@ export const App = () => <Wrapper />;
     expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
   });
 
+  it("does not infer sx pass-through to shadowed class component bindings", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  class Box extends React.Component<{ className?: string; children?: React.ReactNode }> {
+    render() {
+      return <span className={this.props.className}>{this.props.children}</span>;
+    }
+  }
+  return <Box className={className}>local</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>local</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
+  });
+
   it("adds sx to the wrapper props type from the matching lexical scope", () => {
     const source = `
 import styled from "styled-components";

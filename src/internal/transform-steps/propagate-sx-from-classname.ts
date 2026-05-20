@@ -500,6 +500,18 @@ function findNearestValueBindingPath(
     }
   });
 
+  ctx.root.find(ctx.j.ClassDeclaration).forEach((path: ScopedAstPath) => {
+    if (path.node.id?.name === name) {
+      considerBindingPath(path, getLexicalContainerPath(path));
+    }
+  });
+
+  ctx.root.find(ctx.j.ClassExpression).forEach((path: ScopedAstPath) => {
+    if (path.node.id?.name === name) {
+      considerBindingPath(path, path);
+    }
+  });
+
   ctx.root.find(ctx.j.VariableDeclarator).forEach((path: ScopedAstPath) => {
     if (patternHasBindingName(path.node.id, name)) {
       considerBindingPath(path, getLexicalContainerPath(path));
