@@ -2,9 +2,14 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function Card(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
-  const { children, style } = props;
-  return <div {...mergedSx(styles.card, undefined, style)}>{children}</div>;
+function Card(
+  props: React.PropsWithChildren<{
+    sx?: stylex.StyleXStyles;
+    style?: React.CSSProperties;
+  }>,
+) {
+  const { children, style, sx } = props;
+  return <div {...mergedSx([styles.card, sx], undefined, style)}>{children}</div>;
 }
 
 export function App() {

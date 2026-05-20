@@ -9,10 +9,12 @@ type TileProps = {
   children?: React.ReactNode;
 };
 
-export function Tile(props: TileProps & Omit<React.ComponentProps<"div">, "className">) {
-  const { children, style, gap, ...rest } = props;
+export function Tile(
+  props: TileProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
+) {
+  const { children, style, sx, gap, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.tile(`${gap ?? 8}px`), undefined, style)}>
+    <div {...rest} {...mergedSx([styles.tile(`${gap ?? 8}px`), sx], undefined, style)}>
       {children}
     </div>
   );

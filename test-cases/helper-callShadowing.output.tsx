@@ -1,4 +1,6 @@
 import React from "react";
+import * as stylex from "@stylexjs/stylex";
+import { mergedSx } from "./lib/mergedSx";
 
 // Test: When a local function shadows an imported helper inside a nested scope,
 // the codemod should NOT resolve the local function call to the import.
@@ -10,15 +12,14 @@ function createThemedComponents() {
 
   // This uses the LOCAL color function, not the imported helper.
   // The codemod should preserve the shadowed call via inline style fallback.
-  function ThemedBox(props: React.ComponentProps<"div">) {
-    const { className, children, style } = props;
+  function ThemedBox(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
+    const { className, children, style, sx } = props;
     return (
       <div
-        className={className}
-        style={{
+        {...mergedSx(sx, className, {
           backgroundColor: color("ff0000"),
           ...style,
-        }}
+        })}
       >
         {children}
       </div>

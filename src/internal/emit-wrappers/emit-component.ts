@@ -324,6 +324,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propsTypeExposesForwardedSx(d.propsType, wrappedComponent) ||
         !d.propsType ||
         !wrappedLocalDecl);
+    const exposeSxProp = wrapperPropsExposeSx || allowSxProp;
+    const shouldAddOwnSxProp = exposeSxProp && !wrapperPropsExposeSx;
     // When the wrapper intentionally exposes className/style and the wrapped component
     // requires them, force the exposed props to be optional. If this wrapper does not
     // expose className/style, they are omitted from the inherited base type instead.
@@ -429,7 +431,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (forceStyleOptional) {
           optionalProps.push("style?: React.CSSProperties");
         }
-        if (allowSxProp) {
+        if (shouldAddOwnSxProp) {
           optionalProps.push(SX_PROP_TYPE_TEXT);
         }
         if (hasForwardedAsUsage) {
@@ -471,7 +473,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           ? `Omit<React.ComponentPropsWithRef<"${defaultTag}">, keyof ${explicitTypeName}${omitted.length ? ` | ${omitted.join(" | ")}` : ""}>`
           : null;
         const optionalProps: string[] = [];
-        if (allowSxProp) {
+        if (shouldAddOwnSxProp) {
           optionalProps.push(SX_PROP_TYPE_TEXT);
         }
         if (hasForwardedAsUsage) {
@@ -520,7 +522,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           if (forceStyleOptional) {
             optionalStyleProps.push("style?: React.CSSProperties");
           }
-          if (allowSxProp) {
+          if (shouldAddOwnSxProp) {
             optionalStyleProps.push(SX_PROP_TYPE_TEXT);
           }
           const typeText = [
@@ -565,8 +567,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             d,
             allowClassNameProp,
             allowStyleProp,
-            allowSxProp,
+            allowSxProp: shouldAddOwnSxProp,
             wrappedComponentIsInternalWrapper: skipStyleProps,
+            wrappedComponentIsStyledWrapper,
             hasExplicitPropsType,
             forceClassNameOptional,
             forceStyleOptional,
@@ -585,10 +588,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               refElementType,
             );
           }
-          // Inject className/style/sx into explicit props when external styles are explicitly
+          // Inject className/style into explicit props when external styles are explicitly
           // enabled via adapter (d.supportsExternalStyles).
           // className/style are skipped when the wrapped component already has them.
-          // sx is always injected when allowSxProp is true (it's a new StyleX-specific prop).
+          // sx is injected into the wrapper's own props when it is consumed locally
+          // rather than inherited from an sx-aware wrapped component.
           //
           // Also inject when the wrapper will destructure className/style from `props`
           // but the wrapped component's prepass metadata proves it doesn't accept them.
@@ -604,19 +608,27 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             !skipStyleProps && allowClassNameProp && wrappedRejectsClassName;
           const shouldLiftStyleOntoExplicit =
             !skipStyleProps && allowStyleProp && wrappedRejectsStyle;
+          const shouldLiftSxOntoExplicit = !wrappedComponentIsStyledWrapper && shouldAddOwnSxProp;
+          const shouldInjectClassNameOntoExplicit =
+            !skipStyleProps &&
+            allowClassNameProp &&
+            ((d.supportsExternalStyles && !wrappedHasClassName) || shouldLiftClassNameOntoExplicit);
+          const shouldInjectStyleOntoExplicit =
+            !skipStyleProps &&
+            allowStyleProp &&
+            ((d.supportsExternalStyles && !wrappedHasStyle) || shouldLiftStyleOntoExplicit);
           if (
             explicitWithExtras &&
-            (d.supportsExternalStyles ||
+            (shouldInjectClassNameOntoExplicit ||
+              shouldInjectStyleOntoExplicit ||
               shouldLiftClassNameOntoExplicit ||
-              shouldLiftStyleOntoExplicit)
+              shouldLiftStyleOntoExplicit ||
+              shouldLiftSxOntoExplicit)
           ) {
             explicitWithExtras = injectStylePropsIntoTypeLiteralString(explicitWithExtras, {
-              className:
-                !skipStyleProps &&
-                allowClassNameProp &&
-                (!wrappedHasClassName || wrappedRejectsClassName),
-              style: !skipStyleProps && allowStyleProp && (!wrappedHasStyle || wrappedRejectsStyle),
-              sx: allowSxProp,
+              className: shouldInjectClassNameOntoExplicit,
+              style: shouldInjectStyleOntoExplicit,
+              sx: shouldLiftSxOntoExplicit,
             });
           }
           const explicitWithRef =
@@ -641,7 +653,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             hasNoCustomProps &&
             shouldLowerForwardedAs &&
             renderedAsProp?.baseTypeText &&
-            !allowSxProp &&
+            !exposeSxProp &&
             !forceClassNameOptional &&
             !forceStyleOptional
           ) {
@@ -1115,7 +1127,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
 
-      if (allowSxProp || wrapperPropsExposeSx) {
+      if (exposeSxProp) {
         styleArgs.push(sxId);
       }
       if (attrsSxExpr) {
@@ -1143,7 +1155,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         !(staticClassNameExpr || attrsStaticStyleExpr || d.inlineStyleProps?.length);
       const destructureClassName = allowClassNameProp && !canForwardClassNameStyleThroughRest;
       const destructureStyle = allowStyleProp && !canForwardClassNameStyleThroughRest;
-      const destructureSx = allowSxProp || wrapperPropsExposeSx;
+      const destructureSx = exposeSxProp;
       // When the wrapper will emit `const theme = useTheme()`, don't also
       // destructure `theme` from props — the redeclaration produces TS2451
       // ("Cannot redeclare block-scoped variable 'theme'"). The theme
@@ -1190,7 +1202,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         styleId,
         allowClassNameProp,
         allowStyleProp,
-        allowSxProp,
+        allowSxProp: exposeSxProp,
         inlineStyleProps: (d.inlineStyleProps ?? []) as InlineStyleProp[],
         staticStyleExpr: attrsStaticStyleExpr,
         staticClassNameExpr,
@@ -2140,10 +2152,10 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
     return false;
   }
   const isComponentProps =
-    (typeName.kind === "identifier" && typeName.name.startsWith("ComponentProps")) ||
+    (typeName.kind === "identifier" && isReactComponentPropsUtilityName(typeName.name)) ||
     (typeName.kind === "qualified" &&
       typeName.namespace === "React" &&
-      typeName.name.startsWith("ComponentProps"));
+      isReactComponentPropsUtilityName(typeName.name));
   if (!isComponentProps) {
     return false;
   }
@@ -2154,6 +2166,14 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
       getTypeQueryExpressionName(query.exprName) === wrappedComponent
     );
   });
+}
+
+function isReactComponentPropsUtilityName(name: string): boolean {
+  return (
+    name === "ComponentProps" ||
+    name === "ComponentPropsWithRef" ||
+    name === "ComponentPropsWithoutRef"
+  );
 }
 
 function isIntrinsicPassthroughType(emitter: WrapperEmitter, type: ASTNode): boolean {

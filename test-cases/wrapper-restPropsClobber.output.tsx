@@ -4,28 +4,30 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function OptionsList(props: React.ComponentProps<"ul">) {
-  const { className, children, style, ref, ...rest } = props;
+function OptionsList(
+  props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, children, style, ref, sx, ...rest } = props;
   return (
-    <ul ref={ref} {...rest} {...mergedSx(styles.optionsList, className, style)}>
+    <ul ref={ref} {...rest} {...mergedSx([styles.optionsList, sx], className, style)}>
       {children}
     </ul>
   );
 }
 
-function AliasedOptionsList(props: React.ComponentProps<"ul">) {
-  const { className, children, style, ...rest } = props;
+function AliasedOptionsList(props: React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles }) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <ul {...rest} {...mergedSx(styles.aliasedOptionsList, className, style)}>
+    <ul {...rest} {...mergedSx([styles.aliasedOptionsList, sx], className, style)}>
       {children}
     </ul>
   );
 }
 
-function TransitiveOptionsList(props: React.ComponentProps<"ul">) {
-  const { className, children, style, ...rest } = props;
+function TransitiveOptionsList(props: React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles }) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <ul {...rest} {...mergedSx(styles.transitiveOptionsList, className, style)}>
+    <ul {...rest} {...mergedSx([styles.transitiveOptionsList, sx], className, style)}>
       {children}
     </ul>
   );

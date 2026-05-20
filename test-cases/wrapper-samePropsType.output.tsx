@@ -29,11 +29,14 @@ function Base<C extends React.ElementType = "div">(
 
 // Wrapper ALSO uses SharedProps - must not create circular reference
 export function Wrapper(
-  props: SharedProps & Omit<React.ComponentPropsWithRef<"div">, keyof SharedProps | "className">,
+  props: SharedProps &
+    Omit<React.ComponentPropsWithRef<"div">, keyof SharedProps | "className"> & {
+      sx?: stylex.StyleXStyles;
+    },
 ) {
-  const { children, ...rest } = props;
+  const { children, sx, ...rest } = props;
   return (
-    <Base {...rest} sx={styles.wrapper}>
+    <Base {...rest} sx={[styles.wrapper, sx]}>
       {children}
     </Base>
   );

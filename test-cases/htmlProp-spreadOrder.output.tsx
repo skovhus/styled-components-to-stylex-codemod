@@ -8,9 +8,11 @@ type Props = {
 };
 
 // Original styled component - spread props first, then override src
-function Thumbnail(props: React.ComponentProps<"img">) {
-  const { className, style, ...rest } = props;
-  return <img {...rest} {...mergedSx(styles.thumbnail, className, style)} />;
+function Thumbnail(
+  props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"img"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, style, sx, ...rest } = props;
+  return <img {...rest} {...mergedSx([styles.thumbnail, sx], className, style)} />;
 }
 
 export function SecureThumbnail(props: Props) {
@@ -20,12 +22,17 @@ export function SecureThumbnail(props: Props) {
 
 // Multiple spreads with explicit attr in between:
 // The explicit attr foo="1" should stay between {...a} and {...b}
-type BoxProps = { className?: string };
+type BoxProps = { className?: string } & { sx?: stylex.StyleXStyles };
 
-function Box(props: { "data-test"?: boolean | string } & React.ComponentProps<"div">) {
-  const { className, children, style, ...rest } = props;
+function Box(
+  props: {
+    sx?: stylex.StyleXStyles;
+    "data-test"?: boolean | string;
+  } & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.box, className, style)}>
+    <div {...rest} {...mergedSx([styles.box, sx], className, style)}>
       {children}
     </div>
   );

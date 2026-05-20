@@ -25,19 +25,19 @@ function VirtualList({
 }
 
 // These styled components are passed as values, not just rendered
-function OuterWrapper(props: React.ComponentProps<"div">) {
-  const { className, children, style, ...rest } = props;
+function OuterWrapper(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.outerWrapper, className, style)}>
+    <div {...rest} {...mergedSx([styles.outerWrapper, sx], className, style)}>
       {children}
     </div>
   );
 }
 
-function InnerWrapper(props: React.ComponentProps<"div">) {
-  const { className, children, style, ...rest } = props;
+function InnerWrapper(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.innerWrapper, className, style)}>
+    <div {...rest} {...mergedSx([styles.innerWrapper, sx], className, style)}>
       {children}
     </div>
   );

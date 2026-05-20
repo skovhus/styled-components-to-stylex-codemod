@@ -7,11 +7,12 @@ type Align = "top" | "center" | "bottom";
 type ContainerProps = React.PropsWithChildren<{
   align: Align;
   property?: "width" | "height";
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 }>;
 
 function Container(props: ContainerProps) {
-  const { children, style, align } = props;
+  const { children, style, sx, align } = props;
   return (
     <div
       {...mergedSx(
@@ -19,6 +20,7 @@ function Container(props: ContainerProps) {
           styles.container,
           align !== "top" && align === "center" && styles.containerAlignNotTopAlignCenter,
           align !== "top" && align !== "center" && styles.containerAlignNotTopAlignNotCenter,
+          sx,
         ],
         undefined,
         style,

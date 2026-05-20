@@ -37,8 +37,10 @@ export const flexPropKeys = ["wrap", "alignSelf", "gap", "wrapGap", "column"];
 /**
  * Generic flexbox div component.
  */
-export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "className">) {
-  const { children, style, wrap, alignSelf, gap, wrapGap, column, ...rest } = props;
+export function FlexBox(
+  props: FlexProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
+) {
+  const { children, style, sx, wrap, alignSelf, gap, wrapGap, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -52,6 +54,7 @@ export function FlexBox(props: FlexProps & Omit<React.ComponentProps<"div">, "cl
               ? styles.flexBoxColumnGap(wrapGap)
               : styles.flexBoxRowGap(wrapGap)
             : undefined,
+          sx,
         ],
         undefined,
         style,

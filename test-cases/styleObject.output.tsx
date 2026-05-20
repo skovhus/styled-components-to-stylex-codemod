@@ -5,11 +5,12 @@ import { mergedSx } from "./lib/mergedSx";
 type DynamicBoxProps = React.PropsWithChildren<{
   background?: string;
   size?: string;
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 }>;
 
 function DynamicBox(props: DynamicBoxProps) {
-  const { children, style, background, size } = props;
+  const { children, style, sx, background, size } = props;
   return (
     <div
       {...mergedSx(
@@ -18,6 +19,7 @@ function DynamicBox(props: DynamicBoxProps) {
           background != null && styles.dynamicBoxBackgroundColor(background),
           size != null && styles.dynamicBoxHeight(size),
           size != null && styles.dynamicBoxWidth(size),
+          sx,
         ],
         undefined,
         style,

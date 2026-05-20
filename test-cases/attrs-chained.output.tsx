@@ -14,10 +14,9 @@ function Text<C extends React.ElementType = "span">(
   );
 }
 
-type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
-  React.ComponentPropsWithRef<typeof Text>,
-  "as"
->;
+type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & {
+  sx?: stylex.StyleXStyles;
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "as">;
 
 // B has .attrs({ as: "button" }) but is only used as a base for A.
 // The chain-flattening logic must NOT flatten A to Text, because

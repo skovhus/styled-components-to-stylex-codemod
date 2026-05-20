@@ -10,8 +10,10 @@ type StripProps = {
   children?: React.ReactNode;
 };
 
-export function Strip(props: StripProps & Omit<React.ComponentProps<"div">, "className">) {
-  const { children, style, enabled, column, ...rest } = props;
+export function Strip(
+  props: StripProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
+) {
+  const { children, style, sx, enabled, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -20,6 +22,7 @@ export function Strip(props: StripProps & Omit<React.ComponentProps<"div">, "cla
           styles.strip,
           enabled && column && styles.stripEnabledColumn,
           enabled && !column && styles.stripEnabledNotColumn,
+          sx,
         ],
         undefined,
         style,

@@ -70,7 +70,9 @@ export function FixedHrefText<C extends React.ElementType = typeof Text>(
 }
 
 /** forwardedAs attrs normalize to an emitted "as" prop */
-export function ForwardedAsText(props: Omit<React.ComponentPropsWithRef<typeof Text>, "as">) {
+export function ForwardedAsText(
+  props: { sx?: stylex.StyleXStyles } & Omit<React.ComponentPropsWithRef<typeof Text>, "as">,
+) {
   const { className, children, style, sx, ...rest } = props;
   return (
     <Text {...rest} as="em" {...mergedSx([styles.forwardedAsText, sx], className, style)}>

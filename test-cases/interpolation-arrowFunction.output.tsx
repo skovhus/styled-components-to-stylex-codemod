@@ -36,14 +36,17 @@ function TabItem(props: TabItemProps) {
 
 type BlockBodyBoxProps = React.PropsWithChildren<{
   large?: boolean;
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 }>;
 
 // Arrow function with block body (contains comment)
 function BlockBodyBox(props: BlockBodyBoxProps) {
-  const { children, style, large } = props;
+  const { children, style, sx, large } = props;
   return (
-    <div {...mergedSx([styles.blockBodyBox, large && styles.blockBodyBoxLarge], undefined, style)}>
+    <div
+      {...mergedSx([styles.blockBodyBox, large && styles.blockBodyBoxLarge, sx], undefined, style)}
+    >
       {children}
     </div>
   );

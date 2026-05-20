@@ -12,12 +12,12 @@ type ColumnContainerProps = {
  * The codemod should preserve this via a stylex function.
  */
 export function ColumnContainer(props: ColumnContainerProps) {
-  const { children, style, noGrowOrShrink, basis, ...rest } = props;
+  const { children, style, sx, noGrowOrShrink, basis, ...rest } = props;
   return (
     <div
       {...rest}
       {...mergedSx(
-        [styles.columnContainer, noGrowOrShrink && styles.columnContainerNoGrowOrShrink],
+        [styles.columnContainer, noGrowOrShrink && styles.columnContainerNoGrowOrShrink, sx],
         undefined,
         {
           flexShrink: `var(--flex-shrink, ${props.noGrowOrShrink ? 0 : props.basis ? 1 : 2})`,

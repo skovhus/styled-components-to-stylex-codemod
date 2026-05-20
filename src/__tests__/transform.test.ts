@@ -9451,6 +9451,477 @@ export const App = () => <Box>test</Box>;
   });
 });
 
+describe("sx propagation from forwarded className", () => {
+  it("uses rest sx without removing it from destructured wrapper rest props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+function Wrapper({ className, ...rest }: WrapperProps) {
+  return <Box {...rest} className={className} />;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("function Wrapper({ className, ...rest }: WrapperProps)");
+    expect(output).toContain("<Box sx={rest.sx} {...rest} className={className} />");
+    expect(output).not.toContain("...rest, sx");
+  });
+
+  it("preserves sx in rest props forwarded to unrelated components", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+function Other(props: WrapperProps) {
+  return <div {...props} />;
+}
+
+function Wrapper({ className, ...rest }: WrapperProps) {
+  return (
+    <>
+      <Box className={className}>converted</Box>
+      <Other {...rest} />
+    </>
+  );
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("function Wrapper({ className, ...rest }: WrapperProps)");
+    expect(output).toContain("<Box className={className} sx={rest.sx}>converted</Box>");
+    expect(output).toContain("<Other {...rest} />");
+    expect(output).not.toMatch(/function Wrapper\(\{\s*className,\s*sx,\s*\.\.\.rest/);
+  });
+
+  it("does not infer sx pass-through from shadowed className bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  items: { className?: string; label: string }[];
+};
+
+function Wrapper({ className, items }: WrapperProps) {
+  return (
+    <>
+      {items.map(({ className, label }) => (
+        <Box key={label} className={className}>{label}</Box>
+      ))}
+      <Box className={className}>outer</Box>
+    </>
+  );
+}
+
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper items={[{ label: "inner", className: "item" }]} />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("<Box className={className} sx={sx}>outer</Box>");
+    expect(output).toContain("<Box key={label} className={className}>");
+    expect(output.match(/sx=\{sx\}/g)).toHaveLength(1);
+  });
+
+  it("does not infer sx pass-through to shadowed component bindings", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  const Box = (props: { className?: string; children?: React.ReactNode }) => (
+    <span className={props.className}>{props.children}</span>
+  );
+  return <Box className={className}>local</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>local</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
+  });
+
+  it("does not infer sx pass-through to shadowed class component bindings", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  class Box extends React.Component<{ className?: string; children?: React.ReactNode }> {
+    render() {
+      return <span className={this.props.className}>{this.props.children}</span>;
+    }
+  }
+  return <Box className={className}>local</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>local</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
+  });
+
+  it("does not mutate an outer props alias shadowed by a type parameter", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper<WrapperProps extends { className?: string }>({ className }: WrapperProps) {
+  return <Box className={className}>generic</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>generic</Box>");
+    expect(output).toContain(
+      "function Wrapper<WrapperProps extends { className?: string }>({ className }: WrapperProps)",
+    );
+    expect(output).not.toContain("<Box className={className} sx={sx}>generic</Box>");
+  });
+
+  it("inserts sx before JSX spreads so spread-provided sx can still win", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  childProps?: React.ComponentProps<typeof Box>;
+};
+
+function Wrapper({ className, childProps }: WrapperProps) {
+  return <Box {...childProps} className={className}>spread</Box>;
+}
+
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("sx?: stylex.StyleXStyles;");
+    expect(output).toContain("<Box sx={sx} {...childProps} className={className}>spread</Box>");
+  });
+
+  it("propagates sx through component props aliases that already include sx", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type WrapperProps = React.ComponentProps<typeof Box>;
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>alias</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = React.ComponentProps<typeof Box>;");
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*sx,?\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sx}>alias</Box>");
+  });
+
+  it("does not propagate destructured wrapper sx when it is not StyleX typed", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  sx?: number;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  sx?: number;\n};");
+    expect(output).toContain("function Wrapper({ className, sx }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
+  it("propagates destructured wrapper sx when bare StyleXStyles is imported from StyleX", () => {
+    const source = `
+import styled from "styled-components";
+import type { StyleXStyles } from "@stylexjs/stylex";
+
+type WrapperProps = {
+  className?: string;
+  sx?: StyleXStyles;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>wrapped</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain('import type { StyleXStyles } from "@stylexjs/stylex";');
+    expect(output).toContain("<Box className={className} sx={sx}>wrapped</Box>");
+  });
+
+  it("does not propagate destructured wrapper sx when bare StyleXStyles is locally aliased", () => {
+    const source = `
+import styled from "styled-components";
+
+type StyleXStyles = number;
+
+type WrapperProps = {
+  className?: string;
+  sx?: StyleXStyles;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type StyleXStyles = number;");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
+  it("does not propagate object wrapper sx when it is not StyleX typed", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  sx?: number;
+};
+
+function Wrapper(props: WrapperProps) {
+  return <Box className={props.className}>{props.sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  sx?: number;\n};");
+    expect(output).toContain("function Wrapper(props: WrapperProps)");
+    expect(output).toContain("<Box className={props.className}>{props.sx}</Box>");
+    expect(output).not.toContain("<Box className={props.className} sx={props.sx}>");
+  });
+
+  it("does not treat component props aliases with non-StyleX sx overrides as sx-aware", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type WrapperProps = React.ComponentProps<typeof Box> & {
+  sx?: number;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      "type WrapperProps = React.ComponentProps<typeof Box> & {\n  sx?: number;\n};",
+    );
+    expect(output).toContain("function Wrapper({ className, sx }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
+  it("does not treat local ComponentProps-prefixed helpers as sx-aware React utilities", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type ComponentPropsSubset<T extends React.ElementType> = Pick<React.ComponentProps<T>, "className">;
+type WrapperProps = ComponentPropsSubset<typeof Box>;
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>alias</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      'type ComponentPropsSubset<T extends React.ElementType> = Pick<React.ComponentProps<T>, "className">;',
+    );
+    expect(output).toContain("type WrapperProps = ComponentPropsSubset<typeof Box>;");
+    expect(output).toContain("function Wrapper({ className }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>alias</Box>");
+    expect(output).not.toMatch(/type WrapperProps = ComponentPropsSubset<typeof Box> & \{/);
+    expect(output).not.toMatch(/function Wrapper\(\{\s*className,\s*sx/);
+    expect(output).not.toContain("<Box className={className} sx={sx}>alias</Box>");
+  });
+
+  it("does not shadow captured sx identifiers when adding sx destructuring", () => {
+    const source = `
+import styled from "styled-components";
+
+const sx = "captured";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain('const sx = "captured";');
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*sx: sxProp,?\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sxProp}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>{sx}</Box>");
+  });
+
+  it("adds sx to the wrapper props type from the matching lexical scope", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  label?: string;
+};
+
+function Parent() {
+  type WrapperProps = {
+    className?: string;
+    count: number;
+  };
+
+  function Wrapper({ className, count }: WrapperProps) {
+    return <Box className={className}>{count}</Box>;
+  }
+
+  return <Wrapper count={1} />;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Parent />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  label?: string;\n};");
+    expect(output).toContain(
+      "type WrapperProps = {\n    className?: string;\n    sx?: stylex.StyleXStyles;\n    count: number;\n  };",
+    );
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*count,\s*sx,\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sx}>{count}</Box>");
+  });
+});
+
 describe("usePhysicalProperties adapter option", () => {
   it("should expand 2-value padding to logical properties by default", () => {
     const source = `

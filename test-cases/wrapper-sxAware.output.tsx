@@ -61,10 +61,10 @@ export function ExportedAccentButton(props: React.ComponentPropsWithRef<typeof S
   );
 }
 
-type ExportedToggleButtonProps = {
-  sx?: stylex.StyleXStyles;
-  open?: boolean;
-} & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "type" | "$open">;
+type ExportedToggleButtonProps = { open?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof SxAwareButton>,
+  "type" | "$open"
+>;
 
 export function ExportedToggleButton(props: ExportedToggleButtonProps) {
   const { children, sx, open, ...rest } = props;

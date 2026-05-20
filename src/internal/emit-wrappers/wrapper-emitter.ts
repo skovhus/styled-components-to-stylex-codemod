@@ -429,7 +429,12 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
-    return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
+    return (
+      (d.supportsExternalStyles ?? false) ||
+      d.typeScriptSupportsSxProp === true ||
+      this.shouldAllowClassNameProp(d) ||
+      this.shouldAllowStyleProp(d)
+    );
   }
 
   typedComponentHasProp(componentLocalName: string, propName: string): boolean {
@@ -452,7 +457,7 @@ export class WrapperEmitter {
 
   /**
    * Returns true when the wrapped component's prepass metadata proves it does
-   * NOT accept the given style prop (className/style) — i.e. the prop is
+   * NOT accept the given external style prop (className/style/sx) — i.e. the prop is
    * missing from both explicit and resolved props AND the component has no
    * index signature. Used to decide whether to lift the prop onto the wrapper.
    *
@@ -466,7 +471,10 @@ export class WrapperEmitter {
    * Returns false when metadata is unavailable (conservative — defer to
    * existing emission logic rather than incorrectly lifting).
    */
-  wrappedRejectsStyleProp(componentLocalName: string, propName: "className" | "style"): boolean {
+  wrappedRejectsStyleProp(
+    componentLocalName: string,
+    propName: "className" | "style" | "sx",
+  ): boolean {
     const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
     if (!metadata) {
       return false;
@@ -1679,6 +1687,7 @@ export class WrapperEmitter {
     allowStyleProp: boolean;
     allowSxProp?: boolean;
     wrappedComponentIsInternalWrapper?: boolean;
+    wrappedComponentIsStyledWrapper?: boolean;
     hasExplicitPropsType?: boolean;
     forceClassNameOptional?: boolean;
     forceStyleOptional?: boolean;
@@ -1692,6 +1701,7 @@ export class WrapperEmitter {
       allowStyleProp,
       allowSxProp,
       wrappedComponentIsInternalWrapper,
+      wrappedComponentIsStyledWrapper,
       hasExplicitPropsType,
       forceClassNameOptional,
       forceStyleOptional,
@@ -1731,6 +1741,8 @@ export class WrapperEmitter {
       this.wrappedRejectsStyleProp(wrappedComponent!, "className");
     const liftStyleForUnsupportedWrapped =
       liftableContext && allowStyleProp && this.wrappedRejectsStyleProp(wrappedComponent!, "style");
+    const shouldAddOwnSxProp =
+      !hasExplicitPropsType && !wrappedComponentIsStyledWrapper && allowSxProp;
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.
@@ -1748,7 +1760,7 @@ export class WrapperEmitter {
     ) {
       lines.push("style?: React.CSSProperties");
     }
-    if (shouldAddStyleProps && allowSxProp) {
+    if (shouldAddOwnSxProp) {
       lines.push(SX_PROP_TYPE_TEXT);
     }
     if (this.hasForwardedAsUsage(d.localName)) {

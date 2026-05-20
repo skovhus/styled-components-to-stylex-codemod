@@ -100,16 +100,18 @@ export function ColorChip(props: ColorChipProps) {
   );
 }
 
-type SpecifierTagProps = { highlighted?: boolean } & React.ComponentProps<"div">;
+type SpecifierTagProps = { highlighted?: boolean } & React.ComponentProps<"div"> & {
+    sx?: stylex.StyleXStyles;
+  };
 
 // Specifier export (export { ... }) — should also be renamed
 function SpecifierTag(props: SpecifierTagProps) {
-  const { className, children, style, highlighted, ...rest } = props;
+  const { className, children, style, sx, highlighted, ...rest } = props;
   return (
     <div
       {...rest}
       {...mergedSx(
-        [styles.specifierTag, highlighted && styles.specifierTagHighlighted],
+        [styles.specifierTag, highlighted && styles.specifierTagHighlighted, sx],
         className,
         style,
       )}
