@@ -9451,6 +9451,101 @@ export const App = () => <Box>test</Box>;
   });
 });
 
+describe("inferSxPropFromClassName adapter option", () => {
+  it("inserts inferred sx before object rest props in destructured wrapper params", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+function Wrapper({ className, ...rest }: WrapperProps) {
+  return <Box {...rest} className={className} />;
+}
+
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toMatch(
+      /function Wrapper\(\{\s*className,\s*sx,\s*\.\.\.rest\s*\}: WrapperProps\)/,
+    );
+    expect(output).toContain("<Box {...rest} className={className} sx={sx} />");
+    expect(output).not.toContain("...rest, sx");
+  });
+
+  it("does not infer sx pass-through from shadowed className bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  items: { className?: string; label: string }[];
+};
+
+function Wrapper({ className, items }: WrapperProps) {
+  return (
+    <>
+      {items.map(({ className, label }) => (
+        <Box key={label} className={className}>{label}</Box>
+      ))}
+      <Box className={className}>outer</Box>
+    </>
+  );
+}
+
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper items={[{ label: "inner", className: "item" }]} />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("<Box className={className} sx={sx}>outer</Box>");
+    expect(output).toContain("<Box key={label} className={className}>");
+    expect(output.match(/sx=\{sx\}/g)).toHaveLength(1);
+  });
+
+  it("does not infer sx pass-through when disabled", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  size: number;
+};
+
+function Wrapper({ className, size }: WrapperProps) {
+  return <Box $size={size} className={className}>wrapped</Box>;
+}
+
+const Box = styled.div<{ $size: number }>\`
+  width: \${(props) => props.$size}px;
+  color: red;
+\`;
+
+export const App = () => <Wrapper size={16} />;
+`;
+    const output = runTransform(source, {
+      adapter: {
+        ...fixtureAdapter,
+        inferSxPropFromClassName: false,
+      },
+    });
+
+    expect(output).not.toContain("sx?: stylex.StyleXStyles");
+    expect(output).not.toContain("sx={");
+  });
+});
+
 describe("usePhysicalProperties adapter option", () => {
   it("should expand 2-value padding to logical properties by default", () => {
     const source = `

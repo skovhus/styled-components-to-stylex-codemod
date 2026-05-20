@@ -15,14 +15,17 @@ function StyledBox(props: StyledBoxProps) {
   );
 }
 
-type ClassNameBoxProps = React.PropsWithChildren<{ className?: string }>;
+type ClassNameBoxProps = React.PropsWithChildren<{
+  className?: string;
+  sx?: stylex.StyleXStyles;
+}>;
 
 function ClassNameBox(props: ClassNameBoxProps) {
-  const { className, children } = props;
+  const { className, children, sx } = props;
   return (
     <div
       {...mergedSx(
-        [styles.classNameBox, className != null && styles.classNameBoxColor(className)],
+        [styles.classNameBox, className != null && styles.classNameBoxColor(className), sx],
         ["static-class", className],
       )}
     >

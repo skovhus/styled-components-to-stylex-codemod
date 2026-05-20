@@ -18,8 +18,10 @@ const showProperty = (size?: number | string) => {
   return !!size || size === 0;
 };
 
-export function Spacer(props: Props & Omit<React.ComponentProps<"div">, "className">) {
-  const { children, style, width, height, ...rest } = props;
+export function Spacer(
+  props: Props & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
+) {
+  const { children, style, sx, width, height, ...rest } = props;
   return (
     <div
       {...rest}
@@ -27,6 +29,7 @@ export function Spacer(props: Props & Omit<React.ComponentProps<"div">, "classNa
         [
           showProperty(width) ? styles.spacerWithWidth(width) : undefined,
           showProperty(height) ? styles.spacerWithHeight(height) : undefined,
+          sx,
         ],
         undefined,
         style,

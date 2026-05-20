@@ -17,12 +17,18 @@ export function CardA(
   );
 }
 
-export function CardB(props: SharedProps & React.ComponentProps<"div">) {
-  const { className, children, style, highlight, ...rest } = props;
+export function CardB(
+  props: SharedProps & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, children, style, sx, highlight, ...rest } = props;
   return (
     <div
       {...rest}
-      {...mergedSx([styles.cardB, highlight ? styles.cardBHighlight : undefined], className, style)}
+      {...mergedSx(
+        [styles.cardB, highlight ? styles.cardBHighlight : undefined, sx],
+        className,
+        style,
+      )}
     >
       {children}
     </div>

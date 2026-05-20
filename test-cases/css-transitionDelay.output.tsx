@@ -14,12 +14,14 @@ const EASING = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
  * Test case for transitionDelay with number value.
  * The codemod should convert number 0 to "0ms" string for CSS properties.
  */
-function Container(props: ContainerProps & React.ComponentProps<"div">) {
-  const { className, children, style, $delay, $open, ...rest } = props;
+function Container(
+  props: ContainerProps & { sx?: stylex.StyleXStyles } & React.ComponentProps<"div">,
+) {
+  const { className, children, style, sx, $delay, $open, ...rest } = props;
   return (
     <div
       {...rest}
-      {...mergedSx([styles.container, $open && styles.containerOpen($delay)], className, style)}
+      {...mergedSx([styles.container, $open && styles.containerOpen($delay), sx], className, style)}
     >
       {children}
     </div>

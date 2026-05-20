@@ -52,11 +52,14 @@ function UnionBadgeBase(props: UnionBadgeProps) {
 }
 
 export function StatusBadge(
-  props: Omit<React.ComponentPropsWithRef<typeof BadgeBase>, "className">,
+  props: { sx?: stylex.StyleXStyles } & Omit<
+    React.ComponentPropsWithRef<typeof BadgeBase>,
+    "className"
+  >,
 ) {
-  const { children, style, ...rest } = props;
+  const { children, style, sx, ...rest } = props;
   return (
-    <BadgeBase {...rest} {...mergedSx(styles.statusBadge, undefined, style)}>
+    <BadgeBase {...rest} {...mergedSx([styles.statusBadge, sx], undefined, style)}>
       {children}
     </BadgeBase>
   );

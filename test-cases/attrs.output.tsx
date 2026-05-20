@@ -528,14 +528,17 @@ function MixedFallbackHeightBox(props: MixedFallbackHeightBoxProps) {
 
 type SeparatorLineProps = React.PropsWithChildren<{
   height?: number;
+  sx?: stylex.StyleXStyles;
   className?: string;
   style?: React.CSSProperties;
 }>;
 
 // Pattern 12: dynamic attrs style should merge with caller style, with caller style last
 function SeparatorLine(props: SeparatorLineProps) {
-  const { className, children, style, height } = props;
-  return <div {...mergedSx(styles.separatorLine(height ?? 1), className, style)}>{children}</div>;
+  const { className, children, style, sx, height } = props;
+  return (
+    <div {...mergedSx([styles.separatorLine(height ?? 1), sx], className, style)}>{children}</div>
+  );
 }
 
 type FallbackSeparatorLineProps = React.PropsWithChildren<{

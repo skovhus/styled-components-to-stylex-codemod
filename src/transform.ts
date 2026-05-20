@@ -47,6 +47,7 @@ import { finalize } from "./internal/transform-steps/finalize.js";
 import { lowerRulesStep } from "./internal/transform-steps/lower-rules.js";
 import { postProcessStep } from "./internal/transform-steps/post-process.js";
 import { preflight } from "./internal/transform-steps/preflight.js";
+import { propagateSxFromClassNameStep } from "./internal/transform-steps/propagate-sx-from-classname.js";
 import { reinsertStaticPropsStep } from "./internal/transform-steps/reinsert-static-props.js";
 import { rewriteJsxStep } from "./internal/transform-steps/rewrite-jsx.js";
 import { upgradePolymorphicAsPropTypesStep } from "./internal/transform-steps/upgrade-polymorphic-as-prop-types.js";
@@ -167,6 +168,7 @@ export function transformWithWarnings(
     rewriteJsxStep,
     emitWrappersStep,
     emitBridgeExportsStep,
+    propagateSxFromClassNameStep,
     upgradePolymorphicAsPropTypesStep,
     ensureMergerImportStep,
     reinsertStaticPropsStep,

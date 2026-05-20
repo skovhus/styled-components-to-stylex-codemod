@@ -4,14 +4,19 @@ import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 import { ColorConverter, color, mixedColor } from "./lib/helpers";
 
-function Toggle(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
-  const { children, style } = props;
+function Toggle(
+  props: React.PropsWithChildren<{
+    sx?: stylex.StyleXStyles;
+    style?: React.CSSProperties;
+  }>,
+) {
+  const { children, style, sx } = props;
   const theme = useTheme();
 
   return (
     <div
       {...mergedSx(
-        styles.toggle(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)),
+        [styles.toggle(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.4)), sx],
         undefined,
         style,
       )}
@@ -23,11 +28,12 @@ function Toggle(props: React.PropsWithChildren<{ style?: React.CSSProperties }>)
 
 type BoxProps = React.PropsWithChildren<{
   m: number;
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 }>;
 
 function Box(props: BoxProps) {
-  const { children, style, m } = props;
+  const { children, style, sx, m } = props;
   const theme = useTheme();
 
   return (
@@ -36,6 +42,7 @@ function Box(props: BoxProps) {
         [
           styles.boxBackgroundColor(ColorConverter.cssWithAlpha(theme.color.bgBase, 0.2)),
           styles.boxMargin(m),
+          sx,
         ],
         undefined,
         style,
@@ -46,22 +53,30 @@ function Box(props: BoxProps) {
   );
 }
 
-function TintedLabel(props: React.PropsWithChildren<{ style?: React.CSSProperties }>) {
-  const { children, style } = props;
+function TintedLabel(
+  props: React.PropsWithChildren<{
+    sx?: stylex.StyleXStyles;
+    style?: React.CSSProperties;
+  }>,
+) {
+  const { children, style, sx } = props;
   const theme = useTheme();
 
   return (
     <span
       {...mergedSx(
-        styles.tintedLabel(
-          ColorConverter.cssWithAlpha(
-            color("bgBase")({
-              ...props,
-              theme,
-            }),
-            0.8,
+        [
+          styles.tintedLabel(
+            ColorConverter.cssWithAlpha(
+              color("bgBase")({
+                ...props,
+                theme,
+              }),
+              0.8,
+            ),
           ),
-        ),
+          sx,
+        ],
         undefined,
         style,
       )}
@@ -71,29 +86,34 @@ function TintedLabel(props: React.PropsWithChildren<{ style?: React.CSSPropertie
   );
 }
 
-type TintedPanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className">;
+type TintedPanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className"> & {
+    sx?: stylex.StyleXStyles;
+  };
 
 function TintedPanel(props: TintedPanelProps) {
-  const { children, style, faded } = props;
+  const { children, style, sx, faded } = props;
   const theme = useTheme();
 
   return (
     <div
       {...mergedSx(
-        styles.tintedPanel(
-          props.faded
-            ? ColorConverter.cssWithAlpha(
-                color("bgBase")({
+        [
+          styles.tintedPanel(
+            props.faded
+              ? ColorConverter.cssWithAlpha(
+                  color("bgBase")({
+                    ...props,
+                    theme,
+                  }),
+                  0.8,
+                )
+              : color("bgBase")({
                   ...props,
                   theme,
                 }),
-                0.8,
-              )
-            : color("bgBase")({
-                ...props,
-                theme,
-              }),
-        ),
+          ),
+          sx,
+        ],
         undefined,
         style,
       )}
@@ -103,14 +123,16 @@ function TintedPanel(props: TintedPanelProps) {
   );
 }
 
-type PlainSwatchProps = { tone: string } & Omit<React.ComponentProps<"div">, "className">;
+type PlainSwatchProps = { tone: string } & Omit<React.ComponentProps<"div">, "className"> & {
+    sx?: stylex.StyleXStyles;
+  };
 
 function PlainSwatch(props: PlainSwatchProps) {
-  const { children, style, tone } = props;
+  const { children, style, sx, tone } = props;
   return (
     <div
       {...mergedSx(
-        styles.plainSwatch(ColorConverter.cssWithAlpha(props.tone, 0.4)),
+        [styles.plainSwatch(ColorConverter.cssWithAlpha(props.tone, 0.4)), sx],
         undefined,
         style,
       )}
@@ -120,29 +142,34 @@ function PlainSwatch(props: PlainSwatchProps) {
   );
 }
 
-type MixedModePanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className">;
+type MixedModePanelProps = { faded: boolean } & Omit<React.ComponentProps<"div">, "className"> & {
+    sx?: stylex.StyleXStyles;
+  };
 
 function MixedModePanel(props: MixedModePanelProps) {
-  const { children, style, faded } = props;
+  const { children, style, sx, faded } = props;
   const theme = useTheme();
 
   return (
     <div
       {...mergedSx(
-        styles.mixedModePanel(
-          ColorConverter.cssWithAlpha(
-            props.faded
-              ? mixedColor(
-                  "bgBase",
-                  "theme",
-                )({
-                  ...props,
-                  theme,
-                })
-              : mixedColor("bgSub"),
-            0.7,
+        [
+          styles.mixedModePanel(
+            ColorConverter.cssWithAlpha(
+              props.faded
+                ? mixedColor(
+                    "bgBase",
+                    "theme",
+                  )({
+                    ...props,
+                    theme,
+                  })
+                : mixedColor("bgSub"),
+              0.7,
+            ),
           ),
-        ),
+          sx,
+        ],
         undefined,
         style,
       )}

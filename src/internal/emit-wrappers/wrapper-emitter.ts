@@ -74,6 +74,7 @@ type WrapperEmitterArgs = {
   /** Parent style keys that need defaultMarker() (have at least one override without a scoped marker) */
   parentsNeedingDefaultMarker?: Set<string>;
   useSxProp: boolean;
+  inferSxPropFromClassName: boolean;
   /** Import map of local identifiers to their import source. Used to query adapter
    * hooks about wrapped imported components. */
   importMap?: Map<string, { importedName: string; source: ImportSource }>;
@@ -108,6 +109,7 @@ export class WrapperEmitter {
   readonly siblingMarkerKeys: Set<string>;
   readonly parentsNeedingDefaultMarker: Set<string>;
   readonly useSxProp: boolean;
+  readonly inferSxPropFromClassName: boolean;
   readonly importMap: Map<string, { importedName: string; source: ImportSource }>;
   readonly sourceOverrides?: ReadonlyMap<string, string>;
   readonly typeScriptMetadata?: TypeScriptPrepassMetadata;
@@ -148,6 +150,7 @@ export class WrapperEmitter {
     this.siblingMarkerKeys = args.siblingMarkerKeys ?? new Set<string>();
     this.parentsNeedingDefaultMarker = args.parentsNeedingDefaultMarker ?? new Set<string>();
     this.useSxProp = args.useSxProp;
+    this.inferSxPropFromClassName = args.inferSxPropFromClassName;
     this.importMap = args.importMap ?? new Map();
     this.sourceOverrides = args.sourceOverrides;
     this.typeScriptMetadata = args.typeScriptMetadata;
@@ -429,7 +432,12 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
-    return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
+    return (
+      (d.supportsExternalStyles ?? false) ||
+      d.typeScriptSupportsSxProp === true ||
+      (this.inferSxPropFromClassName &&
+        (this.shouldAllowClassNameProp(d) || this.shouldAllowStyleProp(d)))
+    );
   }
 
   typedComponentHasProp(componentLocalName: string, propName: string): boolean {
@@ -452,7 +460,7 @@ export class WrapperEmitter {
 
   /**
    * Returns true when the wrapped component's prepass metadata proves it does
-   * NOT accept the given style prop (className/style) — i.e. the prop is
+   * NOT accept the given external style prop (className/style/sx) — i.e. the prop is
    * missing from both explicit and resolved props AND the component has no
    * index signature. Used to decide whether to lift the prop onto the wrapper.
    *
@@ -466,7 +474,10 @@ export class WrapperEmitter {
    * Returns false when metadata is unavailable (conservative — defer to
    * existing emission logic rather than incorrectly lifting).
    */
-  wrappedRejectsStyleProp(componentLocalName: string, propName: "className" | "style"): boolean {
+  wrappedRejectsStyleProp(
+    componentLocalName: string,
+    propName: "className" | "style" | "sx",
+  ): boolean {
     const metadata = this.typeScriptComponentMetadataFor(componentLocalName);
     if (!metadata) {
       return false;
@@ -1731,6 +1742,7 @@ export class WrapperEmitter {
       this.wrappedRejectsStyleProp(wrappedComponent!, "className");
     const liftStyleForUnsupportedWrapped =
       liftableContext && allowStyleProp && this.wrappedRejectsStyleProp(wrappedComponent!, "style");
+    const liftSxForUnsupportedWrapped = allowSxProp && d.typeScriptSupportsSxProp !== true;
     // When forceClassNameOptional/forceStyleOptional is set, the wrapped component has
     // className/style that may be required. We need to explicitly add them as optional
     // so the wrapper doesn't inherit requiredness from the wrapped component.
@@ -1748,7 +1760,7 @@ export class WrapperEmitter {
     ) {
       lines.push("style?: React.CSSProperties");
     }
-    if (shouldAddStyleProps && allowSxProp) {
+    if (liftSxForUnsupportedWrapped) {
       lines.push(SX_PROP_TYPE_TEXT);
     }
     if (this.hasForwardedAsUsage(d.localName)) {

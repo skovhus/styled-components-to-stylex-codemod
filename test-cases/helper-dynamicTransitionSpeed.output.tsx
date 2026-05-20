@@ -7,9 +7,9 @@ import "./cssVariable-basic.css";
 type AnimatedPathProps = { width: number } & Omit<React.ComponentProps<"path">, "className">;
 
 function AnimatedPath(props: AnimatedPathProps) {
-  const { children, style, width, ...rest } = props;
+  const { children, style, sx, width, ...rest } = props;
   return (
-    <path {...rest} {...mergedSx(styles.animatedPath(width), undefined, style)}>
+    <path {...rest} {...mergedSx([styles.animatedPath(width), sx], undefined, style)}>
       {children}
     </path>
   );

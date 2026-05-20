@@ -50,6 +50,7 @@ export function emitWrappersStep(ctx: TransformContext): StepResult {
     siblingMarkerKeys: ctx.siblingMarkerKeys,
     parentsNeedingDefaultMarker: ctx.parentsNeedingDefaultMarker,
     useSxProp: ctx.adapter.useSxProp,
+    inferSxPropFromClassName: ctx.adapter.inferSxPropFromClassName !== false,
     importMap: ctx.importMap,
     sourceOverrides: ctx.options.transformedFileSources,
     typeScriptMetadata: ctx.options.crossFileInfo?.typeScriptMetadata,

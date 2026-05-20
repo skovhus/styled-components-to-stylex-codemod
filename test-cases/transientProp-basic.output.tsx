@@ -105,16 +105,16 @@ function StyledAnimatedContainer(
 type FaderProps = {
   $open: boolean;
   $duration: number;
-} & React.ComponentProps<"div">;
+} & { sx?: stylex.StyleXStyles } & React.ComponentProps<"div">;
 
 // Pattern 6: Transient props with spread at call site — $-prefixed props
 // explicitly passed should still be renamed even when spread is present
 function Fader(props: FaderProps) {
-  const { className, children, style, $duration, $open, ...rest } = props;
+  const { className, children, style, sx, $duration, $open, ...rest } = props;
   return (
     <div
       {...rest}
-      {...mergedSx([styles.fader($duration), $open && styles.faderOpen], className, style)}
+      {...mergedSx([styles.fader($duration), $open && styles.faderOpen, sx], className, style)}
     >
       {children}
     </div>
@@ -166,14 +166,16 @@ function Overlay() {
   );
 }
 
-type SpreadOverlayProps = { zIndex: number } & React.ComponentProps<"div">;
+type SpreadOverlayProps = { zIndex: number } & {
+  sx?: stylex.StyleXStyles;
+} & React.ComponentProps<"div">;
 
 // Pattern 9: Same as Pattern 8 but with JSX spread — must keep wrapper
 // because the inline path can't extract styleFn props from spreads
 function SpreadOverlay(props: SpreadOverlayProps) {
-  const { className, children, style, zIndex, ...rest } = props;
+  const { className, children, style, sx, zIndex, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.spreadOverlay(zIndex), className, style)}>
+    <div {...rest} {...mergedSx([styles.spreadOverlay(zIndex), sx], className, style)}>
       {children}
     </div>
   );

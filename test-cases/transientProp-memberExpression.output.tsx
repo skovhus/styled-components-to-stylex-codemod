@@ -3,21 +3,21 @@ import * as stylex from "@stylexjs/stylex";
 import { motion, type MotionValue } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
-type ComponentWrapperProps = { isOpen: boolean } & Omit<
-  React.ComponentPropsWithRef<typeof motion.div>,
-  "className"
->;
+type ComponentWrapperProps = { isOpen: boolean } & { sx?: stylex.StyleXStyles } & Omit<
+    React.ComponentPropsWithRef<typeof motion.div>,
+    "className"
+  >;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
-  const { children, style, isOpen, ...rest } = props;
-  const sx = stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen);
+  const { children, style, sx, isOpen, ...rest } = props;
+  const _sx = stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen, sx);
 
   return (
     <motion.div
       {...rest}
-      {...sx}
+      {..._sx}
       style={{
-        ...sx.style,
+        ..._sx.style,
         ...style,
       }}
     >

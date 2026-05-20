@@ -14,10 +14,9 @@ function Text<C extends React.ElementType = "span">(
   );
 }
 
-type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
-  React.ComponentPropsWithRef<typeof Text>,
-  "as"
->;
+type StyledButtonProps = { ref?: React.Ref<HTMLButtonElement> } & {
+  sx?: stylex.StyleXStyles;
+} & Omit<React.ComponentPropsWithRef<typeof Text>, "as">;
 
 // B has .attrs({ as: "button" }) but is only used as a base for A.
 // The chain-flattening logic must NOT flatten A to Text, because
@@ -27,10 +26,9 @@ function StyledButton(props: StyledButtonProps) {
   return <Text {...rest} as="button" {...mergedSx([styles.button, sx], className, style)} />;
 }
 
-type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
-  React.ComponentPropsWithRef<typeof StyledButton>,
-  "className" | "style" | "as"
->;
+type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & {
+  sx?: stylex.StyleXStyles;
+} & Omit<React.ComponentPropsWithRef<typeof StyledButton>, "className" | "style" | "as">;
 
 // A extends B - this MUST preserve B's as="button" semantics
 export function ClickableText(props: ClickableTextProps) {

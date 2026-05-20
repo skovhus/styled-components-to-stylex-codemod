@@ -13,7 +13,10 @@ type ScrollableFlexProps = Props & {
   className?: string;
   style?: React.CSSProperties;
   sx?: stylex.StyleXStyles;
-} & Omit<React.ComponentPropsWithRef<typeof Flex>, "$applyBackground">;
+} & { sx?: stylex.StyleXStyles } & Omit<
+    React.ComponentPropsWithRef<typeof Flex>,
+    "$applyBackground"
+  >;
 
 export function ScrollableFlex(props: ScrollableFlexProps) {
   const { className, children, style, sx, applyBackground, tabIndex, ...rest } = props;

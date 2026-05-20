@@ -6,16 +6,17 @@ import { mergedSx } from "./lib/mergedSx";
 
 type TextDividerContainerProps = React.PropsWithChildren<{
   noMinWidth?: boolean;
+  sx?: stylex.StyleXStyles;
   className?: string;
   style?: React.CSSProperties;
 }>;
 
 function TextDividerContainer(props: TextDividerContainerProps) {
-  const { className, children, style, noMinWidth } = props;
+  const { className, children, style, sx, noMinWidth } = props;
   return (
     <div
       {...mergedSx(
-        [styles.textDividerContainer, noMinWidth && styles.textDividerContainerNoMinWidth],
+        [styles.textDividerContainer, noMinWidth && styles.textDividerContainerNoMinWidth, sx],
         className,
         style,
       )}
@@ -28,12 +29,13 @@ function TextDividerContainer(props: TextDividerContainerProps) {
 type ActionMenuTextDividerProps = {
   text: string;
   className?: string;
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 };
 
 function ActionMenuTextDivider(props: ActionMenuTextDividerProps) {
   return (
-    <TextDividerContainer noMinWidth className={props.className} style={props.style}>
+    <TextDividerContainer noMinWidth className={props.className} style={props.style} sx={props.sx}>
       <span>{props.text}</span>
     </TextDividerContainer>
   );
@@ -42,7 +44,7 @@ function ActionMenuTextDivider(props: ActionMenuTextDividerProps) {
 // Second call site without noMinWidth — prevents folding
 function ActionMenuTextDividerWide(props: ActionMenuTextDividerProps) {
   return (
-    <TextDividerContainer className={props.className} style={props.style}>
+    <TextDividerContainer className={props.className} style={props.style} sx={props.sx}>
       <span>{props.text}</span>
     </TextDividerContainer>
   );

@@ -852,6 +852,18 @@ export interface Adapter {
   useSxProp: boolean;
 
   /**
+   * Support for threading StyleX styles through local wrapper components
+   * that forward `className` to converted styled components.
+   *
+   * When enabled, converted wrappers that accept a locally-forwarded `className`
+   * also accept `sx?: stylex.StyleXStyles`, and compatible wrapper components get
+   * a matching `sx` prop that is passed to the same child components as `className`.
+   *
+   * @default true
+   */
+  inferSxPropFromClassName?: boolean;
+
+  /**
    * Use physical CSS properties (`paddingTop`/`paddingRight`/`paddingBottom`/`paddingLeft`)
    * instead of logical properties (`paddingBlock`/`paddingInline`) when expanding
    * 2-value CSS shorthands like `padding: 4px 8px`.
@@ -943,6 +955,7 @@ export interface AdapterInput {
   styleMerger: Adapter["styleMerger"];
   themeHook?: Adapter["themeHook"];
   useSxProp: Adapter["useSxProp"];
+  inferSxPropFromClassName?: Adapter["inferSxPropFromClassName"];
   usePhysicalProperties?: Adapter["usePhysicalProperties"];
   wrappedComponentInterface?: Adapter["wrappedComponentInterface"];
   markerFile?: Adapter["markerFile"];
@@ -1015,6 +1028,9 @@ export interface AdapterInput {
  *
  *     // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (requires StyleX ≥0.18)
  *     useSxProp: false,
+ *
+ *     // Optional: disable sx prop inference from local className forwarding
+ *     // inferSxPropFromClassName: false,
  *
  *     // Opt out of logical properties — use paddingTop/Right/Bottom/Left instead of Block/Inline
  *     // usePhysicalProperties: true,

@@ -181,6 +181,16 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
     );
   }
 
+  const inferSxPropFromClassName = obj?.inferSxPropFromClassName;
+  if (inferSxPropFromClassName !== undefined && typeof inferSxPropFromClassName !== "boolean") {
+    throw new Error(
+      [
+        `${where}: adapter.inferSxPropFromClassName must be a boolean when provided.`,
+        `Received: inferSxPropFromClassName=${describeValue(inferSxPropFromClassName)}`,
+      ].join("\n"),
+    );
+  }
+
   // Validate styleMerger config (null or object with functionName/importSource)
   const styleMerger = obj?.styleMerger;
   if (styleMerger !== null && styleMerger !== undefined) {

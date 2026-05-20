@@ -8,14 +8,53 @@ import { $colors } from "./tokens.stylex";
 type InitialsProps = {
   name: string;
   size?: number;
+  /** Additional class name for the rendered SVG. */
   className?: string;
+  /** StyleX styles applied to the rendered SVG. */
+  sx?: stylex.StyleXStyles;
   style?: React.CSSProperties;
 };
 
-export function Initials({ name, size = 16, className, style }: InitialsProps) {
+export function Initials({ name, size = 16, className, style, sx }: InitialsProps) {
   return (
-    <Container size={size} className={className} style={style}>
+    <Container size={size} className={className} style={style} sx={sx}>
       {name.slice(0, 1).toUpperCase()}
+    </Container>
+  );
+}
+
+type ExistingSxInitialsProps = {
+  name: string;
+  size?: number;
+  className?: string;
+  sx?: stylex.StyleXStyles;
+};
+
+export function ExistingSxInitials({ name, size = 24, className, sx }: ExistingSxInitialsProps) {
+  return (
+    <Container size={size} className={className} sx={sx}>
+      {name.slice(0, 1).toUpperCase()}
+    </Container>
+  );
+}
+
+type LocalSxNameInitialsProps = {
+  name: string;
+  size?: number;
+  className?: string;
+  sx?: stylex.StyleXStyles;
+};
+
+export function LocalSxNameInitials({
+  name,
+  size = 28,
+  className,
+  sx: sxProp,
+}: LocalSxNameInitialsProps) {
+  const sx = name.slice(0, 1).toUpperCase();
+  return (
+    <Container size={size} className={className} sx={sxProp}>
+      {sx}
     </Container>
   );
 }
@@ -25,21 +64,20 @@ export const App = () => (
     <Initials name="Alice" size={32} />
     <Initials name="Bob" size={48} />
     <Initials name="Charlie" />
+    <ExistingSxInitials name="Dora" />
+    <LocalSxNameInitials name="Eve" />
   </div>
 );
 
-type ContainerProps = React.PropsWithChildren<{
-  size: number;
-  className?: string;
-  style?: React.CSSProperties;
-}>;
+type ContainerProps = { size: number } & React.ComponentProps<"div">;
 
 function Container(props: ContainerProps) {
-  const { className, children, style, size } = props;
+  const { className, children, style, sx, size, ...rest } = props;
   const theme = useTheme();
 
   return (
     <div
+      {...rest}
       {...mergedSx(
         [
           styles.container,
@@ -48,6 +86,7 @@ function Container(props: ContainerProps) {
           styles.containerHeight(size),
           styles.containerFontSize(`${Math.round(size * (2 / 3))}px`),
           styles.containerLineHeight(size),
+          sx,
         ],
         className,
         style,

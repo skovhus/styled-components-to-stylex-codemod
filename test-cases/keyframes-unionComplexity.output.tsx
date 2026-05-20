@@ -32,10 +32,10 @@ export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCa
   );
 }
 
-type StyledLoaderCaretProps = { noPadding?: boolean } & Omit<
-  React.ComponentPropsWithRef<typeof LoaderCaret>,
-  "className" | "style"
->;
+type StyledLoaderCaretProps = { noPadding?: boolean } & { sx?: stylex.StyleXStyles } & Omit<
+    React.ComponentPropsWithRef<typeof LoaderCaret>,
+    "className" | "style"
+  >;
 
 function StyledLoaderCaret(props: StyledLoaderCaretProps) {
   const { sx, noPadding, ...rest } = props;

@@ -14,16 +14,19 @@ export interface CardProps {
   title: string;
   /** Whether the card is highlighted */
   highlighted?: boolean;
+  sx?: stylex.StyleXStyles;
 }
 
 // The styled component uses the existing props interface
-export function Card(props: CardProps & Omit<React.ComponentProps<"div">, "style">) {
-  const { className, children, highlighted, ...rest } = props;
+export function Card(
+  props: CardProps & Omit<React.ComponentProps<"div">, "style"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, children, sx, highlighted, ...rest } = props;
   return (
     <div
       {...rest}
       {...mergedSx(
-        [styles.card, highlighted ? styles.cardHighlighted : styles.cardNotHighlighted],
+        [styles.card, highlighted ? styles.cardHighlighted : styles.cardNotHighlighted, sx],
         className,
       )}
     >

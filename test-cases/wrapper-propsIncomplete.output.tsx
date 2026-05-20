@@ -32,14 +32,15 @@ const BaseText = (props: React.ComponentProps<"span">) => <span {...props} />;
 interface HighlightProps extends Omit<React.ComponentPropsWithRef<typeof BaseText>, "style"> {
   /** Whether to highlight */
   highlighted?: boolean;
+  sx?: stylex.StyleXStyles;
 }
 
 export function Highlight(props: HighlightProps) {
-  const { className, children, highlighted, ...rest } = props;
+  const { className, children, sx, highlighted, ...rest } = props;
   return (
     <BaseText
       {...rest}
-      {...mergedSx([styles.highlight, highlighted && styles.highlightHighlighted], className)}
+      {...mergedSx([styles.highlight, highlighted && styles.highlightHighlighted, sx], className)}
     >
       {children}
     </BaseText>

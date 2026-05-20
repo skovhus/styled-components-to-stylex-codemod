@@ -8,12 +8,15 @@ import { mergedSx } from "./lib/mergedSx";
 export interface ButtonProps {
   variant?: "primary" | "secondary";
   size?: "small" | "large";
+  sx?: stylex.StyleXStyles;
 }
 
 export type ButtonVariant = ButtonProps["variant"];
 
-function Button(props: ButtonProps & React.ComponentProps<"button">) {
-  const { className, children, style, size, variant, ...rest } = props;
+function Button(
+  props: ButtonProps & React.ComponentProps<"button"> & { sx?: stylex.StyleXStyles },
+) {
+  const { className, children, style, sx, size, variant, ...rest } = props;
   return (
     <button
       {...rest}
@@ -22,6 +25,7 @@ function Button(props: ButtonProps & React.ComponentProps<"button">) {
           styles.button,
           size === "large" && styles.buttonSizeLarge,
           variant === "primary" && styles.buttonVariantPrimary,
+          sx,
         ],
         className,
         style,

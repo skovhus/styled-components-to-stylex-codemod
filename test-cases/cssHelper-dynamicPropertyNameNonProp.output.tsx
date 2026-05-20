@@ -12,8 +12,10 @@ type StackProps = {
   children?: React.ReactNode;
 };
 
-export function Stack(props: StackProps & Omit<React.ComponentProps<"div">, "className">) {
-  const { children, style, gap, column, ...rest } = props;
+export function Stack(
+  props: StackProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
+) {
+  const { children, style, sx, gap, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -25,6 +27,7 @@ export function Stack(props: StackProps & Omit<React.ComponentProps<"div">, "cla
               ? styles.stackColumnGapMarginTop(gap)
               : styles.stackRowGapMarginTop(gap)
             : undefined,
+          sx,
         ],
         undefined,
         style,
