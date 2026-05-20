@@ -9452,7 +9452,7 @@ export const App = () => <Box>test</Box>;
 });
 
 describe("sx propagation from forwarded className", () => {
-  it("inserts inferred sx before object rest props in destructured wrapper params", () => {
+  it("uses rest sx without removing it from destructured wrapper rest props", () => {
     const source = `
 import * as React from "react";
 import styled from "styled-components";
@@ -9466,7 +9466,7 @@ function Wrapper({ className, ...rest }: WrapperProps) {
   return <Box {...rest} className={className} />;
 }
 
-const Box = styled.div\`
+export const Box = styled.div\`
   color: red;
 \`;
 
@@ -9474,11 +9474,46 @@ export const App = () => <Wrapper>wrapped</Wrapper>;
 `;
     const output = runTransform(source);
 
-    expect(output).toMatch(
-      /function Wrapper\(\{\s*className,\s*sx,\s*\.\.\.rest\s*\}: WrapperProps\)/,
-    );
-    expect(output).toContain("<Box sx={sx} {...rest} className={className} />");
+    expect(output).toContain("function Wrapper({ className, ...rest }: WrapperProps)");
+    expect(output).toContain("<Box sx={rest.sx} {...rest} className={className} />");
     expect(output).not.toContain("...rest, sx");
+  });
+
+  it("preserves sx in rest props forwarded to unrelated components", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  children?: React.ReactNode;
+};
+
+function Other(props: WrapperProps) {
+  return <div {...props} />;
+}
+
+function Wrapper({ className, ...rest }: WrapperProps) {
+  return (
+    <>
+      <Box className={className}>converted</Box>
+      <Other {...rest} />
+    </>
+  );
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("function Wrapper({ className, ...rest }: WrapperProps)");
+    expect(output).toContain("<Box className={className} sx={rest.sx}>converted</Box>");
+    expect(output).toContain("<Other {...rest} />");
+    expect(output).not.toMatch(/function Wrapper\(\{\s*className,\s*sx,\s*\.\.\.rest/);
   });
 
   it("does not infer sx pass-through from shadowed className bindings", () => {

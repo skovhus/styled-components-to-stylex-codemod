@@ -109,6 +109,7 @@ type PropsBinding =
       typeName: string;
       classNameLocal: string;
       sxLocal: string;
+      restLocal: string | null;
     }
   | {
       kind: "propsObject";
@@ -221,14 +222,14 @@ function getPropsBinding(fn: FunctionLike): PropsBinding | null {
     if (!classNameLocal) {
       return null;
     }
+    const hasSx = hasObjectPatternProp(firstParam, "sx");
     return {
       kind: "destructured",
       pattern: firstParam,
       typeName,
       classNameLocal,
-      sxLocal: hasObjectPatternProp(firstParam, "sx")
-        ? getExistingSxLocal(firstParam)
-        : getAvailableSxLocalName(fn),
+      sxLocal: hasSx ? getExistingSxLocal(firstParam) : getAvailableSxLocalName(fn),
+      restLocal: hasSx ? null : getObjectPatternRestLocal(firstParam),
     };
   }
 
@@ -617,6 +618,9 @@ function rewriteClassNameComment(value: unknown): unknown {
 
 function buildSxExpression(j: JSCodeshift, propsBinding: PropsBinding): JsxExpression {
   if (propsBinding.kind === "destructured") {
+    if (propsBinding.restLocal) {
+      return j.memberExpression(j.identifier(propsBinding.restLocal), j.identifier("sx"));
+    }
     return j.identifier(propsBinding.sxLocal);
   }
   return j.memberExpression(j.identifier(propsBinding.propsLocal), j.identifier("sx"));
@@ -809,7 +813,11 @@ function isInBindingScope(path: ScopedAstPath, bindingName: string, bindingScope
 }
 
 function addSxDestructure(ctx: TransformContext, propsBinding: PropsBinding): void {
-  if (propsBinding.kind !== "destructured" || hasObjectPatternProp(propsBinding.pattern, "sx")) {
+  if (
+    propsBinding.kind !== "destructured" ||
+    propsBinding.restLocal ||
+    hasObjectPatternProp(propsBinding.pattern, "sx")
+  ) {
     return;
   }
   const properties = [...(propsBinding.pattern.properties ?? [])];
@@ -824,6 +832,11 @@ function addSxDestructure(ctx: TransformContext, propsBinding: PropsBinding): vo
 
 function isObjectPatternRestElement(prop: any): boolean {
   return prop?.type === "RestElement" || prop?.type === "RestProperty";
+}
+
+function getObjectPatternRestLocal(pattern: any): string | null {
+  const rest = (pattern.properties ?? []).find(isObjectPatternRestElement);
+  return rest?.argument?.type === "Identifier" ? rest.argument.name : null;
 }
 
 function getJsxAttr(opening: any, attrName: string): any {
