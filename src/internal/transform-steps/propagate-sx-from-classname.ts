@@ -229,6 +229,10 @@ function getPropsType(
   typeName: string,
   referencePath: ScopedAstPath,
 ): { members: any[]; replaceMembers: (members: any[]) => void } | null {
+  if (isTypeParameterInScope(referencePath, typeName)) {
+    return null;
+  }
+
   const { root, j } = ctx;
 
   let bestPath: ScopedAstPath | null | undefined;
@@ -298,6 +302,36 @@ function getLexicalContainerPath(path: ScopedAstPath): ScopedAstPath | null {
     current = current.parentPath;
   }
   return null;
+}
+
+function isTypeParameterInScope(referencePath: ScopedAstPath, typeName: string): boolean {
+  let current: ScopedAstPath | undefined = referencePath;
+  while (current) {
+    if (hasTypeParameterNamed(current.node, typeName)) {
+      return true;
+    }
+    current = current.parentPath;
+  }
+  return false;
+}
+
+function hasTypeParameterNamed(node: unknown, typeName: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const params = (node as { typeParameters?: { params?: unknown[] } }).typeParameters?.params;
+  return (params ?? []).some((param) => getTypeParameterName(param) === typeName);
+}
+
+function getTypeParameterName(param: unknown): string | null {
+  if (!param || typeof param !== "object") {
+    return null;
+  }
+  const node = param as { name?: unknown; id?: { name?: unknown } };
+  if (typeof node.name === "string") {
+    return node.name;
+  }
+  return typeof node.id?.name === "string" ? node.id.name : null;
 }
 
 function pathContains(containerPath: ScopedAstPath, descendantPath: ScopedAstPath): boolean {
@@ -436,17 +470,30 @@ function addSxToForwardedChildren(args: {
         return;
       }
 
-      opening.attributes = [
-        ...(opening.attributes ?? []),
-        ctx.j.jsxAttribute(
-          ctx.j.jsxIdentifier("sx"),
-          ctx.j.jsxExpressionContainer(cloneExpression(sxExpression)),
-        ),
-      ];
+      insertSxAttribute(ctx, opening, sxExpression);
       changed = true;
     });
 
   return changed;
+}
+
+function insertSxAttribute(
+  ctx: TransformContext,
+  opening: { attributes?: any[] | null },
+  sxExpression: JsxExpression,
+): void {
+  const sxAttr = ctx.j.jsxAttribute(
+    ctx.j.jsxIdentifier("sx"),
+    ctx.j.jsxExpressionContainer(cloneExpression(sxExpression)),
+  );
+  const attributes = opening.attributes ?? [];
+  const firstSpreadIndex = attributes.findIndex((attr) => attr?.type === "JSXSpreadAttribute");
+  const insertionIndex = firstSpreadIndex === -1 ? attributes.length : firstSpreadIndex;
+  opening.attributes = [
+    ...attributes.slice(0, insertionIndex),
+    sxAttr,
+    ...attributes.slice(insertionIndex),
+  ];
 }
 
 function isConvertedChildBinding(

@@ -9477,7 +9477,7 @@ export const App = () => <Wrapper>wrapped</Wrapper>;
     expect(output).toMatch(
       /function Wrapper\(\{\s*className,\s*sx,\s*\.\.\.rest\s*\}: WrapperProps\)/,
     );
-    expect(output).toContain("<Box {...rest} className={className} sx={sx} />");
+    expect(output).toContain("<Box sx={sx} {...rest} className={className} />");
     expect(output).not.toContain("...rest, sx");
   });
 
@@ -9572,6 +9572,60 @@ export const App = () => <Wrapper />;
     expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
     expect(output).toContain("<Box className={className}>local</Box>");
     expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
+  });
+
+  it("does not mutate an outer props alias shadowed by a type parameter", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper<WrapperProps extends { className?: string }>({ className }: WrapperProps) {
+  return <Box className={className}>generic</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>generic</Box>");
+    expect(output).toContain(
+      "function Wrapper<WrapperProps extends { className?: string }>({ className }: WrapperProps)",
+    );
+    expect(output).not.toContain("<Box className={className} sx={sx}>generic</Box>");
+  });
+
+  it("inserts sx before JSX spreads so spread-provided sx can still win", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  childProps?: React.ComponentProps<typeof Box>;
+};
+
+function Wrapper({ className, childProps }: WrapperProps) {
+  return <Box {...childProps} className={className}>spread</Box>;
+}
+
+const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("sx?: stylex.StyleXStyles;");
+    expect(output).toContain("<Box sx={sx} {...childProps} className={className}>spread</Box>");
   });
 
   it("adds sx to the wrapper props type from the matching lexical scope", () => {
