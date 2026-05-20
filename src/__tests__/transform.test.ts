@@ -9714,6 +9714,60 @@ export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
     expect(output).not.toContain("<Box className={className} sx={sx}>");
   });
 
+  it("propagates destructured wrapper sx when bare StyleXStyles is imported from StyleX", () => {
+    const source = `
+import styled from "styled-components";
+import type { StyleXStyles } from "@stylexjs/stylex";
+
+type WrapperProps = {
+  className?: string;
+  sx?: StyleXStyles;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>wrapped</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain('import type { StyleXStyles } from "@stylexjs/stylex";');
+    expect(output).toContain("<Box className={className} sx={sx}>wrapped</Box>");
+  });
+
+  it("does not propagate destructured wrapper sx when bare StyleXStyles is locally aliased", () => {
+    const source = `
+import styled from "styled-components";
+
+type StyleXStyles = number;
+
+type WrapperProps = {
+  className?: string;
+  sx?: StyleXStyles;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type StyleXStyles = number;");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
   it("does not propagate object wrapper sx when it is not StyleX typed", () => {
     const source = `
 import styled from "styled-components";

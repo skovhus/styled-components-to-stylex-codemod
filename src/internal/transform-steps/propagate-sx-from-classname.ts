@@ -15,6 +15,7 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
   if (convertedWrappers.names.size === 0) {
     return CONTINUE;
   }
+  const stylexStyleImports = collectStylexStyleImports(ctx);
 
   const components = collectComponentCandidates(ctx);
   for (const component of components) {
@@ -32,6 +33,7 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       propsBinding.typeName,
       component.fnPath,
       convertedWrappers.names,
+      stylexStyleImports,
     );
     if (!propsType) {
       continue;
@@ -44,7 +46,9 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
     const propsTypeAlreadyHasSx =
       propsType.kind === "mutable" ? Boolean(sxMember) : propsType.hasSx;
     const propsTypeHasCompatibleSx =
-      propsType.kind === "mutable" ? !sxMember || isStylexSxMember(sxMember) : propsType.hasSx;
+      propsType.kind === "mutable"
+        ? !sxMember || isStylexSxMember(sxMember, stylexStyleImports)
+        : propsType.hasSx;
     const propsTypeHasClassName =
       propsType.kind === "mutable" ? Boolean(classNameMember) : propsType.hasClassName;
     if (!propsTypeHasClassName || !propsTypeHasCompatibleSx) {
@@ -140,6 +144,11 @@ type PropsSurface = {
   sx: SxSurface;
 };
 
+type StylexStyleImports = {
+  namespaceNames: Set<string>;
+  styleTypeNames: Set<string>;
+};
+
 function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
   const names = new Set<string>();
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
@@ -153,6 +162,28 @@ function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
     names,
     bindings: collectTopLevelBindingPaths(ctx, names),
   };
+}
+
+function collectStylexStyleImports(ctx: TransformContext): StylexStyleImports {
+  const namespaceNames = new Set<string>();
+  const styleTypeNames = new Set<string>();
+  ctx.root
+    .find(ctx.j.ImportDeclaration, { source: { value: "@stylexjs/stylex" } } as any)
+    .forEach((path: any) => {
+      for (const specifier of path.node.specifiers ?? []) {
+        if (specifier.type === "ImportNamespaceSpecifier" && specifier.local?.name) {
+          namespaceNames.add(specifier.local.name);
+        } else if (
+          specifier.type === "ImportSpecifier" &&
+          specifier.imported?.type === "Identifier" &&
+          specifier.imported.name === "StyleXStyles" &&
+          specifier.local?.name
+        ) {
+          styleTypeNames.add(specifier.local.name);
+        }
+      }
+    });
+  return { namespaceNames, styleTypeNames };
 }
 
 function collectTopLevelBindingPaths(
@@ -262,6 +293,7 @@ function getPropsType(
   typeName: string,
   referencePath: ScopedAstPath,
   convertedWrapperNames: Set<string>,
+  stylexStyleImports: StylexStyleImports,
 ): PropsType | null {
   if (isTypeParameterInScope(referencePath, typeName)) {
     return null;
@@ -314,7 +346,11 @@ function getPropsType(
     return null;
   }
   if (matched.typeAnnotation?.type !== "TSTypeLiteral") {
-    return getReadonlyAliasPropsType(matched.typeAnnotation, convertedWrapperNames);
+    return getReadonlyAliasPropsType(
+      matched.typeAnnotation,
+      convertedWrapperNames,
+      stylexStyleImports,
+    );
   }
   return {
     kind: "mutable",
@@ -328,8 +364,9 @@ function getPropsType(
 function getReadonlyAliasPropsType(
   typeAnnotation: any,
   convertedWrapperNames: Set<string>,
+  stylexStyleImports: StylexStyleImports,
 ): ReadonlyPropsType | null {
-  const surface = getPropsSurface(typeAnnotation, convertedWrapperNames);
+  const surface = getPropsSurface(typeAnnotation, convertedWrapperNames, stylexStyleImports);
   if (!surface?.hasClassName || surface.sx !== "stylex") {
     return null;
   }
@@ -343,6 +380,7 @@ function getReadonlyAliasPropsType(
 function getPropsSurface(
   typeAnnotation: any,
   convertedWrapperNames: Set<string>,
+  stylexStyleImports: StylexStyleImports,
 ): PropsSurface | null {
   if (!typeAnnotation) {
     return null;
@@ -357,7 +395,7 @@ function getPropsSurface(
     let hasClassName = false;
     let sx: SxSurface = "missing";
     for (const part of typeAnnotation.types ?? []) {
-      const partSurface = getPropsSurface(part, convertedWrapperNames);
+      const partSurface = getPropsSurface(part, convertedWrapperNames, stylexStyleImports);
       if (!partSurface) {
         continue;
       }
@@ -369,7 +407,11 @@ function getPropsSurface(
   }
 
   if (typeAnnotation.type === "TSParenthesizedType") {
-    return getPropsSurface(typeAnnotation.typeAnnotation, convertedWrapperNames);
+    return getPropsSurface(
+      typeAnnotation.typeAnnotation,
+      convertedWrapperNames,
+      stylexStyleImports,
+    );
   }
 
   if (typeAnnotation.type === "TSTypeLiteral") {
@@ -377,13 +419,13 @@ function getPropsSurface(
     const sxMember = getPropsTypeMember(members, "sx");
     return {
       hasClassName: propsTypeHasProp(members, "className"),
-      sx: sxMember ? getSxMemberSurface(sxMember) : "missing",
+      sx: sxMember ? getSxMemberSurface(sxMember, stylexStyleImports) : "missing",
     };
   }
 
   if (isOmitTypeReference(typeAnnotation)) {
     const params = getTypeReferenceParams(typeAnnotation);
-    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames);
+    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames, stylexStyleImports);
     const omittedProps = getStringLiteralTypeNames(params[1]);
     if (!sourceSurface || !omittedProps) {
       return null;
@@ -396,7 +438,7 @@ function getPropsSurface(
 
   if (isPickTypeReference(typeAnnotation)) {
     const params = getTypeReferenceParams(typeAnnotation);
-    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames);
+    const sourceSurface = getPropsSurface(params[0], convertedWrapperNames, stylexStyleImports);
     const pickedProps = getStringLiteralTypeNames(params[1]);
     if (!sourceSurface || !pickedProps) {
       return null;
@@ -597,32 +639,32 @@ function getMemberName(member: any): string | null {
   return null;
 }
 
-function getSxMemberSurface(member: any): SxSurface {
-  return isStylexSxMember(member) ? "stylex" : "nonStylex";
+function getSxMemberSurface(member: any, stylexStyleImports: StylexStyleImports): SxSurface {
+  return isStylexSxMember(member, stylexStyleImports) ? "stylex" : "nonStylex";
 }
 
-function isStylexSxMember(member: any): boolean {
-  return isStylexStylesType(member?.typeAnnotation?.typeAnnotation);
+function isStylexSxMember(member: any, stylexStyleImports: StylexStyleImports): boolean {
+  return isStylexStylesType(member?.typeAnnotation?.typeAnnotation, stylexStyleImports);
 }
 
-function isStylexStylesType(typeAnnotation: any): boolean {
+function isStylexStylesType(typeAnnotation: any, stylexStyleImports: StylexStyleImports): boolean {
   if (!typeAnnotation) {
     return false;
   }
   if (typeAnnotation.type === "TSParenthesizedType") {
-    return isStylexStylesType(typeAnnotation.typeAnnotation);
+    return isStylexStylesType(typeAnnotation.typeAnnotation, stylexStyleImports);
   }
   if (typeAnnotation.type !== "TSTypeReference") {
     return false;
   }
   const typeName = typeAnnotation.typeName;
   if (typeName?.type === "Identifier") {
-    return typeName.name === "StyleXStyles";
+    return stylexStyleImports.styleTypeNames.has(typeName.name);
   }
   return (
     typeName?.type === "TSQualifiedName" &&
     typeName.left?.type === "Identifier" &&
-    typeName.left.name === "stylex" &&
+    stylexStyleImports.namespaceNames.has(typeName.left.name) &&
     typeName.right?.type === "Identifier" &&
     typeName.right.name === "StyleXStyles"
   );
