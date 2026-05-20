@@ -9628,6 +9628,34 @@ export const App = () => <Wrapper />;
     expect(output).toContain("<Box sx={sx} {...childProps} className={className}>spread</Box>");
   });
 
+  it("does not shadow captured sx identifiers when adding sx destructuring", () => {
+    const source = `
+import styled from "styled-components";
+
+const sx = "captured";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain('const sx = "captured";');
+    expect(output).toMatch(/function Wrapper\(\{\s*className,\s*sx: sxProp,?\s*\}: WrapperProps\)/);
+    expect(output).toContain("<Box className={className} sx={sxProp}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>{sx}</Box>");
+  });
+
   it("adds sx to the wrapper props type from the matching lexical scope", () => {
     const source = `
 import styled from "styled-components";

@@ -702,8 +702,10 @@ function getAvailableSxLocalName(fn: FunctionLike): string {
   const usedNames = new Set<string>();
   for (const param of fn.params ?? []) {
     collectPatternBindingNames(param, usedNames);
+    collectIdentifierNames(param, usedNames);
   }
   collectBindingNames(fn.body, usedNames);
+  collectIdentifierNames(fn.body, usedNames);
   if (!usedNames.has("sx")) {
     return "sx";
   }
@@ -715,6 +717,39 @@ function getAvailableSxLocalName(fn: FunctionLike): string {
     suffix++;
   }
   return `sxProp${suffix}`;
+}
+
+function collectIdentifierNames(
+  node: unknown,
+  names: Set<string>,
+  visited = new WeakSet<object>(),
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (visited.has(node)) {
+    return;
+  }
+  visited.add(node);
+
+  const astNode = node as Record<string, unknown>;
+  if (astNode.type === "Identifier" && typeof astNode.name === "string") {
+    names.add(astNode.name);
+    return;
+  }
+
+  for (const value of Object.values(astNode)) {
+    if (!value) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectIdentifierNames(item, names, visited);
+      }
+    } else if (typeof value === "object") {
+      collectIdentifierNames(value, names, visited);
+    }
+  }
 }
 
 function collectBindingNames(
