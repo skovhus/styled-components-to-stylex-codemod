@@ -9687,6 +9687,89 @@ export const App = () => <Wrapper>wrapped</Wrapper>;
     expect(output).toContain("<Box className={className} sx={sx}>alias</Box>");
   });
 
+  it("does not propagate destructured wrapper sx when it is not StyleX typed", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  sx?: number;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  sx?: number;\n};");
+    expect(output).toContain("function Wrapper({ className, sx }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
+  it("does not propagate object wrapper sx when it is not StyleX typed", () => {
+    const source = `
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+  sx?: number;
+};
+
+function Wrapper(props: WrapperProps) {
+  return <Box className={props.className}>{props.sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n  sx?: number;\n};");
+    expect(output).toContain("function Wrapper(props: WrapperProps)");
+    expect(output).toContain("<Box className={props.className}>{props.sx}</Box>");
+    expect(output).not.toContain("<Box className={props.className} sx={props.sx}>");
+  });
+
+  it("does not treat component props aliases with non-StyleX sx overrides as sx-aware", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type WrapperProps = React.ComponentProps<typeof Box> & {
+  sx?: number;
+};
+
+function Wrapper({ className, sx }: WrapperProps) {
+  return <Box className={className}>{sx}</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      "type WrapperProps = React.ComponentProps<typeof Box> & {\n  sx?: number;\n};",
+    );
+    expect(output).toContain("function Wrapper({ className, sx }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>{sx}</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>");
+  });
+
   it("does not treat local ComponentProps-prefixed helpers as sx-aware React utilities", () => {
     const source = `
 import styled from "styled-components";

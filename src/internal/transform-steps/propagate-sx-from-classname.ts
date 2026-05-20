@@ -38,14 +38,16 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
     }
 
     const classNameMember =
-      propsType.kind === "mutable"
-        ? propsType.members.find((member) => getMemberName(member) === "className")
-        : null;
+      propsType.kind === "mutable" ? getPropsTypeMember(propsType.members, "className") : null;
+    const sxMember =
+      propsType.kind === "mutable" ? getPropsTypeMember(propsType.members, "sx") : null;
     const propsTypeAlreadyHasSx =
-      propsType.kind === "mutable" ? propsTypeHasProp(propsType.members, "sx") : propsType.hasSx;
+      propsType.kind === "mutable" ? Boolean(sxMember) : propsType.hasSx;
+    const propsTypeHasCompatibleSx =
+      propsType.kind === "mutable" ? !sxMember || isStylexSxMember(sxMember) : propsType.hasSx;
     const propsTypeHasClassName =
       propsType.kind === "mutable" ? Boolean(classNameMember) : propsType.hasClassName;
-    if (!propsTypeHasClassName) {
+    if (!propsTypeHasClassName || !propsTypeHasCompatibleSx) {
       continue;
     }
 
@@ -131,9 +133,11 @@ type ReadonlyPropsType = {
 
 type PropsType = MutablePropsType | ReadonlyPropsType;
 
+type SxSurface = "missing" | "stylex" | "nonStylex";
+
 type PropsSurface = {
   hasClassName: boolean;
-  hasSx: boolean;
+  sx: SxSurface;
 };
 
 function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
@@ -326,7 +330,7 @@ function getReadonlyAliasPropsType(
   convertedWrapperNames: Set<string>,
 ): ReadonlyPropsType | null {
   const surface = getPropsSurface(typeAnnotation, convertedWrapperNames);
-  if (!surface?.hasClassName || !surface.hasSx) {
+  if (!surface?.hasClassName || surface.sx !== "stylex") {
     return null;
   }
   return {
@@ -345,13 +349,13 @@ function getPropsSurface(
   }
 
   if (isComponentPropsOfConvertedWrapper(typeAnnotation, convertedWrapperNames)) {
-    return { hasClassName: true, hasSx: true };
+    return { hasClassName: true, sx: "stylex" };
   }
 
   if (typeAnnotation.type === "TSIntersectionType") {
     let hasSurface = false;
     let hasClassName = false;
-    let hasSx = false;
+    let sx: SxSurface = "missing";
     for (const part of typeAnnotation.types ?? []) {
       const partSurface = getPropsSurface(part, convertedWrapperNames);
       if (!partSurface) {
@@ -359,13 +363,22 @@ function getPropsSurface(
       }
       hasSurface = true;
       hasClassName ||= partSurface.hasClassName;
-      hasSx ||= partSurface.hasSx;
+      sx = mergeSxSurfaces(sx, partSurface.sx);
     }
-    return hasSurface ? { hasClassName, hasSx } : null;
+    return hasSurface ? { hasClassName, sx } : null;
   }
 
   if (typeAnnotation.type === "TSParenthesizedType") {
     return getPropsSurface(typeAnnotation.typeAnnotation, convertedWrapperNames);
+  }
+
+  if (typeAnnotation.type === "TSTypeLiteral") {
+    const members = typeAnnotation.members ?? [];
+    const sxMember = getPropsTypeMember(members, "sx");
+    return {
+      hasClassName: propsTypeHasProp(members, "className"),
+      sx: sxMember ? getSxMemberSurface(sxMember) : "missing",
+    };
   }
 
   if (isOmitTypeReference(typeAnnotation)) {
@@ -377,7 +390,7 @@ function getPropsSurface(
     }
     return {
       hasClassName: sourceSurface.hasClassName && !omittedProps.has("className"),
-      hasSx: sourceSurface.hasSx && !omittedProps.has("sx"),
+      sx: omittedProps.has("sx") ? "missing" : sourceSurface.sx,
     };
   }
 
@@ -390,11 +403,21 @@ function getPropsSurface(
     }
     return {
       hasClassName: sourceSurface.hasClassName && pickedProps.has("className"),
-      hasSx: sourceSurface.hasSx && pickedProps.has("sx"),
+      sx: pickedProps.has("sx") ? sourceSurface.sx : "missing",
     };
   }
 
   return null;
+}
+
+function mergeSxSurfaces(left: SxSurface, right: SxSurface): SxSurface {
+  if (left === "nonStylex" || right === "nonStylex") {
+    return "nonStylex";
+  }
+  if (left === "stylex" || right === "stylex") {
+    return "stylex";
+  }
+  return "missing";
 }
 
 function isComponentPropsOfConvertedWrapper(
@@ -556,6 +579,10 @@ function propsTypeHasProp(members: any[], propName: string): boolean {
   return members.some((member) => getMemberName(member) === propName);
 }
 
+function getPropsTypeMember(members: any[], propName: string): Record<string, unknown> | null {
+  return members.find((member) => getMemberName(member) === propName) ?? null;
+}
+
 function getMemberName(member: any): string | null {
   const key = member?.key;
   if (!key) {
@@ -568,6 +595,37 @@ function getMemberName(member: any): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
+}
+
+function getSxMemberSurface(member: any): SxSurface {
+  return isStylexSxMember(member) ? "stylex" : "nonStylex";
+}
+
+function isStylexSxMember(member: any): boolean {
+  return isStylexStylesType(member?.typeAnnotation?.typeAnnotation);
+}
+
+function isStylexStylesType(typeAnnotation: any): boolean {
+  if (!typeAnnotation) {
+    return false;
+  }
+  if (typeAnnotation.type === "TSParenthesizedType") {
+    return isStylexStylesType(typeAnnotation.typeAnnotation);
+  }
+  if (typeAnnotation.type !== "TSTypeReference") {
+    return false;
+  }
+  const typeName = typeAnnotation.typeName;
+  if (typeName?.type === "Identifier") {
+    return typeName.name === "StyleXStyles";
+  }
+  return (
+    typeName?.type === "TSQualifiedName" &&
+    typeName.left?.type === "Identifier" &&
+    typeName.left.name === "stylex" &&
+    typeName.right?.type === "Identifier" &&
+    typeName.right.name === "StyleXStyles"
+  );
 }
 
 function addSxMemberAfterClassName(args: {
