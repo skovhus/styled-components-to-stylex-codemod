@@ -415,14 +415,22 @@ function isComponentPropsOfConvertedWrapper(
 function isComponentPropsTypeName(typeReference: any): boolean {
   const typeName = typeReference.typeName;
   if (typeName?.type === "Identifier") {
-    return typeName.name.startsWith("ComponentProps");
+    return isReactComponentPropsUtilityName(typeName.name);
   }
   return (
     typeName?.type === "TSQualifiedName" &&
     typeName.left?.type === "Identifier" &&
     typeName.left.name === "React" &&
     typeName.right?.type === "Identifier" &&
-    typeName.right.name.startsWith("ComponentProps")
+    isReactComponentPropsUtilityName(typeName.right.name)
+  );
+}
+
+function isReactComponentPropsUtilityName(name: string): boolean {
+  return (
+    name === "ComponentProps" ||
+    name === "ComponentPropsWithRef" ||
+    name === "ComponentPropsWithoutRef"
   );
 }
 

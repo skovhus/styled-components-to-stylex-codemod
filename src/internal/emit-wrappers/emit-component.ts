@@ -2152,10 +2152,10 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
     return false;
   }
   const isComponentProps =
-    (typeName.kind === "identifier" && typeName.name.startsWith("ComponentProps")) ||
+    (typeName.kind === "identifier" && isReactComponentPropsUtilityName(typeName.name)) ||
     (typeName.kind === "qualified" &&
       typeName.namespace === "React" &&
-      typeName.name.startsWith("ComponentProps"));
+      isReactComponentPropsUtilityName(typeName.name));
   if (!isComponentProps) {
     return false;
   }
@@ -2166,6 +2166,14 @@ function typeReferenceIsComponentPropsOfWrapped(type: ASTNode, wrappedComponent:
       getTypeQueryExpressionName(query.exprName) === wrappedComponent
     );
   });
+}
+
+function isReactComponentPropsUtilityName(name: string): boolean {
+  return (
+    name === "ComponentProps" ||
+    name === "ComponentPropsWithRef" ||
+    name === "ComponentPropsWithoutRef"
+  );
 }
 
 function isIntrinsicPassthroughType(emitter: WrapperEmitter, type: ASTNode): boolean {

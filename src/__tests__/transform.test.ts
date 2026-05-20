@@ -9652,6 +9652,37 @@ export const App = () => <Wrapper>wrapped</Wrapper>;
     expect(output).toContain("<Box className={className} sx={sx}>alias</Box>");
   });
 
+  it("does not treat local ComponentProps-prefixed helpers as sx-aware React utilities", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+
+type ComponentPropsSubset<T extends React.ElementType> = Pick<React.ComponentProps<T>, "className">;
+type WrapperProps = ComponentPropsSubset<typeof Box>;
+
+function Wrapper({ className }: WrapperProps) {
+  return <Box className={className}>alias</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper>wrapped</Wrapper>;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      'type ComponentPropsSubset<T extends React.ElementType> = Pick<React.ComponentProps<T>, "className">;',
+    );
+    expect(output).toContain("type WrapperProps = ComponentPropsSubset<typeof Box>;");
+    expect(output).toContain("function Wrapper({ className }: WrapperProps)");
+    expect(output).toContain("<Box className={className}>alias</Box>");
+    expect(output).not.toMatch(/type WrapperProps = ComponentPropsSubset<typeof Box> & \{/);
+    expect(output).not.toMatch(/function Wrapper\(\{\s*className,\s*sx/);
+    expect(output).not.toContain("<Box className={className} sx={sx}>alias</Box>");
+  });
+
   it("does not shadow captured sx identifiers when adding sx destructuring", () => {
     const source = `
 import styled from "styled-components";
