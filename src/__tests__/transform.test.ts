@@ -11610,7 +11610,7 @@ export const App = () => <Box $width={320}>content</Box>;
       export const App = () => <Box $width={320}>content</Box>;
 
       const styles = stylex.create({
-        boxWithPanelWidth: (width: number | undefined) => ({
+        boxWithPanelWidth: (width: number) => ({
           "--panel-width": \`\${width}px\`,
         }),
       });
