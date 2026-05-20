@@ -9513,6 +9513,35 @@ export const App = () => <Wrapper items={[{ label: "inner", className: "item" }]
     expect(output).toContain("<Box key={label} className={className}>");
     expect(output.match(/sx=\{sx\}/g)).toHaveLength(1);
   });
+
+  it("does not infer sx pass-through to shadowed component bindings", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+type WrapperProps = {
+  className?: string;
+};
+
+function Wrapper({ className }: WrapperProps) {
+  const Box = (props: { className?: string; children?: React.ReactNode }) => (
+    <span className={props.className}>{props.children}</span>
+  );
+  return <Box className={className}>local</Box>;
+}
+
+export const Box = styled.div\`
+  color: red;
+\`;
+
+export const App = () => <Wrapper />;
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("type WrapperProps = {\n  className?: string;\n};");
+    expect(output).toContain("<Box className={className}>local</Box>");
+    expect(output).not.toContain("<Box className={className} sx={sx}>local</Box>");
+  });
 });
 
 describe("usePhysicalProperties adapter option", () => {

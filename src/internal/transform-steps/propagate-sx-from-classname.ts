@@ -11,14 +11,14 @@ import type { TransformContext } from "../transform-context.js";
  * prop through to converted styled-component wrappers.
  */
 export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult {
-  const convertedWrapperNames = collectConvertedWrapperNames(ctx);
-  if (convertedWrapperNames.size === 0) {
+  const convertedWrappers = collectConvertedWrappers(ctx);
+  if (convertedWrappers.names.size === 0) {
     return CONTINUE;
   }
 
   const components = collectComponentCandidates(ctx);
   for (const component of components) {
-    if (convertedWrapperNames.has(component.name)) {
+    if (convertedWrappers.names.has(component.name)) {
       continue;
     }
 
@@ -45,7 +45,8 @@ export function propagateSxFromClassNameStep(ctx: TransformContext): StepResult 
       ctx,
       fn: component.fn,
       fnPath: component.fnPath,
-      convertedWrapperNames,
+      convertedWrapperBindings: convertedWrappers.bindings,
+      localBindingNames: collectLocalBindingNames(component.fn),
       propsBinding,
       sxExpression,
     });
@@ -80,10 +81,17 @@ type ComponentCandidate = {
 
 type JsxExpression = Parameters<JSCodeshift["jsxExpressionContainer"]>[0];
 
+type ConvertedWrappers = {
+  names: Set<string>;
+  bindings: Map<string, object>;
+};
+
 type ScopedAstPath = ASTPath<any> & {
   scope?: {
+    isGlobal?: boolean;
     lookup?: (name: string) => object | null | undefined;
   };
+  parentPath?: ScopedAstPath;
 };
 
 type PropsBinding =
@@ -100,7 +108,7 @@ type PropsBinding =
       typeName: string;
     };
 
-function collectConvertedWrapperNames(ctx: TransformContext): Set<string> {
+function collectConvertedWrappers(ctx: TransformContext): ConvertedWrappers {
   const names = new Set<string>();
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
   for (const decl of styledDecls ?? []) {
@@ -108,7 +116,41 @@ function collectConvertedWrapperNames(ctx: TransformContext): Set<string> {
       names.add(decl.localName);
     }
   }
-  return names;
+
+  return {
+    names,
+    bindings: collectTopLevelBindingScopes(ctx, names),
+  };
+}
+
+function collectTopLevelBindingScopes(
+  ctx: TransformContext,
+  names: Set<string>,
+): Map<string, object> {
+  const bindings = new Map<string, object>();
+  const { root, j } = ctx;
+
+  root.find(j.FunctionDeclaration).forEach((path: ScopedAstPath) => {
+    const name = path.node.id?.name;
+    if (!name || !names.has(name) || !path.parentPath?.scope?.isGlobal) {
+      return;
+    }
+    if (path.parentPath.scope) {
+      bindings.set(name, path.parentPath.scope);
+    }
+  });
+
+  root.find(j.VariableDeclarator).forEach((path: ScopedAstPath) => {
+    const name = path.node.id?.type === "Identifier" ? path.node.id.name : undefined;
+    if (!name || !names.has(name) || path.scope?.isGlobal !== true) {
+      return;
+    }
+    if (path.scope) {
+      bindings.set(name, path.scope);
+    }
+  });
+
+  return bindings;
 }
 
 function collectComponentCandidates(ctx: TransformContext): ComponentCandidate[] {
@@ -299,11 +341,20 @@ function addSxToForwardedChildren(args: {
   ctx: TransformContext;
   fn: FunctionLike;
   fnPath: ScopedAstPath;
-  convertedWrapperNames: Set<string>;
+  convertedWrapperBindings: Map<string, object>;
+  localBindingNames: Set<string>;
   propsBinding: PropsBinding;
   sxExpression: JsxExpression;
 }): boolean {
-  const { ctx, fn, fnPath, convertedWrapperNames, propsBinding, sxExpression } = args;
+  const {
+    ctx,
+    fn,
+    fnPath,
+    convertedWrapperBindings,
+    localBindingNames,
+    propsBinding,
+    sxExpression,
+  } = args;
   const body = fn.body as ASTNode | undefined;
   if (!body) {
     return false;
@@ -320,7 +371,13 @@ function addSxToForwardedChildren(args: {
     .forEach((path: ScopedAstPath) => {
       const opening = path.node;
       const childName = opening.name?.type === "JSXIdentifier" ? opening.name.name : undefined;
-      if (!childName || !convertedWrapperNames.has(childName) || hasJsxAttr(opening, "sx")) {
+      const convertedBindingScope = childName ? convertedWrapperBindings.get(childName) : undefined;
+      if (
+        !childName ||
+        !convertedBindingScope ||
+        !isConvertedChildBinding(path, childName, convertedBindingScope, localBindingNames) ||
+        hasJsxAttr(opening, "sx")
+      ) {
         return;
       }
 
@@ -346,11 +403,23 @@ function addSxToForwardedChildren(args: {
   return changed;
 }
 
+function isConvertedChildBinding(
+  path: ScopedAstPath,
+  childName: string,
+  convertedBindingScope: object,
+  localBindingNames: Set<string>,
+): boolean {
+  const childBindingScope = findBindingScope(path, childName);
+  if (childBindingScope) {
+    return childBindingScope === convertedBindingScope;
+  }
+  return !localBindingNames.has(childName);
+}
+
 function findPropsBindingScope(fnPath: ScopedAstPath, propsBinding: PropsBinding): object | null {
   const bindingName =
     propsBinding.kind === "destructured" ? propsBinding.classNameLocal : propsBinding.propsLocal;
-  const scope = fnPath.scope?.lookup?.(bindingName);
-  return scope && typeof scope === "object" ? scope : null;
+  return findBindingScope(fnPath, bindingName);
 }
 
 function isInPropsBindingScope(
@@ -360,7 +429,21 @@ function isInPropsBindingScope(
 ): boolean {
   const bindingName =
     propsBinding.kind === "destructured" ? propsBinding.classNameLocal : propsBinding.propsLocal;
-  return path.scope?.lookup?.(bindingName) === bindingScope;
+  return isInBindingScope(path, bindingName, bindingScope);
+}
+
+function findBindingScope(path: ScopedAstPath, bindingName: string): object | null {
+  let scope: object | null | undefined;
+  try {
+    scope = path.scope?.lookup?.(bindingName);
+  } catch {
+    return null;
+  }
+  return scope && typeof scope === "object" ? scope : null;
+}
+
+function isInBindingScope(path: ScopedAstPath, bindingName: string, bindingScope: object): boolean {
+  return findBindingScope(path, bindingName) === bindingScope;
 }
 
 function addSxDestructure(ctx: TransformContext, propsBinding: PropsBinding): void {
@@ -468,6 +551,12 @@ function getAvailableSxLocalName(fn: FunctionLike): string {
   return `sxProp${suffix}`;
 }
 
+function collectLocalBindingNames(fn: FunctionLike): Set<string> {
+  const names = new Set<string>();
+  collectBindingNames(fn.body, names);
+  return names;
+}
+
 function collectBindingNames(
   node: unknown,
   names: Set<string>,
@@ -487,8 +576,13 @@ function collectBindingNames(
   if (typeof astNode.id === "object" && astNode.id !== null) {
     collectPatternBindingNames(astNode.id, names);
   }
+  if (Array.isArray(astNode.params)) {
+    for (const param of astNode.params) {
+      collectPatternBindingNames(param, names);
+    }
+  }
   for (const value of Object.values(astNode)) {
-    if (!value || value === astNode.id) {
+    if (!value || value === astNode.id || value === astNode.params) {
       continue;
     }
     if (Array.isArray(value)) {
