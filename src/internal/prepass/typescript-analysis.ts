@@ -724,6 +724,8 @@ function collectStyleXStylesWithoutKeys(
       visited.add(declaration);
       if (ts.isTypeAliasDeclaration(declaration)) {
         collectStyleXStylesWithoutKeys(names, declaration.type, checker, visited);
+      } else if (ts.isInterfaceDeclaration(declaration)) {
+        collectStyleXStylesWithoutKeysFromInterface(names, declaration, checker, visited);
       }
     }
     return;
@@ -732,6 +734,46 @@ function collectStyleXStylesWithoutKeys(
   if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
     for (const part of typeNode.types) {
       collectStyleXStylesWithoutKeys(names, part, checker, visited);
+    }
+  }
+}
+
+function collectStyleXStylesWithoutKeysFromInterface(
+  names: Set<string>,
+  declaration: ts.InterfaceDeclaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  for (const clause of declaration.heritageClauses ?? []) {
+    for (const heritageType of clause.types) {
+      if (isIntrinsicReactHeritageReference(heritageType)) {
+        continue;
+      }
+      const typeName = heritageType.expression.getText();
+      if (typeName.endsWith("StyleXStylesWithout")) {
+        collectPropertyKeysFromTypeNode(names, heritageType.typeArguments?.[0], checker, visited);
+        continue;
+      }
+      const symbol = resolveAliasedSymbol(
+        checker.getSymbolAtLocation(heritageType.expression),
+        checker,
+      );
+      for (const inheritedDeclaration of symbol?.declarations ?? []) {
+        if (visited.has(inheritedDeclaration)) {
+          continue;
+        }
+        visited.add(inheritedDeclaration);
+        if (ts.isTypeAliasDeclaration(inheritedDeclaration)) {
+          collectStyleXStylesWithoutKeys(names, inheritedDeclaration.type, checker, visited);
+        } else if (ts.isInterfaceDeclaration(inheritedDeclaration)) {
+          collectStyleXStylesWithoutKeysFromInterface(
+            names,
+            inheritedDeclaration,
+            checker,
+            visited,
+          );
+        }
+      }
     }
   }
 }

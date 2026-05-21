@@ -132,6 +132,8 @@ describe("TypeScript compiler prepass", () => {
         "  sx?: stylex.StyleXStylesWithout<ExcludedProps>;",
         "};",
         "",
+        "interface SxSurface extends stylex.StyleXStylesWithout<ExcludedProps> {}",
+        "",
         "type ButtonProps = {",
         "  sx?: stylex.StyleXStylesWithout<{",
         "    paddingBlock?: string | number | null;",
@@ -142,6 +144,7 @@ describe("TypeScript compiler prepass", () => {
         'type OmittedButtonProps = Omit<BaseButtonProps, "tone">;',
         'type PickedButtonProps = Pick<BaseButtonProps, "sx">;',
         "type PartialButtonProps = Partial<BaseButtonProps>;",
+        "type InterfaceAliasButtonProps = { sx?: SxSurface };",
         'type WithoutSxProps = Pick<BaseButtonProps, "tone">;',
         "",
         "export function Button(props: ButtonProps) {",
@@ -160,6 +163,10 @@ describe("TypeScript compiler prepass", () => {
         "  return <button />;",
         "}",
         "",
+        "export function InterfaceAliasButton(props: InterfaceAliasButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
         "export function WithoutSxButton(props: WithoutSxProps) {",
         "  return <button />;",
         "}",
@@ -171,7 +178,12 @@ describe("TypeScript compiler prepass", () => {
       const button = findTypeScriptComponentMetadata(metadata, filePath, ["Button"]);
       expect(button?.supportsSxProp).toBe(true);
       expect(button?.sxExcludedProperties).toEqual(["paddingBlock", "paddingInline"]);
-      for (const componentName of ["OmittedButton", "PickedButton", "PartialButton"]) {
+      for (const componentName of [
+        "OmittedButton",
+        "PickedButton",
+        "PartialButton",
+        "InterfaceAliasButton",
+      ]) {
         const component = findTypeScriptComponentMetadata(metadata, filePath, [componentName]);
         expect(component?.supportsSxProp).toBe(true);
         expect(component?.sxExcludedProperties).toEqual([

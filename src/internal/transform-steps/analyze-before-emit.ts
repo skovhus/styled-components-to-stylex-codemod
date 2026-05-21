@@ -2582,8 +2582,31 @@ function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
   for (const sbv of decl.staticBooleanVariants ?? []) {
     keys.push(sbv.styleKey);
   }
+  for (const cs of decl.callSiteCombinedStyles ?? []) {
+    keys.push(cs.styleKey);
+  }
+  for (const ps of decl.promotedStyleProps ?? []) {
+    if (!ps.mergeIntoBase) {
+      keys.push(ps.styleKey);
+    }
+  }
   for (const pas of decl.pseudoAliasSelectors ?? []) {
     keys.push(...pas.styleKeys);
+  }
+  if (decl.attrWrapper) {
+    const aw = decl.attrWrapper;
+    for (const k of [
+      aw.checkboxKey,
+      aw.radioKey,
+      aw.readonlyKey,
+      aw.externalKey,
+      aw.httpsKey,
+      aw.pdfKey,
+    ]) {
+      if (k) {
+        keys.push(k);
+      }
+    }
   }
   return keys;
 }
@@ -4694,7 +4717,7 @@ function normalizeStylesForSxRestrictedWrappedComponents(
     }
 
     const excluded = new Set(excludedProperties);
-    for (const styleKey of collectComponentStyleKeys(decl)) {
+    for (const styleKey of collectAllStyleKeysForDecl(decl)) {
       const style = ctx.resolvedStyleObjects.get(styleKey);
       if (!style || typeof style !== "object") {
         continue;
@@ -4754,41 +4777,6 @@ function wrappedComponentInterfaceForSxNormalization(
   }
 
   return undefined;
-}
-
-function collectComponentStyleKeys(decl: StyledDecl): string[] {
-  const keys: string[] = [decl.styleKey];
-  if (decl.variantStyleKeys) {
-    keys.push(...Object.values(decl.variantStyleKeys));
-  }
-  if (decl.extraStyleKeys) {
-    keys.push(...decl.extraStyleKeys);
-  }
-  if (decl.extraStyleKeysAfterBase) {
-    keys.push(...decl.extraStyleKeysAfterBase);
-  }
-  if (decl.enumVariant) {
-    keys.push(decl.enumVariant.baseKey);
-    for (const c of decl.enumVariant.cases) {
-      keys.push(c.styleKey);
-    }
-  }
-  if (decl.attrWrapper) {
-    const aw = decl.attrWrapper;
-    for (const k of [
-      aw.checkboxKey,
-      aw.radioKey,
-      aw.readonlyKey,
-      aw.externalKey,
-      aw.httpsKey,
-      aw.pdfKey,
-    ]) {
-      if (k) {
-        keys.push(k);
-      }
-    }
-  }
-  return keys;
 }
 
 function expandExcludedLogicalProperties(
