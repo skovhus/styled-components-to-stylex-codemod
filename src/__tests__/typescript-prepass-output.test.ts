@@ -497,12 +497,21 @@ describe("TypeScript prepass output refinement", () => {
       'import * as stylex from "@stylexjs/stylex";',
       'import styled from "styled-components";',
       "",
-      "type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
-      "  sx?: stylex.StyleXStylesWithout<{",
-      "    paddingBlock?: string | number | null;",
-      "    paddingInline?: string | number | null;",
-      "  }>;",
+      "interface ExcludedBase {",
+      "  marginBlock?: string | number | null;",
+      "}",
+      "",
+      "interface ExcludedProps extends ExcludedBase {",
+      "  paddingBlock?: string | number | null;",
+      "  paddingInline?: string | number | null;",
+      "}",
+      "",
+      "type BaseButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
+      "  tone?: 'primary' | 'secondary';",
+      "  sx?: stylex.StyleXStylesWithout<ExcludedProps>;",
       "};",
+      "",
+      'type ButtonProps = Omit<BaseButtonProps, "tone">;',
       "",
       "function Button(props: ButtonProps) {",
       "  return <button {...props} />;",
@@ -536,6 +545,8 @@ describe("TypeScript prepass output refinement", () => {
       expect(after.code).toContain("paddingLeft: 6");
       expect(after.code).not.toContain("paddingBlock: 0");
       expect(after.code).not.toContain("paddingInline: 6");
+      expect(after.code).toContain("marginLeft: -6");
+      expect(after.code).not.toContain("marginBlock:");
       expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
       expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
     } finally {

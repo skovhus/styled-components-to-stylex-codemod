@@ -118,6 +118,20 @@ describe("TypeScript compiler prepass", () => {
       [
         'import * as stylex from "@stylexjs/stylex";',
         "",
+        "interface ExcludedBase {",
+        "  marginBlock?: string | number | null;",
+        "}",
+        "",
+        "interface ExcludedProps extends ExcludedBase {",
+        "  paddingBlock?: string | number | null;",
+        "  paddingInline?: string | number | null;",
+        "}",
+        "",
+        "type BaseButtonProps = {",
+        "  tone?: 'primary' | 'secondary';",
+        "  sx?: stylex.StyleXStylesWithout<ExcludedProps>;",
+        "};",
+        "",
         "type ButtonProps = {",
         "  sx?: stylex.StyleXStylesWithout<{",
         "    paddingBlock?: string | number | null;",
@@ -125,7 +139,28 @@ describe("TypeScript compiler prepass", () => {
         "  }>;",
         "};",
         "",
+        'type OmittedButtonProps = Omit<BaseButtonProps, "tone">;',
+        'type PickedButtonProps = Pick<BaseButtonProps, "sx">;',
+        "type PartialButtonProps = Partial<BaseButtonProps>;",
+        'type WithoutSxProps = Pick<BaseButtonProps, "tone">;',
+        "",
         "export function Button(props: ButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+        "export function OmittedButton(props: OmittedButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+        "export function PickedButton(props: PickedButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+        "export function PartialButton(props: PartialButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+        "export function WithoutSxButton(props: WithoutSxProps) {",
         "  return <button />;",
         "}",
       ].join("\n"),
@@ -136,6 +171,18 @@ describe("TypeScript compiler prepass", () => {
       const button = findTypeScriptComponentMetadata(metadata, filePath, ["Button"]);
       expect(button?.supportsSxProp).toBe(true);
       expect(button?.sxExcludedProperties).toEqual(["paddingBlock", "paddingInline"]);
+      for (const componentName of ["OmittedButton", "PickedButton", "PartialButton"]) {
+        const component = findTypeScriptComponentMetadata(metadata, filePath, [componentName]);
+        expect(component?.supportsSxProp).toBe(true);
+        expect(component?.sxExcludedProperties).toEqual([
+          "marginBlock",
+          "paddingBlock",
+          "paddingInline",
+        ]);
+      }
+      const withoutSx = findTypeScriptComponentMetadata(metadata, filePath, ["WithoutSxButton"]);
+      expect(withoutSx?.supportsSxProp).toBe(false);
+      expect(withoutSx?.sxExcludedProperties).toEqual([]);
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

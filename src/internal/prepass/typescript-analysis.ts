@@ -488,6 +488,38 @@ function collectExplicitPropNamesInto(
     return;
   }
 
+  const utilityType = readUtilityTypeReference(typeNode);
+  if (utilityType.name === "Pick") {
+    if (utilityType.typeArgs[0]) {
+      const pickedNames = new Set<string>();
+      collectExplicitPropNamesInto(pickedNames, utilityType.typeArgs[0], checker, visited);
+      for (const name of pickedNames) {
+        if (typeNodeKeyIncludes(utilityType.typeArgs[1], name)) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+  if (utilityType.name === "Omit") {
+    if (utilityType.typeArgs[0]) {
+      const omittedNames = new Set<string>();
+      collectExplicitPropNamesInto(omittedNames, utilityType.typeArgs[0], checker, visited);
+      for (const name of omittedNames) {
+        if (!typeNodeKeyIncludes(utilityType.typeArgs[1], name)) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+  if (isTransparentUtilityTypeName(utilityType.name)) {
+    if (utilityType.typeArgs[0]) {
+      collectExplicitPropNamesInto(names, utilityType.typeArgs[0], checker, visited);
+    }
+    return;
+  }
+
   const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
   for (const declaration of symbol?.declarations ?? []) {
     collectExplicitPropNamesFromDeclaration(names, declaration, checker, visited);
@@ -517,22 +549,21 @@ function typeNodeHasResolvableSxSurface(
     return false;
   }
 
-  const utilityTypeName = typeNode.typeName.getText();
-  const typeArgs = typeNode.typeArguments ?? [];
-  if (utilityTypeName === "Pick") {
-    return typeArgs.length >= 2 && typeNodeKeyIncludes(typeArgs[1], "sx");
+  const utilityType = readUtilityTypeReference(typeNode);
+  if (utilityType.name === "Pick") {
+    return utilityType.typeArgs.length >= 2 && typeNodeKeyIncludes(utilityType.typeArgs[1], "sx");
   }
-  if (utilityTypeName === "Omit") {
-    const baseType = typeArgs[0];
+  if (utilityType.name === "Omit") {
+    const baseType = utilityType.typeArgs[0];
     return (
       baseType !== undefined &&
-      typeArgs.length >= 2 &&
-      !typeNodeKeyIncludes(typeArgs[1], "sx") &&
+      utilityType.typeArgs.length >= 2 &&
+      !typeNodeKeyIncludes(utilityType.typeArgs[1], "sx") &&
       typeNodeHasResolvableSxSurface(baseType, checker, visited)
     );
   }
-  if (["Partial", "Required", "Readonly"].includes(utilityTypeName)) {
-    const baseType = typeArgs[0];
+  if (isTransparentUtilityTypeName(utilityType.name)) {
+    const baseType = utilityType.typeArgs[0];
     return baseType !== undefined && typeNodeHasResolvableSxSurface(baseType, checker, visited);
   }
 
@@ -540,6 +571,20 @@ function typeNodeHasResolvableSxSurface(
   return (symbol?.declarations ?? []).some((declaration) =>
     declarationHasResolvableSxSurface(declaration, checker, visited),
   );
+}
+
+function readUtilityTypeReference(typeNode: ts.TypeReferenceNode): {
+  name: string;
+  typeArgs: readonly ts.TypeNode[];
+} {
+  return {
+    name: typeNode.typeName.getText(),
+    typeArgs: typeNode.typeArguments ?? [],
+  };
+}
+
+function isTransparentUtilityTypeName(typeName: string): boolean {
+  return typeName === "Partial" || typeName === "Required" || typeName === "Readonly";
 }
 
 function collectSxExcludedProperties(
@@ -580,6 +625,34 @@ function collectSxExcludedPropertiesInto(
   }
 
   if (!ts.isTypeReferenceNode(typeNode) || isIntrinsicReactPropReference(typeNode)) {
+    return;
+  }
+
+  const utilityType = readUtilityTypeReference(typeNode);
+  if (utilityType.name === "Pick") {
+    if (
+      utilityType.typeArgs.length >= 2 &&
+      typeNodeKeyIncludes(utilityType.typeArgs[1], "sx") &&
+      utilityType.typeArgs[0]
+    ) {
+      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+    }
+    return;
+  }
+  if (utilityType.name === "Omit") {
+    if (
+      utilityType.typeArgs.length >= 2 &&
+      !typeNodeKeyIncludes(utilityType.typeArgs[1], "sx") &&
+      utilityType.typeArgs[0]
+    ) {
+      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+    }
+    return;
+  }
+  if (isTransparentUtilityTypeName(utilityType.name)) {
+    if (utilityType.typeArgs[0]) {
+      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+    }
     return;
   }
 
@@ -692,6 +765,37 @@ function collectPropertyKeysFromTypeNode(
   if (!ts.isTypeReferenceNode(typeNode)) {
     return;
   }
+  const utilityType = readUtilityTypeReference(typeNode);
+  if (utilityType.name === "Pick") {
+    if (utilityType.typeArgs[0]) {
+      const pickedNames = new Set<string>();
+      collectPropertyKeysFromTypeNode(pickedNames, utilityType.typeArgs[0], checker, visited);
+      for (const name of pickedNames) {
+        if (typeNodeKeyIncludes(utilityType.typeArgs[1], name)) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+  if (utilityType.name === "Omit") {
+    if (utilityType.typeArgs[0]) {
+      const omittedNames = new Set<string>();
+      collectPropertyKeysFromTypeNode(omittedNames, utilityType.typeArgs[0], checker, visited);
+      for (const name of omittedNames) {
+        if (!typeNodeKeyIncludes(utilityType.typeArgs[1], name)) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+  if (isTransparentUtilityTypeName(utilityType.name)) {
+    if (utilityType.typeArgs[0]) {
+      collectPropertyKeysFromTypeNode(names, utilityType.typeArgs[0], checker, visited);
+    }
+    return;
+  }
   const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
   for (const declaration of symbol?.declarations ?? []) {
     if (visited.has(declaration)) {
@@ -701,12 +805,49 @@ function collectPropertyKeysFromTypeNode(
     if (ts.isTypeAliasDeclaration(declaration)) {
       collectPropertyKeysFromTypeNode(names, declaration.type, checker, visited);
     } else if (ts.isInterfaceDeclaration(declaration)) {
-      for (const member of declaration.members) {
-        if (ts.isPropertySignature(member)) {
-          const name = propertyNameText(member.name);
-          if (name) {
-            names.add(name);
-          }
+      collectPropertyKeysFromInterfaceDeclaration(names, declaration, checker, visited);
+    }
+  }
+}
+
+function collectPropertyKeysFromInterfaceDeclaration(
+  names: Set<string>,
+  declaration: ts.InterfaceDeclaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  for (const member of declaration.members) {
+    if (ts.isPropertySignature(member)) {
+      const name = propertyNameText(member.name);
+      if (name) {
+        names.add(name);
+      }
+    }
+  }
+
+  for (const clause of declaration.heritageClauses ?? []) {
+    for (const heritageType of clause.types) {
+      if (isIntrinsicReactHeritageReference(heritageType)) {
+        continue;
+      }
+      const symbol = resolveAliasedSymbol(
+        checker.getSymbolAtLocation(heritageType.expression),
+        checker,
+      );
+      for (const inheritedDeclaration of symbol?.declarations ?? []) {
+        if (visited.has(inheritedDeclaration)) {
+          continue;
+        }
+        visited.add(inheritedDeclaration);
+        if (ts.isInterfaceDeclaration(inheritedDeclaration)) {
+          collectPropertyKeysFromInterfaceDeclaration(
+            names,
+            inheritedDeclaration,
+            checker,
+            visited,
+          );
+        } else if (ts.isTypeAliasDeclaration(inheritedDeclaration)) {
+          collectPropertyKeysFromTypeNode(names, inheritedDeclaration.type, checker, visited);
         }
       }
     }
