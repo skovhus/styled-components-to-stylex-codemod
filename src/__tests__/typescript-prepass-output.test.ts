@@ -449,12 +449,13 @@ describe("TypeScript prepass output refinement", () => {
       'import styled from "styled-components";',
       'import { Button } from "./Button";',
       "",
-      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })`',
-      "  padding: 0 6px;",
+      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })<{ $pad: number }>`',
+      "  padding-block: ${(props) => props.$pad}px;",
+      "  padding-inline: 6px;",
       "  margin-left: -6px;",
       "`;",
       "",
-      'export const App = () => <WidgetButton aria-label="Open" />;',
+      'export const App = () => <WidgetButton $pad={4} aria-label="Open" />;',
     ].join("\n");
     writeFileSync(sourcePath, source);
 
@@ -476,13 +477,13 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("paddingTop: 0");
+      expect(after.code).toContain("paddingTop:");
       expect(after.code).toContain("paddingRight: 6");
-      expect(after.code).toContain("paddingBottom: 0");
+      expect(after.code).toContain("paddingBottom:");
       expect(after.code).toContain("paddingLeft: 6");
-      expect(after.code).not.toContain("paddingBlock: 0");
+      expect(after.code).not.toMatch(/^\s+paddingBlock:/m);
       expect(after.code).not.toContain("paddingInline: 6");
-      expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
+      expect(after.code).toContain("sx={[styles.widgetButton(pad), sx]}");
       expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });

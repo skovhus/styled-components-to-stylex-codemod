@@ -26,6 +26,7 @@ import {
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
   astNodesEqual,
+  cloneAstNode,
   type ExpressionKind,
   getRootJsxIdentifierName,
   isAstNode,
@@ -4695,10 +4696,10 @@ function normalizeStylesForSxRestrictedWrappedComponents(
     const excluded = new Set(excludedProperties);
     for (const styleKey of collectComponentStyleKeys(decl)) {
       const style = ctx.resolvedStyleObjects.get(styleKey);
-      if (!style || typeof style !== "object" || isAstNode(style)) {
+      if (!style || typeof style !== "object") {
         continue;
       }
-      expandExcludedLogicalProperties(style as Record<string, unknown>, excluded);
+      expandExcludedLogicalProperties(ctx.j, style, excluded);
     }
   }
 }
@@ -4791,10 +4792,17 @@ function collectComponentStyleKeys(decl: StyledDecl): string[] {
 }
 
 function expandExcludedLogicalProperties(
-  style: Record<string, unknown>,
+  j: JSCodeshift,
+  style: object,
   excludedProperties: ReadonlySet<string>,
 ): void {
-  const entries = Object.entries(style);
+  if (isAstNode(style)) {
+    expandExcludedLogicalPropertiesInAstNode(j, style, excludedProperties);
+    return;
+  }
+
+  const styleObject = style as Record<string, unknown>;
+  const entries = Object.entries(styleObject);
   let changed = false;
   for (const [prop] of entries) {
     if (excludedProperties.has(prop) && LOGICAL_TO_PHYSICAL[prop]) {
@@ -4806,17 +4814,98 @@ function expandExcludedLogicalProperties(
     return;
   }
 
-  for (const key of Object.keys(style)) {
-    delete style[key];
+  for (const key of Object.keys(styleObject)) {
+    delete styleObject[key];
   }
   for (const [prop, value] of entries) {
     const physicalProps = excludedProperties.has(prop) ? LOGICAL_TO_PHYSICAL[prop] : undefined;
     if (!physicalProps) {
-      style[prop] = value;
+      styleObject[prop] = value;
       continue;
     }
     for (const physicalProp of physicalProps) {
-      style[physicalProp] = value;
+      styleObject[physicalProp] = value;
     }
   }
+}
+
+function expandExcludedLogicalPropertiesInAstNode(
+  j: JSCodeshift,
+  node: object,
+  excludedProperties: ReadonlySet<string>,
+): void {
+  const n = node as { type?: string; body?: unknown; properties?: unknown[] };
+  if (n.type === "ObjectExpression") {
+    expandExcludedLogicalPropertiesInObjectExpression(j, n, excludedProperties);
+    return;
+  }
+  if (n.type === "ArrowFunctionExpression" && n.body && typeof n.body === "object") {
+    expandExcludedLogicalPropertiesInAstNode(j, n.body, excludedProperties);
+  }
+}
+
+function expandExcludedLogicalPropertiesInObjectExpression(
+  j: JSCodeshift,
+  node: { properties?: unknown[] },
+  excludedProperties: ReadonlySet<string>,
+): void {
+  const originalProperties = node.properties ?? [];
+  let changed = false;
+  const nextProperties: unknown[] = [];
+  for (const prop of originalProperties) {
+    const name = staticObjectPropertyName(prop);
+    const physicalProps = name && excludedProperties.has(name) ? LOGICAL_TO_PHYSICAL[name] : null;
+    if (!physicalProps) {
+      nextProperties.push(prop);
+      continue;
+    }
+    const value = (prop as { value?: unknown }).value;
+    if (!value) {
+      nextProperties.push(prop);
+      continue;
+    }
+    changed = true;
+    for (const physicalProp of physicalProps) {
+      nextProperties.push(
+        makeClonedStyleProperty(j, physicalProp, value, prop as { comments?: unknown }),
+      );
+    }
+  }
+  if (changed) {
+    node.properties = nextProperties;
+  }
+}
+
+function staticObjectPropertyName(prop: unknown): string | null {
+  if (!prop || typeof prop !== "object") {
+    return null;
+  }
+  const p = prop as { type?: string; computed?: boolean; key?: unknown };
+  if (p.type !== "Property" || p.computed) {
+    return null;
+  }
+  const key = p.key as { type?: string; name?: string; value?: unknown } | undefined;
+  if (!key) {
+    return null;
+  }
+  if (key.type === "Identifier") {
+    return key.name ?? null;
+  }
+  if (key.type === "Literal" || key.type === "StringLiteral") {
+    return typeof key.value === "string" ? key.value : null;
+  }
+  return null;
+}
+
+function makeClonedStyleProperty(
+  j: JSCodeshift,
+  propName: string,
+  value: unknown,
+  sourceProp: { comments?: unknown },
+): unknown {
+  const prop = j.property("init", j.identifier(propName), cloneAstNode(value) as ExpressionKind);
+  if (sourceProp.comments) {
+    (prop as { comments?: unknown }).comments = cloneAstNode(sourceProp.comments) as unknown;
+  }
+  return prop;
 }
