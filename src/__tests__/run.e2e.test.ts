@@ -31,6 +31,8 @@ async function runAutoSxWrapperFixture(args: {
   consumerPaths?: string | string[] | null;
   dryRun?: boolean;
   print?: boolean;
+  appReturn?: string;
+  exportStyled?: boolean;
 }): Promise<{
   result: Awaited<ReturnType<typeof runTransform>>;
   container: string;
@@ -65,12 +67,12 @@ async function runAutoSxWrapperFixture(args: {
       'import styled from "styled-components";',
       args.importLine,
       "",
-      `const Body = styled(${args.wrappedName ?? "ContentViewContainer"})\``,
+      `${args.exportStyled ? "export " : ""}const Body = styled(${args.wrappedName ?? "ContentViewContainer"})\``,
       ...args.bodyRuleLines,
       "`;",
       "",
       "export function App() {",
-      "  return <Body />;",
+      `  return ${args.appReturn ?? "<Body />"};`,
       "}",
       "",
     ].join("\n"),
@@ -191,6 +193,72 @@ describe("runTransform (e2e)", () => {
         ],
       }),
     );
+  });
+
+  it("expands sx-excluded logical properties for sx-aware wrappers", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-sx-without-",
+      componentLines: [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
+        "  size?: 'small' | 'normal';",
+        "  variant?: 'borderless' | 'primary';",
+        "  sx?: stylex.StyleXStylesWithout<{",
+        "    paddingBlock?: string | number | null;",
+        "    paddingInline?: string | number | null;",
+        "  }>;",
+        "};",
+        "",
+        "export function ContentViewContainer(props: ButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+      ],
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  padding: 0 6px;", "  margin-left: -6px;"],
+    });
+
+    expect(result.errors).toBe(0);
+    expect(consumer).toContain("paddingTop: 0");
+    expect(consumer).toContain("paddingRight: 6");
+    expect(consumer).toContain("paddingBottom: 0");
+    expect(consumer).toContain("paddingLeft: 6");
+    expect(consumer).not.toContain("paddingBlock");
+    expect(consumer).not.toContain("paddingInline");
+    expect(consumer).toContain("sx={styles.body}");
+  });
+
+  it("does not infer onlyIcon narrowing for sx-aware wrappers that render children", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-only-icon-",
+      componentLines: [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
+        "  sx?: stylex.StyleXStyles;",
+        "} & (",
+        "  | { onlyIcon?: false; ['aria-label']?: string }",
+        "  | { onlyIcon: true; ['aria-label']: string }",
+        ");",
+        "",
+        "export function Button(props: ButtonProps) {",
+        "  return <button />;",
+        "}",
+        "",
+      ],
+      importLine: 'import { Button } from "../../components/ContentViewContainer";',
+      wrappedName: "Button",
+      bodyRuleLines: ["  margin-left: -6px;"],
+      appReturn: "<><Body>Open</Body><Body>Again</Body></>",
+      exportStyled: true,
+    });
+
+    expect(result.errors).toBe(0);
+    expect(consumer).not.toContain("onlyIcon?: false");
+    expect(consumer).not.toContain('"onlyIcon"');
   });
 
   it("uses sx for wrappers of default-exported components made sx-aware by the same run", async () => {

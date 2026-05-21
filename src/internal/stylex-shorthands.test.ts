@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { isStylexShorthandCamelCase, splitDirectionalProperty } from "./stylex-shorthands.js";
+import {
+  LOGICAL_TO_PHYSICAL,
+  isStylexShorthandCamelCase,
+  splitDirectionalProperty,
+} from "./stylex-shorthands.js";
 
 describe("isStylexShorthandCamelCase", () => {
   it("detects camelCase shorthands that map to kebab-case entries", () => {
@@ -17,6 +21,17 @@ describe("isStylexShorthandCamelCase", () => {
   it("rejects plain CSS properties", () => {
     expect(isStylexShorthandCamelCase("color")).toBe(false);
     expect(isStylexShorthandCamelCase("fontSize")).toBe(false);
+  });
+});
+
+describe("LOGICAL_TO_PHYSICAL", () => {
+  it("maps logical directional props to their physical counterparts", () => {
+    expect(LOGICAL_TO_PHYSICAL.paddingBlock).toEqual(["paddingTop", "paddingBottom"]);
+    expect(LOGICAL_TO_PHYSICAL.paddingInline).toEqual(["paddingRight", "paddingLeft"]);
+    expect(LOGICAL_TO_PHYSICAL.scrollMarginBlock).toEqual([
+      "scrollMarginTop",
+      "scrollMarginBottom",
+    ]);
   });
 });
 

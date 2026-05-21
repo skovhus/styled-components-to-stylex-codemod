@@ -578,7 +578,10 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             sourceComponentNames,
           );
           if (typedComponent?.supportsSxProp === true) {
-            return { acceptsSx: true };
+            return {
+              acceptsSx: true,
+              sxExcludedProperties: typedComponent.sxExcludedProperties,
+            };
           }
           if (
             transformedComponentAcceptsSx({

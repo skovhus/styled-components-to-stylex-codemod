@@ -171,7 +171,7 @@ function collectStyledDeclsImpl(args: {
           continue;
         }
 
-        // Support: onlyIcon: undefined or onlyIcon: null
+        // Support static attrs explicitly set to undefined or null.
         if ((v.type === "Identifier" && v.name === "undefined") || v.type === "NullLiteral") {
           out.staticAttrs[key] = v.type === "NullLiteral" ? null : undefined;
           continue;

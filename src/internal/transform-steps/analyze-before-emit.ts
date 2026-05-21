@@ -54,6 +54,7 @@ import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection
 import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "../lower-rules/shared.js";
+import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import {
   propCommentMetadataToAstComments,
   SOURCE_CSS_PROPERTIES_KEY,
@@ -1380,6 +1381,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  if (!validateSxRestrictedWrappedComponentStyles(ctx, styledDecls)) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+
   // Partial-migration support: if the file already has exactly one top-level
   // `const <name> = stylex.create({...})` call with no collisions and no shadowing,
   // merge new entries into the existing object instead of emitting a second
@@ -2549,6 +2554,9 @@ function renameStaticAttrKeys(
  */
 function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
   const keys: string[] = [decl.styleKey];
+  if (decl.adjacentSiblingStyleKey) {
+    keys.push(decl.adjacentSiblingStyleKey);
+  }
   for (const key of Object.values(decl.variantStyleKeys ?? {})) {
     keys.push(key);
   }
@@ -2575,8 +2583,34 @@ function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
   for (const sbv of decl.staticBooleanVariants ?? []) {
     keys.push(sbv.styleKey);
   }
+  for (const cs of decl.callSiteCombinedStyles ?? []) {
+    keys.push(cs.styleKey);
+  }
+  for (const ps of decl.promotedStyleProps ?? []) {
+    if (!ps.mergeIntoBase) {
+      keys.push(ps.styleKey);
+    }
+  }
   for (const pas of decl.pseudoAliasSelectors ?? []) {
     keys.push(...pas.styleKeys);
+  }
+  for (const pes of decl.pseudoExpandSelectors ?? []) {
+    keys.push(pes.styleKey);
+  }
+  if (decl.attrWrapper) {
+    const aw = decl.attrWrapper;
+    for (const k of [
+      aw.checkboxKey,
+      aw.radioKey,
+      aw.readonlyKey,
+      aw.externalKey,
+      aw.httpsKey,
+      aw.pdfKey,
+    ]) {
+      if (k) {
+        keys.push(k);
+      }
+    }
   }
   return keys;
 }
@@ -4665,4 +4699,136 @@ function mergeAttrEntriesByAttrName<T extends { attrName: string }>(
     byAttrName.set(entry.attrName, entry);
   }
   return [...byAttrName.values()];
+}
+
+function validateSxRestrictedWrappedComponentStyles(
+  ctx: TransformContext,
+  styledDecls: StyledDecl[],
+): boolean {
+  if (!ctx.adapter.useSxProp || !ctx.resolvedStyleObjects) {
+    return true;
+  }
+
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.base.kind !== "component") {
+      continue;
+    }
+
+    const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
+    const excludedProperties = componentInterface?.sxExcludedProperties;
+    if (componentInterface?.acceptsSx !== true || !excludedProperties?.length) {
+      continue;
+    }
+
+    const excluded = new Set(excludedProperties);
+    for (const styleKey of collectAllStyleKeysForDecl(decl)) {
+      const style = ctx.resolvedStyleObjects.get(styleKey);
+      if (!style || typeof style !== "object") {
+        continue;
+      }
+      const rejectedProperty = findSxExcludedStyleProperty(style, excluded);
+      if (!rejectedProperty) {
+        continue;
+      }
+      ctx.warnings.push({
+        severity: "error",
+        type: "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly",
+        loc: decl.loc,
+        context: {
+          localName: decl.localName,
+          wrappedComponent: decl.base.ident,
+          styleKey,
+          property: rejectedProperty,
+        },
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
+function staticObjectPropertyName(prop: unknown): string | null {
+  if (!prop || typeof prop !== "object") {
+    return null;
+  }
+  const p = prop as { type?: string; computed?: boolean; key?: unknown };
+  if ((p.type !== "Property" && p.type !== "ObjectProperty") || p.computed) {
+    return null;
+  }
+  const key = p.key as { type?: string; name?: string; value?: unknown } | undefined;
+  if (!key) {
+    return null;
+  }
+  if (key.type === "Identifier") {
+    return key.name ?? null;
+  }
+  if (key.type === "Literal" || key.type === "StringLiteral") {
+    return typeof key.value === "string" ? key.value : null;
+  }
+  return null;
+}
+
+function findSxExcludedStyleProperty(
+  style: object,
+  excludedProperties: ReadonlySet<string>,
+): string | null {
+  if (isAstNode(style)) {
+    return findSxExcludedStylePropertyInAstNode(style, excludedProperties);
+  }
+
+  for (const [key, value] of Object.entries(style)) {
+    if (excludedProperties.has(key)) {
+      return key;
+    }
+    if (value && typeof value === "object") {
+      const nested = findSxExcludedStyleProperty(value, excludedProperties);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function findSxExcludedStylePropertyInAstNode(
+  node: object,
+  excludedProperties: ReadonlySet<string>,
+): string | null {
+  const n = node as {
+    type?: string;
+    argument?: unknown;
+    body?: unknown;
+    properties?: unknown[];
+  };
+  if (n.type === "ObjectExpression") {
+    for (const prop of n.properties ?? []) {
+      const name = staticObjectPropertyName(prop);
+      if (name && excludedProperties.has(name)) {
+        return name;
+      }
+      const value = (prop as { value?: unknown }).value;
+      if (value && typeof value === "object") {
+        const nested = findSxExcludedStylePropertyInAstNode(value, excludedProperties);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+    return null;
+  }
+  if (n.type === "ArrowFunctionExpression" && n.body && typeof n.body === "object") {
+    return findSxExcludedStylePropertyInAstNode(n.body, excludedProperties);
+  }
+  if (n.type === "BlockStatement" && Array.isArray((n as { body?: unknown[] }).body)) {
+    for (const statement of (n as { body?: unknown[] }).body ?? []) {
+      const s = statement as { type?: string; argument?: unknown };
+      if (s.type === "ReturnStatement" && s.argument && typeof s.argument === "object") {
+        const nested = findSxExcludedStylePropertyInAstNode(s.argument, excludedProperties);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+  }
+  return null;
 }

@@ -49,7 +49,7 @@ import {
 import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
-import { SHORTHAND_LONGHANDS } from "../emit-styles.js";
+import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";

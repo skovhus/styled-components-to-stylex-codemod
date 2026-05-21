@@ -400,7 +400,7 @@ export interface ResolveBaseComponentContext {
   importSource: string;
   /**
    * Imported binding name for the wrapped base component.
-   * Example: `import { Flex as OrbiterFlex } ...` -> importedName: "Flex"
+   * Example: `import { Flex as DesignSystemFlex } ...` -> importedName: "Flex"
    */
   importedName: string;
   /**
@@ -668,6 +668,14 @@ export interface WrappedComponentInterfaceContext {
  */
 export interface WrappedComponentInterfaceResult {
   acceptsSx: boolean;
+  /**
+   * CSS property names that the wrapped component's `sx` prop explicitly rejects.
+   *
+   * Some components accept `sx`, but narrow it with `StyleXStylesWithout<...>` to
+   * reserve properties that the component owns internally. The transform can still
+   * use `sx` if it rewrites generated styles away from those excluded properties.
+   */
+  sxExcludedProperties?: string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────

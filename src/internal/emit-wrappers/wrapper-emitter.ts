@@ -162,8 +162,14 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
+    return this.wrappedComponentInterfaceFor(componentLocalName)?.acceptsSx === true;
+  }
+
+  wrappedComponentInterfaceFor(
+    componentLocalName: string,
+  ): WrappedComponentInterfaceResult | undefined {
     if (!this.useSxProp) {
-      return false;
+      return undefined;
     }
     const importInfo = this.importMap.get(componentLocalName);
     if (importInfo) {
@@ -174,19 +180,22 @@ export class WrapperEmitter {
         filePath: this.filePath,
       });
       if (adapterResult !== undefined) {
-        return adapterResult.acceptsSx === true;
+        return adapterResult;
       }
     }
     const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
     if (typedComponent) {
       if (typedComponent.supportsSxProp) {
-        return true;
+        return {
+          acceptsSx: true,
+          sxExcludedProperties: typedComponent.sxExcludedProperties,
+        };
       }
       if (!this.hasSourceOverrideFor(componentLocalName)) {
-        return false;
+        return { acceptsSx: false };
       }
     }
-    return (
+    const acceptsSx =
       importInfo?.source.kind === "absolutePath" &&
       transformedComponentAcceptsSx({
         absolutePath: importInfo.source.value,
@@ -195,8 +204,8 @@ export class WrapperEmitter {
             ? [componentLocalName, importInfo.importedName]
             : [importInfo.importedName],
         sourceOverrides: this.sourceOverrides,
-      })
-    );
+      });
+    return acceptsSx ? { acceptsSx: true } : undefined;
   }
 
   propsTypeNameFor(localName: string): string {
@@ -1809,7 +1818,10 @@ export class WrapperEmitter {
       }
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+    const omittedUnique = [...new Set(omitted)];
+    const baseMaybeOmitted = omittedUnique.length
+      ? `Omit<${base}, ${omittedUnique.join(" | ")}>`
+      : base;
     return this.joinIntersection(
       literal !== "{}" ? literal : null,
       baseMaybeOmitted,
