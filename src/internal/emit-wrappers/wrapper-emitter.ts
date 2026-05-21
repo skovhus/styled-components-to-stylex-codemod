@@ -1779,10 +1779,6 @@ export class WrapperEmitter {
     const base = this.componentPropsBaseType(propsTarget);
     const omitted: string[] = [];
     const renamedPropTypes: string[] = [];
-    const booleanLiteralNarrowedProps = this.booleanLiteralPropsToNarrowForChildren({
-      d,
-      wrappedComponent,
-    });
     // When forcing optional, always omit from base to prevent inheriting requiredness
     if (!allowClassNameProp || forceClassNameOptional) {
       omitted.push('"className"');
@@ -1791,10 +1787,6 @@ export class WrapperEmitter {
       omitted.push('"style"');
     }
     appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
-    for (const prop of booleanLiteralNarrowedProps) {
-      omitted.push(JSON.stringify(prop.name));
-      lines.push(`${prop.name}?: ${prop.value}`);
-    }
     // When transient props are renamed ($prop → prop), omit the original $-prefixed
     // props from the base type and re-add them with their new names.
     // This is needed when the base component's type includes the $-prefixed prop
@@ -1835,25 +1827,6 @@ export class WrapperEmitter {
       baseMaybeOmitted,
       ...renamedPropTypes,
     );
-  }
-
-  private booleanLiteralPropsToNarrowForChildren(args: {
-    d: StyledDecl;
-    wrappedComponent?: string;
-  }): Array<{ name: string; value: "false" }> {
-    const { d, wrappedComponent } = args;
-    if (!wrappedComponent || !this.hasJsxChildrenUsage(d.localName)) {
-      return [];
-    }
-
-    if (
-      !/\bButton$/.test(wrappedComponent) &&
-      !this.typedComponentProp(wrappedComponent, "onlyIcon")
-    ) {
-      return [];
-    }
-
-    return [{ name: "onlyIcon", value: "false" }];
   }
 
   isPropRequiredInPropsTypeLiteral(propsType: any, propName: string): boolean {

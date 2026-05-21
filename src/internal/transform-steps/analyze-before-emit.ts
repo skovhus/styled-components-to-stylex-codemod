@@ -53,6 +53,7 @@ import {
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
+import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
@@ -4789,17 +4790,6 @@ function collectComponentStyleKeys(decl: StyledDecl): string[] {
   return keys;
 }
 
-const LOGICAL_TO_PHYSICAL_STYLE_PROPS: Record<string, string[]> = {
-  marginBlock: ["marginTop", "marginBottom"],
-  marginInline: ["marginRight", "marginLeft"],
-  paddingBlock: ["paddingTop", "paddingBottom"],
-  paddingInline: ["paddingRight", "paddingLeft"],
-  scrollMarginBlock: ["scrollMarginTop", "scrollMarginBottom"],
-  scrollMarginInline: ["scrollMarginRight", "scrollMarginLeft"],
-  scrollPaddingBlock: ["scrollPaddingTop", "scrollPaddingBottom"],
-  scrollPaddingInline: ["scrollPaddingRight", "scrollPaddingLeft"],
-};
-
 function expandExcludedLogicalProperties(
   style: Record<string, unknown>,
   excludedProperties: ReadonlySet<string>,
@@ -4807,7 +4797,7 @@ function expandExcludedLogicalProperties(
   const entries = Object.entries(style);
   let changed = false;
   for (const [prop] of entries) {
-    if (excludedProperties.has(prop) && LOGICAL_TO_PHYSICAL_STYLE_PROPS[prop]) {
+    if (excludedProperties.has(prop) && LOGICAL_TO_PHYSICAL[prop]) {
       changed = true;
       break;
     }
@@ -4820,9 +4810,7 @@ function expandExcludedLogicalProperties(
     delete style[key];
   }
   for (const [prop, value] of entries) {
-    const physicalProps = excludedProperties.has(prop)
-      ? LOGICAL_TO_PHYSICAL_STYLE_PROPS[prop]
-      : undefined;
+    const physicalProps = excludedProperties.has(prop) ? LOGICAL_TO_PHYSICAL[prop] : undefined;
     if (!physicalProps) {
       style[prop] = value;
       continue;

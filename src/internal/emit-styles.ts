@@ -17,6 +17,7 @@ import {
   findLastImportIndex,
   insertImportDeclarationNearStylex,
 } from "./utilities/import-insertion.js";
+import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "./stylex-shorthands.js";
 
 /**
  * CSS shorthands that must NEVER appear as property names in stylex.create() output.
@@ -767,42 +768,6 @@ function isFiniteNumericString(s: string): boolean {
 // ---------------------------------------------------------------------------
 // Shorthand/longhand conflict normalization
 // ---------------------------------------------------------------------------
-
-/** Mapping from CSS shorthand to the longhands that conflict with it */
-export const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
-  margin: {
-    physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
-    logical: ["marginBlock", "marginInline"],
-  },
-  padding: {
-    physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
-    logical: ["paddingBlock", "paddingInline"],
-  },
-  scrollMargin: {
-    physical: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
-    logical: ["scrollMarginBlock", "scrollMarginInline"],
-  },
-  scrollPadding: {
-    physical: [
-      "scrollPaddingTop",
-      "scrollPaddingRight",
-      "scrollPaddingBottom",
-      "scrollPaddingLeft",
-    ],
-    logical: ["scrollPaddingBlock", "scrollPaddingInline"],
-  },
-};
-
-/**
- * Mapping from logical longhands to their physical equivalents, derived from SHORTHAND_LONGHANDS.
- * `marginBlock` → `["marginTop", "marginBottom"]`
- */
-const LOGICAL_TO_PHYSICAL: Record<string, string[]> = Object.fromEntries(
-  Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
-    [logical[0]!, [physical[0]!, physical[2]!]], // Block → Top + Bottom
-    [logical[1]!, [physical[1]!, physical[3]!]], // Inline → Right + Left
-  ]),
-);
 
 /** Type guard: value is a simple string or number (not a conditional object) */
 function isSimpleStyleValue(value: unknown): value is string | number {

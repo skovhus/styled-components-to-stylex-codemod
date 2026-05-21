@@ -230,7 +230,7 @@ describe("runTransform (e2e)", () => {
     expect(consumer).toContain("sx={styles.body}");
   });
 
-  it("narrows onlyIcon props for sx-aware wrappers that render children", async () => {
+  it("does not infer onlyIcon narrowing for sx-aware wrappers that render children", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-only-icon-",
       componentLines: [
@@ -257,8 +257,8 @@ describe("runTransform (e2e)", () => {
     });
 
     expect(result.errors).toBe(0);
-    expect(consumer).toContain("onlyIcon?: false");
-    expect(consumer).toContain('"onlyIcon"');
+    expect(consumer).not.toContain("onlyIcon?: false");
+    expect(consumer).not.toContain('"onlyIcon"');
   });
 
   it("uses sx for wrappers of default-exported components made sx-aware by the same run", async () => {

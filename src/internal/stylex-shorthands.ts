@@ -26,6 +26,42 @@ export const STYLEX_LONGHAND_ONLY_SHORTHANDS = new Set([
   "scroll-padding",
 ]);
 
+/** Mapping from CSS shorthand to the longhands that conflict with it. */
+export const SHORTHAND_LONGHANDS: Record<string, { physical: string[]; logical: string[] }> = {
+  margin: {
+    physical: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+    logical: ["marginBlock", "marginInline"],
+  },
+  padding: {
+    physical: ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+    logical: ["paddingBlock", "paddingInline"],
+  },
+  scrollMargin: {
+    physical: ["scrollMarginTop", "scrollMarginRight", "scrollMarginBottom", "scrollMarginLeft"],
+    logical: ["scrollMarginBlock", "scrollMarginInline"],
+  },
+  scrollPadding: {
+    physical: [
+      "scrollPaddingTop",
+      "scrollPaddingRight",
+      "scrollPaddingBottom",
+      "scrollPaddingLeft",
+    ],
+    logical: ["scrollPaddingBlock", "scrollPaddingInline"],
+  },
+};
+
+/**
+ * Mapping from logical longhands to their physical equivalents, derived from SHORTHAND_LONGHANDS.
+ * `marginBlock` -> `["marginTop", "marginBottom"]`
+ */
+export const LOGICAL_TO_PHYSICAL: Record<string, string[]> = Object.fromEntries(
+  Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
+    [logical[0]!, [physical[0]!, physical[2]!]],
+    [logical[1]!, [physical[1]!, physical[3]!]],
+  ]),
+);
+
 export function isStylexLonghandOnlyShorthand(prop: string): boolean {
   return STYLEX_LONGHAND_ONLY_SHORTHANDS.has(prop);
 }
