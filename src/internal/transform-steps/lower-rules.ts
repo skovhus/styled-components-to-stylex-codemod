@@ -5,6 +5,7 @@
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { getUseLogicalProperties, setUseLogicalProperties } from "../css-prop-mapping.js";
 import { cssKeyframeNameToIdentifier, extractInlineKeyframes } from "../keyframes.js";
 import { createDeclProcessingState } from "../lower-rules/decl-setup.js";
 import { finalizeDeclProcessing } from "../lower-rules/finalize-decl.js";
@@ -23,6 +24,8 @@ import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
 import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import { shouldSkipPartialImportedComponentRoot } from "../utilities/partial-migration.js";
+import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
+import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
 
 const PLACEHOLDER_RE_G = new RegExp(PLACEHOLDER_RE.source, "g");
 
@@ -174,7 +177,7 @@ function lowerRules(ctx: TransformContext): LowerRulesResult {
 
     const snapshot = snapshotStateForDecl(state);
     state.currentDecl = decl;
-    const outcome = processOneDecl(state, decl);
+    const outcome = processOneDecl(ctx, state, decl);
     state.currentDecl = null;
 
     if (outcome === "skip") {
@@ -287,28 +290,49 @@ type DeclOutcome = "ok" | "skip" | "bail";
  * Returns `"skip"` if the decl marked itself skipped (per-decl bail), `"bail"` if
  * something set the file-level bail, or `"ok"` on success.
  */
-function processOneDecl(state: LowerRulesState, decl: StyledDecl): DeclOutcome {
-  const declState = createDeclProcessingState(state, decl);
-  // preScanCssHelperPlaceholders returns false when markBail was called during
-  // scanning — either as a per-decl skip (new) or a legacy file-level bail.
-  if (!preScanCssHelperPlaceholders(declState)) {
-    return decl.skipTransform ? "skip" : "bail";
+function processOneDecl(
+  ctx: TransformContext,
+  state: LowerRulesState,
+  decl: StyledDecl,
+): DeclOutcome {
+  const previousUseLogicalProperties = getUseLogicalProperties();
+  const componentInterface =
+    decl.base.kind === "component" ? wrappedComponentInterfaceFor(ctx, decl.base.ident) : undefined;
+  const forcePhysicalDirectionalShorthands =
+    componentInterface?.acceptsSx === true &&
+    componentInterface.sxExcludedProperties?.some((prop) => LOGICAL_TO_PHYSICAL[prop]) === true;
+
+  if (forcePhysicalDirectionalShorthands) {
+    setUseLogicalProperties(false);
   }
-  processDeclRules(declState);
-  if (decl.skipTransform) {
-    return "skip";
+
+  try {
+    const declState = createDeclProcessingState(state, decl);
+    // preScanCssHelperPlaceholders returns false when markBail was called during
+    // scanning — either as a per-decl skip (new) or a legacy file-level bail.
+    if (!preScanCssHelperPlaceholders(declState)) {
+      return decl.skipTransform ? "skip" : "bail";
+    }
+    processDeclRules(declState);
+    if (decl.skipTransform) {
+      return "skip";
+    }
+    if (state.bail) {
+      return "bail";
+    }
+    finalizeDeclProcessing(declState);
+    if (decl.skipTransform) {
+      return "skip";
+    }
+    if (state.bail) {
+      return "bail";
+    }
+    return "ok";
+  } finally {
+    if (forcePhysicalDirectionalShorthands) {
+      setUseLogicalProperties(previousUseLogicalProperties);
+    }
   }
-  if (state.bail) {
-    return "bail";
-  }
-  finalizeDeclProcessing(declState);
-  if (decl.skipTransform) {
-    return "skip";
-  }
-  if (state.bail) {
-    return "bail";
-  }
-  return "ok";
 }
 
 /**

@@ -26,7 +26,6 @@ import {
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
 import {
   astNodesEqual,
-  cloneAstNode,
   type ExpressionKind,
   getRootJsxIdentifierName,
   isAstNode,
@@ -47,18 +46,15 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
-import {
-  applyTypeScriptMetadataToDecl,
-  findTypeScriptComponentMetadata,
-} from "../utilities/typescript-metadata.js";
+import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
-import { LOGICAL_TO_PHYSICAL } from "../stylex-shorthands.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "../lower-rules/shared.js";
+import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import {
   propCommentMetadataToAstComments,
   SOURCE_CSS_PROPERTIES_KEY,
@@ -1385,7 +1381,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
-  normalizeStylesForSxRestrictedWrappedComponents(ctx, styledDecls);
+  if (!validateSxRestrictedWrappedComponentStyles(ctx, styledDecls)) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
 
   // Partial-migration support: if the file already has exactly one top-level
   // `const <name> = stylex.create({...})` call with no collisions and no shadowing,
@@ -4697,12 +4695,12 @@ function mergeAttrEntriesByAttrName<T extends { attrName: string }>(
   return [...byAttrName.values()];
 }
 
-function normalizeStylesForSxRestrictedWrappedComponents(
+function validateSxRestrictedWrappedComponentStyles(
   ctx: TransformContext,
   styledDecls: StyledDecl[],
-): void {
+): boolean {
   if (!ctx.adapter.useSxProp || !ctx.resolvedStyleObjects) {
-    return;
+    return true;
   }
 
   for (const decl of styledDecls) {
@@ -4710,7 +4708,7 @@ function normalizeStylesForSxRestrictedWrappedComponents(
       continue;
     }
 
-    const componentInterface = wrappedComponentInterfaceForSxNormalization(ctx, decl.base.ident);
+    const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
     const excludedProperties = componentInterface?.sxExcludedProperties;
     if (componentInterface?.acceptsSx !== true || !excludedProperties?.length) {
       continue;
@@ -4722,146 +4720,25 @@ function normalizeStylesForSxRestrictedWrappedComponents(
       if (!style || typeof style !== "object") {
         continue;
       }
-      expandExcludedLogicalProperties(ctx.j, style, excluded);
-    }
-  }
-}
-
-function wrappedComponentInterfaceForSxNormalization(
-  ctx: TransformContext,
-  componentLocalName: string,
-): { acceptsSx: boolean; sxExcludedProperties?: string[] } | undefined {
-  const importInfo = ctx.importMap?.get(componentLocalName);
-  if (importInfo) {
-    const adapterResult = ctx.adapter.wrappedComponentInterface?.({
-      localName: componentLocalName,
-      importSource: importInfo.source.value,
-      importedName: importInfo.importedName,
-      filePath: ctx.file.path,
-    });
-    if (adapterResult !== undefined) {
-      return adapterResult;
-    }
-
-    if (importInfo.source.kind === "absolutePath") {
-      const names =
-        importInfo.importedName === "default"
-          ? [componentLocalName, importInfo.importedName]
-          : [importInfo.importedName];
-      const typedComponent = findTypeScriptComponentMetadata(
-        ctx.options.crossFileInfo?.typeScriptMetadata,
-        importInfo.source.value,
-        names,
-      );
-      if (typedComponent?.supportsSxProp) {
-        return {
-          acceptsSx: true,
-          sxExcludedProperties: typedComponent.sxExcludedProperties,
-        };
+      const rejectedProperty = findSxExcludedStyleProperty(style, excluded);
+      if (!rejectedProperty) {
+        continue;
       }
-    }
-
-    return undefined;
-  }
-
-  const typedComponent = findTypeScriptComponentMetadata(
-    ctx.options.crossFileInfo?.typeScriptMetadata,
-    ctx.file.path,
-    [componentLocalName],
-  );
-  if (typedComponent?.supportsSxProp) {
-    return {
-      acceptsSx: true,
-      sxExcludedProperties: typedComponent.sxExcludedProperties,
-    };
-  }
-
-  return undefined;
-}
-
-function expandExcludedLogicalProperties(
-  j: JSCodeshift,
-  style: object,
-  excludedProperties: ReadonlySet<string>,
-): void {
-  if (isAstNode(style)) {
-    expandExcludedLogicalPropertiesInAstNode(j, style, excludedProperties);
-    return;
-  }
-
-  const styleObject = style as Record<string, unknown>;
-  const entries = Object.entries(styleObject);
-  let changed = false;
-  for (const [prop] of entries) {
-    if (excludedProperties.has(prop) && LOGICAL_TO_PHYSICAL[prop]) {
-      changed = true;
-      break;
+      ctx.warnings.push({
+        severity: "error",
+        type: "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly",
+        loc: decl.loc,
+        context: {
+          localName: decl.localName,
+          wrappedComponent: decl.base.ident,
+          styleKey,
+          property: rejectedProperty,
+        },
+      });
+      return false;
     }
   }
-  if (!changed) {
-    return;
-  }
-
-  for (const key of Object.keys(styleObject)) {
-    delete styleObject[key];
-  }
-  for (const [prop, value] of entries) {
-    const physicalProps = excludedProperties.has(prop) ? LOGICAL_TO_PHYSICAL[prop] : undefined;
-    if (!physicalProps) {
-      styleObject[prop] = value;
-      continue;
-    }
-    for (const physicalProp of physicalProps) {
-      styleObject[physicalProp] = value;
-    }
-  }
-}
-
-function expandExcludedLogicalPropertiesInAstNode(
-  j: JSCodeshift,
-  node: object,
-  excludedProperties: ReadonlySet<string>,
-): void {
-  const n = node as { type?: string; body?: unknown; properties?: unknown[] };
-  if (n.type === "ObjectExpression") {
-    expandExcludedLogicalPropertiesInObjectExpression(j, n, excludedProperties);
-    return;
-  }
-  if (n.type === "ArrowFunctionExpression" && n.body && typeof n.body === "object") {
-    expandExcludedLogicalPropertiesInAstNode(j, n.body, excludedProperties);
-  }
-}
-
-function expandExcludedLogicalPropertiesInObjectExpression(
-  j: JSCodeshift,
-  node: { properties?: unknown[] },
-  excludedProperties: ReadonlySet<string>,
-): void {
-  const originalProperties = node.properties ?? [];
-  let changed = false;
-  const nextProperties: unknown[] = [];
-  for (const prop of originalProperties) {
-    const name = staticObjectPropertyName(prop);
-    const physicalProps = name && excludedProperties.has(name) ? LOGICAL_TO_PHYSICAL[name] : null;
-    if (!physicalProps) {
-      nextProperties.push(prop);
-      continue;
-    }
-    const value = (prop as { value?: unknown }).value;
-    if (!value) {
-      nextProperties.push(prop);
-      continue;
-    }
-    changed = true;
-    for (const physicalProp of physicalProps) {
-      nextProperties.push(
-        makeClonedStyleProperty(j, physicalProp, value, prop as { comments?: unknown }),
-      );
-    }
-  }
-  if (changed) {
-    node.properties = nextProperties;
-  }
+  return true;
 }
 
 function staticObjectPropertyName(prop: unknown): string | null {
@@ -4869,7 +4746,7 @@ function staticObjectPropertyName(prop: unknown): string | null {
     return null;
   }
   const p = prop as { type?: string; computed?: boolean; key?: unknown };
-  if (p.type !== "Property" || p.computed) {
+  if ((p.type !== "Property" && p.type !== "ObjectProperty") || p.computed) {
     return null;
   }
   const key = p.key as { type?: string; name?: string; value?: unknown } | undefined;
@@ -4885,15 +4762,67 @@ function staticObjectPropertyName(prop: unknown): string | null {
   return null;
 }
 
-function makeClonedStyleProperty(
-  j: JSCodeshift,
-  propName: string,
-  value: unknown,
-  sourceProp: { comments?: unknown },
-): unknown {
-  const prop = j.property("init", j.identifier(propName), cloneAstNode(value) as ExpressionKind);
-  if (sourceProp.comments) {
-    (prop as { comments?: unknown }).comments = cloneAstNode(sourceProp.comments) as unknown;
+function findSxExcludedStyleProperty(
+  style: object,
+  excludedProperties: ReadonlySet<string>,
+): string | null {
+  if (isAstNode(style)) {
+    return findSxExcludedStylePropertyInAstNode(style, excludedProperties);
   }
-  return prop;
+
+  for (const [key, value] of Object.entries(style)) {
+    if (excludedProperties.has(key)) {
+      return key;
+    }
+    if (value && typeof value === "object") {
+      const nested = findSxExcludedStyleProperty(value, excludedProperties);
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+  return null;
+}
+
+function findSxExcludedStylePropertyInAstNode(
+  node: object,
+  excludedProperties: ReadonlySet<string>,
+): string | null {
+  const n = node as {
+    type?: string;
+    argument?: unknown;
+    body?: unknown;
+    properties?: unknown[];
+  };
+  if (n.type === "ObjectExpression") {
+    for (const prop of n.properties ?? []) {
+      const name = staticObjectPropertyName(prop);
+      if (name && excludedProperties.has(name)) {
+        return name;
+      }
+      const value = (prop as { value?: unknown }).value;
+      if (value && typeof value === "object") {
+        const nested = findSxExcludedStylePropertyInAstNode(value, excludedProperties);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+    return null;
+  }
+  if (n.type === "ArrowFunctionExpression" && n.body && typeof n.body === "object") {
+    return findSxExcludedStylePropertyInAstNode(n.body, excludedProperties);
+  }
+  if (n.type === "BlockStatement" && Array.isArray((n as { body?: unknown[] }).body)) {
+    for (const statement of (n as { body?: unknown[] }).body ?? []) {
+      const s = statement as { type?: string; argument?: unknown };
+      if (s.type === "ReturnStatement" && s.argument && typeof s.argument === "object") {
+        const nested = findSxExcludedStylePropertyInAstNode(s.argument, excludedProperties);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+  }
+  return null;
 }

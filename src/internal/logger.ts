@@ -121,6 +121,7 @@ export type WarningType =
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
   | "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts"
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
+  | "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly"
   | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names"
   | "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens"
   | "animation shorthand contains a var() with no classifiable fallback — its longhand position cannot be determined statically; bind the variable to a specific longhand (e.g. animation-duration: var(--x)) instead";

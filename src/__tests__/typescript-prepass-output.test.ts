@@ -442,20 +442,19 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
-  it("expands generated styles rejected by a wrapped component sx surface", () => {
+  it("uses physical shorthand styles rejected by a wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
     const source = [
       'import styled from "styled-components";',
       'import { Button } from "./Button";',
       "",
-      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })<{ $pad: number }>`',
-      "  padding-block: ${(props) => props.$pad}px;",
-      "  padding-inline: 6px;",
+      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })`',
+      "  padding: 4px 6px;",
       "  margin-left: -6px;",
       "`;",
       "",
-      'export const App = () => <WidgetButton $pad={4} aria-label="Open" />;',
+      'export const App = () => <WidgetButton aria-label="Open" />;',
     ].join("\n");
     writeFileSync(sourcePath, source);
 
@@ -477,14 +476,59 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("paddingTop:");
+      expect(after.code).toContain("paddingTop: 4");
       expect(after.code).toContain("paddingRight: 6");
-      expect(after.code).toContain("paddingBottom:");
+      expect(after.code).toContain("paddingBottom: 4");
       expect(after.code).toContain("paddingLeft: 6");
       expect(after.code).not.toMatch(/^\s+paddingBlock:/m);
       expect(after.code).not.toContain("paddingInline: 6");
-      expect(after.code).toContain("sx={[styles.widgetButton(pad), sx]}");
+      expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
       expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when a restricted sx wrapper uses true logical CSS properties", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-logical-bail-"));
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Button } from "./Button";',
+      "",
+      "const WidgetButton = styled(Button)`",
+      "  padding-block: 4px;",
+      "  padding-inline: 6px;",
+      "`;",
+      "",
+      'export const App = () => <WidgetButton aria-label="Open" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+
+    try {
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Button"
+              ? {
+                  acceptsSx: true,
+                  sxExcludedProperties: ["paddingBlock", "paddingInline"],
+                }
+              : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly",
+        }),
+      );
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
