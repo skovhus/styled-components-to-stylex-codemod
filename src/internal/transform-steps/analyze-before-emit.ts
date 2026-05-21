@@ -2554,6 +2554,9 @@ function renameStaticAttrKeys(
  */
 function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
   const keys: string[] = [decl.styleKey];
+  if (decl.adjacentSiblingStyleKey) {
+    keys.push(decl.adjacentSiblingStyleKey);
+  }
   for (const key of Object.values(decl.variantStyleKeys ?? {})) {
     keys.push(key);
   }
@@ -2590,6 +2593,9 @@ function collectAllStyleKeysForDecl(decl: StyledDecl): string[] {
   }
   for (const pas of decl.pseudoAliasSelectors ?? []) {
     keys.push(...pas.styleKeys);
+  }
+  for (const pes of decl.pseudoExpandSelectors ?? []) {
+    keys.push(pes.styleKey);
   }
   if (decl.attrWrapper) {
     const aw = decl.attrWrapper;

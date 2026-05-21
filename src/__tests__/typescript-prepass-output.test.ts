@@ -445,6 +445,7 @@ describe("TypeScript prepass output refinement", () => {
   it("uses physical shorthand styles rejected by a wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const buttonPath = path.join(fixtureDir, "Button.tsx");
     const source = [
       'import styled from "styled-components";',
       'import { Button } from "./Button";',
@@ -457,22 +458,40 @@ describe("TypeScript prepass output refinement", () => {
       'export const App = () => <WidgetButton aria-label="Open" />;',
     ].join("\n");
     writeFileSync(sourcePath, source);
+    writeFileSync(
+      buttonPath,
+      [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
+        "  sx?: stylex.StyleXStylesWithout<{",
+        "    paddingBlock?: string | number | null;",
+        "    paddingInline?: string | number | null;",
+        "  }>;",
+        "};",
+        "",
+        "export function Button(props: ButtonProps) {",
+        "  return <button {...props} />;",
+        "}",
+      ].join("\n"),
+    );
 
     try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [buttonPath, sourcePath],
+        cwd: fixtureDir,
+      });
       const after = transformWithWarnings({ source, path: sourcePath }, api, {
         adapter: {
           ...fixtureAdapter,
           wrappedComponentInterface(ctx) {
-            return ctx.importedName === "Button"
-              ? {
-                  acceptsSx: true,
-                  sxExcludedProperties: ["paddingBlock", "paddingInline"],
-                }
-              : undefined;
+            return ctx.importedName === "Button" ? { acceptsSx: true } : undefined;
           },
         },
         crossFileInfo: {
           selectorUsages: [],
+          typeScriptMetadata,
         },
       });
 
@@ -484,6 +503,58 @@ describe("TypeScript prepass output refinement", () => {
       expect(after.code).not.toContain("paddingInline: 6");
       expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
       expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when a restricted sx wrapper emits pseudo-expand logical styles", () => {
+    const fixtureDir = mkdtempSync(
+      path.join(tmpdir(), "typescript-prepass-sx-pseudo-expand-bail-"),
+    );
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Button } from "./Button";',
+      'import { highlightExpand } from "./lib/helpers";',
+      "",
+      "const WidgetButton = styled(Button)<{ $active?: boolean }>`",
+      "  &:${highlightExpand} {",
+      "    ${(props) => props.$active && `padding-block: 4px;`}",
+      "  }",
+      "`;",
+      "",
+      'export const App = () => <WidgetButton $active aria-label="Open" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+
+    try {
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Button"
+              ? {
+                  acceptsSx: true,
+                  sxExcludedProperties: ["paddingBlock"],
+                }
+              : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly",
+          context: expect.objectContaining({
+            property: "paddingBlock",
+          }),
+        }),
+      );
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

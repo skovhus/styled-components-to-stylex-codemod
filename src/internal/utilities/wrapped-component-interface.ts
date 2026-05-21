@@ -16,6 +16,16 @@ export function wrappedComponentInterfaceFor(
 
   const importInfo = ctx.importMap?.get(componentLocalName);
   if (importInfo) {
+    const typedInterface =
+      importInfo.source.kind === "absolutePath"
+        ? typedComponentInterfaceFor(
+            ctx,
+            importInfo.source.value,
+            importInfo.importedName === "default"
+              ? [componentLocalName, importInfo.importedName]
+              : [importInfo.importedName],
+          )
+        : undefined;
     const adapterResult = ctx.adapter.wrappedComponentInterface?.({
       localName: componentLocalName,
       importSource: importInfo.source.value,
@@ -23,34 +33,33 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
+      if (adapterResult.acceptsSx && typedInterface?.sxExcludedProperties?.length) {
+        return {
+          ...adapterResult,
+          sxExcludedProperties: mergeUniqueStrings(
+            adapterResult.sxExcludedProperties,
+            typedInterface.sxExcludedProperties,
+          ),
+        };
+      }
       return adapterResult;
     }
 
-    if (importInfo.source.kind === "absolutePath") {
-      const names =
-        importInfo.importedName === "default"
-          ? [componentLocalName, importInfo.importedName]
-          : [importInfo.importedName];
-      const typedComponent = findTypeScriptComponentMetadata(
-        ctx.options.crossFileInfo?.typeScriptMetadata,
-        importInfo.source.value,
-        names,
-      );
-      if (typedComponent?.supportsSxProp) {
-        return {
-          acceptsSx: true,
-          sxExcludedProperties: typedComponent.sxExcludedProperties,
-        };
-      }
-    }
-
-    return undefined;
+    return typedInterface;
   }
 
+  return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
+}
+
+function typedComponentInterfaceFor(
+  ctx: TransformContext,
+  filePath: string,
+  componentNames: readonly string[],
+): WrappedComponentInterfaceResult | undefined {
   const typedComponent = findTypeScriptComponentMetadata(
     ctx.options.crossFileInfo?.typeScriptMetadata,
-    ctx.file.path,
-    [componentLocalName],
+    filePath,
+    componentNames,
   );
   if (typedComponent?.supportsSxProp) {
     return {
@@ -60,4 +69,11 @@ export function wrappedComponentInterfaceFor(
   }
 
   return undefined;
+}
+
+function mergeUniqueStrings(
+  first: readonly string[] | undefined,
+  second: readonly string[],
+): string[] {
+  return [...new Set([...(first ?? []), ...second])];
 }
