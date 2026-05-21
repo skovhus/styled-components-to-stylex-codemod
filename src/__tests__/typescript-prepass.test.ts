@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
 import { runPrepass } from "../internal/prepass/run-prepass.js";
-import { type TypeScriptPrepassMetadata } from "../internal/prepass/typescript-analysis.js";
+import {
+  analyzeTypeScriptProgram,
+  type TypeScriptPrepassMetadata,
+} from "../internal/prepass/typescript-analysis.js";
 import { findTypeScriptComponentMetadata } from "../internal/utilities/typescript-metadata.js";
 import { runTransform } from "../run.js";
 
@@ -43,6 +46,9 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
             parameters: component.parameters,
             restProps: component.restProps,
             supportsSxProp: component.supportsSxProp,
+            ...(component.sxExcludedProperties.length > 0
+              ? { sxExcludedProperties: component.sxExcludedProperties }
+              : {}),
           },
         ]),
     ),
@@ -71,6 +77,7 @@ describe("TypeScript compiler prepass", () => {
               restProps: [],
               hasIndexSignature: false,
               supportsSxProp: true,
+              sxExcludedProperties: [],
             },
             {
               name: "Plain",
@@ -85,6 +92,7 @@ describe("TypeScript compiler prepass", () => {
               restProps: [],
               hasIndexSignature: false,
               supportsSxProp: false,
+              sxExcludedProperties: [],
             },
           ],
         },
@@ -100,6 +108,37 @@ describe("TypeScript compiler prepass", () => {
     expect(
       findTypeScriptComponentMetadata(metadata, "/tmp/components.tsx", ["Alias", "default"])?.name,
     ).toBe("DefaultButton");
+  });
+
+  it("extracts properties excluded by StyleXStylesWithout sx props", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-without-"));
+    const filePath = path.join(fixtureDir, "Button.tsx");
+    writeFileSync(
+      filePath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "type ButtonProps = {",
+        "  sx?: stylex.StyleXStylesWithout<{",
+        "    paddingBlock?: string | number | null;",
+        "    paddingInline?: string | number | null;",
+        "  }>;",
+        "};",
+        "",
+        "export function Button(props: ButtonProps) {",
+        "  return <button />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const metadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const button = findTypeScriptComponentMetadata(metadata, filePath, ["Button"]);
+      expect(button?.supportsSxProp).toBe(true);
+      expect(button?.sxExcludedProperties).toEqual(["paddingBlock", "paddingInline"]);
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
   });
 
   it("extracts serializable component metadata automatically for TypeScript parsers", async () => {

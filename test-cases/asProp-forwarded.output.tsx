@@ -18,10 +18,10 @@ function Button<C extends React.ElementType = "button">(
 
 // Wrapper that always renders as a specific element but passes `as` through
 function ButtonWrapper(
-  props: { forwardedAs?: React.ElementType } & Omit<
-    React.ComponentPropsWithRef<typeof Button>,
-    "className" | "style"
-  >,
+  props: {
+    forwardedAs?: React.ElementType;
+    onlyIcon?: false;
+  } & Omit<React.ComponentPropsWithRef<typeof Button>, "className" | "style" | "onlyIcon">,
 ) {
   const { children, sx, ...rest } = props;
   return (

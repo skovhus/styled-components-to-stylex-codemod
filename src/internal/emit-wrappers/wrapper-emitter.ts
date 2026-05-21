@@ -162,8 +162,14 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
+    return this.wrappedComponentInterfaceFor(componentLocalName)?.acceptsSx === true;
+  }
+
+  wrappedComponentInterfaceFor(
+    componentLocalName: string,
+  ): WrappedComponentInterfaceResult | undefined {
     if (!this.useSxProp) {
-      return false;
+      return undefined;
     }
     const importInfo = this.importMap.get(componentLocalName);
     if (importInfo) {
@@ -174,19 +180,22 @@ export class WrapperEmitter {
         filePath: this.filePath,
       });
       if (adapterResult !== undefined) {
-        return adapterResult.acceptsSx === true;
+        return adapterResult;
       }
     }
     const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
     if (typedComponent) {
       if (typedComponent.supportsSxProp) {
-        return true;
+        return {
+          acceptsSx: true,
+          sxExcludedProperties: typedComponent.sxExcludedProperties,
+        };
       }
       if (!this.hasSourceOverrideFor(componentLocalName)) {
-        return false;
+        return { acceptsSx: false };
       }
     }
-    return (
+    const acceptsSx =
       importInfo?.source.kind === "absolutePath" &&
       transformedComponentAcceptsSx({
         absolutePath: importInfo.source.value,
@@ -195,8 +204,8 @@ export class WrapperEmitter {
             ? [componentLocalName, importInfo.importedName]
             : [importInfo.importedName],
         sourceOverrides: this.sourceOverrides,
-      })
-    );
+      });
+    return acceptsSx ? { acceptsSx: true } : undefined;
   }
 
   propsTypeNameFor(localName: string): string {
@@ -1770,6 +1779,10 @@ export class WrapperEmitter {
     const base = this.componentPropsBaseType(propsTarget);
     const omitted: string[] = [];
     const renamedPropTypes: string[] = [];
+    const booleanLiteralNarrowedProps = this.booleanLiteralPropsToNarrowForChildren({
+      d,
+      wrappedComponent,
+    });
     // When forcing optional, always omit from base to prevent inheriting requiredness
     if (!allowClassNameProp || forceClassNameOptional) {
       omitted.push('"className"');
@@ -1778,6 +1791,10 @@ export class WrapperEmitter {
       omitted.push('"style"');
     }
     appendAttrsProvidedPropOmissions(omitted, d.attrsInfo, attrsProvidedPropOptions);
+    for (const prop of booleanLiteralNarrowedProps) {
+      omitted.push(JSON.stringify(prop.name));
+      lines.push(`${prop.name}?: ${prop.value}`);
+    }
     // When transient props are renamed ($prop → prop), omit the original $-prefixed
     // props from the base type and re-add them with their new names.
     // This is needed when the base component's type includes the $-prefixed prop
@@ -1809,12 +1826,34 @@ export class WrapperEmitter {
       }
     }
     const literal = lines.length > 0 ? `{ ${lines.join(", ")} }` : "{}";
-    const baseMaybeOmitted = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
+    const omittedUnique = [...new Set(omitted)];
+    const baseMaybeOmitted = omittedUnique.length
+      ? `Omit<${base}, ${omittedUnique.join(" | ")}>`
+      : base;
     return this.joinIntersection(
       literal !== "{}" ? literal : null,
       baseMaybeOmitted,
       ...renamedPropTypes,
     );
+  }
+
+  private booleanLiteralPropsToNarrowForChildren(args: {
+    d: StyledDecl;
+    wrappedComponent?: string;
+  }): Array<{ name: string; value: "false" }> {
+    const { d, wrappedComponent } = args;
+    if (!wrappedComponent || !this.hasJsxChildrenUsage(d.localName)) {
+      return [];
+    }
+
+    if (
+      !/\bButton$/.test(wrappedComponent) &&
+      !this.typedComponentProp(wrappedComponent, "onlyIcon")
+    ) {
+      return [];
+    }
+
+    return [{ name: "onlyIcon", value: "false" }];
   }
 
   isPropRequiredInPropsTypeLiteral(propsType: any, propName: string): boolean {

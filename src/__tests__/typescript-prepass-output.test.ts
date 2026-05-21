@@ -442,6 +442,107 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("expands generated styles rejected by a wrapped component sx surface", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-without-"));
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Button } from "./Button";',
+      "",
+      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })`',
+      "  padding: 0 6px;",
+      "  margin-left: -6px;",
+      "`;",
+      "",
+      'export const App = () => <WidgetButton aria-label="Open" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+
+    try {
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Button"
+              ? {
+                  acceptsSx: true,
+                  sxExcludedProperties: ["paddingBlock", "paddingInline"],
+                }
+              : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+        },
+      });
+
+      expect(after.code).toContain("paddingTop: 0");
+      expect(after.code).toContain("paddingRight: 6");
+      expect(after.code).toContain("paddingBottom: 0");
+      expect(after.code).toContain("paddingLeft: 6");
+      expect(after.code).not.toContain("paddingBlock: 0");
+      expect(after.code).not.toContain("paddingInline: 6");
+      expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
+      expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("expands generated styles rejected by a local wrapped component sx surface", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-sx-without-"));
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import * as stylex from "@stylexjs/stylex";',
+      'import styled from "styled-components";',
+      "",
+      "type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {",
+      "  sx?: stylex.StyleXStylesWithout<{",
+      "    paddingBlock?: string | number | null;",
+      "    paddingInline?: string | number | null;",
+      "  }>;",
+      "};",
+      "",
+      "function Button(props: ButtonProps) {",
+      "  return <button {...props} />;",
+      "}",
+      "",
+      'const WidgetButton = styled(Button).attrs({ size: "small", variant: "borderless" })`',
+      "  padding: 0 6px;",
+      "  margin-left: -6px;",
+      "`;",
+      "",
+      'export const App = () => <WidgetButton aria-label="Open" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [sourcePath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toContain("paddingTop: 0");
+      expect(after.code).toContain("paddingRight: 6");
+      expect(after.code).toContain("paddingBottom: 0");
+      expect(after.code).toContain("paddingLeft: 6");
+      expect(after.code).not.toContain("paddingBlock: 0");
+      expect(after.code).not.toContain("paddingInline: 6");
+      expect(after.code).toContain("sx={[styles.widgetButton, sx]}");
+      expect(after.code).not.toContain("{...stylex.props(styles.widgetButton)}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("uses imported prop metadata for optional dynamic style functions", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-style-fn-output-"));
     const typesPath = path.join(fixtureDir, "types.ts");

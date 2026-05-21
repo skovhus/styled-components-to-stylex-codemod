@@ -27,6 +27,7 @@ export interface TypeScriptComponentMetadata {
   restProps: TypeScriptRestPropMetadata[];
   hasIndexSignature: boolean;
   supportsSxProp: boolean;
+  sxExcludedProperties: string[];
 }
 
 interface TypeScriptFunctionMetadata {
@@ -285,6 +286,10 @@ function buildComponentMetadata(args: {
     props.some((prop) => prop.name === "sx") &&
     args.propTypeNode !== undefined &&
     typeNodeHasResolvableSxSurface(args.propTypeNode, args.checker, new Set());
+  const sxExcludedProperties =
+    args.propTypeNode !== undefined
+      ? collectSxExcludedProperties(args.propTypeNode, args.checker, new Set())
+      : [];
   return {
     name: args.name,
     kind: args.kind,
@@ -301,6 +306,7 @@ function buildComponentMetadata(args: {
       explicitPropNames.includes("sx") ||
       supportsResolvedSxProp ||
       args.bodySupportsSxProp === true,
+    sxExcludedProperties,
   };
 }
 
@@ -534,6 +540,177 @@ function typeNodeHasResolvableSxSurface(
   return (symbol?.declarations ?? []).some((declaration) =>
     declarationHasResolvableSxSurface(declaration, checker, visited),
   );
+}
+
+function collectSxExcludedProperties(
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): string[] {
+  const names = new Set<string>();
+  collectSxExcludedPropertiesInto(names, typeNode, checker, visited);
+  return [...names].sort();
+}
+
+function collectSxExcludedPropertiesInto(
+  names: Set<string>,
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (ts.isTypeLiteralNode(typeNode)) {
+    for (const member of typeNode.members) {
+      if (
+        !ts.isPropertySignature(member) ||
+        propertyNameText(member.name) !== "sx" ||
+        !member.type
+      ) {
+        continue;
+      }
+      collectStyleXStylesWithoutKeys(names, member.type, checker, visited);
+    }
+    return;
+  }
+
+  if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    for (const part of typeNode.types) {
+      collectSxExcludedPropertiesInto(names, part, checker, visited);
+    }
+    return;
+  }
+
+  if (!ts.isTypeReferenceNode(typeNode) || isIntrinsicReactPropReference(typeNode)) {
+    return;
+  }
+
+  const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+  for (const declaration of symbol?.declarations ?? []) {
+    collectSxExcludedPropertiesFromDeclaration(names, declaration, checker, visited);
+  }
+}
+
+function collectSxExcludedPropertiesFromDeclaration(
+  names: Set<string>,
+  declaration: ts.Declaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (visited.has(declaration)) {
+    return;
+  }
+  visited.add(declaration);
+
+  if (ts.isTypeAliasDeclaration(declaration)) {
+    collectSxExcludedPropertiesInto(names, declaration.type, checker, visited);
+    return;
+  }
+
+  if (!ts.isInterfaceDeclaration(declaration)) {
+    return;
+  }
+
+  for (const member of declaration.members) {
+    if (ts.isPropertySignature(member) && propertyNameText(member.name) === "sx" && member.type) {
+      collectStyleXStylesWithoutKeys(names, member.type, checker, visited);
+    }
+  }
+
+  for (const clause of declaration.heritageClauses ?? []) {
+    for (const heritageType of clause.types) {
+      if (isIntrinsicReactHeritageReference(heritageType)) {
+        continue;
+      }
+      const symbol = resolveAliasedSymbol(
+        checker.getSymbolAtLocation(heritageType.expression),
+        checker,
+      );
+      for (const inheritedDeclaration of symbol?.declarations ?? []) {
+        collectSxExcludedPropertiesFromDeclaration(names, inheritedDeclaration, checker, visited);
+      }
+    }
+  }
+}
+
+function collectStyleXStylesWithoutKeys(
+  names: Set<string>,
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (ts.isTypeReferenceNode(typeNode)) {
+    const typeName = typeNode.typeName.getText();
+    if (typeName.endsWith("StyleXStylesWithout")) {
+      collectPropertyKeysFromTypeNode(names, typeNode.typeArguments?.[0], checker, visited);
+      return;
+    }
+    const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+    for (const declaration of symbol?.declarations ?? []) {
+      if (visited.has(declaration)) {
+        continue;
+      }
+      visited.add(declaration);
+      if (ts.isTypeAliasDeclaration(declaration)) {
+        collectStyleXStylesWithoutKeys(names, declaration.type, checker, visited);
+      }
+    }
+    return;
+  }
+
+  if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    for (const part of typeNode.types) {
+      collectStyleXStylesWithoutKeys(names, part, checker, visited);
+    }
+  }
+}
+
+function collectPropertyKeysFromTypeNode(
+  names: Set<string>,
+  typeNode: ts.TypeNode | undefined,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): void {
+  if (!typeNode) {
+    return;
+  }
+  if (ts.isTypeLiteralNode(typeNode)) {
+    for (const member of typeNode.members) {
+      if (ts.isPropertySignature(member)) {
+        const name = propertyNameText(member.name);
+        if (name) {
+          names.add(name);
+        }
+      }
+    }
+    return;
+  }
+  if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    for (const part of typeNode.types) {
+      collectPropertyKeysFromTypeNode(names, part, checker, visited);
+    }
+    return;
+  }
+  if (!ts.isTypeReferenceNode(typeNode)) {
+    return;
+  }
+  const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+  for (const declaration of symbol?.declarations ?? []) {
+    if (visited.has(declaration)) {
+      continue;
+    }
+    visited.add(declaration);
+    if (ts.isTypeAliasDeclaration(declaration)) {
+      collectPropertyKeysFromTypeNode(names, declaration.type, checker, visited);
+    } else if (ts.isInterfaceDeclaration(declaration)) {
+      for (const member of declaration.members) {
+        if (ts.isPropertySignature(member)) {
+          const name = propertyNameText(member.name);
+          if (name) {
+            names.add(name);
+          }
+        }
+      }
+    }
+  }
 }
 
 function declarationHasResolvableSxSurface(

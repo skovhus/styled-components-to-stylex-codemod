@@ -46,7 +46,10 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
-import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
+import {
+  applyTypeScriptMetadataToDecl,
+  findTypeScriptComponentMetadata,
+} from "../utilities/typescript-metadata.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
@@ -1379,6 +1382,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       }
     }
   }
+
+  normalizeStylesForSxRestrictedWrappedComponents(ctx, styledDecls);
 
   // Partial-migration support: if the file already has exactly one top-level
   // `const <name> = stylex.create({...})` call with no collisions and no shadowing,
@@ -4665,4 +4670,165 @@ function mergeAttrEntriesByAttrName<T extends { attrName: string }>(
     byAttrName.set(entry.attrName, entry);
   }
   return [...byAttrName.values()];
+}
+
+function normalizeStylesForSxRestrictedWrappedComponents(
+  ctx: TransformContext,
+  styledDecls: StyledDecl[],
+): void {
+  if (!ctx.adapter.useSxProp || !ctx.resolvedStyleObjects) {
+    return;
+  }
+
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.base.kind !== "component") {
+      continue;
+    }
+
+    const componentInterface = wrappedComponentInterfaceForSxNormalization(ctx, decl.base.ident);
+    const excludedProperties = componentInterface?.sxExcludedProperties;
+    if (componentInterface?.acceptsSx !== true || !excludedProperties?.length) {
+      continue;
+    }
+
+    const excluded = new Set(excludedProperties);
+    for (const styleKey of collectComponentStyleKeys(decl)) {
+      const style = ctx.resolvedStyleObjects.get(styleKey);
+      if (!style || typeof style !== "object" || isAstNode(style)) {
+        continue;
+      }
+      expandExcludedLogicalProperties(style as Record<string, unknown>, excluded);
+    }
+  }
+}
+
+function wrappedComponentInterfaceForSxNormalization(
+  ctx: TransformContext,
+  componentLocalName: string,
+): { acceptsSx: boolean; sxExcludedProperties?: string[] } | undefined {
+  const importInfo = ctx.importMap?.get(componentLocalName);
+  if (importInfo) {
+    const adapterResult = ctx.adapter.wrappedComponentInterface?.({
+      localName: componentLocalName,
+      importSource: importInfo.source.value,
+      importedName: importInfo.importedName,
+      filePath: ctx.file.path,
+    });
+    if (adapterResult !== undefined) {
+      return adapterResult;
+    }
+
+    if (importInfo.source.kind === "absolutePath") {
+      const names =
+        importInfo.importedName === "default"
+          ? [componentLocalName, importInfo.importedName]
+          : [importInfo.importedName];
+      const typedComponent = findTypeScriptComponentMetadata(
+        ctx.options.crossFileInfo?.typeScriptMetadata,
+        importInfo.source.value,
+        names,
+      );
+      if (typedComponent?.supportsSxProp) {
+        return {
+          acceptsSx: true,
+          sxExcludedProperties: typedComponent.sxExcludedProperties,
+        };
+      }
+    }
+
+    return undefined;
+  }
+
+  const typedComponent = findTypeScriptComponentMetadata(
+    ctx.options.crossFileInfo?.typeScriptMetadata,
+    ctx.file.path,
+    [componentLocalName],
+  );
+  if (typedComponent?.supportsSxProp) {
+    return {
+      acceptsSx: true,
+      sxExcludedProperties: typedComponent.sxExcludedProperties,
+    };
+  }
+
+  return undefined;
+}
+
+function collectComponentStyleKeys(decl: StyledDecl): string[] {
+  const keys: string[] = [decl.styleKey];
+  if (decl.variantStyleKeys) {
+    keys.push(...Object.values(decl.variantStyleKeys));
+  }
+  if (decl.extraStyleKeys) {
+    keys.push(...decl.extraStyleKeys);
+  }
+  if (decl.extraStyleKeysAfterBase) {
+    keys.push(...decl.extraStyleKeysAfterBase);
+  }
+  if (decl.enumVariant) {
+    keys.push(decl.enumVariant.baseKey);
+    for (const c of decl.enumVariant.cases) {
+      keys.push(c.styleKey);
+    }
+  }
+  if (decl.attrWrapper) {
+    const aw = decl.attrWrapper;
+    for (const k of [
+      aw.checkboxKey,
+      aw.radioKey,
+      aw.readonlyKey,
+      aw.externalKey,
+      aw.httpsKey,
+      aw.pdfKey,
+    ]) {
+      if (k) {
+        keys.push(k);
+      }
+    }
+  }
+  return keys;
+}
+
+const LOGICAL_TO_PHYSICAL_STYLE_PROPS: Record<string, string[]> = {
+  marginBlock: ["marginTop", "marginBottom"],
+  marginInline: ["marginRight", "marginLeft"],
+  paddingBlock: ["paddingTop", "paddingBottom"],
+  paddingInline: ["paddingRight", "paddingLeft"],
+  scrollMarginBlock: ["scrollMarginTop", "scrollMarginBottom"],
+  scrollMarginInline: ["scrollMarginRight", "scrollMarginLeft"],
+  scrollPaddingBlock: ["scrollPaddingTop", "scrollPaddingBottom"],
+  scrollPaddingInline: ["scrollPaddingRight", "scrollPaddingLeft"],
+};
+
+function expandExcludedLogicalProperties(
+  style: Record<string, unknown>,
+  excludedProperties: ReadonlySet<string>,
+): void {
+  const entries = Object.entries(style);
+  let changed = false;
+  for (const [prop] of entries) {
+    if (excludedProperties.has(prop) && LOGICAL_TO_PHYSICAL_STYLE_PROPS[prop]) {
+      changed = true;
+      break;
+    }
+  }
+  if (!changed) {
+    return;
+  }
+
+  for (const key of Object.keys(style)) {
+    delete style[key];
+  }
+  for (const [prop, value] of entries) {
+    const physicalProps = excludedProperties.has(prop)
+      ? LOGICAL_TO_PHYSICAL_STYLE_PROPS[prop]
+      : undefined;
+    if (!physicalProps) {
+      style[prop] = value;
+      continue;
+    }
+    for (const physicalProp of physicalProps) {
+      style[physicalProp] = value;
+    }
+  }
 }
