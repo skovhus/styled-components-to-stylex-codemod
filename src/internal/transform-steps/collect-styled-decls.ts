@@ -7,6 +7,7 @@ import { collectStyledDecls } from "../collect-styled-decls.js";
 import { extractStyledCallArgs } from "../extract-styled-call-args.js";
 import { findUncollectedStyledTemplateLoc } from "../utilities/uncollected-styled-template.js";
 import { formatOutput } from "../utilities/format-output.js";
+import { UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING } from "../logger.js";
 import { CONTINUE, returnResult, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
@@ -102,7 +103,7 @@ export function collectStyledDeclsStep(ctx: TransformContext): StepResult {
   if (unparseableSfpDecl && ctx.options.transformMode !== "leavesOnly") {
     ctx.warnings.push({
       severity: "warning",
-      type: "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
+      type: UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING,
       loc: unparseableSfpDecl.loc,
     });
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");

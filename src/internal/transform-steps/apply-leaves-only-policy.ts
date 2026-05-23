@@ -10,6 +10,7 @@ import {
   type Resolve,
 } from "../prepass/extract-external-interface.js";
 import { hasUniversalSelectorInRules } from "../css-ir.js";
+import { UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING } from "../logger.js";
 import {
   CONTINUE,
   type StepResult,
@@ -48,7 +49,7 @@ export function applyLeavesOnlyPolicyStep(ctx: TransformContext): StepResult {
       decl.skipTransform = true;
       ctx.warnings.push({
         severity: "warning",
-        type: "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
+        type: UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING,
         loc: decl.loc,
       });
       continue;

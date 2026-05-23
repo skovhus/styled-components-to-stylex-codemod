@@ -54,6 +54,16 @@ export function hasInlineableStyleFnOnly(decl: StyledDecl): boolean {
 }
 
 /**
+ * Returns true when `shouldForwardProp` must be preserved by a wrapper boundary.
+ * Resolver-added drops for inlined base components are applied directly during JSX rewrite.
+ */
+export function needsShouldForwardPropWrapper(decl: StyledDecl): boolean {
+  const resolverOnlyShouldForwardProp =
+    !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
+  return !!decl.shouldForwardProp && !resolverOnlyShouldForwardProp;
+}
+
+/**
  * Returns true if any JSX usage of a component has spread attributes
  * (e.g., `<Comp {...props} />`). The inline path can only consume explicit
  * JSX attributes, so spreads require a wrapper for prop extraction.

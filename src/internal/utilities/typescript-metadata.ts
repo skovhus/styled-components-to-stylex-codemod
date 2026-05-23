@@ -1,11 +1,10 @@
-import { existsSync, realpathSync } from "node:fs";
-import path from "node:path";
 import type { TransformContext } from "../transform-context.js";
 import type { StyledDecl } from "../transform-types.js";
 import type {
   TypeScriptComponentMetadata,
   TypeScriptPrepassMetadata,
 } from "../prepass/typescript-analysis.js";
+import { resolveExistingFilePath } from "./path-utils.js";
 
 export function findTypeScriptComponentMetadata(
   metadata: TypeScriptPrepassMetadata | undefined,
@@ -53,30 +52,4 @@ function defaultExportMatches(
   names: ReadonlySet<string>,
 ): boolean {
   return component.defaultExport && names.has("default");
-}
-
-function resolveExistingFilePath(filePath: string): string {
-  const resolved = resolveExistingSourceFilePath(filePath);
-  if (!existsSync(resolved)) {
-    return resolved;
-  }
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
-}
-
-function resolveExistingSourceFilePath(filePath: string): string {
-  const resolved = path.resolve(filePath);
-  if (existsSync(resolved)) {
-    return resolved;
-  }
-  for (const extension of [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"]) {
-    const candidate = `${resolved}${extension}`;
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return resolved;
 }

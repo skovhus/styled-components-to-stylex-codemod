@@ -1,7 +1,7 @@
 /**
  * Shared path utilities for symlink resolution and path normalization.
  */
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 
 /**
@@ -33,4 +33,34 @@ export function isRelativeSpecifier(specifier: string): boolean {
     specifier.startsWith(".\\") ||
     specifier.startsWith("..\\")
   );
+}
+
+/**
+ * Resolve a source file path to an existing implementation file when possible,
+ * accepting extensionless imports and index modules before resolving symlinks.
+ */
+export function resolveExistingFilePath(filePath: string): string {
+  const resolved = resolveExistingSourceFilePath(filePath);
+  if (!existsSync(resolved)) {
+    return resolved;
+  }
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
+function resolveExistingSourceFilePath(filePath: string): string {
+  const resolved = pathResolve(filePath);
+  if (existsSync(resolved)) {
+    return resolved;
+  }
+  for (const extension of [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"]) {
+    const candidate = `${resolved}${extension}`;
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return resolved;
 }

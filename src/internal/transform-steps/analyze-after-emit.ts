@@ -449,7 +449,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.supportsExternalStyles || decl.supportsAsProp) {
     return false;
   }
-  if ((decl as { isPolymorphicIntrinsicWrapper?: boolean }).isPolymorphicIntrinsicWrapper) {
+  if (decl.isPolymorphicIntrinsicWrapper) {
     return false;
   }
   if (decl.compoundVariants?.length) {
@@ -464,7 +464,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.withConfig?.componentId) {
     return false;
   }
-  if ((decl as { receivesClassNameOrStyleInJsx?: boolean }).receivesClassNameOrStyleInJsx) {
+  if (decl.receivesClassNameOrStyleInJsx) {
     return false;
   }
   return true;

@@ -12,6 +12,7 @@ import {
   cloneAstNode,
   getFunctionBodyExpr,
   getNodeLocStart,
+  literalToStaticValue,
 } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
@@ -19,6 +20,7 @@ import type { StyledDecl } from "./transform-types.js";
 import { stripStyledPrefix, toStyleKey, styleKeyWithSuffix } from "./transform/helpers.js";
 import {
   getCommentBody,
+  isValidIdentifierName,
   isPrettierIgnoreComment,
   isStyleSectionMarkerComment,
 } from "./utilities/string-utils.js";
@@ -350,7 +352,7 @@ function collectStyledDeclsImpl(args: {
     if (decls.length !== 1) {
       return undefined;
     }
-    const value = literalStaticValueFromNode((decls.get().node as any).init);
+    const value = literalToStaticValue((decls.get().node as any).init);
     return typeof value === "string" || typeof value === "number" ? value : undefined;
   };
 
@@ -1725,35 +1727,14 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
     ) {
       names.add(value.left.name);
       propByLocalName.set(value.left.name, propName);
-      const defaultValue = literalStaticValueFromNode(value.right);
-      if (defaultValue !== undefined) {
+      const defaultValue = literalToStaticValue(value.right);
+      if (defaultValue !== null) {
         defaultsByPropName.set(propName, defaultValue);
       }
     }
   }
 
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
-}
-
-function literalStaticValueFromNode(node: any): string | number | boolean | undefined {
-  if (node?.type === "StringLiteral" || node?.type === "NumericLiteral") {
-    return node.value;
-  }
-  if (node?.type === "BooleanLiteral") {
-    return node.value;
-  }
-  if (
-    node?.type === "Literal" &&
-    (typeof node.value === "string" ||
-      typeof node.value === "number" ||
-      typeof node.value === "boolean")
-  ) {
-    return node.value;
-  }
-  if (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
-    return literalStaticValueFromNode(node.expression);
-  }
-  return undefined;
 }
 
 function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {
@@ -1783,10 +1764,6 @@ function getStaticAttrExpressionRootName(node: any): string | null {
     return null;
   }
   return getStaticAttrExpressionRootName(node.object);
-}
-
-function isValidIdentifierName(name: string): boolean {
-  return /^[$A-Z_a-z][$\w]*$/.test(name);
 }
 
 function staticAttrExpressionToReference(node: any, attrsParamInfo: AttrsParamInfo): string | null {

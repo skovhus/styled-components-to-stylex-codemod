@@ -21,6 +21,7 @@ import {
   countComponentJsxUsages,
   hasInlineableStyleFnOnly,
   hasSpreadInJsx,
+  needsShouldForwardPropWrapper,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
@@ -187,9 +188,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     // shouldForwardProp from withConfig() still needs wrappers.
     // Resolver-added prop drops for inlined imported bases can be handled in JSX rewrite.
-    const resolverOnlyShouldForwardProp =
-      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
-    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
+    if (needsShouldForwardPropWrapper(decl)) {
       decl.needsWrapperComponent = true;
     }
     // withConfig.componentId needs wrapper

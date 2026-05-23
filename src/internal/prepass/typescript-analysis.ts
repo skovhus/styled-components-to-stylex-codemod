@@ -1,7 +1,7 @@
-import { existsSync, realpathSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
+import { resolveExistingFilePath } from "../utilities/path-utils.js";
 
 export interface TypeScriptPrepassMetadata {
   version: 1;
@@ -1541,32 +1541,6 @@ function findTsConfig(rootNames: readonly string[], cwd: string): string | undef
 
 function normalizeFilePaths(files: readonly string[]): string[] {
   return [...new Set(files.map(resolveExistingFilePath))].sort();
-}
-
-function resolveExistingFilePath(filePath: string): string {
-  const resolved = resolveExistingSourceFilePath(filePath);
-  if (!existsSync(resolved)) {
-    return resolved;
-  }
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
-}
-
-function resolveExistingSourceFilePath(filePath: string): string {
-  const resolved = path.resolve(filePath);
-  if (existsSync(resolved)) {
-    return resolved;
-  }
-  for (const extension of [".tsx", ".ts", ".jsx", ".js", "/index.tsx", "/index.ts"]) {
-    const candidate = `${resolved}${extension}`;
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return resolved;
 }
 
 function normalizeFilePath(filePath: string): string {

@@ -521,6 +521,12 @@ export type StyledDecl = {
    * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
    */
   usedAsValue?: boolean;
+  /** Original component base before post-emit flattening mutates `base` to an intrinsic target. */
+  originalBaseIdent?: string;
+  /** True when same-file JSX usage passes className or style into this component. */
+  receivesClassNameOrStyleInJsx?: boolean;
+  /** True for intrinsic wrappers that must preserve runtime `as`/`forwardedAs` rendering. */
+  isPolymorphicIntrinsicWrapper?: boolean;
   styleFnFromProps?: Array<{
     fnKey: string;
     jsxProp: string;
@@ -668,7 +674,7 @@ export type StyledDecl = {
     pdfKey?: string;
   };
   rules: CssRuleIR[];
-  templateExpressions: unknown[];
+  templateExpressions: ExpressionKind[];
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
