@@ -1020,7 +1020,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
-    selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl, root, j);
+    selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl, state);
     if (hasEnabledCompoundPseudoSelector(selector)) {
       state.markBail();
       warnings.push({
@@ -2257,12 +2257,12 @@ function tryResolveInterpolatedPseudo(
 
   if (selectorResult.kind === "pseudoExpand") {
     const resolvedPrefixPseudo = prefixPseudo
-      ? normalizeEnabledPseudoForSupportedIntrinsic(prefixPseudo, decl, state.root, state.j)
+      ? normalizeEnabledPseudoForSupportedIntrinsic(prefixPseudo, decl, state)
       : prefixPseudo;
     if (
       resolvedPrefixPseudo &&
       containsEnabledPseudo(resolvedPrefixPseudo) &&
-      !canUseEnabledPseudoForSupportedIntrinsic(decl, state.root, state.j)
+      !canUseEnabledPseudoForSupportedIntrinsic(decl, state)
     ) {
       return "bail";
     }
@@ -2292,10 +2292,9 @@ const ENABLED_PSEUDO_INTRINSIC_TAGS = new Set([
 function normalizeEnabledPseudoForSupportedIntrinsic(
   selector: string,
   decl: StyledDecl,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
+  state: DeclProcessingState["state"],
 ): string {
-  if (!canUseEnabledPseudoForSupportedIntrinsic(decl, root, j)) {
+  if (!canUseEnabledPseudoForSupportedIntrinsic(decl, state)) {
     return selector;
   }
   return selector.replace(/(^|[,&]\s*):enabled(?=[:\s,{]|$)/g, "$1:not(:disabled)");
@@ -2303,22 +2302,98 @@ function normalizeEnabledPseudoForSupportedIntrinsic(
 
 function canUseEnabledPseudoForSupportedIntrinsic(
   decl: StyledDecl,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
+  state: DeclProcessingState["state"],
 ): boolean {
   return (
     decl.base.kind === "intrinsic" &&
     ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) &&
-    !hasPolymorphicAsPropType(decl, root, j) &&
-    !hasNonFormControlAsUsage(decl.localName, root, j)
+    !hasPolymorphicAsPropType(decl, state.root, state.j) &&
+    !hasExternalAsSupport(decl, state) &&
+    !hasNonFormControlAsUsage(decl.localName, state.root, state.j)
   );
+}
+
+function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["state"]): boolean {
+  const exportInfo =
+    state.exportedComponents?.get(decl.localName) ??
+    findComponentExportInfo(decl.localName, state.root, state.j);
+  if (!exportInfo) {
+    return false;
+  }
+  return state.adapter.externalInterface({
+    filePath: state.filePath,
+    componentName: decl.localName,
+    exportName: exportInfo.exportName,
+    isDefaultExport: exportInfo.isDefault,
+  }).as;
+}
+
+function findComponentExportInfo(
+  name: string,
+  root: DeclProcessingState["state"]["root"] | undefined,
+  j: JSCodeshift,
+): { exportName: string; isDefault: boolean } | null {
+  if (!root) {
+    return null;
+  }
+  let found: { exportName: string; isDefault: boolean } | null = null;
+
+  root.find(j.ExportNamedDeclaration).forEach((path) => {
+    if (found) {
+      return;
+    }
+    const decl = path.node.declaration;
+    if (decl?.type === "VariableDeclaration") {
+      for (const d of decl.declarations as Array<{ id?: { type?: string; name?: string } }>) {
+        if (d.id?.type === "Identifier" && d.id.name === name) {
+          found = { exportName: name, isDefault: false };
+          return;
+        }
+      }
+    }
+    if (decl?.type === "FunctionDeclaration" && decl.id?.name === name) {
+      found = { exportName: name, isDefault: false };
+      return;
+    }
+    if (!decl && path.node.specifiers) {
+      for (const specifier of path.node.specifiers) {
+        const localName = specifier.local?.type === "Identifier" ? specifier.local.name : undefined;
+        if (localName !== name) {
+          continue;
+        }
+        const exportName =
+          specifier.exported?.type === "Identifier" ? specifier.exported.name : name;
+        found = { exportName, isDefault: false };
+        return;
+      }
+    }
+  });
+
+  if (found) {
+    return found;
+  }
+
+  root.find(j.ExportDefaultDeclaration).forEach((path) => {
+    if (found) {
+      return;
+    }
+    const decl = path.node.declaration;
+    if (decl?.type === "Identifier" && decl.name === name) {
+      found = { exportName: "default", isDefault: true };
+    }
+  });
+
+  return found;
 }
 
 function hasNonFormControlAsUsage(
   componentName: string,
-  root: DeclProcessingState["state"]["root"],
+  root: DeclProcessingState["state"]["root"] | undefined,
   j: JSCodeshift,
 ): boolean {
+  if (!root) {
+    return false;
+  }
   let unsafe = false;
   root
     .find(j.JSXElement, {
@@ -2331,7 +2406,10 @@ function hasNonFormControlAsUsage(
         return;
       }
       for (const attr of path.node.openingElement.attributes ?? []) {
-        if (attr.type !== "JSXAttribute" || attr.name.name !== "as") {
+        if (
+          attr.type !== "JSXAttribute" ||
+          (attr.name.name !== "as" && attr.name.name !== "forwardedAs")
+        ) {
           continue;
         }
         const value = readStaticJsxLiteral(attr);
@@ -2346,10 +2424,12 @@ function hasNonFormControlAsUsage(
 
 function hasPolymorphicAsPropType(
   decl: StyledDecl,
-  root: DeclProcessingState["state"]["root"],
+  root: DeclProcessingState["state"]["root"] | undefined,
   j: JSCodeshift,
 ): boolean {
-  return !!decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType });
+  return (
+    !!root && !!decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType })
+  );
 }
 
 function containsEnabledPseudo(selector: string): boolean {

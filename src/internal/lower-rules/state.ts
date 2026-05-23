@@ -280,6 +280,8 @@ export function createLowerRulesState(ctx: TransformContext) {
     root,
     file,
     filePath,
+    adapter: ctx.adapter,
+    exportedComponents: ctx.exportedComponents,
     warnings,
     resolverImports,
     keyframesNames,

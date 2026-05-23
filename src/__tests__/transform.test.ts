@@ -3027,6 +3027,32 @@ export const App = () => <Title>Imported root with computed helper</Title>;
     expect(result).toContain('${mixins["root"]}');
   });
 
+  it("bails on enabled compound pseudos when external interface supports as", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface() {
+        return { styles: false, as: true, ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(input, { adapter }, "external-as.tsx");
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath, parser);
