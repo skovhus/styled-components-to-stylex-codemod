@@ -7,6 +7,7 @@ import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssDeclarationIR, CssValuePart } from "../css-ir.js";
+import { collectExportedComponents } from "../analyze-before-emit/exported-components.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
@@ -2316,7 +2317,9 @@ function canUseEnabledPseudoForSupportedIntrinsic(
 function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["state"]): boolean {
   const exportInfo =
     state.exportedComponents?.get(decl.localName) ??
-    findComponentExportInfo(decl.localName, state.root, state.j);
+    (state.root
+      ? collectExportedComponents(state.root, state.j, state.declByLocalName).get(decl.localName)
+      : undefined);
   if (!exportInfo) {
     return false;
   }
@@ -2326,64 +2329,6 @@ function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["stat
     exportName: exportInfo.exportName,
     isDefaultExport: exportInfo.isDefault,
   }).as;
-}
-
-function findComponentExportInfo(
-  name: string,
-  root: DeclProcessingState["state"]["root"] | undefined,
-  j: JSCodeshift,
-): { exportName: string; isDefault: boolean } | null {
-  if (!root) {
-    return null;
-  }
-  let found: { exportName: string; isDefault: boolean } | null = null;
-
-  root.find(j.ExportNamedDeclaration).forEach((path) => {
-    if (found) {
-      return;
-    }
-    const decl = path.node.declaration;
-    if (decl?.type === "VariableDeclaration") {
-      for (const d of decl.declarations as Array<{ id?: { type?: string; name?: string } }>) {
-        if (d.id?.type === "Identifier" && d.id.name === name) {
-          found = { exportName: name, isDefault: false };
-          return;
-        }
-      }
-    }
-    if (decl?.type === "FunctionDeclaration" && decl.id?.name === name) {
-      found = { exportName: name, isDefault: false };
-      return;
-    }
-    if (!decl && path.node.specifiers) {
-      for (const specifier of path.node.specifiers) {
-        const localName = specifier.local?.type === "Identifier" ? specifier.local.name : undefined;
-        if (localName !== name) {
-          continue;
-        }
-        const exportName =
-          specifier.exported?.type === "Identifier" ? specifier.exported.name : name;
-        found = { exportName, isDefault: false };
-        return;
-      }
-    }
-  });
-
-  if (found) {
-    return found;
-  }
-
-  root.find(j.ExportDefaultDeclaration).forEach((path) => {
-    if (found) {
-      return;
-    }
-    const decl = path.node.declaration;
-    if (decl?.type === "Identifier" && decl.name === name) {
-      found = { exportName: "default", isDefault: true };
-    }
-  });
-
-  return found;
 }
 
 function hasNonFormControlAsUsage(
