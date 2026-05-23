@@ -8,6 +8,8 @@
 import { vi } from "vitest";
 
 vi.mock("../internal/logger.js", () => ({
+  UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING:
+    "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
   Logger: {
     info: vi.fn(),
     warn: vi.fn(),

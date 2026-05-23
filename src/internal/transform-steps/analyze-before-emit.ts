@@ -656,7 +656,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     const { className, style } = getJsxAttributeUsage(decl.localName);
     if (className || style) {
-      (decl as any).receivesClassNameOrStyleInJsx = true;
+      decl.receivesClassNameOrStyleInJsx = true;
       // Style props promoted to stylex.create entries don't need a wrapper.
       if (!className && decl.promotedStyleProps?.length) {
         continue;
@@ -1186,7 +1186,7 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       const propsTypeHasAs =
         decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType });
       if (hasAs || hasForwardedAs || propsTypeHasAs) {
-        (decl as any).isPolymorphicIntrinsicWrapper = true;
+        decl.isPolymorphicIntrinsicWrapper = true;
       }
     }
   }

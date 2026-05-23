@@ -2,7 +2,7 @@
  * Shared type definitions for the transform pipeline.
  * Core concepts: step results, styled declarations, and options.
  */
-import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
+import type { ASTNode, Comment, Expression, JSCodeshift, Options } from "jscodeshift";
 import type {
   Adapter,
   ResolveBaseComponentResult,
@@ -674,7 +674,7 @@ export type StyledDecl = {
     pdfKey?: string;
   };
   rules: CssRuleIR[];
-  templateExpressions: ExpressionKind[];
+  templateExpressions: Expression[];
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;
