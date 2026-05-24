@@ -1,3 +1,5 @@
+import { PLACEHOLDER_RE } from "../styled-css.js";
+
 /**
  * Shared heuristic for determining whether a placeholder/expression is in a
  * CSS selector context rather than a property value context.
