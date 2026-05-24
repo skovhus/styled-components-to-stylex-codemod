@@ -216,4 +216,3 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
 
   return CONTINUE;
 }
-

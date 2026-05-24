@@ -700,7 +700,6 @@ function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
   return identifiers;
 }
 
-
 function collectCssHelperFunctionSelectorIdentifiers(
   state: LowerRulesState,
   cssLocal: string | undefined,

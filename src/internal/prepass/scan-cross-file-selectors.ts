@@ -641,7 +641,6 @@ function isCssTag(tag: AstNode | undefined, cssImportNames?: ReadonlySet<string>
   return tag.type === "Identifier" && typeof tag.name === "string" && cssImportNames.has(tag.name);
 }
 
-
 /* ── Debug logging ────────────────────────────────────────────────────── */
 
 function logCrossFileDebug(scannedFiles: string[], info: CrossFileInfo): void {

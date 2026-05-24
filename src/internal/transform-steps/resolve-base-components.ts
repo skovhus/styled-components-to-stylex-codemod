@@ -1414,7 +1414,6 @@ function isUsedAsNonJsxValue(ctx: TransformContext, localName: string): boolean 
   );
 }
 
-
 /** Returns a styleKey that doesn't collide with existing keys. */
 function deduplicateStyleKey(base: string, usedKeys: Set<string>): string {
   if (!usedKeys.has(base)) {

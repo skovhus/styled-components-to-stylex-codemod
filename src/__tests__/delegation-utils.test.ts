@@ -22,7 +22,7 @@ describe("needsShouldForwardPropWrapper", () => {
       inlinedBaseComponent: {
         importSource: "./Button",
         importedName: "Button",
-        baseResult: { kind: "intrinsic", tagName: "button" },
+        baseResult: { tagName: "button", consumedProps: [] },
         baseStaticProps: {},
       },
       shouldForwardProp: { dropProps: ["$variant"] },
@@ -37,7 +37,7 @@ describe("needsShouldForwardPropWrapper", () => {
       inlinedBaseComponent: {
         importSource: "./Button",
         importedName: "Button",
-        baseResult: { kind: "intrinsic", tagName: "button" },
+        baseResult: { tagName: "button", consumedProps: [] },
         baseStaticProps: {},
       },
       shouldForwardProp: { dropProps: ["$variant"] },

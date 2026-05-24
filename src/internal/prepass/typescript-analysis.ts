@@ -93,7 +93,6 @@ export function analyzeTypeScriptProgram(options: {
   return { version: 1, files };
 }
 
-
 function analyzeSourceFile(
   sourceFile: ts.SourceFile,
   checker: ts.TypeChecker,
