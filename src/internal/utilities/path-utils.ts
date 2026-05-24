@@ -41,14 +41,7 @@ export function isRelativeSpecifier(specifier: string): boolean {
  */
 export function resolveExistingFilePath(filePath: string): string {
   const resolved = resolveExistingSourceFilePath(filePath);
-  if (!existsSync(resolved)) {
-    return resolved;
-  }
-  try {
-    return realpathSync(resolved);
-  } catch {
-    return resolved;
-  }
+  return existsSync(resolved) ? toRealPath(resolved) : resolved;
 }
 
 function resolveExistingSourceFilePath(filePath: string): string {

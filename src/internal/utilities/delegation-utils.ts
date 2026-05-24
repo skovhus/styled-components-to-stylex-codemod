@@ -63,6 +63,10 @@ export function needsShouldForwardPropWrapper(decl: StyledDecl): boolean {
   return !!decl.shouldForwardProp && !resolverOnlyShouldForwardProp;
 }
 
+export function getEffectiveBaseIdent(decl: StyledDecl): string | null {
+  return decl.originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+}
+
 /**
  * Returns true if any JSX usage of a component has spread attributes
  * (e.g., `<Comp {...props} />`). The inline path can only consume explicit

@@ -1,6 +1,5 @@
 import path from "node:path";
 import ts from "typescript";
-import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 import { resolveExistingFilePath } from "../utilities/path-utils.js";
 
 export interface TypeScriptPrepassMetadata {
@@ -94,7 +93,6 @@ export function analyzeTypeScriptProgram(options: {
   return { version: 1, files };
 }
 
-export { findTypeScriptComponentMetadata };
 
 function analyzeSourceFile(
   sourceFile: ts.SourceFile,

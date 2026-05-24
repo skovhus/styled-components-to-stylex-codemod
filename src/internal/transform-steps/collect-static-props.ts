@@ -5,6 +5,7 @@
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { getEffectiveBaseIdent } from "../utilities/delegation-utils.js";
 
 /**
  * Collects static property assignments and generates inheritance statements.
@@ -216,6 +217,3 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   return CONTINUE;
 }
 
-function getEffectiveBaseIdent(decl: StyledDecl): string | null {
-  return decl.originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
-}

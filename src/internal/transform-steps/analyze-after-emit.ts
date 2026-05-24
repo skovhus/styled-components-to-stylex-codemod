@@ -428,7 +428,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.bridgeClassName || decl.attrWrapper) {
     return false;
   }
-  if ((decl as { usedAsValue?: boolean }).usedAsValue) {
+  if (decl.usedAsValue) {
     return false;
   }
   if (!hasInlineableStyleFnOnly(decl)) {
@@ -455,7 +455,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.pseudoAliasSelectors?.length) {
     return false;
   }
-  if ((decl as { pseudoExpandSelectors?: unknown[] }).pseudoExpandSelectors?.length) {
+  if (decl.pseudoExpandSelectors?.length) {
     return false;
   }
   if (decl.withConfig?.componentId) {

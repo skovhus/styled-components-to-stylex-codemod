@@ -54,3 +54,16 @@ export function isSelectorContext(before: string, after: string): boolean {
 
   return false;
 }
+
+const TEMPLATE_PLACEHOLDER_RE = new RegExp(PLACEHOLDER_RE.source, "g");
+
+export function isTemplatePlaceholderInSelectorContext(
+  rawCss: string,
+  pos: number,
+  length: number,
+): boolean {
+  const after = rawCss.slice(pos + length).trimStart();
+  const before = rawCss.slice(0, pos).trimEnd();
+  // Treat placeholders before this point as pseudo-selector identifiers, not value-context colons.
+  return isSelectorContext(before.replace(TEMPLATE_PLACEHOLDER_RE, "hover"), after);
+}

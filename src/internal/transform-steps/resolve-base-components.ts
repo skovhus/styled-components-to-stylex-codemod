@@ -15,6 +15,7 @@ import type {
 import { toStyleKey, styleKeyWithSuffix, toSuffixFromProp } from "../transform/helpers.js";
 import { TransformContext } from "../transform-context.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
+import { hasSpreadInJsx } from "../utilities/delegation-utils.js";
 
 export function resolveBaseComponentsStep(ctx: TransformContext): StepResult {
   const styledDecls = ctx.styledDecls as StyledDecl[] | undefined;
@@ -1252,7 +1253,7 @@ function resolveDirectJsxUsages(ctx: TransformContext, styledDecls: StyledDecl[]
     if (isUsedAsNonJsxValue(ctx, name)) {
       continue;
     }
-    if (hasSpreadInJsxForComponent(ctx, name)) {
+    if (hasSpreadInJsx(ctx.root, ctx.j, name)) {
       continue;
     }
 
@@ -1413,33 +1414,6 @@ function isUsedAsNonJsxValue(ctx: TransformContext, localName: string): boolean 
   );
 }
 
-/** Returns true if any JSX call site of `localName` has a spread attribute. */
-function hasSpreadInJsxForComponent(ctx: TransformContext, localName: string): boolean {
-  const { root, j } = ctx;
-  let found = false;
-  const checkAttrs = (attributes: unknown[] | undefined): void => {
-    if (found) {
-      return;
-    }
-    for (const attr of attributes ?? []) {
-      if ((attr as { type?: string }).type === "JSXSpreadAttribute") {
-        found = true;
-        return;
-      }
-    }
-  };
-  root
-    .find(j.JSXElement, {
-      openingElement: { name: { type: "JSXIdentifier", name: localName } },
-    } as object)
-    .forEach((p: any) => checkAttrs(p.node.openingElement?.attributes));
-  root
-    .find(j.JSXSelfClosingElement, {
-      name: { type: "JSXIdentifier", name: localName },
-    } as object)
-    .forEach((p: any) => checkAttrs(p.node.attributes));
-  return found;
-}
 
 /** Returns a styleKey that doesn't collide with existing keys. */
 function deduplicateStyleKey(base: string, usedKeys: Set<string>): string {
