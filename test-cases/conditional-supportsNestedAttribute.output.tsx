@@ -1,8 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
 
 export const App = () => (
-  <div data-open="true" sx={styles.collapsibleRegion}>
-    <div>Open content</div>
+  <div>
+    <div data-open="true" sx={styles.collapsibleRegion}>
+      <div>Open content</div>
+    </div>
+    <div sx={styles.supportsHoverOrder}>Hover order</div>
   </div>
 );
 
@@ -25,6 +28,15 @@ const styles = stylex.create({
     interpolateSize: {
       default: null,
       "@supports (interpolate-size: allow-keywords)": "allow-keywords",
+    },
+  },
+  supportsHoverOrder: {
+    color: {
+      default: "black",
+      "@supports (color: color(display-p3 1 0 0))": {
+        default: "blue",
+        ":hover": "color(display-p3 1 0 0)",
+      },
     },
   },
 });

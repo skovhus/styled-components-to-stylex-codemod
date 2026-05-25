@@ -373,7 +373,10 @@ function resolveScopedConstStringInit(
     if (!scopeNode || !ancestorScopes.has(scopeNode)) {
       return;
     }
-    if (isProgramNode(scopeNode)) {
+    if (
+      isProgramNode(scopeNode) ||
+      hasInnerFunctionBindingBetween(identPath, scopeNode, expr.name)
+    ) {
       return;
     }
 
@@ -431,6 +434,79 @@ function getDeclarationScopeNode(path: AstPathLike, declarationKind: string | nu
   return null;
 }
 
+function hasInnerFunctionBindingBetween(
+  identPath: AstPathLike,
+  outerScopeNode: object,
+  name: string,
+): boolean {
+  let cur: AstPathLike | null | undefined = identPath.parentPath;
+  while (cur && cur.node !== outerScopeNode) {
+    if (isFunctionNode(cur.node) && functionDeclaresName(cur.node, name)) {
+      return true;
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return false;
+}
+
+function functionDeclaresName(node: object, name: string): boolean {
+  const fn = node as { id?: unknown; params?: unknown[] };
+  const ids = new Set<string>();
+  collectPatternIdentifiers(fn.id, ids);
+  for (const param of fn.params ?? []) {
+    collectPatternIdentifiers(param, ids);
+  }
+  return ids.has(name);
+}
+
+function collectPatternIdentifiers(pattern: unknown, out: Set<string>): void {
+  if (!pattern || typeof pattern !== "object") {
+    return;
+  }
+  const node = pattern as {
+    type?: string;
+    name?: string;
+    argument?: unknown;
+    left?: unknown;
+    value?: unknown;
+    properties?: unknown[];
+    elements?: unknown[];
+    parameter?: unknown;
+  };
+  switch (node.type) {
+    case "Identifier":
+      if (node.name) {
+        out.add(node.name);
+      }
+      return;
+    case "RestElement":
+      collectPatternIdentifiers(node.argument, out);
+      return;
+    case "AssignmentPattern":
+      collectPatternIdentifiers(node.left, out);
+      return;
+    case "ObjectPattern":
+      for (const prop of node.properties ?? []) {
+        const property = prop as { type?: string; argument?: unknown; value?: unknown } | null;
+        collectPatternIdentifiers(
+          property?.type === "RestElement" ? property.argument : property?.value,
+          out,
+        );
+      }
+      return;
+    case "ArrayPattern":
+      for (const element of node.elements ?? []) {
+        collectPatternIdentifiers(element, out);
+      }
+      return;
+    case "TSParameterProperty":
+      collectPatternIdentifiers(node.parameter, out);
+      return;
+    default:
+      return;
+  }
+}
+
 function getVariableDeclarationKind(path: AstPathLike): string | null {
   const parentNode = path.parentPath?.node as { type?: string; kind?: unknown } | undefined;
   return parentNode?.type === "VariableDeclaration" && typeof parentNode.kind === "string"
@@ -448,9 +524,12 @@ function isProgramNode(node: unknown): boolean {
 }
 
 function isFunctionOrProgramNode(node: unknown): boolean {
+  return isProgramNode(node) || isFunctionNode(node);
+}
+
+function isFunctionNode(node: unknown): node is object {
   const type = (node as { type?: unknown }).type;
   return (
-    type === "Program" ||
     type === "FunctionDeclaration" ||
     type === "FunctionExpression" ||
     type === "ArrowFunctionExpression"

@@ -1492,7 +1492,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             existing.default = null;
           }
         }
-        existing[media] = value;
+        const currentMediaValue = existing[media];
+        if (
+          currentMediaValue &&
+          typeof currentMediaValue === "object" &&
+          !Array.isArray(currentMediaValue) &&
+          !isAstNode(currentMediaValue)
+        ) {
+          (currentMediaValue as Record<string, unknown>).default = value;
+        } else {
+          existing[media] = value;
+        }
         patchEarlierDynamicConditionValues(prop, media, value);
         return;
       }
