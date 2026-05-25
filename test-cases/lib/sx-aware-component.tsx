@@ -30,6 +30,7 @@ export function SxAwareButton(
 
 const styles = stylex.create({
   base: {
+    display: "flex",
     backgroundColor: "#eee",
     borderWidth: 0,
     padding: 4,

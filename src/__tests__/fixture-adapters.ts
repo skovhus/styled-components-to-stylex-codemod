@@ -37,6 +37,13 @@ export const fixtureAdapter = defineAdapter({
   // Write all defineMarker() declarations to a single shared sidecar file
   markerFile: () => ({ kind: "specifier", value: "./markers.stylex" }),
 
+  wrappedComponentInterface(ctx) {
+    if (ctx.importSource.includes("sx-dynamic-flex")) {
+      return { acceptsSx: true };
+    }
+    return undefined;
+  },
+
   // Configure external interface for exported components
   externalInterface(ctx): ExternalInterfaceResult {
     // Enable external styles + polymorphic `as` prop for test cases that need both

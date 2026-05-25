@@ -154,6 +154,13 @@ const callerStyles = stylex.create({
     color: "#bf4f74",
     fontWeight: "bold",
   },
+  // Media-only overrides forwarded through sx must keep SxAwareButton's base default.
+  printButton: {
+    display: {
+      default: "flex",
+      "@media print": "block",
+    },
+  },
   // Multiple call sites → emitted as a wrapper function component.
   primary: {
     color: "white",
@@ -262,6 +269,7 @@ export const App = () => (
     </StyledButton>
     {/* Caller passes its own sx — must compose with the wrapper's internal sx */}
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
+    <SxAwareButton sx={callerStyles.printButton}>Print display</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 1</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 2</SxAwareButton>
     <SxAwareButton sx={[callerStyles.inlinedAccent, callerStyles.caller]}>

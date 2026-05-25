@@ -61,6 +61,7 @@ import {
   SOURCE_CSS_PROPERTIES_KEY,
   type PropCommentMetadata,
 } from "../transform/helpers.js";
+import { guardForwardedSxConditionalDefaults } from "../utilities/forwarded-sx-defaults.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
 
@@ -1381,6 +1382,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   if (!validateSxRestrictedWrappedComponentStyles(ctx, styledDecls)) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+  if (guardForwardedSxConditionalDefaults(ctx, styledDecls) === "bail") {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
