@@ -2348,6 +2348,9 @@ function collectExternalInterfaceExportInfos(
   add(state.exportedComponents?.get(decl.localName));
   if (state.root) {
     add(collectExportedComponents(state.root, state.j, state.declByLocalName).get(decl.localName));
+    for (const info of collectDirectExportInfosForLocal(decl.localName, state.root, state.j)) {
+      add(info);
+    }
     for (const exportName of collectDottedExportNamesForLocal(
       decl.localName,
       state.root,
@@ -2357,6 +2360,46 @@ function collectExternalInterfaceExportInfos(
     }
   }
   return [...infos.values()];
+}
+
+function collectDirectExportInfosForLocal(
+  localName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): Array<{ exportName: string; isDefault: boolean }> {
+  const infos: Array<{ exportName: string; isDefault: boolean }> = [];
+  root.find(j.ExportNamedDeclaration).forEach((path) => {
+    const declaration = path.node.declaration;
+    if (declaration?.type === "VariableDeclaration") {
+      for (const declarator of declaration.declarations as Array<{ type?: string; id?: unknown }>) {
+        if (
+          declarator.type === "VariableDeclarator" &&
+          staticPropertyKeyName(declarator.id) === localName
+        ) {
+          infos.push({ exportName: localName, isDefault: false });
+        }
+      }
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (
+        specifier.type !== "ExportSpecifier" ||
+        staticPropertyKeyName(specifier.local) !== localName
+      ) {
+        continue;
+      }
+      infos.push({
+        exportName: staticPropertyKeyName(specifier.exported) ?? localName,
+        isDefault: false,
+      });
+    }
+  });
+  root.find(j.ExportDefaultDeclaration).forEach((path) => {
+    const declaration = path.node.declaration;
+    if (staticPropertyKeyName(declaration) === localName) {
+      infos.push({ exportName: "default", isDefault: true });
+    }
+  });
+  return infos;
 }
 
 function collectDottedExportNamesForLocal(
@@ -2496,7 +2539,7 @@ function hasNonFormControlAsUsage(
       return;
     }
     const [componentArg, propsArg] = path.node.arguments ?? [];
-    if (!valueExpressionTargetsLocalBinding(componentArg, componentName, root, j)) {
+    if (!valueExpressionTargetsLocalBinding(componentArg, componentName, root, j, path)) {
       return;
     }
     if (isUnsafeCreateElementProps(propsArg)) {
@@ -2565,12 +2608,14 @@ function valueExpressionTargetsLocalBinding(
   componentName: string,
   root: DeclProcessingState["state"]["root"],
   j: JSCodeshift,
+  fromPath?: { parentPath?: unknown },
 ): boolean {
   return jsxNameTargetsLocalBinding({
     root,
     j,
     name: valueExpressionToJsxName(node),
     localName: componentName,
+    fromPath,
   });
 }
 

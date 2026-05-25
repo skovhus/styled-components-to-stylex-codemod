@@ -3147,6 +3147,39 @@ export { Button, Section };
     );
   });
 
+  it("checks named external as support when default export is also present", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+export { Button };
+export default Button;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.exportName === "Button", ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-named-default-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it("does not treat shadowed JSX aliases as enabled selector usages", () => {
     const input = `
 import styled from "styled-components";
@@ -3273,6 +3306,38 @@ export const App = () => (
 );
 `;
     const diagnostics = runTransformWithDiagnostics(input, {}, "namespaced-create-element.tsx");
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
+  it("bails on enabled compound pseudos for locally aliased createElement targets", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+export const App = () => {
+  const LinkButton = Button;
+
+  return (
+    <div style={{ display: "flex", gap: 12, padding: 16 }}>
+      <Button type="button">Button</Button>
+      {React.createElement(LinkButton, { as: "a", href: "#" }, "Link")}
+    </div>
+  );
+};
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "local-alias-create-element.tsx");
 
     expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
       "Unsupported selector: compound pseudo selector",
