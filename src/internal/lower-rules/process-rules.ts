@@ -51,6 +51,7 @@ import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
+import { jsxNameTargetsLocalBinding } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
@@ -2340,34 +2341,32 @@ function hasNonFormControlAsUsage(
     return false;
   }
   let unsafe = false;
-  root
-    .find(j.JSXElement, {
-      openingElement: {
-        name: { type: "JSXIdentifier", name: componentName },
-      },
-    } as any)
-    .forEach((path) => {
-      if (unsafe) {
+  root.find(j.JSXElement).forEach((path) => {
+    if (unsafe) {
+      return;
+    }
+    const name = path.node.openingElement.name;
+    if (!jsxNameTargetsLocalBinding({ root, j, name, localName: componentName })) {
+      return;
+    }
+    for (const attr of path.node.openingElement.attributes ?? []) {
+      if (attr.type === "JSXSpreadAttribute") {
+        unsafe = true;
         return;
       }
-      for (const attr of path.node.openingElement.attributes ?? []) {
-        if (attr.type === "JSXSpreadAttribute") {
-          unsafe = true;
-          return;
-        }
-        if (
-          attr.type !== "JSXAttribute" ||
-          (attr.name.name !== "as" && attr.name.name !== "forwardedAs")
-        ) {
-          continue;
-        }
-        const value = readStaticJsxLiteral(attr);
-        if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
-          unsafe = true;
-          return;
-        }
+      if (
+        attr.type !== "JSXAttribute" ||
+        (attr.name.name !== "as" && attr.name.name !== "forwardedAs")
+      ) {
+        continue;
       }
-    });
+      const value = readStaticJsxLiteral(attr);
+      if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
+        unsafe = true;
+        return;
+      }
+    }
+  });
   return unsafe;
 }
 

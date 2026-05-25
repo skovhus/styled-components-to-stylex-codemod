@@ -53,7 +53,7 @@ export function namespaceMemberTargetsLocal(
   if (!rootNamespace) {
     return false;
   }
-  return (
+  const targetsTsNamespace =
     root
       .find(j.TSModuleDeclaration)
       .filter((p) => {
@@ -61,8 +61,84 @@ export function namespaceMemberTargetsLocal(
         return id.type === "Identifier" && id.name === rootNamespace;
       })
       .filter((p) => tsModulePathTargetsLocal(p.node, nestedNamespaces, exportedName, localName))
-      .size() > 0
-  );
+      .size() > 0;
+  if (targetsTsNamespace) {
+    return true;
+  }
+  return namespaceObjectMemberTargetsLocal(root, j, namespacePath, exportedName, localName);
+}
+
+function namespaceObjectMemberTargetsLocal(
+  root: Collection<ASTNode>,
+  j: JSCodeshift,
+  namespacePath: string[],
+  exportedName: string,
+  localName: string,
+): boolean {
+  const [rootName, ...remainingPath] = namespacePath;
+  if (!rootName) {
+    return false;
+  }
+  let matched = false;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: rootName } } as any)
+    .forEach((path) => {
+      if (matched) {
+        return;
+      }
+      matched = objectExpressionPathTargetsLocal(
+        path.node.init,
+        [...remainingPath, exportedName],
+        localName,
+      );
+    });
+  return matched;
+}
+
+function objectExpressionPathTargetsLocal(
+  node: unknown,
+  path: string[],
+  localName: string,
+): boolean {
+  const objectNode = node as
+    | { type?: string; properties?: Array<{ type?: string; key?: unknown; value?: unknown }> }
+    | null
+    | undefined;
+  if (objectNode?.type !== "ObjectExpression") {
+    return false;
+  }
+  const [nextKey, ...remainingPath] = path;
+  if (!nextKey) {
+    return false;
+  }
+  for (const property of objectNode.properties ?? []) {
+    if (property?.type !== "Property" && property?.type !== "ObjectProperty") {
+      continue;
+    }
+    if (staticPropertyKeyName(property.key) !== nextKey) {
+      continue;
+    }
+    if (remainingPath.length > 0) {
+      return objectExpressionPathTargetsLocal(property.value, remainingPath, localName);
+    }
+    const value = property.value as { type?: string; name?: string } | null | undefined;
+    return value?.type === "Identifier" && value.name === localName;
+  }
+  return false;
+}
+
+function staticPropertyKeyName(key: unknown): string | null {
+  const keyNode = key as { type?: string; name?: string; value?: unknown } | null | undefined;
+  if (keyNode?.type === "Identifier") {
+    return keyNode.name ?? null;
+  }
+  if (
+    (keyNode?.type === "StringLiteral" || keyNode?.type === "Literal") &&
+    typeof keyNode.value === "string"
+  ) {
+    return keyNode.value;
+  }
+  return null;
 }
 
 function tsModulePathTargetsLocal(
