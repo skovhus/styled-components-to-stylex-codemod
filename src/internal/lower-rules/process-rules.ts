@@ -2320,20 +2320,139 @@ function canUseEnabledPseudoForSupportedIntrinsic(
 }
 
 function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["state"]): boolean {
-  const exportInfo =
-    state.exportedComponents?.get(decl.localName) ??
-    (state.root
-      ? collectExportedComponents(state.root, state.j, state.declByLocalName).get(decl.localName)
-      : undefined);
-  if (!exportInfo) {
+  const exportInfos = collectExternalInterfaceExportInfos(decl, state);
+  if (exportInfos.length === 0) {
     return false;
   }
-  return state.adapter.externalInterface({
-    filePath: state.filePath,
-    componentName: decl.localName,
-    exportName: exportInfo.exportName,
-    isDefaultExport: exportInfo.isDefault,
-  }).as;
+  return exportInfos.some(
+    (exportInfo) =>
+      state.adapter.externalInterface({
+        filePath: state.filePath,
+        componentName: decl.localName,
+        exportName: exportInfo.exportName,
+        isDefaultExport: exportInfo.isDefault,
+      }).as,
+  );
+}
+
+function collectExternalInterfaceExportInfos(
+  decl: StyledDecl,
+  state: DeclProcessingState["state"],
+): Array<{ exportName: string; isDefault: boolean }> {
+  const infos = new Map<string, { exportName: string; isDefault: boolean }>();
+  const add = (info: { exportName: string; isDefault: boolean } | undefined): void => {
+    if (info) {
+      infos.set(`${info.isDefault ? "default" : "named"}:${info.exportName}`, info);
+    }
+  };
+  add(state.exportedComponents?.get(decl.localName));
+  if (state.root) {
+    add(collectExportedComponents(state.root, state.j, state.declByLocalName).get(decl.localName));
+    for (const exportName of collectDottedExportNamesForLocal(
+      decl.localName,
+      state.root,
+      state.j,
+    )) {
+      add({ exportName, isDefault: false });
+    }
+  }
+  return [...infos.values()];
+}
+
+function collectDottedExportNamesForLocal(
+  localName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): string[] {
+  const names: string[] = [];
+  const addFromObject = (objectExpression: unknown, prefix: string): void => {
+    const objectNode = objectExpression as
+      | { type?: string; properties?: Array<{ type?: string; key?: unknown; value?: unknown }> }
+      | null
+      | undefined;
+    if (objectNode?.type !== "ObjectExpression") {
+      return;
+    }
+    for (const property of objectNode.properties ?? []) {
+      if (property?.type !== "Property" && property?.type !== "ObjectProperty") {
+        continue;
+      }
+      const key = staticPropertyKeyName(property.key);
+      if (!key) {
+        continue;
+      }
+      const value = property.value as { type?: string; name?: string } | null | undefined;
+      if (value?.type === "Identifier" && value.name === localName) {
+        names.push(`${prefix}.${key}`);
+        continue;
+      }
+      addFromObject(property.value, `${prefix}.${key}`);
+    }
+  };
+  root.find(j.ExportNamedDeclaration).forEach((path) => {
+    const declaration = path.node.declaration;
+    if (declaration?.type === "VariableDeclaration") {
+      for (const declarator of declaration.declarations as Array<{
+        type?: string;
+        id?: unknown;
+        init?: unknown;
+      }>) {
+        const exportName =
+          declarator.type === "VariableDeclarator" ? staticPropertyKeyName(declarator.id) : null;
+        if (exportName) {
+          addFromObject(declarator.init, exportName);
+        }
+      }
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (specifier.type !== "ExportSpecifier") {
+        continue;
+      }
+      const local = staticPropertyKeyName(specifier.local);
+      const exported = staticPropertyKeyName(specifier.exported) ?? local;
+      if (local && exported) {
+        addFromObject(findModuleScopeVariableInitializer(root, j, local), exported);
+      }
+    }
+  });
+  return names;
+}
+
+function findModuleScopeVariableInitializer(
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+  localName: string,
+): unknown {
+  let init: unknown;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path) => {
+      if (init !== undefined || !isModuleScopeVariableDeclarator(path)) {
+        return;
+      }
+      init = path.node.init;
+    });
+  return init;
+}
+
+function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolean {
+  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  while (current?.node) {
+    const type = current.node.type;
+    if (type === "Program" || type === "ExportNamedDeclaration") {
+      return true;
+    }
+    if (
+      type === "BlockStatement" ||
+      type === "FunctionDeclaration" ||
+      type === "FunctionExpression" ||
+      type === "ArrowFunctionExpression"
+    ) {
+      return false;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return false;
 }
 
 function hasNonFormControlAsUsage(
@@ -2422,6 +2541,9 @@ function collectCreateElementBindings(
       return;
     }
     for (const specifier of path.node.specifiers ?? []) {
+      if (specifier.type === "ImportDefaultSpecifier" && specifier.local?.type === "Identifier") {
+        names.add(`${specifier.local.name}.createElement`);
+      }
       if (specifier.type === "ImportNamespaceSpecifier" && specifier.local?.type === "Identifier") {
         names.add(`${specifier.local.name}.createElement`);
       }

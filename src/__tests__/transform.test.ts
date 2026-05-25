@@ -3114,6 +3114,39 @@ export { Button, Section };
     );
   });
 
+  it("checks dotted external as support when direct export is also present", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+const Section = { Button };
+export { Button, Section };
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.exportName === "Section.Button", ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-direct-and-dotted-dotted-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it("does not treat shadowed JSX aliases as enabled selector usages", () => {
     const input = `
 import styled from "styled-components";
