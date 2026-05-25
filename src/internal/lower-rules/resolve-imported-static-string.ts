@@ -418,9 +418,17 @@ function getAncestorScopeNodes(path: AstPathLike): Set<object> {
 }
 
 function getDeclarationScopeNode(path: AstPathLike, declarationKind: string | null): object | null {
+  const declarationParent = path.parentPath?.parentPath;
+  if (declarationKind !== "var" && declarationParent && isLoopNode(declarationParent.node)) {
+    return declarationParent.node;
+  }
+
   let cur: AstPathLike | null | undefined = path.parentPath;
   while (cur) {
     if (declarationKind === "var" && isFunctionOrProgramNode(cur.node)) {
+      return cur.node;
+    }
+    if (declarationKind !== "var" && isLoopNode(cur.node)) {
       return cur.node;
     }
     if (declarationKind !== "var" && isScopeNode(cur.node)) {

@@ -236,7 +236,8 @@ export function isStyleConditionKey(key: string): boolean {
     key.startsWith(":") ||
     key.startsWith("::") ||
     key.startsWith("@media") ||
-    key.startsWith("@container")
+    key.startsWith("@container") ||
+    key.startsWith("@supports")
   );
 }
 

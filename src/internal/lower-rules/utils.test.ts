@@ -61,11 +61,12 @@ describe("hasUnsupportedAtRule", () => {
 });
 
 describe("isStyleConditionKey", () => {
-  it("identifies pseudo-classes, pseudo-elements, @media, @container", () => {
+  it("identifies pseudo-classes, pseudo-elements, and condition at-rules", () => {
     expect(isStyleConditionKey(":hover")).toBe(true);
     expect(isStyleConditionKey("::before")).toBe(true);
     expect(isStyleConditionKey("@media (min-width: 768px)")).toBe(true);
     expect(isStyleConditionKey("@container (min-width: 500px)")).toBe(true);
+    expect(isStyleConditionKey("@supports (display: grid)")).toBe(true);
   });
 
   it("rejects regular CSS property names", () => {

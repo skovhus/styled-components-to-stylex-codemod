@@ -98,6 +98,25 @@ function ShadowedLocalSetter() {
   return <ShadowedContainer>Sets --locally-shadowed-name from local shadow</ShadowedContainer>;
 }
 
+function LoopScopedSetter() {
+  const ITEM_LOOP_SCOPE_VAR = "--outer-loop-name";
+
+  for (const ITEM_LOOP_SCOPE_VAR of ["--loop-name"]) {
+    if (ITEM_LOOP_SCOPE_VAR === "") {
+      return null;
+    }
+  }
+
+  const LoopScopedContainer = styled.div`
+    ${ITEM_LOOP_SCOPE_VAR}: 25%;
+    background-color: mediumvioletred;
+    color: white;
+    padding: 8px;
+  `;
+
+  return <LoopScopedContainer>Sets --outer-loop-name after loop scope</LoopScopedContainer>;
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <Container>Sets --item-min-width: 100%</Container>
@@ -108,5 +127,6 @@ export const App = () => (
     <DirectoryBarrelSetter>Sets --item-gap via directory-style barrel</DirectoryBarrelSetter>
     <SpecifierExportSetter>Sets --item-padding via local-const re-export</SpecifierExportSetter>
     <ShadowedLocalSetter />
+    <LoopScopedSetter />
   </div>
 );
