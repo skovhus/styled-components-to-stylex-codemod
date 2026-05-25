@@ -444,6 +444,12 @@ function hasInnerBindingBetween(
     if (isCatchClauseNode(cur.node) && catchClauseDeclaresName(cur.node, name)) {
       return true;
     }
+    if (isBlockStatementNode(cur.node) && blockDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isLoopNode(cur.node) && loopDeclaresName(cur.node, name)) {
+      return true;
+    }
     cur = cur.parentPath ?? null;
   }
   return false;
@@ -464,6 +470,65 @@ function catchClauseDeclaresName(node: object, name: string): boolean {
   const ids = new Set<string>();
   collectPatternIdentifiers(catchClause.param, ids);
   return ids.has(name);
+}
+
+function blockDeclaresName(node: object, name: string): boolean {
+  const block = node as { body?: unknown[] };
+  for (const statement of block.body ?? []) {
+    if (!statement || typeof statement !== "object") {
+      continue;
+    }
+    const stmt = statement as {
+      type?: string;
+      kind?: string;
+      declarations?: Array<{ id?: unknown }>;
+      id?: unknown;
+    };
+    if (stmt.type === "VariableDeclaration" && (stmt.kind === "let" || stmt.kind === "const")) {
+      for (const declarator of stmt.declarations ?? []) {
+        const ids = new Set<string>();
+        collectPatternIdentifiers(declarator.id, ids);
+        if (ids.has(name)) {
+          return true;
+        }
+      }
+    }
+    if (stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration") {
+      const ids = new Set<string>();
+      collectPatternIdentifiers(stmt.id, ids);
+      if (ids.has(name)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function loopDeclaresName(node: object, name: string): boolean {
+  const loop = node as { init?: unknown; left?: unknown };
+  const binding = loop.init ?? loop.left;
+  if (!binding || typeof binding !== "object") {
+    return false;
+  }
+  const declaration = binding as {
+    type?: string;
+    kind?: string;
+    declarations?: Array<{ id?: unknown }>;
+  };
+  if (
+    declaration.type !== "VariableDeclaration" ||
+    (declaration.kind !== "let" && declaration.kind !== "const")
+  ) {
+    return false;
+  }
+  for (const declarator of declaration.declarations ?? []) {
+    const ids = new Set<string>();
+    collectPatternIdentifiers(declarator.id, ids);
+    if (ids.has(name)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectPatternIdentifiers(pattern: unknown, out: Set<string>): void {
@@ -522,8 +587,7 @@ function getVariableDeclarationKind(path: AstPathLike): string | null {
 }
 
 function isScopeNode(node: unknown): boolean {
-  const type = (node as { type?: unknown }).type;
-  return isProgramNode(node) || type === "BlockStatement";
+  return isProgramNode(node) || isBlockStatementNode(node);
 }
 
 function isProgramNode(node: unknown): boolean {
@@ -545,6 +609,15 @@ function isFunctionNode(node: unknown): node is object {
 
 function isCatchClauseNode(node: unknown): node is object {
   return (node as { type?: unknown }).type === "CatchClause";
+}
+
+function isBlockStatementNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "BlockStatement";
+}
+
+function isLoopNode(node: unknown): node is object {
+  const type = (node as { type?: unknown }).type;
+  return type === "ForStatement" || type === "ForInStatement" || type === "ForOfStatement";
 }
 
 /**
