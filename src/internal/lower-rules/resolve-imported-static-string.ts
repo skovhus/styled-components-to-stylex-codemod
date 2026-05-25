@@ -373,10 +373,7 @@ function resolveScopedConstStringInit(
     if (!scopeNode || !ancestorScopes.has(scopeNode)) {
       return;
     }
-    if (
-      isProgramNode(scopeNode) ||
-      hasInnerFunctionBindingBetween(identPath, scopeNode, expr.name)
-    ) {
+    if (isProgramNode(scopeNode) || hasInnerBindingBetween(identPath, scopeNode, expr.name)) {
       return;
     }
 
@@ -434,7 +431,7 @@ function getDeclarationScopeNode(path: AstPathLike, declarationKind: string | nu
   return null;
 }
 
-function hasInnerFunctionBindingBetween(
+function hasInnerBindingBetween(
   identPath: AstPathLike,
   outerScopeNode: object,
   name: string,
@@ -442,6 +439,9 @@ function hasInnerFunctionBindingBetween(
   let cur: AstPathLike | null | undefined = identPath.parentPath;
   while (cur && cur.node !== outerScopeNode) {
     if (isFunctionNode(cur.node) && functionDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isCatchClauseNode(cur.node) && catchClauseDeclaresName(cur.node, name)) {
       return true;
     }
     cur = cur.parentPath ?? null;
@@ -456,6 +456,13 @@ function functionDeclaresName(node: object, name: string): boolean {
   for (const param of fn.params ?? []) {
     collectPatternIdentifiers(param, ids);
   }
+  return ids.has(name);
+}
+
+function catchClauseDeclaresName(node: object, name: string): boolean {
+  const catchClause = node as { param?: unknown };
+  const ids = new Set<string>();
+  collectPatternIdentifiers(catchClause.param, ids);
   return ids.has(name);
 }
 
@@ -534,6 +541,10 @@ function isFunctionNode(node: unknown): node is object {
     type === "FunctionExpression" ||
     type === "ArrowFunctionExpression"
   );
+}
+
+function isCatchClauseNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "CatchClause";
 }
 
 /**
