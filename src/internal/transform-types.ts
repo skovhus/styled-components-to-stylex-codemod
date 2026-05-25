@@ -2,7 +2,7 @@
  * Shared type definitions for the transform pipeline.
  * Core concepts: step results, styled declarations, and options.
  */
-import type { ASTNode, Comment, JSCodeshift, Options } from "jscodeshift";
+import type { ASTNode, Comment, Expression, JSCodeshift, Options } from "jscodeshift";
 import type {
   Adapter,
   ResolveBaseComponentResult,
@@ -521,6 +521,12 @@ export type StyledDecl = {
    * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
    */
   usedAsValue?: boolean;
+  /** Original component base before post-emit flattening mutates `base` to an intrinsic target. */
+  originalBaseIdent?: string;
+  /** True when same-file JSX usage passes className or style into this component. */
+  receivesClassNameOrStyleInJsx?: boolean;
+  /** True for intrinsic wrappers that must preserve runtime `as`/`forwardedAs` rendering. */
+  isPolymorphicIntrinsicWrapper?: boolean;
   styleFnFromProps?: Array<{
     fnKey: string;
     jsxProp: string;
@@ -668,7 +674,7 @@ export type StyledDecl = {
     pdfKey?: string;
   };
   rules: CssRuleIR[];
-  templateExpressions: unknown[];
+  templateExpressions: Expression[];
   rawCss?: string;
   preResolvedStyle?: Record<string, unknown>;
   isCssHelper?: boolean;

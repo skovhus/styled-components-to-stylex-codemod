@@ -23,7 +23,7 @@ import type {
 } from "../transform-types.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
-import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
+import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { resolveBarrelReExport } from "./extract-external-interface.js";
 
 /* ── Public types ─────────────────────────────────────────────────────── */
@@ -589,7 +589,7 @@ export function findComponentSelectorLocalsFromNodes(
       const exprIndex = Number(match[1]);
       const pos = match.index;
 
-      if (isPlaceholderInSelectorContext(rawCss, pos, match[0].length)) {
+      if (isTemplatePlaceholderInSelectorContext(rawCss, pos, match[0].length)) {
         const expr = expressions[exprIndex];
         if (expr?.type === "Identifier" && typeof expr.name === "string") {
           selectorLocals.add(expr.name);
@@ -639,16 +639,6 @@ function isCssTag(tag: AstNode | undefined, cssImportNames?: ReadonlySet<string>
     return false;
   }
   return tag.type === "Identifier" && typeof tag.name === "string" && cssImportNames.has(tag.name);
-}
-
-/** Check if a placeholder at the given position is in a CSS selector context. */
-function isPlaceholderInSelectorContext(rawCss: string, pos: number, length: number): boolean {
-  const after = rawCss.slice(pos + length).trimStart();
-  const before = rawCss.slice(0, pos).trimEnd();
-  // Replace placeholders in `before` with a valid CSS identifier so that
-  // `&:__SC_EXPR_N__` is recognized as a pseudo-selector (like `&:hover`)
-  // rather than a property-value colon context.
-  return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
 }
 
 /* ── Debug logging ────────────────────────────────────────────────────── */

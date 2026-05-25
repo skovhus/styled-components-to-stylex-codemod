@@ -10,6 +10,7 @@ import {
   countComponentJsxUsages,
   hasInlineableStyleFnOnly,
   hasSpreadInJsx,
+  needsShouldForwardPropWrapper,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -123,21 +124,19 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
       // Mark intrinsic components with polymorphic `as` usage - these pass style through
       // directly instead of merging, so they don't need the merger import
       if (decl.base.kind === "intrinsic") {
-        (decl as any).isPolymorphicIntrinsicWrapper = true;
+        decl.isPolymorphicIntrinsicWrapper = true;
       }
     }
     // `withConfig({ shouldForwardProp })` cases need wrappers so we can consume
     // styling props without forwarding them to the DOM.
-    const resolverOnlyShouldForwardProp =
-      !!decl.inlinedBaseComponent && !decl.shouldForwardPropFromWithConfig;
-    if (decl.shouldForwardProp && !resolverOnlyShouldForwardProp) {
+    if (needsShouldForwardPropWrapper(decl)) {
       decl.needsWrapperComponent = true;
     }
     if (decl.base.kind === "component") {
       const baseDecl = declByLocal.get(decl.base.ident);
       if (baseDecl) {
         // Save original base component name for static property inheritance
-        (decl as any).originalBaseIdent = decl.base.ident;
+        decl.originalBaseIdent = decl.base.ident;
         decl.extendsStyleKey = baseDecl.styleKey;
         // Defer base flattening decision until after all needsWrapperComponent flags are set
       }
@@ -205,15 +204,13 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     // shouldForwardProp from withConfig() filters props at wrapper boundaries and
     // must be preserved. Resolver-only dropProps for inlined bases are handled
     // directly in JSX rewrite, so they do not block flattening.
-    const resolverOnlyShouldForwardProp =
-      !!d.inlinedBaseComponent && !d.shouldForwardPropFromWithConfig;
-    if (d.shouldForwardProp && !resolverOnlyShouldForwardProp) {
+    if (needsShouldForwardPropWrapper(d)) {
       return true;
     }
     // Polymorphic intrinsic wrappers render a dynamic element type via the `as` prop.
     // Flattening through them would lose the polymorphic type resolution and
     // forwardedAs delegation semantics.
-    if ((d as any).isPolymorphicIntrinsicWrapper) {
+    if (d.isPolymorphicIntrinsicWrapper) {
       return true;
     }
     return false;
@@ -431,7 +428,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.bridgeClassName || decl.attrWrapper) {
     return false;
   }
-  if ((decl as { usedAsValue?: boolean }).usedAsValue) {
+  if (decl.usedAsValue) {
     return false;
   }
   if (!hasInlineableStyleFnOnly(decl)) {
@@ -449,7 +446,7 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.supportsExternalStyles || decl.supportsAsProp) {
     return false;
   }
-  if ((decl as { isPolymorphicIntrinsicWrapper?: boolean }).isPolymorphicIntrinsicWrapper) {
+  if (decl.isPolymorphicIntrinsicWrapper) {
     return false;
   }
   if (decl.compoundVariants?.length) {
@@ -458,13 +455,13 @@ function canDowngradeStyleFnIntrinsicWrapper(
   if (decl.pseudoAliasSelectors?.length) {
     return false;
   }
-  if ((decl as { pseudoExpandSelectors?: unknown[] }).pseudoExpandSelectors?.length) {
+  if (decl.pseudoExpandSelectors?.length) {
     return false;
   }
   if (decl.withConfig?.componentId) {
     return false;
   }
-  if ((decl as { receivesClassNameOrStyleInJsx?: boolean }).receivesClassNameOrStyleInJsx) {
+  if (decl.receivesClassNameOrStyleInJsx) {
     return false;
   }
   return true;

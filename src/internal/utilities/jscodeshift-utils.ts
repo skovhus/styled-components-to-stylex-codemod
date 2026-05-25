@@ -615,6 +615,7 @@ export function collectIdentifiers(node: unknown, out: Set<string>): void {
  * - Literal (ESTree/recast AST)
  * - TemplateLiteral without expressions (static template strings)
  * - TaggedTemplateExpression with css tag (styled-components css helper)
+ * - TSAsExpression and TSSatisfiesExpression wrapping static values
  * - ArrowFunctionExpression with no params and a static body (e.g., `() => "value"` or `() => \`value\``)
  *
  * Returns null for non-literal or dynamic nodes.
@@ -624,6 +625,9 @@ export function literalToStaticValue(node: unknown): string | number | boolean |
     return null;
   }
   const type = (node as { type?: string }).type;
+  if (type === "TSAsExpression" || type === "TSSatisfiesExpression") {
+    return literalToStaticValue((node as { expression?: unknown }).expression);
+  }
   if (type === "StringLiteral") {
     return (node as { value: string }).value;
   }

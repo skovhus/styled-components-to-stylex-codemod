@@ -227,6 +227,7 @@ Available playbooks:
 - `.claude/skills/create-pr/SKILL.md`
 - `.claude/skills/refactor-code-quality/SKILL.md`
 - `.claude/skills/stylex-authoring/SKILL.md`
+- `.claude/skills/thermo-nuclear-code-quality-review/SKILL.md`
 
 These files are repository documentation, not Claude-only metadata. Codex-compatible agents should read them directly when the task matches their scope.
 

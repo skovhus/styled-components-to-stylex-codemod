@@ -21,7 +21,7 @@ import {
 } from "../lower-rules/state.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { removeInlinedCssHelperFunctions } from "../transform/css-helpers.js";
-import { isSelectorContext } from "../utilities/selector-context-heuristic.js";
+import { isTemplatePlaceholderInSelectorContext } from "../utilities/selector-context-heuristic.js";
 import { collectIdentifiers } from "../utilities/jscodeshift-utils.js";
 import { shouldSkipPartialImportedComponentRoot } from "../utilities/partial-migration.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
@@ -698,16 +698,6 @@ function collectTemplateSelectorIdentifiers(decl: StyledDecl): Set<string> {
     }
   }
   return identifiers;
-}
-
-function isTemplatePlaceholderInSelectorContext(
-  rawCss: string,
-  pos: number,
-  length: number,
-): boolean {
-  const after = rawCss.slice(pos + length).trimStart();
-  const before = rawCss.slice(0, pos).trimEnd();
-  return isSelectorContext(before.replace(PLACEHOLDER_RE_G, "hover"), after);
 }
 
 function collectCssHelperFunctionSelectorIdentifiers(

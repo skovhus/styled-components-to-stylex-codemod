@@ -5,6 +5,7 @@
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
+import { getEffectiveBaseIdent } from "../utilities/delegation-utils.js";
 
 /**
  * Collects static property assignments and generates inheritance statements.
@@ -29,9 +30,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   // Also track base components of styled components (they may have static properties to inherit)
   const baseComponentNames = new Set<string>();
   for (const decl of styledDecls) {
-    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
-    const baseIdent =
-      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    const baseIdent = getEffectiveBaseIdent(decl);
     if (baseIdent && !styledNames.has(baseIdent)) {
       baseComponentNames.add(baseIdent);
     }
@@ -90,10 +89,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   // e.g., ExtendedButton.HEIGHT = BaseButton.HEIGHT
   // This works for both styled base components AND regular React components with static props
   for (const decl of styledDecls) {
-    // Check for originalBaseIdent (set when base was a component that got converted to intrinsic)
-    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
-    const baseIdent =
-      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    const baseIdent = getEffectiveBaseIdent(decl);
     if (!baseIdent) {
       continue;
     }
@@ -144,9 +140,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   // 1. Finding property accesses on styled components that wrap imports (same-file usage)
   // 2. OR by analyzing the imported file to find static property assignments (cross-file)
   for (const decl of styledDecls) {
-    const originalBaseIdent = (decl as any).originalBaseIdent as string | undefined;
-    const baseIdent =
-      originalBaseIdent ?? (decl.base.kind === "component" ? decl.base.ident : null);
+    const baseIdent = getEffectiveBaseIdent(decl);
     if (!baseIdent) {
       continue;
     }

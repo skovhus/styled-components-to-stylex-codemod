@@ -28,6 +28,7 @@ import {
 import type {
   LocalElementOverrideCandidate,
   LocalStylexVarRef,
+  StyledDecl,
   TransformOptions,
 } from "./transform-types.js";
 import type { RelationOverride } from "./lower-rules/state.js";
@@ -94,7 +95,7 @@ export class TransformContext {
       elseValue: string;
     }
   >;
-  styledDecls?: any[];
+  styledDecls?: StyledDecl[];
   hasUniversalSelectors?: boolean;
   universalSelectorLoc?: { line: number; column: number } | null;
   resolvedStyleObjects?: Map<string, unknown>;
@@ -118,7 +119,7 @@ export class TransformContext {
     /** Property keys already present in the existing object (used to detect collisions) */
     existingKeys: Set<string>;
   };
-  declByLocal?: Map<string, any>;
+  declByLocal?: Map<string, StyledDecl>;
   extendedBy?: Map<string, string[]>;
   exportedComponents?: Map<string, ExportInfo>;
   wrapperNames?: Set<string>;

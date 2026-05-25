@@ -2,7 +2,7 @@
  * Collects and normalizes css`` helper functions for reuse.
  * Core concepts: template parsing, rule normalization, and helper metadata.
  */
-import type { Collection, JSCodeshift, TemplateLiteral } from "jscodeshift";
+import type { Collection, Expression, JSCodeshift, TemplateLiteral } from "jscodeshift";
 import { compile } from "stylis";
 
 import type { CssRuleIR } from "../css-ir.js";
@@ -24,7 +24,7 @@ type CssHelperFunction = {
   paramType?: unknown;
   loc: Loc;
   rules: CssRuleIR[];
-  templateExpressions: unknown[];
+  templateExpressions: Expression[];
   rawCss: string;
 };
 
@@ -249,7 +249,7 @@ function parseCssHelperTemplate(args: {
 }): {
   rules: CssRuleIR[];
   rawCss: string;
-  templateExpressions: unknown[];
+  templateExpressions: Expression[];
 } {
   const { template, noteUniversalSelector } = args;
   const parsed = parseStyledTemplateLiteral(template);

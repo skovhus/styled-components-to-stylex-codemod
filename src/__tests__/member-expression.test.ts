@@ -207,3 +207,10 @@ describe("staticValueToLiteral", () => {
     }
   });
 });
+
+describe("literalToStaticValue", () => {
+  it("unwraps TypeScript assertion wrappers around static values", () => {
+    expect(literalToStaticValue(parseExpr('"primary" as const'))).toBe("primary");
+    expect(literalToStaticValue(parseExpr("42 satisfies number"))).toBe(42);
+  });
+});

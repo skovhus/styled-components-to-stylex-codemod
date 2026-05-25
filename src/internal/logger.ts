@@ -126,6 +126,9 @@ export type WarningType =
   | "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens"
   | "animation shorthand contains a var() with no classifiable fallback — its longhand position cannot be determined statically; bind the variable to a specific longhand (e.g. animation-duration: var(--x)) instead";
 
+export const UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING =
+  "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)" satisfies WarningType;
+
 export interface WarningLog {
   severity: Severity;
   type: WarningType;
