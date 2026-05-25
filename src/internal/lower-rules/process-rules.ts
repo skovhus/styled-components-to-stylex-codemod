@@ -2351,6 +2351,10 @@ function hasNonFormControlAsUsage(
         return;
       }
       for (const attr of path.node.openingElement.attributes ?? []) {
+        if (attr.type === "JSXSpreadAttribute") {
+          unsafe = true;
+          return;
+        }
         if (
           attr.type !== "JSXAttribute" ||
           (attr.name.name !== "as" && attr.name.name !== "forwardedAs")
