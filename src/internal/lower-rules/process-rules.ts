@@ -2313,10 +2313,23 @@ function canUseEnabledPseudoForSupportedIntrinsic(
   return (
     decl.base.kind === "intrinsic" &&
     ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) &&
+    !hasUnsafeAttrsAsTarget(decl) &&
     !hasPolymorphicAsPropType(decl, state.root, state.j) &&
     !hasExternalAsSupport(decl, state) &&
     !hasNonFormControlAsUsage(decl.localName, state.root, state.j)
   );
+}
+
+function hasUnsafeAttrsAsTarget(decl: StyledDecl): boolean {
+  const staticAs = decl.attrsInfo?.staticAttrs?.as;
+  if (staticAs !== undefined) {
+    return typeof staticAs !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(staticAs);
+  }
+  const attrsAsTag = decl.attrsInfo?.attrsAsTag;
+  if (!attrsAsTag) {
+    return false;
+  }
+  return !ENABLED_PSEUDO_INTRINSIC_TAGS.has(attrsAsTag);
 }
 
 function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["state"]): boolean {
