@@ -2441,16 +2441,30 @@ function valueExpressionTargetsLocalBinding(
   root: DeclProcessingState["state"]["root"],
   j: JSCodeshift,
 ): boolean {
-  const expr = node as { type?: string; name?: string } | null | undefined;
-  if (expr?.type !== "Identifier" || !expr.name) {
-    return false;
-  }
   return jsxNameTargetsLocalBinding({
     root,
     j,
-    name: { type: "JSXIdentifier", name: expr.name },
+    name: valueExpressionToJsxName(node),
     localName: componentName,
   });
+}
+
+function valueExpressionToJsxName(node: unknown): unknown {
+  const expr = node as
+    | { type?: string; name?: string; object?: unknown; property?: unknown }
+    | null
+    | undefined;
+  if (expr?.type === "Identifier") {
+    return { type: "JSXIdentifier", name: expr.name };
+  }
+  if (expr?.type === "MemberExpression" && expr.object && expr.property) {
+    return {
+      type: "JSXMemberExpression",
+      object: valueExpressionToJsxName(expr.object),
+      property: valueExpressionToJsxName(expr.property),
+    };
+  }
+  return null;
 }
 
 function isUnsafeCreateElementProps(node: unknown): boolean {

@@ -79,7 +79,7 @@ function collectDottedExportedComponents(
       return;
     }
     const existing = exportedComponents.get(localName)?.exportName;
-    if (existing && existing.split(".").length > exportName.split(".").length) {
+    if (existing && existing.split(".").length <= exportName.split(".").length) {
       return;
     }
     exportedComponents.set(localName, {
