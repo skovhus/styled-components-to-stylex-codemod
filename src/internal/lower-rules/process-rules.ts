@@ -2406,7 +2406,7 @@ function isReactCreateElementCall(
   return (
     callee?.type === "MemberExpression" &&
     callee.object?.type === "Identifier" &&
-    callee.object.name === "React" &&
+    createElementBindings.has(`${callee.object.name}.createElement`) &&
     callee.property?.type === "Identifier" &&
     callee.property.name === "createElement"
   );
@@ -2422,6 +2422,9 @@ function collectCreateElementBindings(
       return;
     }
     for (const specifier of path.node.specifiers ?? []) {
+      if (specifier.type === "ImportNamespaceSpecifier" && specifier.local?.type === "Identifier") {
+        names.add(`${specifier.local.name}.createElement`);
+      }
       if (
         specifier.type === "ImportSpecifier" &&
         specifier.imported?.type === "Identifier" &&
@@ -2451,7 +2454,7 @@ function valueExpressionTargetsLocalBinding(
 
 function valueExpressionToJsxName(node: unknown): unknown {
   const expr = node as
-    | { type?: string; name?: string; object?: unknown; property?: unknown }
+    | { type?: string; name?: string; object?: unknown; property?: unknown; value?: unknown }
     | null
     | undefined;
   if (expr?.type === "Identifier") {
@@ -2463,6 +2466,12 @@ function valueExpressionToJsxName(node: unknown): unknown {
       object: valueExpressionToJsxName(expr.object),
       property: valueExpressionToJsxName(expr.property),
     };
+  }
+  if (
+    (expr?.type === "StringLiteral" || expr?.type === "Literal") &&
+    typeof expr.value === "string"
+  ) {
+    return { type: "JSXIdentifier", name: expr.value };
   }
   return null;
 }
