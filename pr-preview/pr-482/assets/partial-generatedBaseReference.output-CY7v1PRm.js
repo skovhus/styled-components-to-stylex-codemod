@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{c as t,p as n}from"./index-DRimNK-E.js";n();var r=e();function i(e){return e}var a=t(i(function(e){let{children:t,className:n}=e;return(0,r.jsx)(`div`,{className:n,children:t})}))``,o=()=>(0,r.jsx)(`div`,{className:`xc7ga6q xmkeg23 x1y0btm7 xjq3kbz`,children:(0,r.jsx)(a,{children:`Notice`})});export{o as App,a as Notice};
