@@ -46,6 +46,7 @@ const styles = stylex.create({
     position: "relative",
     padding: 20,
     backgroundColor: "#f5f5f5",
+    opacity: 1,
   },
   containerEnabled: {
     left: {
@@ -53,7 +54,7 @@ const styles = stylex.create({
       ":hover": `${OFFSET}px`,
     },
     opacity: {
-      default: null,
+      default: 1,
       ":hover": 0.8,
     },
   },

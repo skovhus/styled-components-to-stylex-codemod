@@ -10,6 +10,10 @@ import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
 import { wrappedComponentInterfaceFor } from "./wrapped-component-interface.js";
 import { isRelativeSpecifier, toRealPath } from "./path-utils.js";
+import {
+  propertiesWithNullConditionalDefault,
+  setConditionalDefault,
+} from "./conditional-style-defaults.js";
 
 export function guardForwardedSxConditionalDefaults(
   ctx: TransformContext,
@@ -88,26 +92,6 @@ function styleKeysForDecl(decl: StyledDecl): string[] {
     ...Object.values(decl.variantStyleKeys ?? {}),
     ...(decl.pseudoExpandSelectors?.map((entry) => entry.styleKey) ?? []),
   ];
-}
-
-function propertiesWithNullConditionalDefault(styleObj: AstRecord): string[] {
-  const props: string[] = [];
-  for (const [prop, value] of Object.entries(styleObj)) {
-    if (prop.startsWith("__") || !isRecord(value)) {
-      continue;
-    }
-    if (hasStyleCondition(value) && Object.hasOwn(value, "default") && value.default === null) {
-      props.push(prop);
-    }
-  }
-  return props;
-}
-
-function setConditionalDefault(styleObj: AstRecord, prop: string, value: StaticStyleValue): void {
-  const map = styleObj[prop];
-  if (isRecord(map)) {
-    map.default = value;
-  }
 }
 
 function inferWrappedComponentSxProperty(
@@ -523,12 +507,6 @@ function mergePropertyInferences(inferences: readonly PropertyInference[]): Prop
     merged = inference;
   }
   return merged;
-}
-
-function hasStyleCondition(map: AstRecord): boolean {
-  return Object.keys(map).some(
-    (key) => key === "default" || key.startsWith(":") || key.startsWith("@"),
-  );
 }
 
 function isStylexCreateCall(node: unknown): boolean {

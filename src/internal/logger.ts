@@ -121,6 +121,7 @@ export type WarningType =
   | "Using styled-components components as mixins is not supported; use css`` mixins or strings instead"
   | "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts"
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
+  | "Conditional StyleX default would override an unproven earlier style for the same property"
   | "Forwarded sx conditional default would override an unproven wrapped component base style"
   | "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly"
   | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names"

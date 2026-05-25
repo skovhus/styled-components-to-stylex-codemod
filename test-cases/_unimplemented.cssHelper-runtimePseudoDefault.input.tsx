@@ -1,3 +1,4 @@
+// @expected-warning: Conditional StyleX default would override an unproven earlier style for the same property
 // Conditional css pseudo block with a runtime base value for the same property.
 import styled, { css } from "styled-components";
 
