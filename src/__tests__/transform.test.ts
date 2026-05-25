@@ -3081,6 +3081,38 @@ export const Section = { Button };
     );
   });
 
+  it("does not treat shadowed JSX aliases as enabled selector usages", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+function Shadowed({ Button }) {
+  const LinkButton = Button;
+  return <LinkButton as="a" href="#">Link</LinkButton>;
+}
+
+export const App = () => (
+  <div style={{ display: "flex", gap: 12, padding: 16 }}>
+    <Button type="button">Button</Button>
+    <Shadowed Button="a" />
+  </div>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, {}, "shadowed-alias.tsx");
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).not.toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it("bails on enabled compound pseudos when re-exported dotted external interface supports as", () => {
     const input = `
 import styled from "styled-components";
@@ -3110,6 +3142,45 @@ export { Section };
     );
 
     expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
+  it("does not use shadowed namespace initializers for external as support", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+function makeSection() {
+  const Section = { Button };
+  return Section;
+}
+
+const Section = {};
+
+export { Section };
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.exportName === "Section.Button", ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-shadowed-dotted-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).not.toContain(
       "Unsupported selector: compound pseudo selector",
     );
   });

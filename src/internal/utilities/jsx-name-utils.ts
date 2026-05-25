@@ -59,6 +59,7 @@ function localAliasTargetsLocal(
   let matched = false;
   root
     .find(j.VariableDeclarator, { id: { type: "Identifier", name: aliasName } } as any)
+    .filter(isModuleScopeVariableDeclarator)
     .forEach((path) => {
       if (matched) {
         return;
@@ -114,6 +115,7 @@ function namespaceObjectMemberTargetsLocal(
   let matched = false;
   root
     .find(j.VariableDeclarator, { id: { type: "Identifier", name: rootName } } as any)
+    .filter(isModuleScopeVariableDeclarator)
     .forEach((path) => {
       if (matched) {
         return;
@@ -125,6 +127,26 @@ function namespaceObjectMemberTargetsLocal(
       );
     });
   return matched;
+}
+
+function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolean {
+  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  while (current?.node) {
+    const type = current.node.type;
+    if (type === "Program" || type === "ExportNamedDeclaration") {
+      return true;
+    }
+    if (
+      type === "BlockStatement" ||
+      type === "FunctionDeclaration" ||
+      type === "FunctionExpression" ||
+      type === "ArrowFunctionExpression"
+    ) {
+      return false;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return false;
 }
 
 function objectExpressionPathTargetsLocal(

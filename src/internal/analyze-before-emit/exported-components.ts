@@ -217,6 +217,7 @@ function findVariableInitializer(
   let init: unknown;
   root
     .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .filter(isModuleScopeVariableDeclarator)
     .forEach((path) => {
       if (init !== undefined) {
         return;
@@ -224,4 +225,24 @@ function findVariableInitializer(
       init = path.node.init;
     });
   return init;
+}
+
+function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolean {
+  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  while (current?.node) {
+    const type = current.node.type;
+    if (type === "Program" || type === "ExportNamedDeclaration") {
+      return true;
+    }
+    if (
+      type === "BlockStatement" ||
+      type === "FunctionDeclaration" ||
+      type === "FunctionExpression" ||
+      type === "ArrowFunctionExpression"
+    ) {
+      return false;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return false;
 }
