@@ -26,7 +26,10 @@ export function jsxNameTargetsLocalBinding(args: {
 }): boolean {
   const path = jsxNamePath(args.name);
   if (path.length === 1) {
-    return path[0] === args.localName;
+    return (
+      path[0] === args.localName ||
+      (!!path[0] && localAliasTargetsLocal(args.root, args.j, path[0], args.localName))
+    );
   }
   const memberName = path[path.length - 1];
   const namespacePath = path.slice(0, -1);
@@ -37,6 +40,25 @@ export function jsxNameTargetsLocalBinding(args: {
     memberName ?? "",
     args.localName,
   );
+}
+
+function localAliasTargetsLocal(
+  root: Collection<ASTNode>,
+  j: JSCodeshift,
+  aliasName: string,
+  localName: string,
+): boolean {
+  let matched = false;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: aliasName } } as any)
+    .forEach((path) => {
+      if (matched) {
+        return;
+      }
+      const init = path.node.init as { type?: string; name?: string } | null | undefined;
+      matched = init?.type === "Identifier" && init.name === localName;
+    });
+  return matched;
 }
 
 export function namespaceMemberTargetsLocal(
