@@ -1416,6 +1416,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
     });
     expect(toSnapshot(prepassResult.consumerAnalysis!)).toMatchInlineSnapshot(`
       {
+        "test-cases/_unsupported.wrapper-mergerImported.input.tsx:StyledLoading": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/asProp-crossFile.input.tsx:HeaderTitle": {
           "as": false,
           "className": false,
@@ -2407,15 +2416,6 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": false,
         },
         "test-cases/wrapper-conditionalPropForwarding.input.tsx:Card": {
-          "as": false,
-          "className": false,
-          "elementProps": true,
-          "ref": false,
-          "spreadProps": false,
-          "style": false,
-          "styles": false,
-        },
-        "test-cases/wrapper-mergerImported.input.tsx:StyledLoading": {
           "as": false,
           "className": false,
           "elementProps": true,

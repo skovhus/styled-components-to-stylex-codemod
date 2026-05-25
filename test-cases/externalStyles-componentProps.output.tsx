@@ -1,7 +1,12 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function ComponentLoader(props: { content: string; ref?: React.Ref<HTMLDivElement> }) {
+function ComponentLoader(props: {
+  content: string;
+  ref?: React.Ref<HTMLDivElement>;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return <div>{props.content}</div>;
 }
 

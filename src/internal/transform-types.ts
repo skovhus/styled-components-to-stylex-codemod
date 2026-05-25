@@ -234,6 +234,8 @@ export type VariantDimension = {
    * Set for dimensions from base-component resolution where the variant values are known.
    */
   propTypeFromKeyof?: boolean;
+  /** Force lookup casts without changing the public prop type. */
+  forceKeyofLookupCast?: boolean;
   /**
    * When true, this dimension's prop is a boolean (not a string that happens to equal "true").
    * Used to emit `prop && variants.true` (truthy guard) instead of `variants[prop]` (lookup),
@@ -375,6 +377,8 @@ export type StyledDecl = {
   }>;
   extendsStyleKey?: string;
   variantStyleKeys?: Record<string, string>; // conditionProp -> styleKey
+  /** Props whose generated variant lookups need a keyof cast because their preserved type is broader. */
+  variantLookupCastProps?: Set<string>;
   /** Source order indices for variant style keys, used to interleave with styleFnFromProps during emission. */
   variantSourceOrder?: Record<string, number>;
   /**
@@ -383,6 +387,8 @@ export type StyledDecl = {
    * and uses object lookup (`variants[prop]`) instead of conditionals.
    */
   variantDimensions?: VariantDimension[];
+  /** Props consumed as CSS values by observed static variant dimensions. */
+  styleValueVariantProps?: Set<string>;
   /**
    * Compound variants for multi-prop nested ternaries like:
    *   outerProp ? A : innerProp ? B : C
@@ -521,6 +527,8 @@ export type StyledDecl = {
    * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
    */
   usedAsValue?: boolean;
+  /** Narrow known component-value usage contract, such as react-window element type props. */
+  valueUsageKind?: "virtualListElementType";
   /** Original component base before post-emit flattening mutates `base` to an intrinsic target. */
   originalBaseIdent?: string;
   /** True when same-file JSX usage passes className or style into this component. */

@@ -5,6 +5,7 @@
 import type { JSCodeshift } from "jscodeshift";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type {
+  CallResolveContext,
   CallResolveResult,
   ExprWithImports,
   ImportSpec,
@@ -20,6 +21,7 @@ import {
   cssDeclarationToStylexDeclarations,
   cssPropertyToStylexProp,
   isCssShorthandProperty,
+  isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   parseBorderShorthandParts,
   resolveBackgroundStylexProp,
@@ -53,6 +55,10 @@ import {
   literalToStaticValue,
   markDeclNeedsUseThemeHook,
 } from "./types.js";
+import {
+  evaluateLocalCallValueTransform,
+  evaluateObservedDynamicExpression,
+} from "./static-evaluator.js";
 
 type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
 
@@ -199,6 +205,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   if (d.value.kind !== "interpolated") {
     return;
   }
+  if (d.property && isUnsupportedStylexProperty(d.property)) {
+    state.bailUnsupported(
+      decl,
+      `Unsupported CSS property "${d.property}" cannot be emitted in StyleX`,
+    );
+    return;
+  }
 
   let bail = false;
   const getRootIdentifierInfo = extractRootAndPath;
@@ -240,7 +253,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return null;
     }
     const values = propUsage.values.filter(
-      (value: string | number | boolean): value is number => typeof value === "number",
+      (value: string | number | boolean): value is string | number =>
+        typeof value === "string" || typeof value === "number",
     );
     if (values.length !== propUsage.values.length) {
       return null;
@@ -438,7 +452,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     const unionValues = extractUnionLiteralValues(propType);
     const observedValues = unionValues ? null : getObservedStaticVariantValues(jsxProp);
     const hasStaticText = staticParts.prefix !== "" || staticParts.suffix !== "";
-    if (observedValues && getNumericCssEmissionMode(stylexProp) === "cssText" && !hasStaticText) {
+    if (
+      observedValues &&
+      observedValues.some((value) => typeof value === "number") &&
+      getNumericCssEmissionMode(stylexProp) === "cssText" &&
+      !hasStaticText
+    ) {
       observedNumericCssTextProps.add(jsxProp);
       return false;
     }
@@ -468,11 +487,111 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         jsxProp,
         ensureObservedVariantFallbackFn(jsxProp, stylexProp, staticParts),
       );
+      markStyleValueVariantProp(jsxProp);
     }
-    if (jsxProp.startsWith("$")) {
-      ensureShouldForwardPropDrop(decl, jsxProp);
-    }
+    ensureShouldForwardPropDrop(decl, jsxProp);
     return true;
+  };
+
+  const tryEmitTransformedObservedVariantBuckets = (
+    jsxProp: string,
+    stylexProp: string,
+    valueTransform: CallValueTransform | undefined,
+  ): boolean => {
+    if (
+      !valueTransform ||
+      valueTransform.kind !== "call" ||
+      valueTransform.resolvedExpr ||
+      valueTransform.resolvedUsage ||
+      media ||
+      pseudos?.length
+    ) {
+      return false;
+    }
+    const observedValues = getObservedStaticVariantValues(jsxProp);
+    if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+      return false;
+    }
+
+    const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
+    for (const propValue of observedValues) {
+      const cssValue = evaluateLocalCallValueTransform({
+        j,
+        root: state.root,
+        calleeName: valueTransform.calleeIdent,
+        argValue: propValue,
+      });
+      if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+        return false;
+      }
+      transformedValues.push({ propValue, cssValue });
+    }
+
+    for (const { propValue, cssValue } of transformedValues) {
+      const propValueExpr =
+        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+      applyVariant(
+        { when: `${jsxProp} === ${propValueExpr}`, propName: jsxProp },
+        {
+          [stylexProp]: cssValue,
+        },
+      );
+    }
+    markStyleValueVariantProp(jsxProp);
+    ensureShouldForwardPropDrop(decl, jsxProp);
+    return true;
+  };
+
+  const tryEmitObservedExpressionVariantBuckets = (
+    jsxProp: string,
+    stylexProp: string,
+    expression: ExpressionKind,
+    prefix: string,
+    suffix: string,
+  ): boolean => {
+    if (media || pseudos?.length) {
+      return false;
+    }
+    const observedValues = getObservedStaticVariantValues(jsxProp);
+    if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+      return false;
+    }
+
+    const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
+    for (const propValue of observedValues) {
+      const evaluatedValue = evaluateObservedDynamicExpression({
+        j,
+        root: state.root,
+        expression,
+        propName: jsxProp,
+        propValue,
+      });
+      if (typeof evaluatedValue !== "string" && typeof evaluatedValue !== "number") {
+        return false;
+      }
+      const cssValue =
+        prefix || suffix ? `${prefix}${String(evaluatedValue)}${suffix}` : evaluatedValue;
+      transformedValues.push({ propValue, cssValue });
+    }
+
+    for (const { propValue, cssValue } of transformedValues) {
+      const propValueExpr =
+        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+      applyVariant(
+        { when: `${jsxProp} === ${propValueExpr}`, propName: jsxProp },
+        {
+          [stylexProp]: cssValue,
+        },
+      );
+    }
+    markStyleValueVariantProp(jsxProp);
+    ensureShouldForwardPropDrop(decl, jsxProp);
+    return true;
+  };
+
+  const markStyleValueVariantProp = (jsxProp: string): void => {
+    decl.styleValueVariantProps ??= new Set<string>();
+    decl.styleValueVariantProps.add(jsxProp);
   };
 
   const ensureObservedVariantFallbackFn = (
@@ -1469,7 +1588,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       },
       handlerContext,
     );
-
     if (res && res.type === "resolvedStyles") {
       // Adapter-resolved StyleX style objects are emitted as additional stylex.props args.
       // This is only safe for base selector declarations.
@@ -2182,6 +2300,25 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? buildTemplateWithStaticParts(j, clonedDynamic, prefix, suffix)
             : clonedDynamic;
 
+        if (dynamicProps.length === 1) {
+          const out = cssDeclarationToStylexDeclarations(d)[0];
+          const dynamicProp = dynamicProps[0];
+          if (
+            out &&
+            dynamicProp &&
+            tryEmitObservedExpressionVariantBuckets(
+              dynamicProp,
+              out.prop,
+              clonedDynamic,
+              prefix,
+              suffix,
+            )
+          ) {
+            decl.needsWrapperComponent = true;
+            continue;
+          }
+        }
+
         // Mark dynamic props for DOM exclusion
         for (const propName of dynamicProps) {
           ensureShouldForwardPropDrop(decl, propName);
@@ -2641,6 +2778,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
     if (res && res.type === "emitStyleFunction") {
       const jsxProp = res.call;
+      const outs = cssDeclarationToStylexDeclarations(d);
+      const valueTransform = (res as { valueTransform?: CallValueTransform }).valueTransform;
 
       // Identity prop with finite union type → static variant lookups
       // (e.g., `align-items: ${({ align }) => align}` with `align: "stretch" | "center" | ...`)
@@ -2650,18 +2789,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         !media &&
         (!pseudos || pseudos.length === 0)
       ) {
-        const outs = cssDeclarationToStylexDeclarations(d);
         if (outs.length === 1 && tryEmitIdentityVariantBuckets(jsxProp, outs[0]!.prop)) {
           continue;
         }
       }
+      if (
+        !(res as { wrapValueInTemplateLiteral?: boolean }).wrapValueInTemplateLiteral &&
+        outs.length === 1 &&
+        tryEmitTransformedObservedVariantBuckets(jsxProp, outs[0]!.prop, valueTransform)
+      ) {
+        continue;
+      }
 
       {
-        const outs = cssDeclarationToStylexDeclarations(d);
         for (let i = 0; i < outs.length; i++) {
           const out = outs[i]!;
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
-          const valueTransform = (res as { valueTransform?: CallValueTransform }).valueTransform;
           const resolvedCallArg = buildResolvedValueTransformCallArg({
             j,
             jsxProp,
@@ -3504,8 +3647,9 @@ function getNumericCssEmissionMode(stylexProp: string): NumericCssEmissionMode {
 }
 
 type ResolvedStylesCallMeta = {
+  imports?: ImportSpec[];
   resolveCallResult?: unknown;
-  resolveCallContext?: { calleeImportedName?: string };
+  resolveCallContext?: CallResolveContext;
 };
 
 function isUnchangedImportedHelperStyleCall(
@@ -3519,18 +3663,66 @@ function isUnchangedImportedHelperStyleCall(
     resolveResult && typeof resolveResult === "object"
       ? (resolveResult as { cssText?: string; imports?: unknown[] })
       : null;
-  if (
-    !typedResult ||
-    !resolveContext ||
-    typedResult.cssText ||
-    (typedResult.imports?.length ?? 0) > 0
-  ) {
+  if (!typedResult || !resolveContext || typedResult.cssText) {
     return false;
   }
   if (!isCallExpressionLike(exprAst) || !isCallExpressionLike(originalExpr)) {
     return false;
   }
-  return calleeKey(exprAst.callee) === calleeKey(originalExpr.callee);
+  if (calleeKey(exprAst.callee) !== calleeKey(originalExpr.callee)) {
+    return false;
+  }
+  return !redirectsOriginalCalleeToDifferentSource(res, resolveContext);
+}
+
+function redirectsOriginalCalleeToDifferentSource(
+  res: ResolvedStylesCallMeta,
+  resolveContext: CallResolveContext,
+): boolean {
+  const imports =
+    res.imports ??
+    (res.resolveCallResult && typeof res.resolveCallResult === "object"
+      ? (res.resolveCallResult as { imports?: ImportSpec[] }).imports
+      : undefined) ??
+    [];
+  const matchingImport = imports.find((importSpec) =>
+    importSpec.names.some(
+      (name) =>
+        name.imported === resolveContext.calleeImportedName ||
+        name.local === resolveContext.calleeImportedName,
+    ),
+  );
+  return Boolean(
+    matchingImport && !sourcesReferToSameImport(matchingImport.from, resolveContext.calleeSource),
+  );
+}
+
+function sourcesReferToSameImport(
+  left: ImportSpec["from"],
+  right: CallResolveContext["calleeSource"],
+): boolean {
+  if (left.value === right.value) {
+    return true;
+  }
+  return specifierMatchesAbsolutePath(left, right) || specifierMatchesAbsolutePath(right, left);
+}
+
+function specifierMatchesAbsolutePath(
+  maybeSpecifier: ImportSpec["from"] | CallResolveContext["calleeSource"],
+  maybeAbsolute: ImportSpec["from"] | CallResolveContext["calleeSource"],
+): boolean {
+  if (maybeSpecifier.kind !== "specifier" || maybeAbsolute.kind !== "absolutePath") {
+    return false;
+  }
+  const specifier = maybeSpecifier.value.replace(/\\/g, "/");
+  if (!specifier.startsWith("./")) {
+    return false;
+  }
+  const suffix = specifier.slice(2);
+  const absolutePath = maybeAbsolute.value.replace(/\\/g, "/");
+  return ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"].some((extension) =>
+    absolutePath.endsWith(`/${suffix}${extension}`),
+  );
 }
 
 function isCallExpressionLike(node: unknown): node is { type: "CallExpression"; callee: unknown } {

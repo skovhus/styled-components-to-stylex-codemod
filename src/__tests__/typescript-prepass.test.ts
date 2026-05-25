@@ -49,6 +49,9 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
             ...(component.sxExcludedProperties.length > 0
               ? { sxExcludedProperties: component.sxExcludedProperties }
               : {}),
+            ...(component.sxAllowedProperties?.length
+              ? { sxAllowedProperties: component.sxAllowedProperties }
+              : {}),
           },
         ]),
     ),
@@ -195,6 +198,55 @@ describe("TypeScript compiler prepass", () => {
       const withoutSx = findTypeScriptComponentMetadata(metadata, filePath, ["WithoutSxButton"]);
       expect(withoutSx?.supportsSxProp).toBe(false);
       expect(withoutSx?.sxExcludedProperties).toEqual([]);
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts properties accepted by narrow StyleXStyles sx props", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-allowed-"));
+    const filePath = path.join(fixtureDir, "Input.tsx");
+    writeFileSync(
+      filePath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface InputSxSurface {",
+        "  backgroundColor?: string;",
+        "  width?: number | string;",
+        "}",
+        "",
+        "interface InputProps {",
+        "  sx?: stylex.StyleXStyles<InputSxSurface>;",
+        "}",
+        "",
+        "interface PickerProps extends InputProps {",
+        "  value?: string;",
+        "}",
+        "",
+        "type AliasProps = Pick<PickerProps, 'sx' | 'value'>;",
+        "",
+        "export function Input(props: InputProps) {",
+        "  return <input />;",
+        "}",
+        "",
+        "export function Picker(props: PickerProps) {",
+        "  return <Input {...props} />;",
+        "}",
+        "",
+        "export function AliasPicker(props: AliasProps) {",
+        "  return <Input {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const metadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      for (const componentName of ["Input", "Picker", "AliasPicker"]) {
+        const component = findTypeScriptComponentMetadata(metadata, filePath, [componentName]);
+        expect(component?.supportsSxProp).toBe(true);
+        expect(component?.sxAllowedProperties).toEqual(["backgroundColor", "width"]);
+      }
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

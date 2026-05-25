@@ -12,6 +12,7 @@ import {
 
 export {
   isCssShorthandProperty,
+  isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   isStylexStringOnlyCssProp,
   setUseLogicalProperties,
@@ -44,6 +45,21 @@ const DIRECTIONAL_SHORTHAND_MAP: Record<string, DirectionalProp> = {
   "scroll-padding": "scrollPadding",
 };
 
+const PHYSICAL_ONLY_LOGICAL_LONGHAND_MAP: Record<string, string[]> = {
+  "scroll-margin-block": ["scrollMarginTop", "scrollMarginBottom"],
+  "scroll-margin-block-start": ["scrollMarginTop"],
+  "scroll-margin-block-end": ["scrollMarginBottom"],
+  "scroll-margin-inline": ["scrollMarginLeft", "scrollMarginRight"],
+  "scroll-margin-inline-start": ["scrollMarginLeft"],
+  "scroll-margin-inline-end": ["scrollMarginRight"],
+  "scroll-padding-block": ["scrollPaddingTop", "scrollPaddingBottom"],
+  "scroll-padding-block-start": ["scrollPaddingTop"],
+  "scroll-padding-block-end": ["scrollPaddingBottom"],
+  "scroll-padding-inline": ["scrollPaddingLeft", "scrollPaddingRight"],
+  "scroll-padding-inline-start": ["scrollPaddingLeft"],
+  "scroll-padding-inline-end": ["scrollPaddingRight"],
+};
+
 /**
  * CSS properties that accept numeric values in standard CSS / React inline styles
  * but are typed as `string` in StyleX. Numeric values must be emitted as strings.
@@ -58,6 +74,13 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "outlineOffset",
 ]);
 
+const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
+  // StyleX rejects the CSS-wide reset property. It is too broad to expand
+  // safely without element-specific knowledge, so callers should bail instead
+  // of emitting `all` into stylex.create().
+  "all",
+]);
+
 /**
  * Returns true if the CSS property is a shorthand that StyleX cannot express directly
  * and requires expansion (e.g., `padding`, `margin`, `border`, `background`).
@@ -69,6 +92,10 @@ function isCssShorthandProperty(cssProp: string): boolean {
     /^border-(top|right|bottom|left)$/.test(cssProp) ||
     cssProp === "background"
   );
+}
+
+function isUnsupportedStylexProperty(cssProp: string): boolean {
+  return UNSUPPORTED_STYLEX_CSS_PROPS.has(cssProp.trim());
 }
 
 function isUnsupportedBackgroundShorthandValue(rawValue: string): boolean {
@@ -188,6 +215,14 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
         value: { kind: "static", value: entry.value },
       }));
     }
+  }
+
+  const physicalOnlyLogicalLonghands = PHYSICAL_ONLY_LOGICAL_LONGHAND_MAP[prop];
+  if (physicalOnlyLogicalLonghands) {
+    return physicalOnlyLogicalLonghands.map((physicalProp) => ({
+      prop: physicalProp,
+      value: decl.value,
+    }));
   }
 
   if (prop === "background") {

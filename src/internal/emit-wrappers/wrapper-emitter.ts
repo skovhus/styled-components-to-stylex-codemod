@@ -189,6 +189,7 @@ export class WrapperEmitter {
         return {
           acceptsSx: true,
           sxExcludedProperties: typedComponent.sxExcludedProperties,
+          sxAllowedProperties: typedComponent.sxAllowedProperties,
         };
       }
       if (!this.hasSourceOverrideFor(componentLocalName)) {
@@ -358,6 +359,10 @@ export class WrapperEmitter {
     return Boolean(d.usedAsValue) || this.isUsedAsValueInFile(d.localName);
   }
 
+  isBroadValueUsage(d: StyledDecl): boolean {
+    return this.isUsedAsValue(d) && d.valueUsageKind !== "virtualListElementType";
+  }
+
   requiresRestForValueUsage(d: StyledDecl): boolean {
     return this.isUsedAsValueInFile(d.localName) || this.hasAliasedJsxSpreadUsage(d.localName);
   }
@@ -416,7 +421,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return this.spreadMayContainProp(d, "className");
     }
-    if (this.isUsedAsValue(d)) {
+    if (this.isBroadValueUsage(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -430,7 +435,10 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return this.spreadMayContainProp(d, "style");
     }
-    if (this.isUsedAsValue(d)) {
+    if (d.valueUsageKind === "virtualListElementType") {
+      return true;
+    }
+    if (this.isBroadValueUsage(d)) {
       return true;
     }
     const used = this.getUsedAttrs(d.localName);
@@ -438,6 +446,9 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
+    if (d.valueUsageKind === "virtualListElementType") {
+      return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
+    }
     return (
       (d.supportsExternalStyles ?? false) ||
       d.typeScriptSupportsSxProp === true ||
@@ -1466,7 +1477,7 @@ export class WrapperEmitter {
     } = args;
 
     const used = this.getUsedAttrs(d.localName);
-    const needsBroadAttrs = used.has("*") || this.isUsedAsValue(d);
+    const needsBroadAttrs = used.has("*") || this.isBroadValueUsage(d);
 
     const lines: string[] = [];
     // Standard props go into Pick<ComponentProps<"tag">, ...> for proper types.
@@ -1557,6 +1568,9 @@ export class WrapperEmitter {
     }
     if (!allowStyleProp) {
       intrinsicBaseOmitted.push('"style"');
+    }
+    if (!allowSxProp) {
+      intrinsicBaseOmitted.push('"sx"');
     }
     const intrinsicBaseMaybeOmitted = intrinsicBaseOmitted.length
       ? `Omit<${intrinsicBase}, ${intrinsicBaseOmitted.join(" | ")}>`

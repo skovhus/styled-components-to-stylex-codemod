@@ -8,7 +8,7 @@ export interface BadgeProps {
 }
 
 export function Badge(
-  props: BadgeProps & Omit<React.ComponentProps<"div">, "className" | "style">,
+  props: BadgeProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
   const { children, textColor, ...rest } = props;
   return (

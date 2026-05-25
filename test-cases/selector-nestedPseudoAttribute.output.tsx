@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function MenuDiv(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
+function MenuDiv(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
   const { children, ...rest } = props;
   return (
     <div {...rest} sx={styles.menuDiv}>
@@ -10,7 +10,7 @@ function MenuDiv(props: Omit<React.ComponentProps<"div">, "className" | "style">
   );
 }
 
-function InteractiveBox(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
+function InteractiveBox(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
   const { children, ...rest } = props;
   return (
     <div {...rest} sx={styles.interactiveBox}>

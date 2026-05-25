@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
+type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style" | "sx">;
 
 function Input(props: InputProps) {
   const { type, readOnly, ...rest } = props;
@@ -16,7 +16,7 @@ function Input(props: InputProps) {
 }
 
 type LinkProps = React.PropsWithChildren<
-  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
+  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style" | "sx">
 >;
 
 function Link(props: LinkProps) {

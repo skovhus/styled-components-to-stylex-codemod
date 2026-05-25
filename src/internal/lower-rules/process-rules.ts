@@ -273,6 +273,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         });
         break;
       }
+      if (specificityResult.wasStripped && decl.base.kind === "component") {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
+      }
       const selectorForAnalysis = specificityResult.normalized;
       const s = normalizeInterpolatedSelector(selectorForAnalysis).trim();
       const hasComponentExpr = rule.selector.includes("__SC_EXPR_");

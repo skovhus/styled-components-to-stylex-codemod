@@ -51,7 +51,7 @@ type GenericProps<T extends string> = {
 // When wrapping with parameterized type, the type args must be preserved
 export function Button(
   props: GenericProps<"primary" | "secondary"> &
-    Omit<React.ComponentProps<"button">, "className" | "style">,
+    Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
   const { children, size, variant, ...rest } = props;
   return (

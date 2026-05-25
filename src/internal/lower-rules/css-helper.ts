@@ -56,6 +56,10 @@ export type ConditionalVariant = {
   style: Record<string, unknown>;
 };
 
+type CssHelperTemplateOptions = {
+  rejectStrippedSpecificity?: boolean;
+};
+
 type ValuePart = { kind: string; value?: string; slotId?: number };
 
 /**
@@ -120,6 +124,7 @@ export function createCssHelperResolver(args: {
     template: any,
     paramName: string | null,
     loc: { line: number; column: number } | null | undefined,
+    options?: CssHelperTemplateOptions,
   ) => {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
@@ -306,6 +311,7 @@ export function createCssHelperResolver(args: {
     template: any,
     paramName: string | null,
     loc: { line: number; column: number } | null | undefined,
+    options?: CssHelperTemplateOptions,
   ): {
     style: Record<string, unknown>;
     dynamicProps: Array<{ jsxProp: string; stylexProp: string }>;
@@ -379,6 +385,13 @@ export function createCssHelperResolver(args: {
       if (specificityResult.hasHigherTier) {
         return bail(
           "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+        );
+      }
+      if (specificityResult.wasStripped && options?.rejectStrippedSpecificity) {
+        return bail(
+          "Styled-components specificity hacks like `&&` / `&&&` are not representable in StyleX",
+          undefined,
+          computeSelectorWarningLoc(templateLoc ?? undefined, rawCss, rawSelector) ?? templateLoc,
         );
       }
       const selector = specificityResult.normalized.trim();

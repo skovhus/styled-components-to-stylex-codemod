@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type TransientButtonProps = { variant?: "primary" | "secondary" } & Omit<
   React.ComponentProps<"button">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Exported component with shouldForwardProp using dropPrefix pattern
@@ -30,7 +30,7 @@ export function TransientButton(props: TransientButtonProps) {
 type ExplicitFilterButtonProps = {
   customProp?: string;
   anotherProp?: number;
-} & Omit<React.ComponentProps<"button">, "className" | "style">;
+} & Omit<React.ComponentProps<"button">, "className" | "style" | "sx">;
 
 // Exported component with explicit list-based shouldForwardProp
 export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {

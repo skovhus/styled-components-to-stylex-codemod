@@ -4,7 +4,7 @@ import { Browser } from "./lib/helpers";
 
 type EmojiContainerProps = { size: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 /** A container for emojis that standardizes sizing across browsers */

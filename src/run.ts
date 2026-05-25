@@ -581,6 +581,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             return {
               acceptsSx: true,
               sxExcludedProperties: typedComponent.sxExcludedProperties,
+              sxAllowedProperties: typedComponent.sxAllowedProperties,
             };
           }
           if (

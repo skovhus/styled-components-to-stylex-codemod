@@ -211,6 +211,7 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
           if (!allowStyleProp) {
             omitted.push('"style"');
           }
+          omitted.push('"sx"');
           return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         })(),
       includesForwardedAs,
@@ -305,6 +306,7 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
             if (!allowStyleProp) {
               omitted.push('"style"');
             }
+            omitted.push('"sx"');
             return omitted.length > 0 ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
           })(),
         ),
@@ -430,7 +432,7 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
             ? values.map((v) => JSON.stringify(v)).join(" | ")
             : "string";
         const typeText = emitter.withChildren(
-          `React.HTMLAttributes<HTMLDivElement> & { ${propName}?: ${union} }`,
+          `Omit<React.HTMLAttributes<HTMLDivElement>, "sx"> & { ${propName}?: ${union} }`,
         );
         emitPropsType({
           localName: d.localName,

@@ -52,7 +52,7 @@ type PlaceholderColor = "labelBase" | "labelMuted";
 
 type DynamicPlaceholderProps = { placeholderColor: PlaceholderColor } & Omit<
   React.ComponentProps<"input">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function DynamicPlaceholder(props: DynamicPlaceholderProps) {

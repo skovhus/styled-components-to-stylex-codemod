@@ -8,7 +8,7 @@ function getRowHighlightColor(isDark: boolean): string {
 
 type RowProps = { isHighlighted: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Row(props: RowProps) {

@@ -1,20 +1,36 @@
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Flex } from "./lib/flex";
 
+type BoxProps = {
+  bg: string;
+  text: string;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
+
+function Box(props: BoxProps) {
+  const { children, bg, text, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.box,
+        bgVariants[bg as keyof typeof bgVariants] ?? styles.boxBg(bg),
+        textVariants[text as keyof typeof textVariants] ?? styles.boxText(text),
+      )}
+    >
+      {children}
+    </Flex>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <Flex
-      gap={8}
-      {...stylex.props(styles.box, styles.boxBackgroundColor("#bf4f74"), styles.boxColor("white"))}
-    >
+    <Box bg="#bf4f74" text="white" gap={8}>
       Red
-    </Flex>
-    <Flex
-      gap={12}
-      {...stylex.props(styles.box, styles.boxBackgroundColor("#4f74bf"), styles.boxColor("black"))}
-    >
+    </Box>
+    <Box bg="#4f74bf" text="black" gap={12}>
       Blue
-    </Flex>
+    </Box>
   </div>
 );
 
@@ -22,10 +38,28 @@ const styles = stylex.create({
   box: {
     padding: 8,
   },
-  boxBackgroundColor: (bg: string) => ({
-    backgroundColor: bg,
+  boxBg: (bg: string) => ({
+    backgroundColor: `${bg}`,
   }),
-  boxColor: (text: string) => ({
-    color: text,
+  boxText: (text: string) => ({
+    color: `${text}`,
   }),
+});
+
+const bgVariants = stylex.create({
+  "#bf4f74": {
+    backgroundColor: "#bf4f74",
+  },
+  "#4f74bf": {
+    backgroundColor: "#4f74bf",
+  },
+});
+
+const textVariants = stylex.create({
+  white: {
+    color: "white",
+  },
+  black: {
+    color: "black",
+  },
 });

@@ -49,6 +49,10 @@ import {
   literalToStaticValue,
   resolveTypeNodeFromTsType,
 } from "./types.js";
+import {
+  evaluateObservedDynamicExpression,
+  getObservedStaticVariantValues,
+} from "./static-evaluator.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 import {
@@ -78,6 +82,8 @@ type CssHelperConditionalContext = Pick<
   | "resolveCssHelperTemplate"
   | "markBail"
   | "importMap"
+  | "root"
+  | "propUsageByComponent"
   | "keyframesNames"
   | "inlineKeyframeNameMap"
 > & {
@@ -130,10 +136,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     isJsxPropOptional,
     markBail,
     importMap,
+    root,
+    propUsageByComponent,
     extraStyleObjects,
     resolvedStyleObjects,
   } = ctx;
   const avoidNames = new Set(importMap.keys());
+  const cssHelperTemplateOptions = {
+    rejectStrippedSpecificity: decl.base.kind === "component",
+  };
 
   /**
    * Resolve the TS type node for a prop used in a style function parameter.
@@ -816,7 +827,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
       if (isCssHelperTaggedTemplate(body.right)) {
         const cssNode = body.right as { quasi: ExpressionKind };
-        const resolved = resolveCssHelperTemplate(cssNode.quasi, paramName, decl.loc);
+        const resolved = resolveCssHelperTemplate(
+          cssNode.quasi,
+          paramName,
+          decl.loc,
+          cssHelperTemplateOptions,
+        );
         if (!resolved) {
           markBail();
           return true;
@@ -1106,6 +1122,73 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (entries.length > 0) {
         decl.needsWrapperComponent = true;
       }
+    };
+
+    const tryApplyObservedStaticMap = (args: {
+      map: Map<string, ExpressionKind>;
+      test: ExpressionKind;
+      propName: string;
+      paramName: string | null;
+    }): boolean => {
+      const observedValues = getObservedStaticVariantValues(
+        propUsageByComponent,
+        decl.localName,
+        args.propName,
+      );
+      if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+        return false;
+      }
+
+      const buckets: Array<{ propValue: string | number; style: Record<string, unknown> }> = [];
+      for (const propValue of observedValues) {
+        const testValue = evaluateObservedDynamicExpression({
+          j,
+          root,
+          expression: args.test,
+          propName: args.propName,
+          propValue,
+          paramName: args.paramName,
+        });
+        if (typeof testValue !== "boolean") {
+          return false;
+        }
+        if (!testValue) {
+          continue;
+        }
+        const style: Record<string, unknown> = {};
+        for (const [stylexProp, valueExpr] of args.map) {
+          const cssValue = evaluateObservedDynamicExpression({
+            j,
+            root,
+            expression: valueExpr,
+            propName: args.propName,
+            propValue,
+            paramName: args.paramName,
+          });
+          if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+            return false;
+          }
+          style[stylexProp] = cssValue;
+        }
+        if (Object.keys(style).length > 0) {
+          buckets.push({ propValue, style });
+        }
+      }
+      if (buckets.length === 0) {
+        return false;
+      }
+      for (const { propValue, style } of buckets) {
+        const propValueExpr =
+          typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+        applyVariant(
+          { when: `${args.propName} === ${propValueExpr}`, propName: args.propName },
+          style,
+        );
+      }
+      decl.variantLookupCastProps ??= new Set<string>();
+      decl.variantLookupCastProps.add(args.propName);
+      ensureShouldForwardPropDrop(decl, args.propName);
+      return true;
     };
 
     // Handle direct TemplateLiteral body: (props) => `width: ${props.$width}px;`
@@ -1638,6 +1721,21 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return true;
       }
 
+      if (
+        valuePropParams.length === 1 &&
+        consMap.size > 0 &&
+        altMap.size === 0 &&
+        tryApplyObservedStaticMap({
+          map: consMap,
+          test: conditional.test as ExpressionKind,
+          propName: valuePropParams[0]!,
+          paramName,
+        })
+      ) {
+        decl.needsWrapperComponent = true;
+        return true;
+      }
+
       // Single-prop case: use direct parameter instead of props object
       // e.g., (gap: number) => ({ gap: `${gap}px` }) instead of (props: { gap: number }) => (...)
       const useSingleParam = valuePropParams.length === 1;
@@ -1781,7 +1879,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return null;
       }
       const tplNode = node as { quasi: ExpressionKind };
-      return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc);
+      return resolveCssHelperTemplate(tplNode.quasi, paramName, decl.loc, cssHelperTemplateOptions);
     };
 
     // Reuse the shared helper for the ternary handler path

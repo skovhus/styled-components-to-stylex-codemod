@@ -33,12 +33,20 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
-      if (adapterResult.acceptsSx && typedInterface?.sxExcludedProperties?.length) {
+      if (
+        adapterResult.acceptsSx &&
+        (typedInterface?.sxExcludedProperties?.length ||
+          typedInterface?.sxAllowedProperties?.length)
+      ) {
         return {
           ...adapterResult,
           sxExcludedProperties: mergeUniqueStrings(
             adapterResult.sxExcludedProperties,
-            typedInterface.sxExcludedProperties,
+            typedInterface.sxExcludedProperties ?? [],
+          ),
+          sxAllowedProperties: mergeAllowedPropertyLists(
+            adapterResult.sxAllowedProperties,
+            typedInterface.sxAllowedProperties,
           ),
         };
       }
@@ -65,10 +73,25 @@ function typedComponentInterfaceFor(
     return {
       acceptsSx: true,
       sxExcludedProperties: typedComponent.sxExcludedProperties,
+      sxAllowedProperties: typedComponent.sxAllowedProperties,
     };
   }
 
   return undefined;
+}
+
+function mergeAllowedPropertyLists(
+  first: readonly string[] | undefined,
+  second: readonly string[] | undefined,
+): string[] | undefined {
+  if (!first?.length) {
+    return second?.length ? [...second] : undefined;
+  }
+  if (!second?.length) {
+    return [...first];
+  }
+  const secondSet = new Set(second);
+  return first.filter((name) => secondSet.has(name));
 }
 
 function mergeUniqueStrings(

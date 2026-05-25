@@ -8,7 +8,9 @@ type Props = {
   size?: Size;
 };
 
-export function Badge(props: Props & Omit<React.ComponentProps<"div">, "className" | "style">) {
+export function Badge(
+  props: Props & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
+) {
   const { children, size = "normal", color, ...rest } = props;
   return (
     <div

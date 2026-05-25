@@ -317,6 +317,9 @@ export function createEmitIntrinsicHelpers(env: EmitIntrinsicHelpersEnv): EmitIn
     if (!allowStyleProp) {
       omitted.push('"style"');
     }
+    if (!allowSxProp) {
+      omitted.push('"sx"');
+    }
     const base =
       omitted.length > 0
         ? `Omit<React.ComponentPropsWithRef<C>, ${omitted.join(" | ")}>`

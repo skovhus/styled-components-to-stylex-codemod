@@ -85,7 +85,8 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const allowStyleProp = emitter.shouldAllowStyleProp(d);
     const allowSxProp = emitter.shouldAllowSxProp(d);
     const allowAsProp = shouldAllowAsProp(d, tagName);
-    const useSlimType = !(d.isExported ?? false) && !supportsExternalStyles && !d.usedAsValue;
+    const useSlimType =
+      !(d.isExported ?? false) && !supportsExternalStyles && !emitter.isBroadValueUsage(d);
     // Determine whether the component will forward ref (via explicit forwarding
     // and/or {...rest}) so we can include ref in the narrow type only when it's
     // actually forwarded.
@@ -124,7 +125,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           return true;
         }
         const used = emitter.getUsedAttrs(d.localName);
-        if (used.has("*")) {
+        if (used.has("*") || d.valueUsageKind === "virtualListElementType") {
           return true;
         }
         // If any attribute is passed, prefer intrinsic props.
@@ -244,7 +245,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       //   which means user should be able to pass/override these props
       const includeRest =
         usedAttrs.has("*") ||
-        !!d.usedAsValue ||
+        emitter.isBroadValueUsage(d) ||
         (d.isExported ?? false) ||
         usedAttrs.size > 0 ||
         hasElementPropsInDefaultAttrs(d);
@@ -520,6 +521,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const willForwardRef =
       (d.supportsRefProp ?? false) ||
       isExportedComponent ||
+      d.valueUsageKind === "virtualListElementType" ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
     // Non-exported components use PropsWithChildren for simple cases, but
@@ -528,7 +530,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const useSlimType =
       !isExportedComponent &&
       !(d.supportsExternalStyles ?? false) &&
-      !d.usedAsValue &&
+      !emitter.isBroadValueUsage(d) &&
       !hasElementPropsInDefaultAttrs(d);
     {
       const explicit = emitter.stringifyTsType(d.propsType);
@@ -585,7 +587,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       });
       const supportsExternalStyles = d.supportsExternalStyles ?? false;
       const needsRestForType =
-        !!d.usedAsValue ||
+        emitter.isBroadValueUsage(d) ||
         usedAttrsForType.has("*") ||
         // External callers need full HTML props (id, onClick, aria-*, etc.)
         // Use spread/element props when explicitly true, or fall back to supportsExternalStyles
@@ -622,6 +624,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         }
         if (!allowStyleProp) {
           omitted.push('"style"');
+        }
+        if (!allowSxProp) {
+          omitted.push('"sx"');
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();
@@ -705,6 +710,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             typeText: explicit,
             allowClassNameProp,
             allowStyleProp,
+            allowSxProp,
           })
         : undefined;
       const explicitTypeIncludesIntrinsicProps =
@@ -1342,6 +1348,7 @@ function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
   typeText: string;
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
+  allowSxProp: boolean;
 }): string {
   if (
     !explicitTypeMayContainExternalStyleProps({
@@ -1357,6 +1364,9 @@ function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
   }
   if (!args.allowStyleProp) {
     omitted.push('"style"');
+  }
+  if (!args.allowSxProp) {
+    omitted.push('"sx"');
   }
   return omitted.length > 0 ? `Omit<${args.typeText}, ${omitted.join(" | ")}>` : args.typeText;
 }

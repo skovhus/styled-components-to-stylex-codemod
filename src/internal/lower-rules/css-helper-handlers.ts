@@ -73,6 +73,9 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
     handlerContext,
     markBail,
   } = ctx;
+  const cssHelperTemplateOptions = {
+    rejectStrippedSpecificity: decl.base.kind === "component",
+  };
 
   const tplCtx: TemplateLiteralContext = {
     j,
@@ -341,6 +344,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
           parsed.defaultCssTemplate.quasi,
           null,
           helperFn.loc ?? decl.loc,
+          cssHelperTemplateOptions,
         );
         if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
           warnings.push({
@@ -355,7 +359,12 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
         mergeStyleObjects(baseFromHelper, defaultResolved.style);
 
         for (const [caseValue, tpl] of parsed.caseCssTemplates.entries()) {
-          const res = resolveCssHelperTemplate(tpl.quasi, null, helperFn.loc ?? decl.loc);
+          const res = resolveCssHelperTemplate(
+            tpl.quasi,
+            null,
+            helperFn.loc ?? decl.loc,
+            cssHelperTemplateOptions,
+          );
           if (!res || res.dynamicProps.length > 0) {
             warnings.push({
               severity: "warning",

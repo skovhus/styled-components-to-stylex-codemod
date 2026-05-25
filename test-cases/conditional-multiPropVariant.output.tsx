@@ -6,7 +6,10 @@ import * as stylex from "@stylexjs/stylex";
 
 type BadgeSize = "micro" | "small";
 
-type BadgeProps = { size: BadgeSize } & Omit<React.ComponentProps<"span">, "className" | "style">;
+type BadgeProps = { size: BadgeSize } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
 
 export function Badge(props: BadgeProps) {
   const { children, size, ...rest } = props;

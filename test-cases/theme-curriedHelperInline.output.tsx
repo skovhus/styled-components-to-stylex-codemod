@@ -4,7 +4,7 @@ import { pixelVars, $colors } from "./tokens.stylex";
 
 type BoxProps = { position: "top" | "bottom" } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Box(props: BoxProps) {

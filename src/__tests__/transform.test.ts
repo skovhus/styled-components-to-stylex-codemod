@@ -555,10 +555,12 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
     // skips are allowed. Regular `_unsupported.*` cases should bail under the
     // default stricter semantics.
     const allowPartialMigration = bailOutInput.startsWith("_unsupported.partial-");
+    const parser = bailOutInput.endsWith(".input.jsx") ? "babel" : "tsx";
+    const crossFileInfo = getCrossFileInfo(inputPath, parser);
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter, allowPartialMigration },
+      { adapter: fixtureAdapter, allowPartialMigration, crossFileInfo },
     );
     // With per-decl skips, other decls in the fixture may transform successfully while
     // the one carrying the unsupported pattern is preserved. Require the expected
@@ -2503,6 +2505,45 @@ export const App = () => <MaskedPanel>Masked</MaskedPanel>;
     expect(diagnostics.code).toBeNull();
   });
 
+  it("does not copy reimported styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${scrollFadeMaskStyles(10, "both")}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: 'scrollFadeMaskStyles(10, "both")',
+            imports: [
+              {
+                from: { kind: "specifier", value: "./lib/helpers" },
+                names: [{ imported: "scrollFadeMaskStyles" }],
+              },
+            ],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
   it("does not rename transient props on unrelated JSX member expressions", () => {
     const input = `
 import * as React from "react";
@@ -3304,6 +3345,30 @@ export const App = () => <Box />;
     expect(warning).toBeDefined();
     // Line 4 is template start, `& + span` is on line 7 (3 lines into template content)
     expect(warning?.loc?.line).toBe(7);
+  });
+
+  it("should bail instead of emitting unsupported all reset property", () => {
+    const source = `
+import styled from "styled-components";
+
+const Option = styled.li\`
+  all: unset;
+  display: flex;
+\`;
+
+export const App = () => <Option>Option</Option>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => String(w.type).includes('Unsupported CSS property "all"')),
+    ).toBe(true);
   });
 
   it("should warn with correct line number for descendant/child/sibling selector", () => {

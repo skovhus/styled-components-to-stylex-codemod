@@ -8,7 +8,9 @@ interface TextProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 // This chain is silently not recognized: styled("span").withConfig(...).attrs(fn)
 // The codemod produces no output and no warning.
-export function Text(props: TextProps & Omit<React.ComponentProps<"span">, "className" | "style">) {
+export function Text(
+  props: TextProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
+) {
   const { children, align, selectable, ...rest } = props;
   return (
     <span

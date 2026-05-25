@@ -6,6 +6,7 @@ import type { CssRuleIR } from "../css-ir.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import {
   cssDeclarationToStylexDeclarations,
+  isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
 } from "../css-prop-mapping.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
@@ -131,6 +132,17 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       state.bailUnsupported(
         ctx.decl,
         "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+      );
+      if (state.currentDecl === ctx.decl) {
+        break;
+      }
+      state.bail = true;
+      break;
+    }
+    if (d.property && isUnsupportedStylexProperty(d.property)) {
+      state.bailUnsupported(
+        ctx.decl,
+        `Unsupported CSS property "${d.property}" cannot be emitted in StyleX`,
       );
       if (state.currentDecl === ctx.decl) {
         break;

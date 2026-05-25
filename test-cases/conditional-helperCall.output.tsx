@@ -2,7 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
-type TextProps = { truncate?: boolean } & Omit<React.ComponentProps<"p">, "className" | "style">;
+type TextProps = { truncate?: boolean } & Omit<
+  React.ComponentProps<"p">,
+  "className" | "style" | "sx"
+>;
 
 // Helper call in conditional - should apply truncation when truthy
 function Text(props: TextProps) {
@@ -12,7 +15,7 @@ function Text(props: TextProps) {
 
 type TextAltProps = { noTruncate?: boolean } & Omit<
   React.ComponentProps<"p">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Helper call in alternate - should apply truncation when falsy

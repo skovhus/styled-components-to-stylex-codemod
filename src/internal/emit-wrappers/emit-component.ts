@@ -302,6 +302,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       emitter.useSxProp &&
       ((wrappedLocalDecl ? emitter.shouldAllowSxProp(wrappedLocalDecl) : false) ||
         (!wrappedPropsAreOnlyIntrinsic && emitter.wrappedComponentAcceptsSxProp(wrappedComponent)));
+    if (!wrappedAcceptsSx && !wrappedLocalDecl && !emitter.importMap.has(wrappedComponent)) {
+      injectLocalWrappedComponentStyleProps({
+        emitter,
+        propsType: baseComponentPropsType,
+      });
+    }
     const attrsProvidedPropOptions: AttrsProvidedPropOptions = {
       normalizeForwardedAs: !shouldLowerForwardedAs,
     };
@@ -691,6 +697,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // when declared in the wrapper's explicit type, they should not be forwarded to the base
     // component even when the base type can't be resolved (imported component).
     const styleFnValueProps = new Set<string>();
+    const styleValueVariantProps = new Set(d.styleValueVariantProps ?? []);
+    for (const prop of styleValueVariantProps) {
+      styleFnValueProps.add(prop);
+    }
 
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
@@ -974,6 +984,11 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
     }
+    const shouldDropForwardedProp = (propName: string): boolean =>
+      (d.shouldForwardProp?.dropProps ?? []).includes(propName) ||
+      Boolean(
+        d.shouldForwardProp?.dropPrefix && propName.startsWith(d.shouldForwardProp.dropPrefix),
+      );
 
     // For imported base components (type unresolvable), don't destructure non-transient
     // style-fn props that are declared in the wrapper's explicit type. Leaving them in
@@ -992,6 +1007,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (
           wrapperExplicitPropNames.has(prop) &&
           !prop.startsWith("$") &&
+          !(styleValueVariantProps.has(prop) && shouldDropForwardedProp(prop)) &&
           !wrapperOnlyTransientProps.includes(prop) &&
           !filterOnlyTransientProps.includes(prop) &&
           !renamedTransientValues?.has(prop)
@@ -1337,12 +1353,18 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             // style-only concerns. Forward them when the base component explicitly
             // accepts them, or when the base type can't be resolved (styled-components
             // forwards all non-transient props to wrapped components by default).
-            if (!baseExplicitProps || baseExplicitProps.has(propName)) {
+            if (
+              !(styleValueVariantProps.has(propName) && shouldDropForwardedProp(propName)) &&
+              (!baseExplicitProps || baseExplicitProps.has(propName))
+            ) {
               pushForwardedProp(propName);
             }
             continue;
           }
-          if (!baseExplicitProps || baseExplicitProps.has(propName)) {
+          if (
+            !(styleValueVariantProps.has(propName) && shouldDropForwardedProp(propName)) &&
+            (!baseExplicitProps || baseExplicitProps.has(propName))
+          ) {
             pushForwardedProp(propName);
           }
         }
@@ -2173,6 +2195,70 @@ function isReactComponentPropsUtilityName(name: string): boolean {
 function isIntrinsicPassthroughType(emitter: WrapperEmitter, type: ASTNode): boolean {
   const text = emitter.stringifyTsType(type);
   return text !== null && /^React\.ComponentProps(?:WithRef)?<"[^"]+">$/.test(text);
+}
+
+function injectLocalWrappedComponentStyleProps(args: {
+  emitter: WrapperEmitter;
+  propsType: ASTNode | null;
+}): void {
+  const { emitter, propsType } = args;
+  if (!emitter.emitTypes || !propsType) {
+    return;
+  }
+  const existingProps = emitter.getExplicitPropNames(propsType);
+  if (
+    propsType.type !== "TSTypeLiteral" ||
+    existingProps.has("className") ||
+    existingProps.has("style")
+  ) {
+    return;
+  }
+  injectMembersIntoTypeLiteral(emitter, propsType, [
+    "className?: string",
+    "style?: React.CSSProperties",
+  ]);
+}
+
+function injectMembersIntoTypeLiteral(
+  emitter: WrapperEmitter,
+  typeLiteral: ASTNode,
+  memberTexts: string[],
+): void {
+  const typed = typeLiteral as { members?: unknown[] };
+  const existingMembers = typed.members ?? [];
+  const existingNames = new Set(
+    existingMembers
+      .filter((member): member is { type?: string; key?: { type?: string; name?: string } } =>
+        Boolean(member && typeof member === "object"),
+      )
+      .filter(
+        (member) => member.type === "TSPropertySignature" && member.key?.type === "Identifier",
+      )
+      .map((member) => member.key?.name)
+      .filter((name): name is string => Boolean(name)),
+  );
+  const newMembers = parseTypeMembers(emitter, memberTexts).filter((member) => {
+    const typedMember = member as { type?: string; key?: { type?: string; name?: string } };
+    return (
+      typedMember.type !== "TSPropertySignature" ||
+      typedMember.key?.type !== "Identifier" ||
+      !typedMember.key.name ||
+      !existingNames.has(typedMember.key.name)
+    );
+  });
+  if (newMembers.length > 0) {
+    typed.members = [...existingMembers, ...newMembers];
+  }
+}
+
+function parseTypeMembers(emitter: WrapperEmitter, memberTexts: string[]): unknown[] {
+  try {
+    const parsed = emitter.j(`interface _Tmp { ${memberTexts.join("; ")} }`).get().node.program
+      .body[0] as { body?: { body?: unknown[] } };
+    return parsed.body?.body ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function getTypeQueryExpressionName(exprName: unknown): string | null {

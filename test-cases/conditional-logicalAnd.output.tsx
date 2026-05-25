@@ -18,7 +18,7 @@ function LayeredBox(props: LayeredBoxProps) {
 
 type GrayscaleImageProps = { isBw?: boolean } & Omit<
   React.ComponentProps<"img">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Pattern 2: Simple logical AND with css helper (using destructured props)
@@ -30,7 +30,7 @@ function GrayscaleImage(props: GrayscaleImageProps) {
 type DialogTextProps = {
   renderingContext?: "dialog" | "page";
   lines?: number;
-} & Omit<React.ComponentProps<"p">, "className" | "style">;
+} & Omit<React.ComponentProps<"p">, "className" | "style" | "sx">;
 
 // Pattern 3: Chained logical expressions with multiple conditions
 function DialogText(props: DialogTextProps) {

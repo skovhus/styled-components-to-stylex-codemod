@@ -621,7 +621,10 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     }
   }
 
-  emitLocalDefineVarsSidecars(ctx);
+  emitLocalDefineVarsSidecars(
+    ctx,
+    nonEmptyStyleEntries.map(([, value]) => value),
+  );
   const programBody = root.get().node.program.body as any[];
   const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
   if (insertNodes.length > 0) {
@@ -1107,11 +1110,11 @@ function tokenizeShorthandValue(value: string): string[] {
   return tokens;
 }
 
-function emitLocalDefineVarsSidecars(ctx: TransformContext): void {
+function emitLocalDefineVarsSidecars(ctx: TransformContext, emittedStyleValues: unknown[]): void {
   const j = ctx.j;
-  const vars = [...(ctx.localStylexVars?.values() ?? [])].sort(
-    (a, b) => a.sourceOrder - b.sourceOrder,
-  );
+  const vars = [...(ctx.localStylexVars?.values() ?? [])]
+    .filter((ref) => emittedStyleValues.some((value) => containsLocalStylexVarRef(value, ref)))
+    .sort((a, b) => a.sourceOrder - b.sourceOrder);
   if (vars.length === 0) {
     return;
   }
@@ -1137,6 +1140,42 @@ function emitLocalDefineVarsSidecars(ctx: TransformContext): void {
     ctx.root,
     j.importDeclaration(specifiers, j.literal(`./${vars[0]?.sidecarFileName ?? "vars.stylex"}`)),
   );
+}
+
+function containsLocalStylexVarRef(value: unknown, ref: LocalStylexVarRef): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => containsLocalStylexVarRef(item, ref));
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === "MemberExpression") {
+    const object = record.object as { type?: string; name?: string } | undefined;
+    const property = record.property as
+      | { type?: string; name?: string; value?: unknown }
+      | undefined;
+    if (object?.type === "Identifier" && object.name === ref.groupName) {
+      if (property?.type === "Identifier" && property.name === ref.keyName) {
+        return true;
+      }
+      if (property?.type === "Literal" && property.value === ref.keyName) {
+        return true;
+      }
+      if (property?.type === "StringLiteral" && property.value === ref.keyName) {
+        return true;
+      }
+    }
+  }
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "loc" || key === "comments") {
+      continue;
+    }
+    if (containsLocalStylexVarRef(child, ref)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function groupLocalStylexVars(vars: LocalStylexVarRef[]): Map<string, LocalStylexVarRef[]> {

@@ -1,7 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = { color?: string } & Omit<React.ComponentProps<"button">, "className" | "style">;
+type ButtonProps = { color?: string } & Omit<
+  React.ComponentProps<"button">,
+  "className" | "style" | "sx"
+>;
 
 // Destructured prop with default AND || fallback
 // When color is undefined, should use "hotpink" (default)
@@ -11,7 +14,10 @@ function Button(props: ButtonProps) {
   return <button sx={styles.button((props.color ?? "hotpink") || "blue")}>{children}</button>;
 }
 
-type CardProps = { size?: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
+type CardProps = { size?: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 // Destructured prop with ternary using default
 // When size is undefined, should use 16 (default), then check if it equals 16
@@ -29,7 +35,10 @@ function Card(props: CardProps) {
   );
 }
 
-type BoxProps = { margin?: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
+type BoxProps = { margin?: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 // Renamed destructured prop with default AND fallback
 function Box(props: BoxProps) {

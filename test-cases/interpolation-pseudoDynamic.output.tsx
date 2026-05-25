@@ -4,7 +4,7 @@ import { highlightStyles } from "./lib/helpers";
 
 type ButtonProps = { active?: boolean } & Omit<
   React.ComponentProps<"button">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Button(props: ButtonProps) {

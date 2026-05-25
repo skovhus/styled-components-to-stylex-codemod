@@ -4,7 +4,7 @@ import { mergedSx } from "./lib/mergedSx";
 
 type GradientBoxProps = { direction?: "horizontal" | "vertical" } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Arrow function in background (10 occurrences)
