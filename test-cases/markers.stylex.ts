@@ -9,6 +9,9 @@ export const HoverFocusButtonMarker = stylex.defineMarker();
 /** Custom marker for LabelButton */
 export const LabelButtonMarker = stylex.defineMarker();
 
+/** Custom marker for ExternalSummary */
+export const ExternalSummaryMarker = stylex.defineMarker();
+
 /** Custom marker for Wrapper */
 export const WrapperMarker = stylex.defineMarker();
 

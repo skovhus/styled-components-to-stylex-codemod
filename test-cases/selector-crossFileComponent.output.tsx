@@ -1,11 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
-import { CrossFileIcon, TruncatedLabel } from "./lib/cross-file-icon.styled";
+import { CrossFileIcon, CrossFileLink, TruncatedLabel } from "./lib/cross-file-icon.styled";
 
-import { IconButtonMarker, HoverFocusButtonMarker, LabelButtonMarker } from "./markers.stylex";
+import {
+  IconButtonMarker,
+  HoverFocusButtonMarker,
+  LabelButtonMarker,
+  ExternalSummaryMarker,
+} from "./markers.stylex";
 
 export function App() {
   return (
-    <div style={{ display: "flex", gap: 16, padding: 16, width: 620 }}>
+    <div style={{ display: "flex", gap: 16, padding: 16, width: 760 }}>
       <CrossFileIcon />
       <button sx={[styles.button, styles.iconButton, IconButtonMarker]}>
         <CrossFileIcon {...stylex.props(styles.crossFileIconInIconButton)} />
@@ -24,6 +29,12 @@ export function App() {
           Exported selector label
         </TruncatedLabel>
       </button>
+      <div sx={[styles.externalSummary, ExternalSummaryMarker]}>
+        <CrossFileIcon {...stylex.props(styles.crossFileIconInExternalSummary)} />
+        <CrossFileLink href="#" {...stylex.props(styles.crossFileLinkInExternalSummary)}>
+          External link
+        </CrossFileLink>
+      </div>
     </div>
   );
 }
@@ -44,6 +55,15 @@ const styles = stylex.create({
   // grouped-pseudo rule. The base value (opacity: 0) must survive as `default`.
   hoverFocusButton: {
     gap: 8,
+  },
+  externalSummary: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#cbd5e1",
   },
   crossFileIconInIconButton: {
     width: 30,
@@ -72,6 +92,24 @@ const styles = stylex.create({
     textDecoration: {
       default: null,
       [stylex.when.ancestor(":hover", LabelButtonMarker)]: "underline",
+    },
+  },
+  crossFileIconInExternalSummary: {
+    width: 20,
+    height: 20,
+    transform: {
+      default: null,
+      [stylex.when.ancestor(":hover", ExternalSummaryMarker)]: "scale(1.2)",
+    },
+  },
+  crossFileLinkInExternalSummary: {
+    color: {
+      default: "#2563eb",
+      [stylex.when.ancestor(":hover", ExternalSummaryMarker)]: "#1d4ed8",
+    },
+    textDecoration: {
+      default: "none",
+      [stylex.when.ancestor(":hover", ExternalSummaryMarker)]: "underline",
     },
   },
 });

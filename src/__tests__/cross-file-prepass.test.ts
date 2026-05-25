@@ -383,6 +383,65 @@ export const App = () => (
     expect(code).toMatch(/stylex\.props\(iconStyles\.icon.*iconStyles\./);
   });
 
+  it("forward cross-file: passes descendant selector overrides to external children explicitly", () => {
+    const source = `
+import styled from "styled-components";
+import { CrossFileIcon, CrossFileLink } from "./lib/cross-file-icon.styled";
+
+const ExternalSummary = styled.div\`
+  \${CrossFileIcon} {
+    width: 20px;
+  }
+
+  &:hover \${CrossFileLink} {
+    color: #1d4ed8;
+  }
+\`;
+
+export const App = () => (
+  <ExternalSummary>
+    <CrossFileIcon />
+    <CrossFileLink href="#">External link</CrossFileLink>
+  </ExternalSummary>
+);
+`;
+
+    const crossFileInfo = {
+      selectorUsages: [
+        {
+          localName: "CrossFileIcon",
+          importSource: "./lib/cross-file-icon.styled",
+          importedName: "CrossFileIcon",
+          resolvedPath: fixture("lib/cross-file-icon.styled.tsx"),
+        },
+        {
+          localName: "CrossFileLink",
+          importSource: "./lib/cross-file-icon.styled",
+          importedName: "CrossFileLink",
+          resolvedPath: fixture("lib/cross-file-icon.styled.tsx"),
+        },
+      ],
+    };
+
+    const result = transformWithWarnings(
+      { source, path: fixture("consumer-external-children.tsx") },
+      api,
+      { adapter: fixtureAdapter, crossFileInfo },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code!;
+
+    expect(code).not.toContain("GlobalSelector");
+    expect(code).not.toContain("sc2sx-");
+    expect(code).toMatch(
+      /CrossFileIcon\s*\{\.\.\.stylex\.props\(styles\.crossFileIconInExternalSummary\)\}/,
+    );
+    expect(code).toMatch(
+      /CrossFileLink\s+href="#"\s+\{\.\.\.stylex\.props\(styles\.crossFileLinkInExternalSummary\)\}/,
+    );
+  });
+
   it("bridge forward in conditional JSX: adds marker on parent and override on imported child", () => {
     const source = `
 import styled from "styled-components";

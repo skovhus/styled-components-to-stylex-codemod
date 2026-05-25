@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { CrossFileIcon, TruncatedLabel } from "./lib/cross-file-icon.styled";
+import { CrossFileIcon, CrossFileLink, TruncatedLabel } from "./lib/cross-file-icon.styled";
 
 const Button = styled.button`
   display: inline-flex;
@@ -57,9 +57,36 @@ const LabelButton = styled(Button)`
   }
 `;
 
+const ExternalSummary = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+
+  ${CrossFileIcon} {
+    width: 20px;
+    height: 20px;
+  }
+
+  ${CrossFileLink} {
+    color: #2563eb;
+    text-decoration: none;
+  }
+
+  &:hover ${CrossFileIcon} {
+    transform: scale(1.2);
+  }
+
+  &:hover ${CrossFileLink} {
+    color: #1d4ed8;
+    text-decoration: underline;
+  }
+`;
+
 export function App() {
   return (
-    <div style={{ display: "flex", gap: 16, padding: 16, width: 620 }}>
+    <div style={{ display: "flex", gap: 16, padding: 16, width: 760 }}>
       <CrossFileIcon />
       <IconButton>
         <CrossFileIcon />
@@ -76,6 +103,10 @@ export function App() {
       <LabelButton>
         <TruncatedLabel>Exported selector label</TruncatedLabel>
       </LabelButton>
+      <ExternalSummary>
+        <CrossFileIcon />
+        <CrossFileLink href="#">External link</CrossFileLink>
+      </ExternalSummary>
     </div>
   );
 }
