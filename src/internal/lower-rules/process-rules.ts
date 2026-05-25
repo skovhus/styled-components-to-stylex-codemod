@@ -55,7 +55,11 @@ import { jsxNameTargetsLocalBinding } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
-import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
+import {
+  ensureShouldForwardPropDrop,
+  literalToStaticValue,
+  resolveTypeNodeFromTsType,
+} from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   unwrapArrowFunctionToPropsExpr,
@@ -2367,7 +2371,98 @@ function hasNonFormControlAsUsage(
       }
     }
   });
+  root.find(j.CallExpression).forEach((path) => {
+    if (unsafe || !isReactCreateElementCall(path.node)) {
+      return;
+    }
+    const [componentArg, propsArg] = path.node.arguments ?? [];
+    if (!valueExpressionTargetsLocalBinding(componentArg, componentName, root, j)) {
+      return;
+    }
+    if (isUnsafeCreateElementProps(propsArg)) {
+      unsafe = true;
+    }
+  });
   return unsafe;
+}
+
+function isReactCreateElementCall(node: unknown): boolean {
+  const call = node as { callee?: unknown } | null | undefined;
+  const callee = call?.callee as
+    | {
+        type?: string;
+        object?: { type?: string; name?: string };
+        property?: { type?: string; name?: string };
+      }
+    | undefined;
+  return (
+    callee?.type === "MemberExpression" &&
+    callee.object?.type === "Identifier" &&
+    callee.object.name === "React" &&
+    callee.property?.type === "Identifier" &&
+    callee.property.name === "createElement"
+  );
+}
+
+function valueExpressionTargetsLocalBinding(
+  node: unknown,
+  componentName: string,
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): boolean {
+  const expr = node as { type?: string; name?: string } | null | undefined;
+  if (expr?.type !== "Identifier" || !expr.name) {
+    return false;
+  }
+  return jsxNameTargetsLocalBinding({
+    root,
+    j,
+    name: { type: "JSXIdentifier", name: expr.name },
+    localName: componentName,
+  });
+}
+
+function isUnsafeCreateElementProps(node: unknown): boolean {
+  const props = node as { type?: string; name?: string; properties?: unknown[] } | null | undefined;
+  if (
+    !props ||
+    props.type === "NullLiteral" ||
+    (props.type === "Identifier" && props.name === "undefined")
+  ) {
+    return false;
+  }
+  if (props.type !== "ObjectExpression") {
+    return true;
+  }
+  for (const property of props.properties ?? []) {
+    const prop = property as { type?: string; key?: unknown; value?: unknown } | null | undefined;
+    if (!prop || prop.type === "SpreadElement" || prop.type === "SpreadProperty") {
+      return true;
+    }
+    const key = staticPropertyKeyName(prop.key);
+    if (key !== "as" && key !== "forwardedAs") {
+      continue;
+    }
+    const value = literalToStaticValue(prop.value);
+    if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function staticPropertyKeyName(key: unknown): string | null {
+  const keyNode = key as { type?: string; name?: string; value?: unknown } | null | undefined;
+  if (keyNode?.type === "Identifier") {
+    return keyNode.name ?? null;
+  }
+  if (
+    (keyNode?.type === "StringLiteral" || keyNode?.type === "Literal") &&
+    typeof keyNode.value === "string"
+  ) {
+    return keyNode.value;
+  }
+  return null;
 }
 
 function hasPolymorphicAsPropType(
