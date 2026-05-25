@@ -3212,6 +3212,43 @@ export { Section };
     );
   });
 
+  it("uses the module-scope namespace initializer when a loop binding has the same name", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+for (const Section of []) {
+  void Section;
+}
+
+const Section = { Button };
+export { Section };
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.exportName === "Section.Button", ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-loop-before-reexport-dotted-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it("bails on enabled compound pseudos for namespaced createElement targets", () => {
     const input = `
 import * as React from "react";

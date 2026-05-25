@@ -285,6 +285,9 @@ function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolea
     }
     if (
       type === "BlockStatement" ||
+      type === "ForInStatement" ||
+      type === "ForOfStatement" ||
+      type === "ForStatement" ||
       type === "FunctionDeclaration" ||
       type === "FunctionExpression" ||
       type === "ArrowFunctionExpression"
