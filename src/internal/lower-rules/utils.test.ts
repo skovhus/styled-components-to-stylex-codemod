@@ -37,6 +37,15 @@ describe("findSupportedAtRule", () => {
     ).toBe("@supports (interpolate-size: allow-keywords) and (height: calc-size(auto, size))");
   });
 
+  it("groups nested @supports conditions containing or", () => {
+    expect(
+      findSupportedAtRule([
+        "@supports (display: grid) or (display: flex)",
+        "@supports (color: color(display-p3 1 0 0))",
+      ]),
+    ).toBe("@supports ((display: grid) or (display: flex)) and (color: color(display-p3 1 0 0))");
+  });
+
   it("returns undefined when no supported rules exist", () => {
     expect(findSupportedAtRule(["@keyframes fade"])).toBeUndefined();
     expect(

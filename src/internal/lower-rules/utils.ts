@@ -434,6 +434,9 @@ function combineSupportsAtRules(atRuleStack: string[]): string {
 }
 
 function parenthesizeSupportsCondition(condition: string): string {
+  if (condition.includes(" and ") || condition.includes(" or ")) {
+    return `(${condition})`;
+  }
   return condition.startsWith("(") && condition.endsWith(")") ? condition : `(${condition})`;
 }
 

@@ -455,6 +455,9 @@ function hasInnerBindingBetween(
     if (isBlockStatementNode(cur.node) && blockDeclaresName(cur.node, name)) {
       return true;
     }
+    if (isSwitchStatementNode(cur.node) && switchStatementDeclaresName(cur.node, name)) {
+      return true;
+    }
     if (isLoopNode(cur.node) && loopDeclaresName(cur.node, name)) {
       return true;
     }
@@ -507,6 +510,16 @@ function blockDeclaresName(node: object, name: string): boolean {
       if (ids.has(name)) {
         return true;
       }
+    }
+  }
+  return false;
+}
+
+function switchStatementDeclaresName(node: object, name: string): boolean {
+  const switchStatement = node as { cases?: Array<{ consequent?: unknown[] }> };
+  for (const switchCase of switchStatement.cases ?? []) {
+    if (blockDeclaresName({ body: switchCase.consequent ?? [] }, name)) {
+      return true;
     }
   }
   return false;
@@ -621,6 +634,10 @@ function isCatchClauseNode(node: unknown): node is object {
 
 function isBlockStatementNode(node: unknown): node is object {
   return (node as { type?: unknown }).type === "BlockStatement";
+}
+
+function isSwitchStatementNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "SwitchStatement";
 }
 
 function isLoopNode(node: unknown): node is object {
