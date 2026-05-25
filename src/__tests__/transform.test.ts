@@ -3081,6 +3081,39 @@ export const Section = { Button };
     );
   });
 
+  it("bails on enabled compound pseudos when re-exported dotted external interface supports as", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+const Section = { Button };
+export { Section };
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.exportName === "Section.Button", ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-reexport-dotted-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it.each(fixtureCases)("$outputFile", async ({ name, inputPath, outputPath, parser }) => {
     const { input, output } = readTestCase(name, inputPath, outputPath);
     const crossFileInfo = getCrossFileInfo(inputPath, parser);

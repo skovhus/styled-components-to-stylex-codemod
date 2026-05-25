@@ -116,16 +116,25 @@ function collectDottedExportedComponents(
 
   root.find(j.ExportNamedDeclaration).forEach((p) => {
     const declaration = p.node.declaration;
-    if (declaration?.type !== "VariableDeclaration") {
-      return;
+    if (declaration?.type === "VariableDeclaration") {
+      for (const declarator of declaration.declarations) {
+        if (declarator.type !== "VariableDeclarator") {
+          continue;
+        }
+        const exportName = getIdentifierName(declarator.id);
+        if (exportName) {
+          collectObjectProperties(declarator.init, exportName);
+        }
+      }
     }
-    for (const declarator of declaration.declarations) {
-      if (declarator.type !== "VariableDeclarator") {
+    for (const specifier of p.node.specifiers ?? []) {
+      if (specifier.type !== "ExportSpecifier") {
         continue;
       }
-      const exportName = getIdentifierName(declarator.id);
-      if (exportName) {
-        collectObjectProperties(declarator.init, exportName);
+      const localName = getIdentifierName(specifier.local);
+      const exportName = getIdentifierName(specifier.exported) ?? localName;
+      if (localName && exportName) {
+        collectObjectProperties(findVariableInitializer(root, j, localName), exportName);
       }
     }
   });
@@ -198,4 +207,21 @@ function collectDottedExportedComponents(
 function getIdentifierName(node: unknown): string | null {
   const n = node as { type?: string; name?: string } | null | undefined;
   return n?.type === "Identifier" && n.name ? n.name : null;
+}
+
+function findVariableInitializer(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  localName: string,
+): unknown {
+  let init: unknown;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
+    .forEach((path) => {
+      if (init !== undefined) {
+        return;
+      }
+      init = path.node.init;
+    });
+  return init;
 }
