@@ -2407,7 +2407,7 @@ function handlePseudoExpand(
         if (existing && typeof existing === "object" && "__computedKeys" in existing) {
           (existing.__computedKeys as unknown[]).push(newEntry);
         } else {
-          target[pseudo] = { default: null, __computedKeys: [newEntry] };
+          target[pseudo] = { default: target.default ?? null, __computedKeys: [newEntry] };
         }
       } else {
         target[pseudo] = cloneAstNode(value);

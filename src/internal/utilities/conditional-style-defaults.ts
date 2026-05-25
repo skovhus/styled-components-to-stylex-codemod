@@ -17,8 +17,21 @@ type DefaultInference =
 
 type StyleSequenceEntry = {
   styleKey: string;
+  styleObj?: Record<string, unknown>;
   patchable: boolean;
-  source: "base" | "mixin" | "variant" | "styleFn" | "pseudo" | "attr" | "enum";
+  contributes?: boolean;
+  source:
+    | "base"
+    | "mixin"
+    | "variant"
+    | "styleFn"
+    | "pseudo"
+    | "theme"
+    | "attr"
+    | "enum"
+    | "adjacent"
+    | "promoted"
+    | "combined";
 };
 
 type OrderedTailEntry = {
@@ -85,17 +98,12 @@ function patchConditionalDefaultsForSequence(args: {
   const defaults = new Map<string, DefaultInference>();
 
   for (const entry of entries) {
-    const source = ctx.resolvedStyleObjects?.get(entry.styleKey);
+    const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
     if (entry.patchable && isPlainStyleObject(source)) {
-      for (const prop of propertiesWithNullConditionalDefault(source)) {
+      for (const prop of propertiesWithUnsafeNullConditionalDefault(source)) {
         const earlier = defaults.get(prop) ?? { kind: "absent" };
-        if (earlier.kind === "absent") {
-          continue;
-        }
-        if (earlier.kind === "static") {
-          if (earlier.value !== null) {
-            setConditionalDefault(source, prop, earlier.value);
-          }
+        const patchResult = patchNullConditionalDefaultsForProp(source, prop, earlier);
+        if (patchResult === "patched" || patchResult === "safe") {
           continue;
         }
         ctx.warnings.push({
@@ -136,16 +144,61 @@ function patchConditionalDefaultsForSequence(args: {
       }
     }
 
-    for (const [prop, inference] of inferDefaultContributions(source)) {
-      if (inference.kind === "absent") {
-        defaults.delete(prop);
-      } else {
-        defaults.set(prop, inference);
+    if (entry.contributes !== false) {
+      for (const [prop, inference] of inferDefaultContributions(source)) {
+        if (inference.kind === "absent") {
+          defaults.delete(prop);
+        } else {
+          defaults.set(prop, inference);
+        }
       }
     }
   }
 
   return "ok";
+}
+
+function propertiesWithUnsafeNullConditionalDefault(styleObj: Record<string, unknown>): string[] {
+  const props = new Set(propertiesWithNullConditionalDefault(styleObj));
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop) || !isPlainStyleObject(value)) {
+      continue;
+    }
+    if (hasNestedNullConditionalDefault(value)) {
+      props.add(prop);
+    }
+  }
+  return [...props];
+}
+
+function patchNullConditionalDefaultsForProp(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  earlier: DefaultInference,
+): "patched" | "safe" | "bail" {
+  const value = styleObj[prop];
+  if (!isPlainStyleObject(value) || !isConditionalStyleMap(value)) {
+    return "safe";
+  }
+
+  let inheritedDefault = inferDefaultFromValue(value);
+  if (value.default === null && earlier.kind === "static" && earlier.value !== null) {
+    value.default = earlier.value;
+    inheritedDefault = earlier;
+  } else if (value.default === null && earlier.kind === "dynamic") {
+    return "bail";
+  } else if (value.default === null) {
+    inheritedDefault = earlier;
+  }
+
+  if (!hasNestedNullConditionalDefault(value)) {
+    return "safe";
+  }
+  if (inheritedDefault.kind === "static" && inheritedDefault.value !== null) {
+    patchNestedNullConditionalDefaults(value, inheritedDefault.value);
+    return "patched";
+  }
+  return inheritedDefault.kind === "dynamic" ? "bail" : "safe";
 }
 
 function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSequenceEntry[] {
@@ -168,9 +221,22 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
   }
 
   entries.push(...buildVariantAndStyleFnEntries(decl));
+  entries.push(...buildThemeEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
+  entries.push(...buildPseudoAliasEntries(decl));
+  entries.push(...buildCompoundVariantEntries(decl));
+  entries.push(...buildVariantDimensionEntries(decl));
   entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildEnumVariantEntries(decl));
+  entries.push(...buildCallSiteCombinedEntries(decl));
+  entries.push(...buildPromotedStyleEntries(decl));
+  if (decl.adjacentSiblingStyleKey) {
+    entries.push({
+      styleKey: decl.adjacentSiblingStyleKey,
+      patchable: true,
+      source: "adjacent",
+    });
+  }
 
   return entries;
 }
@@ -253,6 +319,96 @@ function buildPseudoExpandEntries(decl: StyledDecl): StyleSequenceEntry[] {
   }));
 }
 
+function buildThemeEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  const entries: StyleSequenceEntry[] = [];
+  for (const hook of decl.needsUseThemeHook ?? []) {
+    if (hook.trueStyleKey) {
+      entries.push({
+        styleKey: hook.trueStyleKey,
+        patchable: true,
+        contributes: false,
+        source: "theme",
+      });
+    }
+    if (hook.falseStyleKey) {
+      entries.push({
+        styleKey: hook.falseStyleKey,
+        patchable: true,
+        contributes: false,
+        source: "theme",
+      });
+    }
+  }
+  return entries;
+}
+
+function buildPseudoAliasEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.pseudoAliasSelectors ?? []).flatMap((entry) =>
+    entry.styleKeys.map(
+      (styleKey) =>
+        ({
+          styleKey,
+          patchable: true,
+          contributes: false,
+          source: "pseudo",
+        }) satisfies StyleSequenceEntry,
+    ),
+  );
+}
+
+function buildCompoundVariantEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.compoundVariants ?? []).flatMap((entry) => {
+    if (entry.kind === "3branch") {
+      return [entry.outerTruthyKey, entry.innerTruthyKey, entry.innerFalsyKey].map(
+        (styleKey) =>
+          ({
+            styleKey,
+            patchable: true,
+            contributes: false,
+            source: "variant",
+          }) satisfies StyleSequenceEntry,
+      );
+    }
+    return [
+      entry.outerTruthyInnerTruthyKey,
+      entry.outerTruthyInnerFalsyKey,
+      entry.outerFalsyInnerTruthyKey,
+      entry.outerFalsyInnerFalsyKey,
+    ].map(
+      (styleKey) =>
+        ({
+          styleKey,
+          patchable: true,
+          contributes: false,
+          source: "variant",
+        }) satisfies StyleSequenceEntry,
+    );
+  });
+}
+
+function buildVariantDimensionEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.variantDimensions ?? []).flatMap((dimension) => {
+    const entries: StyleSequenceEntry[] = Object.entries(dimension.variants).map(
+      ([variantKey, styleObj]) =>
+        ({
+          styleKey: `${dimension.variantObjectName}.${variantKey}`,
+          styleObj,
+          patchable: true,
+          contributes: false,
+          source: "variant",
+        }) satisfies StyleSequenceEntry,
+    );
+    if (dimension.fallbackFnKey) {
+      entries.push({
+        styleKey: dimension.fallbackFnKey,
+        patchable: true,
+        source: "styleFn",
+      });
+    }
+    return entries;
+  });
+}
+
 function buildAttrWrapperEntries(decl: StyledDecl): StyleSequenceEntry[] {
   const attrWrapper = decl.attrWrapper;
   if (!attrWrapper) {
@@ -270,6 +426,20 @@ function buildAttrWrapperEntries(decl: StyledDecl): StyleSequenceEntry[] {
     .map(
       (styleKey) => ({ styleKey, patchable: true, source: "attr" }) satisfies StyleSequenceEntry,
     );
+}
+
+function buildCallSiteCombinedEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.callSiteCombinedStyles ?? []).map((entry) => ({
+    styleKey: entry.styleKey,
+    patchable: true,
+    source: "combined",
+  }));
+}
+
+function buildPromotedStyleEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.promotedStyleProps ?? [])
+    .filter((entry) => !entry.mergeIntoBase)
+    .map((entry) => ({ styleKey: entry.styleKey, patchable: true, source: "promoted" }));
 }
 
 function buildEnumVariantEntries(decl: StyledDecl): StyleSequenceEntry[] {
@@ -380,6 +550,146 @@ function astObjectHasNullConditionalDefault(value: unknown): boolean {
     }
   }
   return hasCondition && hasNullDefault;
+}
+
+function hasNestedNullConditionalDefault(value: Record<string, unknown>): boolean {
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "__computedKeys" && computedEntriesHaveNullConditionalDefault(nested)) {
+      return true;
+    }
+    if (key === "default" || !isPlainStyleObject(nested)) {
+      continue;
+    }
+    if (isConditionalStyleMap(nested) && nested.default === null) {
+      return true;
+    }
+    if (hasNestedNullConditionalDefault(nested)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function patchNestedNullConditionalDefaults(
+  value: Record<string, unknown>,
+  inheritedDefault: string | number | boolean,
+): void {
+  for (const [key, nested] of Object.entries(value)) {
+    if (key === "__computedKeys") {
+      patchComputedEntryDefaults(nested, inheritedDefault);
+      continue;
+    }
+    if (key === "default" || !isPlainStyleObject(nested)) {
+      continue;
+    }
+    let nextDefault = inheritedDefault;
+    if (isConditionalStyleMap(nested)) {
+      if (nested.default === null) {
+        nested.default = inheritedDefault;
+      } else {
+        const nestedDefault = inferDefaultFromValue(nested);
+        if (nestedDefault.kind === "static" && nestedDefault.value !== null) {
+          nextDefault = nestedDefault.value;
+        }
+      }
+    }
+    patchNestedNullConditionalDefaults(nested, nextDefault);
+  }
+}
+
+function computedEntriesHaveNullConditionalDefault(value: unknown): boolean {
+  return getComputedEntryValues(value).some(
+    (entryValue) =>
+      (isPlainStyleObject(entryValue) &&
+        ((isConditionalStyleMap(entryValue) && entryValue.default === null) ||
+          hasNestedNullConditionalDefault(entryValue))) ||
+      astObjectHasNullConditionalDefault(entryValue),
+  );
+}
+
+function patchComputedEntryDefaults(
+  value: unknown,
+  inheritedDefault: string | number | boolean,
+): void {
+  for (const entryValue of getComputedEntryValues(value)) {
+    if (isObjectExpression(entryValue)) {
+      patchAstObjectNullConditionalDefaults(entryValue, inheritedDefault);
+      continue;
+    }
+    if (!isPlainStyleObject(entryValue)) {
+      continue;
+    }
+    let nextDefault = inheritedDefault;
+    if (isConditionalStyleMap(entryValue)) {
+      if (entryValue.default === null) {
+        entryValue.default = inheritedDefault;
+      } else {
+        const entryDefault = inferDefaultFromValue(entryValue);
+        if (entryDefault.kind === "static" && entryDefault.value !== null) {
+          nextDefault = entryDefault.value;
+        }
+      }
+    }
+    patchNestedNullConditionalDefaults(entryValue, nextDefault);
+  }
+}
+
+function getComputedEntryValues(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((entry) => (isAstRecord(entry) ? entry.value : undefined));
+}
+
+function patchAstObjectNullConditionalDefaults(
+  value: Record<string, unknown>,
+  inheritedDefault: string | number | boolean,
+): void {
+  let nextDefault = inheritedDefault;
+  for (const property of getObjectProperties(value)) {
+    const key = readPropertyKey(property);
+    if (key === "default") {
+      if (isNullLiteral(property.value)) {
+        property.value = astLiteral(inheritedDefault);
+      } else {
+        const staticDefault = readStaticAstLiteral(property.value);
+        if (staticDefault !== undefined && staticDefault !== null) {
+          nextDefault = staticDefault;
+        }
+      }
+      continue;
+    }
+    if (isObjectExpression(property.value)) {
+      patchAstObjectNullConditionalDefaults(property.value, nextDefault);
+    }
+  }
+}
+
+function astLiteral(value: string | number | boolean): Record<string, unknown> {
+  return { type: "Literal", value };
+}
+
+function readStaticAstLiteral(value: unknown): string | number | boolean | null | undefined {
+  if (!isAstRecord(value)) {
+    return undefined;
+  }
+  if (
+    value.type === "StringLiteral" ||
+    value.type === "NumericLiteral" ||
+    value.type === "BooleanLiteral" ||
+    value.type === "Literal"
+  ) {
+    return typeof value.value === "string" ||
+      typeof value.value === "number" ||
+      typeof value.value === "boolean" ||
+      value.value === null
+      ? value.value
+      : undefined;
+  }
+  if (value.type === "NullLiteral") {
+    return null;
+  }
+  return undefined;
 }
 
 function isStyleConditionKey(key: string): boolean {

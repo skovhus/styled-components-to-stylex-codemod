@@ -35,7 +35,7 @@ const styles = stylex.create({
       default: "#f0f0f0",
       ":active": "#e0e0e0",
       ":hover": {
-        default: null,
+        default: "#f0f0f0",
         [$interaction.canHover]: "#e0e0e0",
       },
     },
@@ -43,7 +43,7 @@ const styles = stylex.create({
       default: "#333",
       ":active": "#111",
       ":hover": {
-        default: null,
+        default: "#333",
         [$interaction.canHover]: "#111",
       },
     },
@@ -55,7 +55,7 @@ const styles = stylex.create({
       default: "#f0f0f0",
       ":not(:disabled):active": "#d0d0ff",
       ":not(:disabled):hover": {
-        default: null,
+        default: "#f0f0f0",
         [$interaction.canHover]: "#d0d0ff",
       },
     },
@@ -63,7 +63,7 @@ const styles = stylex.create({
       default: "#333",
       ":not(:disabled):active": "#000",
       ":not(:disabled):hover": {
-        default: null,
+        default: "#333",
         [$interaction.canHover]: "#000",
       },
     },

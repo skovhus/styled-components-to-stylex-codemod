@@ -94,7 +94,7 @@ const styles = stylex.create({
     boxShadow: {
       default: "0 2px 4px rgba(0, 0, 0, 0.1)",
       ":hover": {
-        default: null,
+        default: "0 2px 4px rgba(0, 0, 0, 0.1)",
         "@media (hover: hover)": "0 8px 16px rgba(0, 0, 0, 0.15)",
       },
     },

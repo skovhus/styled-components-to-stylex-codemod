@@ -28,7 +28,7 @@ const styles = stylex.create({
       default: "#f0f0f0",
       ":active": "#e0e0e0",
       ":hover": {
-        default: null,
+        default: "#f0f0f0",
         [$interaction.canHover]: "#e0e0e0",
       },
     },
