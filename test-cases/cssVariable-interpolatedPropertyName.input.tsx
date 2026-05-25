@@ -85,6 +85,19 @@ const SpecifierExportSetter = styled.div`
   padding: 8px;
 `;
 
+function ShadowedLocalSetter() {
+  const ITEM_MIN_WIDTH_VAR = "--locally-shadowed-name";
+
+  const ShadowedContainer = styled.div`
+    ${ITEM_MIN_WIDTH_VAR}: 100%;
+    background-color: darkorange;
+    color: white;
+    padding: 8px;
+  `;
+
+  return <ShadowedContainer>Sets --locally-shadowed-name from local shadow</ShadowedContainer>;
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <Container>Sets --item-min-width: 100%</Container>
@@ -94,5 +107,6 @@ export const App = () => (
     <BarrelMaxSetter>Sets --item-max-width via barrel star re-export</BarrelMaxSetter>
     <DirectoryBarrelSetter>Sets --item-gap via directory-style barrel</DirectoryBarrelSetter>
     <SpecifierExportSetter>Sets --item-padding via local-const re-export</SpecifierExportSetter>
+    <ShadowedLocalSetter />
   </div>
 );

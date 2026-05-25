@@ -330,7 +330,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
-      if (hasEnabledCompoundPseudoSelector(s) && normalizeEnabledCompoundPseudo(s, decl) === null) {
+      if (hasEnabledCompoundPseudoSelector(s)) {
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -1028,7 +1028,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
-    selector = normalizeEnabledCompoundPseudo(selector, decl) ?? selector;
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
     const { normalized: selectorNormalized, wasStripped: specificityStripped } =
@@ -2298,33 +2297,6 @@ function hasEnabledCompoundPseudoSelector(selector: string): boolean {
     return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
   });
 }
-
-function normalizeEnabledCompoundPseudo(selector: string | null, decl: StyledDecl): string | null {
-  if (!selector || !containsPseudoToken(selector, "enabled")) {
-    return selector;
-  }
-  if (!isDisabledCapableIntrinsic(decl)) {
-    return null;
-  }
-  return selector.replace(/:enabled\b/g, ":not(:disabled)");
-}
-
-function isDisabledCapableIntrinsic(decl: StyledDecl): boolean {
-  if (decl.base.kind !== "intrinsic") {
-    return false;
-  }
-  return DISABLED_CAPABLE_INTRINSIC_TAGS.has(decl.base.tagName);
-}
-
-const DISABLED_CAPABLE_INTRINSIC_TAGS = new Set([
-  "button",
-  "fieldset",
-  "input",
-  "optgroup",
-  "option",
-  "select",
-  "textarea",
-]);
 
 function isStylexCompilerPseudoElement(selector: string): boolean {
   // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.

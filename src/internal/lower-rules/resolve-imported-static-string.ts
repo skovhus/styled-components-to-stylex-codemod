@@ -28,6 +28,13 @@ export function resolveExpressionToStaticString(
   if (!isIdentifierNode(expr)) {
     return null;
   }
+  const scoped = resolveScopedConstStringInit(expr, state);
+  if (scoped?.kind === "found") {
+    return scoped.value;
+  }
+  if (scoped?.kind === "blocked") {
+    return null;
+  }
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
   }
@@ -96,6 +103,13 @@ function findConstDeclaratorString(declarations: unknown[], name: string): strin
 const MAX_REEXPORT_DEPTH = 8;
 
 type ParsedProgram = ReturnType<DeclProcessingState["state"]["api"]["jscodeshift"]>;
+
+type AstPathLike = {
+  node: object;
+  parentPath?: AstPathLike | null;
+};
+
+type ScopedStringResolution = { kind: "found"; value: string } | { kind: "blocked" } | null;
 
 /**
  * Per-state cached module resolver. Configured to prefer `.ts` over `.tsx`
@@ -325,6 +339,115 @@ function findTopLevelConstStringInit(
       }
     });
   return resolved;
+}
+
+function resolveScopedConstStringInit(
+  expr: { name: string },
+  state: DeclProcessingState["state"],
+): ScopedStringResolution {
+  const identPath = findIdentifierPath(expr, state);
+  const exprStart = getNodeStart(expr);
+  if (!identPath || exprStart === null) {
+    return null;
+  }
+
+  const ancestorScopes = getAncestorScopeNodes(identPath);
+  let best: { start: number; value: string | null } | null = null;
+
+  state.root.find(state.j.VariableDeclarator).forEach((p) => {
+    const declarator = p.node as {
+      id?: { type?: string; name?: string };
+      init?: unknown;
+    };
+    if (declarator.id?.type !== "Identifier" || declarator.id.name !== expr.name) {
+      return;
+    }
+
+    const start = getNodeStart(declarator);
+    if (start === null || start >= exprStart) {
+      return;
+    }
+
+    const path = p as AstPathLike;
+    const scopeNode = getDeclarationScopeNode(path, getVariableDeclarationKind(path));
+    if (!scopeNode || !ancestorScopes.has(scopeNode)) {
+      return;
+    }
+
+    const value =
+      getVariableDeclarationKind(path) === "const" ? literalToStaticValue(declarator.init) : null;
+    const candidate = { start, value: typeof value === "string" ? value : null };
+    if (!best || candidate.start > best.start) {
+      best = candidate;
+    }
+  });
+
+  const resolved = best as { start: number; value: string | null } | null;
+  if (!resolved) {
+    return null;
+  }
+  return resolved.value === null ? { kind: "blocked" } : { kind: "found", value: resolved.value };
+}
+
+function findIdentifierPath(expr: object, state: DeclProcessingState["state"]): AstPathLike | null {
+  const paths = state.root
+    .find(state.j.Identifier)
+    .filter((p) => p.node === expr)
+    .paths();
+  return (paths[0] as AstPathLike | undefined) ?? null;
+}
+
+function getNodeStart(node: unknown): number | null {
+  const start = (node as { start?: unknown }).start;
+  return typeof start === "number" ? start : null;
+}
+
+function getAncestorScopeNodes(path: AstPathLike): Set<object> {
+  const scopes = new Set<object>();
+  let cur: AstPathLike | null | undefined = path;
+  while (cur) {
+    if (isScopeNode(cur.node)) {
+      scopes.add(cur.node);
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return scopes;
+}
+
+function getDeclarationScopeNode(path: AstPathLike, declarationKind: string | null): object | null {
+  let cur: AstPathLike | null | undefined = path.parentPath;
+  while (cur) {
+    if (declarationKind === "var" && isFunctionOrProgramNode(cur.node)) {
+      return cur.node;
+    }
+    if (declarationKind !== "var" && isScopeNode(cur.node)) {
+      return cur.node;
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return null;
+}
+
+function getVariableDeclarationKind(path: AstPathLike): string | null {
+  const parentNode = path.parentPath?.node as { type?: string; kind?: unknown } | undefined;
+  return parentNode?.type === "VariableDeclaration" && typeof parentNode.kind === "string"
+    ? parentNode.kind
+    : null;
+}
+
+function isScopeNode(node: unknown): boolean {
+  const type = (node as { type?: unknown }).type;
+  return type === "Program" || type === "BlockStatement";
+}
+
+function isFunctionOrProgramNode(node: unknown): boolean {
+  const type = (node as { type?: unknown }).type;
+  return (
+    type === "Program" ||
+    type === "FunctionDeclaration" ||
+    type === "FunctionExpression" ||
+    type === "ArrowFunctionExpression"
+  );
 }
 
 /**

@@ -3,6 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 
 const ITEM_MIN_WIDTH_VAR = "--item-min-width";
 
+function ShadowedLocalSetter() {
+  const ITEM_MIN_WIDTH_VAR = "--locally-shadowed-name";
+
+  return <div sx={styles.shadowedContainer}>Sets --locally-shadowed-name from local shadow</div>;
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
     <div sx={styles.container}>Sets --item-min-width: 100%</div>
@@ -14,6 +20,7 @@ export const App = () => (
     <div sx={styles.barrelMaxSetter}>Sets --item-max-width via barrel star re-export</div>
     <div sx={styles.directoryBarrelSetter}>Sets --item-gap via directory-style barrel</div>
     <div sx={styles.specifierExportSetter}>Sets --item-padding via local-const re-export</div>
+    <ShadowedLocalSetter />
   </div>
 );
 
@@ -77,6 +84,13 @@ const styles = stylex.create({
   specifierExportSetter: {
     "--item-padding": "16px",
     backgroundColor: "chocolate",
+    color: "white",
+    padding: 8,
+  },
+
+  shadowedContainer: {
+    "--locally-shadowed-name": "100%",
+    backgroundColor: "darkorange",
     color: "white",
     padding: 8,
   },
