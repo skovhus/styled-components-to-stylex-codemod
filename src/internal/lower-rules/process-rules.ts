@@ -2350,7 +2350,7 @@ function hasNonFormControlAsUsage(
       return;
     }
     const name = path.node.openingElement.name;
-    if (!jsxNameTargetsLocalBinding({ root, j, name, localName: componentName })) {
+    if (!jsxNameTargetsLocalBinding({ root, j, name, localName: componentName, fromPath: path })) {
       return;
     }
     for (const attr of path.node.openingElement.attributes ?? []) {
@@ -2371,8 +2371,9 @@ function hasNonFormControlAsUsage(
       }
     }
   });
+  const createElementBindings = collectCreateElementBindings(root, j);
   root.find(j.CallExpression).forEach((path) => {
-    if (unsafe || !isReactCreateElementCall(path.node)) {
+    if (unsafe || !isReactCreateElementCall(path.node, createElementBindings)) {
       return;
     }
     const [componentArg, propsArg] = path.node.arguments ?? [];
@@ -2386,15 +2387,22 @@ function hasNonFormControlAsUsage(
   return unsafe;
 }
 
-function isReactCreateElementCall(node: unknown): boolean {
+function isReactCreateElementCall(
+  node: unknown,
+  createElementBindings: ReadonlySet<string>,
+): boolean {
   const call = node as { callee?: unknown } | null | undefined;
   const callee = call?.callee as
     | {
         type?: string;
+        name?: string;
         object?: { type?: string; name?: string };
         property?: { type?: string; name?: string };
       }
     | undefined;
+  if (callee?.type === "Identifier" && callee.name) {
+    return createElementBindings.has(callee.name);
+  }
   return (
     callee?.type === "MemberExpression" &&
     callee.object?.type === "Identifier" &&
@@ -2402,6 +2410,29 @@ function isReactCreateElementCall(node: unknown): boolean {
     callee.property?.type === "Identifier" &&
     callee.property.name === "createElement"
   );
+}
+
+function collectCreateElementBindings(
+  root: DeclProcessingState["state"]["root"],
+  j: JSCodeshift,
+): Set<string> {
+  const names = new Set<string>();
+  root.find(j.ImportDeclaration).forEach((path) => {
+    if ((path.node.source as { value?: unknown }).value !== "react") {
+      return;
+    }
+    for (const specifier of path.node.specifiers ?? []) {
+      if (
+        specifier.type === "ImportSpecifier" &&
+        specifier.imported?.type === "Identifier" &&
+        specifier.imported.name === "createElement" &&
+        specifier.local?.type === "Identifier"
+      ) {
+        names.add(specifier.local.name);
+      }
+    }
+  });
+  return names;
 }
 
 function valueExpressionTargetsLocalBinding(

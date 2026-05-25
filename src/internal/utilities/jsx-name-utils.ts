@@ -23,12 +23,16 @@ export function jsxNameTargetsLocalBinding(args: {
   j: JSCodeshift;
   name: unknown;
   localName: string;
+  fromPath?: { parentPath?: unknown };
 }): boolean {
   const path = jsxNamePath(args.name);
   if (path.length === 1) {
     return (
       path[0] === args.localName ||
-      (!!path[0] && localAliasTargetsLocal(args.root, args.j, path[0], args.localName))
+      (!!path[0] &&
+        localAliasTargetsLocal(args.root, args.j, path[0], args.localName, {
+          fromPath: args.fromPath,
+        }))
     );
   }
   const memberName = path[path.length - 1];
@@ -47,8 +51,9 @@ function localAliasTargetsLocal(
   j: JSCodeshift,
   aliasName: string,
   localName: string,
-  seen: Set<string> = new Set<string>(),
+  options: { fromPath?: { parentPath?: unknown }; seen?: Set<string> } = {},
 ): boolean {
+  const seen = options.seen ?? new Set<string>();
   if (aliasName === localName) {
     return true;
   }
@@ -59,17 +64,159 @@ function localAliasTargetsLocal(
   let matched = false;
   root
     .find(j.VariableDeclarator, { id: { type: "Identifier", name: aliasName } } as any)
-    .filter(isModuleScopeVariableDeclarator)
+    .filter((path) =>
+      options.fromPath
+        ? variableDeclaratorIsVisibleFrom(path, options.fromPath)
+        : isModuleScopeVariableDeclarator(path),
+    )
     .forEach((path) => {
       if (matched) {
         return;
       }
       const init = path.node.init as { type?: string; name?: string } | null | undefined;
+      if (
+        init?.type === "Identifier" &&
+        init.name === localName &&
+        localNameIsShadowedForAlias(path, localName)
+      ) {
+        return;
+      }
       matched =
         init?.type === "Identifier" &&
-        localAliasTargetsLocal(root, j, init.name ?? "", localName, seen);
+        localAliasTargetsLocal(root, j, init.name ?? "", localName, {
+          ...options,
+          seen,
+        });
     });
   return matched;
+}
+
+function localNameIsShadowedForAlias(path: { parentPath?: unknown }, localName: string): boolean {
+  if (isModuleScopeVariableDeclarator(path)) {
+    return false;
+  }
+  let current = path.parentPath as
+    | { node?: { type?: string; params?: unknown[]; body?: unknown[] }; parentPath?: unknown }
+    | undefined;
+  while (current?.node) {
+    if (current.node.type === "Program" || current.node.type === "ExportNamedDeclaration") {
+      return false;
+    }
+    if (
+      functionParamsContainName(current.node, localName) ||
+      blockStatementsDeclareName(current.node, localName)
+    ) {
+      return true;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return false;
+}
+
+function functionParamsContainName(
+  node: { type?: string; params?: unknown[] } | undefined,
+  name: string,
+): boolean {
+  if (
+    node?.type !== "FunctionDeclaration" &&
+    node?.type !== "FunctionExpression" &&
+    node?.type !== "ArrowFunctionExpression"
+  ) {
+    return false;
+  }
+  return (node.params ?? []).some((param) => patternContainsName(param, name));
+}
+
+function blockStatementsDeclareName(
+  node: { type?: string; body?: unknown[] } | undefined,
+  name: string,
+): boolean {
+  if (node?.type !== "BlockStatement") {
+    return false;
+  }
+  return (node.body ?? []).some((statement) => {
+    const stmt = statement as { type?: string; declarations?: unknown[] } | null;
+    return (
+      stmt?.type === "VariableDeclaration" &&
+      (stmt.declarations ?? []).some((decl) =>
+        patternContainsName((decl as { id?: unknown }).id, name),
+      )
+    );
+  });
+}
+
+function patternContainsName(pattern: unknown, name: string): boolean {
+  const node = pattern as {
+    type?: string;
+    name?: string;
+    properties?: unknown[];
+    elements?: unknown[];
+    argument?: unknown;
+    left?: unknown;
+  } | null;
+  if (!node) {
+    return false;
+  }
+  if (node.type === "Identifier") {
+    return node.name === name;
+  }
+  if (node.type === "ObjectPattern") {
+    return (node.properties ?? []).some((prop) =>
+      patternContainsName(
+        (prop as { value?: unknown; argument?: unknown }).value ??
+          (prop as { argument?: unknown }).argument,
+        name,
+      ),
+    );
+  }
+  if (node.type === "ArrayPattern") {
+    return (node.elements ?? []).some((element) => patternContainsName(element, name));
+  }
+  if (node.type === "RestElement") {
+    return patternContainsName(node.argument, name);
+  }
+  if (node.type === "AssignmentPattern") {
+    return patternContainsName(node.left, name);
+  }
+  return false;
+}
+
+function variableDeclaratorIsVisibleFrom(
+  declaratorPath: { parentPath?: unknown },
+  fromPath: { parentPath?: unknown },
+): boolean {
+  if (isModuleScopeVariableDeclarator(declaratorPath)) {
+    return true;
+  }
+  const declaratorScope = nearestFunctionOrBlockScope(declaratorPath);
+  return !!declaratorScope && scopeContainsPath(declaratorScope, fromPath);
+}
+
+function nearestFunctionOrBlockScope(path: { parentPath?: unknown }): unknown {
+  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
+  while (current?.node) {
+    if (
+      current.node.type === "BlockStatement" ||
+      current.node.type === "FunctionDeclaration" ||
+      current.node.type === "FunctionExpression" ||
+      current.node.type === "ArrowFunctionExpression"
+    ) {
+      return current;
+    }
+    current = current.parentPath as typeof current;
+  }
+  return null;
+}
+
+function scopeContainsPath(scopePath: unknown, path: { parentPath?: unknown }): boolean {
+  let current: unknown = path;
+  while (current) {
+    if (current === scopePath) {
+      return true;
+    }
+    current = (current as { parentPath?: unknown }).parentPath;
+  }
+  return false;
 }
 
 export function namespaceMemberTargetsLocal(
