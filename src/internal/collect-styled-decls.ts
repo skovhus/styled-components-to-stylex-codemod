@@ -1736,23 +1736,29 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
 }
 
-function literalStaticValueFromNode(node: any): string | number | boolean | undefined {
-  if (node?.type === "StringLiteral" || node?.type === "NumericLiteral") {
-    return node.value;
+function literalStaticValueFromNode(node: unknown): string | number | boolean | undefined {
+  if (!node || typeof node !== "object") {
+    return undefined;
   }
-  if (node?.type === "BooleanLiteral") {
-    return node.value;
+  const typed = node as { type?: string; value?: unknown; expression?: unknown };
+  if (typed.type === "StringLiteral" || typed.type === "NumericLiteral") {
+    return typeof typed.value === "string" || typeof typed.value === "number"
+      ? typed.value
+      : undefined;
+  }
+  if (typed.type === "BooleanLiteral") {
+    return typeof typed.value === "boolean" ? typed.value : undefined;
   }
   if (
-    node?.type === "Literal" &&
-    (typeof node.value === "string" ||
-      typeof node.value === "number" ||
-      typeof node.value === "boolean")
+    typed.type === "Literal" &&
+    (typeof typed.value === "string" ||
+      typeof typed.value === "number" ||
+      typeof typed.value === "boolean")
   ) {
-    return node.value;
+    return typed.value;
   }
-  if (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
-    return literalStaticValueFromNode(node.expression);
+  if (typed.type === "TSAsExpression" || typed.type === "TSSatisfiesExpression") {
+    return literalStaticValueFromNode(typed.expression);
   }
   return undefined;
 }
