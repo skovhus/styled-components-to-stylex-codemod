@@ -710,6 +710,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   --optional-color-panel-background-color: var(--x---optional-color-panel-background-color);
 }
 
+.x1z7xqp {
+  --outer-loop-name: 25%;
+}
+
 .xfxf9ic {
   --settings-list-view-border-color: #bf4f74;
 }
@@ -2515,6 +2519,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xg3vklh:not(#\#):not(#\#):not(#\#) {
   background-color: #3cb371;
+}
+
+.x1el4p72:not(#\#):not(#\#):not(#\#) {
+  background-color: #c71585;
 }
 
 .x9g8dfu:not(#\#):not(#\#):not(#\#) {
