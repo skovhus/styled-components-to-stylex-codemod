@@ -2936,6 +2936,16 @@ function resolveMediaAndEmitComputedKeys(
   const { state, decl } = ctx;
   const { warnings } = state;
 
+  if (hasUnsupportedAtRule(rule.atRuleStack)) {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
   let media = findSupportedAtRule(rule.atRuleStack);
   if (media) {
     const resolved = resolveMediaAtRulePlaceholders(
@@ -3091,6 +3101,16 @@ function handleAdjacentSiblingSelector(
     state.warnings.push({
       severity: "warning",
       type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  if (hasUnsupportedAtRule(rule.atRuleStack)) {
+    state.markBail();
+    state.warnings.push({
+      severity: "warning",
+      type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
       loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
     });
     return "break";
