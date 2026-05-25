@@ -12,7 +12,6 @@ import {
   cloneAstNode,
   getFunctionBodyExpr,
   getNodeLocStart,
-  literalToStaticValue,
 } from "./utilities/jscodeshift-utils.js";
 import { resolveBackgroundStylexProp } from "./css-prop-mapping.js";
 import { parseStyledTemplateLiteral } from "./styled-css.js";
@@ -352,7 +351,7 @@ function collectStyledDeclsImpl(args: {
     if (decls.length !== 1) {
       return undefined;
     }
-    const value = literalToStaticValue((decls.get().node as any).init);
+    const value = literalStaticValueFromNode((decls.get().node as any).init);
     return typeof value === "string" || typeof value === "number" ? value : undefined;
   };
 
@@ -1727,14 +1726,35 @@ function getAttrsParamInfo(params: any[] | undefined): AttrsParamInfo {
     ) {
       names.add(value.left.name);
       propByLocalName.set(value.left.name, propName);
-      const defaultValue = literalToStaticValue(value.right);
-      if (defaultValue !== null) {
+      const defaultValue = literalStaticValueFromNode(value.right);
+      if (defaultValue !== undefined) {
         defaultsByPropName.set(propName, defaultValue);
       }
     }
   }
 
   return { propNames: names, propByLocalName, defaultsByPropName, rootNames, localNames };
+}
+
+function literalStaticValueFromNode(node: any): string | number | boolean | undefined {
+  if (node?.type === "StringLiteral" || node?.type === "NumericLiteral") {
+    return node.value;
+  }
+  if (node?.type === "BooleanLiteral") {
+    return node.value;
+  }
+  if (
+    node?.type === "Literal" &&
+    (typeof node.value === "string" ||
+      typeof node.value === "number" ||
+      typeof node.value === "boolean")
+  ) {
+    return node.value;
+  }
+  if (node?.type === "TSAsExpression" || node?.type === "TSSatisfiesExpression") {
+    return literalStaticValueFromNode(node.expression);
+  }
+  return undefined;
 }
 
 function isStaticAttrExpression(node: any, attrsParamInfo: AttrsParamInfo): boolean {
