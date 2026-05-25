@@ -478,85 +478,42 @@ function functionDeclaresName(node: object, name: string): boolean {
 }
 
 function collectFunctionVarBindings(node: object, out: Set<string>): void {
-  const fn = node as { body?: { type?: string; body?: unknown[] } };
-  const body = fn.body?.type === "BlockStatement" ? (fn.body.body ?? []) : [];
-  for (const statement of body) {
-    collectVarBindingsInFunctionStatement(statement, out);
-  }
-}
+  const visit = (current: unknown, isRoot = false): void => {
+    if (!current || typeof current !== "object") {
+      return;
+    }
+    if (Array.isArray(current)) {
+      for (const child of current) {
+        visit(child);
+      }
+      return;
+    }
 
-function collectVarBindingsInFunctionStatement(statement: unknown, out: Set<string>): void {
-  if (!statement || typeof statement !== "object") {
-    return;
-  }
-  const stmt = statement as {
-    type?: string;
-    kind?: string;
-    declarations?: Array<{ id?: unknown }>;
-    body?: unknown;
-    consequent?: unknown[];
-    alternate?: unknown;
-    cases?: Array<{ consequent?: unknown[] }>;
-    init?: unknown;
-    left?: unknown;
-  };
-  switch (stmt.type) {
-    case "FunctionDeclaration":
-    case "FunctionExpression":
-    case "ArrowFunctionExpression":
+    if (!isRoot && isFunctionNode(current)) {
       return;
-    case "VariableDeclaration":
-      if (stmt.kind === "var") {
-        for (const declarator of stmt.declarations ?? []) {
-          collectPatternIdentifiers(declarator.id, out);
-        }
-      }
-      return;
-    case "BlockStatement":
-      for (const child of (stmt.body as unknown[] | undefined) ?? []) {
-        collectVarBindingsInFunctionStatement(child, out);
-      }
-      return;
-    case "IfStatement":
-      collectVarBindingsInFunctionStatement(stmt.consequent, out);
-      collectVarBindingsInFunctionStatement(stmt.alternate, out);
-      return;
-    case "SwitchStatement":
-      for (const switchCase of stmt.cases ?? []) {
-        for (const child of switchCase.consequent ?? []) {
-          collectVarBindingsInFunctionStatement(child, out);
-        }
-      }
-      return;
-    case "ForStatement":
-      collectFunctionVarLoopBinding(stmt.init, out);
-      collectVarBindingsInFunctionStatement(stmt.body, out);
-      return;
-    case "ForInStatement":
-    case "ForOfStatement":
-      collectFunctionVarLoopBinding(stmt.left, out);
-      collectVarBindingsInFunctionStatement(stmt.body, out);
-      return;
-    default:
-      return;
-  }
-}
+    }
 
-function collectFunctionVarLoopBinding(binding: unknown, out: Set<string>): void {
-  if (!binding || typeof binding !== "object") {
-    return;
-  }
-  const declaration = binding as {
-    type?: string;
-    kind?: string;
-    declarations?: Array<{ id?: unknown }>;
+    const astNode = current as {
+      type?: string;
+      kind?: string;
+      declarations?: Array<{ id?: unknown }>;
+      [key: string]: unknown;
+    };
+    if (astNode.type === "VariableDeclaration" && astNode.kind === "var") {
+      for (const declarator of astNode.declarations ?? []) {
+        collectPatternIdentifiers(declarator.id, out);
+      }
+      return;
+    }
+
+    for (const key of Object.keys(astNode)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      visit(astNode[key]);
+    }
   };
-  if (declaration.type !== "VariableDeclaration" || declaration.kind !== "var") {
-    return;
-  }
-  for (const declarator of declaration.declarations ?? []) {
-    collectPatternIdentifiers(declarator.id, out);
-  }
+  visit(node, true);
 }
 
 function catchClauseDeclaresName(node: object, name: string): boolean {
