@@ -330,7 +330,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         continue;
       }
 
-      if (hasEnabledCompoundPseudoSelector(s)) {
+      if (hasEnabledCompoundPseudoSelector(s) && normalizeEnabledCompoundPseudo(s, decl) === null) {
         state.markBail();
         warnings.push({
           severity: "warning",
@@ -1019,7 +1019,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       state.markBail();
       warnings.push({
         severity: "warning",
-        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+        type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
       break;
@@ -1028,6 +1028,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
+    selector = normalizeEnabledCompoundPseudo(selector, decl) ?? selector;
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
     const { normalized: selectorNormalized, wasStripped: specificityStripped } =
@@ -1338,38 +1339,61 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         localVarValues.set(prop, value);
       }
 
-      // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
-      // This produces: { ":hover": { default: value, "@media (...)": value } }
+      // Handle nested pseudo + condition: `&:hover { @media (...) { ... } }`
       if (media && pseudos?.length) {
-        perPropPseudo[prop] ??= {};
-        const existing = perPropPseudo[prop]!;
-        noteSourceCssProperty(existing);
-        if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          if (existingVal !== undefined) {
-            existing.default = existingVal;
-          } else if (cssHelperPropValues.has(prop)) {
-            existing.default = getComposedDefaultValue(prop);
-          } else {
-            existing.default = null;
+        if (media.startsWith("@supports")) {
+          perPropMedia[prop] ??= {};
+          const existing = perPropMedia[prop]!;
+          noteSourceCssProperty(existing);
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
           }
-        }
-        // For each pseudo, create/update a nested media map
-        for (const ps of pseudos) {
-          const current = existing[ps];
-          if (!current || typeof current !== "object") {
-            const fallbackDefault = cssHelperPropValues.has(prop)
-              ? getComposedDefaultValue(prop)
-              : null;
-            const preservedDefault = current !== undefined ? current : fallbackDefault;
-            existing[ps] = { default: preservedDefault };
-          } else if (!("default" in (current as Record<string, unknown>))) {
-            const fallbackDefault = cssHelperPropValues.has(prop)
-              ? getComposedDefaultValue(prop)
-              : null;
-            (current as Record<string, unknown>).default = fallbackDefault;
+          const current = existing[media];
+          const mediaMap =
+            current && typeof current === "object" && !Array.isArray(current) && !isAstNode(current)
+              ? (current as Record<string, unknown>)
+              : { default: current ?? null };
+          for (const ps of pseudos) {
+            mediaMap[ps] = value;
           }
-          (existing[ps] as Record<string, unknown>)[media] = value;
+          existing[media] = mediaMap;
+        } else {
+          perPropPseudo[prop] ??= {};
+          const existing = perPropPseudo[prop]!;
+          noteSourceCssProperty(existing);
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
+          }
+          for (const ps of pseudos) {
+            const current = existing[ps];
+            if (!current || typeof current !== "object") {
+              const fallbackDefault = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              const preservedDefault = current !== undefined ? current : fallbackDefault;
+              existing[ps] = { default: preservedDefault };
+            } else if (!("default" in (current as Record<string, unknown>))) {
+              const fallbackDefault = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              (current as Record<string, unknown>).default = fallbackDefault;
+            }
+            (existing[ps] as Record<string, unknown>)[media] = value;
+          }
         }
         return;
       }
@@ -2274,6 +2298,33 @@ function hasEnabledCompoundPseudoSelector(selector: string): boolean {
     return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
   });
 }
+
+function normalizeEnabledCompoundPseudo(selector: string | null, decl: StyledDecl): string | null {
+  if (!selector || !containsPseudoToken(selector, "enabled")) {
+    return selector;
+  }
+  if (!isDisabledCapableIntrinsic(decl)) {
+    return null;
+  }
+  return selector.replace(/:enabled\b/g, ":not(:disabled)");
+}
+
+function isDisabledCapableIntrinsic(decl: StyledDecl): boolean {
+  if (decl.base.kind !== "intrinsic") {
+    return false;
+  }
+  return DISABLED_CAPABLE_INTRINSIC_TAGS.has(decl.base.tagName);
+}
+
+const DISABLED_CAPABLE_INTRINSIC_TAGS = new Set([
+  "button",
+  "fieldset",
+  "input",
+  "optgroup",
+  "option",
+  "select",
+  "textarea",
+]);
 
 function isStylexCompilerPseudoElement(selector: string): boolean {
   // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.

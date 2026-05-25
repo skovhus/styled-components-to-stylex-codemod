@@ -294,13 +294,13 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     const mediaStyles = new Map<string, Record<string, unknown>>();
     for (const rule of rules) {
       const media = findSupportedAtRule(rule.atRuleStack);
-      // Only support @media and @container at-rules; bail on others (@supports, etc.).
-      // Mixed stacks such as @supports { @media { ... } } must also bail because
-      // preserving only the media query would make the guarded declarations too broad.
+      // Support StyleX condition at-rules; bail on non-StyleX at-rules or unsafe mixed stacks.
+      // Mixed stacks such as @supports { @media { ... } } must still bail because
+      // preserving only one condition would make the guarded declarations too broad.
       if (hasUnsupportedAtRule(rule.atRuleStack)) {
         warnings.push({
           severity: "warning",
-          type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+          type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
           loc: decl.loc,
         });
         return null;

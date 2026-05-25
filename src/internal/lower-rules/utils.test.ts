@@ -11,41 +11,49 @@ import {
 } from "./utils.js";
 
 describe("isSupportedAtRule", () => {
-  it("supports @media and @container", () => {
+  it("supports StyleX condition at-rules", () => {
     expect(isSupportedAtRule("@media (min-width: 768px)")).toBe(true);
     expect(isSupportedAtRule("@container (min-width: 500px)")).toBe(true);
+    expect(isSupportedAtRule("@supports (display: grid)")).toBe(true);
   });
 
-  it("rejects @supports, @keyframes, @font-face", () => {
-    expect(isSupportedAtRule("@supports (display: grid)")).toBe(false);
+  it("rejects unsupported at-rules", () => {
     expect(isSupportedAtRule("@keyframes fade")).toBe(false);
     expect(isSupportedAtRule("@font-face")).toBe(false);
   });
 });
 
 describe("findSupportedAtRule", () => {
-  it("finds first supported rule, skipping unsupported ones", () => {
-    expect(findSupportedAtRule(["@supports (display: grid)", "@media (min-width: 768px)"])).toBe(
-      "@media (min-width: 768px)",
-    );
+  it("returns a single supported condition", () => {
+    expect(findSupportedAtRule(["@media (min-width: 768px)"])).toBe("@media (min-width: 768px)");
+  });
+
+  it("combines nested @supports conditions", () => {
+    expect(
+      findSupportedAtRule([
+        "@supports (interpolate-size: allow-keywords)",
+        "@supports (height: calc-size(auto, size))",
+      ]),
+    ).toBe("@supports (interpolate-size: allow-keywords) and (height: calc-size(auto, size))");
   });
 
   it("returns undefined when no supported rules exist", () => {
-    expect(findSupportedAtRule(["@supports (display: grid)"])).toBeUndefined();
+    expect(findSupportedAtRule(["@keyframes fade"])).toBeUndefined();
+    expect(
+      findSupportedAtRule(["@supports (display: grid)", "@media (min-width: 768px)"]),
+    ).toBeUndefined();
     expect(findSupportedAtRule([])).toBeUndefined();
   });
 });
 
 describe("hasUnsupportedAtRule", () => {
-  it("returns false for empty and supported-only stacks", () => {
+  it("returns false for empty and supported stacks", () => {
     expect(hasUnsupportedAtRule([])).toBe(false);
-    expect(
-      hasUnsupportedAtRule(["@media (min-width: 768px)", "@container (min-width: 500px)"]),
-    ).toBe(false);
+    expect(hasUnsupportedAtRule(["@supports (display: grid)"])).toBe(false);
   });
 
-  it("returns true for unsupported or mixed stacks", () => {
-    expect(hasUnsupportedAtRule(["@supports (height: calc-size(auto, size))"])).toBe(true);
+  it("returns true for unsupported or unsafe mixed stacks", () => {
+    expect(hasUnsupportedAtRule(["@keyframes fade"])).toBe(true);
     expect(hasUnsupportedAtRule(["@supports (display: grid)", "@media (min-width: 768px)"])).toBe(
       true,
     );
