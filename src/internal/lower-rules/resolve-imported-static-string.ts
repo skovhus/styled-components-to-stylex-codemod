@@ -373,6 +373,9 @@ function resolveScopedConstStringInit(
     if (!scopeNode || !ancestorScopes.has(scopeNode)) {
       return;
     }
+    if (isProgramNode(scopeNode)) {
+      return;
+    }
 
     const value =
       getVariableDeclarationKind(path) === "const" ? literalToStaticValue(declarator.init) : null;
@@ -437,7 +440,11 @@ function getVariableDeclarationKind(path: AstPathLike): string | null {
 
 function isScopeNode(node: unknown): boolean {
   const type = (node as { type?: unknown }).type;
-  return type === "Program" || type === "BlockStatement";
+  return isProgramNode(node) || type === "BlockStatement";
+}
+
+function isProgramNode(node: unknown): boolean {
+  return (node as { type?: unknown }).type === "Program";
 }
 
 function isFunctionOrProgramNode(node: unknown): boolean {
