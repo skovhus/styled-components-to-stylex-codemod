@@ -47,7 +47,15 @@ function localAliasTargetsLocal(
   j: JSCodeshift,
   aliasName: string,
   localName: string,
+  seen: Set<string> = new Set<string>(),
 ): boolean {
+  if (aliasName === localName) {
+    return true;
+  }
+  if (seen.has(aliasName)) {
+    return false;
+  }
+  seen.add(aliasName);
   let matched = false;
   root
     .find(j.VariableDeclarator, { id: { type: "Identifier", name: aliasName } } as any)
@@ -56,7 +64,9 @@ function localAliasTargetsLocal(
         return;
       }
       const init = path.node.init as { type?: string; name?: string } | null | undefined;
-      matched = init?.type === "Identifier" && init.name === localName;
+      matched =
+        init?.type === "Identifier" &&
+        localAliasTargetsLocal(root, j, init.name ?? "", localName, seen);
     });
   return matched;
 }
