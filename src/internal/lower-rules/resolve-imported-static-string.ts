@@ -497,6 +497,8 @@ function collectVarBindingsInFunctionStatement(statement: unknown, out: Set<stri
     consequent?: unknown[];
     alternate?: unknown;
     cases?: Array<{ consequent?: unknown[] }>;
+    init?: unknown;
+    left?: unknown;
   };
   switch (stmt.type) {
     case "FunctionDeclaration":
@@ -526,8 +528,34 @@ function collectVarBindingsInFunctionStatement(statement: unknown, out: Set<stri
         }
       }
       return;
+    case "ForStatement":
+      collectFunctionVarLoopBinding(stmt.init, out);
+      collectVarBindingsInFunctionStatement(stmt.body, out);
+      return;
+    case "ForInStatement":
+    case "ForOfStatement":
+      collectFunctionVarLoopBinding(stmt.left, out);
+      collectVarBindingsInFunctionStatement(stmt.body, out);
+      return;
     default:
       return;
+  }
+}
+
+function collectFunctionVarLoopBinding(binding: unknown, out: Set<string>): void {
+  if (!binding || typeof binding !== "object") {
+    return;
+  }
+  const declaration = binding as {
+    type?: string;
+    kind?: string;
+    declarations?: Array<{ id?: unknown }>;
+  };
+  if (declaration.type !== "VariableDeclaration" || declaration.kind !== "var") {
+    return;
+  }
+  for (const declarator of declaration.declarations ?? []) {
+    collectPatternIdentifiers(declarator.id, out);
   }
 }
 
