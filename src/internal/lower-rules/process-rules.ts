@@ -7,7 +7,6 @@ import type { SelectorResolveResult } from "../../adapter.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { CssDeclarationIR, CssValuePart } from "../css-ir.js";
-import { collectExportedComponents } from "../analyze-before-emit/exported-components.js";
 import { computeSelectorWarningLoc } from "../css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
 import { addPropComments } from "./comments.js";
@@ -51,15 +50,8 @@ import type { RelationOverride } from "./state.js";
 import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
-import { jsxNameTargetsLocalBinding } from "../utilities/jsx-name-utils.js";
-import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
-import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
-import {
-  ensureShouldForwardPropDrop,
-  literalToStaticValue,
-  resolveTypeNodeFromTsType,
-} from "./types.js";
+import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   unwrapArrowFunctionToPropsExpr,
@@ -336,6 +328,16 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         // pseudoAlias and media both handled all declarations —
         // skip remaining rule processing for this rule.
         continue;
+      }
+
+      if (hasEnabledCompoundPseudoSelector(s)) {
+        state.markBail();
+        warnings.push({
+          severity: "warning",
+          type: "Unsupported selector: compound pseudo selector",
+          loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+        });
+        break;
       }
 
       // Component selector patterns that have special handling below:
@@ -1026,16 +1028,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     const intrinsicTagName = decl.base.kind === "intrinsic" ? decl.base.tagName : null;
     let selector = normalizeSelectorForAttributePseudos(rule.selector, intrinsicTagName);
     selector = normalizeInterpolatedSelector(selector);
-    selector = normalizeEnabledPseudoForSupportedIntrinsic(selector, decl, state);
-    if (hasEnabledCompoundPseudoSelector(selector)) {
-      state.markBail();
-      warnings.push({
-        severity: "warning",
-        type: "Unsupported selector: compound pseudo selector",
-        loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
-      });
-      break;
-    }
     // Normalize specificity hacks (&&) to base selector (&).
     // Higher tiers (&&&) are caught in the heuristic check above.
     const { normalized: selectorNormalized, wasStripped: specificityStripped } =
@@ -2221,7 +2213,7 @@ function tryResolveInterpolatedPseudo(
   ctx: DeclProcessingState,
   prefixPseudo?: string | null,
 ): "bail" | void {
-  const { state, decl } = ctx;
+  const { state } = ctx;
   const { resolveSelector, resolveImportInScope } = state;
 
   if (!slotExpr) {
@@ -2262,456 +2254,14 @@ function tryResolveInterpolatedPseudo(
   }
 
   if (selectorResult.kind === "pseudoExpand") {
-    const resolvedPrefixPseudo = prefixPseudo
-      ? normalizeEnabledPseudoForSupportedIntrinsic(prefixPseudo, decl, state)
-      : prefixPseudo;
-    if (
-      resolvedPrefixPseudo &&
-      containsEnabledPseudo(resolvedPrefixPseudo) &&
-      !canUseEnabledPseudoForSupportedIntrinsic(decl, state)
-    ) {
+    if (prefixPseudo && containsPseudoToken(prefixPseudo, "enabled")) {
       return "bail";
     }
-    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, resolvedPrefixPseudo);
+    return handlePseudoExpand(selectorResult, imp.importedName, rule, ctx, prefixPseudo);
   }
 
   // "media" kind is not applicable for pseudo selectors
   return "bail";
-}
-
-function isStylexCompilerPseudoElement(selector: string): boolean {
-  // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.
-  // Keep this broader than the eslint plugin's finite allowlist so linter lag does not force bailouts.
-  return selector.startsWith("::");
-}
-
-const ENABLED_PSEUDO_INTRINSIC_TAGS = new Set([
-  "button",
-  "fieldset",
-  "input",
-  "optgroup",
-  "option",
-  "select",
-  "textarea",
-]);
-
-function normalizeEnabledPseudoForSupportedIntrinsic(
-  selector: string,
-  decl: StyledDecl,
-  state: DeclProcessingState["state"],
-): string {
-  if (!canUseEnabledPseudoForSupportedIntrinsic(decl, state)) {
-    return selector;
-  }
-  return selector.replace(/(^|[,&]\s*):enabled(?=[:\s,{]|$)/g, "$1:not(:disabled)");
-}
-
-function canUseEnabledPseudoForSupportedIntrinsic(
-  decl: StyledDecl,
-  state: DeclProcessingState["state"],
-): boolean {
-  return (
-    decl.base.kind === "intrinsic" &&
-    ENABLED_PSEUDO_INTRINSIC_TAGS.has(decl.base.tagName) &&
-    !hasUnsafeAttrsAsTarget(decl) &&
-    !hasPolymorphicAsPropType(decl, state.root, state.j) &&
-    !hasExternalAsSupport(decl, state) &&
-    !hasNonFormControlAsUsage(decl.localName, state.root, state.j)
-  );
-}
-
-function hasUnsafeAttrsAsTarget(decl: StyledDecl): boolean {
-  const staticAs = decl.attrsInfo?.staticAttrs?.as;
-  if (staticAs !== undefined) {
-    return typeof staticAs !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(staticAs);
-  }
-  const attrsAsTag = decl.attrsInfo?.attrsAsTag;
-  if (!attrsAsTag) {
-    return false;
-  }
-  return !ENABLED_PSEUDO_INTRINSIC_TAGS.has(attrsAsTag);
-}
-
-function hasExternalAsSupport(decl: StyledDecl, state: DeclProcessingState["state"]): boolean {
-  const exportInfos = collectExternalInterfaceExportInfos(decl, state);
-  if (exportInfos.length === 0) {
-    return false;
-  }
-  return exportInfos.some(
-    (exportInfo) =>
-      state.adapter.externalInterface({
-        filePath: state.filePath,
-        componentName: decl.localName,
-        exportName: exportInfo.exportName,
-        isDefaultExport: exportInfo.isDefault,
-      }).as,
-  );
-}
-
-function collectExternalInterfaceExportInfos(
-  decl: StyledDecl,
-  state: DeclProcessingState["state"],
-): Array<{ exportName: string; isDefault: boolean }> {
-  const infos = new Map<string, { exportName: string; isDefault: boolean }>();
-  const add = (info: { exportName: string; isDefault: boolean } | undefined): void => {
-    if (info) {
-      infos.set(`${info.isDefault ? "default" : "named"}:${info.exportName}`, info);
-    }
-  };
-  add(state.exportedComponents?.get(decl.localName));
-  if (state.root) {
-    add(collectExportedComponents(state.root, state.j, state.declByLocalName).get(decl.localName));
-    for (const info of collectDirectExportInfosForLocal(decl.localName, state.root, state.j)) {
-      add(info);
-    }
-    for (const exportName of collectDottedExportNamesForLocal(
-      decl.localName,
-      state.root,
-      state.j,
-    )) {
-      add({ exportName, isDefault: false });
-    }
-  }
-  return [...infos.values()];
-}
-
-function collectDirectExportInfosForLocal(
-  localName: string,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-): Array<{ exportName: string; isDefault: boolean }> {
-  const infos: Array<{ exportName: string; isDefault: boolean }> = [];
-  root.find(j.ExportNamedDeclaration).forEach((path) => {
-    const declaration = path.node.declaration;
-    if (declaration?.type === "VariableDeclaration") {
-      for (const declarator of declaration.declarations as Array<{ type?: string; id?: unknown }>) {
-        if (
-          declarator.type === "VariableDeclarator" &&
-          staticPropertyKeyName(declarator.id) === localName
-        ) {
-          infos.push({ exportName: localName, isDefault: false });
-        }
-      }
-    }
-    for (const specifier of path.node.specifiers ?? []) {
-      if (
-        specifier.type !== "ExportSpecifier" ||
-        staticPropertyKeyName(specifier.local) !== localName
-      ) {
-        continue;
-      }
-      const exportName = staticPropertyKeyName(specifier.exported) ?? localName;
-      infos.push({
-        exportName,
-        isDefault: exportName === "default",
-      });
-    }
-  });
-  root.find(j.ExportDefaultDeclaration).forEach((path) => {
-    const declaration = path.node.declaration;
-    if (staticPropertyKeyName(declaration) === localName) {
-      infos.push({ exportName: "default", isDefault: true });
-    }
-  });
-  return infos;
-}
-
-function collectDottedExportNamesForLocal(
-  localName: string,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-): string[] {
-  const names: string[] = [];
-  const addFromObject = (objectExpression: unknown, prefix: string): void => {
-    const objectNode = objectExpression as
-      | { type?: string; properties?: Array<{ type?: string; key?: unknown; value?: unknown }> }
-      | null
-      | undefined;
-    if (objectNode?.type !== "ObjectExpression") {
-      return;
-    }
-    for (const property of objectNode.properties ?? []) {
-      if (property?.type !== "Property" && property?.type !== "ObjectProperty") {
-        continue;
-      }
-      const key = staticPropertyKeyName(property.key);
-      if (!key) {
-        continue;
-      }
-      const value = property.value as { type?: string; name?: string } | null | undefined;
-      if (value?.type === "Identifier" && value.name === localName) {
-        names.push(`${prefix}.${key}`);
-        continue;
-      }
-      addFromObject(property.value, `${prefix}.${key}`);
-    }
-  };
-  root.find(j.ExportNamedDeclaration).forEach((path) => {
-    const declaration = path.node.declaration;
-    if (declaration?.type === "VariableDeclaration") {
-      for (const declarator of declaration.declarations as Array<{
-        type?: string;
-        id?: unknown;
-        init?: unknown;
-      }>) {
-        const exportName =
-          declarator.type === "VariableDeclarator" ? staticPropertyKeyName(declarator.id) : null;
-        if (exportName) {
-          addFromObject(declarator.init, exportName);
-        }
-      }
-    }
-    for (const specifier of path.node.specifiers ?? []) {
-      if (specifier.type !== "ExportSpecifier") {
-        continue;
-      }
-      const local = staticPropertyKeyName(specifier.local);
-      const exported = staticPropertyKeyName(specifier.exported) ?? local;
-      if (local && exported) {
-        addFromObject(findModuleScopeVariableInitializer(root, j, local), exported);
-      }
-    }
-  });
-  return names;
-}
-
-function findModuleScopeVariableInitializer(
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-  localName: string,
-): unknown {
-  let init: unknown;
-  root
-    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
-    .forEach((path) => {
-      if (init !== undefined || !isModuleScopeVariableDeclarator(path)) {
-        return;
-      }
-      init = path.node.init;
-    });
-  return init;
-}
-
-function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolean {
-  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
-  while (current?.node) {
-    const type = current.node.type;
-    if (type === "Program" || type === "ExportNamedDeclaration") {
-      return true;
-    }
-    if (
-      type === "BlockStatement" ||
-      type === "FunctionDeclaration" ||
-      type === "FunctionExpression" ||
-      type === "ArrowFunctionExpression"
-    ) {
-      return false;
-    }
-    current = current.parentPath as typeof current;
-  }
-  return false;
-}
-
-function hasNonFormControlAsUsage(
-  componentName: string,
-  root: DeclProcessingState["state"]["root"] | undefined,
-  j: JSCodeshift,
-): boolean {
-  if (!root) {
-    return false;
-  }
-  let unsafe = false;
-  root.find(j.JSXElement).forEach((path) => {
-    if (unsafe) {
-      return;
-    }
-    const name = path.node.openingElement.name;
-    if (!jsxNameTargetsLocalBinding({ root, j, name, localName: componentName, fromPath: path })) {
-      return;
-    }
-    for (const attr of path.node.openingElement.attributes ?? []) {
-      if (attr.type === "JSXSpreadAttribute") {
-        unsafe = true;
-        return;
-      }
-      if (
-        attr.type !== "JSXAttribute" ||
-        (attr.name.name !== "as" && attr.name.name !== "forwardedAs")
-      ) {
-        continue;
-      }
-      const value = readStaticJsxLiteral(attr);
-      if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
-        unsafe = true;
-        return;
-      }
-    }
-  });
-  const createElementBindings = collectCreateElementBindings(root, j);
-  root.find(j.CallExpression).forEach((path) => {
-    if (unsafe || !isReactCreateElementCall(path.node, createElementBindings)) {
-      return;
-    }
-    const [componentArg, propsArg] = path.node.arguments ?? [];
-    if (!valueExpressionTargetsLocalBinding(componentArg, componentName, root, j, path)) {
-      return;
-    }
-    if (isUnsafeCreateElementProps(propsArg)) {
-      unsafe = true;
-    }
-  });
-  return unsafe;
-}
-
-function isReactCreateElementCall(
-  node: unknown,
-  createElementBindings: ReadonlySet<string>,
-): boolean {
-  const call = node as { callee?: unknown } | null | undefined;
-  const callee = call?.callee as
-    | {
-        type?: string;
-        name?: string;
-        object?: { type?: string; name?: string };
-        property?: { type?: string; name?: string };
-      }
-    | undefined;
-  if (callee?.type === "Identifier" && callee.name) {
-    return createElementBindings.has(callee.name);
-  }
-  return (
-    callee?.type === "MemberExpression" &&
-    callee.object?.type === "Identifier" &&
-    createElementBindings.has(`${callee.object.name}.createElement`) &&
-    callee.property?.type === "Identifier" &&
-    callee.property.name === "createElement"
-  );
-}
-
-function collectCreateElementBindings(
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-): Set<string> {
-  const names = new Set<string>();
-  root.find(j.ImportDeclaration).forEach((path) => {
-    if ((path.node.source as { value?: unknown }).value !== "react") {
-      return;
-    }
-    for (const specifier of path.node.specifiers ?? []) {
-      if (specifier.type === "ImportDefaultSpecifier" && specifier.local?.type === "Identifier") {
-        names.add(`${specifier.local.name}.createElement`);
-      }
-      if (specifier.type === "ImportNamespaceSpecifier" && specifier.local?.type === "Identifier") {
-        names.add(`${specifier.local.name}.createElement`);
-      }
-      if (
-        specifier.type === "ImportSpecifier" &&
-        specifier.imported?.type === "Identifier" &&
-        specifier.imported.name === "createElement" &&
-        specifier.local?.type === "Identifier"
-      ) {
-        names.add(specifier.local.name);
-      }
-    }
-  });
-  return names;
-}
-
-function valueExpressionTargetsLocalBinding(
-  node: unknown,
-  componentName: string,
-  root: DeclProcessingState["state"]["root"],
-  j: JSCodeshift,
-  fromPath?: { parentPath?: unknown },
-): boolean {
-  return jsxNameTargetsLocalBinding({
-    root,
-    j,
-    name: valueExpressionToJsxName(node),
-    localName: componentName,
-    fromPath,
-  });
-}
-
-function valueExpressionToJsxName(node: unknown): unknown {
-  const expr = node as
-    | { type?: string; name?: string; object?: unknown; property?: unknown; value?: unknown }
-    | null
-    | undefined;
-  if (expr?.type === "Identifier") {
-    return { type: "JSXIdentifier", name: expr.name };
-  }
-  if (expr?.type === "MemberExpression" && expr.object && expr.property) {
-    return {
-      type: "JSXMemberExpression",
-      object: valueExpressionToJsxName(expr.object),
-      property: valueExpressionToJsxName(expr.property),
-    };
-  }
-  if (
-    (expr?.type === "StringLiteral" || expr?.type === "Literal") &&
-    typeof expr.value === "string"
-  ) {
-    return { type: "JSXIdentifier", name: expr.value };
-  }
-  return null;
-}
-
-function isUnsafeCreateElementProps(node: unknown): boolean {
-  const props = node as { type?: string; name?: string; properties?: unknown[] } | null | undefined;
-  if (
-    !props ||
-    props.type === "NullLiteral" ||
-    (props.type === "Identifier" && props.name === "undefined")
-  ) {
-    return false;
-  }
-  if (props.type !== "ObjectExpression") {
-    return true;
-  }
-  for (const property of props.properties ?? []) {
-    const prop = property as { type?: string; key?: unknown; value?: unknown } | null | undefined;
-    if (!prop || prop.type === "SpreadElement" || prop.type === "SpreadProperty") {
-      return true;
-    }
-    const key = staticPropertyKeyName(prop.key);
-    if (key !== "as" && key !== "forwardedAs") {
-      continue;
-    }
-    const value = literalToStaticValue(prop.value);
-    if (typeof value !== "string" || !ENABLED_PSEUDO_INTRINSIC_TAGS.has(value)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function staticPropertyKeyName(key: unknown): string | null {
-  const keyNode = key as { type?: string; name?: string; value?: unknown } | null | undefined;
-  if (keyNode?.type === "Identifier") {
-    return keyNode.name ?? null;
-  }
-  if (
-    (keyNode?.type === "StringLiteral" || keyNode?.type === "Literal") &&
-    typeof keyNode.value === "string"
-  ) {
-    return keyNode.value;
-  }
-  return null;
-}
-
-function hasPolymorphicAsPropType(
-  decl: StyledDecl,
-  root: DeclProcessingState["state"]["root"] | undefined,
-  j: JSCodeshift,
-): boolean {
-  return (
-    !!root && !!decl.propsType && typeContainsPolymorphicAs({ root, j, typeNode: decl.propsType })
-  );
-}
-
-function containsEnabledPseudo(selector: string): boolean {
-  return extractPseudoTokens(selector).includes("enabled");
 }
 
 function hasEnabledCompoundPseudoSelector(selector: string): boolean {
@@ -2723,6 +2273,16 @@ function hasEnabledCompoundPseudoSelector(selector: string): boolean {
     const pseudoTokens = extractPseudoTokens(trimmed);
     return pseudoTokens.includes("enabled") && pseudoTokens.length > 1;
   });
+}
+
+function isStylexCompilerPseudoElement(selector: string): boolean {
+  // StyleX Babel treats any selector key that starts with `::` as a pseudo-element.
+  // Keep this broader than the eslint plugin's finite allowlist so linter lag does not force bailouts.
+  return selector.startsWith("::");
+}
+
+function containsPseudoToken(selector: string, token: string): boolean {
+  return extractPseudoTokens(selector).includes(token);
 }
 
 function extractPseudoTokens(selector: string): string[] {

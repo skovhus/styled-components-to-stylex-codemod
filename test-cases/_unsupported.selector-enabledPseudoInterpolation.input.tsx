@@ -1,4 +1,10 @@
-// Interpolated pseudo expansion should preserve an :enabled self-pseudo prefix.
+// @expected-warning: Unsupported selector: interpolated pseudo selector
+// `&:enabled:${highlightExpand}` would expand to compound pseudo keys like `:enabled:hover`.
+//
+// This is the interpolated form of the `:enabled:*` bail-out. The helper expands to multiple
+// interaction selectors, so supporting this safely needs the same `:enabled` normalization/proof as
+// `_unsupported.selector-compoundPseudo`, plus the existing pseudo-expansion machinery. It is not a
+// generic interpolated-pseudo limitation.
 import styled from "styled-components";
 import { highlightExpand } from "./lib/helpers";
 

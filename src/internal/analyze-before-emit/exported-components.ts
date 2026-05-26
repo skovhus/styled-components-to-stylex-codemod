@@ -79,7 +79,7 @@ function collectDottedExportedComponents(
       return;
     }
     const existing = exportedComponents.get(localName)?.exportName;
-    if (existing && existing.split(".").length <= exportName.split(".").length) {
+    if (existing && existing.split(".").length > exportName.split(".").length) {
       return;
     }
     exportedComponents.set(localName, {
@@ -116,25 +116,16 @@ function collectDottedExportedComponents(
 
   root.find(j.ExportNamedDeclaration).forEach((p) => {
     const declaration = p.node.declaration;
-    if (declaration?.type === "VariableDeclaration") {
-      for (const declarator of declaration.declarations) {
-        if (declarator.type !== "VariableDeclarator") {
-          continue;
-        }
-        const exportName = getIdentifierName(declarator.id);
-        if (exportName) {
-          collectObjectProperties(declarator.init, exportName);
-        }
-      }
+    if (declaration?.type !== "VariableDeclaration") {
+      return;
     }
-    for (const specifier of p.node.specifiers ?? []) {
-      if (specifier.type !== "ExportSpecifier") {
+    for (const declarator of declaration.declarations) {
+      if (declarator.type !== "VariableDeclarator") {
         continue;
       }
-      const localName = getIdentifierName(specifier.local);
-      const exportName = getIdentifierName(specifier.exported) ?? localName;
-      if (localName && exportName) {
-        collectObjectProperties(findVariableInitializer(root, j, localName), exportName);
+      const exportName = getIdentifierName(declarator.id);
+      if (exportName) {
+        collectObjectProperties(declarator.init, exportName);
       }
     }
   });
@@ -207,45 +198,4 @@ function collectDottedExportedComponents(
 function getIdentifierName(node: unknown): string | null {
   const n = node as { type?: string; name?: string } | null | undefined;
   return n?.type === "Identifier" && n.name ? n.name : null;
-}
-
-function findVariableInitializer(
-  root: ReturnType<JSCodeshift>,
-  j: JSCodeshift,
-  localName: string,
-): unknown {
-  let init: unknown;
-  root
-    .find(j.VariableDeclarator, { id: { type: "Identifier", name: localName } } as any)
-    .filter(isModuleScopeVariableDeclarator)
-    .forEach((path) => {
-      if (init !== undefined) {
-        return;
-      }
-      init = path.node.init;
-    });
-  return init;
-}
-
-function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolean {
-  let current = path.parentPath as { node?: { type?: string }; parentPath?: unknown } | undefined;
-  while (current?.node) {
-    const type = current.node.type;
-    if (type === "Program" || type === "ExportNamedDeclaration") {
-      return true;
-    }
-    if (
-      type === "BlockStatement" ||
-      type === "ForInStatement" ||
-      type === "ForOfStatement" ||
-      type === "ForStatement" ||
-      type === "FunctionDeclaration" ||
-      type === "FunctionExpression" ||
-      type === "ArrowFunctionExpression"
-    ) {
-      return false;
-    }
-    current = current.parentPath as typeof current;
-  }
-  return false;
 }
