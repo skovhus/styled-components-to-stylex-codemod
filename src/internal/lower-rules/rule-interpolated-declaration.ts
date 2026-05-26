@@ -592,23 +592,35 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       transformedValues.push({ propValue, cssValue });
     }
 
-    const fallbackFnKey = ensureObservedVariantFallbackFn(jsxProp, stylexProp, (param) =>
-      buildObservedExpressionFallbackValueExpr({
-        j,
-        expression,
-        jsxProp,
-        paramName,
-        param,
-        prefix,
-        suffix,
-      }),
+    const fallbackFnKey = observedExpressionFallbackFnKey(jsxProp, conditionWhen);
+    const ensuredFallbackFnKey = ensureObservedVariantFallbackFn(
+      jsxProp,
+      stylexProp,
+      (param) =>
+        buildObservedExpressionFallbackValueExpr({
+          j,
+          expression,
+          jsxProp,
+          paramName,
+          param,
+          prefix,
+          suffix,
+        }),
+      fallbackFnKey,
     );
-    if (!fallbackFnKey) {
+    if (!ensuredFallbackFnKey) {
       return false;
     }
-    if (!styleFnFromProps.some((entry) => entry.fnKey === fallbackFnKey)) {
+    if (
+      !styleFnFromProps.some(
+        (entry) =>
+          entry.fnKey === ensuredFallbackFnKey &&
+          entry.jsxProp === jsxProp &&
+          entry.conditionWhen === conditionWhen,
+      )
+    ) {
       styleFnFromProps.push({
-        fnKey: fallbackFnKey,
+        fnKey: ensuredFallbackFnKey,
         jsxProp,
         conditionWhen,
       });
@@ -630,6 +642,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     return true;
   };
 
+  const observedExpressionFallbackFnKey = (jsxProp: string, conditionWhen: string): string => {
+    const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
+    const baseFnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
+    const existingForCondition = styleFnFromProps.find(
+      (entry) => entry.jsxProp === jsxProp && entry.conditionWhen === conditionWhen,
+    );
+    if (existingForCondition) {
+      return existingForCondition.fnKey;
+    }
+    const baseKeyHasDifferentCondition = styleFnFromProps.some(
+      (entry) =>
+        entry.fnKey === baseFnKey &&
+        entry.jsxProp === jsxProp &&
+        entry.conditionWhen !== conditionWhen,
+    );
+    return baseKeyHasDifferentCondition ? styleKeyWithSuffix(baseFnKey, conditionWhen) : baseFnKey;
+  };
+
   const ensureObservedVariantPropDrop = (jsxProp: string): void => {
     if (jsxProp.startsWith("$") || decl.base.kind !== "component") {
       ensureShouldForwardPropDrop(decl, jsxProp);
@@ -645,9 +675,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     jsxProp: string,
     stylexProp: string,
     buildValueExpr: (param: ExpressionKind, paramName: string) => ExpressionKind | null,
+    fnKeyOverride?: string,
   ): string | null => {
     const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
-    const fnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
+    const fnKey = fnKeyOverride ?? styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
     const paramName = cssPropertyToIdentifier(normalizedJsxProp || stylexProp, avoidNames);
     const valueExpr = buildValueExpr(j.identifier(paramName) as ExpressionKind, paramName);
     if (!valueExpr) {

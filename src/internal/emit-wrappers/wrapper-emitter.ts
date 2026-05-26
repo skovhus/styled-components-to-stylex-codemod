@@ -33,7 +33,7 @@ import {
   VOID_TAGS,
 } from "./type-helpers.js";
 import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
-import { toRealPath } from "../utilities/path-utils.js";
+import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -534,7 +534,7 @@ export class WrapperEmitter {
     const importInfo = this.importMap.get(componentLocalName);
     return (
       importInfo?.source.kind === "absolutePath" &&
-      this.sourceOverrides?.has(toRealPath(importInfo.source.value)) === true
+      this.sourceOverrides?.has(resolveExistingFilePath(importInfo.source.value)) === true
     );
   }
 

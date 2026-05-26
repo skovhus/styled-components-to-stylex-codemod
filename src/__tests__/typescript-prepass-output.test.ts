@@ -640,6 +640,57 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("resolves extensionless already-transformed import paths before wrapped component validation", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-extensionless-skip-"));
+    const basePath = path.join(fixtureDir, "Base.tsx");
+    const basePathWithoutExtension = path.join(fixtureDir, "Base");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    writeFileSync(
+      basePath,
+      [
+        "export function Base(props: { label?: string }) {",
+        "  return <button>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [basePath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./Base"
+            ? basePathWithoutExtension
+            : path.resolve(path.dirname(fromFile), specifier),
+        transformedFileSources: new Map([[realpathSync(basePath), "already transformed"]]),
+      });
+
+      expect(after.warnings.map((warning) => warning.type)).not.toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("bails instead of widening local wrapped component props for generated styles", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-wrapper-bail-"));
     const filePath = path.join(fixtureDir, "Wrapper.tsx");

@@ -18,7 +18,7 @@ import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.
 import { mergeAdjacentComplementaryStyleExprs } from "../emit-wrappers/variant-condition.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
-import { toRealPath } from "../utilities/path-utils.js";
+import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 
@@ -132,7 +132,8 @@ function wrappedComponentAcceptsSxProp(
     }
     if (
       importInfo?.source.kind !== "absolutePath" ||
-      ctx.options.transformedFileSources?.has(toRealPath(importInfo.source.value)) !== true
+      ctx.options.transformedFileSources?.has(resolveExistingFilePath(importInfo.source.value)) !==
+        true
     ) {
       visiting.delete(componentLocalName);
       return false;

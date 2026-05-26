@@ -2392,6 +2392,32 @@ export const App = () => (
     expect(result).toContain("color: color");
   });
 
+  it("keeps separate observed expression fallbacks for distinct guards on the same prop", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; highlighted?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+  background-color: \${(props) => props.highlighted ? props.color : "white"};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green" highlighted>Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-distinct-guards.tsx");
+
+    expect(result).toContain("!active && styles.badgeColor(color)");
+    expect(result).toContain("highlighted && styles.badgeColorHighlighted(color)");
+    expect(result).toContain("badgeColor: (");
+    expect(result).toContain("color: color");
+    expect(result).toContain("badgeColorHighlighted: (");
+    expect(result).toContain("backgroundColor: color");
+  });
+
   it("does not forward observed expression condition props to unresolved component bases", () => {
     const input = `
 import styled from "styled-components";
