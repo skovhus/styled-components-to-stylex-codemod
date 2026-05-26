@@ -325,6 +325,31 @@ export function buildExtraStylexPropsExprs(
 }
 
 /**
+ * Merges adjacent `cond && styleA, !cond && styleB` expressions into
+ * `cond ? styleA : styleB` without reordering other style args.
+ */
+export function mergeAdjacentComplementaryStyleExprs(
+  j: JSCodeshift,
+  styleArgs: ExpressionKind[],
+): ExpressionKind[] {
+  const result: ExpressionKind[] = [];
+  for (let i = 0; i < styleArgs.length; i++) {
+    const current = styleArgs[i]!;
+    const next = styleArgs[i + 1];
+    if (next) {
+      const merged = mergeComplementaryLogicalPair(j, current, next);
+      if (merged) {
+        result.push(merged);
+        i++;
+        continue;
+      }
+    }
+    result.push(current);
+  }
+  return result;
+}
+
+/**
  * Finds the next unconsumed entry in sorted variant entries (as `[when, key]` tuples)
  * that has a complementary "when" condition to the entry at `index`.
  * Used by both intrinsic-simple and component emitters for ternary merging.
@@ -385,6 +410,61 @@ function findComplementaryEntry(
   }
 
   return null;
+}
+
+function mergeComplementaryLogicalPair(
+  j: JSCodeshift,
+  leftExpr: ExpressionKind,
+  rightExpr: ExpressionKind,
+): ExpressionKind | null {
+  const left = getConditionalStyleParts(j, leftExpr);
+  const right = getConditionalStyleParts(j, rightExpr);
+  if (!left || !right) {
+    return null;
+  }
+
+  const positiveWhen = getPositiveWhen(left.when, right.when);
+  if (!positiveWhen) {
+    return null;
+  }
+
+  const isLeftPositive = areEquivalentWhen(left.when, positiveWhen);
+  return j.conditionalExpression(
+    isLeftPositive ? left.cond : right.cond,
+    isLeftPositive ? left.style : right.style,
+    isLeftPositive ? right.style : left.style,
+  );
+}
+
+function getConditionalStyleParts(
+  j: JSCodeshift,
+  expr: ExpressionKind,
+): {
+  when: string;
+  cond: ExpressionKind;
+  style: ExpressionKind;
+} | null {
+  if (expr.type !== "LogicalExpression" || expr.operator !== "&&") {
+    return null;
+  }
+  const cond = expr.left as ExpressionKind;
+  const when = printCondition(j, cond);
+  if (!when) {
+    return null;
+  }
+  return {
+    when,
+    cond,
+    style: expr.right as ExpressionKind,
+  };
+}
+
+function printCondition(j: JSCodeshift, cond: ExpressionKind): string | null {
+  try {
+    return j(cond).toSource();
+  } catch {
+    return null;
+  }
 }
 
 /**
