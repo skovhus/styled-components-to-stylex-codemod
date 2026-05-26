@@ -94,7 +94,7 @@
     "react-dom": "^19.2.5",
     "react-select": "^5.10.2",
     "storybook": "^10.2.19",
-    "styled-components": "^6.3.11",
+    "styled-components": "^6.4.2",
     "tsdown": "^0.21.10",
     "typescript": "^5.9.3",
     "vite": "^8.0.10",
