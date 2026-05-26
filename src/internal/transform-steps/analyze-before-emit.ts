@@ -4934,7 +4934,9 @@ function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata):
 }
 
 function isIntrinsicReactPropsTypeText(typeText: string): boolean {
-  return /^React\.ComponentProps(?:WithRef|WithoutRef)?<(['"])[^'"]+\1>$/.test(typeText);
+  return /^(?:[$A-Z_a-z][$\w]*\.)*ComponentProps(?:WithRef|WithoutRef)?\s*<\s*(['"])[^'"]+\1\s*>$/.test(
+    typeText.trim(),
+  );
 }
 
 function hasInlineObjectPropType(metadata: TypeScriptComponentMetadata): boolean {

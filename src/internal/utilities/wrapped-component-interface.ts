@@ -33,11 +33,7 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
-      if (
-        adapterResult.acceptsSx &&
-        (typedInterface?.sxExcludedProperties?.length ||
-          typedInterface?.sxAllowedProperties?.length)
-      ) {
+      if (adapterResult.acceptsSx && hasTypedSxConstraints(typedInterface)) {
         return {
           ...adapterResult,
           sxExcludedProperties: mergeUniqueStrings(
@@ -57,6 +53,16 @@ export function wrappedComponentInterfaceFor(
   }
 
   return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
+}
+
+function hasTypedSxConstraints(
+  typedInterface: WrappedComponentInterfaceResult | undefined,
+): typedInterface is WrappedComponentInterfaceResult {
+  return (
+    typedInterface !== undefined &&
+    ((typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
+      typedInterface.sxAllowedProperties !== undefined)
+  );
 }
 
 function typedComponentInterfaceFor(
