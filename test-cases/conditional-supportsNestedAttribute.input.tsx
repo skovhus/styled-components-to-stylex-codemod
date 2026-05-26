@@ -1,5 +1,4 @@
-// @expected-warning: CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)
-// Attribute fallbacks outside @supports must not be dropped or replaced by guarded enhanced values.
+// Attribute fallbacks outside nested @supports must be preserved.
 import styled from "styled-components";
 
 const CollapsibleRegion = styled.div`
@@ -26,8 +25,23 @@ const CollapsibleRegion = styled.div`
   }
 `;
 
+const SupportsHoverOrder = styled.div`
+  color: black;
+
+  @supports (color: color(display-p3 1 0 0)) {
+    &:hover {
+      color: color(display-p3 1 0 0);
+    }
+
+    color: blue;
+  }
+`;
+
 export const App = () => (
-  <CollapsibleRegion data-open="true">
-    <div>Open content</div>
-  </CollapsibleRegion>
+  <div>
+    <CollapsibleRegion data-open="true">
+      <div>Open content</div>
+    </CollapsibleRegion>
+    <SupportsHoverOrder>Hover order</SupportsHoverOrder>
+  </div>
 );
