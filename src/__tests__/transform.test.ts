@@ -34,7 +34,10 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
 
-const PRESERVED_FIXTURES = new Set(["selector-pseudoElementConditionalValue"]);
+const PRESERVED_FIXTURES = new Set([
+  "cssHelper-componentSelectorReference",
+  "selector-pseudoElementConditionalValue",
+]);
 
 /**
  * Fixtures that intentionally test partial-file transforms: at least one styled

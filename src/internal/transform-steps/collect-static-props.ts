@@ -85,6 +85,47 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       j(p).remove();
     });
 
+  root.find(j.CallExpression).forEach((path: any) => {
+    const callee = path.node.callee;
+    if (
+      callee?.type !== "MemberExpression" ||
+      callee.object?.type !== "Identifier" ||
+      callee.object.name !== "Object" ||
+      callee.property?.type !== "Identifier" ||
+      callee.property.name !== "assign"
+    ) {
+      return;
+    }
+    const parent = path.parentPath?.node;
+    const assignedName =
+      parent?.type === "VariableDeclarator" && parent.id?.type === "Identifier"
+        ? parent.id.name
+        : null;
+    const target = path.node.arguments?.[0];
+    const statics = path.node.arguments?.[1];
+    if (target?.type !== "Identifier") {
+      return;
+    }
+    const componentName = assignedName ?? target.name;
+    if (!baseComponentNames.has(componentName) && !baseComponentNames.has(target.name)) {
+      return;
+    }
+    if (statics?.type !== "ObjectExpression") {
+      return;
+    }
+    const names = staticPropertyNames.get(componentName) ?? [];
+    for (const prop of statics.properties ?? []) {
+      const key = (prop as any).key;
+      const propName = key?.name ?? key?.value;
+      if (typeof propName === "string" && !names.includes(propName)) {
+        names.push(propName);
+      }
+    }
+    if (names.length > 0) {
+      staticPropertyNames.set(componentName, names);
+    }
+  });
+
   // Generate static property inheritance for extended components
   // e.g., ExtendedButton.HEIGHT = BaseButton.HEIGHT
   // This works for both styled base components AND regular React components with static props

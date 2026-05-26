@@ -12,7 +12,10 @@ import type {
   ResolveValueResult,
 } from "../../adapter.js";
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "../css-ir.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  parseInterpolatedBorderStaticParts,
+} from "../css-prop-mapping.js";
 import {
   extractRootAndPath,
   getMemberPathFromIdentifier,
@@ -691,6 +694,33 @@ export function createCssHelperResolver(args: {
         if (resolved) {
           if (hasStaticParts) {
             const { prefix, suffix } = extractPrefixSuffix(parts);
+            const borderParts = parseInterpolatedBorderStaticParts({
+              prop: d.property.trim(),
+              prefix,
+              suffix,
+            });
+            if (borderParts) {
+              if (borderParts.width) {
+                (target as any)[borderParts.widthProp] = mergeIntoContext(
+                  borderParts.width,
+                  borderParts.widthProp,
+                  target as any,
+                ) as any;
+              }
+              if (borderParts.style) {
+                (target as any)[borderParts.styleProp] = mergeIntoContext(
+                  borderParts.style,
+                  borderParts.styleProp,
+                  target as any,
+                ) as any;
+              }
+              (target as any)[borderParts.colorProp] = mergeIntoContext(
+                resolved.ast,
+                borderParts.colorProp,
+                target as any,
+              ) as any;
+              continue;
+            }
             // Create a template literal string using the shared helper (same logic as top-level)
             const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
             const templateAst = parseExpr(wrappedExpr);

@@ -210,7 +210,10 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       // Emit StyleX dynamic functions instead of inline styles
       // Use the base key when this is the sole style for the component
       const baseKeyAvailable =
-        outs.length === 1 && Object.keys(styleObj).length === 0 && !styleFnDecls.has(decl.styleKey);
+        outs.length === 1 &&
+        Object.keys(styleObj).length === 0 &&
+        !declarationHasFollowingStaticBaseStyles(decl, d) &&
+        !styleFnDecls.has(decl.styleKey);
       for (const out of outs) {
         if (!out.prop) {
           continue;
@@ -223,7 +226,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           const param = j.identifier(paramName);
           if (/\.(ts|tsx)$/.test(filePath)) {
             (param as any).typeAnnotation = j.tsTypeAnnotation(
-              j.tsUnionType([j.tsStringKeyword(), j.tsUndefinedKeyword()]),
+              inferStyleFnParamType(j, out.prop, valueExpr),
             );
           }
           const propKey = makeCssPropKey(j, out.prop);
@@ -320,6 +323,53 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
 
 function hasSimpleIdentifierParam(expr: { params?: Array<{ type?: string }> }): boolean {
   return expr.params?.length === 1 && expr.params[0]?.type === "Identifier";
+}
+
+function declarationHasFollowingStaticBaseStyles(
+  decl: StyledDecl,
+  current: CssDeclarationIR,
+): boolean {
+  for (const rule of decl.rules ?? []) {
+    const index = rule.declarations.indexOf(current);
+    if (index < 0) {
+      continue;
+    }
+    return rule.declarations.slice(index + 1).some((next) => next.value.kind === "static");
+  }
+  return false;
+}
+
+function inferStyleFnParamType(
+  j: JSCodeshift,
+  stylexProp: string,
+  callArg: ExpressionKind,
+):
+  | ReturnType<JSCodeshift["tsStringKeyword"]>
+  | ReturnType<JSCodeshift["tsNumberKeyword"]>
+  | ReturnType<JSCodeshift["tsUnionType"]> {
+  if (callArg.type === "TemplateLiteral" && expressionHasNullishFallback(callArg)) {
+    return j.tsStringKeyword();
+  }
+  if (expressionHasNullishFallback(callArg) && NUMERIC_STYLEX_PROPS.has(stylexProp)) {
+    return j.tsNumberKeyword();
+  }
+  return j.tsUnionType([j.tsStringKeyword(), j.tsUndefinedKeyword()]);
+}
+
+const NUMERIC_STYLEX_PROPS = new Set(["zIndex", "opacity", "flexGrow", "flexShrink", "order"]);
+
+function expressionHasNullishFallback(expr: unknown): boolean {
+  if (!expr || typeof expr !== "object") {
+    return false;
+  }
+  const node = expr as { type?: string; operator?: string; expressions?: unknown[] };
+  if (node.type === "LogicalExpression" && node.operator === "??") {
+    return true;
+  }
+  if (node.type === "TemplateLiteral") {
+    return (node.expressions ?? []).some(expressionHasNullishFallback);
+  }
+  return false;
 }
 
 /**
