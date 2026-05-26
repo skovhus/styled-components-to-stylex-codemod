@@ -136,7 +136,9 @@ function patchConditionalDefaultsForSequence(args: {
       }
     } else if (entry.patchable) {
       for (const prop of functionPropertiesWithNullConditionalDefault(source)) {
-        const earlier = defaults.get(prop) ?? { kind: "absent" };
+        const earlier = hasDynamicUnknownContributor
+          ? ({ kind: "dynamic" } satisfies DefaultInference)
+          : (defaults.get(prop) ?? { kind: "absent" });
         if (earlier.kind === "absent") {
           continue;
         }

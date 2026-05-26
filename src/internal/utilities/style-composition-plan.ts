@@ -331,7 +331,13 @@ function buildAttrWrapperEntries(decl: StyledDecl): StyleSequenceEntry[] {
   ]
     .filter((styleKey): styleKey is string => typeof styleKey === "string")
     .map(
-      (styleKey) => ({ styleKey, patchable: true, source: "attr" }) satisfies StyleSequenceEntry,
+      (styleKey) =>
+        ({
+          styleKey,
+          patchable: true,
+          contributes: false,
+          source: "attr",
+        }) satisfies StyleSequenceEntry,
     );
 }
 

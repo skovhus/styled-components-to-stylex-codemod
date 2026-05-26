@@ -81,7 +81,7 @@ describe("guardGeneratedConditionalDefaults", () => {
     });
   });
 
-  it("inherits defaults from attr-wrapper entries emitted before pseudo styles", () => {
+  it("does not inherit defaults from guarded attr-wrapper entries", () => {
     const styles = new Map<string, unknown>([
       ["link", { backgroundColor: "#ffffff" }],
       ["linkExternal", { backgroundColor: "#dbeafe" }],
@@ -116,7 +116,7 @@ describe("guardGeneratedConditionalDefaults", () => {
 
     expect(styles.get("linkHover")).toEqual({
       backgroundColor: {
-        default: "#dbeafe",
+        default: "#ffffff",
         ":hover": "#fee2e2",
       },
     });
@@ -148,6 +148,70 @@ describe("guardGeneratedConditionalDefaults", () => {
         },
       ],
       pseudoExpandSelectors: [{ styleKey: "buttonHover" }],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Conditional StyleX default would override an unproven earlier style for the same property",
+    );
+  });
+
+  it("treats prior extra stylex props args as dynamic before style functions", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      [
+        "buttonHover",
+        {
+          type: "ArrowFunctionExpression",
+          body: {
+            type: "ObjectExpression",
+            properties: [
+              {
+                type: "Property",
+                key: { type: "Identifier", name: "backgroundColor" },
+                value: {
+                  type: "ObjectExpression",
+                  properties: [
+                    {
+                      type: "Property",
+                      key: { type: "Identifier", name: "default" },
+                      value: { type: "Literal", value: null },
+                    },
+                    {
+                      type: "Property",
+                      key: { type: "Literal", value: ":hover" },
+                      value: { type: "Identifier", name: "backgroundColor" },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStylexPropsArgs: [
+        {
+          expr: { type: "Identifier", name: "externalStyles" } as never,
+          afterBase: true,
+        },
+      ],
+      styleFnFromProps: [
+        {
+          fnKey: "buttonHover",
+          jsxProp: "backgroundColor",
+        },
+      ],
     } satisfies StyledDecl;
     const ctx = {
       resolvedStyleObjects: styles,
