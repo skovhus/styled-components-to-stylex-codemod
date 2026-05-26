@@ -42,4 +42,42 @@ describe("guardGeneratedConditionalDefaults", () => {
       },
     });
   });
+
+  it("does not inherit defaults from conditional variants that may be absent at runtime", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      ["buttonActive", { backgroundColor: "#dbeafe" }],
+      [
+        "buttonHover",
+        {
+          backgroundColor: {
+            default: null,
+            ":hover": "#fee2e2",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      variantStyleKeys: { active: "buttonActive" },
+      pseudoExpandSelectors: [{ styleKey: "buttonHover" }],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+
+    expect(styles.get("buttonHover")).toEqual({
+      backgroundColor: {
+        default: "#ffffff",
+        ":hover": "#fee2e2",
+      },
+    });
+  });
 });

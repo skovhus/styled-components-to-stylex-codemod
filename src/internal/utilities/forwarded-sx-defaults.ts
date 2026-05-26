@@ -11,8 +11,9 @@ import type { TransformContext } from "../transform-context.js";
 import { wrappedComponentInterfaceFor } from "./wrapped-component-interface.js";
 import { isRelativeSpecifier, toRealPath } from "./path-utils.js";
 import {
-  propertiesWithNullConditionalDefault,
-  setConditionalDefault,
+  propertiesWithUnsafeNullConditionalDefault,
+  patchNullConditionalDefaultsForProp,
+  type DefaultInference,
 } from "./conditional-style-defaults.js";
 
 export function guardForwardedSxConditionalDefaults(
@@ -33,12 +34,21 @@ export function guardForwardedSxConditionalDefaults(
       if (!isRecord(styleObj)) {
         continue;
       }
-      for (const prop of propertiesWithNullConditionalDefault(styleObj)) {
+      for (const prop of propertiesWithUnsafeNullConditionalDefault(styleObj)) {
         const result = applyForwardedSxDefault({
           ctx,
           decl,
           prop,
-          applyStaticDefault: (value) => setConditionalDefault(styleObj, prop, value),
+          applyInference: (inferred) => {
+            if (inferred.kind !== "static" && inferred.kind !== "absent") {
+              return "bail";
+            }
+            return patchNullConditionalDefaultsForProp(
+              styleObj,
+              prop,
+              toDefaultInference(inferred),
+            );
+          },
         });
         if (result === "ok") {
           continue;
@@ -50,7 +60,13 @@ export function guardForwardedSxConditionalDefaults(
           ctx,
           decl,
           prop,
-          applyStaticDefault: (value) => setFunctionConditionalDefault(styleObj, prop, value),
+          applyInference: (inferred) => {
+            if (inferred.kind === "static") {
+              setFunctionConditionalDefault(styleObj, prop, inferred.value);
+              return "patched";
+            }
+            return inferred.kind === "absent" ? "safe" : "bail";
+          },
         });
         if (result === "ok") {
           continue;
@@ -67,16 +83,13 @@ function applyForwardedSxDefault(args: {
   ctx: TransformContext;
   decl: StyledDecl;
   prop: string;
-  applyStaticDefault: (value: StaticStyleValue) => void;
+  applyInference: (value: PropertyInference) => "patched" | "safe" | "bail";
 }): "ok" | "bail" {
-  const { ctx, decl, prop, applyStaticDefault } = args;
+  const { ctx, decl, prop, applyInference } = args;
   const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
   const inferred = inferWrappedComponentSxProperty(ctx, wrappedComponent, prop);
-  if (inferred.kind === "static") {
-    applyStaticDefault(inferred.value);
-    return "ok";
-  }
-  if (inferred.kind === "absent") {
+  const applied = applyInference(inferred);
+  if (applied === "patched" || applied === "safe") {
     return "ok";
   }
   ctx.warnings.push({
@@ -95,6 +108,16 @@ function applyForwardedSxDefault(args: {
     },
   });
   return "bail";
+}
+
+function toDefaultInference(inferred: PropertyInference): DefaultInference {
+  if (inferred.kind === "static") {
+    return inferred;
+  }
+  if (inferred.kind === "absent") {
+    return inferred;
+  }
+  return { kind: "dynamic" };
 }
 
 const FORWARDED_SX_DEFAULT_WARNING =

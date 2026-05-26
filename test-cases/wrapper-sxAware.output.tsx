@@ -183,6 +183,16 @@ const callerStyles = stylex.create({
       "@media print": printDisplay,
     },
   }),
+  // Nested forwarded sx defaults must preserve SxAwareButton's base defaults too.
+  hoverMediaButton: {
+    backgroundColor: {
+      default: "#eee",
+      ":hover": {
+        default: "#eee",
+        "@media (hover: hover)": "orange",
+      },
+    },
+  },
   // Multiple call sites → emitted as a wrapper function component.
   primary: {
     color: "white",
@@ -299,6 +309,7 @@ export const App = () => (
     <SxAwareButton sx={callerStyles.dynamicPrintButtonDisplay("block")}>
       Dynamic print display
     </SxAwareButton>
+    <SxAwareButton sx={callerStyles.hoverMediaButton}>Hover media</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 1</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 2</SxAwareButton>
     <SxAwareButton sx={[callerStyles.inlinedAccent, callerStyles.caller]}>

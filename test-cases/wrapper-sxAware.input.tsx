@@ -54,6 +54,15 @@ const DynamicPrintButton = styled(SxAwareButton)<{ printDisplay: "block" | "inli
   }
 `;
 
+// Nested forwarded sx defaults must preserve SxAwareButton's base defaults too.
+const HoverMediaButton = styled(SxAwareButton)`
+  &:hover {
+    @media (hover: hover) {
+      background-color: orange;
+    }
+  }
+`;
+
 // Multiple call sites → emitted as a wrapper function component.
 const StyledPrimary = styled(SxAwareButton)`
   color: white;
@@ -237,6 +246,7 @@ export const App = () => (
     <DefaultPrintButton>Default export print</DefaultPrintButton>
     <DirectoryPrintButton>Directory import print</DirectoryPrintButton>
     <DynamicPrintButton printDisplay="block">Dynamic print display</DynamicPrintButton>
+    <HoverMediaButton>Hover media</HoverMediaButton>
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>

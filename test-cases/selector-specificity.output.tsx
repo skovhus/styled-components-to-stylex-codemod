@@ -54,7 +54,7 @@ const styles = stylex.create({
     // TODO: Specificity hack stripped, carefully test (was: &&:hover)
     // TODO: Validate the default background color; StyleX requires an explicit default for conditional backgroundColor.
     backgroundColor: {
-      default: "#dbeafe",
+      default: null,
       ":hover": "#fee2e2",
     },
   },

@@ -10,7 +10,7 @@ import { isAstNode } from "./jscodeshift-utils.js";
 const CONDITIONAL_DEFAULT_WARNING =
   "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
 
-type DefaultInference =
+export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
   | { kind: "absent" }
   | { kind: "dynamic" };
@@ -70,7 +70,7 @@ export function guardGeneratedConditionalDefaults(
   return "ok";
 }
 
-export function propertiesWithNullConditionalDefault(styleObj: Record<string, unknown>): string[] {
+function propertiesWithNullConditionalDefault(styleObj: Record<string, unknown>): string[] {
   const props: string[] = [];
   for (const [prop, value] of Object.entries(styleObj)) {
     if (isMetadataOrConditionKey(prop) || !isPlainStyleObject(value)) {
@@ -83,15 +83,49 @@ export function propertiesWithNullConditionalDefault(styleObj: Record<string, un
   return props;
 }
 
-export function setConditionalDefault(
+export function propertiesWithUnsafeNullConditionalDefault(
+  styleObj: Record<string, unknown>,
+): string[] {
+  const props = new Set(propertiesWithNullConditionalDefault(styleObj));
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop) || !isPlainStyleObject(value)) {
+      continue;
+    }
+    if (hasNestedNullConditionalDefault(value)) {
+      props.add(prop);
+    }
+  }
+  return [...props];
+}
+
+export function patchNullConditionalDefaultsForProp(
   styleObj: Record<string, unknown>,
   prop: string,
-  value: string | number | boolean | null,
-): void {
-  const map = styleObj[prop];
-  if (isPlainStyleObject(map)) {
-    map.default = value;
+  earlier: DefaultInference,
+): "patched" | "safe" | "bail" {
+  const value = styleObj[prop];
+  if (!isPlainStyleObject(value) || !isConditionalStyleMap(value)) {
+    return "safe";
   }
+
+  let inheritedDefault = inferDefaultFromValue(value);
+  if (value.default === null && earlier.kind === "static" && earlier.value !== null) {
+    value.default = earlier.value;
+    inheritedDefault = earlier;
+  } else if (value.default === null && earlier.kind === "dynamic") {
+    return "bail";
+  } else if (value.default === null) {
+    inheritedDefault = earlier;
+  }
+
+  if (!hasNestedNullConditionalDefault(value)) {
+    return "safe";
+  }
+  if (inheritedDefault.kind === "static" && inheritedDefault.value !== null) {
+    patchNestedNullConditionalDefaults(value, inheritedDefault.value);
+    return "patched";
+  }
+  return inheritedDefault.kind === "dynamic" ? "bail" : "safe";
 }
 
 function patchConditionalDefaultsForSequence(args: {
@@ -163,49 +197,6 @@ function patchConditionalDefaultsForSequence(args: {
   return "ok";
 }
 
-function propertiesWithUnsafeNullConditionalDefault(styleObj: Record<string, unknown>): string[] {
-  const props = new Set(propertiesWithNullConditionalDefault(styleObj));
-  for (const [prop, value] of Object.entries(styleObj)) {
-    if (isMetadataOrConditionKey(prop) || !isPlainStyleObject(value)) {
-      continue;
-    }
-    if (hasNestedNullConditionalDefault(value)) {
-      props.add(prop);
-    }
-  }
-  return [...props];
-}
-
-function patchNullConditionalDefaultsForProp(
-  styleObj: Record<string, unknown>,
-  prop: string,
-  earlier: DefaultInference,
-): "patched" | "safe" | "bail" {
-  const value = styleObj[prop];
-  if (!isPlainStyleObject(value) || !isConditionalStyleMap(value)) {
-    return "safe";
-  }
-
-  let inheritedDefault = inferDefaultFromValue(value);
-  if (value.default === null && earlier.kind === "static" && earlier.value !== null) {
-    value.default = earlier.value;
-    inheritedDefault = earlier;
-  } else if (value.default === null && earlier.kind === "dynamic") {
-    return "bail";
-  } else if (value.default === null) {
-    inheritedDefault = earlier;
-  }
-
-  if (!hasNestedNullConditionalDefault(value)) {
-    return "safe";
-  }
-  if (inheritedDefault.kind === "static" && inheritedDefault.value !== null) {
-    patchNestedNullConditionalDefaults(value, inheritedDefault.value);
-    return "patched";
-  }
-  return inheritedDefault.kind === "dynamic" ? "bail" : "safe";
-}
-
 function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSequenceEntry[] {
   const entries: StyleSequenceEntry[] = [];
   const afterBase = new Set(decl.extraStyleKeysAfterBase ?? []);
@@ -273,7 +264,12 @@ function localBaseStyleKeys(ctx: TransformContext, decl: StyledDecl): string[] {
 function buildVariantAndStyleFnEntries(decl: StyledDecl): VariantAndStyleFnEntries {
   const variantEntries = Object.entries(decl.variantStyleKeys ?? {}).map(([when, styleKey]) => ({
     when,
-    entry: { styleKey, patchable: true, source: "variant" } satisfies StyleSequenceEntry,
+    entry: {
+      styleKey,
+      patchable: true,
+      contributes: false,
+      source: "variant",
+    } satisfies StyleSequenceEntry,
   }));
   const styleFnEntries = (decl.styleFnFromProps ?? []).map((styleFn) => ({
     sourceOrder: styleFn.sourceOrder,
