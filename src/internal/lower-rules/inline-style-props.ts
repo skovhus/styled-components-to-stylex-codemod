@@ -351,12 +351,64 @@ function inferStyleFnParamType(
     return j.tsStringKeyword();
   }
   if (expressionHasNullishFallback(callArg) && NUMERIC_STYLEX_PROPS.has(stylexProp)) {
+    const fallbackType = getNullishFallbackType(callArg);
+    if (fallbackType !== "number") {
+      return j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()]);
+    }
     return j.tsNumberKeyword();
   }
   return j.tsUnionType([j.tsStringKeyword(), j.tsUndefinedKeyword()]);
 }
 
 const NUMERIC_STYLEX_PROPS = new Set(["zIndex", "opacity", "flexGrow", "flexShrink", "order"]);
+
+function getNullishFallbackType(expr: unknown): "number" | "string" | "unknown" | null {
+  if (!expr || typeof expr !== "object") {
+    return null;
+  }
+  const node = expr as {
+    type?: string;
+    operator?: string;
+    right?: unknown;
+    value?: unknown;
+    expressions?: unknown[];
+  };
+  if (node.type === "LogicalExpression" && node.operator === "??") {
+    return getExpressionPrimitiveType(node.right);
+  }
+  if (node.type === "TemplateLiteral") {
+    for (const templateExpr of node.expressions ?? []) {
+      const fallbackType = getNullishFallbackType(templateExpr);
+      if (fallbackType) {
+        return fallbackType;
+      }
+    }
+  }
+  return null;
+}
+
+function getExpressionPrimitiveType(expr: unknown): "number" | "string" | "unknown" {
+  if (!expr || typeof expr !== "object") {
+    return "unknown";
+  }
+  const node = expr as { type?: string; value?: unknown };
+  if (
+    node.type === "NumericLiteral" ||
+    (node.type === "Literal" && typeof node.value === "number")
+  ) {
+    return "number";
+  }
+  if (
+    node.type === "StringLiteral" ||
+    (node.type === "Literal" && typeof node.value === "string")
+  ) {
+    return "string";
+  }
+  if (node.type === "TemplateLiteral") {
+    return "string";
+  }
+  return "unknown";
+}
 
 function expressionHasNullishFallback(expr: unknown): boolean {
   if (!expr || typeof expr !== "object") {

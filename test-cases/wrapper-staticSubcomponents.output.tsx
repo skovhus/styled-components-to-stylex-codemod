@@ -27,6 +27,7 @@ export const Select = Object.assign(SelectBase, {
   Group: SelectGroup,
   Option: SelectOption,
   Separator: SelectSeparator,
+  "sub-component": SelectSeparator,
 });
 
 function WideSelect(
@@ -38,6 +39,7 @@ function WideSelect(
 WideSelect.Group = (Select as any).Group;
 WideSelect.Option = (Select as any).Option;
 WideSelect.Separator = (Select as any).Separator;
+(WideSelect as any)["sub-component"] = (Select as any)["sub-component"];
 
 function BaseWideSelect(
   props: Omit<React.ComponentPropsWithRef<typeof SelectBase>, "className" | "style">,
@@ -48,6 +50,7 @@ function BaseWideSelect(
 BaseWideSelect.Group = (SelectBase as any).Group;
 BaseWideSelect.Option = (SelectBase as any).Option;
 BaseWideSelect.Separator = (SelectBase as any).Separator;
+(BaseWideSelect as any)["sub-component"] = (SelectBase as any)["sub-component"];
 
 export const App = () => (
   <>

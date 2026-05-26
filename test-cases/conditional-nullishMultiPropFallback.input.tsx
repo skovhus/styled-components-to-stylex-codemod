@@ -26,11 +26,21 @@ export const GutterBox = styled.div<GutterBoxProps>`
   padding: 8px;
 `;
 
+const AutoLayerBox = styled.div<{ $zIndex?: number }>`
+  position: relative;
+  z-index: ${(props) => props.$zIndex ?? "auto"};
+  background: lavender;
+  color: black;
+  padding: 8px;
+`;
+
 export const App = () => (
   <div>
     <GutterBox>Default gutter</GutterBox>
     <GutterBox $gutter={80} $zIndex={3}>
       Custom gutter
     </GutterBox>
+    <AutoLayerBox>Auto layer</AutoLayerBox>
+    <AutoLayerBox $zIndex={2}>Numeric layer</AutoLayerBox>
   </div>
 );

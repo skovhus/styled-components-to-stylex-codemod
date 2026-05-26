@@ -36,12 +36,27 @@ export function GutterBox(
   );
 }
 
+type AutoLayerBoxProps = React.PropsWithChildren<{
+  zIndex?: number;
+}>;
+
+function AutoLayerBox(props: AutoLayerBoxProps) {
+  const { children, zIndex } = props;
+  return (
+    <div sx={[styles.autoLayerBox, zIndex != null && styles.autoLayerBoxZIndex(zIndex)]}>
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <GutterBox>Default gutter</GutterBox>
     <GutterBox $gutter={80} $zIndex={3}>
       Custom gutter
     </GutterBox>
+    <AutoLayerBox>Auto layer</AutoLayerBox>
+    <AutoLayerBox zIndex={2}>Numeric layer</AutoLayerBox>
   </div>
 );
 
@@ -57,7 +72,17 @@ const styles = stylex.create({
   gutterBoxMarginBottom: (marginBottom: string) => ({
     marginBottom,
   }),
-  gutterBoxZIndex: (zIndex: number) => ({
+  gutterBoxZIndex: (zIndex: number | string) => ({
+    zIndex,
+  }),
+  autoLayerBox: {
+    position: "relative",
+    zIndex: "auto",
+    backgroundColor: "lavender",
+    color: "black",
+    padding: 8,
+  },
+  autoLayerBoxZIndex: (zIndex: number) => ({
     zIndex,
   }),
 });

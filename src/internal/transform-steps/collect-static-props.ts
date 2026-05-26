@@ -2,10 +2,13 @@
  * Step: collect static property assignments on styled components.
  * Core concepts: static metadata capture and inheritance generation.
  */
+import type { JSCodeshift } from "jscodeshift";
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { getEffectiveBaseIdent } from "../utilities/delegation-utils.js";
+
+type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
 
 /**
  * Collects static property assignments and generates inheritance statements.
@@ -57,13 +60,11 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     .forEach((p) => {
       const expr = p.node.expression as any;
       const componentName = expr.left.object.name as string;
-      const propName = expr.left.property?.name ?? expr.left.property?.value;
+      const propName = getStaticPropertyNameFromMemberExpression(expr.left);
 
       // Track property names for inheritance generation
       if (propName) {
-        const names = staticPropertyNames.get(componentName) ?? [];
-        names.push(propName);
-        staticPropertyNames.set(componentName, names);
+        addStaticPropertyName(staticPropertyNames, componentName, propName);
       }
 
       // For non-styled base components, only track properties for inheritance (don't remove or reposition)
@@ -116,16 +117,11 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       return;
     }
     for (const componentName of componentNames) {
-      const names = staticPropertyNames.get(componentName) ?? [];
       for (const prop of statics.properties ?? []) {
-        const key = (prop as any).key;
-        const propName = key?.name ?? key?.value;
-        if (typeof propName === "string" && !names.includes(propName)) {
-          names.push(propName);
+        const propName = getStaticPropertyNameFromObjectProperty(prop);
+        if (propName) {
+          addStaticPropertyName(staticPropertyNames, componentName, propName);
         }
-      }
-      if (names.length > 0) {
-        staticPropertyNames.set(componentName, names);
       }
     }
   });
@@ -158,21 +154,11 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    const inheritanceStatements: any[] = [];
+    const inheritanceStatements: StatementKind[] = [];
     for (const propName of baseProps) {
-      // Accessing arbitrary static properties on a function component is legal at runtime,
-      // but TypeScript doesn't know about ad-hoc statics. Cast the base to `any` to keep
-      // generated outputs typecheck-friendly.
-      const rhs = ctx.j(`const __x = (${baseComponentName} as any).${propName};`).get().node.program
-        .body[0].declarations[0].init;
-      const stmt = ctx.j.expressionStatement(
-        ctx.j.assignmentExpression(
-          "=",
-          ctx.j.memberExpression(ctx.j.identifier(decl.localName), ctx.j.identifier(propName)),
-          rhs as any,
-        ),
+      inheritanceStatements.push(
+        buildStaticInheritanceStatement(ctx.j, decl.localName, baseComponentName, propName),
       );
-      inheritanceStatements.push(stmt);
     }
 
     if (inheritanceStatements.length > 0) {
@@ -237,7 +223,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     }
 
     // Generate inheritance statements for each accessed property
-    const inheritanceStatements: any[] = [];
+    const inheritanceStatements: StatementKind[] = [];
     for (const propName of accessedProps) {
       const stmt = j.expressionStatement(
         j.assignmentExpression(
@@ -260,4 +246,74 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   ctx.staticPropertyNames = staticPropertyNames;
 
   return CONTINUE;
+}
+
+function addStaticPropertyName(
+  staticPropertyNames: Map<string, string[]>,
+  componentName: string,
+  propName: string,
+): void {
+  const names = staticPropertyNames.get(componentName) ?? [];
+  if (!names.includes(propName)) {
+    names.push(propName);
+    staticPropertyNames.set(componentName, names);
+  }
+}
+
+function getStaticPropertyNameFromMemberExpression(memberExpression: {
+  computed?: boolean;
+  property?: { type?: string; name?: string; value?: unknown };
+}): string | null {
+  const property = memberExpression.property;
+  if (!memberExpression.computed && property?.type === "Identifier") {
+    return property.name ?? null;
+  }
+  if (
+    (property?.type === "Literal" || property?.type === "StringLiteral") &&
+    typeof property.value === "string"
+  ) {
+    return property.value;
+  }
+  return null;
+}
+
+function getStaticPropertyNameFromObjectProperty(prop: unknown): string | null {
+  if (!prop || typeof prop !== "object") {
+    return null;
+  }
+  const property = prop as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string; value?: unknown };
+  };
+  if (property.type === "SpreadElement" || property.type === "SpreadProperty") {
+    return null;
+  }
+  const key = property.key;
+  if (!property.computed && key?.type === "Identifier") {
+    return key.name ?? null;
+  }
+  if ((key?.type === "Literal" || key?.type === "StringLiteral") && typeof key.value === "string") {
+    return key.value;
+  }
+  return null;
+}
+
+function buildStaticInheritanceStatement(
+  j: TransformContext["j"],
+  componentName: string,
+  baseComponentName: string,
+  propName: string,
+): StatementKind {
+  const target = isIdentifierPropertyName(propName)
+    ? `${componentName}.${propName}`
+    : `(${componentName} as any)[${JSON.stringify(propName)}]`;
+  const source = isIdentifierPropertyName(propName)
+    ? `(${baseComponentName} as any).${propName}`
+    : `(${baseComponentName} as any)[${JSON.stringify(propName)}]`;
+  return j(`${target} = ${source};`).get().node.program.body[0];
+}
+
+function isIdentifierPropertyName(propName: string): boolean {
+  return /^[$A-Z_a-z][$\w]*$/.test(propName);
 }

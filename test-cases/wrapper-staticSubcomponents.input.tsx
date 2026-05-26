@@ -27,6 +27,7 @@ export const Select = Object.assign(SelectBase, {
   Group: SelectGroup,
   Option: SelectOption,
   Separator: SelectSeparator,
+  "sub-component": SelectSeparator,
 });
 
 const WideSelect = styled(Select)`
