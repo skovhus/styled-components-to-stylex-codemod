@@ -22,9 +22,7 @@ function ListItem({ children }: { children?: React.ReactNode }) {
   return <div sx={styles.listItem}>{children}</div>;
 }
 
-function DialogRow(
-  props: Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "gap" | "shrink">,
-) {
+function DialogRow(props: { children?: React.ReactNode }) {
   return <Flex {...props} gap={6} shrink={0} {...stylex.props(styles.dialogRow)} />;
 }
 

@@ -592,12 +592,7 @@ function BaseToolbarButton(
   );
 }
 
-function ActiveToolbarButton(
-  props: Omit<
-    React.ComponentPropsWithRef<typeof ButtonLike>,
-    "className" | "style" | "size" | "variant"
-  >,
-) {
+function ActiveToolbarButton(props: { children?: React.ReactNode }) {
   return (
     <ButtonLike
       {...props}
@@ -622,12 +617,7 @@ function StyledIcon(
   return <Icon {...props} size={iconSize} {...stylex.props(styles.icon)} />;
 }
 
-function AttrsSxButton(
-  props: Omit<
-    React.ComponentPropsWithRef<typeof SxAwareButton>,
-    "className" | "style" | "sx" | "type"
-  >,
-) {
+function AttrsSxButton(props: { children?: React.ReactNode }) {
   const { children, ...rest } = props;
   return (
     <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]}>
