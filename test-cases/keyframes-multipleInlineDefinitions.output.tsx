@@ -8,12 +8,7 @@ type AnimatedGroupProps = React.PropsWithChildren<{
 function AnimatedGroup(props: AnimatedGroupProps) {
   const { children, isAnimated } = props;
   return (
-    <g
-      sx={[
-        isAnimated && styles.animatedGroupAnimated,
-        !isAnimated && styles.animatedGroupNotAnimated,
-      ]}
-    >
+    <g sx={isAnimated ? styles.animatedGroupAnimated : styles.animatedGroupNotAnimated}>
       {children}
     </g>
   );

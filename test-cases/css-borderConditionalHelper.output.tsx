@@ -22,8 +22,7 @@ function EnumBox(props: EnumBoxProps) {
       sx={[
         styles.enumBox,
         position !== "free" && styles.enumBoxPositionNotFree,
-        position === "top" && styles.enumBoxPositionTop,
-        position !== "top" && styles.enumBoxPositionNotTop,
+        position === "top" ? styles.enumBoxPositionTop : styles.enumBoxPositionNotTop,
       ]}
     >
       {children}

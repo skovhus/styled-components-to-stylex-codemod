@@ -5,6 +5,7 @@
 import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
+import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
 
 /**
  * Result of emitting style merging logic.
@@ -127,12 +128,15 @@ export function emitStyleMerging(args: {
     emitTypes,
   } = emitter;
 
-  const styleArgs = filterEmptyStyleArgs({
-    styleArgs: rawStyleArgs,
-    emptyStyleKeys,
-    stylesIdentifier,
-    ancestorSelectorParents,
-  });
+  const styleArgs = mergeAdjacentComplementaryStyleExprs(
+    j,
+    filterEmptyStyleArgs({
+      styleArgs: rawStyleArgs,
+      emptyStyleKeys,
+      stylesIdentifier,
+      ancestorSelectorParents,
+    }),
+  );
 
   // Add a marker when any style arg references an ancestor selector parent.
   // Scoped markers (from defineMarker) and defaultMarker() coexist: the scoped marker
