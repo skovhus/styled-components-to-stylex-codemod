@@ -2091,6 +2091,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": true,
           "styles": true,
         },
+        "test-cases/lib/sx-branchy-box.tsx:BranchyBox": {
+          "as": false,
+          "className": true,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": true,
+          "style": true,
+          "styles": true,
+        },
         "test-cases/lib/sx-dynamic-flex.tsx:DynamicFlex": {
           "as": false,
           "className": true,

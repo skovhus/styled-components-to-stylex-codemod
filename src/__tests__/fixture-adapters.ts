@@ -40,6 +40,7 @@ export const fixtureAdapter = defineAdapter({
   wrappedComponentInterface(ctx) {
     if (
       ctx.importSource.includes("sx-dynamic-flex") ||
+      ctx.importSource.includes("sx-branchy-box") ||
       ctx.importSource.includes("sx-directory-button")
     ) {
       return { acceptsSx: true };

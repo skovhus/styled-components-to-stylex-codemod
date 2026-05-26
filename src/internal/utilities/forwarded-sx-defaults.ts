@@ -665,12 +665,17 @@ function analyzeStyleReference(
 
 function mergePropertyInferences(inferences: readonly PropertyInference[]): PropertyInference {
   let merged: PropertyInference = { kind: "absent" };
+  let sawAbsent = false;
   for (const inference of inferences) {
     if (inference.kind === "unknown" || inference.kind === "variable") {
       return inference;
     }
     if (inference.kind === "absent") {
+      sawAbsent = true;
       continue;
+    }
+    if (sawAbsent) {
+      return { kind: "variable" };
     }
     if (merged.kind === "static" && merged.value !== inference.value) {
       return { kind: "variable" };
