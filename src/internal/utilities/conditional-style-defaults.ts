@@ -219,12 +219,12 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
   const variantAndStyleFnEntries = buildVariantAndStyleFnEntries(decl);
   entries.push(...variantAndStyleFnEntries.immediate);
   entries.push(...buildThemeEntries(decl));
+  entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
   entries.push(...buildPseudoAliasEntries(decl));
   entries.push(...buildCompoundVariantEntries(decl));
   entries.push(...buildVariantDimensionEntries(decl));
   entries.push(...variantAndStyleFnEntries.ordered);
-  entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildEnumVariantEntries(decl));
   entries.push(...buildCallSiteCombinedEntries(decl));
   entries.push(...buildPromotedStyleEntries(decl));

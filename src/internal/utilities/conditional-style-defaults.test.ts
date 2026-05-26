@@ -80,4 +80,45 @@ describe("guardGeneratedConditionalDefaults", () => {
       },
     });
   });
+
+  it("inherits defaults from attr-wrapper entries emitted before pseudo styles", () => {
+    const styles = new Map<string, unknown>([
+      ["link", { backgroundColor: "#ffffff" }],
+      ["linkExternal", { backgroundColor: "#dbeafe" }],
+      [
+        "linkHover",
+        {
+          backgroundColor: {
+            default: null,
+            ":hover": "#fee2e2",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Link",
+      styleKey: "link",
+      base: { kind: "intrinsic", tagName: "a" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "link",
+        externalKey: "linkExternal",
+      },
+      pseudoExpandSelectors: [{ styleKey: "linkHover" }],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+
+    expect(styles.get("linkHover")).toEqual({
+      backgroundColor: {
+        default: "#dbeafe",
+        ":hover": "#fee2e2",
+      },
+    });
+  });
 });
