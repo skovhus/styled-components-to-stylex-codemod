@@ -22,6 +22,7 @@ import type { StyleMergingResult } from "./style-merger.js";
 export type JsxAttr = JSXAttribute | JSXSpreadAttribute;
 export type JsxTagName = Parameters<JSCodeshift["jsxOpeningElement"]>[0];
 export type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
+export type FunctionParams = Parameters<JSCodeshift["functionDeclaration"]>[1];
 
 /**
  * Builds the `<C extends React.ElementType = "tag">` type parameter for polymorphic wrappers.
@@ -338,7 +339,7 @@ export function buildWrapperFunction(
   j: JSCodeshift,
   args: {
     localName: string;
-    params: Identifier[];
+    params: FunctionParams;
     bodyStmts: StatementKind[];
     typeParameters?: unknown;
     moveTypeParamsFromParam?: Identifier;

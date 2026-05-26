@@ -3,12 +3,12 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 
-function HighlightBox(props: React.PropsWithChildren<{}>) {
+function HighlightBox({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
     <div sx={styles.highlightBox(theme.highlightVariant(theme.color.bgBorderSolid))}>
-      {props.children}
+      {children}
     </div>
   );
 }

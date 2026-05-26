@@ -8,8 +8,8 @@ const styles = stylex.create({
   },
 });
 
-function StyledFallback(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.fallback}>{props.children}</div>;
+function StyledFallback({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.fallback}>{children}</div>;
 }
 
 // Simulate a HOC that takes options

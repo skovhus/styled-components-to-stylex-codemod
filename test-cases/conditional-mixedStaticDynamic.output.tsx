@@ -13,8 +13,8 @@ interface ContainerProps {
   position?: Position;
 }
 
-function Wrapper(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.wrapper}>{props.children}</div>;
+function Wrapper({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.wrapper}>{children}</div>;
 }
 
 function Container(props: React.PropsWithChildren<ContainerProps>) {

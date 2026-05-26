@@ -7,9 +7,9 @@ function caret(color: string): string {
   return `inset 0 -2px 0 ${color}`;
 }
 
-function CaretBox(props: React.PropsWithChildren<{}>) {
+function CaretBox({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
-  return <div sx={styles.caretBox(caret(theme.color.labelMuted))}>{props.children}</div>;
+  return <div sx={styles.caretBox(caret(theme.color.labelMuted))}>{children}</div>;
 }
 
 export function App() {

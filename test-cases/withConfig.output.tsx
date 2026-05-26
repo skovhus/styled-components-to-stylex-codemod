@@ -1,11 +1,11 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type CardProps = React.PropsWithChildren<{}>;
+type CardProps = { children?: React.ReactNode };
 
 // withConfig for componentId (stable class names)
-function Card(props: CardProps) {
-  return <div sx={styles.card}>{props.children}</div>;
+function Card({ children }: CardProps) {
+  return <div sx={styles.card}>{children}</div>;
 }
 
 type InputProps = { hasError?: boolean } & Omit<

@@ -3,18 +3,18 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 import { ThingMarker, ThingThemedMarker, RowMarker } from "./selector-sibling.input.stylex";
 
-function Thing(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
+function Thing({ children }: { children?: React.ReactNode }) {
+  return <div sx={[styles.thing, ThingMarker]}>{children}</div>;
 }
 
 // General sibling with theme interpolation
-function ThingThemed(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thingThemed, ThingThemedMarker]}>{props.children}</div>;
+function ThingThemed({ children }: { children?: React.ReactNode }) {
+  return <div sx={[styles.thingThemed, ThingThemedMarker]}>{children}</div>;
 }
 
 // Minimal general sibling (margin-top spacing pattern)
-function Row(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.row, RowMarker]}>{props.children}</div>;
+function Row({ children }: { children?: React.ReactNode }) {
+  return <div sx={[styles.row, RowMarker]}>{children}</div>;
 }
 
 export const App = () => (

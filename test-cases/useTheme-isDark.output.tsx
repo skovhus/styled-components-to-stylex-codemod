@@ -3,23 +3,21 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $colors, pixelVars } from "./tokens.stylex";
 
-function Text(props: React.PropsWithChildren<{}>) {
+function Text({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
   return (
-    <span sx={[styles.text, theme.isDark ? styles.textDark : styles.textLight]}>
-      {props.children}
-    </span>
+    <span sx={[styles.text, theme.isDark ? styles.textDark : styles.textLight]}>{children}</span>
   );
 }
 
 // theme.isDark controlling an entire CSS block (empty string vs padding)
-function Box(props: React.PropsWithChildren<{}>) {
+function Box({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
-  return <div sx={theme.isDark ? undefined : styles.boxLight}>{props.children}</div>;
+  return <div sx={theme.isDark ? undefined : styles.boxLight}>{children}</div>;
 }
 
 // theme.isDark setting a CSS custom property value (with optional chaining)
-function DayPicker(props: React.PropsWithChildren<{}>) {
+function DayPicker({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   const sx = stylex.props(
@@ -35,7 +33,7 @@ function DayPicker(props: React.PropsWithChildren<{}>) {
         backgroundColor: "var(--highlighted-color)",
       }}
     >
-      {props.children}
+      {children}
     </div>
   );
 }

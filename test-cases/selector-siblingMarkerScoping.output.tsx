@@ -6,8 +6,8 @@ import { RowMarker } from "./selector-siblingMarkerScoping.input.stylex";
 // If another component in the same file also uses defaultMarker() (e.g. for
 // an ancestor relation override), its marker could incorrectly activate
 // Row's general-sibling styles. Use defineMarker() for strict scoping.
-function Row(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.row, RowMarker]}>{props.children}</div>;
+function Row({ children }: { children?: React.ReactNode }) {
+  return <div sx={[styles.row, RowMarker]}>{children}</div>;
 }
 
 export const App = () => (
