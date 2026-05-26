@@ -268,6 +268,8 @@ function namespaceObjectMemberTargetsLocal(
         return;
       }
       matched = objectExpressionPathTargetsLocal(
+        root,
+        j,
         path.node.init,
         [...remainingPath, exportedName],
         localName,
@@ -300,9 +302,12 @@ function isModuleScopeVariableDeclarator(path: { parentPath?: unknown }): boolea
 }
 
 function objectExpressionPathTargetsLocal(
+  root: Collection<ASTNode>,
+  j: JSCodeshift,
   node: unknown,
   path: string[],
   localName: string,
+  seen: Set<string> = new Set<string>(),
 ): boolean {
   const objectNode = node as
     | { type?: string; properties?: Array<{ type?: string; key?: unknown; value?: unknown }> }
@@ -323,12 +328,62 @@ function objectExpressionPathTargetsLocal(
       continue;
     }
     if (remainingPath.length > 0) {
-      return objectExpressionPathTargetsLocal(property.value, remainingPath, localName);
+      const value = property.value as { type?: string; name?: string } | null | undefined;
+      if (value?.type === "Identifier" && value.name) {
+        return objectIdentifierPathTargetsLocal(
+          root,
+          j,
+          value.name,
+          remainingPath,
+          localName,
+          seen,
+        );
+      }
+      return objectExpressionPathTargetsLocal(
+        root,
+        j,
+        property.value,
+        remainingPath,
+        localName,
+        seen,
+      );
     }
     const value = property.value as { type?: string; name?: string } | null | undefined;
     return value?.type === "Identifier" && value.name === localName;
   }
   return false;
+}
+
+function objectIdentifierPathTargetsLocal(
+  root: Collection<ASTNode>,
+  j: JSCodeshift,
+  objectName: string,
+  path: string[],
+  localName: string,
+  seen: Set<string>,
+): boolean {
+  if (seen.has(objectName)) {
+    return false;
+  }
+  seen.add(objectName);
+  let matched = false;
+  root
+    .find(j.VariableDeclarator, { id: { type: "Identifier", name: objectName } } as any)
+    .filter(isModuleScopeVariableDeclarator)
+    .forEach((declPath) => {
+      if (matched) {
+        return;
+      }
+      matched = objectExpressionPathTargetsLocal(
+        root,
+        j,
+        declPath.node.init,
+        path,
+        localName,
+        seen,
+      );
+    });
+  return matched;
 }
 
 function staticPropertyKeyName(key: unknown): string | null {
