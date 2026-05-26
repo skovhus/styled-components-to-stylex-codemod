@@ -15,6 +15,7 @@ import {
   patchNullConditionalDefaultsForProp,
   type DefaultInference,
 } from "./conditional-style-defaults.js";
+import { buildStyleKeySequence } from "./style-composition-plan.js";
 
 export function guardForwardedSxConditionalDefaults(
   ctx: TransformContext,
@@ -29,8 +30,8 @@ export function guardForwardedSxConditionalDefaults(
       continue;
     }
 
-    for (const styleKey of styleKeysForDecl(decl)) {
-      const styleObj = ctx.resolvedStyleObjects.get(styleKey);
+    for (const entry of buildStyleKeySequence(ctx, decl, { includeLocalBase: false })) {
+      const styleObj = entry.styleObj ?? ctx.resolvedStyleObjects.get(entry.styleKey);
       if (!isRecord(styleObj)) {
         continue;
       }
@@ -53,11 +54,6 @@ export function guardForwardedSxConditionalDefaults(
         if (result === "ok") {
           continue;
         }
-        return "bail";
-      }
-    }
-    for (const styleObj of variantDimensionStyleObjects(decl)) {
-      if (guardForwardedSxStyleObject(ctx, decl, styleObj) === "bail") {
         return "bail";
       }
     }
@@ -88,10 +84,6 @@ function guardForwardedSxStyleObject(
     }
   }
   return "ok";
-}
-
-function variantDimensionStyleObjects(decl: StyledDecl): Record<string, unknown>[] {
-  return (decl.variantDimensions ?? []).flatMap((dimension) => Object.values(dimension.variants));
 }
 
 function applyForwardedSxDefault(args: {
@@ -153,48 +145,6 @@ type PropertyInference =
 
 function wrappedComponentForwardsSx(ctx: TransformContext, componentLocalName: string): boolean {
   return wrappedComponentInterfaceFor(ctx, componentLocalName)?.acceptsSx === true;
-}
-
-function styleKeysForDecl(decl: StyledDecl): string[] {
-  return [
-    decl.styleKey,
-    ...(decl.extraStyleKeys ?? []),
-    ...(decl.needsUseThemeHook?.flatMap((entry) =>
-      [entry.trueStyleKey, entry.falseStyleKey].filter((key): key is string => key !== null),
-    ) ?? []),
-    ...Object.values(decl.variantStyleKeys ?? {}),
-    ...(decl.styleFnFromProps?.map((entry) => entry.fnKey) ?? []),
-    ...(decl.compoundVariants?.flatMap((entry) =>
-      entry.kind === "3branch"
-        ? [entry.outerTruthyKey, entry.innerTruthyKey, entry.innerFalsyKey]
-        : [
-            entry.outerTruthyInnerTruthyKey,
-            entry.outerTruthyInnerFalsyKey,
-            entry.outerFalsyInnerTruthyKey,
-            entry.outerFalsyInnerFalsyKey,
-          ],
-    ) ?? []),
-    ...(decl.pseudoExpandSelectors?.map((entry) => entry.styleKey) ?? []),
-    ...(decl.pseudoAliasSelectors?.flatMap((entry) => entry.styleKeys) ?? []),
-    ...(decl.attrWrapper
-      ? [
-          decl.attrWrapper.checkboxKey,
-          decl.attrWrapper.radioKey,
-          decl.attrWrapper.readonlyKey,
-          decl.attrWrapper.externalKey,
-          decl.attrWrapper.httpsKey,
-          decl.attrWrapper.pdfKey,
-        ].filter((key): key is string => typeof key === "string")
-      : []),
-    ...(decl.enumVariant
-      ? [decl.enumVariant.baseKey, ...decl.enumVariant.cases.map((entry) => entry.styleKey)]
-      : []),
-    ...(decl.callSiteCombinedStyles?.map((entry) => entry.styleKey) ?? []),
-    ...(decl.promotedStyleProps
-      ?.filter((entry) => !entry.mergeIntoBase)
-      .map((entry) => entry.styleKey) ?? []),
-    ...(decl.adjacentSiblingStyleKey ? [decl.adjacentSiblingStyleKey] : []),
-  ];
 }
 
 function inferWrappedComponentSxProperty(
