@@ -3955,6 +3955,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   z-index: 3;
 }
 
+.x1swf91x:not(#\#):not(#\#):not(#\#) {
+  z-index: auto;
+}
+
 .x1csysfu:not(#\#):not(#\#):not(#\#) {
   z-index: calc(var(--x1ofp3te) + 1);
 }
