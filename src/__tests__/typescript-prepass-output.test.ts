@@ -134,6 +134,40 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("recognizes single-quoted intrinsic pass-through props on custom components", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-single-quote-"));
+    const filePath = path.join(fixtureDir, "Box.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "const Base = (props: React.ComponentPropsWithRef<'div'>) => <div {...props} />;",
+      "",
+      "const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      "export const App = () => <Wrapped>Box</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain("{...stylex.props(");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("bails when a local wrapped component has no style channel despite nested sx reads", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-shadowed-sx-"));
     const filePath = path.join(fixtureDir, "Panel.tsx");
@@ -151,6 +185,44 @@ describe("TypeScript prepass output refinement", () => {
       "`;",
       "",
       "export const App = () => <Wrapped items={[{}]}>Panel</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat unused rest destructuring as className support", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-unused-rest-"));
+    const filePath = path.join(fixtureDir, "Panel.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "function Panel({ ...rest }: { label?: string; children?: React.ReactNode }) {",
+      "  return <section>Panel</section>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Panel)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Panel">Panel</Wrapped>;',
     ].join("\n");
     writeFileSync(filePath, source);
 

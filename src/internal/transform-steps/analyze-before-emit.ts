@@ -4912,9 +4912,6 @@ function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata):
   if (metadata.propType && isIntrinsicReactPropsTypeText(metadata.propType.text)) {
     return true;
   }
-  if (metadata.restProps.length > 0) {
-    return true;
-  }
   if (metadata.hasIndexSignature) {
     return true;
   }
@@ -4925,7 +4922,7 @@ function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata):
 }
 
 function isIntrinsicReactPropsTypeText(typeText: string): boolean {
-  return /^React\.ComponentProps(?:WithRef|WithoutRef)?<"[^"]+">$/.test(typeText);
+  return /^React\.ComponentProps(?:WithRef|WithoutRef)?<(['"])[^'"]+\1>$/.test(typeText);
 }
 
 function hasInlineObjectPropType(metadata: TypeScriptComponentMetadata): boolean {
