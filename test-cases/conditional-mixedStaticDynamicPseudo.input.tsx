@@ -15,6 +15,7 @@ const Container = styled.div<Props>`
   position: relative;
   padding: 20px;
   background-color: #f5f5f5;
+  opacity: 1;
 
   ${(props) =>
     props.$enabled

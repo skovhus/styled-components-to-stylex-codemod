@@ -1,6 +1,7 @@
 import styled from "styled-components";
 
 const Button = styled.button`
+  display: flex;
   color: #bf4f74;
   font-size: 1em;
   margin: 1em;
@@ -12,6 +13,10 @@ const Button = styled.button`
 const TomatoButton = styled(Button)`
   color: tomato;
   border-color: tomato;
+
+  @media print {
+    display: block;
+  }
 `;
 
 export const App = () => (

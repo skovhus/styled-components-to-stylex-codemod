@@ -48,7 +48,7 @@ const styles = stylex.create({
       ':is([data-state="active"])': $colors.bgSub,
     },
     boxShadow: {
-      default: null,
+      default: "none",
       ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint}`,
     },
   },
@@ -58,7 +58,7 @@ const styles = stylex.create({
       ':is([data-state="active"])': $colors.bgBase,
     },
     boxShadow: {
-      default: null,
+      default: "none",
       ':is([data-state="active"])': `0 0 0 1px ${$colors.bgBorderFaint}`,
     },
   },
@@ -72,7 +72,7 @@ const styles = stylex.create({
       default: "#f8fafc",
       ":active": $colors.bgBaseHover,
       ":hover": {
-        default: null,
+        default: "#f8fafc",
         [$interaction.canHover]: $colors.bgBaseHover,
       },
     },
@@ -80,7 +80,7 @@ const styles = stylex.create({
       default: "#334155",
       ":active": $colors.labelTitle,
       ":hover": {
-        default: null,
+        default: "#334155",
         [$interaction.canHover]: $colors.labelTitle,
       },
     },

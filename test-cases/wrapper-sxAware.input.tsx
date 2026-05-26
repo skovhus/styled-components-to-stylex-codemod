@@ -5,7 +5,7 @@
 // wrapped component.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
@@ -14,6 +14,10 @@ import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
+import DefaultSxButton from "./lib/sx-default-button";
+import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
+import DirectorySxButton from "./lib/sx-directory-button";
+import { NestedSxBox } from "./lib/sx-branchy-box";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
@@ -22,6 +26,57 @@ import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
 const StyledButton = styled(SxAwareButton)`
   color: #bf4f74;
   font-weight: bold;
+`;
+
+// Media-only overrides forwarded through sx must keep SxAwareButton's base default.
+const PrintButton = styled(SxAwareButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Default imports must infer the source declaration name when preserving sx defaults.
+const DefaultPrintButton = styled(DefaultSxButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Default exports through identifiers must resolve the source declaration name.
+const DefaultIdentifierPrintButton = styled(DefaultIdentifierSxButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Directory imports must continue probing to index.tsx when preserving sx defaults.
+const DirectoryPrintButton = styled(DirectorySxButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Dynamic style functions forwarded through sx must preserve the wrapped base default.
+const DynamicPrintButton = styled(SxAwareButton)<{ printDisplay: "block" | "inline-flex" }>`
+  @media print {
+    display: ${(props) => props.printDisplay};
+  }
+`;
+
+// Nested forwarded sx defaults must preserve SxAwareButton's base defaults too.
+const HoverMediaButton = styled(SxAwareButton)`
+  &:hover {
+    @media (hover: hover) {
+      background-color: orange;
+    }
+  }
+`;
+
+// Nested functions that mention sx must not affect the wrapped component base proof.
+const NestedPrintBox = styled(NestedSxBox)`
+  @media print {
+    display: block;
+  }
 `;
 
 // Multiple call sites → emitted as a wrapper function component.
@@ -203,6 +258,13 @@ export const App = () => (
     </StyledButton>
     {/* Caller passes its own sx — must compose with the wrapper's internal sx */}
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
+    <PrintButton>Print display</PrintButton>
+    <DefaultPrintButton>Default export print</DefaultPrintButton>
+    <DefaultIdentifierPrintButton>Default identifier print</DefaultIdentifierPrintButton>
+    <DirectoryPrintButton>Directory import print</DirectoryPrintButton>
+    <DynamicPrintButton printDisplay="block">Dynamic print display</DynamicPrintButton>
+    <HoverMediaButton>Hover media</HoverMediaButton>
+    <NestedPrintBox>Nested sx scope</NestedPrintBox>
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>

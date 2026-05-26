@@ -9,6 +9,7 @@ export const App = () => (
 
 const styles = stylex.create({
   button: {
+    display: "flex",
     color: "#bf4f74",
     fontSize: "1em",
     margin: "1em",
@@ -22,5 +23,9 @@ const styles = stylex.create({
   tomatoButton: {
     color: "tomato",
     borderColor: "tomato",
+    display: {
+      default: "flex",
+      "@media print": "block",
+    },
   },
 });

@@ -26,7 +26,7 @@ const styles = stylex.create({
   },
   containerCompact: {
     maxWidth: {
-      default: null,
+      default: 800,
       [breakpoints.phone]: "none",
     },
     borderRadius: {
