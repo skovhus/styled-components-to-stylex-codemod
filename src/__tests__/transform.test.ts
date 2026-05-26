@@ -10170,6 +10170,66 @@ export const App = () => <Parent />;
   });
 });
 
+describe("component value usage", () => {
+  it("keeps react-window elementType props on the narrow style-only wrapper contract", () => {
+    const source = `
+import * as React from "react";
+import { FixedSizeList as WindowList } from "react-window";
+import styled from "styled-components";
+
+const InnerContainer = styled.div\`
+  position: relative;
+  background-color: red;
+\`;
+
+export const App = () => (
+  <WindowList innerElementType={InnerContainer} height={100} itemCount={1} itemSize={20} width={100}>
+    {() => <div>Row</div>}
+  </WindowList>
+);
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("props: React.PropsWithChildren<{");
+    expect(output).toContain("style?: React.CSSProperties");
+    expect(output).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(output).not.toContain("sx?: stylex.StyleXStyles");
+    expect(output).not.toContain("className, children, style, sx");
+  });
+
+  it("uses broad value wrappers for non-react-window elementType props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function LocalList(props: { innerElementType?: React.ElementType; children: React.ReactNode }) {
+  const Inner = props.innerElementType ?? "div";
+  return <Inner>{props.children}</Inner>;
+}
+
+const InnerContainer = styled.div\`
+  position: relative;
+  background-color: red;
+\`;
+
+export const App = () => (
+  <LocalList innerElementType={InnerContainer}>
+    Row
+  </LocalList>
+);
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      'function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles })',
+    );
+    expect(output).toMatch(
+      /const \{\s*className,\s*children,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/,
+    );
+    expect(output).toContain("{...mergedSx([styles.innerContainer, sx], className, style)}");
+  });
+});
+
 describe("usePhysicalProperties adapter option", () => {
   it("should expand 2-value padding to logical properties by default", () => {
     const source = `

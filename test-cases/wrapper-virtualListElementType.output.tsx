@@ -1,17 +1,12 @@
-// Private styled element passed as a virtual-list elementType should keep a narrow layout prop surface.
+// Private styled element passed to a local elementType-like prop should keep a broad value surface.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function InnerContainer(
-  props: React.PropsWithChildren<{
-    style?: React.CSSProperties;
-    ref?: React.Ref<HTMLDivElement>;
-  }>,
-) {
-  const { children, style, ...rest } = props;
+function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
+  const { className, children, style, sx, ...rest } = props;
   return (
-    <div {...rest} {...mergedSx(styles.innerContainer, undefined, style)}>
+    <div {...rest} {...mergedSx([styles.innerContainer, sx], className, style)}>
       {children}
     </div>
   );

@@ -70,6 +70,16 @@ import { guardForwardedSxConditionalDefaults } from "../utilities/forwarded-sx-d
 import { guardGeneratedConditionalDefaults } from "../utilities/conditional-style-defaults.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
+const REACT_WINDOW_SOURCE = "react-window";
+const REACT_WINDOW_ELEMENT_TYPE_PROPS = new Set(["innerElementType", "outerElementType"]);
+const REACT_WINDOW_COMPONENT_EXPORTS = new Set([
+  "FixedSizeGrid",
+  "FixedSizeList",
+  "Grid",
+  "List",
+  "VariableSizeGrid",
+  "VariableSizeList",
+]);
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -564,7 +574,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         expressionContainer?.type !== "JSXExpressionContainer" ||
         attr?.type !== "JSXAttribute" ||
         attrName?.type !== "JSXIdentifier" ||
-        (attrName.name !== "innerElementType" && attrName.name !== "outerElementType")
+        !REACT_WINDOW_ELEMENT_TYPE_PROPS.has(attrName.name) ||
+        !isKnownReactWindowElementTypeAttribute(p.parentPath?.parentPath, ctx.importMap)
       ) {
         onlyVirtualListElementType = false;
       }
@@ -4973,6 +4984,63 @@ function staticObjectPropertyName(prop: unknown): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
+}
+
+function isKnownReactWindowElementTypeAttribute(
+  attrPath:
+    | { parentPath?: { node?: { type?: string; name?: unknown } | null } | null }
+    | null
+    | undefined,
+  importMap: TransformContext["importMap"],
+): boolean {
+  const openingElement = attrPath?.parentPath?.node;
+  if (openingElement?.type !== "JSXOpeningElement") {
+    return false;
+  }
+  return jsxNameIsKnownReactWindowComponent(openingElement.name, importMap);
+}
+
+function jsxNameIsKnownReactWindowComponent(
+  jsxName: unknown,
+  importMap: TransformContext["importMap"],
+): boolean {
+  const name = jsxName as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: unknown;
+  };
+  if (name.type === "JSXIdentifier") {
+    return localNameIsReactWindowComponent(name.name, importMap);
+  }
+  if (name.type !== "JSXMemberExpression") {
+    return false;
+  }
+  const namespace = name.object as { type?: string; name?: string } | undefined;
+  const member = name.property as { type?: string; name?: string } | undefined;
+  if (
+    namespace?.type !== "JSXIdentifier" ||
+    member?.type !== "JSXIdentifier" ||
+    !REACT_WINDOW_COMPONENT_EXPORTS.has(member.name ?? "")
+  ) {
+    return false;
+  }
+  const importInfo = namespace.name ? importMap?.get(namespace.name) : undefined;
+  return importInfo?.source.value === REACT_WINDOW_SOURCE && importInfo.importedName === "*";
+}
+
+function localNameIsReactWindowComponent(
+  localName: string | undefined,
+  importMap: TransformContext["importMap"],
+): boolean {
+  if (!localName) {
+    return false;
+  }
+  const importInfo = importMap?.get(localName);
+  return (
+    importInfo?.source.value === REACT_WINDOW_SOURCE &&
+    REACT_WINDOW_COMPONENT_EXPORTS.has(importInfo.importedName)
+  );
 }
 
 function isStylexConditionKey(key: string): boolean {

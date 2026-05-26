@@ -1,4 +1,4 @@
-// Private styled element passed as a virtual-list elementType should keep a narrow layout prop surface.
+// Private styled element passed to a local elementType-like prop should keep a broad value surface.
 import * as React from "react";
 import styled from "styled-components";
 
