@@ -16,6 +16,7 @@ import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-
 import DefaultSxButton from "./lib/sx-default-button";
 import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
 import DirectorySxButton from "./lib/sx-directory-button";
+import { NestedSxBox } from "./lib/sx-branchy-box";
 
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -201,6 +202,13 @@ const callerStyles = stylex.create({
       },
     },
   },
+  // Nested functions that mention sx must not affect the wrapped component base proof.
+  nestedPrintBox: {
+    display: {
+      default: "flex",
+      "@media print": "block",
+    },
+  },
   // Multiple call sites → emitted as a wrapper function component.
   primary: {
     color: "white",
@@ -321,6 +329,7 @@ export const App = () => (
       Dynamic print display
     </SxAwareButton>
     <SxAwareButton sx={callerStyles.hoverMediaButton}>Hover media</SxAwareButton>
+    <NestedSxBox sx={callerStyles.nestedPrintBox}>Nested sx scope</NestedSxBox>
     <SxAwareButton sx={callerStyles.primary}>Primary 1</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 2</SxAwareButton>
     <SxAwareButton sx={[callerStyles.inlinedAccent, callerStyles.caller]}>

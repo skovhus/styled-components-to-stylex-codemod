@@ -559,7 +559,7 @@ function collectSxCompositionObservations(
   prop: string,
 ): PropertyInference[] {
   const observations: PropertyInference[] = [];
-  walk(component.body, (node) => {
+  walkTopLevelComponentBody(component.body, (node) => {
     if (node.type === "CallExpression" && isStylexPropsCall(node)) {
       const beforeSx = argsBeforeSx(getCallArguments(node), sxBindings);
       if (beforeSx) {
@@ -586,6 +586,16 @@ function collectSxCompositionObservations(
     }
   });
   return observations;
+}
+
+function walkTopLevelComponentBody(node: unknown, visit: (node: AstRecord) => void): void {
+  walk(node, (current) => {
+    if (current !== node && isFunctionLike(current)) {
+      return "skip";
+    }
+    visit(current);
+    return undefined;
+  });
 }
 
 function argsBeforeSx(
@@ -680,11 +690,15 @@ function analyzeStyleReference(
 function mergePropertyInferences(inferences: readonly PropertyInference[]): PropertyInference {
   let merged: PropertyInference = { kind: "absent" };
   let sawAbsent = false;
+  let sawStatic = false;
   for (const inference of inferences) {
     if (inference.kind === "unknown" || inference.kind === "variable") {
       return inference;
     }
     if (inference.kind === "absent") {
+      if (sawStatic) {
+        return { kind: "variable" };
+      }
       sawAbsent = true;
       continue;
     }
@@ -694,6 +708,7 @@ function mergePropertyInferences(inferences: readonly PropertyInference[]): Prop
     if (merged.kind === "static" && merged.value !== inference.value) {
       return { kind: "variable" };
     }
+    sawStatic = true;
     merged = inference;
   }
   return merged;
@@ -864,7 +879,11 @@ function readJsxExpression(value: unknown): unknown {
   return isRecord(value) && value.type === "JSXExpressionContainer" ? value.expression : value;
 }
 
-function walk(node: unknown, visit: (node: AstRecord) => void, seen = new WeakSet<object>()): void {
+function walk(
+  node: unknown,
+  visit: (node: AstRecord) => "skip" | undefined | void,
+  seen = new WeakSet<object>(),
+): void {
   if (!isRecord(node)) {
     return;
   }
@@ -872,7 +891,9 @@ function walk(node: unknown, visit: (node: AstRecord) => void, seen = new WeakSe
     return;
   }
   seen.add(node);
-  visit(node);
+  if (visit(node) === "skip") {
+    return;
+  }
   for (const [key, value] of Object.entries(node)) {
     if (key === "loc" || key === "comments" || key === "tokens") {
       continue;
