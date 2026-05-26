@@ -39,18 +39,34 @@ WideSelect.Group = (Select as any).Group;
 WideSelect.Option = (Select as any).Option;
 WideSelect.Separator = (Select as any).Separator;
 
+function BaseWideSelect(
+  props: Omit<React.ComponentPropsWithRef<typeof SelectBase>, "className" | "style">,
+) {
+  return <SelectBase {...props} {...stylex.props(styles.baseWideSelect)} />;
+}
+
+BaseWideSelect.Group = (SelectBase as any).Group;
+BaseWideSelect.Option = (SelectBase as any).Option;
+BaseWideSelect.Separator = (SelectBase as any).Separator;
+
 export const App = () => (
-  <WideSelect id="x">
-    <WideSelect.Separator />
-    <WideSelect.Group label="favorites">
-      <WideSelect.Option value="a">A</WideSelect.Option>
-      <WideSelect.Option value="b">B</WideSelect.Option>
-    </WideSelect.Group>
-  </WideSelect>
+  <>
+    <WideSelect id="x">
+      <WideSelect.Separator />
+      <WideSelect.Group label="favorites">
+        <WideSelect.Option value="a">A</WideSelect.Option>
+        <WideSelect.Option value="b">B</WideSelect.Option>
+      </WideSelect.Group>
+    </WideSelect>
+    <BaseWideSelect id="y">Base wrapper</BaseWideSelect>
+  </>
 );
 
 const styles = stylex.create({
   wideSelect: {
     width: 200,
+  },
+  baseWideSelect: {
+    width: 240,
   },
 });

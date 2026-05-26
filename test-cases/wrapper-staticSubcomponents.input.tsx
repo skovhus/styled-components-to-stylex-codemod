@@ -33,12 +33,19 @@ const WideSelect = styled(Select)`
   width: 200px;
 `;
 
+const BaseWideSelect = styled(SelectBase)`
+  width: 240px;
+`;
+
 export const App = () => (
-  <WideSelect id="x">
-    <WideSelect.Separator />
-    <WideSelect.Group label="favorites">
-      <WideSelect.Option value="a">A</WideSelect.Option>
-      <WideSelect.Option value="b">B</WideSelect.Option>
-    </WideSelect.Group>
-  </WideSelect>
+  <>
+    <WideSelect id="x">
+      <WideSelect.Separator />
+      <WideSelect.Group label="favorites">
+        <WideSelect.Option value="a">A</WideSelect.Option>
+        <WideSelect.Option value="b">B</WideSelect.Option>
+      </WideSelect.Group>
+    </WideSelect>
+    <BaseWideSelect id="y">Base wrapper</BaseWideSelect>
+  </>
 );

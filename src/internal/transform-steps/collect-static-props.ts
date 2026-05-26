@@ -106,23 +106,27 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     if (target?.type !== "Identifier") {
       return;
     }
-    const componentName = assignedName ?? target.name;
-    if (!baseComponentNames.has(componentName) && !baseComponentNames.has(target.name)) {
+    const componentNames = [target.name, ...(assignedName ? [assignedName] : [])].filter(
+      (name, index, names) => names.indexOf(name) === index && baseComponentNames.has(name),
+    );
+    if (componentNames.length === 0) {
       return;
     }
     if (statics?.type !== "ObjectExpression") {
       return;
     }
-    const names = staticPropertyNames.get(componentName) ?? [];
-    for (const prop of statics.properties ?? []) {
-      const key = (prop as any).key;
-      const propName = key?.name ?? key?.value;
-      if (typeof propName === "string" && !names.includes(propName)) {
-        names.push(propName);
+    for (const componentName of componentNames) {
+      const names = staticPropertyNames.get(componentName) ?? [];
+      for (const prop of statics.properties ?? []) {
+        const key = (prop as any).key;
+        const propName = key?.name ?? key?.value;
+        if (typeof propName === "string" && !names.includes(propName)) {
+          names.push(propName);
+        }
       }
-    }
-    if (names.length > 0) {
-      staticPropertyNames.set(componentName, names);
+      if (names.length > 0) {
+        staticPropertyNames.set(componentName, names);
+      }
     }
   });
 
