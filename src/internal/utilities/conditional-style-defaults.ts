@@ -44,7 +44,7 @@ type OrderedTailEntry = {
 
 type VariantAndStyleFnEntries = {
   immediate: StyleSequenceEntry[];
-  ordered: StyleSequenceEntry[];
+  ordered: OrderedTailEntry[];
 };
 
 export function guardGeneratedConditionalDefaults(
@@ -227,15 +227,18 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
   }
 
   const variantAndStyleFnEntries = buildVariantAndStyleFnEntries(decl);
+  const variantDimensionEntries = buildVariantDimensionEntries(decl);
   entries.push(...variantAndStyleFnEntries.immediate);
+  entries.push(...variantDimensionEntries.immediate);
   entries.push(...buildExtraStylexPropsArgEntries(decl));
   entries.push(...buildThemeEntries(decl));
   entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
   entries.push(...buildPseudoAliasEntries(decl));
   entries.push(...buildCompoundVariantEntries(decl));
-  entries.push(...buildVariantDimensionEntries(decl));
-  entries.push(...variantAndStyleFnEntries.ordered);
+  entries.push(
+    ...mergeOrderedEntries([variantDimensionEntries.ordered, variantAndStyleFnEntries.ordered]),
+  );
   entries.push(...buildEnumVariantEntries(decl));
   entries.push(...buildCallSiteCombinedEntries(decl));
   entries.push(...buildPromotedStyleEntries(decl));
@@ -350,13 +353,11 @@ function buildVariantAndStyleFnEntries(decl: StyledDecl): VariantAndStyleFnEntri
 
   return {
     immediate,
-    ordered: ordered
-      .sort((a, b) => a.order - b.order || a.index - b.index)
-      .map((orderedEntry) => orderedEntry.entry),
+    ordered,
   };
 }
 
-function buildVariantDimensionEntries(decl: StyledDecl): StyleSequenceEntry[] {
+function buildVariantDimensionEntries(decl: StyledDecl): VariantAndStyleFnEntries {
   const immediate: StyleSequenceEntry[] = [];
   const ordered: OrderedTailEntry[] = [];
   let index = 0;
@@ -389,12 +390,17 @@ function buildVariantDimensionEntries(decl: StyledDecl): StyleSequenceEntry[] {
     }
   }
 
-  return [
-    ...immediate,
-    ...ordered
-      .sort((a, b) => a.order - b.order || a.index - b.index)
-      .map((orderedEntry) => orderedEntry.entry),
-  ];
+  return {
+    immediate,
+    ordered,
+  };
+}
+
+function mergeOrderedEntries(groups: OrderedTailEntry[][]): StyleSequenceEntry[] {
+  return groups
+    .flat()
+    .sort((a, b) => a.order - b.order || a.index - b.index)
+    .map((orderedEntry) => orderedEntry.entry);
 }
 
 function buildPseudoExpandEntries(decl: StyledDecl): StyleSequenceEntry[] {

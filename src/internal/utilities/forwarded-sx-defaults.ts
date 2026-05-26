@@ -34,25 +34,7 @@ export function guardForwardedSxConditionalDefaults(
       if (!isRecord(styleObj)) {
         continue;
       }
-      for (const prop of propertiesWithUnsafeNullConditionalDefault(styleObj)) {
-        const result = applyForwardedSxDefault({
-          ctx,
-          decl,
-          prop,
-          applyInference: (inferred) => {
-            if (inferred.kind !== "static" && inferred.kind !== "absent") {
-              return "bail";
-            }
-            return patchNullConditionalDefaultsForProp(
-              styleObj,
-              prop,
-              toDefaultInference(inferred),
-            );
-          },
-        });
-        if (result === "ok") {
-          continue;
-        }
+      if (guardForwardedSxStyleObject(ctx, decl, styleObj) === "bail") {
         return "bail";
       }
       for (const prop of functionPropertiesWithNullConditionalDefault(styleObj)) {
@@ -74,9 +56,42 @@ export function guardForwardedSxConditionalDefaults(
         return "bail";
       }
     }
+    for (const styleObj of variantDimensionStyleObjects(decl)) {
+      if (guardForwardedSxStyleObject(ctx, decl, styleObj) === "bail") {
+        return "bail";
+      }
+    }
   }
 
   return "ok";
+}
+
+function guardForwardedSxStyleObject(
+  ctx: TransformContext,
+  decl: StyledDecl,
+  styleObj: Record<string, unknown>,
+): "ok" | "bail" {
+  for (const prop of propertiesWithUnsafeNullConditionalDefault(styleObj)) {
+    const result = applyForwardedSxDefault({
+      ctx,
+      decl,
+      prop,
+      applyInference: (inferred) => {
+        if (inferred.kind !== "static" && inferred.kind !== "absent") {
+          return "bail";
+        }
+        return patchNullConditionalDefaultsForProp(styleObj, prop, toDefaultInference(inferred));
+      },
+    });
+    if (result !== "ok") {
+      return "bail";
+    }
+  }
+  return "ok";
+}
+
+function variantDimensionStyleObjects(decl: StyledDecl): Record<string, unknown>[] {
+  return (decl.variantDimensions ?? []).flatMap((dimension) => Object.values(dimension.variants));
 }
 
 function applyForwardedSxDefault(args: {

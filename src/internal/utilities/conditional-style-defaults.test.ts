@@ -159,4 +159,115 @@ describe("guardGeneratedConditionalDefaults", () => {
       "Conditional StyleX default would override an unproven earlier style for the same property",
     );
   });
+
+  it("orders variant dimensions with source-ordered variant entries", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      [
+        "buttonActive",
+        {
+          backgroundColor: {
+            default: null,
+            ":hover": "#fee2e2",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      variantStyleKeys: { active: "buttonActive" },
+      variantSourceOrder: { active: 0 },
+      variantDimensions: [
+        {
+          propName: "tone",
+          variantObjectName: "toneVariants",
+          sourceOrder: 10,
+          variants: {
+            warm: { backgroundColor: "#dbeafe" },
+          },
+        },
+      ],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+
+    expect(styles.get("buttonActive")).toEqual({
+      backgroundColor: {
+        default: "#ffffff",
+        ":hover": "#fee2e2",
+      },
+    });
+  });
+
+  it("orders source-ordered variant dimensions with dynamic style functions", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      [
+        "buttonDynamicBackground",
+        {
+          type: "ArrowFunctionExpression",
+          body: {
+            type: "ObjectExpression",
+            properties: [
+              {
+                type: "Property",
+                key: { type: "Identifier", name: "backgroundColor" },
+                value: { type: "Identifier", name: "backgroundColor" },
+              },
+            ],
+          },
+        },
+      ],
+      [
+        "buttonTone.warm",
+        {
+          backgroundColor: {
+            default: null,
+            ":hover": "#dbeafe",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      styleFnFromProps: [
+        {
+          fnKey: "buttonDynamicBackground",
+          jsxProp: "backgroundColor",
+          sourceOrder: 0,
+        },
+      ],
+      variantDimensions: [
+        {
+          propName: "tone",
+          variantObjectName: "buttonTone",
+          sourceOrder: 10,
+          variants: {
+            warm: styles.get("buttonTone.warm") as Record<string, unknown>,
+          },
+        },
+      ],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Conditional StyleX default would override an unproven earlier style for the same property",
+    );
+  });
 });
