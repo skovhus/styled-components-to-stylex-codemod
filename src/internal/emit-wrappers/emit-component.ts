@@ -1026,6 +1026,21 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       }
     }
 
+    const localOnlyPropsTypeText = localOnlyComponentWrapperPropsTypeText({
+      d,
+      emitter,
+      allowClassNameProp,
+      allowStyleProp,
+      exposeSxProp,
+      forceClassNameOptional,
+      forceStyleOptional,
+      functionParamTypeName,
+      isPolymorphicComponentWrapper,
+      shouldLowerForwardedAs,
+    });
+    if (localOnlyPropsTypeText) {
+      inlineTypeText = localOnlyPropsTypeText;
+    }
     const propsParamId = j.identifier("props");
     let polymorphicFnTypeParams: unknown = null;
     if (isPolymorphicComponentWrapper && emitTypes) {
@@ -1497,6 +1512,93 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
 function shouldKeepStylePropSeparate(componentName: string): boolean {
   return componentName.startsWith("motion.") || componentName.startsWith("animated.");
+}
+
+function localOnlyComponentWrapperPropsTypeText(args: {
+  d: StyledDecl;
+  emitter: WrapperEmitter;
+  allowClassNameProp: boolean;
+  allowStyleProp: boolean;
+  exposeSxProp: boolean;
+  forceClassNameOptional: boolean;
+  forceStyleOptional: boolean;
+  functionParamTypeName: string | null;
+  isPolymorphicComponentWrapper: boolean;
+  shouldLowerForwardedAs: boolean;
+}): string | null {
+  const {
+    d,
+    emitter,
+    allowClassNameProp,
+    allowStyleProp,
+    exposeSxProp,
+    forceClassNameOptional,
+    forceStyleOptional,
+    functionParamTypeName,
+    isPolymorphicComponentWrapper,
+    shouldLowerForwardedAs,
+  } = args;
+  if (
+    !emitter.emitTypes ||
+    d.isExported ||
+    emitter.exportedComponents.has(d.localName) ||
+    d.propsType ||
+    d.consumerUsesSpread ||
+    emitter.isBroadValueUsage(d) ||
+    functionParamTypeName ||
+    isPolymorphicComponentWrapper ||
+    allowClassNameProp ||
+    allowStyleProp ||
+    exposeSxProp ||
+    forceClassNameOptional ||
+    forceStyleOptional ||
+    shouldLowerForwardedAs ||
+    !hasStaticComponentAttrs(d) ||
+    hasPropDrivenComponentWrapperBehavior(d) ||
+    hasRuntimeAttrsProps(d)
+  ) {
+    return null;
+  }
+
+  const usedAttrs = emitter.getUsedAttrs(d.localName);
+  if (usedAttrs.has("*") || [...usedAttrs].some((attr) => attr !== "children")) {
+    return null;
+  }
+  if (!usedAttrs.has("children") && !emitter.hasJsxChildrenUsage(d.localName)) {
+    return null;
+  }
+  return "{ children?: React.ReactNode }";
+}
+
+function hasStaticComponentAttrs(d: StyledDecl): boolean {
+  return Object.keys(d.attrsInfo?.staticAttrs ?? {}).length > 0;
+}
+
+function hasRuntimeAttrsProps(d: StyledDecl): boolean {
+  const attrsInfo = d.attrsInfo;
+  return !!(
+    (attrsInfo?.defaultAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.dynamicAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.conditionalAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.attrsDynamicStyles?.length ?? 0) > 0 ||
+    attrsInfo?.attrsStaticStyleExpr
+  );
+}
+
+function hasPropDrivenComponentWrapperBehavior(d: StyledDecl): boolean {
+  return !!(
+    d.enumVariant ||
+    d.shouldForwardProp ||
+    (d.inlineStyleProps?.length ?? 0) > 0 ||
+    (d.styleFnFromProps?.length ?? 0) > 0 ||
+    (d.variantDimensions?.length ?? 0) > 0 ||
+    (d.compoundVariants?.length ?? 0) > 0 ||
+    Object.keys(d.variantStyleKeys ?? {}).length > 0 ||
+    (d.transientPropRenames?.size ?? 0) > 0 ||
+    (d.observedExpressionConditionDropProps?.size ?? 0) > 0 ||
+    (d.styleValueVariantProps?.size ?? 0) > 0
+  );
 }
 
 function getExplicitAttrsOmitUnion(args: {
