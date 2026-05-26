@@ -14,6 +14,7 @@ import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-b
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
 import DefaultSxButton from "./lib/sx-default-button";
+import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
 import DirectorySxButton from "./lib/sx-directory-button";
 
 // Generic component whose props type intersects an aliased object literal
@@ -170,6 +171,13 @@ const callerStyles = stylex.create({
       "@media print": "block",
     },
   },
+  // Default exports through identifiers must resolve the source declaration name.
+  defaultIdentifierPrintButton: {
+    display: {
+      default: "flex",
+      "@media print": "block",
+    },
+  },
   // Directory imports must continue probing to index.tsx when preserving sx defaults.
   directoryPrintButton: {
     display: {
@@ -303,6 +311,9 @@ export const App = () => (
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
     <SxAwareButton sx={callerStyles.printButton}>Print display</SxAwareButton>
     <DefaultSxButton sx={callerStyles.defaultPrintButton}>Default export print</DefaultSxButton>
+    <DefaultIdentifierSxButton sx={callerStyles.defaultIdentifierPrintButton}>
+      Default identifier print
+    </DefaultIdentifierSxButton>
     <DirectorySxButton sx={callerStyles.directoryPrintButton}>
       Directory import print
     </DirectorySxButton>

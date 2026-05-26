@@ -457,7 +457,7 @@ function staticStyleValueToAst(value: StaticStyleValue): AstRecord {
 }
 
 function findComponentFunction(ast: unknown, componentNames: readonly string[]): AstRecord | null {
-  const names = new Set(componentNames);
+  const names = new Set([...componentNames, ...defaultExportedIdentifierNames(ast)]);
   let found: AstRecord | null = null;
   walk(ast, (node) => {
     if (found) {
@@ -492,6 +492,20 @@ function findComponentFunction(ast: unknown, componentNames: readonly string[]):
     }
   });
   return found;
+}
+
+function defaultExportedIdentifierNames(ast: unknown): string[] {
+  const names: string[] = [];
+  walk(ast, (node) => {
+    if (node.type !== "ExportDefaultDeclaration") {
+      return;
+    }
+    const declaration = node.declaration;
+    if (isIdentifier(declaration)) {
+      names.push(declaration.name);
+    }
+  });
+  return names;
 }
 
 function collectSxBindings(component: AstRecord): {

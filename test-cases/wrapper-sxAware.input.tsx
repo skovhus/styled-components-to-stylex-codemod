@@ -15,6 +15,7 @@ import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-b
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
 import DefaultSxButton from "./lib/sx-default-button";
+import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
 import DirectorySxButton from "./lib/sx-directory-button";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -35,6 +36,13 @@ const PrintButton = styled(SxAwareButton)`
 
 // Default imports must infer the source declaration name when preserving sx defaults.
 const DefaultPrintButton = styled(DefaultSxButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Default exports through identifiers must resolve the source declaration name.
+const DefaultIdentifierPrintButton = styled(DefaultIdentifierSxButton)`
   @media print {
     display: block;
   }
@@ -244,6 +252,7 @@ export const App = () => (
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
     <PrintButton>Print display</PrintButton>
     <DefaultPrintButton>Default export print</DefaultPrintButton>
+    <DefaultIdentifierPrintButton>Default identifier print</DefaultIdentifierPrintButton>
     <DirectoryPrintButton>Directory import print</DirectoryPrintButton>
     <DynamicPrintButton printDisplay="block">Dynamic print display</DynamicPrintButton>
     <HoverMediaButton>Hover media</HoverMediaButton>

@@ -121,4 +121,42 @@ describe("guardGeneratedConditionalDefaults", () => {
       },
     });
   });
+
+  it("treats prior extra stylex props args as dynamic contributors", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      [
+        "buttonHover",
+        {
+          backgroundColor: {
+            default: null,
+            ":hover": "#fee2e2",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStylexPropsArgs: [
+        {
+          expr: { type: "Identifier", name: "externalStyles" } as never,
+          afterBase: true,
+        },
+      ],
+      pseudoExpandSelectors: [{ styleKey: "buttonHover" }],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Conditional StyleX default would override an unproven earlier style for the same property",
+    );
+  });
 });

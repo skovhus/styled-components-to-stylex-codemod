@@ -20,6 +20,7 @@ type StyleSequenceEntry = {
   styleObj?: Record<string, unknown>;
   patchable: boolean;
   contributes?: boolean;
+  contributesDynamic?: boolean;
   source:
     | "base"
     | "mixin"
@@ -31,7 +32,8 @@ type StyleSequenceEntry = {
     | "enum"
     | "adjacent"
     | "promoted"
-    | "combined";
+    | "combined"
+    | "propsArg";
 };
 
 type OrderedTailEntry = {
@@ -135,12 +137,15 @@ function patchConditionalDefaultsForSequence(args: {
 }): "ok" | "bail" {
   const { ctx, decl, entries } = args;
   const defaults = new Map<string, DefaultInference>();
+  let hasDynamicUnknownContributor = false;
 
   for (const entry of entries) {
     const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
     if (entry.patchable && isPlainStyleObject(source)) {
       for (const prop of propertiesWithUnsafeNullConditionalDefault(source)) {
-        const earlier = defaults.get(prop) ?? { kind: "absent" };
+        const earlier = hasDynamicUnknownContributor
+          ? ({ kind: "dynamic" } satisfies DefaultInference)
+          : (defaults.get(prop) ?? { kind: "absent" });
         const patchResult = patchNullConditionalDefaultsForProp(source, prop, earlier);
         if (patchResult === "patched" || patchResult === "safe") {
           continue;
@@ -183,6 +188,11 @@ function patchConditionalDefaultsForSequence(args: {
       }
     }
 
+    if (entry.contributesDynamic) {
+      hasDynamicUnknownContributor = true;
+      continue;
+    }
+
     if (entry.contributes !== false) {
       for (const [prop, inference] of inferDefaultContributions(source)) {
         if (inference.kind === "absent") {
@@ -218,6 +228,7 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
 
   const variantAndStyleFnEntries = buildVariantAndStyleFnEntries(decl);
   entries.push(...variantAndStyleFnEntries.immediate);
+  entries.push(...buildExtraStylexPropsArgEntries(decl));
   entries.push(...buildThemeEntries(decl));
   entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
@@ -237,6 +248,15 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
   }
 
   return entries;
+}
+
+function buildExtraStylexPropsArgEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  return (decl.extraStylexPropsArgs ?? []).map((_, index) => ({
+    styleKey: `${decl.styleKey}ExtraStylexPropsArg${index}`,
+    patchable: false,
+    contributesDynamic: true,
+    source: "propsArg",
+  }));
 }
 
 function localBaseStyleKeys(ctx: TransformContext, decl: StyledDecl): string[] {
