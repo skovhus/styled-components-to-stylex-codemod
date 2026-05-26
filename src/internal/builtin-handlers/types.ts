@@ -294,6 +294,8 @@ export type HandlerResult =
       staticValue: string | number;
       /** AST node for the dynamic branch expression */
       dynamicBranchExpr: unknown;
+      /** Original arrow function parameter name used by the dynamic branch */
+      paramName: string;
       /** Prop names referenced in the dynamic branch (e.g., ["$delay"]) */
       dynamicProps: string[];
       /** true = the false/alternate branch is the static one */

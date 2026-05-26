@@ -2368,6 +2368,30 @@ export const App = () => (
     expect(result).toContain("gap: toGap(size)");
   });
 
+  it("adds a runtime fallback for observed expression variant buckets", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-variants.tsx");
+
+    expect(result).toContain("!active && styles.badgeColor(color)");
+    expect(result).toContain('!active && color === "blue" && styles.badgeNotActiveColorBlue');
+    expect(result).toContain('!active && color === "green" && styles.badgeNotActiveColorGreen');
+    expect(result).toContain("styles.badgeColor(color)");
+    expect(result).toContain("color: color");
+  });
+
   it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
