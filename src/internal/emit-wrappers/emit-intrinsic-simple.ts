@@ -227,7 +227,6 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const classNameId = j.identifier("className");
     const childrenId = j.identifier("children");
     const styleId = j.identifier("style");
-    const refId = j.identifier("ref");
     const restId = j.identifier("rest");
 
     const isVoidTag = VOID_TAGS.has(tagName);
@@ -352,7 +351,6 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         emitter.patternProp("className", classNameId),
         ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
         emitter.patternProp("style", styleId),
-        ...((d.supportsRefProp ?? false) ? [emitter.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [emitter.patternProp("sx", sxId)] : []),
       ],
       destructureProps: [...pseudoGuardProps],
@@ -389,9 +387,6 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         attrsInfo,
         propExprFor: (prop) => j.identifier(prop),
       }),
-      ...((d.supportsRefProp ?? false)
-        ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
-        : []),
       j.jsxSpreadAttribute(restId),
       ...emitter.buildDynamicAttrsFromProps({
         dynamicAttrs: attrsInfo?.dynamicAttrs ?? [],
@@ -1084,6 +1079,8 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const sxId = j.identifier("sx");
       const refId = j.identifier("ref");
       const restId = shouldIncludeRest ? j.identifier("rest") : null;
+      const shouldForwardRefExplicitly =
+        !restId && ((d.supportsRefProp ?? false) || willForwardRef);
       const forwardedAsId = j.identifier("forwardedAs");
 
       if (allowSxProp) {
@@ -1127,9 +1124,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
           ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
-          ...((d.supportsRefProp ?? false) || (!restId && willForwardRef)
-            ? [ctx.patternProp("ref", refId)]
-            : []),
+          ...(shouldForwardRefExplicitly ? [ctx.patternProp("ref", refId)] : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
         destructureProps: destructurePropsForPattern,
@@ -1175,7 +1170,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           attrsInfo: attrsInfoWithoutForwardedAsStatic,
           propExprFor: (prop) => j.identifier(prop),
         }),
-        ...((d.supportsRefProp ?? false) || (!restId && willForwardRef)
+        ...(shouldForwardRefExplicitly
           ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
           : []),
         ...(restId ? [j.jsxSpreadAttribute(restId)] : []),

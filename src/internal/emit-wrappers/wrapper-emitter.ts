@@ -2060,7 +2060,8 @@ export class WrapperEmitter {
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
-    if (includeRefProp) {
+    const shouldForwardRefExplicitly = includeRefProp && !includeRest;
+    if (shouldForwardRefExplicitly) {
       patternProps.push(this.patternProp("ref"));
     }
     if (allowClassNameProp) {
@@ -2188,7 +2189,7 @@ export class WrapperEmitter {
         ),
       );
     }
-    if (includeRefProp) {
+    if (shouldForwardRefExplicitly) {
       jsxAttrs.push(
         j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
       );
