@@ -6855,7 +6855,7 @@ export const App = () => {
     expect(result.code).toMatch(
       /<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/,
     );
-    expect(result.code).not.toContain("ref={ref}");
+    expect(result.code).not.toMatch(/<div[^>]*\bref=\{ref\}/);
   });
 
   it("should forward ref through props spread for component wrappers", async () => {
@@ -6902,7 +6902,7 @@ export const App = () => {
 
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/<Base\s+\{\.\.\.props\}\s+\{\.\.\.stylex\.props\(styles\.wrapped\)\}\s*\/>/);
-    expect(result.code).not.toContain("ref={ref}");
+    expect(result.code).not.toMatch(/<Base[^>]*\bref=\{ref\}/);
   });
 
   it("should not include ref in type when externalInterface returns ref: false", async () => {
