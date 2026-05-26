@@ -6,4 +6,14 @@ const Box = styled.div`
   border-bottom: ${(p) => borderByColor(p.theme.color.bgSub)};
 `;
 
-export const App = () => <Box>Themed helper border</Box>;
+const Separator = styled.div`
+  border-top: ${(p) => borderByColor(p.theme.color.bgBorderFaint)};
+  margin: 8px 0;
+`;
+
+export const App = () => (
+  <div>
+    <Box>Themed helper border</Box>
+    <Separator>Themed helper separator</Separator>
+  </div>
+);

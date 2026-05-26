@@ -580,43 +580,39 @@ export function tryHandleInterpolatedBorder(
       if (!hasStaticWidthOrStyle) {
         const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
         if (parsedTpl) {
-          if (selector.trim() !== "&" || (atRuleStack ?? []).length > 0) {
-            if (parsedTpl.width) {
-              applyResolvedPropValue(widthProp, parsedTpl.width);
-            }
-            if (parsedTpl.style) {
-              applyResolvedPropValue(styleProp, parsedTpl.style);
-            }
-            applyResolvedPropValue(colorProp, parsedTpl.colorExpr);
-            return true;
-          }
-
-          const fullProp = direction ? `border${direction}` : "border";
-          const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
-          const bucket = extraStyleObjects.get(extraKey) ?? {};
+          const expandedBorderEntries: Array<[string, unknown]> = [];
           if (parsedTpl.width) {
-            (bucket as any)[widthProp] = parsedTpl.width;
+            expandedBorderEntries.push([widthProp, parsedTpl.width]);
           }
           if (parsedTpl.style) {
-            (bucket as any)[styleProp] = parsedTpl.style;
+            expandedBorderEntries.push([styleProp, parsedTpl.style]);
           }
-          (bucket as any)[colorProp] = parsedTpl.colorExpr;
-          extraStyleObjects.set(extraKey, bucket);
+          expandedBorderEntries.push([colorProp, parsedTpl.colorExpr]);
 
-          decl.extraStylexPropsArgs ??= [];
-          // When variant style keys already exist (from earlier conditional declarations),
-          // this unconditional style must come after variants to preserve CSS cascade order.
-          const afterVariants = Object.keys(variantStyleKeys).length > 0;
-          decl.extraStylexPropsArgs.push({
-            expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
-            ...(afterVariants ? { afterVariants } : {}),
-          });
-          // `extraStylexPropsArgs` are only emitted for wrapper components.
-          // If this styled component would otherwise be eligible for inlining, we'd drop the extra
-          // `styles.<extraKey>` argument and lose the border expansion. Force a wrapper to preserve
-          // semantics.
-          decl.needsWrapperComponent = true;
+          if (
+            selector.trim() === "&" &&
+            (atRuleStack ?? []).length === 0 &&
+            hasConflictingEarlierVariant(Array.from(variantBuckets.values()), expandedBorderEntries)
+          ) {
+            const fullProp = direction ? `border${direction}` : "border";
+            const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
+            const bucket = extraStyleObjects.get(extraKey) ?? {};
+            for (const [entryProp, entryValue] of expandedBorderEntries) {
+              bucket[entryProp] = entryValue;
+            }
+            extraStyleObjects.set(extraKey, bucket);
 
+            decl.extraStylexPropsArgs ??= [];
+            decl.extraStylexPropsArgs.push({
+              expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
+              afterVariants: true,
+            });
+            decl.needsWrapperComponent = true;
+          } else {
+            for (const [entryProp, entryValue] of expandedBorderEntries) {
+              applyResolvedPropValue(entryProp, entryValue);
+            }
+          }
           // Import insertion currently always happens right after the stylex import, which means
           // later inserts appear above earlier inserts. For this pattern, we want helper imports
           // (e.g. `borders`) to appear above theme token imports (e.g. `$colors`), matching
@@ -749,4 +745,41 @@ function classifyBorderSlotRole(ast: unknown): "width" | "color" | null {
     return looksLikeLength(node.value) ? "width" : "color";
   }
   return null;
+}
+
+function hasConflictingEarlierVariant(
+  variantBuckets: Array<Record<string, unknown>>,
+  borderEntries: Array<[string, unknown]>,
+): boolean {
+  const borderProps = borderEntries.map(([prop]) => prop);
+  return variantBuckets.some((bucket) =>
+    Object.keys(bucket).some((variantProp) =>
+      borderProps.some((borderProp) => borderLonghandsConflict(variantProp, borderProp)),
+    ),
+  );
+}
+
+function borderLonghandsConflict(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftParts = parseBorderLonghand(left);
+  const rightParts = parseBorderLonghand(right);
+  if (!leftParts || !rightParts || leftParts.aspect !== rightParts.aspect) {
+    return false;
+  }
+  return leftParts.side === null || rightParts.side === null || leftParts.side === rightParts.side;
+}
+
+function parseBorderLonghand(prop: string): {
+  side: "Top" | "Right" | "Bottom" | "Left" | null;
+  aspect: "Width" | "Style" | "Color";
+} | null {
+  const match = prop.match(/^border(?:(Top|Right|Bottom|Left))?(Width|Style|Color)$/);
+  if (!match) {
+    return null;
+  }
+  const side = (match[1] ?? null) as "Top" | "Right" | "Bottom" | "Left" | null;
+  const aspect = match[2] as "Width" | "Style" | "Color";
+  return { side, aspect };
 }

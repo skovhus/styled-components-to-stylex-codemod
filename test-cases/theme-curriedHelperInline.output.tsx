@@ -20,7 +20,7 @@ export const App = () => (
   <div style={{ margin: "10px", padding: "10px", height: "100px" }}>
     <Box position="top">Top box with themed border</Box>
     <Box position="bottom">Bottom box without border</Box>
-    <div sx={styles.borderedBoxBorder}>Bordered box</div>
+    <div sx={styles.borderedBox}>Bordered box</div>
   </div>
 );
 
@@ -39,7 +39,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: $colors.labelMuted,
   },
-  borderedBoxBorder: {
+  borderedBox: {
     borderWidth: pixelVars.thin,
     borderStyle: "solid",
     borderColor: $colors.labelMuted,
