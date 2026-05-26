@@ -25,6 +25,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-17p0gf5 {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -4527,7 +4532,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .xcq4dyp.xcq4dyp:not(#\#):not(#\#):not(#\#) {
     display: none;
   }
+}
 
+@media print {
+  .x1ypcxso.x1ypcxso:not(#\#):not(#\#):not(#\#) {
+    display: var(--x-17p0gf5);
+  }
+}
+
+@media (width <= 768px) {
   .x1mx85iw.x1mx85iw:not(#\#):not(#\#):not(#\#) {
     flex-direction: column;
   }
