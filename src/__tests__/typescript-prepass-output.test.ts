@@ -839,6 +839,68 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("bails when TypeScript metadata resolves an empty sx allowlist", () => {
+    const fixtureDir = mkdtempSync(
+      path.join(tmpdir(), "typescript-prepass-sx-empty-allowlist-bail-"),
+    );
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+    writeFileSync(
+      colorTriggerPath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface EmptySxSurface {}",
+        "",
+        "export interface ColorTriggerProps {",
+        "  sx?: stylex.StyleXStyles<EmptySxSurface>;",
+        "  value?: string;",
+        "}",
+        "",
+        "export function ColorTrigger(props: ColorTriggerProps) {",
+        "  return <button {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [colorTriggerPath, sourcePath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop does not accept generated StyleX property",
+          context: expect.objectContaining({
+            property: "backgroundColor",
+          }),
+        }),
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("treats an empty wrapped component sx allowlist as deny-all", () => {
     const source = [
       'import styled from "styled-components";',
