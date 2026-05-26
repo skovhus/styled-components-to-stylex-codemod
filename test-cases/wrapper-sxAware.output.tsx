@@ -177,6 +177,12 @@ const callerStyles = stylex.create({
       "@media print": "block",
     },
   },
+  dynamicPrintButtonDisplay: (printDisplay: "block" | "inline-flex") => ({
+    display: {
+      default: "flex",
+      "@media print": printDisplay,
+    },
+  }),
   // Multiple call sites → emitted as a wrapper function component.
   primary: {
     color: "white",
@@ -290,6 +296,9 @@ export const App = () => (
     <DirectorySxButton sx={callerStyles.directoryPrintButton}>
       Directory import print
     </DirectorySxButton>
+    <SxAwareButton sx={callerStyles.dynamicPrintButtonDisplay("block")}>
+      Dynamic print display
+    </SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 1</SxAwareButton>
     <SxAwareButton sx={callerStyles.primary}>Primary 2</SxAwareButton>
     <SxAwareButton sx={[callerStyles.inlinedAccent, callerStyles.caller]}>

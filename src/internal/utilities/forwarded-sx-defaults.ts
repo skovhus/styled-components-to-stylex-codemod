@@ -34,35 +34,67 @@ export function guardForwardedSxConditionalDefaults(
         continue;
       }
       for (const prop of propertiesWithNullConditionalDefault(styleObj)) {
-        const inferred = inferWrappedComponentSxProperty(ctx, decl.base.ident, prop);
-        if (inferred.kind === "static") {
-          setConditionalDefault(styleObj, prop, inferred.value);
-          continue;
-        }
-        if (inferred.kind === "absent") {
-          continue;
-        }
-        ctx.warnings.push({
-          severity: "warning",
-          type: FORWARDED_SX_DEFAULT_WARNING,
-          loc: decl.loc,
-          context: {
-            localName: decl.localName,
-            wrappedComponent: decl.base.ident,
-            property: prop,
-            reason:
-              inferred.kind === "variable"
-                ? "wrapped component base property can vary before sx is applied"
-                : "wrapped component base default could not be proven",
-            todo: `TODO: set an explicit default for ${prop} or avoid forwarding this conditional override through sx.`,
-          },
+        const result = applyForwardedSxDefault({
+          ctx,
+          decl,
+          prop,
+          applyStaticDefault: (value) => setConditionalDefault(styleObj, prop, value),
         });
+        if (result === "ok") {
+          continue;
+        }
+        return "bail";
+      }
+      for (const prop of functionPropertiesWithNullConditionalDefault(styleObj)) {
+        const result = applyForwardedSxDefault({
+          ctx,
+          decl,
+          prop,
+          applyStaticDefault: (value) => setFunctionConditionalDefault(styleObj, prop, value),
+        });
+        if (result === "ok") {
+          continue;
+        }
         return "bail";
       }
     }
   }
 
   return "ok";
+}
+
+function applyForwardedSxDefault(args: {
+  ctx: TransformContext;
+  decl: StyledDecl;
+  prop: string;
+  applyStaticDefault: (value: StaticStyleValue) => void;
+}): "ok" | "bail" {
+  const { ctx, decl, prop, applyStaticDefault } = args;
+  const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
+  const inferred = inferWrappedComponentSxProperty(ctx, wrappedComponent, prop);
+  if (inferred.kind === "static") {
+    applyStaticDefault(inferred.value);
+    return "ok";
+  }
+  if (inferred.kind === "absent") {
+    return "ok";
+  }
+  ctx.warnings.push({
+    severity: "warning",
+    type: FORWARDED_SX_DEFAULT_WARNING,
+    loc: decl.loc,
+    context: {
+      localName: decl.localName,
+      wrappedComponent,
+      property: prop,
+      reason:
+        inferred.kind === "variable"
+          ? "wrapped component base property can vary before sx is applied"
+          : "wrapped component base default could not be proven",
+      todo: `TODO: set an explicit default for ${prop} or avoid forwarding this conditional override through sx.`,
+    },
+  });
+  return "bail";
 }
 
 const FORWARDED_SX_DEFAULT_WARNING =
@@ -93,6 +125,7 @@ function styleKeysForDecl(decl: StyledDecl): string[] {
       [entry.trueStyleKey, entry.falseStyleKey].filter((key): key is string => key !== null),
     ) ?? []),
     ...Object.values(decl.variantStyleKeys ?? {}),
+    ...(decl.styleFnFromProps?.map((entry) => entry.fnKey) ?? []),
     ...(decl.compoundVariants?.flatMap((entry) =>
       entry.kind === "3branch"
         ? [entry.outerTruthyKey, entry.innerTruthyKey, entry.innerFalsyKey]
@@ -342,6 +375,62 @@ function readFunctionReturnedObject(node: unknown): AstRecord | null {
     }
   }
   return null;
+}
+
+function functionPropertiesWithNullConditionalDefault(node: unknown): string[] {
+  const returnedObject = readFunctionReturnedObject(node);
+  if (!returnedObject) {
+    return [];
+  }
+  const props: string[] = [];
+  for (const property of getObjectProperties(returnedObject)) {
+    const key = readPropertyKey(property);
+    if (!key || !isObjectExpression(property.value)) {
+      continue;
+    }
+    if (objectExpressionHasNullDefault(property.value)) {
+      props.push(key);
+    }
+  }
+  return props;
+}
+
+function setFunctionConditionalDefault(
+  node: unknown,
+  propName: string,
+  value: StaticStyleValue,
+): void {
+  const returnedObject = readFunctionReturnedObject(node);
+  if (!returnedObject) {
+    return;
+  }
+  for (const property of getObjectProperties(returnedObject)) {
+    if (readPropertyKey(property) !== propName || !isObjectExpression(property.value)) {
+      continue;
+    }
+    setObjectExpressionDefault(property.value, value);
+  }
+}
+
+function objectExpressionHasNullDefault(node: AstRecord): boolean {
+  return getObjectProperties(node).some((property) => {
+    if (readPropertyKey(property) !== "default") {
+      return false;
+    }
+    return isNullLiteral(property.value);
+  });
+}
+
+function setObjectExpressionDefault(node: AstRecord, value: StaticStyleValue): void {
+  for (const property of getObjectProperties(node)) {
+    if (readPropertyKey(property) === "default") {
+      property.value = staticStyleValueToAst(value);
+    }
+  }
+}
+
+function staticStyleValueToAst(value: StaticStyleValue): AstRecord {
+  return value === null ? { type: "Literal", value: null } : { type: "Literal", value };
 }
 
 function findComponentFunction(ast: unknown, componentNames: readonly string[]): AstRecord | null {
@@ -656,6 +745,13 @@ function isNullishOrBooleanFalse(node: AstRecord): boolean {
     (node.type === "Identifier" && node.name === "undefined") ||
     (node.type === "BooleanLiteral" && node.value === false) ||
     (node.type === "Literal" && (node.value === null || node.value === false))
+  );
+}
+
+function isNullLiteral(node: unknown): boolean {
+  return (
+    isRecord(node) &&
+    (node.type === "NullLiteral" || (node.type === "Literal" && node.value === null))
   );
 }
 

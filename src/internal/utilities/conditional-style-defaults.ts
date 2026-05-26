@@ -40,6 +40,11 @@ type OrderedTailEntry = {
   entry: StyleSequenceEntry;
 };
 
+type VariantAndStyleFnEntries = {
+  immediate: StyleSequenceEntry[];
+  ordered: StyleSequenceEntry[];
+};
+
 export function guardGeneratedConditionalDefaults(
   ctx: TransformContext,
   styledDecls: readonly StyledDecl[],
@@ -220,12 +225,14 @@ function buildStyleKeySequence(ctx: TransformContext, decl: StyledDecl): StyleSe
     entries.push({ styleKey, patchable: true, source: "mixin" });
   }
 
-  entries.push(...buildVariantAndStyleFnEntries(decl));
+  const variantAndStyleFnEntries = buildVariantAndStyleFnEntries(decl);
+  entries.push(...variantAndStyleFnEntries.immediate);
   entries.push(...buildThemeEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
   entries.push(...buildPseudoAliasEntries(decl));
   entries.push(...buildCompoundVariantEntries(decl));
   entries.push(...buildVariantDimensionEntries(decl));
+  entries.push(...variantAndStyleFnEntries.ordered);
   entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildEnumVariantEntries(decl));
   entries.push(...buildCallSiteCombinedEntries(decl));
@@ -263,7 +270,7 @@ function localBaseStyleKeys(ctx: TransformContext, decl: StyledDecl): string[] {
   return keys.reverse();
 }
 
-function buildVariantAndStyleFnEntries(decl: StyledDecl): StyleSequenceEntry[] {
+function buildVariantAndStyleFnEntries(decl: StyledDecl): VariantAndStyleFnEntries {
   const variantEntries = Object.entries(decl.variantStyleKeys ?? {}).map(([when, styleKey]) => ({
     when,
     entry: { styleKey, patchable: true, source: "variant" } satisfies StyleSequenceEntry,
@@ -281,34 +288,97 @@ function buildVariantAndStyleFnEntries(decl: StyledDecl): StyleSequenceEntry[] {
     styleFnEntries.some((entry) => entry.sourceOrder !== undefined);
 
   if (!hasSourceOrder) {
-    return [
-      ...variantEntries.map((entry) => entry.entry),
-      ...styleFnEntries.map((entry) => entry.entry),
-    ];
+    return {
+      immediate: [
+        ...variantEntries.map((entry) => entry.entry),
+        ...styleFnEntries.map((entry) => entry.entry),
+      ],
+      ordered: [],
+    };
   }
+
+  const immediate = [
+    ...variantEntries
+      .filter((entry) => decl.variantSourceOrder?.[entry.when] === undefined)
+      .map((entry) => entry.entry),
+    ...styleFnEntries
+      .filter((entry) => entry.sourceOrder === undefined)
+      .map((entry) => entry.entry),
+  ];
 
   const ordered: OrderedTailEntry[] = [];
   let index = 0;
   for (const variant of variantEntries) {
+    const order = decl.variantSourceOrder?.[variant.when];
+    if (order === undefined) {
+      continue;
+    }
     ordered.push({
-      order: decl.variantSourceOrder?.[variant.when] ?? Number.MAX_SAFE_INTEGER,
+      order,
       index,
       entry: variant.entry,
     });
     index += 1;
   }
   for (const styleFn of styleFnEntries) {
+    if (styleFn.sourceOrder === undefined) {
+      continue;
+    }
     ordered.push({
-      order: styleFn.sourceOrder ?? Number.MAX_SAFE_INTEGER,
+      order: styleFn.sourceOrder,
       index,
       entry: styleFn.entry,
     });
     index += 1;
   }
 
-  return ordered
-    .sort((a, b) => a.order - b.order || a.index - b.index)
-    .map((orderedEntry) => orderedEntry.entry);
+  return {
+    immediate,
+    ordered: ordered
+      .sort((a, b) => a.order - b.order || a.index - b.index)
+      .map((orderedEntry) => orderedEntry.entry),
+  };
+}
+
+function buildVariantDimensionEntries(decl: StyledDecl): StyleSequenceEntry[] {
+  const immediate: StyleSequenceEntry[] = [];
+  const ordered: OrderedTailEntry[] = [];
+  let index = 0;
+
+  for (const dimension of decl.variantDimensions ?? []) {
+    const entries: StyleSequenceEntry[] = Object.entries(dimension.variants).map(
+      ([variantKey, styleObj]) =>
+        ({
+          styleKey: `${dimension.variantObjectName}.${variantKey}`,
+          styleObj,
+          patchable: true,
+          contributes: false,
+          source: "variant",
+        }) satisfies StyleSequenceEntry,
+    );
+    if (dimension.fallbackFnKey) {
+      entries.push({
+        styleKey: dimension.fallbackFnKey,
+        patchable: true,
+        source: "styleFn",
+      });
+    }
+    if (dimension.sourceOrder === undefined) {
+      immediate.push(...entries);
+      continue;
+    }
+    for (const entry of entries) {
+      ordered.push({ order: dimension.sourceOrder, index, entry });
+      index += 1;
+    }
+  }
+
+  return [
+    ...immediate,
+    ...ordered
+      .sort((a, b) => a.order - b.order || a.index - b.index)
+      .map((orderedEntry) => orderedEntry.entry),
+  ];
 }
 
 function buildPseudoExpandEntries(decl: StyledDecl): StyleSequenceEntry[] {
@@ -383,29 +453,6 @@ function buildCompoundVariantEntries(decl: StyledDecl): StyleSequenceEntry[] {
           source: "variant",
         }) satisfies StyleSequenceEntry,
     );
-  });
-}
-
-function buildVariantDimensionEntries(decl: StyledDecl): StyleSequenceEntry[] {
-  return (decl.variantDimensions ?? []).flatMap((dimension) => {
-    const entries: StyleSequenceEntry[] = Object.entries(dimension.variants).map(
-      ([variantKey, styleObj]) =>
-        ({
-          styleKey: `${dimension.variantObjectName}.${variantKey}`,
-          styleObj,
-          patchable: true,
-          contributes: false,
-          source: "variant",
-        }) satisfies StyleSequenceEntry,
-    );
-    if (dimension.fallbackFnKey) {
-      entries.push({
-        styleKey: dimension.fallbackFnKey,
-        patchable: true,
-        source: "styleFn",
-      });
-    }
-    return entries;
   });
 }
 

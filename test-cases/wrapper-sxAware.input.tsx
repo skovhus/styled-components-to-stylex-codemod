@@ -5,7 +5,7 @@
 // wrapped component.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import styled from "styled-components";
+import styled, { css } from "styled-components";
 import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
@@ -44,6 +44,13 @@ const DefaultPrintButton = styled(DefaultSxButton)`
 const DirectoryPrintButton = styled(DirectorySxButton)`
   @media print {
     display: block;
+  }
+`;
+
+// Dynamic style functions forwarded through sx must preserve the wrapped base default.
+const DynamicPrintButton = styled(SxAwareButton)<{ printDisplay: "block" | "inline-flex" }>`
+  @media print {
+    display: ${(props) => props.printDisplay};
   }
 `;
 
@@ -229,6 +236,7 @@ export const App = () => (
     <PrintButton>Print display</PrintButton>
     <DefaultPrintButton>Default export print</DefaultPrintButton>
     <DirectoryPrintButton>Directory import print</DirectoryPrintButton>
+    <DynamicPrintButton printDisplay="block">Dynamic print display</DynamicPrintButton>
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>

@@ -10,7 +10,7 @@ import * as stylex from "@stylexjs/stylex";
  */
 export function SxAwareButton(
   props: {
-    sx?: stylex.StyleXStyles;
+    sx?: React.ComponentPropsWithRef<"button">["sx"];
     className?: string;
     style?: React.CSSProperties;
     active?: boolean;
