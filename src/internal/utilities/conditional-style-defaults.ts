@@ -617,6 +617,9 @@ function astObjectHasNullConditionalDefault(value: unknown): boolean {
     if (key === "default" && isNullLiteral(property.value)) {
       hasNullDefault = true;
     }
+    if (isObjectExpression(property.value) && astObjectHasNullConditionalDefault(property.value)) {
+      return true;
+    }
   }
   return hasCondition && hasNullDefault;
 }

@@ -270,4 +270,71 @@ describe("guardGeneratedConditionalDefaults", () => {
       "Conditional StyleX default would override an unproven earlier style for the same property",
     );
   });
+
+  it("detects nested null defaults returned from dynamic style functions", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { backgroundColor: "#ffffff" }],
+      [
+        "buttonHover",
+        {
+          type: "ArrowFunctionExpression",
+          body: {
+            type: "ObjectExpression",
+            properties: [
+              {
+                type: "Property",
+                key: { type: "Identifier", name: "backgroundColor" },
+                value: {
+                  type: "ObjectExpression",
+                  properties: [
+                    {
+                      type: "Property",
+                      key: { type: "Literal", value: ":hover" },
+                      value: {
+                        type: "ObjectExpression",
+                        properties: [
+                          {
+                            type: "Property",
+                            key: { type: "Identifier", name: "default" },
+                            value: { type: "Literal", value: null },
+                          },
+                          {
+                            type: "Property",
+                            key: { type: "Literal", value: "@media (hover: hover)" },
+                            value: { type: "Identifier", name: "backgroundColor" },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      styleFnFromProps: [
+        {
+          fnKey: "buttonHover",
+          jsxProp: "backgroundColor",
+        },
+      ],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Conditional StyleX default would override an unproven earlier style for the same property",
+    );
+  });
 });
