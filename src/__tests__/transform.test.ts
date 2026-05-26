@@ -2392,6 +2392,29 @@ export const App = () => (
     expect(result).toContain("color: color");
   });
 
+  it("does not forward observed expression condition props to unresolved component bases", () => {
+    const input = `
+import styled from "styled-components";
+import { Base } from "./Base";
+
+export const Badge = styled(Base)<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-condition-drop.tsx");
+
+    expect(result).toContain("active,");
+    expect(result).toContain("!active && styles.badgeColor(props.color)");
+    expect(result).not.toContain("active={active}");
+  });
+
   it("forwards non-transient observed variant props to wrapped components", () => {
     const input = `
 import * as React from "react";

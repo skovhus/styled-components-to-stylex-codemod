@@ -2370,6 +2370,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               suffix,
             )
           ) {
+            ensureShouldForwardPropDrop(decl, conditionProp);
+            decl.observedExpressionConditionDropProps ??= new Set<string>();
+            decl.observedExpressionConditionDropProps.add(conditionProp);
             decl.needsWrapperComponent = true;
             continue;
           }

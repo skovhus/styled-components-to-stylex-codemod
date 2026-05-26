@@ -389,6 +389,8 @@ export type StyledDecl = {
   variantDimensions?: VariantDimension[];
   /** Props consumed as CSS values by observed static variant dimensions. */
   styleValueVariantProps?: Set<string>;
+  /** Condition props consumed only by observed expression variant guards. */
+  observedExpressionConditionDropProps?: Set<string>;
   /**
    * Compound variants for multi-prop nested ternaries like:
    *   outerProp ? A : innerProp ? B : C
