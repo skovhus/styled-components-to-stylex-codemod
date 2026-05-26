@@ -25,6 +25,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x-17p0gf5 {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x-19zvkyr {
   syntax: "*";
   inherits: false
@@ -4093,6 +4098,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #d0d0ff;
 }
 
+.x17g2j4q:not(:disabled):hover:not(#\#):not(#\#):not(#\#) {
+  background-color: #f0f0f0;
+}
+
 .xeu1bbw[disabled]:not(#\#):not(#\#):not(#\#) {
   background-color: #f5f5f5;
 }
@@ -4131,6 +4140,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .x14ai0a5:focus-within:not(#\#):not(#\#):not(#\#) {
   color: #111;
+}
+
+.x1sou9ln:not(:disabled):hover:not(#\#):not(#\#):not(#\#) {
+  color: #333;
 }
 
 .x1okvs37[disabled]:not(#\#):not(#\#):not(#\#) {
@@ -4253,6 +4266,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #e0f2fe;
 }
 
+.xy8jdh7:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: #eee;
+}
+
+.xokg3y8:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: #f0f0f0;
+}
+
+.x1kgq5nt:hover:not(#\#):not(#\#):not(#\#) {
+  background-color: #f8fafc;
+}
+
 .x38jt1p:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #00008b;
 }
@@ -4297,10 +4322,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: var(--xufgxy3);
 }
 
-.xs7l1ul:hover:not(#\#):not(#\#):not(#\#) {
-  background-color: var(--xy9b778);
-}
-
 .x1336f0y:hover:not(#\#):not(#\#):not(#\#) {
   background-color: #ff0;
 }
@@ -4309,12 +4330,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-image: none;
 }
 
+.x1mj7j4a:hover:not(#\#):not(#\#):not(#\#) {
+  box-shadow: 0 2px 4px #0000001a;
+}
+
 .xy0lkqh:hover:not(#\#):not(#\#):not(#\#) {
   box-shadow: var(--x-bf5hz0);
 }
 
 .x1nt1xku:hover:not(#\#):not(#\#):not(#\#) {
   color: #111;
+}
+
+.x1sw8hja:hover:not(#\#):not(#\#):not(#\#) {
+  color: #333;
+}
+
+.xb6pbq5:hover:not(#\#):not(#\#):not(#\#) {
+  color: #334155;
 }
 
 .x103215m:hover:not(#\#):not(#\#):not(#\#) {
@@ -4507,7 +4540,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .xcq4dyp.xcq4dyp:not(#\#):not(#\#):not(#\#) {
     display: none;
   }
+}
 
+@media print {
+  .x1ypcxso.x1ypcxso:not(#\#):not(#\#):not(#\#) {
+    display: var(--x-17p0gf5);
+  }
+}
+
+@media (width <= 768px) {
   .x1mx85iw.x1mx85iw:not(#\#):not(#\#):not(#\#) {
     flex-direction: column;
   }
@@ -4608,6 +4649,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 }
 
 @media (hover: hover) {
+  .xxlzydb.xxlzydb:hover:not(#\#):not(#\#):not(#\#) {
+    background-color: orange;
+  }
+
   .x145ape1.x145ape1:hover:not(#\#):not(#\#):not(#\#) {
     box-shadow: 0 4px 12px #4169e166;
   }
