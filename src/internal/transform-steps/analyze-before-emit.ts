@@ -53,6 +53,7 @@ import {
 } from "../utilities/typescript-metadata.js";
 import type { TypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
+import { toRealPath } from "../utilities/path-utils.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -4848,7 +4849,7 @@ function validateWrappedComponentStyleChannels(
     }
     if (
       importInfo.source.kind === "absolutePath" &&
-      ctx.options.transformedFileSources?.has(importInfo.source.value)
+      ctx.options.transformedFileSources?.has(toRealPath(importInfo.source.value))
     ) {
       continue;
     }

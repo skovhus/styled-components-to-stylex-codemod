@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import jscodeshift from "jscodeshift";
@@ -437,6 +437,61 @@ describe("TypeScript prepass output refinement", () => {
 
       expect(after.code).toContain("{...stylex.props(styles.wrapped)}");
       expect(after.code).not.toContain("sx={styles.wrapped}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes already-transformed import paths before wrapped component validation", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-realpath-skip-"));
+    const realDir = path.join(fixtureDir, "real");
+    const linkDir = path.join(fixtureDir, "link");
+    const baseRealPath = path.join(realDir, "Base.tsx");
+    const baseLinkPath = path.join(linkDir, "Base.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    mkdirSync(realDir);
+    writeFileSync(
+      baseRealPath,
+      [
+        "export function Base(props: { label?: string }) {",
+        "  return <button>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    symlinkSync(realDir, linkDir, "dir");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./link/Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [baseLinkPath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./link/Base"
+            ? baseLinkPath
+            : path.resolve(path.dirname(fromFile), specifier),
+        transformedFileSources: new Map([[realpathSync(baseRealPath), "already transformed"]]),
+      });
+
+      expect(after.warnings.map((warning) => warning.type)).not.toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

@@ -12,6 +12,7 @@ type StaticReturnResult =
   | { supported: true; returned: true; value: StaticEvalValue }
   | { supported: true; returned: false }
   | { supported: false };
+type LocalSingleParamFunction = { paramName: string; body: unknown };
 type StaticEvalContext = {
   j: JSCodeshift;
   root: ReturnType<JSCodeshift>;
@@ -87,28 +88,37 @@ function findLocalSingleParamFunction(args: {
   j: JSCodeshift;
   root: ReturnType<JSCodeshift>;
   calleeName: string;
-}): { paramName: string; body: unknown } | null {
+}): LocalSingleParamFunction | null {
   const { j, root, calleeName } = args;
-  const fnDecls = root.find(j.FunctionDeclaration, { id: { name: calleeName } });
-  if (fnDecls.size() > 0) {
-    const fnNode = fnDecls.get().node;
-    const paramName = getSingleIdentifierParamName(fnNode.params);
-    return paramName ? { paramName, body: fnNode.body } : null;
-  }
+  const candidates: LocalSingleParamFunction[] = [];
+  let matchingBindings = 0;
 
-  const variableDecls = root.find(j.VariableDeclarator, { id: { name: calleeName } });
-  if (variableDecls.size() === 0) {
-    return null;
-  }
-  const init = variableDecls.get().node.init as
-    | { type?: string; params?: unknown[]; body?: unknown }
-    | null
-    | undefined;
-  if (!init || (init.type !== "ArrowFunctionExpression" && init.type !== "FunctionExpression")) {
-    return null;
-  }
-  const paramName = getSingleIdentifierParamName(init.params);
-  return paramName ? { paramName, body: init.body } : null;
+  root.find(j.FunctionDeclaration, { id: { name: calleeName } }).forEach((path) => {
+    matchingBindings += 1;
+    const fnNode = path.node;
+    const paramName = getSingleIdentifierParamName(fnNode.params);
+    if (paramName) {
+      candidates.push({ paramName, body: fnNode.body });
+    }
+  });
+
+  root.find(j.VariableDeclarator, { id: { name: calleeName } }).forEach((path) => {
+    matchingBindings += 1;
+    const init = path.node.init as
+      | { type?: string; params?: unknown[]; body?: unknown }
+      | null
+      | undefined;
+    if (!init || (init.type !== "ArrowFunctionExpression" && init.type !== "FunctionExpression")) {
+      return;
+    }
+    const paramName = getSingleIdentifierParamName(init.params);
+    if (paramName) {
+      candidates.push({ paramName, body: init.body });
+    }
+  });
+
+  const [candidate] = candidates;
+  return matchingBindings === 1 && candidate ? candidate : null;
 }
 
 function getSingleIdentifierParamName(params: unknown[] | undefined): string | null {
