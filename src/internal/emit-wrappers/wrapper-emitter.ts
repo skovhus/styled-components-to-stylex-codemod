@@ -37,7 +37,7 @@ import { toRealPath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
-import type { JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
+import type { FunctionParams, JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
 import type { LogicalExpressionOperand } from "./variant-condition.js";
 import * as vc from "./variant-condition.js";
@@ -969,7 +969,7 @@ export class WrapperEmitter {
     return true;
   }
 
-  annotatePropsParam(propsId: Identifier, localName: string, inlineTypeText?: string): void {
+  annotatePropsParam(propsParam: ASTNode, localName: string, inlineTypeText?: string): void {
     const { j } = this;
     if (!this.emitTypes) {
       return;
@@ -993,9 +993,9 @@ export class WrapperEmitter {
           `Failed to parse inline props param type for ${localName} (${this.filePath}).`,
         );
       }
-      (propsId as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
+      (propsParam as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
     } else {
-      (propsId as any).typeAnnotation = j.tsTypeAnnotation(
+      (propsParam as any).typeAnnotation = j.tsTypeAnnotation(
         j.tsTypeReference(j.identifier(this.propsTypeNameFor(localName))),
       );
     }
@@ -1003,6 +1003,9 @@ export class WrapperEmitter {
 
   withChildren(innerTypeText: string): string {
     const t = innerTypeText.trim();
+    if (t === "{}") {
+      return "{ children?: React.ReactNode }";
+    }
     if (t.startsWith("React.PropsWithChildren<")) {
       return t;
     }
@@ -2002,45 +2005,8 @@ export class WrapperEmitter {
 
     const isVoidTag = VOID_TAGS.has(tagName);
     const allowForwardedAsProp = this.getUsedAttrs(localName).has("forwardedAs");
-    const propsParamId = j.identifier("props");
     const needsPolymorphicTypeParams =
       this.emitTypes && (allowAsProp || inlineTypeNeedsElementGeneric(inlineTypeText));
-    if (this.emitTypes) {
-      if (inlineTypeText) {
-        let typeNode: TsTypeAnnotationInput | null = null;
-        try {
-          typeNode = j(`const x: ${inlineTypeText} = null`).get().node.program.body[0]
-            .declarations[0].id.typeAnnotation.typeAnnotation;
-        } catch (e) {
-          throw new Error(
-            [
-              `Failed to parse inline wrapper props type for ${localName} (${tagName}).`,
-              `Inline type: ${inlineTypeText}`,
-              `Error: ${e instanceof Error ? e.message : String(e)}`,
-            ].join("\n"),
-          );
-        }
-        if (!typeNode) {
-          throw new Error(
-            `Failed to parse inline wrapper props type for ${localName} (${tagName}).`,
-          );
-        }
-        (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(typeNode);
-      } else {
-        if (!propsTypeName) {
-          throw new Error(`Missing propsTypeName for ${localName} (${tagName}).`);
-        }
-        if (needsPolymorphicTypeParams) {
-          (propsParamId as any).typeAnnotation = j(
-            `const x: ${propsTypeName}<C> = null`,
-          ).get().node.program.body[0].declarations[0].id.typeAnnotation;
-        } else {
-          (propsParamId as any).typeAnnotation = j.tsTypeAnnotation(
-            j.tsTypeReference(j.identifier(propsTypeName)),
-          );
-        }
-      }
-    }
     const propsId = j.identifier("props");
 
     const patternProps: Array<Property | RestElement> = [];
@@ -2060,7 +2026,8 @@ export class WrapperEmitter {
     if (!isVoidTag) {
       patternProps.push(this.patternProp("children"));
     }
-    if (includeRefProp) {
+    const shouldForwardRefExplicitly = includeRefProp && !includeRest;
+    if (shouldForwardRefExplicitly) {
       patternProps.push(this.patternProp("ref"));
     }
     if (allowClassNameProp) {
@@ -2106,9 +2073,27 @@ export class WrapperEmitter {
     }
     const usePropsDirectlyForRest =
       includeRest && patternProps.length === 1 && patternProps[0]?.type === "RestElement";
-    const usePropsChildrenDirectly = this.isChildrenOnlyDestructurePattern(patternProps);
+    const useChildrenParamDestructure = this.isChildrenOnlyDestructurePattern(patternProps);
     if (usePropsDirectlyForRest) {
       restId = propsId;
+    }
+
+    const propsParam = useChildrenParamDestructure
+      ? this.buildChildrenOnlyParam(
+          inlineTypeText ??
+            (propsTypeName
+              ? `${propsTypeName}${needsPolymorphicTypeParams ? "<C>" : ""}`
+              : undefined),
+        )
+      : j.identifier("props");
+    if (!useChildrenParamDestructure) {
+      this.annotateMinimalWrapperParam(propsParam, {
+        localName,
+        tagName,
+        inlineTypeText,
+        propsTypeName,
+        needsPolymorphicTypeParams,
+      });
     }
 
     const classNameId = j.identifier("className");
@@ -2188,7 +2173,7 @@ export class WrapperEmitter {
         ),
       );
     }
-    if (includeRefProp) {
+    if (shouldForwardRefExplicitly) {
       jsxAttrs.push(
         j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(j.identifier("ref"))),
       );
@@ -2250,9 +2235,7 @@ export class WrapperEmitter {
     const renderedTagName = allowAsProp ? "Component" : (attrsAsTag ?? tagName);
     const renderedJsxName = jsxNameFromString(j, renderedTagName);
     const openingEl = j.jsxOpeningElement(renderedJsxName, jsxAttrs, isVoidTag);
-    const childrenExpr = usePropsChildrenDirectly
-      ? j.memberExpression(propsId, j.identifier("children"))
-      : j.identifier("children");
+    const childrenExpr = j.identifier("children");
     const jsx = j.jsxElement(
       openingEl,
       isVoidTag ? null : j.jsxClosingElement(renderedJsxName),
@@ -2260,7 +2243,7 @@ export class WrapperEmitter {
     );
 
     const bodyStmts: BlockStatementBody = [];
-    if (!usePropsDirectlyForRest && !usePropsChildrenDirectly) {
+    if (!usePropsDirectlyForRest && !useChildrenParamDestructure) {
       bodyStmts.push(
         j.variableDeclaration("const", [
           j.variableDeclarator(j.objectPattern(patternProps), propsId),
@@ -2277,7 +2260,7 @@ export class WrapperEmitter {
     );
     const fn = j.functionDeclaration(
       j.identifier(localName),
-      [propsParamId],
+      [propsParam],
       j.blockStatement(filteredBody),
     );
     if (needsPolymorphicTypeParams) {
@@ -2379,12 +2362,70 @@ export class WrapperEmitter {
 
   buildWrapperFunction(args: {
     localName: string;
-    params: Identifier[];
+    params: FunctionParams;
     bodyStmts: StatementKind[];
     typeParameters?: unknown;
     moveTypeParamsFromParam?: Identifier;
   }): ASTNode {
     return jb.buildWrapperFunction(this.j, args);
+  }
+
+  buildChildrenOnlyParam(typeText?: string): FunctionParams[number] {
+    if (!this.emitTypes) {
+      return this.j.objectPattern([this.patternProp("children")]) as FunctionParams[number];
+    }
+    if (!typeText) {
+      throw new Error("Missing props type for children-only wrapper parameter.");
+    }
+    return this.j(`function _({ children }: ${typeText}) {}`).get().node.program.body[0].params[0];
+  }
+
+  private annotateMinimalWrapperParam(
+    propsParam: FunctionParams[number],
+    args: {
+      localName: string;
+      tagName: string;
+      inlineTypeText?: string;
+      propsTypeName?: string;
+      needsPolymorphicTypeParams: boolean;
+    },
+  ): void {
+    const { localName, tagName, inlineTypeText, propsTypeName, needsPolymorphicTypeParams } = args;
+    if (!this.emitTypes) {
+      return;
+    }
+    if (inlineTypeText) {
+      let typeNode: TsTypeAnnotationInput | null = null;
+      try {
+        typeNode = this.j(`const x: ${inlineTypeText} = null`).get().node.program.body[0]
+          .declarations[0].id.typeAnnotation.typeAnnotation;
+      } catch (e) {
+        throw new Error(
+          [
+            `Failed to parse inline wrapper props type for ${localName} (${tagName}).`,
+            `Inline type: ${inlineTypeText}`,
+            `Error: ${e instanceof Error ? e.message : String(e)}`,
+          ].join("\n"),
+        );
+      }
+      if (!typeNode) {
+        throw new Error(`Failed to parse inline wrapper props type for ${localName} (${tagName}).`);
+      }
+      (propsParam as any).typeAnnotation = this.j.tsTypeAnnotation(typeNode);
+      return;
+    }
+    if (!propsTypeName) {
+      throw new Error(`Missing propsTypeName for ${localName} (${tagName}).`);
+    }
+    if (needsPolymorphicTypeParams) {
+      (propsParam as any).typeAnnotation = this.j(
+        `const x: ${propsTypeName}<C> = null`,
+      ).get().node.program.body[0].declarations[0].id.typeAnnotation;
+      return;
+    }
+    (propsParam as any).typeAnnotation = this.j.tsTypeAnnotation(
+      this.j.tsTypeReference(this.j.identifier(propsTypeName)),
+    );
   }
 
   buildDestructurePatternProps(args: {

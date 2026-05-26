@@ -2,8 +2,8 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { IconMarker } from "./selector-has.input.stylex";
 
-function Button(props: React.PropsWithChildren<{}>) {
-  return <button sx={styles.button}>{props.children}</button>;
+function Button({ children }: { children?: React.ReactNode }) {
+  return <button sx={styles.button}>{children}</button>;
 }
 
 export const App = () => (

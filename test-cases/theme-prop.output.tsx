@@ -4,15 +4,13 @@ import { useTheme } from "styled-components";
 import { pixelVars } from "./tokens.stylex";
 
 // Block-level theme boolean conditional: theme.isDark controls entire CSS block
-function Box(props: React.PropsWithChildren<{}>) {
+function Box({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
-  return (
-    <div sx={[styles.box, theme.isDark ? styles.boxDark : styles.boxLight]}>{props.children}</div>
-  );
+  return <div sx={[styles.box, theme.isDark ? styles.boxDark : styles.boxLight]}>{children}</div>;
 }
 
 // Block-level theme binary conditional: theme.mode === "dark" controls entire CSS block
-function ModeBox(props: React.PropsWithChildren<{}>) {
+function ModeBox({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
@@ -22,7 +20,7 @@ function ModeBox(props: React.PropsWithChildren<{}>) {
         theme.mode === "dark" ? styles.modeBoxThemeModeDark : styles.modeBoxThemeModeNotDark,
       ]}
     >
-      {props.children}
+      {children}
     </div>
   );
 }

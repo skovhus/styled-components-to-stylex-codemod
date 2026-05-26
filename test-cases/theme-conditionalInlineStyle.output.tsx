@@ -23,7 +23,7 @@ export function Chip(props: Pick<React.ComponentProps<"div">, "ref" | "children"
 }
 
 // CSS custom property with one unresolvable theme member expression branch
-function DayPicker(props: React.PropsWithChildren<{}>) {
+function DayPicker({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
   const sx = stylex.props(styles.dayPicker);
 
@@ -38,7 +38,7 @@ function DayPicker(props: React.PropsWithChildren<{}>) {
         } as React.CSSProperties
       }
     >
-      {props.children}
+      {children}
     </div>
   );
 }

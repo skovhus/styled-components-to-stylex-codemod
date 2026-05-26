@@ -20,8 +20,9 @@ export function ColorBadge(
       sx={[
         styles.colorBadge,
         hollow && styles.colorBadgeHollow,
-        hollow && styles.colorBadgeBorderColor(color ? color : $colors.labelMuted),
-        !hollow && styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
+        hollow
+          ? styles.colorBadgeBorderColor(color ? color : $colors.labelMuted)
+          : styles.colorBadgeBackgroundColor(color ? color : $colors.labelMuted),
         sizeVariants[size],
       ]}
     >

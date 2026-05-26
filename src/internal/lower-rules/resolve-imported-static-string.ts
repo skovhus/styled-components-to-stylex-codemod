@@ -28,6 +28,13 @@ export function resolveExpressionToStaticString(
   if (!isIdentifierNode(expr)) {
     return null;
   }
+  const scoped = resolveScopedConstStringInit(expr, state);
+  if (scoped?.kind === "found") {
+    return scoped.value;
+  }
+  if (scoped?.kind === "blocked") {
+    return null;
+  }
   if (state.isIdentifierShadowed(expr, expr.name)) {
     return null;
   }
@@ -96,6 +103,13 @@ function findConstDeclaratorString(declarations: unknown[], name: string): strin
 const MAX_REEXPORT_DEPTH = 8;
 
 type ParsedProgram = ReturnType<DeclProcessingState["state"]["api"]["jscodeshift"]>;
+
+type AstPathLike = {
+  node: object;
+  parentPath?: AstPathLike | null;
+};
+
+type ScopedStringResolution = { kind: "found"; value: string } | { kind: "blocked" } | null;
 
 /**
  * Per-state cached module resolver. Configured to prefer `.ts` over `.tsx`
@@ -325,6 +339,350 @@ function findTopLevelConstStringInit(
       }
     });
   return resolved;
+}
+
+function resolveScopedConstStringInit(
+  expr: { name: string },
+  state: DeclProcessingState["state"],
+): ScopedStringResolution {
+  const identPath = findIdentifierPath(expr, state);
+  const exprStart = getNodeStart(expr);
+  if (!identPath || exprStart === null) {
+    return null;
+  }
+
+  const ancestorScopes = getAncestorScopeNodes(identPath);
+  let best: { start: number; value: string | null } | null = null;
+
+  state.root.find(state.j.VariableDeclarator).forEach((p) => {
+    const declarator = p.node as {
+      id?: { type?: string; name?: string };
+      init?: unknown;
+    };
+    if (declarator.id?.type !== "Identifier" || declarator.id.name !== expr.name) {
+      return;
+    }
+
+    const start = getNodeStart(declarator);
+    if (start === null || start >= exprStart) {
+      return;
+    }
+
+    const path = p as AstPathLike;
+    const scopeNode = getDeclarationScopeNode(path, getVariableDeclarationKind(path));
+    if (!scopeNode || !ancestorScopes.has(scopeNode)) {
+      return;
+    }
+    if (isProgramNode(scopeNode) || hasInnerBindingBetween(identPath, scopeNode, expr.name)) {
+      return;
+    }
+
+    const value =
+      getVariableDeclarationKind(path) === "const" ? literalToStaticValue(declarator.init) : null;
+    const candidate = { start, value: typeof value === "string" ? value : null };
+    if (!best || candidate.start > best.start) {
+      best = candidate;
+    }
+  });
+
+  const resolved = best as { start: number; value: string | null } | null;
+  if (!resolved) {
+    return null;
+  }
+  return resolved.value === null ? { kind: "blocked" } : { kind: "found", value: resolved.value };
+}
+
+function findIdentifierPath(expr: object, state: DeclProcessingState["state"]): AstPathLike | null {
+  const paths = state.root
+    .find(state.j.Identifier)
+    .filter((p) => p.node === expr)
+    .paths();
+  return (paths[0] as AstPathLike | undefined) ?? null;
+}
+
+function getNodeStart(node: unknown): number | null {
+  const start = (node as { start?: unknown }).start;
+  return typeof start === "number" ? start : null;
+}
+
+function getAncestorScopeNodes(path: AstPathLike): Set<object> {
+  const scopes = new Set<object>();
+  let cur: AstPathLike | null | undefined = path;
+  while (cur) {
+    if (isScopeNode(cur.node)) {
+      scopes.add(cur.node);
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return scopes;
+}
+
+function getDeclarationScopeNode(path: AstPathLike, declarationKind: string | null): object | null {
+  const declarationParent = path.parentPath?.parentPath;
+  if (declarationKind !== "var" && declarationParent && isLoopNode(declarationParent.node)) {
+    return declarationParent.node;
+  }
+
+  let cur: AstPathLike | null | undefined = path.parentPath;
+  while (cur) {
+    if (declarationKind === "var" && isFunctionOrProgramNode(cur.node)) {
+      return cur.node;
+    }
+    if (declarationKind !== "var" && isLoopNode(cur.node)) {
+      return cur.node;
+    }
+    if (declarationKind !== "var" && isScopeNode(cur.node)) {
+      return cur.node;
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return null;
+}
+
+function hasInnerBindingBetween(
+  identPath: AstPathLike,
+  outerScopeNode: object,
+  name: string,
+): boolean {
+  let cur: AstPathLike | null | undefined = identPath.parentPath;
+  while (cur && cur.node !== outerScopeNode) {
+    if (isFunctionNode(cur.node) && functionDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isCatchClauseNode(cur.node) && catchClauseDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isBlockStatementNode(cur.node) && blockDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isSwitchStatementNode(cur.node) && switchStatementDeclaresName(cur.node, name)) {
+      return true;
+    }
+    if (isLoopNode(cur.node) && loopDeclaresName(cur.node, name)) {
+      return true;
+    }
+    cur = cur.parentPath ?? null;
+  }
+  return false;
+}
+
+function functionDeclaresName(node: object, name: string): boolean {
+  const fn = node as { id?: unknown; params?: unknown[] };
+  const ids = new Set<string>();
+  collectPatternIdentifiers(fn.id, ids);
+  for (const param of fn.params ?? []) {
+    collectPatternIdentifiers(param, ids);
+  }
+  collectFunctionVarBindings(node, ids);
+  return ids.has(name);
+}
+
+function collectFunctionVarBindings(node: object, out: Set<string>): void {
+  const visit = (current: unknown, isRoot = false): void => {
+    if (!current || typeof current !== "object") {
+      return;
+    }
+    if (Array.isArray(current)) {
+      for (const child of current) {
+        visit(child);
+      }
+      return;
+    }
+
+    if (!isRoot && isFunctionNode(current)) {
+      return;
+    }
+
+    const astNode = current as {
+      type?: string;
+      kind?: string;
+      declarations?: Array<{ id?: unknown }>;
+      [key: string]: unknown;
+    };
+    if (astNode.type === "VariableDeclaration" && astNode.kind === "var") {
+      for (const declarator of astNode.declarations ?? []) {
+        collectPatternIdentifiers(declarator.id, out);
+      }
+      return;
+    }
+
+    for (const key of Object.keys(astNode)) {
+      if (key === "loc" || key === "comments") {
+        continue;
+      }
+      visit(astNode[key]);
+    }
+  };
+  visit(node, true);
+}
+
+function catchClauseDeclaresName(node: object, name: string): boolean {
+  const catchClause = node as { param?: unknown };
+  const ids = new Set<string>();
+  collectPatternIdentifiers(catchClause.param, ids);
+  return ids.has(name);
+}
+
+function blockDeclaresName(node: object, name: string): boolean {
+  const block = node as { body?: unknown[] };
+  for (const statement of block.body ?? []) {
+    if (!statement || typeof statement !== "object") {
+      continue;
+    }
+    const stmt = statement as {
+      type?: string;
+      kind?: string;
+      declarations?: Array<{ id?: unknown }>;
+      id?: unknown;
+    };
+    if (stmt.type === "VariableDeclaration" && (stmt.kind === "let" || stmt.kind === "const")) {
+      for (const declarator of stmt.declarations ?? []) {
+        const ids = new Set<string>();
+        collectPatternIdentifiers(declarator.id, ids);
+        if (ids.has(name)) {
+          return true;
+        }
+      }
+    }
+    if (stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration") {
+      const ids = new Set<string>();
+      collectPatternIdentifiers(stmt.id, ids);
+      if (ids.has(name)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function switchStatementDeclaresName(node: object, name: string): boolean {
+  const switchStatement = node as { cases?: Array<{ consequent?: unknown[] }> };
+  for (const switchCase of switchStatement.cases ?? []) {
+    if (blockDeclaresName({ body: switchCase.consequent ?? [] }, name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function loopDeclaresName(node: object, name: string): boolean {
+  const loop = node as { init?: unknown; left?: unknown };
+  const binding = loop.init ?? loop.left;
+  if (!binding || typeof binding !== "object") {
+    return false;
+  }
+  const declaration = binding as {
+    type?: string;
+    kind?: string;
+    declarations?: Array<{ id?: unknown }>;
+  };
+  if (
+    declaration.type !== "VariableDeclaration" ||
+    (declaration.kind !== "let" && declaration.kind !== "const")
+  ) {
+    return false;
+  }
+  for (const declarator of declaration.declarations ?? []) {
+    const ids = new Set<string>();
+    collectPatternIdentifiers(declarator.id, ids);
+    if (ids.has(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectPatternIdentifiers(pattern: unknown, out: Set<string>): void {
+  if (!pattern || typeof pattern !== "object") {
+    return;
+  }
+  const node = pattern as {
+    type?: string;
+    name?: string;
+    argument?: unknown;
+    left?: unknown;
+    value?: unknown;
+    properties?: unknown[];
+    elements?: unknown[];
+    parameter?: unknown;
+  };
+  switch (node.type) {
+    case "Identifier":
+      if (node.name) {
+        out.add(node.name);
+      }
+      return;
+    case "RestElement":
+      collectPatternIdentifiers(node.argument, out);
+      return;
+    case "AssignmentPattern":
+      collectPatternIdentifiers(node.left, out);
+      return;
+    case "ObjectPattern":
+      for (const prop of node.properties ?? []) {
+        const property = prop as { type?: string; argument?: unknown; value?: unknown } | null;
+        collectPatternIdentifiers(
+          property?.type === "RestElement" ? property.argument : property?.value,
+          out,
+        );
+      }
+      return;
+    case "ArrayPattern":
+      for (const element of node.elements ?? []) {
+        collectPatternIdentifiers(element, out);
+      }
+      return;
+    case "TSParameterProperty":
+      collectPatternIdentifiers(node.parameter, out);
+      return;
+    default:
+      return;
+  }
+}
+
+function getVariableDeclarationKind(path: AstPathLike): string | null {
+  const parentNode = path.parentPath?.node as { type?: string; kind?: unknown } | undefined;
+  return parentNode?.type === "VariableDeclaration" && typeof parentNode.kind === "string"
+    ? parentNode.kind
+    : null;
+}
+
+function isScopeNode(node: unknown): boolean {
+  return isProgramNode(node) || isBlockStatementNode(node);
+}
+
+function isProgramNode(node: unknown): boolean {
+  return (node as { type?: unknown }).type === "Program";
+}
+
+function isFunctionOrProgramNode(node: unknown): boolean {
+  return isProgramNode(node) || isFunctionNode(node);
+}
+
+function isFunctionNode(node: unknown): node is object {
+  const type = (node as { type?: unknown }).type;
+  return (
+    type === "FunctionDeclaration" ||
+    type === "FunctionExpression" ||
+    type === "ArrowFunctionExpression"
+  );
+}
+
+function isCatchClauseNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "CatchClause";
+}
+
+function isBlockStatementNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "BlockStatement";
+}
+
+function isSwitchStatementNode(node: unknown): node is object {
+  return (node as { type?: unknown }).type === "SwitchStatement";
+}
+
+function isLoopNode(node: unknown): node is object {
+  const type = (node as { type?: unknown }).type;
+  return type === "ForStatement" || type === "ForInStatement" || type === "ForOfStatement";
 }
 
 /**

@@ -25,8 +25,8 @@ function CardContainer(props: CardContainerProps) {
   );
 }
 
-function CardContent(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.cardContent}>{props.children}</div>;
+function CardContent({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.cardContent}>{children}</div>;
 }
 
 export const App = () => (

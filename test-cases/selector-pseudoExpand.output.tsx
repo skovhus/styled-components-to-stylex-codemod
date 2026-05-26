@@ -3,8 +3,8 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
 
-function Button(props: React.PropsWithChildren<{}>) {
-  return <button sx={styles.button}>{props.children}</button>;
+function Button({ children }: { children?: React.ReactNode }) {
+  return <button sx={styles.button}>{children}</button>;
 }
 
 function DisabledAwareButton(props: Omit<React.ComponentProps<"button">, "className" | "style">) {

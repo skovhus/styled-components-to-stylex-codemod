@@ -15,6 +15,7 @@ import {
 import { toStyleKey } from "../transform/helpers.js";
 import { buildStaticAttrFromValue } from "../emit-wrappers/jsx-builders.js";
 import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.js";
+import { mergeAdjacentComplementaryStyleExprs } from "../emit-wrappers/variant-condition.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { toRealPath } from "../utilities/path-utils.js";
@@ -1056,7 +1057,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // StyleX compiler can verify and transform it. When all styles are external
         // (e.g. only extraStylexPropsArgs mixin lookups), fall back to stylex.props().
         const stylesId = ctx.stylesIdentifier ?? "styles";
-        const hasLocalStyleRef = styleArgs.some(
+        const mergedStyleArgs = mergeAdjacentComplementaryStyleExprs(j, styleArgs);
+        const hasLocalStyleRef = mergedStyleArgs.some(
           (arg) => j([arg]).find(j.Identifier, { name: stylesId }).size() > 0,
         );
         // sx-aware wrapped components: always emit `sx={...}` and let the
@@ -1079,8 +1081,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         const stylexAttr = useSxProp
           ? (() => {
               const allArgs: ExpressionKind[] = callerSxExpr
-                ? [...styleArgs, callerSxExpr]
-                : [...styleArgs];
+                ? [...mergedStyleArgs, callerSxExpr]
+                : [...mergedStyleArgs];
               const sxExpr =
                 allArgs.length === 1 && allArgs[0] ? allArgs[0] : j.arrayExpression(allArgs);
               return j.jsxAttribute(j.jsxIdentifier("sx"), j.jsxExpressionContainer(sxExpr));
@@ -1089,14 +1091,14 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               needsMerge
                 ? buildInlineMergeCall(
                     j,
-                    styleArgs,
+                    mergedStyleArgs,
                     effectiveClassNameAttr,
                     styleAttr,
                     ctx.adapter.styleMerger?.functionName,
                   )
                 : j.callExpression(
                     j.memberExpression(j.identifier("stylex"), j.identifier("props")),
-                    [...styleArgs],
+                    [...mergedStyleArgs],
                   ),
             );
 

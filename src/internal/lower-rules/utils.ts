@@ -92,19 +92,21 @@ export function isMemberExpression(node: { type?: string } | null | undefined): 
   return isMemberExpressionNode(node);
 }
 
-/** Returns true for at-rules the codemod can transform (`@media`, `@container`). */
+/** Returns true for at-rules the codemod can transform as StyleX condition keys. */
 export function isSupportedAtRule(atRule: string): boolean {
-  return atRule.startsWith("@media") || atRule.startsWith("@container");
+  return (
+    atRule.startsWith("@media") || atRule.startsWith("@container") || atRule.startsWith("@supports")
+  );
 }
 
-/** Finds the first supported at-rule (`@media` or `@container`) in the stack, if any. */
+/** Finds the supported StyleX condition key for an at-rule stack, if representable. */
 export function findSupportedAtRule(atRuleStack: string[]): string | undefined {
-  return atRuleStack.find(isSupportedAtRule);
+  return resolveSupportedAtRule(atRuleStack) ?? undefined;
 }
 
 /** Returns true when any at-rule in the stack cannot be represented by StyleX. */
 export function hasUnsupportedAtRule(atRuleStack: string[]): boolean {
-  return atRuleStack.some((atRule) => !isSupportedAtRule(atRule));
+  return resolveSupportedAtRule(atRuleStack) === null;
 }
 
 /** Result of resolving a media/container at-rule that may contain placeholders. */
@@ -234,7 +236,8 @@ export function isStyleConditionKey(key: string): boolean {
     key.startsWith(":") ||
     key.startsWith("::") ||
     key.startsWith("@media") ||
-    key.startsWith("@container")
+    key.startsWith("@container") ||
+    key.startsWith("@supports")
   );
 }
 
@@ -405,6 +408,36 @@ function parseStaticExprString(expr: string): string | number | null {
     return trimmed.slice(1, -1);
   }
   return null;
+}
+
+function resolveSupportedAtRule(atRuleStack: string[]): string | undefined | null {
+  if (atRuleStack.length === 0) {
+    return undefined;
+  }
+  if (atRuleStack.some((atRule) => !isSupportedAtRule(atRule))) {
+    return null;
+  }
+  if (atRuleStack.length === 1) {
+    return atRuleStack[0];
+  }
+  if (atRuleStack.every((atRule) => atRule.startsWith("@supports"))) {
+    return combineSupportsAtRules(atRuleStack);
+  }
+  return null;
+}
+
+function combineSupportsAtRules(atRuleStack: string[]): string {
+  const conditions = atRuleStack.map((atRule) =>
+    parenthesizeSupportsCondition(atRule.slice("@supports".length).trim()),
+  );
+  return `@supports ${conditions.join(" and ")}`;
+}
+
+function parenthesizeSupportsCondition(condition: string): string {
+  if (condition.includes(" and ") || condition.includes(" or ")) {
+    return `(${condition})`;
+  }
+  return condition.startsWith("(") && condition.endsWith(")") ? condition : `(${condition})`;
 }
 
 // ---------------------------------------------------------------------------

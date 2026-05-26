@@ -3,8 +3,8 @@ import * as stylex from "@stylexjs/stylex";
 import { ThemeProvider } from "styled-components";
 import { testCaseTheme, $colors } from "./tokens.stylex";
 
-function Button(props: React.PropsWithChildren<{}>) {
-  return <button sx={styles.button}>{props.children}</button>;
+function Button({ children }: { children?: React.ReactNode }) {
+  return <button sx={styles.button}>{children}</button>;
 }
 
 const theme = testCaseTheme;

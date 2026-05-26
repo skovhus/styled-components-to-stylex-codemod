@@ -621,6 +621,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       isExportedComponent ||
       (d.supportsExternalStyles ?? false) ||
       (!shouldOmitRestSpread && shouldIncludeRest);
+    const shouldForwardRefExplicitly = (d.supportsRefProp ?? false) && !includeRest;
 
     // When allowAsProp is true, include children support even for void tags
     // because the user might use `as="textarea"` which requires children
@@ -643,7 +644,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
         ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
-        ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
+        ...(shouldForwardRefExplicitly ? [ctx.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
       ],
       destructureProps: destructurePartsForPattern,
@@ -710,7 +711,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
             propExprFor: (prop) => j.identifier(prop),
           })
         : []),
-      ...((d.supportsRefProp ?? false)
+      ...(shouldForwardRefExplicitly
         ? [j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId))]
         : []),
       ...(includeRest ? [j.jsxSpreadAttribute(restId)] : []),

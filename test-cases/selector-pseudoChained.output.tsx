@@ -18,8 +18,8 @@ function Checkbox(props: Omit<React.ComponentProps<"input">, "className" | "styl
 }
 
 // Border on :not(:last-child) with interpolation — should retain the pseudo condition
-function ListItem(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.listItem}>{props.children}</div>;
+function ListItem({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.listItem}>{children}</div>;
 }
 
 function DialogRow(

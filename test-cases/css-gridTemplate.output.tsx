@@ -1,12 +1,12 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-function Gutter(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.gutter}>{props.children}</div>;
+function Gutter({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.gutter}>{children}</div>;
 }
 
-function Code(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.code}>{props.children}</div>;
+function Code({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.code}>{children}</div>;
 }
 
 export const App = ({ highlightRow = "5" }: { highlightRow?: string }) => (

@@ -3,12 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme } from "styled-components";
 import { $colors } from "./tokens.stylex";
 
-function Container(props: React.PropsWithChildren<{}>) {
+function Container({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
     <div sx={[styles.container, theme.isDark ? styles.containerDark : styles.containerLight]}>
-      {props.children}
+      {children}
     </div>
   );
 }

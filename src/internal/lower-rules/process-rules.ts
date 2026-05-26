@@ -1019,7 +1019,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       state.markBail();
       warnings.push({
         severity: "warning",
-        type: "CSS block contains unsupported at-rule (only @media and @container are supported; @supports, etc. require manual handling)",
+        type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
         loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
       });
       break;
@@ -1338,38 +1338,61 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         localVarValues.set(prop, value);
       }
 
-      // Handle nested pseudo + media: `&:hover { @media (...) { ... } }`
-      // This produces: { ":hover": { default: value, "@media (...)": value } }
+      // Handle nested pseudo + condition: `&:hover { @media (...) { ... } }`
       if (media && pseudos?.length) {
-        perPropPseudo[prop] ??= {};
-        const existing = perPropPseudo[prop]!;
-        noteSourceCssProperty(existing);
-        if (!("default" in existing)) {
-          const existingVal = (styleObj as Record<string, unknown>)[prop];
-          if (existingVal !== undefined) {
-            existing.default = existingVal;
-          } else if (cssHelperPropValues.has(prop)) {
-            existing.default = getComposedDefaultValue(prop);
-          } else {
-            existing.default = null;
+        if (media.startsWith("@supports")) {
+          perPropMedia[prop] ??= {};
+          const existing = perPropMedia[prop]!;
+          noteSourceCssProperty(existing);
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
           }
-        }
-        // For each pseudo, create/update a nested media map
-        for (const ps of pseudos) {
-          const current = existing[ps];
-          if (!current || typeof current !== "object") {
-            const fallbackDefault = cssHelperPropValues.has(prop)
-              ? getComposedDefaultValue(prop)
-              : null;
-            const preservedDefault = current !== undefined ? current : fallbackDefault;
-            existing[ps] = { default: preservedDefault };
-          } else if (!("default" in (current as Record<string, unknown>))) {
-            const fallbackDefault = cssHelperPropValues.has(prop)
-              ? getComposedDefaultValue(prop)
-              : null;
-            (current as Record<string, unknown>).default = fallbackDefault;
+          const current = existing[media];
+          const mediaMap =
+            current && typeof current === "object" && !Array.isArray(current) && !isAstNode(current)
+              ? (current as Record<string, unknown>)
+              : { default: current ?? null };
+          for (const ps of pseudos) {
+            mediaMap[ps] = value;
           }
-          (existing[ps] as Record<string, unknown>)[media] = value;
+          existing[media] = mediaMap;
+        } else {
+          perPropPseudo[prop] ??= {};
+          const existing = perPropPseudo[prop]!;
+          noteSourceCssProperty(existing);
+          if (!("default" in existing)) {
+            const existingVal = (styleObj as Record<string, unknown>)[prop];
+            if (existingVal !== undefined) {
+              existing.default = existingVal;
+            } else if (cssHelperPropValues.has(prop)) {
+              existing.default = getComposedDefaultValue(prop);
+            } else {
+              existing.default = null;
+            }
+          }
+          for (const ps of pseudos) {
+            const current = existing[ps];
+            if (!current || typeof current !== "object") {
+              const fallbackDefault = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              const preservedDefault = current !== undefined ? current : fallbackDefault;
+              existing[ps] = { default: preservedDefault };
+            } else if (!("default" in (current as Record<string, unknown>))) {
+              const fallbackDefault = cssHelperPropValues.has(prop)
+                ? getComposedDefaultValue(prop)
+                : null;
+              (current as Record<string, unknown>).default = fallbackDefault;
+            }
+            (existing[ps] as Record<string, unknown>)[media] = value;
+          }
         }
         return;
       }
@@ -1469,7 +1492,17 @@ export function processDeclRules(ctx: DeclProcessingState): void {
             existing.default = null;
           }
         }
-        existing[media] = value;
+        const currentMediaValue = existing[media];
+        if (
+          currentMediaValue &&
+          typeof currentMediaValue === "object" &&
+          !Array.isArray(currentMediaValue) &&
+          !isAstNode(currentMediaValue)
+        ) {
+          (currentMediaValue as Record<string, unknown>).default = value;
+        } else {
+          existing[media] = value;
+        }
         patchEarlierDynamicConditionValues(prop, media, value);
         return;
       }
@@ -2903,6 +2936,16 @@ function resolveMediaAndEmitComputedKeys(
   const { state, decl } = ctx;
   const { warnings } = state;
 
+  if (hasUnsupportedAtRule(rule.atRuleStack)) {
+    state.markBail();
+    warnings.push({
+      severity: "warning",
+      type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
   let media = findSupportedAtRule(rule.atRuleStack);
   if (media) {
     const resolved = resolveMediaAtRulePlaceholders(
@@ -3058,6 +3101,16 @@ function handleAdjacentSiblingSelector(
     state.warnings.push({
       severity: "warning",
       type: "Unsupported selector: unresolved interpolation in sibling selector",
+      loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
+    });
+    return "break";
+  }
+
+  if (hasUnsupportedAtRule(rule.atRuleStack)) {
+    state.markBail();
+    state.warnings.push({
+      severity: "warning",
+      type: "CSS block contains unsupported at-rule (only @media, @container, and @supports are supported; mixed nested at-rules require manual handling)",
       loc: computeSelectorWarningLoc(decl.loc, decl.rawCss, rule.selector),
     });
     return "break";

@@ -57,14 +57,13 @@ function buildAttrWrapperBody(
 
   const classNameId = j.identifier("className");
   const childrenId = j.identifier("children");
-  const refId = j.identifier("ref");
   const restId = j.identifier("rest");
   const forwardedAsId = j.identifier("forwardedAs");
   const componentId = j.identifier("Component");
   const sxId = j.identifier("sx");
 
   // Build base props in the order matching the original template output:
-  // as, forwardedAs, extraProps (type/href/target), className, children, ref
+  // as, forwardedAs, extraProps (type/href/target), className, children
   const baseProps: Array<Property | RestElement> = [
     ...(allowAsProp
       ? [
@@ -80,7 +79,6 @@ function buildAttrWrapperBody(
     ...extraDestructureProps.map((name) => ctx.patternProp(name, j.identifier(name))),
     ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
     ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
-    ...((d.supportsRefProp ?? false) ? [ctx.patternProp("ref", refId)] : []),
   ];
 
   const patternProps = emitter.buildDestructurePatternProps({
@@ -138,15 +136,9 @@ function buildAttrWrapperBody(
       ),
     );
     openingAttrs.push(...extraJsxAttrs);
-    if (d.supportsRefProp ?? false) {
-      openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
-    }
     openingAttrs.push(j.jsxSpreadAttribute(restId));
   } else {
     // No className merging: extraAttrs {...rest} {...sx}
-    if (d.supportsRefProp ?? false) {
-      openingAttrs.push(j.jsxAttribute(j.jsxIdentifier("ref"), j.jsxExpressionContainer(refId)));
-    }
     openingAttrs.push(...extraJsxAttrs);
     openingAttrs.push(j.jsxSpreadAttribute(restId));
     openingAttrs.push(j.jsxSpreadAttribute(sxId));

@@ -325,6 +325,31 @@ export function buildExtraStylexPropsExprs(
 }
 
 /**
+ * Merges adjacent `cond && styleA, !cond && styleB` expressions into
+ * `cond ? styleA : styleB` without reordering other style args.
+ */
+export function mergeAdjacentComplementaryStyleExprs(
+  j: JSCodeshift,
+  styleArgs: ExpressionKind[],
+): ExpressionKind[] {
+  const result: ExpressionKind[] = [];
+  for (let i = 0; i < styleArgs.length; i++) {
+    const current = styleArgs[i]!;
+    const next = styleArgs[i + 1];
+    if (next) {
+      const merged = mergeComplementaryLogicalPair(j, current, next);
+      if (merged) {
+        result.push(merged);
+        i++;
+        continue;
+      }
+    }
+    result.push(current);
+  }
+  return result;
+}
+
+/**
  * Finds the next unconsumed entry in sorted variant entries (as `[when, key]` tuples)
  * that has a complementary "when" condition to the entry at `index`.
  * Used by both intrinsic-simple and component emitters for ternary merging.
@@ -387,6 +412,61 @@ function findComplementaryEntry(
   return null;
 }
 
+function mergeComplementaryLogicalPair(
+  j: JSCodeshift,
+  leftExpr: ExpressionKind,
+  rightExpr: ExpressionKind,
+): ExpressionKind | null {
+  const left = getConditionalStyleParts(j, leftExpr);
+  const right = getConditionalStyleParts(j, rightExpr);
+  if (!left || !right) {
+    return null;
+  }
+
+  const positiveWhen = getPositiveWhen(left.when, right.when);
+  if (!positiveWhen) {
+    return null;
+  }
+
+  const isLeftPositive = areEquivalentWhen(left.when, positiveWhen);
+  return j.conditionalExpression(
+    isLeftPositive ? left.cond : right.cond,
+    isLeftPositive ? left.style : right.style,
+    isLeftPositive ? right.style : left.style,
+  );
+}
+
+function getConditionalStyleParts(
+  j: JSCodeshift,
+  expr: ExpressionKind,
+): {
+  when: string;
+  cond: ExpressionKind;
+  style: ExpressionKind;
+} | null {
+  if (expr.type !== "LogicalExpression" || expr.operator !== "&&") {
+    return null;
+  }
+  const cond = expr.left as ExpressionKind;
+  const when = printCondition(j, cond);
+  if (!when) {
+    return null;
+  }
+  return {
+    when,
+    cond,
+    style: expr.right as ExpressionKind,
+  };
+}
+
+function printCondition(j: JSCodeshift, cond: ExpressionKind): string | null {
+  try {
+    return j(cond).toSource();
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Detects if two "when" strings differ only in === vs !==.
  * Returns the "===" variant (the positive one) or null if they're not inverses.
@@ -394,27 +474,79 @@ function findComplementaryEntry(
 function areComparisonInverses(a: string, b: string): string | null {
   const aNorm = normalizeWhenForComparison(a);
   const bNorm = normalizeWhenForComparison(b);
-  const eqOp = "===";
-  const neqOp = "!==";
-  // Check !== before === since !== contains === as a substring
-  const aHasNeq = aNorm.includes(neqOp);
-  const aHasEq = !aHasNeq && aNorm.includes(eqOp);
-  const bHasNeq = bNorm.includes(neqOp);
-  const bHasEq = !bHasNeq && bNorm.includes(eqOp);
-
-  // One must have === and the other !==
-  if (aHasEq && !aHasNeq && bHasNeq && !bHasEq) {
-    // a is "===", b is "!==". Check they match when operator is swapped.
-    if (aNorm.replace(eqOp, neqOp) === bNorm) {
-      return a.trim(); // a is the positive (===) form
-    }
+  const aComparison = parseSingleComparison(aNorm);
+  const bComparison = parseSingleComparison(bNorm);
+  if (!aComparison || !bComparison) {
+    return null;
   }
-  if (bHasEq && !bHasNeq && aHasNeq && !aHasEq) {
-    if (bNorm.replace(eqOp, neqOp) === aNorm) {
-      return b.trim(); // b is the positive (===) form
-    }
+  if (aComparison.left !== bComparison.left || aComparison.right !== bComparison.right) {
+    return null;
+  }
+  if (aComparison.operator === "===" && bComparison.operator === "!==") {
+    return a.trim();
+  }
+  if (aComparison.operator === "!==" && bComparison.operator === "===") {
+    return b.trim();
   }
   return null;
+}
+
+function parseSingleComparison(expr: string): {
+  left: string;
+  operator: "===" | "!==";
+  right: string;
+} | null {
+  const neqIndex = findTopLevelOperator(expr, "!==");
+  const eqIndex = findTopLevelOperator(expr, "===");
+  if ((neqIndex >= 0 && eqIndex >= 0) || (neqIndex < 0 && eqIndex < 0)) {
+    return null;
+  }
+  const operator = neqIndex >= 0 ? "!==" : "===";
+  const index = neqIndex >= 0 ? neqIndex : eqIndex;
+  const left = expr.slice(0, index);
+  const right = expr.slice(index + operator.length);
+  if (!left || !right || hasTopLevelLogicalOperator(left) || hasTopLevelLogicalOperator(right)) {
+    return null;
+  }
+  return { left, operator, right };
+}
+
+function hasTopLevelLogicalOperator(expr: string): boolean {
+  return findTopLevelOperator(expr, "&&") >= 0 || findTopLevelOperator(expr, "||") >= 0;
+}
+
+function findTopLevelOperator(expr: string, operator: string): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i <= expr.length - operator.length; i++) {
+    const ch = expr[i]!;
+    if (quote) {
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch === ")") {
+      depth--;
+      continue;
+    }
+    if (depth === 0 && expr.slice(i, i + operator.length) === operator) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function isNegationOf(candidate: string, base: string): boolean {
@@ -439,8 +571,40 @@ function isNegationOf(candidate: string, base: string): boolean {
 }
 
 function normalizeWhenForComparison(when: string): string {
-  const withoutWhitespace = String(when ?? "").replace(/\s+/g, "");
+  const withoutWhitespace = removeWhitespaceOutsideLiterals(String(when ?? ""));
   return stripOuterParens(withoutWhitespace);
+}
+
+function removeWhitespaceOutsideLiterals(expr: string): string {
+  let result = "";
+  let quote: string | null = null;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i]!;
+    if (quote) {
+      result += ch;
+      if (ch === "\\") {
+        const next = expr[i + 1];
+        if (next !== undefined) {
+          result += next;
+          i++;
+        }
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      result += ch;
+      continue;
+    }
+    if (!/\s/.test(ch)) {
+      result += ch;
+    }
+  }
+  return result;
 }
 
 function stripOuterParens(expr: string): string {
