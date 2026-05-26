@@ -32,7 +32,6 @@ type BorderHandlerContext = Pick<
   | "hasLocalThemeBinding"
 > & {
   decl: StyledDecl;
-  extraStyleObjects: Map<string, Record<string, unknown>>;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   inlineStyleProps: Array<{ prop: string; expr: unknown }>;
@@ -61,7 +60,6 @@ export function tryHandleInterpolatedBorder(
     j,
     filePath,
     decl,
-    extraStyleObjects,
     resolveValue,
     resolveCall,
     importMap,
@@ -580,43 +578,13 @@ export function tryHandleInterpolatedBorder(
       if (!hasStaticWidthOrStyle) {
         const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
         if (parsedTpl) {
-          if (selector.trim() !== "&" || (atRuleStack ?? []).length > 0) {
-            if (parsedTpl.width) {
-              applyResolvedPropValue(widthProp, parsedTpl.width);
-            }
-            if (parsedTpl.style) {
-              applyResolvedPropValue(styleProp, parsedTpl.style);
-            }
-            applyResolvedPropValue(colorProp, parsedTpl.colorExpr);
-            return true;
-          }
-
-          const fullProp = direction ? `border${direction}` : "border";
-          const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
-          const bucket = extraStyleObjects.get(extraKey) ?? {};
           if (parsedTpl.width) {
-            (bucket as any)[widthProp] = parsedTpl.width;
+            applyResolvedPropValue(widthProp, parsedTpl.width);
           }
           if (parsedTpl.style) {
-            (bucket as any)[styleProp] = parsedTpl.style;
+            applyResolvedPropValue(styleProp, parsedTpl.style);
           }
-          (bucket as any)[colorProp] = parsedTpl.colorExpr;
-          extraStyleObjects.set(extraKey, bucket);
-
-          decl.extraStylexPropsArgs ??= [];
-          // When variant style keys already exist (from earlier conditional declarations),
-          // this unconditional style must come after variants to preserve CSS cascade order.
-          const afterVariants = Object.keys(variantStyleKeys).length > 0;
-          decl.extraStylexPropsArgs.push({
-            expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
-            ...(afterVariants ? { afterVariants } : {}),
-          });
-          // `extraStylexPropsArgs` are only emitted for wrapper components.
-          // If this styled component would otherwise be eligible for inlining, we'd drop the extra
-          // `styles.<extraKey>` argument and lose the border expansion. Force a wrapper to preserve
-          // semantics.
-          decl.needsWrapperComponent = true;
-
+          applyResolvedPropValue(colorProp, parsedTpl.colorExpr);
           // Import insertion currently always happens right after the stylex import, which means
           // later inserts appear above earlier inserts. For this pattern, we want helper imports
           // (e.g. `borders`) to appear above theme token imports (e.g. `$colors`), matching
