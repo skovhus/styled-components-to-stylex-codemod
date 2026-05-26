@@ -97,4 +97,28 @@ describe("mergeAdjacentComplementaryStyleExprs", () => {
 
     expect(merged).toHaveLength(3);
   });
+
+  it("does not merge overlapping logical OR guards", () => {
+    const styles = j.identifier("styles");
+    const firstCondition = j("const x = kind === 'a' || kind === 'b';")
+      .find(j.LogicalExpression)
+      .nodes()[0];
+    const secondCondition = j("const x = kind !== 'a' || kind === 'b';")
+      .find(j.LogicalExpression)
+      .nodes()[0];
+    if (!firstCondition || !secondCondition) {
+      throw new Error("Expected test conditions to parse");
+    }
+
+    const merged = mergeAdjacentComplementaryStyleExprs(j, [
+      j.logicalExpression("&&", firstCondition, j.memberExpression(styles, j.identifier("first"))),
+      j.logicalExpression(
+        "&&",
+        secondCondition,
+        j.memberExpression(styles, j.identifier("second")),
+      ),
+    ]);
+
+    expect(merged).toHaveLength(2);
+  });
 });

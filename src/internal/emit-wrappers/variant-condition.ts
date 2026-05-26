@@ -474,27 +474,79 @@ function printCondition(j: JSCodeshift, cond: ExpressionKind): string | null {
 function areComparisonInverses(a: string, b: string): string | null {
   const aNorm = normalizeWhenForComparison(a);
   const bNorm = normalizeWhenForComparison(b);
-  const eqOp = "===";
-  const neqOp = "!==";
-  // Check !== before === since !== contains === as a substring
-  const aHasNeq = aNorm.includes(neqOp);
-  const aHasEq = !aHasNeq && aNorm.includes(eqOp);
-  const bHasNeq = bNorm.includes(neqOp);
-  const bHasEq = !bHasNeq && bNorm.includes(eqOp);
-
-  // One must have === and the other !==
-  if (aHasEq && !aHasNeq && bHasNeq && !bHasEq) {
-    // a is "===", b is "!==". Check they match when operator is swapped.
-    if (aNorm.replace(eqOp, neqOp) === bNorm) {
-      return a.trim(); // a is the positive (===) form
-    }
+  const aComparison = parseSingleComparison(aNorm);
+  const bComparison = parseSingleComparison(bNorm);
+  if (!aComparison || !bComparison) {
+    return null;
   }
-  if (bHasEq && !bHasNeq && aHasNeq && !aHasEq) {
-    if (bNorm.replace(eqOp, neqOp) === aNorm) {
-      return b.trim(); // b is the positive (===) form
-    }
+  if (aComparison.left !== bComparison.left || aComparison.right !== bComparison.right) {
+    return null;
+  }
+  if (aComparison.operator === "===" && bComparison.operator === "!==") {
+    return a.trim();
+  }
+  if (aComparison.operator === "!==" && bComparison.operator === "===") {
+    return b.trim();
   }
   return null;
+}
+
+function parseSingleComparison(expr: string): {
+  left: string;
+  operator: "===" | "!==";
+  right: string;
+} | null {
+  const neqIndex = findTopLevelOperator(expr, "!==");
+  const eqIndex = findTopLevelOperator(expr, "===");
+  if ((neqIndex >= 0 && eqIndex >= 0) || (neqIndex < 0 && eqIndex < 0)) {
+    return null;
+  }
+  const operator = neqIndex >= 0 ? "!==" : "===";
+  const index = neqIndex >= 0 ? neqIndex : eqIndex;
+  const left = expr.slice(0, index);
+  const right = expr.slice(index + operator.length);
+  if (!left || !right || hasTopLevelLogicalOperator(left) || hasTopLevelLogicalOperator(right)) {
+    return null;
+  }
+  return { left, operator, right };
+}
+
+function hasTopLevelLogicalOperator(expr: string): boolean {
+  return findTopLevelOperator(expr, "&&") >= 0 || findTopLevelOperator(expr, "||") >= 0;
+}
+
+function findTopLevelOperator(expr: string, operator: string): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = 0; i <= expr.length - operator.length; i++) {
+    const ch = expr[i]!;
+    if (quote) {
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(") {
+      depth++;
+      continue;
+    }
+    if (ch === ")") {
+      depth--;
+      continue;
+    }
+    if (depth === 0 && expr.slice(i, i + operator.length) === operator) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 function isNegationOf(candidate: string, base: string): boolean {
