@@ -3,9 +3,9 @@ import styled from "styled-components";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
 export const TopContainer = styled(SxAwareButton)<{
-  electronYTrafficLightPosition?: number;
+  $accentColor?: string;
 }>`
-  padding-left: ${(props) => `${props.electronYTrafficLightPosition ?? 0}px`};
+  color: ${(props) => `${props.$accentColor ?? "black"}`};
 `;
 
 const AccountSwitcherContainer = styled(TopContainer)`
@@ -13,5 +13,5 @@ const AccountSwitcherContainer = styled(TopContainer)`
 `;
 
 export const App = () => (
-  <AccountSwitcherContainer electronYTrafficLightPosition={12}>Account</AccountSwitcherContainer>
+  <AccountSwitcherContainer $accentColor="rgb(20, 60, 90)">Account</AccountSwitcherContainer>
 );

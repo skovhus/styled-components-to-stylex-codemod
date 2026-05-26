@@ -2,31 +2,29 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { SxAwareButton } from "./lib/sx-aware-component";
 
-type TopContainerProps = { electronYTrafficLightPosition?: number } & React.ComponentPropsWithRef<
-  typeof SxAwareButton
+type TopContainerProps = { accentColor?: string } & Omit<
+  React.ComponentPropsWithRef<typeof SxAwareButton>,
+  "$accentColor"
 >;
 
 export function TopContainer(props: TopContainerProps) {
-  const { children, sx, ...rest } = props;
+  const { children, sx, accentColor, ...rest } = props;
   return (
-    <SxAwareButton
-      {...rest}
-      sx={[styles.topContainerPaddingLeft(props.electronYTrafficLightPosition), sx]}
-    >
+    <SxAwareButton {...rest} sx={[styles.topContainerColor(accentColor), sx]}>
       {children}
     </SxAwareButton>
   );
 }
 
 export const App = () => (
-  <TopContainer electronYTrafficLightPosition={12} sx={styles.accountSwitcherContainer}>
+  <TopContainer accentColor="rgb(20, 60, 90)" sx={styles.accountSwitcherContainer}>
     Account
   </TopContainer>
 );
 
 const styles = stylex.create({
-  topContainerPaddingLeft: (electronYTrafficLightPosition: number | undefined) => ({
-    paddingLeft: `${electronYTrafficLightPosition ?? 0}px`,
+  topContainerColor: (accentColor: string | undefined) => ({
+    color: `${accentColor ?? "black"}`,
   }),
   accountSwitcherContainer: {
     marginLeft: 4,

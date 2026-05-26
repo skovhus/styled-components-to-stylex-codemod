@@ -12,6 +12,14 @@ type StaticReturnResult =
   | { supported: true; returned: true; value: StaticEvalValue }
   | { supported: true; returned: false }
   | { supported: false };
+type StaticEvalContext = {
+  j: JSCodeshift;
+  root: ReturnType<JSCodeshift>;
+  paramName?: string | null;
+  callStack: ReadonlySet<string>;
+};
+
+const MAX_STATIC_CALL_DEPTH = 20;
 
 export function getObservedStaticVariantValues(
   propUsageByComponent: Map<string, ComponentPropUsageInfo>,
@@ -38,14 +46,22 @@ export function evaluateLocalCallValueTransform(args: {
   root: ReturnType<JSCodeshift>;
   calleeName: string;
   argValue: StaticEvalValue;
+  callStack?: ReadonlySet<string>;
 }): StaticEvalValue | null {
+  const callStack = args.callStack ?? new Set<string>();
+  if (callStack.has(args.calleeName) || callStack.size >= MAX_STATIC_CALL_DEPTH) {
+    return null;
+  }
   const fn = findLocalSingleParamFunction(args);
   if (!fn) {
     return null;
   }
+  const nextCallStack = new Set(callStack);
+  nextCallStack.add(args.calleeName);
   const result = evaluateFunctionBody(fn.body, fn.paramName, args.argValue, {
     j: args.j,
     root: args.root,
+    callStack: nextCallStack,
   });
   return result.supported && result.returned ? result.value : null;
 }
@@ -62,6 +78,7 @@ export function evaluateObservedDynamicExpression(args: {
     j: args.j,
     root: args.root,
     paramName: args.paramName ?? null,
+    callStack: new Set<string>(),
   });
   return result.supported ? result.value : null;
 }
@@ -106,7 +123,7 @@ function evaluateFunctionBody(
   body: unknown,
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticReturnResult {
   const bodyNode = body as { type?: string; body?: unknown[] } | null | undefined;
   if (!bodyNode) {
@@ -135,7 +152,7 @@ function evaluateStaticStatement(
   statement: unknown,
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticReturnResult {
   const node = statement as
     | {
@@ -178,7 +195,7 @@ function evaluateStaticBranch(
   branch: unknown,
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticReturnResult {
   const node = branch as { type?: string } | null | undefined;
   if (node?.type === "BlockStatement") {
@@ -191,7 +208,7 @@ function evaluateStaticExpression(
   expression: unknown,
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticEvalResult {
   const node = expression as
     | {
@@ -241,6 +258,7 @@ function evaluateStaticExpression(
       root: ctx.root,
       calleeName: callee.name,
       argValue: callArg.value,
+      callStack: ctx.callStack,
     });
     return isStaticEvalValue(value) ? { supported: true, value } : { supported: false };
   }
@@ -329,7 +347,7 @@ function evaluateStaticBinaryExpression(
   node: { operator?: string; left?: unknown; right?: unknown },
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticEvalResult {
   const left = evaluateStaticExpression(node.left, propName, propValue, ctx);
   const right = evaluateStaticExpression(node.right, propName, propValue, ctx);
@@ -357,7 +375,7 @@ function evaluateStaticTemplateLiteral(
   },
   propName: string,
   propValue: StaticEvalValue,
-  ctx: { j: JSCodeshift; root: ReturnType<JSCodeshift>; paramName?: string | null },
+  ctx: StaticEvalContext,
 ): StaticEvalResult {
   let value = "";
   for (let i = 0; i < node.quasis.length; i++) {

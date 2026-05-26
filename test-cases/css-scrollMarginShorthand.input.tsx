@@ -23,11 +23,9 @@ const Panel = styled.div`
   padding: 16px;
 `;
 
-// Single-value scroll-padding and logical longhands
+// Single-value scroll-padding
 const Container = styled.div`
   scroll-padding: 20px;
-  scroll-padding-block: 12px;
-  scroll-margin-inline: 6px;
   background-color: lavender;
   padding: 16px;
 `;

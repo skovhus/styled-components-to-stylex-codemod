@@ -41,14 +41,12 @@ const styles = stylex.create({
     backgroundColor: "lightgreen",
     padding: 16,
   },
-  // Single-value scroll-padding and logical longhands
+  // Single-value scroll-padding
   container: {
-    scrollPaddingTop: 12,
+    scrollPaddingTop: 20,
     scrollPaddingRight: 20,
-    scrollPaddingBottom: 12,
+    scrollPaddingBottom: 20,
     scrollPaddingLeft: 20,
-    scrollMarginLeft: 6,
-    scrollMarginRight: 6,
     backgroundColor: "lavender",
     padding: 16,
   },

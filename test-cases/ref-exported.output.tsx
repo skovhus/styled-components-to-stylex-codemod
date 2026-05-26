@@ -5,14 +5,13 @@ import * as stylex from "@stylexjs/stylex";
 export function StyledInput(
   props: Omit<React.ComponentProps<"input">, "className" | "style" | "sx">,
 ) {
-  const { ref, ...rest } = props;
-  return <input ref={ref} {...rest} sx={styles.input} />;
+  return <input {...props} sx={styles.input} />;
 }
 
 export function StyledDiv(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
-  const { children, ref, ...rest } = props;
+  const { children, ...rest } = props;
   return (
-    <div ref={ref} {...rest} sx={styles.div}>
+    <div {...rest} sx={styles.div}>
       {children}
     </div>
   );
