@@ -27,8 +27,8 @@ export function Spacer(
       {...rest}
       {...mergedSx(
         [
-          width != null && widthVariants[width as keyof typeof widthVariants],
-          height != null && heightVariants[height as keyof typeof heightVariants],
+          showProperty(width) ? styles.spacerWithWidth(width) : undefined,
+          showProperty(height) ? styles.spacerWithHeight(height) : undefined,
           sx,
         ],
         undefined,
@@ -49,20 +49,11 @@ export const App = () => (
   </div>
 );
 
-const widthVariants = stylex.create({
-  100: {
-    width: "100px",
-  },
-  "2rem": {
-    width: "2rem",
-  },
-});
-
-const heightVariants = stylex.create({
-  0: {
-    height: "0px",
-  },
-  50: {
-    height: "50px",
-  },
+const styles = stylex.create({
+  spacerWithWidth: (width: number | string | undefined) => ({
+    width: getSize(width),
+  }),
+  spacerWithHeight: (height: number | string | undefined) => ({
+    height: getSize(height),
+  }),
 });

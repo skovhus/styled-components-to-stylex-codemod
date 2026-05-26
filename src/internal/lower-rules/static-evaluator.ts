@@ -2,7 +2,6 @@
  * Conservative static evaluation helpers for observed JSX prop values.
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { ComponentPropUsageInfo } from "../transform-types.js";
 import { extractRootAndPath } from "../utilities/jscodeshift-utils.js";
 
 type StaticEvalValue = string | number | boolean | null | undefined;
@@ -21,26 +20,6 @@ type StaticEvalContext = {
 };
 
 const MAX_STATIC_CALL_DEPTH = 20;
-
-export function getObservedStaticVariantValues(
-  propUsageByComponent: Map<string, ComponentPropUsageInfo>,
-  componentName: string,
-  jsxProp: string,
-): Array<string | number> | null {
-  const usage = propUsageByComponent.get(componentName);
-  if (!usage || usage.hasUnknownUsage) {
-    return null;
-  }
-  const propUsage = usage.props[jsxProp];
-  if (!propUsage || propUsage.hasUnknown || propUsage.values.length < 2) {
-    return null;
-  }
-  const values = propUsage.values.filter(
-    (value: string | number | boolean): value is string | number =>
-      typeof value === "string" || typeof value === "number",
-  );
-  return values.length === propUsage.values.length ? values : null;
-}
 
 export function evaluateLocalCallValueTransform(args: {
   j: JSCodeshift;

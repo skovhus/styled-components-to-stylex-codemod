@@ -49,10 +49,8 @@ import {
   literalToStaticValue,
   resolveTypeNodeFromTsType,
 } from "./types.js";
-import {
-  evaluateObservedDynamicExpression,
-  getObservedStaticVariantValues,
-} from "./static-evaluator.js";
+import { evaluateObservedDynamicExpression } from "./static-evaluator.js";
+import { extractUnionLiteralValues } from "./variants.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { capitalize } from "../utilities/string-utils.js";
 import {
@@ -83,7 +81,6 @@ type CssHelperConditionalContext = Pick<
   | "markBail"
   | "importMap"
   | "root"
-  | "propUsageByComponent"
   | "keyframesNames"
   | "inlineKeyframeNameMap"
 > & {
@@ -137,7 +134,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     markBail,
     importMap,
     root,
-    propUsageByComponent,
     extraStyleObjects,
     resolvedStyleObjects,
   } = ctx;
@@ -1124,23 +1120,19 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
     };
 
-    const tryApplyObservedStaticMap = (args: {
+    const tryApplyFiniteUnionStaticMap = (args: {
       map: Map<string, ExpressionKind>;
       test: ExpressionKind;
       propName: string;
       paramName: string | null;
     }): boolean => {
-      const observedValues = getObservedStaticVariantValues(
-        propUsageByComponent,
-        decl.localName,
-        args.propName,
-      );
-      if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+      const unionValues = extractUnionLiteralValues(findJsxPropTsType(args.propName));
+      if (!unionValues || unionValues.length < 2 || unionValues.length > 20) {
         return false;
       }
 
       const buckets: Array<{ propValue: string | number; style: Record<string, unknown> }> = [];
-      for (const propValue of observedValues) {
+      for (const propValue of unionValues) {
         const testValue = evaluateObservedDynamicExpression({
           j,
           root,
@@ -1725,7 +1717,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         valuePropParams.length === 1 &&
         consMap.size > 0 &&
         altMap.size === 0 &&
-        tryApplyObservedStaticMap({
+        tryApplyFiniteUnionStaticMap({
           map: consMap,
           test: conditional.test as ExpressionKind,
           propName: valuePropParams[0]!,

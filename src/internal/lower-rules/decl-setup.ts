@@ -400,7 +400,6 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     ...sharedFromState,
     importMap,
     root,
-    propUsageByComponent: state.propUsageByComponent,
     decl,
     componentInfo,
     handlerContext,

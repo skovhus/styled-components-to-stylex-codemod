@@ -2392,6 +2392,31 @@ export const App = () => (
     expect(result).toContain("color: color");
   });
 
+  it("falls back to runtime css helper conditionals when observed values are not exhaustive", () => {
+    const input = `
+import styled from "styled-components";
+
+const getTone = (tone: string) => tone;
+const hasTone = (tone: string) => !!tone;
+
+export const Badge = styled.div<{ tone: string }>\`
+  \${(props) => (hasTone(props.tone) ? \`color: \${getTone(props.tone)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge tone="red">Red</Badge>
+    <Badge tone="blue">Blue</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "css-helper-observed-nonexhaustive.tsx");
+
+    expect(result).toContain("hasTone(tone) ? styles.");
+    expect(result).toContain("color: getTone(tone)");
+    expect(result).not.toContain("toneVariants");
+  });
+
   it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
@@ -12310,6 +12335,31 @@ export const App = () => <Box $width={320}>content</Box>;
       });
       "
     `);
+  });
+
+  it("should emit defineVars sidecars for inline-only local custom property writes", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $width?: number }>\`
+  --panel-width: 200px;
+  \${(props) => (props.$width ? \`--panel-width: \${props.$width}px\` : "")};
+  padding: 4px;
+\`;
+
+export const App = () => <Box $width={320}>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toContain('import { testVariables } from "./test.stylex"');
+    expect(result.code).toContain('[testVariables["--panel-width"]]');
+    expect(result.sidecarFiles?.[0]?.content).toContain("export const testVariables");
+    expect(result.sidecarFiles?.[0]?.content).toContain('"--panel-width": "200px"');
   });
 
   it("should rewrite local CSS variable values under computed media keys", () => {
