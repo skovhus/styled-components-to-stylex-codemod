@@ -13,7 +13,5 @@ const AccountSwitcherContainer = styled(TopContainer)`
 `;
 
 export const App = () => (
-  <AccountSwitcherContainer electronYTrafficLightPosition={12}>
-    Account
-  </AccountSwitcherContainer>
+  <AccountSwitcherContainer electronYTrafficLightPosition={12}>Account</AccountSwitcherContainer>
 );
