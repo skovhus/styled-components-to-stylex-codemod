@@ -493,7 +493,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         markStyleValueVariantProp(jsxProp);
       }
     }
-    ensureShouldForwardPropDrop(decl, jsxProp);
+    ensureObservedVariantPropDrop(jsxProp);
     return true;
   };
 
@@ -552,7 +552,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
     observedVariantFallbackFns.set(jsxProp, fallbackFnKey);
     markStyleValueVariantProp(jsxProp);
-    ensureShouldForwardPropDrop(decl, jsxProp);
+    ensureObservedVariantPropDrop(jsxProp);
     return true;
   };
 
@@ -626,8 +626,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
     }
     markStyleValueVariantProp(jsxProp);
-    ensureShouldForwardPropDrop(decl, jsxProp);
+    ensureObservedVariantPropDrop(jsxProp);
     return true;
+  };
+
+  const ensureObservedVariantPropDrop = (jsxProp: string): void => {
+    if (jsxProp.startsWith("$") || decl.base.kind !== "component") {
+      ensureShouldForwardPropDrop(decl, jsxProp);
+    }
   };
 
   const markStyleValueVariantProp = (jsxProp: string): void => {

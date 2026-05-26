@@ -2392,6 +2392,34 @@ export const App = () => (
     expect(result).toContain("color: color");
   });
 
+  it("forwards non-transient observed variant props to wrapped components", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Base(props: { tone: string; className?: string; children?: React.ReactNode }) {
+  return <div className={props.className} data-tone={props.tone}>{props.children}</div>;
+}
+
+export const Badge = styled(Base)<{ tone: string }>\`
+  color: \${(props) => props.tone};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge tone="red">Red</Badge>
+    <Badge tone="blue">Blue</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-component-prop-forward.tsx");
+
+    expect(result).toContain(
+      "toneVariants[tone as keyof typeof toneVariants] ?? styles.badgeTone(tone)",
+    );
+    expect(result).toContain("tone={tone}");
+  });
+
   it("falls back to runtime css helper conditionals when observed values are not exhaustive", () => {
     const input = `
 import styled from "styled-components";

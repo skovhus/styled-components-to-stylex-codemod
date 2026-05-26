@@ -1,4 +1,4 @@
-// Style function props (bg, text) should NOT be forwarded to the wrapped component
+// Non-transient style function props should still be forwarded to the wrapped component.
 import styled from "styled-components";
 import { Flex } from "./lib/flex";
 

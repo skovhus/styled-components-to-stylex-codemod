@@ -4766,17 +4766,18 @@ function validateSxRestrictedWrappedComponentStyles(
     const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
     const excludedProperties = componentInterface?.sxExcludedProperties;
     const allowedProperties = componentInterface?.sxAllowedProperties;
+    const hasAllowedProperties = allowedProperties !== undefined;
     if (
       componentInterface?.acceptsSx !== true ||
       (!excludedProperties?.length &&
-        !allowedProperties?.length &&
+        !hasAllowedProperties &&
         !componentInterface.rootOnlyProperties?.length)
     ) {
       continue;
     }
 
     const excluded = new Set(excludedProperties ?? []);
-    const allowed = allowedProperties?.length ? new Set(allowedProperties) : null;
+    const allowed = hasAllowedProperties ? new Set(allowedProperties) : null;
     const rootOnly =
       componentInterface.sxTarget === "inner" && componentInterface.rootOnlyProperties?.length
         ? new Set(componentInterface.rootOnlyProperties)

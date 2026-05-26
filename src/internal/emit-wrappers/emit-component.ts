@@ -978,12 +978,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
     }
-    const shouldDropForwardedProp = (propName: string): boolean =>
-      (d.shouldForwardProp?.dropProps ?? []).includes(propName) ||
-      Boolean(
-        d.shouldForwardProp?.dropPrefix && propName.startsWith(d.shouldForwardProp.dropPrefix),
-      );
-
     // For imported base components (type unresolvable), don't destructure non-transient
     // style-fn props that are declared in the wrapper's explicit type. Leaving them in
     // `...rest` naturally forwards them to the base component (matching styled-components
@@ -1001,7 +995,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         if (
           wrapperExplicitPropNames.has(prop) &&
           !prop.startsWith("$") &&
-          !(styleValueVariantProps.has(prop) && shouldDropForwardedProp(prop)) &&
           !wrapperOnlyTransientProps.includes(prop) &&
           !filterOnlyTransientProps.includes(prop) &&
           !renamedTransientValues?.has(prop)
@@ -1347,18 +1340,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
             // style-only concerns. Forward them when the base component explicitly
             // accepts them, or when the base type can't be resolved (styled-components
             // forwards all non-transient props to wrapped components by default).
-            if (
-              !(styleValueVariantProps.has(propName) && shouldDropForwardedProp(propName)) &&
-              (!baseExplicitProps || baseExplicitProps.has(propName))
-            ) {
+            if (!baseExplicitProps || baseExplicitProps.has(propName)) {
               pushForwardedProp(propName);
             }
             continue;
           }
-          if (
-            !(styleValueVariantProps.has(propName) && shouldDropForwardedProp(propName)) &&
-            (!baseExplicitProps || baseExplicitProps.has(propName))
-          ) {
+          if (!baseExplicitProps || baseExplicitProps.has(propName)) {
             pushForwardedProp(propName);
           }
         }

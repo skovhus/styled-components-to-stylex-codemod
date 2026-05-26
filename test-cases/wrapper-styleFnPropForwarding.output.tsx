@@ -8,18 +8,15 @@ type BoxProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 function Box(props: BoxProps) {
-  const { children, bg, text, ...rest } = props;
   return (
     <Flex
-      {...rest}
+      {...props}
       {...stylex.props(
         styles.box,
-        bgVariants[bg as keyof typeof bgVariants] ?? styles.boxBg(bg),
-        textVariants[text as keyof typeof textVariants] ?? styles.boxText(text),
+        bgVariants[props.bg as keyof typeof bgVariants] ?? styles.boxBg(props.bg),
+        textVariants[props.text as keyof typeof textVariants] ?? styles.boxText(props.text),
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 

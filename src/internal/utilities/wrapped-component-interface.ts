@@ -84,10 +84,10 @@ function mergeAllowedPropertyLists(
   first: readonly string[] | undefined,
   second: readonly string[] | undefined,
 ): string[] | undefined {
-  if (!first?.length) {
-    return second?.length ? [...second] : undefined;
+  if (first === undefined) {
+    return second === undefined ? undefined : [...second];
   }
-  if (!second?.length) {
+  if (second === undefined) {
     return [...first];
   }
   const secondSet = new Set(second);

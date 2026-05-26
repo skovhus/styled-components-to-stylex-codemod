@@ -839,6 +839,41 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("treats an empty wrapped component sx allowlist as deny-all", () => {
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+
+    const after = transformWithWarnings({ source, path: "/tmp/Wrapper.tsx" }, api, {
+      adapter: {
+        ...fixtureAdapter,
+        wrappedComponentInterface(ctx) {
+          if (ctx.localName === "ColorTrigger") {
+            return { acceptsSx: true, sxAllowedProperties: [] };
+          }
+          return undefined;
+        },
+      },
+    });
+
+    expect(after.code).toBeNull();
+    expect(after.warnings).toContainEqual(
+      expect.objectContaining({
+        type: "Wrapped component sx prop does not accept generated StyleX property",
+        context: expect.objectContaining({
+          property: "backgroundColor",
+        }),
+      }),
+    );
+  });
+
   it("bails when a wrapped component sx prop targets an inner element for root styles", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-inner-sx-target-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
