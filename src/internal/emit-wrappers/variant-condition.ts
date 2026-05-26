@@ -571,8 +571,40 @@ function isNegationOf(candidate: string, base: string): boolean {
 }
 
 function normalizeWhenForComparison(when: string): string {
-  const withoutWhitespace = String(when ?? "").replace(/\s+/g, "");
+  const withoutWhitespace = removeWhitespaceOutsideLiterals(String(when ?? ""));
   return stripOuterParens(withoutWhitespace);
+}
+
+function removeWhitespaceOutsideLiterals(expr: string): string {
+  let result = "";
+  let quote: string | null = null;
+  for (let i = 0; i < expr.length; i++) {
+    const ch = expr[i]!;
+    if (quote) {
+      result += ch;
+      if (ch === "\\") {
+        const next = expr[i + 1];
+        if (next !== undefined) {
+          result += next;
+          i++;
+        }
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      result += ch;
+      continue;
+    }
+    if (!/\s/.test(ch)) {
+      result += ch;
+    }
+  }
+  return result;
 }
 
 function stripOuterParens(expr: string): string {

@@ -121,4 +121,24 @@ describe("mergeAdjacentComplementaryStyleExprs", () => {
 
     expect(merged).toHaveLength(2);
   });
+
+  it("preserves string literal whitespace when checking inverse comparisons", () => {
+    const styles = j.identifier("styles");
+    const firstCondition = j("const x = kind === 'a b';").find(j.BinaryExpression).nodes()[0];
+    const secondCondition = j("const x = kind !== 'ab';").find(j.BinaryExpression).nodes()[0];
+    if (!firstCondition || !secondCondition) {
+      throw new Error("Expected test conditions to parse");
+    }
+
+    const merged = mergeAdjacentComplementaryStyleExprs(j, [
+      j.logicalExpression("&&", firstCondition, j.memberExpression(styles, j.identifier("spaced"))),
+      j.logicalExpression(
+        "&&",
+        secondCondition,
+        j.memberExpression(styles, j.identifier("unspaced")),
+      ),
+    ]);
+
+    expect(merged).toHaveLength(2);
+  });
 });
