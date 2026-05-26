@@ -1,3 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{l as t,p as n}from"./index-x1lN72h9.js";n();var r=e(),i=Object.assign(e=>(0,r.jsx)(`select`,{id:e.id,children:e.children}),{Group:e=>(0,r.jsx)(`optgroup`,{label:e.label,children:e.children}),Option:e=>(0,r.jsx)(`option`,{value:e.value,children:e.children}),Separator:()=>(0,r.jsx)(`hr`,{})}),a=t(i)`
-  width: 200px;
-`,o=()=>(0,r.jsxs)(a,{id:`x`,children:[(0,r.jsx)(a.Separator,{}),(0,r.jsxs)(a.Group,{label:`favorites`,children:[(0,r.jsx)(a.Option,{value:`a`,children:`A`}),(0,r.jsx)(a.Option,{value:`b`,children:`B`})]})]});export{o as App,i as Select};
