@@ -14,7 +14,9 @@ interface InitialProps {
   isDisabled?: boolean;
 }
 
-function Thing(props: InitialProps & Omit<React.ComponentProps<"div">, "className" | "style">) {
+function Thing(
+  props: InitialProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
+) {
   const { children, isInactive, isInvite, isDisabled } = props;
   const theme = useTheme();
 

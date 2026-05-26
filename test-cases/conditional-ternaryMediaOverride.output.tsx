@@ -5,7 +5,7 @@ import { fontSizeVars } from "./tokens.stylex";
 
 type TitleProps = { size?: "small" | "large" } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Title(props: TitleProps) {

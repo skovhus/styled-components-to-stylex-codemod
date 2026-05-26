@@ -5,7 +5,7 @@ import { Browser } from "./lib/helpers";
 type ContainerProps = {
   size: number;
   padding: number;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 export function Container(props: ContainerProps) {
   const { children, size, padding, ...rest } = props;
@@ -27,7 +27,7 @@ export function Container(props: ContainerProps) {
 
 type BranchedContainerProps = { size: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // css helper called from a function with if/else branches

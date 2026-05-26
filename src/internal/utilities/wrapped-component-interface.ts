@@ -33,12 +33,16 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
-      if (adapterResult.acceptsSx && typedInterface?.sxExcludedProperties?.length) {
+      if (adapterResult.acceptsSx && hasTypedSxConstraints(typedInterface)) {
         return {
           ...adapterResult,
           sxExcludedProperties: mergeUniqueStrings(
             adapterResult.sxExcludedProperties,
-            typedInterface.sxExcludedProperties,
+            typedInterface.sxExcludedProperties ?? [],
+          ),
+          sxAllowedProperties: mergeAllowedPropertyLists(
+            adapterResult.sxAllowedProperties,
+            typedInterface.sxAllowedProperties,
           ),
         };
       }
@@ -49,6 +53,16 @@ export function wrappedComponentInterfaceFor(
   }
 
   return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
+}
+
+function hasTypedSxConstraints(
+  typedInterface: WrappedComponentInterfaceResult | undefined,
+): typedInterface is WrappedComponentInterfaceResult {
+  return (
+    typedInterface !== undefined &&
+    ((typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
+      typedInterface.sxAllowedProperties !== undefined)
+  );
 }
 
 function typedComponentInterfaceFor(
@@ -65,10 +79,25 @@ function typedComponentInterfaceFor(
     return {
       acceptsSx: true,
       sxExcludedProperties: typedComponent.sxExcludedProperties,
+      sxAllowedProperties: typedComponent.sxAllowedProperties,
     };
   }
 
   return undefined;
+}
+
+function mergeAllowedPropertyLists(
+  first: readonly string[] | undefined,
+  second: readonly string[] | undefined,
+): string[] | undefined {
+  if (first === undefined) {
+    return second === undefined ? undefined : [...second];
+  }
+  if (second === undefined) {
+    return [...first];
+  }
+  const secondSet = new Set(second);
+  return first.filter((name) => secondSet.has(name));
 }
 
 function mergeUniqueStrings(

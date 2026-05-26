@@ -399,6 +399,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const tryHandleCssHelperConditionalBlock = createCssHelperConditionalHandler({
     ...sharedFromState,
     importMap,
+    root,
     decl,
     componentInfo,
     handlerContext,

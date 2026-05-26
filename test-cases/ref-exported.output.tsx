@@ -2,11 +2,13 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-export function StyledInput(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+export function StyledInput(
+  props: Omit<React.ComponentProps<"input">, "className" | "style" | "sx">,
+) {
   return <input {...props} sx={styles.input} />;
 }
 
-export function StyledDiv(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
+export function StyledDiv(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
   const { children, ...rest } = props;
   return (
     <div {...rest} sx={styles.div}>

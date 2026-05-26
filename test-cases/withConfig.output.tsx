@@ -10,7 +10,7 @@ function Card({ children }: CardProps) {
 
 type InputProps = { hasError?: boolean } & Omit<
   React.ComponentProps<"input">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Combining withConfig options

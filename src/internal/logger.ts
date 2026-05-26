@@ -73,6 +73,7 @@ export type WarningType =
   | "Unsupported interpolation: member expression"
   | "Unsupported interpolation: property"
   | "Unsupported interpolation: unknown"
+  | `Unsupported CSS property "${string}" cannot be emitted in StyleX`
   | "Unsupported nested conditional interpolation"
   | "Unsupported prop-based inline style expression cannot be safely inlined"
   | "Unsupported prop-based inline style props.theme access is not supported"
@@ -123,7 +124,10 @@ export type WarningType =
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
   | "Conditional StyleX default would override an unproven earlier style for the same property"
   | "Forwarded sx conditional default would override an unproven wrapped component base style"
+  | "Wrapped component does not accept className or sx for generated StyleX styles"
+  | "Wrapped component sx prop targets an inner element for a root style property"
   | "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly"
+  | "Wrapped component sx prop does not accept generated StyleX property"
   | "Transient $-prefixed props renamed on exported component — update consumer call sites to use the new prop names"
   | "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens"
   | "animation shorthand contains a var() with no classifiable fallback — its longhand position cannot be determined statically; bind the variable to a specific longhand (e.g. animation-duration: var(--x)) instead";

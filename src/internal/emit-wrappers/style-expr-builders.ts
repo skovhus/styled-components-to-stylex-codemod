@@ -561,7 +561,13 @@ export function buildVariantDimensionLookups(
       }
       const lookup = dim.fallbackFnKey
         ? buildFallbackExpr(dim, propId)
-        : j.memberExpression(variantsId, propId, true /* computed */);
+        : j.memberExpression(
+            variantsId,
+            dim.forceKeyofLookupCast
+              ? buildKeyofTypeofCast(j, propId, dim.variantObjectName)
+              : propId,
+            true /* computed */,
+          );
       // Guard optional props without defaults to avoid `undefined` index type error
       if (dim.isOptional && !dim.defaultValue) {
         const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));

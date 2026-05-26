@@ -8,7 +8,7 @@ export enum Status {
 
 type IconWithTeamColorProps = { color?: string } & Omit<
   React.ComponentProps<"svg">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Styled component with conditional CSS based on prop

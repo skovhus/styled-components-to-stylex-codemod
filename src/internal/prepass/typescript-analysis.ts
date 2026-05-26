@@ -27,6 +27,7 @@ export interface TypeScriptComponentMetadata {
   hasIndexSignature: boolean;
   supportsSxProp: boolean;
   sxExcludedProperties: string[];
+  sxAllowedProperties?: string[];
 }
 
 interface TypeScriptFunctionMetadata {
@@ -287,6 +288,10 @@ function buildComponentMetadata(args: {
     args.propTypeNode !== undefined
       ? collectSxExcludedProperties(args.propTypeNode, args.checker, new Set())
       : [];
+  const sxAllowedProperties =
+    args.propTypeNode !== undefined
+      ? collectSxAllowedProperties(args.propTypeNode, args.checker, new Set())
+      : undefined;
   return {
     name: args.name,
     kind: args.kind,
@@ -304,6 +309,7 @@ function buildComponentMetadata(args: {
       supportsResolvedSxProp ||
       args.bodySupportsSxProp === true,
     sxExcludedProperties,
+    ...(sxAllowedProperties !== undefined ? { sxAllowedProperties } : {}),
   };
 }
 
@@ -589,18 +595,57 @@ function collectSxExcludedProperties(
   checker: ts.TypeChecker,
   visited: Set<ts.Declaration>,
 ): string[] {
-  const names = new Set<string>();
-  collectSxExcludedPropertiesInto(names, typeNode, checker, visited);
-  return [...names].sort();
+  return collectSxSurfaceProperties(typeNode, checker, visited, collectStyleXStylesWithoutKeys)
+    .properties;
 }
 
-function collectSxExcludedPropertiesInto(
+function collectSxAllowedProperties(
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): string[] | undefined {
+  const collection = collectSxSurfaceProperties(
+    typeNode,
+    checker,
+    visited,
+    collectStyleXStylesKeys,
+  );
+  return collection.found ? collection.properties : undefined;
+}
+
+function collectSxSurfaceProperties(
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+  collectFromSxType: SxTypePropertyCollector,
+): { properties: string[]; found: boolean } {
+  const names = new Set<string>();
+  const found = collectSxSurfacePropertiesInto(
+    names,
+    typeNode,
+    checker,
+    visited,
+    collectFromSxType,
+  );
+  return { properties: [...names].sort(), found };
+}
+
+type SxTypePropertyCollector = (
   names: Set<string>,
   typeNode: ts.TypeNode,
   checker: ts.TypeChecker,
   visited: Set<ts.Declaration>,
-): void {
+) => boolean;
+
+function collectSxSurfacePropertiesInto(
+  names: Set<string>,
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+  collectFromSxType: SxTypePropertyCollector,
+): boolean {
   if (ts.isTypeLiteralNode(typeNode)) {
+    let found = false;
     for (const member of typeNode.members) {
       if (
         !ts.isPropertySignature(member) ||
@@ -609,20 +654,22 @@ function collectSxExcludedPropertiesInto(
       ) {
         continue;
       }
-      collectStyleXStylesWithoutKeys(names, member.type, checker, visited);
+      found = collectFromSxType(names, member.type, checker, visited) || found;
     }
-    return;
+    return found;
   }
 
   if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    let found = false;
     for (const part of typeNode.types) {
-      collectSxExcludedPropertiesInto(names, part, checker, visited);
+      found =
+        collectSxSurfacePropertiesInto(names, part, checker, visited, collectFromSxType) || found;
     }
-    return;
+    return found;
   }
 
   if (!ts.isTypeReferenceNode(typeNode) || isIntrinsicReactPropReference(typeNode)) {
-    return;
+    return false;
   }
 
   const utilityType = readUtilityTypeReference(typeNode);
@@ -632,9 +679,15 @@ function collectSxExcludedPropertiesInto(
       typeNodeKeyIncludes(utilityType.typeArgs[1], "sx") &&
       utilityType.typeArgs[0]
     ) {
-      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+      return collectSxSurfacePropertiesInto(
+        names,
+        utilityType.typeArgs[0],
+        checker,
+        visited,
+        collectFromSxType,
+      );
     }
-    return;
+    return false;
   }
   if (utilityType.name === "Omit") {
     if (
@@ -642,46 +695,74 @@ function collectSxExcludedPropertiesInto(
       !typeNodeKeyIncludes(utilityType.typeArgs[1], "sx") &&
       utilityType.typeArgs[0]
     ) {
-      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+      return collectSxSurfacePropertiesInto(
+        names,
+        utilityType.typeArgs[0],
+        checker,
+        visited,
+        collectFromSxType,
+      );
     }
-    return;
+    return false;
   }
   if (isTransparentUtilityTypeName(utilityType.name)) {
     if (utilityType.typeArgs[0]) {
-      collectSxExcludedPropertiesInto(names, utilityType.typeArgs[0], checker, visited);
+      return collectSxSurfacePropertiesInto(
+        names,
+        utilityType.typeArgs[0],
+        checker,
+        visited,
+        collectFromSxType,
+      );
     }
-    return;
+    return false;
   }
 
   const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+  let found = false;
   for (const declaration of symbol?.declarations ?? []) {
-    collectSxExcludedPropertiesFromDeclaration(names, declaration, checker, visited);
+    found =
+      collectSxSurfacePropertiesFromDeclaration(
+        names,
+        declaration,
+        checker,
+        visited,
+        collectFromSxType,
+      ) || found;
   }
+  return found;
 }
 
-function collectSxExcludedPropertiesFromDeclaration(
+function collectSxSurfacePropertiesFromDeclaration(
   names: Set<string>,
   declaration: ts.Declaration,
   checker: ts.TypeChecker,
   visited: Set<ts.Declaration>,
-): void {
+  collectFromSxType: SxTypePropertyCollector,
+): boolean {
   if (visited.has(declaration)) {
-    return;
+    return false;
   }
   visited.add(declaration);
 
   if (ts.isTypeAliasDeclaration(declaration)) {
-    collectSxExcludedPropertiesInto(names, declaration.type, checker, visited);
-    return;
+    return collectSxSurfacePropertiesInto(
+      names,
+      declaration.type,
+      checker,
+      visited,
+      collectFromSxType,
+    );
   }
 
   if (!ts.isInterfaceDeclaration(declaration)) {
-    return;
+    return false;
   }
 
+  let found = false;
   for (const member of declaration.members) {
     if (ts.isPropertySignature(member) && propertyNameText(member.name) === "sx" && member.type) {
-      collectStyleXStylesWithoutKeys(names, member.type, checker, visited);
+      found = collectFromSxType(names, member.type, checker, visited) || found;
     }
   }
 
@@ -695,10 +776,18 @@ function collectSxExcludedPropertiesFromDeclaration(
         checker,
       );
       for (const inheritedDeclaration of symbol?.declarations ?? []) {
-        collectSxExcludedPropertiesFromDeclaration(names, inheritedDeclaration, checker, visited);
+        found =
+          collectSxSurfacePropertiesFromDeclaration(
+            names,
+            inheritedDeclaration,
+            checker,
+            visited,
+            collectFromSxType,
+          ) || found;
       }
     }
   }
+  return found;
 }
 
 function collectStyleXStylesWithoutKeys(
@@ -706,33 +795,39 @@ function collectStyleXStylesWithoutKeys(
   typeNode: ts.TypeNode,
   checker: ts.TypeChecker,
   visited: Set<ts.Declaration>,
-): void {
+): boolean {
   if (ts.isTypeReferenceNode(typeNode)) {
     const typeName = typeNode.typeName.getText();
     if (typeName.endsWith("StyleXStylesWithout")) {
       collectPropertyKeysFromTypeNode(names, typeNode.typeArguments?.[0], checker, visited);
-      return;
+      return true;
     }
     const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+    let found = false;
     for (const declaration of symbol?.declarations ?? []) {
       if (visited.has(declaration)) {
         continue;
       }
       visited.add(declaration);
       if (ts.isTypeAliasDeclaration(declaration)) {
-        collectStyleXStylesWithoutKeys(names, declaration.type, checker, visited);
+        found = collectStyleXStylesWithoutKeys(names, declaration.type, checker, visited) || found;
       } else if (ts.isInterfaceDeclaration(declaration)) {
-        collectStyleXStylesWithoutKeysFromInterface(names, declaration, checker, visited);
+        found =
+          collectStyleXStylesWithoutKeysFromInterface(names, declaration, checker, visited) ||
+          found;
       }
     }
-    return;
+    return found;
   }
 
   if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    let found = false;
     for (const part of typeNode.types) {
-      collectStyleXStylesWithoutKeys(names, part, checker, visited);
+      found = collectStyleXStylesWithoutKeys(names, part, checker, visited) || found;
     }
+    return found;
   }
+  return false;
 }
 
 function collectStyleXStylesWithoutKeysFromInterface(
@@ -740,7 +835,8 @@ function collectStyleXStylesWithoutKeysFromInterface(
   declaration: ts.InterfaceDeclaration,
   checker: ts.TypeChecker,
   visited: Set<ts.Declaration>,
-): void {
+): boolean {
+  let found = false;
   for (const clause of declaration.heritageClauses ?? []) {
     for (const heritageType of clause.types) {
       if (isIntrinsicReactHeritageReference(heritageType)) {
@@ -749,6 +845,7 @@ function collectStyleXStylesWithoutKeysFromInterface(
       const typeName = heritageType.expression.getText();
       if (typeName.endsWith("StyleXStylesWithout")) {
         collectPropertyKeysFromTypeNode(names, heritageType.typeArguments?.[0], checker, visited);
+        found = true;
         continue;
       }
       const symbol = resolveAliasedSymbol(
@@ -761,18 +858,101 @@ function collectStyleXStylesWithoutKeysFromInterface(
         }
         visited.add(inheritedDeclaration);
         if (ts.isTypeAliasDeclaration(inheritedDeclaration)) {
-          collectStyleXStylesWithoutKeys(names, inheritedDeclaration.type, checker, visited);
+          found =
+            collectStyleXStylesWithoutKeys(names, inheritedDeclaration.type, checker, visited) ||
+            found;
         } else if (ts.isInterfaceDeclaration(inheritedDeclaration)) {
-          collectStyleXStylesWithoutKeysFromInterface(
-            names,
-            inheritedDeclaration,
-            checker,
-            visited,
-          );
+          found =
+            collectStyleXStylesWithoutKeysFromInterface(
+              names,
+              inheritedDeclaration,
+              checker,
+              visited,
+            ) || found;
         }
       }
     }
   }
+  return found;
+}
+
+function collectStyleXStylesKeys(
+  names: Set<string>,
+  typeNode: ts.TypeNode,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): boolean {
+  if (ts.isTypeReferenceNode(typeNode)) {
+    const typeName = typeNode.typeName.getText();
+    if (typeName.endsWith("StyleXStyles") && typeNode.typeArguments?.[0]) {
+      collectPropertyKeysFromTypeNode(names, typeNode.typeArguments[0], checker, visited);
+      return true;
+    }
+    const symbol = resolveAliasedSymbol(checker.getSymbolAtLocation(typeNode.typeName), checker);
+    let found = false;
+    for (const declaration of symbol?.declarations ?? []) {
+      if (visited.has(declaration)) {
+        continue;
+      }
+      visited.add(declaration);
+      if (ts.isTypeAliasDeclaration(declaration)) {
+        found = collectStyleXStylesKeys(names, declaration.type, checker, visited) || found;
+      } else if (ts.isInterfaceDeclaration(declaration)) {
+        found = collectStyleXStylesKeysFromInterface(names, declaration, checker, visited) || found;
+      }
+    }
+    return found;
+  }
+
+  if (ts.isIntersectionTypeNode(typeNode) || ts.isUnionTypeNode(typeNode)) {
+    let found = false;
+    for (const part of typeNode.types) {
+      found = collectStyleXStylesKeys(names, part, checker, visited) || found;
+    }
+    return found;
+  }
+  return false;
+}
+
+function collectStyleXStylesKeysFromInterface(
+  names: Set<string>,
+  declaration: ts.InterfaceDeclaration,
+  checker: ts.TypeChecker,
+  visited: Set<ts.Declaration>,
+): boolean {
+  let found = false;
+  for (const clause of declaration.heritageClauses ?? []) {
+    for (const heritageType of clause.types) {
+      if (isIntrinsicReactHeritageReference(heritageType)) {
+        continue;
+      }
+      const typeName = heritageType.expression.getText();
+      if (typeName.endsWith("StyleXStyles") && heritageType.typeArguments?.[0]) {
+        collectPropertyKeysFromTypeNode(names, heritageType.typeArguments[0], checker, visited);
+        found = true;
+        continue;
+      }
+      const symbol = resolveAliasedSymbol(
+        checker.getSymbolAtLocation(heritageType.expression),
+        checker,
+      );
+      for (const inheritedDeclaration of symbol?.declarations ?? []) {
+        if (visited.has(inheritedDeclaration)) {
+          continue;
+        }
+        visited.add(inheritedDeclaration);
+        if (ts.isTypeAliasDeclaration(inheritedDeclaration)) {
+          found =
+            collectStyleXStylesKeys(names, inheritedDeclaration.type, checker, visited) || found;
+        } else if (ts.isInterfaceDeclaration(inheritedDeclaration)) {
+          found =
+            collectStyleXStylesKeysFromInterface(names, inheritedDeclaration, checker, visited) ||
+            found;
+        }
+      }
+    }
+  }
+  return found;
 }
 
 function collectPropertyKeysFromTypeNode(

@@ -1290,6 +1290,7 @@ function tryDecomposeConditionalBranches(
     conditionProp,
     staticValue,
     dynamicBranchExpr: dynamicBranch,
+    paramName,
     dynamicProps,
     isStaticWhenFalse,
   };

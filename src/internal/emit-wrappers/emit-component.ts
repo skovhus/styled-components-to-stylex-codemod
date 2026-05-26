@@ -691,6 +691,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     // when declared in the wrapper's explicit type, they should not be forwarded to the base
     // component even when the base type can't be resolved (imported component).
     const styleFnValueProps = new Set<string>();
+    const styleValueVariantProps = new Set(d.styleValueVariantProps ?? []);
+    const observedExpressionConditionDropProps = new Set(
+      d.observedExpressionConditionDropProps ?? [],
+    );
+    for (const prop of styleValueVariantProps) {
+      styleFnValueProps.add(prop);
+    }
 
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
@@ -974,7 +981,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         }
       }
     }
-
     // For imported base components (type unresolvable), don't destructure non-transient
     // style-fn props that are declared in the wrapper's explicit type. Leaving them in
     // `...rest` naturally forwards them to the base component (matching styled-components
@@ -1332,6 +1338,12 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
           !propName.startsWith("$") &&
           !renamedFromTransient.has(propName)
         ) {
+          if (
+            observedExpressionConditionDropProps.has(propName) &&
+            !baseExplicitProps?.has(propName)
+          ) {
+            continue;
+          }
           if (styleOnlyConditionProps.has(propName)) {
             // Props added purely for variant conditions or pseudo-alias selectors are
             // style-only concerns. Forward them when the base component explicitly

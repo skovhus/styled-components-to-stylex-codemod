@@ -20,7 +20,7 @@ const Text = (
 
 type ErrorMessageProps = { inline?: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function ErrorMessage(props: ErrorMessageProps) {
@@ -66,7 +66,7 @@ type OrderedBoxProps = {
   add?: boolean;
   warn?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function OrderedBox(props: OrderedBoxProps) {
   const { children, add, warn, hasSubtitle } = props;
@@ -89,7 +89,7 @@ type SplitOrderBoxProps = {
   add?: boolean;
   warn?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function SplitOrderBox(props: SplitOrderBoxProps) {
   const { children, warn, add, hasSubtitle } = props;
@@ -179,7 +179,7 @@ function InverseMergeBox(props: InverseMergeBoxProps) {
 type GroupedInverseBoxProps = {
   add?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function GroupedInverseBox(props: GroupedInverseBoxProps) {
   const { children, add, hasSubtitle } = props;
@@ -202,7 +202,7 @@ type KeyCollisionBoxProps = {
   bar?: boolean;
   fooBar?: boolean;
   baz: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function KeyCollisionBox(props: KeyCollisionBoxProps) {
   const { children, fooBar, foo, bar, baz } = props;
@@ -244,7 +244,7 @@ function StyleFnKeyCollisionBox(props: StyleFnKeyCollisionBoxProps) {
 type AfterBaseCollisionBoxProps = {
   after1?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function AfterBaseCollisionBox(props: AfterBaseCollisionBoxProps) {
   const { children, after1, hasSubtitle } = props;
@@ -267,7 +267,7 @@ type StaleBucketOrderBoxProps = {
   add?: boolean;
   warn?: boolean;
   hasSubtitle: boolean;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 function StaleBucketOrderBox(props: StaleBucketOrderBoxProps) {
   const { children, add, warn, hasSubtitle } = props;

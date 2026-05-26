@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type CircleProps = { isAnimated?: boolean } & Omit<
   React.ComponentProps<"path">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Circle(props: CircleProps) {
@@ -17,7 +17,7 @@ function Circle(props: CircleProps) {
 
 type RingProps = { isAnimated?: boolean } & Omit<
   React.ComponentProps<"path">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Ring(props: RingProps) {

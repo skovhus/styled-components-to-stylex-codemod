@@ -4,7 +4,7 @@ import { helpers } from "./lib/helpers.stylex";
 
 type TitleTextProps = { oneLine: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function TitleText(props: TitleTextProps) {

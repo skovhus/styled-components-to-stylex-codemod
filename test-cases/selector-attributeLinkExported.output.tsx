@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 type LinkProps = React.PropsWithChildren<
-  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style">
+  Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "style" | "sx">
 >;
 
 export function Link(props: LinkProps) {

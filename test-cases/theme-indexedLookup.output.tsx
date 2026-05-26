@@ -32,7 +32,7 @@ interface TextColorProps {
 }
 
 export function TextColor(
-  props: TextColorProps & Omit<React.ComponentProps<"span">, "className" | "style">,
+  props: TextColorProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
 ) {
   const { children, color, ...rest } = props;
   return (

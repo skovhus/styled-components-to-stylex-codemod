@@ -30,7 +30,7 @@ interface ThemeSpanProps {
 }
 
 export function ThemeSpan(
-  props: ThemeSpanProps & Omit<React.ComponentProps<"span">, "className" | "style">,
+  props: ThemeSpanProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
 ) {
   const { children, variant, ...rest } = props;
   return (
@@ -43,8 +43,8 @@ export function ThemeSpan(
 type ChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
 
 export function ChoiceButton(
-  props: Omit<ChoiceButtonProps, "className" | "style"> &
-    Omit<React.ComponentProps<"button">, "className" | "style">,
+  props: Omit<ChoiceButtonProps, "className" | "style" | "sx"> &
+    Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
   const { children, active, ...rest } = props;
   return (
@@ -57,8 +57,8 @@ export function ChoiceButton(
 type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
 
 function LocalChoiceButton(
-  props: Omit<LocalChoiceButtonProps, "className" | "style"> &
-    Omit<React.ComponentProps<"button">, "className" | "style">,
+  props: Omit<LocalChoiceButtonProps, "className" | "style" | "sx"> &
+    Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
   const { children, active, ...rest } = props;
   return (

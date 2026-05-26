@@ -669,13 +669,36 @@ export interface WrappedComponentInterfaceContext {
 export interface WrappedComponentInterfaceResult {
   acceptsSx: boolean;
   /**
-   * CSS property names that the wrapped component's `sx` prop explicitly rejects.
+   * Which element receives the wrapped component's `sx` prop.
+   *
+   * Most components apply `sx` to their root. Some controls expose `sx` for an
+   * inner element while `className`/`style` still target the outer root. Mark
+   * those as `"inner"` so the codemod can reject root-only wrapper styles
+   * instead of moving layout styles onto the wrong element.
+   */
+  sxTarget?: "root" | "inner";
+  /**
+   * StyleX property names that must stay on the wrapped component root when
+   * `sxTarget` is `"inner"`.
+   */
+  rootOnlyProperties?: string[];
+  /**
+   * StyleX property names that the wrapped component's `sx` prop explicitly rejects.
    *
    * Some components accept `sx`, but narrow it with `StyleXStylesWithout<...>` to
    * reserve properties that the component owns internally. The transform can still
    * use `sx` if it rewrites generated styles away from those excluded properties.
    */
   sxExcludedProperties?: string[];
+  /**
+   * StyleX property names that the wrapped component's `sx` prop accepts.
+   *
+   * Use this for components whose `sx` prop is intentionally narrower than a full
+   * `StyleXStyles` surface. When present, generated wrapper styles must use only
+   * these properties, or the codemod bails instead of sending unsupported reset
+   * styles through a weak/incorrect channel.
+   */
+  sxAllowedProperties?: string[];
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -888,6 +911,7 @@ export interface Adapter {
    *
    * Return:
    * - `{ acceptsSx: true }` to force the `sx={...}` path
+   *   (optionally with `sxAllowedProperties` / `sxExcludedProperties`)
    * - `{ acceptsSx: false }` to force the `{...stylex.props(...)}` path
    * - `undefined` to fall through to auto-detection (default)
    *

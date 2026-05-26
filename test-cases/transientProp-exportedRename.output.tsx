@@ -85,7 +85,7 @@ function PrivateLabel(props: PrivateLabelProps) {
 type ColorChipProps = {
   $color: string;
   color: string;
-} & Omit<React.ComponentProps<"div">, "className" | "style">;
+} & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 // Collision: $color cannot be renamed because `color` already exists as a prop
 export function ColorChip(props: ColorChipProps) {

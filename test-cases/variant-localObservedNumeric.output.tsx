@@ -1,7 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type PanelProps = { height: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
+type PanelProps = { height: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 export function Panel(props: PanelProps) {
   const { children, height, ...rest } = props;
@@ -21,7 +24,7 @@ export function Panel(props: PanelProps) {
 
 type TransientPanelProps = { height: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 export function TransientPanel(props: TransientPanelProps) {
@@ -40,7 +43,10 @@ export function TransientPanel(props: TransientPanelProps) {
   );
 }
 
-type FaderProps = { opacity: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
+type FaderProps = { opacity: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 export function Fader(props: FaderProps) {
   const { children, opacity, ...rest } = props;
@@ -60,7 +66,7 @@ export function Fader(props: FaderProps) {
 
 type TransientFaderProps = { opacity: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 export function TransientFader(props: TransientFaderProps) {

@@ -18,7 +18,7 @@ import { wrapCallArgForPropsObject } from "../emit-wrappers/style-expr-builders.
 import { mergeAdjacentComplementaryStyleExprs } from "../emit-wrappers/variant-condition.js";
 import { jsxNamePath, namespaceMemberTargetsLocal } from "../utilities/jsx-name-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
-import { toRealPath } from "../utilities/path-utils.js";
+import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
 
@@ -70,9 +70,27 @@ function substituteStyleFnCallArg(
   return visit(cloneAstNode(callArg)) as ExpressionKind;
 }
 
-function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName: string): boolean {
+function wrappedComponentAcceptsSxProp(
+  ctx: TransformContext,
+  componentLocalName: string,
+  visiting = new Set<string>(),
+): boolean {
   if (!ctx.adapter.useSxProp) {
     return false;
+  }
+  if (visiting.has(componentLocalName)) {
+    return false;
+  }
+  visiting.add(componentLocalName);
+
+  const localStyledDecl = ctx.styledDecls?.find((decl) => decl.localName === componentLocalName);
+  if (
+    localStyledDecl?.needsWrapperComponent &&
+    localStyledDecl.base.kind === "component" &&
+    wrappedComponentAcceptsSxProp(ctx, localStyledDecl.base.ident, visiting)
+  ) {
+    visiting.delete(componentLocalName);
+    return true;
   }
 
   const importInfo = ctx.importMap?.get(componentLocalName);
@@ -84,6 +102,7 @@ function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
+      visiting.delete(componentLocalName);
       return adapterResult.acceptsSx === true;
     }
   }
@@ -108,17 +127,20 @@ function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName
   })();
   if (typedComponent) {
     if (typedComponent.supportsSxProp) {
+      visiting.delete(componentLocalName);
       return true;
     }
     if (
       importInfo?.source.kind !== "absolutePath" ||
-      ctx.options.transformedFileSources?.has(toRealPath(importInfo.source.value)) !== true
+      ctx.options.transformedFileSources?.has(resolveExistingFilePath(importInfo.source.value)) !==
+        true
     ) {
+      visiting.delete(componentLocalName);
       return false;
     }
   }
 
-  return (
+  const accepts =
     importInfo?.source.kind === "absolutePath" &&
     transformedComponentAcceptsSx({
       absolutePath: importInfo.source.value,
@@ -127,8 +149,9 @@ function wrappedComponentAcceptsSxProp(ctx: TransformContext, componentLocalName
           ? [componentLocalName, importInfo.importedName]
           : [importInfo.importedName],
       sourceOverrides: ctx.options.transformedFileSources,
-    })
-  );
+    });
+  visiting.delete(componentLocalName);
+  return accepts;
 }
 
 /**

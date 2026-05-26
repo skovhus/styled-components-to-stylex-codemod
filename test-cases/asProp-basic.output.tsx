@@ -4,7 +4,7 @@ import { Text } from "./lib/text";
 
 // Pattern 1: styled.element with as prop at call site
 function Button<C extends React.ElementType = "button">(
-  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
+  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
   const { as: Component = "button", children, ...rest } = props;
   return (
@@ -33,7 +33,7 @@ function StyledText<C extends React.ElementType = typeof Text>(props: StyledText
 
 // Pattern 3: as prop on unexported intrinsic styled.div
 function FullWidthCopyText<C extends React.ElementType = "div">(
-  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
+  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
   const { as: Component = "div", children, ...rest } = props;
   return (

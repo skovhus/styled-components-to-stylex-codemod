@@ -143,7 +143,7 @@ function FaderConsumerReversed(props: { children: React.ReactNode; style?: React
 
 type OverlayContainerProps = { zIndex: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline

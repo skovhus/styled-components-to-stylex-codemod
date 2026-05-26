@@ -1,7 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type TextInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "style">;
+type TextInputProps = Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "className" | "style" | "sx"
+>;
 
 export function TextInput(props: TextInputProps) {
   const { type, readOnly, ...rest } = props;

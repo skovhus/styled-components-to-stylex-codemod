@@ -1,7 +1,10 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-type ButtonProps = { color?: string } & Omit<React.ComponentProps<"button">, "className" | "style">;
+type ButtonProps = { color?: string } & Omit<
+  React.ComponentProps<"button">,
+  "className" | "style" | "sx"
+>;
 
 // Simple renamed destructured prop with static base style
 function Button(props: ButtonProps) {

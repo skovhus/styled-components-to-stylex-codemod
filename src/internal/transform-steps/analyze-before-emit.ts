@@ -47,8 +47,13 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import type { PromotedStyleEntry } from "../transform-types.js";
-import { applyTypeScriptMetadataToDecl } from "../utilities/typescript-metadata.js";
+import {
+  applyTypeScriptMetadataToDecl,
+  findTypeScriptComponentMetadata,
+} from "../utilities/typescript-metadata.js";
+import type { TypeScriptComponentMetadata } from "../prepass/typescript-analysis.js";
 import { extractConditionName } from "../utilities/style-key-naming.js";
+import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { parseVariantWhenToAst } from "../emit-wrappers/variant-condition.js";
 import { BLOCKED_INTRINSIC_ATTR_RENAMES } from "../emit-wrappers/types.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
@@ -65,6 +70,16 @@ import { guardForwardedSxConditionalDefaults } from "../utilities/forwarded-sx-d
 import { guardGeneratedConditionalDefaults } from "../utilities/conditional-style-defaults.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
+const REACT_WINDOW_SOURCE = "react-window";
+const REACT_WINDOW_ELEMENT_TYPE_PROPS = new Set(["innerElementType", "outerElementType"]);
+const REACT_WINDOW_COMPONENT_EXPORTS = new Set([
+  "FixedSizeGrid",
+  "FixedSizeList",
+  "Grid",
+  "List",
+  "VariableSizeGrid",
+  "VariableSizeList",
+]);
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -490,62 +505,83 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       !hasSpreadInJsx(root, j, targetDecl.localName)
     );
   };
+  const nonJsxComponentValueReferences = (name: string) =>
+    root.find(j.Identifier, { name }).filter((p) => {
+      // Skip the styled component declaration itself, but still count
+      // `const Alias = StyledComponent` as a value use.
+      if (p.parentPath?.node?.type === "VariableDeclarator" && p.parentPath.node.id === p.node) {
+        return false;
+      }
+      // Skip JSX element names (these are handled by inline substitution).
+      if (
+        p.parentPath?.node?.type === "JSXOpeningElement" ||
+        p.parentPath?.node?.type === "JSXClosingElement"
+      ) {
+        return false;
+      }
+      // Skip JSX member expressions like <Styled.Component />.
+      if (
+        p.parentPath?.node?.type === "JSXMemberExpression" &&
+        (p.parentPath.node as any).object === p.node
+      ) {
+        return false;
+      }
+      // Skip styled(Component) extensions.
+      if (p.parentPath?.node?.type === "CallExpression") {
+        const callExpr = p.parentPath.node as any;
+        const callee = callExpr.callee;
+        if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
+          return false;
+        }
+        if (
+          callee?.type === "MemberExpression" &&
+          callee.object?.type === "CallExpression" &&
+          callee.object.callee?.type === "Identifier" &&
+          callee.object.callee.name === ctx.styledDefaultImport
+        ) {
+          return false;
+        }
+      }
+      // Skip TaggedTemplateExpression tags and styled(Component)`...` calls.
+      if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
+        return false;
+      }
+      if (
+        p.parentPath?.node?.type === "CallExpression" &&
+        p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
+      ) {
+        return false;
+      }
+      // Skip template literal interpolations (e.g., ${Link}:hover &).
+      if (p.parentPath?.node?.type === "TemplateLiteral") {
+        return false;
+      }
+      return true;
+    });
   const hasNonJsxComponentValueReference = (name: string): boolean =>
-    root
-      .find(j.Identifier, { name })
-      .filter((p) => {
-        // Skip the styled component declaration itself, but still count
-        // `const Alias = StyledComponent` as a value use.
-        if (p.parentPath?.node?.type === "VariableDeclarator" && p.parentPath.node.id === p.node) {
-          return false;
-        }
-        // Skip JSX element names (these are handled by inline substitution).
-        if (
-          p.parentPath?.node?.type === "JSXOpeningElement" ||
-          p.parentPath?.node?.type === "JSXClosingElement"
-        ) {
-          return false;
-        }
-        // Skip JSX member expressions like <Styled.Component />.
-        if (
-          p.parentPath?.node?.type === "JSXMemberExpression" &&
-          (p.parentPath.node as any).object === p.node
-        ) {
-          return false;
-        }
-        // Skip styled(Component) extensions.
-        if (p.parentPath?.node?.type === "CallExpression") {
-          const callExpr = p.parentPath.node as any;
-          const callee = callExpr.callee;
-          if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
-            return false;
-          }
-          if (
-            callee?.type === "MemberExpression" &&
-            callee.object?.type === "CallExpression" &&
-            callee.object.callee?.type === "Identifier" &&
-            callee.object.callee.name === ctx.styledDefaultImport
-          ) {
-            return false;
-          }
-        }
-        // Skip TaggedTemplateExpression tags and styled(Component)`...` calls.
-        if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
-          return false;
-        }
-        if (
-          p.parentPath?.node?.type === "CallExpression" &&
-          p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
-        ) {
-          return false;
-        }
-        // Skip template literal interpolations (e.g., ${Link}:hover &).
-        if (p.parentPath?.node?.type === "TemplateLiteral") {
-          return false;
-        }
-        return true;
-      })
-      .size() > 0;
+    nonJsxComponentValueReferences(name).size() > 0;
+  const hasOnlyVirtualListElementTypeValueReferences = (name: string): boolean => {
+    const refs = nonJsxComponentValueReferences(name);
+    if (refs.size() === 0) {
+      return false;
+    }
+    let onlyVirtualListElementType = true;
+    refs.forEach((p: any) => {
+      const expressionContainer = p.parentPath?.node;
+      const attr = p.parentPath?.parentPath?.node;
+      const attrName = attr?.name;
+      if (
+        expressionContainer?.type !== "JSXExpressionContainer" ||
+        attr?.type !== "JSXAttribute" ||
+        attrName?.type !== "JSXIdentifier" ||
+        !REACT_WINDOW_ELEMENT_TYPE_PROPS.has(attrName.name) ||
+        !isKnownReactWindowElementTypeAttribute(p.parentPath?.parentPath, ctx.importMap)
+      ) {
+        onlyVirtualListElementType = false;
+      }
+    });
+    return onlyVirtualListElementType;
+  };
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
   // is statically enumerable, each usage site stays on the inline JSX rewrite path,
@@ -1134,6 +1170,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
     if (usedAsValue) {
       decl.usedAsValue = true;
+      if (hasOnlyVirtualListElementTypeValueReferences(decl.localName)) {
+        decl.valueUsageKind = "virtualListElementType";
+      }
       decl.needsWrapperComponent = true;
     }
   }
@@ -1383,6 +1422,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   }
 
   if (!validateSxRestrictedWrappedComponentStyles(ctx, styledDecls)) {
+    return returnResult({ code: null, warnings: ctx.warnings }, "bail");
+  }
+  if (!validateWrappedComponentStyleChannels(ctx, styledDecls)) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
   if (guardGeneratedConditionalDefaults(ctx, styledDecls) === "bail") {
@@ -4723,19 +4765,62 @@ function validateSxRestrictedWrappedComponentStyles(
 
     const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
     const excludedProperties = componentInterface?.sxExcludedProperties;
-    if (componentInterface?.acceptsSx !== true || !excludedProperties?.length) {
+    const allowedProperties = componentInterface?.sxAllowedProperties;
+    const hasAllowedProperties = allowedProperties !== undefined;
+    if (
+      componentInterface?.acceptsSx !== true ||
+      (!excludedProperties?.length &&
+        !hasAllowedProperties &&
+        !componentInterface.rootOnlyProperties?.length)
+    ) {
       continue;
     }
 
-    const excluded = new Set(excludedProperties);
+    const excluded = new Set(excludedProperties ?? []);
+    const allowed = hasAllowedProperties ? new Set(allowedProperties) : null;
+    const rootOnly =
+      componentInterface.sxTarget === "inner" && componentInterface.rootOnlyProperties?.length
+        ? new Set(componentInterface.rootOnlyProperties)
+        : null;
     for (const styleKey of collectAllStyleKeysForDecl(decl)) {
       const style = ctx.resolvedStyleObjects.get(styleKey);
       if (!style || typeof style !== "object") {
         continue;
       }
-      const rejectedProperty = findSxExcludedStyleProperty(style, excluded);
+      const rootOnlyProperty = rootOnly ? findSxExcludedStyleProperty(style, rootOnly) : null;
+      if (rootOnlyProperty) {
+        ctx.warnings.push({
+          severity: "error",
+          type: "Wrapped component sx prop targets an inner element for a root style property",
+          loc: decl.loc,
+          context: {
+            localName: decl.localName,
+            wrappedComponent: decl.base.ident,
+            styleKey,
+            property: rootOnlyProperty,
+          },
+        });
+        return false;
+      }
+      const rejectedProperty =
+        excluded.size > 0 ? findSxExcludedStyleProperty(style, excluded) : null;
       if (!rejectedProperty) {
-        continue;
+        const disallowedProperty = allowed ? findSxDisallowedStyleProperty(style, allowed) : null;
+        if (!disallowedProperty) {
+          continue;
+        }
+        ctx.warnings.push({
+          severity: "error",
+          type: "Wrapped component sx prop does not accept generated StyleX property",
+          loc: decl.loc,
+          context: {
+            localName: decl.localName,
+            wrappedComponent: decl.base.ident,
+            styleKey,
+            property: disallowedProperty,
+          },
+        });
+        return false;
       }
       ctx.warnings.push({
         severity: "error",
@@ -4752,6 +4837,135 @@ function validateSxRestrictedWrappedComponentStyles(
     }
   }
   return true;
+}
+
+function validateWrappedComponentStyleChannels(
+  ctx: TransformContext,
+  styledDecls: StyledDecl[],
+): boolean {
+  if (!ctx.resolvedStyleObjects) {
+    return true;
+  }
+
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.base.kind !== "component") {
+      continue;
+    }
+    const baseIdent = decl.base.ident;
+    if (styledDecls.some((candidate) => candidate.localName === baseIdent)) {
+      continue;
+    }
+    const importInfo = ctx.importMap?.get(baseIdent);
+    const isLocalNonStyledWrappedComponent =
+      !importInfo && isLocalFunctionComponent(ctx.root, ctx.j, baseIdent);
+    if (!importInfo && !isLocalNonStyledWrappedComponent) {
+      continue;
+    }
+    if (
+      importInfo?.source.kind === "absolutePath" &&
+      ctx.options.transformedFileSources?.has(resolveExistingFilePath(importInfo.source.value))
+    ) {
+      continue;
+    }
+    if (!declHasEmittedStyle(ctx, decl)) {
+      continue;
+    }
+    if (wrappedComponentInterfaceFor(ctx, baseIdent)?.acceptsSx === true) {
+      continue;
+    }
+
+    const metadata = findWrappedComponentMetadata(ctx, baseIdent);
+    if (!metadata || componentAcceptsStylexClassName(metadata)) {
+      continue;
+    }
+    if (isLocalNonStyledWrappedComponent && !hasInlineObjectPropType(metadata)) {
+      continue;
+    }
+
+    ctx.warnings.push({
+      severity: "error",
+      type: "Wrapped component does not accept className or sx for generated StyleX styles",
+      loc: decl.loc,
+      context: {
+        localName: decl.localName,
+        wrappedComponent: decl.base.ident,
+      },
+    });
+    return false;
+  }
+  return true;
+}
+
+function declHasEmittedStyle(ctx: TransformContext, decl: StyledDecl): boolean {
+  for (const styleKey of collectAllStyleKeysForDecl(decl)) {
+    if (ctx.resolvedStyleObjects?.has(styleKey)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findWrappedComponentMetadata(
+  ctx: TransformContext,
+  componentLocalName: string,
+): TypeScriptComponentMetadata | undefined {
+  const metadata = ctx.options.crossFileInfo?.typeScriptMetadata;
+  const importInfo = ctx.importMap?.get(componentLocalName);
+  if (importInfo?.source.kind === "absolutePath") {
+    return findTypeScriptComponentMetadata(metadata, importInfo.source.value, [
+      importInfo.importedName,
+      componentLocalName,
+    ]);
+  }
+  return findTypeScriptComponentMetadata(metadata, ctx.file.path, [componentLocalName]);
+}
+
+function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata): boolean {
+  if (metadata.propType && isIntrinsicReactPropsTypeText(metadata.propType.text)) {
+    return true;
+  }
+  if (metadata.hasIndexSignature) {
+    return true;
+  }
+  if (metadata.explicitPropNames.includes("className")) {
+    return true;
+  }
+  return metadata.props.some((prop) => prop.name === "className");
+}
+
+function isIntrinsicReactPropsTypeText(typeText: string): boolean {
+  return /^(?:[$A-Z_a-z][$\w]*\.)*ComponentProps(?:WithRef|WithoutRef)?\s*<\s*(['"])[^'"]+\1\s*>$/.test(
+    typeText.trim(),
+  );
+}
+
+function hasInlineObjectPropType(metadata: TypeScriptComponentMetadata): boolean {
+  return metadata.propType?.text.trim().startsWith("{") === true;
+}
+
+function findSxDisallowedStyleProperty(
+  style: object,
+  allowedProperties: ReadonlySet<string>,
+): string | null {
+  if (isAstNode(style)) {
+    return findSxDisallowedStylePropertyInAstNode(style, allowedProperties);
+  }
+
+  for (const [key, value] of Object.entries(style)) {
+    if (isStylexConditionKey(key)) {
+      if (value && typeof value === "object") {
+        const nested = findSxDisallowedStyleProperty(value, allowedProperties);
+        if (nested) {
+          return nested;
+        }
+      }
+      continue;
+    }
+    if (!allowedProperties.has(key)) {
+      return key;
+    }
+  }
+  return null;
 }
 
 function staticObjectPropertyName(prop: unknown): string | null {
@@ -4773,6 +4987,73 @@ function staticObjectPropertyName(prop: unknown): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
+}
+
+function isKnownReactWindowElementTypeAttribute(
+  attrPath:
+    | { parentPath?: { node?: { type?: string; name?: unknown } | null } | null }
+    | null
+    | undefined,
+  importMap: TransformContext["importMap"],
+): boolean {
+  const openingElement = attrPath?.parentPath?.node;
+  if (openingElement?.type !== "JSXOpeningElement") {
+    return false;
+  }
+  return jsxNameIsKnownReactWindowComponent(openingElement.name, importMap);
+}
+
+function jsxNameIsKnownReactWindowComponent(
+  jsxName: unknown,
+  importMap: TransformContext["importMap"],
+): boolean {
+  const name = jsxName as {
+    type?: string;
+    name?: string;
+    object?: unknown;
+    property?: unknown;
+  };
+  if (name.type === "JSXIdentifier") {
+    return localNameIsReactWindowComponent(name.name, importMap);
+  }
+  if (name.type !== "JSXMemberExpression") {
+    return false;
+  }
+  const namespace = name.object as { type?: string; name?: string } | undefined;
+  const member = name.property as { type?: string; name?: string } | undefined;
+  if (
+    namespace?.type !== "JSXIdentifier" ||
+    member?.type !== "JSXIdentifier" ||
+    !REACT_WINDOW_COMPONENT_EXPORTS.has(member.name ?? "")
+  ) {
+    return false;
+  }
+  const importInfo = namespace.name ? importMap?.get(namespace.name) : undefined;
+  return importInfo?.source.value === REACT_WINDOW_SOURCE && importInfo.importedName === "*";
+}
+
+function localNameIsReactWindowComponent(
+  localName: string | undefined,
+  importMap: TransformContext["importMap"],
+): boolean {
+  if (!localName) {
+    return false;
+  }
+  const importInfo = importMap?.get(localName);
+  return (
+    importInfo?.source.value === REACT_WINDOW_SOURCE &&
+    REACT_WINDOW_COMPONENT_EXPORTS.has(importInfo.importedName)
+  );
+}
+
+function isStylexConditionKey(key: string): boolean {
+  return (
+    key === "default" ||
+    key === "__computedKeys" ||
+    key.startsWith(":") ||
+    key.startsWith("@") ||
+    key.startsWith("stylex.when")
+  );
 }
 
 function findSxExcludedStyleProperty(
@@ -4805,6 +5086,7 @@ function findSxExcludedStylePropertyInAstNode(
     type?: string;
     argument?: unknown;
     body?: unknown;
+    expression?: unknown;
     properties?: unknown[];
   };
   if (n.type === "ObjectExpression") {
@@ -4836,6 +5118,54 @@ function findSxExcludedStylePropertyInAstNode(
         }
       }
     }
+  }
+  return null;
+}
+
+function findSxDisallowedStylePropertyInAstNode(
+  node: object,
+  allowedProperties: ReadonlySet<string>,
+): string | null {
+  const n = node as {
+    type?: string;
+    argument?: unknown;
+    body?: unknown;
+    expression?: unknown;
+    properties?: unknown[];
+  };
+  if (n.type === "ObjectExpression") {
+    for (const prop of n.properties ?? []) {
+      const name = staticObjectPropertyName(prop);
+      const value = (prop as { value?: unknown }).value;
+      if (!name) {
+        if (value && typeof value === "object") {
+          const nested = findSxDisallowedStylePropertyInAstNode(value, allowedProperties);
+          if (nested) {
+            return nested;
+          }
+        }
+        continue;
+      }
+      if (isStylexConditionKey(name)) {
+        if (value && typeof value === "object") {
+          const nested = findSxDisallowedStylePropertyInAstNode(value, allowedProperties);
+          if (nested) {
+            return nested;
+          }
+        }
+        continue;
+      }
+      if (!allowedProperties.has(name)) {
+        return name;
+      }
+    }
+    return null;
+  }
+  if (n.type === "ArrowFunctionExpression" && n.body && typeof n.body === "object") {
+    return findSxDisallowedStylePropertyInAstNode(n.body, allowedProperties);
+  }
+  if (n.type === "ParenthesizedExpression" && n.expression && typeof n.expression === "object") {
+    return findSxDisallowedStylePropertyInAstNode(n.expression, allowedProperties);
   }
   return null;
 }

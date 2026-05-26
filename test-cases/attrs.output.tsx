@@ -99,7 +99,7 @@ interface SharedTransientSectionProps {
 type InputProps = {
   padding?: string;
   small?: boolean;
-} & Omit<React.ComponentProps<"input">, "className" | "style">;
+} & Omit<React.ComponentProps<"input">, "className" | "style" | "sx">;
 
 // Pattern 1: styled.input.attrs (dot notation)
 function Input(props: InputProps) {
@@ -122,7 +122,7 @@ export interface TextInputProps {
 }
 
 export function TextInput(
-  props: TextInputProps & Omit<React.ComponentProps<"input">, "className" | "style">,
+  props: TextInputProps & Omit<React.ComponentProps<"input">, "className" | "style" | "sx">,
 ) {
   const { allowPMAutofill, ...rest } = props;
   return <input data-1p-ignore={allowPMAutofill !== true} {...rest} sx={styles.textInput} />;
@@ -451,7 +451,7 @@ export function FocusableScroll(props: FocusableProps) {
 // Pattern 7: styled.div.attrs with prop reference (native element)
 // When an intrinsic element has defaultAttrs, it generates a wrapper component
 // that destructures the referenced prop and applies the default value
-function Box(props: Omit<React.ComponentProps<"div">, "className" | "style">) {
+function Box(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
   const { children, tabIndex, ...rest } = props;
   return (
     <div tabIndex={tabIndex ?? 0} {...rest} sx={styles.box}>

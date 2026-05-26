@@ -11,7 +11,7 @@ type Props = {
 };
 
 export function ColorBadge(
-  props: Props & Omit<React.ComponentProps<"div">, "className" | "style">,
+  props: Props & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
   const { children, hollow, color, size = "normal", ...rest } = props;
   return (

@@ -11,7 +11,7 @@ interface TransientButtonProps {
 // Props are defined via interface reference, not inline type literal
 // The cleanup loop should still filter unknown $-prefixed props
 export function TransientButton(
-  props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style">,
+  props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
   const { children, variant, size, ...rest } = props;
   const restRecord = rest as Record<string, unknown>;

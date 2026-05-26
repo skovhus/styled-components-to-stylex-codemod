@@ -2,7 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 export function ContentViewContainer<C extends React.ElementType = "div">(
-  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style"> & { as?: C },
+  props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
   const { as: Component = "div", children, ...rest } = props;
   return (

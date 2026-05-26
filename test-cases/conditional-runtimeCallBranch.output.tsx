@@ -5,7 +5,7 @@ import { ColorConverter, getRowHighlightColor } from "./lib/helpers";
 
 type CardContainerProps = { checked: boolean } & Omit<
   React.ComponentProps<"label">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function CardContainer(props: CardContainerProps) {
@@ -25,7 +25,7 @@ function CardContainer(props: CardContainerProps) {
 
 type RowProps = { isHighlighted: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Preserved runtime call using a theme boolean argument (plain function, not member expression)

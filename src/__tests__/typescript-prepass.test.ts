@@ -49,6 +49,9 @@ function componentSnapshot(metadata: TypeScriptPrepassMetadata, baseDir: string)
             ...(component.sxExcludedProperties.length > 0
               ? { sxExcludedProperties: component.sxExcludedProperties }
               : {}),
+            ...(component.sxAllowedProperties !== undefined
+              ? { sxAllowedProperties: component.sxAllowedProperties }
+              : {}),
           },
         ]),
     ),
@@ -195,6 +198,112 @@ describe("TypeScript compiler prepass", () => {
       const withoutSx = findTypeScriptComponentMetadata(metadata, filePath, ["WithoutSxButton"]);
       expect(withoutSx?.supportsSxProp).toBe(false);
       expect(withoutSx?.sxExcludedProperties).toEqual([]);
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("extracts properties accepted by narrow StyleXStyles sx props", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-allowed-"));
+    const filePath = path.join(fixtureDir, "Input.tsx");
+    writeFileSync(
+      filePath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface InputSxSurface {",
+        "  backgroundColor?: string;",
+        "  width?: number | string;",
+        "}",
+        "",
+        "interface InputProps {",
+        "  sx?: stylex.StyleXStyles<InputSxSurface>;",
+        "}",
+        "",
+        "interface PickerProps extends InputProps {",
+        "  value?: string;",
+        "}",
+        "",
+        "type AliasProps = Pick<PickerProps, 'sx' | 'value'>;",
+        "",
+        "export function Input(props: InputProps) {",
+        "  return <input />;",
+        "}",
+        "",
+        "export function Picker(props: PickerProps) {",
+        "  return <Input {...props} />;",
+        "}",
+        "",
+        "export function AliasPicker(props: AliasProps) {",
+        "  return <Input {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const metadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      for (const componentName of ["Input", "Picker", "AliasPicker"]) {
+        const component = findTypeScriptComponentMetadata(metadata, filePath, [componentName]);
+        expect(component?.supportsSxProp).toBe(true);
+        expect(component?.sxAllowedProperties).toEqual(["backgroundColor", "width"]);
+      }
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves empty accepted property lists for narrow StyleXStyles sx props", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-empty-allowlist-"));
+    const filePath = path.join(fixtureDir, "Input.tsx");
+    writeFileSync(
+      filePath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface EmptySxSurface {}",
+        "",
+        "interface EmptyInterfaceSx extends stylex.StyleXStyles<EmptySxSurface> {}",
+        "",
+        "type EmptyAliasSx = stylex.StyleXStyles<{}>;",
+        "",
+        "type DirectProps = {",
+        "  sx?: stylex.StyleXStyles<EmptySxSurface>;",
+        "};",
+        "",
+        "type AliasProps = { sx?: EmptyAliasSx };",
+        "",
+        "type InterfaceProps = { sx?: EmptyInterfaceSx };",
+        "",
+        "type BroadProps = { sx?: stylex.StyleXStyles };",
+        "",
+        "export function DirectInput(props: DirectProps) {",
+        "  return <input />;",
+        "}",
+        "",
+        "export function AliasInput(props: AliasProps) {",
+        "  return <input />;",
+        "}",
+        "",
+        "export function InterfaceInput(props: InterfaceProps) {",
+        "  return <input />;",
+        "}",
+        "",
+        "export function BroadInput(props: BroadProps) {",
+        "  return <input />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const metadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      for (const componentName of ["DirectInput", "AliasInput", "InterfaceInput"]) {
+        const component = findTypeScriptComponentMetadata(metadata, filePath, [componentName]);
+        expect(component?.supportsSxProp).toBe(true);
+        expect(component?.sxAllowedProperties).toEqual([]);
+      }
+      const broad = findTypeScriptComponentMetadata(metadata, filePath, ["BroadInput"]);
+      expect(broad?.supportsSxProp).toBe(true);
+      expect(broad?.sxAllowedProperties).toBeUndefined();
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

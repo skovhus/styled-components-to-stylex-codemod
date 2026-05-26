@@ -80,6 +80,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
+        if (!allowSxProp) {
+          omitted.push('"sx"');
+        }
         // When there's a custom props type, omit its keys from element props
         // so custom props take precedence over native element props
         if (explicit) {

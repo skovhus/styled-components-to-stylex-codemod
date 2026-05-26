@@ -69,7 +69,7 @@ export function ImportedTooltip(props: OptimizedTooltipProps) {
 const styles = stylex.create({
   base: { fontFamily: "system-ui, sans-serif" },
   sm: { fontSize: 12 },
-  md: { fontSize: 16 },
+  md: { fontSize: 16, lineHeight: "normal" },
   icon: { display: "inline-block" },
   tooltip: { display: "inline-flex" },
 });

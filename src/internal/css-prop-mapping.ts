@@ -12,6 +12,7 @@ import {
 
 export {
   isCssShorthandProperty,
+  isUnsupportedStylexProperty,
   isUnsupportedBackgroundShorthandValue,
   isStylexStringOnlyCssProp,
   setUseLogicalProperties,
@@ -58,6 +59,27 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "outlineOffset",
 ]);
 
+const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
+  // StyleX rejects the CSS-wide reset property. It is too broad to expand
+  // safely without element-specific knowledge, so callers should bail instead
+  // of emitting `all` into stylex.create().
+  "all",
+  // StyleX does not currently accept logical scroll longhands, and converting
+  // them to physical sides would change behavior in RTL or vertical writing modes.
+  "scroll-margin-block",
+  "scroll-margin-block-start",
+  "scroll-margin-block-end",
+  "scroll-margin-inline",
+  "scroll-margin-inline-start",
+  "scroll-margin-inline-end",
+  "scroll-padding-block",
+  "scroll-padding-block-start",
+  "scroll-padding-block-end",
+  "scroll-padding-inline",
+  "scroll-padding-inline-start",
+  "scroll-padding-inline-end",
+]);
+
 /**
  * Returns true if the CSS property is a shorthand that StyleX cannot express directly
  * and requires expansion (e.g., `padding`, `margin`, `border`, `background`).
@@ -69,6 +91,10 @@ function isCssShorthandProperty(cssProp: string): boolean {
     /^border-(top|right|bottom|left)$/.test(cssProp) ||
     cssProp === "background"
   );
+}
+
+function isUnsupportedStylexProperty(cssProp: string): boolean {
+  return UNSUPPORTED_STYLEX_CSS_PROPS.has(cssProp.trim());
 }
 
 function isUnsupportedBackgroundShorthandValue(rawValue: string): boolean {

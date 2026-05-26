@@ -5,7 +5,7 @@ type Align = "left" | "right";
 
 type FlexContainerProps = { align?: Align } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Function call form returning a css template literal (not object syntax)

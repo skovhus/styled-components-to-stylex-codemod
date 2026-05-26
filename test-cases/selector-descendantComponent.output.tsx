@@ -10,7 +10,9 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
-export function ContainerLink(props: Omit<React.ComponentProps<"a">, "className" | "style">) {
+export function ContainerLink(
+  props: Omit<React.ComponentProps<"a">, "className" | "style" | "sx">,
+) {
   const { children, ...rest } = props;
   return (
     <a {...rest} sx={stylex.defaultMarker()}>

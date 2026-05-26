@@ -6,7 +6,7 @@ type Color = "labelBase" | "labelMuted";
 
 type InputProps = { placeholderColor: Color } & Omit<
   React.ComponentProps<"input">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function Input(props: InputProps) {

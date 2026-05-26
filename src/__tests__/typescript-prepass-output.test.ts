@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import jscodeshift from "jscodeshift";
@@ -134,7 +134,110 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
-  it("does not treat nested shadowed props.sx reads as wrapper sx support", () => {
+  it("recognizes single-quoted intrinsic pass-through props on custom components", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-single-quote-"));
+    const filePath = path.join(fixtureDir, "Box.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "const Base = (props: React.ComponentPropsWithRef<'div'>) => <div {...props} />;",
+      "",
+      "const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      "export const App = () => <Wrapped>Box</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain("{...stylex.props(");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("recognizes intrinsic pass-through props from React namespace aliases", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-react-alias-"));
+    const filePath = path.join(fixtureDir, "Box.tsx");
+    const source = [
+      'import * as R from "react";',
+      'import styled from "styled-components";',
+      "",
+      "const Base = (props: R.ComponentPropsWithRef<'div'>) => <div {...props} />;",
+      "",
+      "const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      "export const App = () => <Wrapped>Box</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain("{...stylex.props(");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("recognizes intrinsic pass-through props from direct React utility imports", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-react-utility-"));
+    const filePath = path.join(fixtureDir, "Button.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import type { ComponentPropsWithoutRef } from "react";',
+      'import styled from "styled-components";',
+      "",
+      'const Base = (props: ComponentPropsWithoutRef<"button">) => <button {...props} />;',
+      "",
+      "const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      "export const App = () => <Wrapped>Button</Wrapped>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain("{...stylex.props(");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when a local wrapped component has no style channel despite nested sx reads", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-shadowed-sx-"));
     const filePath = path.join(fixtureDir, "Panel.tsx");
     const source = [
@@ -164,8 +267,48 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("{...stylex.props(");
-      expect(after.code).not.toContain("<Panel\n      {...rest}\n      sx=");
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat unused rest destructuring as className support", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-unused-rest-"));
+    const filePath = path.join(fixtureDir, "Panel.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import styled from "styled-components";',
+      "",
+      "function Panel({ ...rest }: { label?: string; children?: React.ReactNode }) {",
+      "  return <section>Panel</section>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Panel)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Panel">Panel</Wrapped>;',
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
@@ -442,6 +585,149 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("normalizes already-transformed import paths before wrapped component validation", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-realpath-skip-"));
+    const realDir = path.join(fixtureDir, "real");
+    const linkDir = path.join(fixtureDir, "link");
+    const baseRealPath = path.join(realDir, "Base.tsx");
+    const baseLinkPath = path.join(linkDir, "Base.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    mkdirSync(realDir);
+    writeFileSync(
+      baseRealPath,
+      [
+        "export function Base(props: { label?: string }) {",
+        "  return <button>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    symlinkSync(realDir, linkDir, "dir");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./link/Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [baseLinkPath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./link/Base"
+            ? baseLinkPath
+            : path.resolve(path.dirname(fromFile), specifier),
+        transformedFileSources: new Map([[realpathSync(baseRealPath), "already transformed"]]),
+      });
+
+      expect(after.warnings.map((warning) => warning.type)).not.toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves extensionless already-transformed import paths before wrapped component validation", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-extensionless-skip-"));
+    const basePath = path.join(fixtureDir, "Base.tsx");
+    const basePathWithoutExtension = path.join(fixtureDir, "Base");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    writeFileSync(
+      basePath,
+      [
+        "export function Base(props: { label?: string }) {",
+        "  return <button>{props.label}</button>;",
+        "}",
+      ].join("\n"),
+    );
+    const source = [
+      'import styled from "styled-components";',
+      'import { Base } from "./Base";',
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(wrapperPath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [basePath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: wrapperPath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./Base"
+            ? basePathWithoutExtension
+            : path.resolve(path.dirname(fromFile), specifier),
+        transformedFileSources: new Map([[realpathSync(basePath), "already transformed"]]),
+      });
+
+      expect(after.warnings.map((warning) => warning.type)).not.toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails instead of widening local wrapped component props for generated styles", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-wrapper-bail-"));
+    const filePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      "",
+      "function Base(props: { label?: string }) {",
+      "  return <button>{props.label}</button>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("uses physical shorthand styles rejected by a wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
@@ -598,6 +884,289 @@ describe("TypeScript prepass output refinement", () => {
       expect(after.warnings).toContainEqual(
         expect.objectContaining({
           type: "Wrapped component sx prop rejects logical CSS properties that cannot be preserved losslessly",
+        }),
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when an sx-aware wrapped component only accepts a narrow property surface", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-allowlist-bail-"));
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "  border: none;",
+      "  height: 25px;",
+      "  width: 25px;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+    writeFileSync(
+      colorTriggerPath,
+      [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface InputProps {",
+        "  sx?: stylex.StyleXStyles<{",
+        "    backgroundColor?: string;",
+        "    width?: number | string;",
+        "  }>;",
+        "}",
+        "",
+        "export interface ColorTriggerProps extends InputProps {",
+        "  value?: string;",
+        "}",
+        "",
+        "export function ColorTrigger(props: ColorTriggerProps) {",
+        "  return <button {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [colorTriggerPath, sourcePath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop does not accept generated StyleX property",
+          context: expect.objectContaining({
+            property: "borderWidth",
+          }),
+        }),
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when TypeScript metadata resolves an empty sx allowlist", () => {
+    const fixtureDir = mkdtempSync(
+      path.join(tmpdir(), "typescript-prepass-sx-empty-allowlist-bail-"),
+    );
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+    writeFileSync(
+      colorTriggerPath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface EmptySxSurface {}",
+        "",
+        "export interface ColorTriggerProps {",
+        "  sx?: stylex.StyleXStyles<EmptySxSurface>;",
+        "  value?: string;",
+        "}",
+        "",
+        "export function ColorTrigger(props: ColorTriggerProps) {",
+        "  return <button {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [colorTriggerPath, sourcePath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop does not accept generated StyleX property",
+          context: expect.objectContaining({
+            property: "backgroundColor",
+          }),
+        }),
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats an empty wrapped component sx allowlist as deny-all", () => {
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+
+    const after = transformWithWarnings({ source, path: "/tmp/Wrapper.tsx" }, api, {
+      adapter: {
+        ...fixtureAdapter,
+        wrappedComponentInterface(ctx) {
+          if (ctx.localName === "ColorTrigger") {
+            return { acceptsSx: true, sxAllowedProperties: [] };
+          }
+          return undefined;
+        },
+      },
+    });
+
+    expect(after.code).toBeNull();
+    expect(after.warnings).toContainEqual(
+      expect.objectContaining({
+        type: "Wrapped component sx prop does not accept generated StyleX property",
+        context: expect.objectContaining({
+          property: "backgroundColor",
+        }),
+      }),
+    );
+  });
+
+  it("merges empty TypeScript sx allowlists into adapter wrapped component interfaces", () => {
+    const fixtureDir = mkdtempSync(
+      path.join(tmpdir(), "typescript-prepass-adapter-empty-allowlist-"),
+    );
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { ColorTrigger } from "./ColorTrigger";',
+      "",
+      "const CompactTrigger = styled(ColorTrigger)`",
+      "  background-color: transparent;",
+      "`;",
+      "",
+      'export const App = () => <CompactTrigger aria-label="Pick color" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+    writeFileSync(
+      colorTriggerPath,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "interface EmptySxSurface {}",
+        "",
+        "export interface ColorTriggerProps {",
+        "  sx?: stylex.StyleXStyles<EmptySxSurface>;",
+        "  value?: string;",
+        "}",
+        "",
+        "export function ColorTrigger(props: ColorTriggerProps) {",
+        "  return <button {...props} />;",
+        "}",
+      ].join("\n"),
+    );
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [colorTriggerPath, sourcePath],
+        cwd: fixtureDir,
+      });
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            if (ctx.localName === "ColorTrigger") {
+              return { acceptsSx: true };
+            }
+            return undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop does not accept generated StyleX property",
+          context: expect.objectContaining({
+            property: "backgroundColor",
+          }),
+        }),
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails when a wrapped component sx prop targets an inner element for root styles", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-inner-sx-target-"));
+    const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      'import { Checkbox } from "./Checkbox";',
+      "",
+      "const StyledCheckbox = styled(Checkbox)`",
+      "  margin-top: 0;",
+      "`;",
+      "",
+      'export const App = () => <StyledCheckbox aria-label="Done" />;',
+    ].join("\n");
+    writeFileSync(sourcePath, source);
+
+    try {
+      const after = transformWithWarnings({ source, path: sourcePath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Checkbox"
+              ? {
+                  acceptsSx: true,
+                  sxTarget: "inner",
+                  rootOnlyProperties: ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+                }
+              : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings).toContainEqual(
+        expect.objectContaining({
+          type: "Wrapped component sx prop targets an inner element for a root style property",
+          context: expect.objectContaining({
+            property: "marginTop",
+          }),
         }),
       );
     } finally {

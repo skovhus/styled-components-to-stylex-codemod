@@ -4,7 +4,7 @@ import { helpers } from "./lib/helpers.stylex";
 
 type TitleTextProps = { oneLine?: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // Destructured default should preserve `undefined` semantics:
@@ -22,7 +22,7 @@ function TitleText(props: TitleTextProps) {
 
 type ColorTitleTextProps = { oneLine?: boolean } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // When the same prop also drives another interpolation, wrapper-level defaulting

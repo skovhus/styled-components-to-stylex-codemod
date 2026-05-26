@@ -7,7 +7,7 @@ type SharedProps = {
 };
 
 export function CardA(
-  props: SharedProps & Omit<React.ComponentProps<"div">, "className" | "style">,
+  props: SharedProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
   const { children, highlight, ...rest } = props;
   return (

@@ -2,7 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { Browser } from "./lib/helpers";
 
-type ContainerProps = { size: number } & Omit<React.ComponentProps<"div">, "className" | "style">;
+type ContainerProps = { size: number } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 export function Container(props: ContainerProps) {
   const { children, size, ...rest } = props;

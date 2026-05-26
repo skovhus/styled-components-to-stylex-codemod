@@ -165,7 +165,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const isExportedComponent = d.isExported ?? false;
     const useSlimType =
-      !isExportedComponent && !(d.supportsExternalStyles ?? false) && !d.usedAsValue;
+      !isExportedComponent && !(d.supportsExternalStyles ?? false) && !emitter.isBroadValueUsage(d);
 
     const explicit = emitter.stringifyTsType(d.propsType);
     // Extract prop names from explicit type to avoid duplicating them in inferred type
@@ -251,6 +251,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         if (!allowStyleProp) {
           omitted.push('"style"');
         }
+        if (!allowSxProp) {
+          omitted.push('"sx"');
+        }
         const baseWithOmit = omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
         return emitter.joinIntersection(extrasTypeText, consumedPropsTypeText, baseWithOmit);
       }
@@ -324,6 +327,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         }
         if (!allowStyleProp) {
           omitted.push('"style"');
+        }
+        if (!allowSxProp) {
+          omitted.push('"sx"');
         }
         return omitted.length ? `Omit<${base}, ${omitted.join(" | ")}>` : base;
       })();

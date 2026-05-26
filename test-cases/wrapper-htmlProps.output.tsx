@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type OptionLabelProps = { disabled?: boolean } & Omit<
   React.ComponentProps<"label">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 // When a styled component wrapper spreads ...rest to the element,

@@ -3,7 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 
 type ConditionalContainerProps = { size: number } & Omit<
   React.ComponentProps<"div">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 export function ConditionalContainer(props: ConditionalContainerProps) {

@@ -12,7 +12,9 @@ interface BoxProps {
 }
 
 // Component with props that affect styles
-export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style">) {
+export function Box(
+  props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
+) {
   const { children, bordered, bg, ...rest } = props;
   return (
     <div
@@ -29,7 +31,7 @@ export function Box(props: BoxProps & Omit<React.ComponentProps<"div">, "classNa
 }
 
 // Component with callback that receives event
-export function Input(props: Omit<React.ComponentProps<"input">, "className" | "style">) {
+export function Input(props: Omit<React.ComponentProps<"input">, "className" | "style" | "sx">) {
   return <input {...props} sx={styles.input} />;
 }
 

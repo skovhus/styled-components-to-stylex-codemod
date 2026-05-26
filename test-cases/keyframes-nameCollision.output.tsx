@@ -13,7 +13,7 @@ export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children"
 
 type MoveIconProps = { animated?: boolean } & Omit<
   React.ComponentProps<"svg">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 export function MoveIcon(props: MoveIconProps) {

@@ -572,6 +572,9 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       if (!observedFallbackFnKey && hasFiniteNumericVariantKey(dim)) {
         dim.propTypeFromKeyof = true;
       }
+      if (decl.variantLookupCastProps?.has(dim.propName)) {
+        dim.forceKeyofLookupCast = true;
+      }
     }
     decl.variantDimensions = mergeVariantDimensions(decl.variantDimensions, dimensions);
     decl.needsWrapperComponent = true;

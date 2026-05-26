@@ -5,7 +5,7 @@ import { $colors } from "./tokens.stylex";
 type ImgProps = {
   isInactive?: boolean;
   disabled?: boolean;
-} & Omit<React.ComponentProps<"img">, "className" | "style">;
+} & Omit<React.ComponentProps<"img">, "className" | "style" | "sx">;
 
 function Img(props: ImgProps) {
   const { disabled, isInactive, ...rest } = props;

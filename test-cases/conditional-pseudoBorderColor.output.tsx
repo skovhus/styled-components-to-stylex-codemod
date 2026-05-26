@@ -4,7 +4,7 @@ import { pixelVars, $colors } from "./tokens.stylex";
 
 type JsonTextareaProps = { hasError?: boolean } & Omit<
   React.ComponentProps<"textarea">,
-  "className" | "style"
+  "className" | "style" | "sx"
 >;
 
 function JsonTextarea(props: JsonTextareaProps) {

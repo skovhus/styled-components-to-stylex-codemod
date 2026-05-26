@@ -555,10 +555,12 @@ describe("bail-out fixtures (_unsupported + _unimplemented)", () => {
     // skips are allowed. Regular `_unsupported.*` cases should bail under the
     // default stricter semantics.
     const allowPartialMigration = bailOutInput.startsWith("_unsupported.partial-");
+    const parser = bailOutInput.endsWith(".input.jsx") ? "babel" : "tsx";
+    const crossFileInfo = getCrossFileInfo(inputPath, parser);
     const result = transformWithWarnings(
       { source: input, path: inputPath },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter, allowPartialMigration },
+      { adapter: fixtureAdapter, allowPartialMigration, crossFileInfo },
     );
     // With per-decl skips, other decls in the fixture may transform successfully while
     // the one carrying the unsupported pattern is preserved. Require the expected
@@ -2335,6 +2337,163 @@ export const App = () => (
     expect(result).toContain("panelOpacity: (");
   });
 
+  it("adds a runtime fallback for transformed observed variant buckets", () => {
+    const input = `
+import styled from "styled-components";
+
+function toGap(size: string): string {
+  return size === "lg" ? "16px" : "8px";
+}
+
+export const Stack = styled.div<{ size: string }>\`
+  gap: \${(props) => toGap(props.size)};
+  display: flex;
+\`;
+
+export const App = () => (
+  <div>
+    <Stack size="sm">Small</Stack>
+    <Stack size="lg">Large</Stack>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-transformed-variants.tsx");
+
+    expect(result).toContain(
+      "sizeVariants[size as keyof typeof sizeVariants] ?? styles.stackSize(size)",
+    );
+    expect(result).toContain("sm: {");
+    expect(result).toContain("lg: {");
+    expect(result).toContain("styles.stackSize(size)");
+    expect(result).toContain("gap: toGap(size)");
+  });
+
+  it("adds a runtime fallback for observed expression variant buckets", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-variants.tsx");
+
+    expect(result).toContain("!active && styles.badgeColor(color)");
+    expect(result).toContain('!active && color === "blue" && styles.badgeNotActiveColorBlue');
+    expect(result).toContain('!active && color === "green" && styles.badgeNotActiveColorGreen');
+    expect(result).toContain("styles.badgeColor(color)");
+    expect(result).toContain("color: color");
+  });
+
+  it("keeps separate observed expression fallbacks for distinct guards on the same prop", () => {
+    const input = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; highlighted?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+  background-color: \${(props) => props.highlighted ? props.color : "white"};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green" highlighted>Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-distinct-guards.tsx");
+
+    expect(result).toContain("!active && styles.badgeColor(color)");
+    expect(result).toContain("highlighted && styles.badgeColorHighlighted(color)");
+    expect(result).toContain("badgeColor: (");
+    expect(result).toContain("color: color");
+    expect(result).toContain("badgeColorHighlighted: (");
+    expect(result).toContain("backgroundColor: color");
+  });
+
+  it("does not forward observed expression condition props to unresolved component bases", () => {
+    const input = `
+import styled from "styled-components";
+import { Base } from "./Base";
+
+export const Badge = styled(Base)<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "red" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-expression-condition-drop.tsx");
+
+    expect(result).toContain("active,");
+    expect(result).toContain("!active && styles.badgeColor(props.color)");
+    expect(result).not.toContain("active={active}");
+  });
+
+  it("forwards non-transient observed variant props to wrapped components", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+function Base(props: { tone: string; className?: string; children?: React.ReactNode }) {
+  return <div className={props.className} data-tone={props.tone}>{props.children}</div>;
+}
+
+export const Badge = styled(Base)<{ tone: string }>\`
+  color: \${(props) => props.tone};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge tone="red">Red</Badge>
+    <Badge tone="blue">Blue</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-component-prop-forward.tsx");
+
+    expect(result).toContain(
+      "toneVariants[tone as keyof typeof toneVariants] ?? styles.badgeTone(tone)",
+    );
+    expect(result).toContain("tone={tone}");
+  });
+
+  it("falls back to runtime css helper conditionals when observed values are not exhaustive", () => {
+    const input = `
+import styled from "styled-components";
+
+const getTone = (tone: string) => tone;
+const hasTone = (tone: string) => !!tone;
+
+export const Badge = styled.div<{ tone: string }>\`
+  \${(props) => (hasTone(props.tone) ? \`color: \${getTone(props.tone)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge tone="red">Red</Badge>
+    <Badge tone="blue">Blue</Badge>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "css-helper-observed-nonexhaustive.tsx");
+
+    expect(result).toContain("hasTone(tone) ? styles.");
+    expect(result).toContain("color: getTone(tone)");
+    expect(result).not.toContain("toneVariants");
+  });
+
   it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
@@ -2489,6 +2648,45 @@ export const App = () => <MaskedPanel>Masked</MaskedPanel>;
             usage: "props",
             expr: "helpers.scrollFadeMaskStyles(12)",
             imports: [],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+    const diagnostics = transformWithWarnings(
+      { source: input, path: join(testCasesDir, "css-helper-ruleset-copy.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(diagnostics.code).toBeNull();
+  });
+
+  it("does not copy reimported styled-components RuleSet helper calls into sx", () => {
+    const input = `
+import styled from "styled-components";
+import { scrollFadeMaskStyles } from "./lib/helpers";
+
+const MaskedPanel = styled.div\`
+  \${scrollFadeMaskStyles(10, "both")}
+  overflow: hidden;
+\`;
+
+export const App = () => <MaskedPanel>Masked</MaskedPanel>;
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "scrollFadeMaskStyles") {
+          return {
+            usage: "props",
+            expr: 'scrollFadeMaskStyles(10, "both")',
+            imports: [
+              {
+                from: { kind: "specifier", value: "./lib/helpers" },
+                names: [{ imported: "scrollFadeMaskStyles" }],
+              },
+            ],
           };
         }
         return fixtureAdapter.resolveCall?.(ctx);
@@ -3304,6 +3502,30 @@ export const App = () => <Box />;
     expect(warning).toBeDefined();
     // Line 4 is template start, `& + span` is on line 7 (3 lines into template content)
     expect(warning?.loc?.line).toBe(7);
+  });
+
+  it("should bail instead of emitting unsupported all reset property", () => {
+    const source = `
+import styled from "styled-components";
+
+const Option = styled.li\`
+  all: unset;
+  display: flex;
+\`;
+
+export const App = () => <Option>Option</Option>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(
+      result.warnings.some((w) => String(w.type).includes('Unsupported CSS property "all"')),
+    ).toBe(true);
   });
 
   it("should warn with correct line number for descendant/child/sibling selector", () => {
@@ -7114,6 +7336,170 @@ export const App = () => <Button>Click me</Button>;
     // Should succeed because adapter resolved the call
     expect(result.code).not.toBeNull();
   });
+
+  it("should bail when adapter returns the same helper imported via a parent-relative specifier", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsUnchangedHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterThatReturnsUnchangedHelper },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
+
+  it("should bail when adapter returns the same helper imported through a directory index", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsUnchangedHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: adapterThatReturnsUnchangedHelper,
+        resolveModule(fromFile, specifier) {
+          if (
+            fromFile === "/workspace/src/components/imported-helper-call.tsx" &&
+            specifier === "../external-helpers"
+          ) {
+            return "/workspace/src/external-helpers/index.ts";
+          }
+          return undefined;
+        },
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
+
+  it("should not treat different parent-relative helper imports with the same basename as the same source", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsDifferentHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../../shared/external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterThatReturnsDifferentHelper },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).not.toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
 });
 
 describe("conditional logical OR/AND mixed operators", () => {
@@ -9923,6 +10309,66 @@ export const App = () => <Parent />;
   });
 });
 
+describe("component value usage", () => {
+  it("keeps react-window elementType props on the narrow style-only wrapper contract", () => {
+    const source = `
+import * as React from "react";
+import { FixedSizeList as WindowList } from "react-window";
+import styled from "styled-components";
+
+const InnerContainer = styled.div\`
+  position: relative;
+  background-color: red;
+\`;
+
+export const App = () => (
+  <WindowList innerElementType={InnerContainer} height={100} itemCount={1} itemSize={20} width={100}>
+    {() => <div>Row</div>}
+  </WindowList>
+);
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain("props: React.PropsWithChildren<{");
+    expect(output).toContain("style?: React.CSSProperties");
+    expect(output).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(output).not.toContain("sx?: stylex.StyleXStyles");
+    expect(output).not.toContain("className, children, style, sx");
+  });
+
+  it("uses broad value wrappers for non-react-window elementType props", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+
+function LocalList(props: { innerElementType?: React.ElementType; children: React.ReactNode }) {
+  const Inner = props.innerElementType ?? "div";
+  return <Inner>{props.children}</Inner>;
+}
+
+const InnerContainer = styled.div\`
+  position: relative;
+  background-color: red;
+\`;
+
+export const App = () => (
+  <LocalList innerElementType={InnerContainer}>
+    Row
+  </LocalList>
+);
+`;
+    const output = runTransform(source);
+
+    expect(output).toContain(
+      'function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles })',
+    );
+    expect(output).toMatch(
+      /const \{\s*className,\s*children,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/,
+    );
+    expect(output).toContain("{...mergedSx([styles.innerContainer, sx], className, style)}");
+  });
+});
+
 describe("usePhysicalProperties adapter option", () => {
   it("should expand 2-value padding to logical properties by default", () => {
     const source = `
@@ -12088,6 +12534,55 @@ export const App = () => <Box $width={320}>content</Box>;
       });
       "
     `);
+  });
+
+  it("should emit defineVars sidecars for inline-only local custom property writes", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ $width?: number }>\`
+  --panel-width: 200px;
+  \${(props) => (props.$width ? \`--panel-width: \${props.$width}px\` : "")};
+  padding: 4px;
+\`;
+
+export const App = () => <Box $width={320}>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toContain('import { testVariables } from "./test.stylex"');
+    expect(result.code).toContain('[testVariables["--panel-width"]]');
+    expect(result.sidecarFiles?.[0]?.content).toContain("export const testVariables");
+    expect(result.sidecarFiles?.[0]?.content).toContain('"--panel-width": "200px"');
+  });
+
+  it("should emit defineVars sidecars for inline-only local custom property reads", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --panel-width: 200px;
+  width: var(--panel-width, 200px);
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toContain('import { testVariables } from "./test.stylex"');
+    expect(result.code).toContain('width: testVariables["--panel-width"]');
+    expect(result.sidecarFiles?.[0]?.content).toContain("export const testVariables");
+    expect(result.sidecarFiles?.[0]?.content).toContain('"--panel-width": "200px"');
   });
 
   it("should rewrite local CSS variable values under computed media keys", () => {
