@@ -3,12 +3,12 @@ import * as stylex from "@stylexjs/stylex";
 import { useTheme as useStyledTheme } from "styled-components";
 import { useTheme } from "./lib/app-theme";
 
-function RuntimeThemeBox(props: React.PropsWithChildren<{}>) {
+function RuntimeThemeBox({ children }: { children?: React.ReactNode }) {
   const theme = useStyledTheme();
 
   return (
     <div sx={styles.runtimeThemeBox(theme.baseTheme?.color.bgBorderSolid ?? "#94a3b8")}>
-      {props.children}
+      {children}
     </div>
   );
 }

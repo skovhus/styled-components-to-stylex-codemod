@@ -4,8 +4,8 @@ import { ThingMarker } from "./selector-siblingBaseAfter.input.stylex";
 
 // The general sibling rule appears BEFORE the base color declaration.
 // The base value must still be preserved as the default.
-function Thing(props: React.PropsWithChildren<{}>) {
-  return <div sx={[styles.thing, ThingMarker]}>{props.children}</div>;
+function Thing({ children }: { children?: React.ReactNode }) {
+  return <div sx={[styles.thing, ThingMarker]}>{children}</div>;
 }
 
 export const App = () => (

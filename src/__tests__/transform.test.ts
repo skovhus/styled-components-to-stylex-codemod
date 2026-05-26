@@ -8837,9 +8837,9 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{}>) {
+      function Box({ children }: { children?: React.ReactNode }) {
         const theme = useTheme();
-        return <div sx={theme.isDark ? styles.boxDark : styles.boxLight}>{props.children}</div>;
+        return <div sx={theme.isDark ? styles.boxDark : styles.boxLight}>{children}</div>;
       }
 
       export const App = () => <Box>Hello</Box>;
@@ -8879,12 +8879,12 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{}>) {
+      function Box({ children }: { children?: React.ReactNode }) {
         const theme = useTheme();
 
         return (
           <div
-            sx={theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast}>{props.children}</div>
+            sx={theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast}>{children}</div>
         );
       }
 
@@ -8927,7 +8927,7 @@ export const App = () => <Box>Hello</Box>;
       import * as stylex from "@stylexjs/stylex";
       import { useTheme } from "styled-components";
 
-      function Box(props: React.PropsWithChildren<{}>) {
+      function Box({ children }: { children?: React.ReactNode }) {
         const theme = useTheme();
 
         return (
@@ -8935,7 +8935,7 @@ export const App = () => <Box>Hello</Box>;
             sx={[
               theme.isDark ? styles.boxDark : styles.boxLight,
               theme.isHighContrast ? styles.boxHighContrast : styles.boxNotHighContrast,
-            ]}>{props.children}</div>
+            ]}>{children}</div>
         );
       }
 

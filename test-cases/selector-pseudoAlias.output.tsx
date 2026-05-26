@@ -3,7 +3,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-function Button(props: React.PropsWithChildren<{}>) {
+function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
@@ -14,12 +14,12 @@ function Button(props: React.PropsWithChildren<{}>) {
         }),
       ]}
     >
-      {props.children}
+      {children}
     </button>
   );
 }
 
-function ResetButton(props: React.PropsWithChildren<{}>) {
+function ResetButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
@@ -30,7 +30,7 @@ function ResetButton(props: React.PropsWithChildren<{}>) {
         }),
       ]}
     >
-      {props.children}
+      {children}
     </button>
   );
 }

@@ -4,7 +4,7 @@ import { useTheme } from "styled-components";
 import { helpers } from "./lib/helpers.stylex";
 
 // Dotted theme access: theme.isDark controls the argument
-function ThemeText(props: React.PropsWithChildren<{}>) {
+function ThemeText({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
@@ -14,13 +14,13 @@ function ThemeText(props: React.PropsWithChildren<{}>) {
         theme.isDark ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
       ]}
     >
-      {props.children}
+      {children}
     </div>
   );
 }
 
 // Bare theme truthiness check (theme object as condition)
-function ThemeTruthyText(props: React.PropsWithChildren<{}>) {
+function ThemeTruthyText({ children }: { children?: React.ReactNode }) {
   const theme = useTheme();
 
   return (
@@ -30,7 +30,7 @@ function ThemeTruthyText(props: React.PropsWithChildren<{}>) {
         theme ? helpers.truncateMultiline(1) : helpers.truncateMultiline(2),
       ]}
     >
-      {props.children}
+      {children}
     </div>
   );
 }

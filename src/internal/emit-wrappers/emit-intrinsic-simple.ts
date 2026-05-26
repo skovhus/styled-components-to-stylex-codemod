@@ -1074,8 +1074,6 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       // When useAsProp is true, include children support even for void tags
       // because the user might use `as="textarea"` which requires children
       const includeChildren = useAsProp || !isVoidTag;
-      const propsParamId = j.identifier("props");
-      emitter.annotatePropsParam(propsParamId, d.localName, inlineTypeText);
       const propsId = j.identifier("props");
       const componentId = j.identifier("Component");
       const classNameId = j.identifier("className");
@@ -1138,6 +1136,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         restId: restId ?? undefined,
       });
       const usePropsChildrenDirectly = emitter.isChildrenOnlyDestructurePattern(patternProps);
+      const propsParam = usePropsChildrenDirectly
+        ? emitter.buildChildrenOnlyParam(inlineTypeText ?? emitter.propsTypeNameFor(d.localName))
+        : j.identifier("props");
+      if (!usePropsChildrenDirectly) {
+        emitter.annotatePropsParam(propsParam, d.localName, inlineTypeText);
+      }
       const declStmt = usePropsChildrenDirectly
         ? null
         : j.variableDeclaration("const", [
@@ -1200,9 +1204,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         tagName: useAsProp ? "Component" : tagName,
         attrs: openingAttrs,
         includeChildren,
-        childrenExpr: usePropsChildrenDirectly
-          ? j.memberExpression(propsId, j.identifier("children"))
-          : childrenId,
+        childrenExpr: childrenId,
       });
 
       const bodyStmts: StatementKind[] = [];
@@ -1225,7 +1227,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           [
             emitter.buildWrapperFunction({
               localName: d.localName,
-              params: [propsParamId],
+              params: [propsParam],
               bodyStmts,
               typeParameters: shouldAddTypeParams
                 ? buildPolymorphicTypeParams(j, tagName)

@@ -2,8 +2,8 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { calcVars } from "./css-calc.stylex";
 
-function FlexItem(props: React.PropsWithChildren<{}>) {
-  return <div sx={styles.flexItem}>{props.children}</div>;
+function FlexItem({ children }: { children?: React.ReactNode }) {
+  return <div sx={styles.flexItem}>{children}</div>;
 }
 
 type WithCssFunctionsProps = React.PropsWithChildren<{

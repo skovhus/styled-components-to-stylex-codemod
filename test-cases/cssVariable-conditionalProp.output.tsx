@@ -21,7 +21,7 @@ function ContainerWrapper(props: ContainerWrapperProps) {
 }
 
 // A container that uses the CSS custom property with calc()
-function Container(props: React.PropsWithChildren<{}>) {
+function Container({ children }: { children?: React.ReactNode }) {
   const sx = stylex.props(styles.container);
 
   return (
@@ -32,7 +32,7 @@ function Container(props: React.PropsWithChildren<{}>) {
         width: "calc(var(--component-width) + 60px)",
       }}
     >
-      {props.children}
+      {children}
     </div>
   );
 }
