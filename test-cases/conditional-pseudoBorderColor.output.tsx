@@ -10,10 +10,7 @@ type JsonTextareaProps = { hasError?: boolean } & Omit<
 function JsonTextarea(props: JsonTextareaProps) {
   const { children, hasError, ...rest } = props;
   return (
-    <textarea
-      {...rest}
-      sx={[styles.jsonTextarea, styles.jsonTextareaBorder, hasError && styles.jsonTextareaHasError]}
-    >
+    <textarea {...rest} sx={[styles.jsonTextarea, hasError && styles.jsonTextareaHasError]}>
       {children}
     </textarea>
   );
@@ -28,20 +25,17 @@ export const App = () => (
 
 const styles = stylex.create({
   jsonTextarea: {
-    borderRadius: 6,
+    borderWidth: pixelVars.thin,
+    borderStyle: "solid",
     borderColor: {
-      default: null,
+      default: $colors.bgBorderFaint,
       ":focus": $colors.controlPrimary,
     },
+    borderRadius: 6,
     outline: {
       default: null,
       ":focus": "none",
     },
-  },
-  jsonTextareaBorder: {
-    borderWidth: pixelVars.thin,
-    borderStyle: "solid",
-    borderColor: $colors.bgBorderFaint,
   },
   jsonTextareaHasError: {
     borderColor: {
