@@ -6852,9 +6852,7 @@ export const App = () => {
 
     expect(result.code).not.toBeNull();
     expect(result.code).toMatch(/const\s*\{\s*children,\s*\.\.\.rest\s*\}\s*=\s*props;/);
-    expect(result.code).toMatch(
-      /<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/,
-    );
+    expect(result.code).toMatch(/<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
     expect(result.code).not.toMatch(/<div[^>]*\bref=\{ref\}/);
   });
 
@@ -6901,7 +6899,9 @@ export const App = () => {
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toMatch(/<Base\s+\{\.\.\.props\}\s+\{\.\.\.stylex\.props\(styles\.wrapped\)\}\s*\/>/);
+    expect(result.code).toMatch(
+      /<Base\s+\{\.\.\.props\}\s+\{\.\.\.stylex\.props\(styles\.wrapped\)\}\s*\/>/,
+    );
     expect(result.code).not.toMatch(/<Base[^>]*\bref=\{ref\}/);
   });
 
