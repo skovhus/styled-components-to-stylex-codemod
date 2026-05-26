@@ -42,6 +42,7 @@ import {
   resolveIdentifierToPropName,
   staticValueToLiteral,
 } from "../utilities/jscodeshift-utils.js";
+import { isRelativeSpecifier } from "../utilities/path-utils.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { tryHandleAnimation } from "./animation.js";
 import { tryHandleInterpolatedBorder } from "./borders.js";
@@ -3715,10 +3716,10 @@ function specifierMatchesAbsolutePath(
     return false;
   }
   const specifier = maybeSpecifier.value.replace(/\\/g, "/");
-  if (!specifier.startsWith("./")) {
+  if (!isRelativeSpecifier(specifier)) {
     return false;
   }
-  const suffix = specifier.slice(2);
+  const suffix = specifier.replace(/^(?:\.\.?\/)+/, "");
   const absolutePath = maybeAbsolute.value.replace(/\\/g, "/");
   return ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"].some((extension) =>
     absolutePath.endsWith(`/${suffix}${extension}`),

@@ -7179,6 +7179,57 @@ export const App = () => <Button>Click me</Button>;
     // Should succeed because adapter resolved the call
     expect(result.code).not.toBeNull();
   });
+
+  it("should bail when adapter returns the same helper imported via a parent-relative specifier", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsUnchangedHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterThatReturnsUnchangedHelper },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
 });
 
 describe("conditional logical OR/AND mixed operators", () => {

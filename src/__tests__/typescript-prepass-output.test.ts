@@ -134,7 +134,7 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
-  it("does not treat nested shadowed props.sx reads as wrapper sx support", () => {
+  it("bails when a local wrapped component has no style channel despite nested sx reads", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-shadowed-sx-"));
     const filePath = path.join(fixtureDir, "Panel.tsx");
     const source = [
@@ -164,8 +164,10 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("{...stylex.props(");
-      expect(after.code).not.toContain("<Panel\n      {...rest}\n      sx=");
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }
@@ -490,6 +492,43 @@ describe("TypeScript prepass output refinement", () => {
       });
 
       expect(after.warnings.map((warning) => warning.type)).not.toContain(
+        "Wrapped component does not accept className or sx for generated StyleX styles",
+      );
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("bails instead of widening local wrapped component props for generated styles", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-wrapper-bail-"));
+    const filePath = path.join(fixtureDir, "Wrapper.tsx");
+    const source = [
+      'import styled from "styled-components";',
+      "",
+      "function Base(props: { label?: string }) {",
+      "  return <button>{props.label}</button>;",
+      "}",
+      "",
+      "export const Wrapped = styled(Base)`",
+      "  color: red;",
+      "`;",
+      "",
+      'export const App = () => <Wrapped label="Save" />;',
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).toBeNull();
+      expect(after.warnings.map((warning) => warning.type)).toContain(
         "Wrapped component does not accept className or sx for generated StyleX styles",
       );
     } finally {

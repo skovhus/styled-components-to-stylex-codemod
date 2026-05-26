@@ -1,3 +1,4 @@
+// @expected-warning: Wrapped component does not accept className or sx for generated StyleX styles
 import React from "react";
 import styled from "styled-components";
 

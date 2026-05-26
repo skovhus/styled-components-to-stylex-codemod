@@ -4844,11 +4844,13 @@ function validateWrappedComponentStyleChannels(
       continue;
     }
     const importInfo = ctx.importMap?.get(baseIdent);
-    if (!importInfo) {
+    const isLocalNonStyledWrappedComponent =
+      !importInfo && isLocalFunctionComponent(ctx.root, ctx.j, baseIdent);
+    if (!importInfo && !isLocalNonStyledWrappedComponent) {
       continue;
     }
     if (
-      importInfo.source.kind === "absolutePath" &&
+      importInfo?.source.kind === "absolutePath" &&
       ctx.options.transformedFileSources?.has(toRealPath(importInfo.source.value))
     ) {
       continue;
@@ -4862,6 +4864,9 @@ function validateWrappedComponentStyleChannels(
 
     const metadata = findWrappedComponentMetadata(ctx, baseIdent);
     if (!metadata || componentAcceptsStylexClassName(metadata)) {
+      continue;
+    }
+    if (isLocalNonStyledWrappedComponent && !hasInlineObjectPropType(metadata)) {
       continue;
     }
 
@@ -4904,6 +4909,12 @@ function findWrappedComponentMetadata(
 }
 
 function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata): boolean {
+  if (metadata.propType && isIntrinsicReactPropsTypeText(metadata.propType.text)) {
+    return true;
+  }
+  if (metadata.restProps.length > 0) {
+    return true;
+  }
   if (metadata.hasIndexSignature) {
     return true;
   }
@@ -4911,6 +4922,14 @@ function componentAcceptsStylexClassName(metadata: TypeScriptComponentMetadata):
     return true;
   }
   return metadata.props.some((prop) => prop.name === "className");
+}
+
+function isIntrinsicReactPropsTypeText(typeText: string): boolean {
+  return /^React\.ComponentProps(?:WithRef|WithoutRef)?<"[^"]+">$/.test(typeText);
+}
+
+function hasInlineObjectPropType(metadata: TypeScriptComponentMetadata): boolean {
+  return metadata.propType?.text.trim().startsWith("{") === true;
 }
 
 function findSxDisallowedStyleProperty(
