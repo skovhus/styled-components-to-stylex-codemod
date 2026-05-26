@@ -2337,6 +2337,37 @@ export const App = () => (
     expect(result).toContain("panelOpacity: (");
   });
 
+  it("adds a runtime fallback for transformed observed variant buckets", () => {
+    const input = `
+import styled from "styled-components";
+
+function toGap(size: string): string {
+  return size === "lg" ? "16px" : "8px";
+}
+
+export const Stack = styled.div<{ size: string }>\`
+  gap: \${(props) => toGap(props.size)};
+  display: flex;
+\`;
+
+export const App = () => (
+  <div>
+    <Stack size="sm">Small</Stack>
+    <Stack size="lg">Large</Stack>
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-transformed-variants.tsx");
+
+    expect(result).toContain(
+      "sizeVariants[size as keyof typeof sizeVariants] ?? styles.stackSize(size)",
+    );
+    expect(result).toContain("sm: {");
+    expect(result).toContain("lg: {");
+    expect(result).toContain("styles.stackSize(size)");
+    expect(result).toContain("gap: toGap(size)");
+  });
+
   it("uses same-file transient prop values to emit observed unitless numeric identity variants without prepass", () => {
     const input = `
 import styled from "styled-components";
@@ -7227,6 +7258,57 @@ export const App = () => <Button>Click me</Button>;
 
     expect(result.code).toBeNull();
     expect(result.warnings.map((warning) => warning.type)).toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
+
+  it("should not treat different parent-relative helper imports with the same basename as the same source", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsDifferentHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../../shared/external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterThatReturnsDifferentHelper },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).not.toContain(
       "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
     );
   });

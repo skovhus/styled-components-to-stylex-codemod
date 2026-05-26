@@ -3,6 +3,7 @@
  * Core concepts: resolve dynamic values, map StyleX props, and emit wrappers.
  */
 import type { JSCodeshift } from "jscodeshift";
+import { dirname, resolve as pathResolve } from "node:path";
 import type { CssDeclarationIR, CssRuleIR } from "../css-ir.js";
 import type {
   CallResolveContext,
@@ -484,11 +485,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
     }
     if (observedValues) {
-      observedVariantFallbackFns.set(
-        jsxProp,
-        ensureObservedVariantFallbackFn(jsxProp, stylexProp, staticParts),
+      const fallbackFnKey = ensureObservedVariantFallbackFn(jsxProp, stylexProp, (param) =>
+        buildRuntimeObservedValueExpr(j, stylexProp, param, staticParts),
       );
-      markStyleValueVariantProp(jsxProp);
+      if (fallbackFnKey) {
+        observedVariantFallbackFns.set(jsxProp, fallbackFnKey);
+        markStyleValueVariantProp(jsxProp);
+      }
     }
     ensureShouldForwardPropDrop(decl, jsxProp);
     return true;
@@ -538,6 +541,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         },
       );
     }
+    const fallbackFnKey = ensureObservedVariantFallbackFn(
+      jsxProp,
+      stylexProp,
+      (param) =>
+        j.callExpression(j.identifier(valueTransform.calleeIdent), [param]) as ExpressionKind,
+    );
+    if (!fallbackFnKey) {
+      return false;
+    }
+    observedVariantFallbackFns.set(jsxProp, fallbackFnKey);
     markStyleValueVariantProp(jsxProp);
     ensureShouldForwardPropDrop(decl, jsxProp);
     return true;
@@ -575,6 +588,20 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       transformedValues.push({ propValue, cssValue });
     }
 
+    const fallbackFnKey = ensureObservedVariantFallbackFn(jsxProp, stylexProp, (param) =>
+      buildObservedExpressionFallbackValueExpr({
+        j,
+        expression,
+        jsxProp,
+        param,
+        prefix,
+        suffix,
+      }),
+    );
+    if (!fallbackFnKey) {
+      return false;
+    }
+
     for (const { propValue, cssValue } of transformedValues) {
       const propValueExpr =
         typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
@@ -585,6 +612,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         },
       );
     }
+    observedVariantFallbackFns.set(jsxProp, fallbackFnKey);
     markStyleValueVariantProp(jsxProp);
     ensureShouldForwardPropDrop(decl, jsxProp);
     return true;
@@ -598,17 +626,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const ensureObservedVariantFallbackFn = (
     jsxProp: string,
     stylexProp: string,
-    staticParts: StaticParts,
-  ): string => {
+    buildValueExpr: (param: ExpressionKind, paramName: string) => ExpressionKind | null,
+  ): string | null => {
     const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
     const fnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
     const paramName = cssPropertyToIdentifier(normalizedJsxProp || stylexProp, avoidNames);
-    const valueExpr = buildRuntimeObservedValueExpr(
-      j,
-      stylexProp,
-      j.identifier(paramName),
-      staticParts,
-    );
+    const valueExpr = buildValueExpr(j.identifier(paramName) as ExpressionKind, paramName);
+    if (!valueExpr) {
+      return null;
+    }
     const property = j.property("init", makeCssPropKey(j, stylexProp), valueExpr);
     const existing = styleFnDecls.get(fnKey);
     if (
@@ -3693,24 +3719,27 @@ function redirectsOriginalCalleeToDifferentSource(
         name.local === resolveContext.calleeImportedName,
     ),
   );
-  return Boolean(
-    matchingImport && !sourcesReferToSameImport(matchingImport.from, resolveContext.calleeSource),
-  );
+  return Boolean(matchingImport && !sourcesReferToSameImport(matchingImport.from, resolveContext));
 }
 
 function sourcesReferToSameImport(
   left: ImportSpec["from"],
-  right: CallResolveContext["calleeSource"],
+  resolveContext: CallResolveContext,
 ): boolean {
+  const right = resolveContext.calleeSource;
   if (left.value === right.value) {
     return true;
   }
-  return specifierMatchesAbsolutePath(left, right) || specifierMatchesAbsolutePath(right, left);
+  return (
+    specifierMatchesAbsolutePath(left, right, resolveContext.callSiteFilePath) ||
+    specifierMatchesAbsolutePath(right, left, resolveContext.callSiteFilePath)
+  );
 }
 
 function specifierMatchesAbsolutePath(
   maybeSpecifier: ImportSpec["from"] | CallResolveContext["calleeSource"],
   maybeAbsolute: ImportSpec["from"] | CallResolveContext["calleeSource"],
+  callSiteFilePath: string,
 ): boolean {
   if (maybeSpecifier.kind !== "specifier" || maybeAbsolute.kind !== "absolutePath") {
     return false;
@@ -3719,10 +3748,10 @@ function specifierMatchesAbsolutePath(
   if (!isRelativeSpecifier(specifier)) {
     return false;
   }
-  const suffix = specifier.replace(/^(?:\.\.?\/)+/, "");
+  const resolvedSpecifier = pathResolve(dirname(callSiteFilePath), specifier).replace(/\\/g, "/");
   const absolutePath = maybeAbsolute.value.replace(/\\/g, "/");
-  return ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"].some((extension) =>
-    absolutePath.endsWith(`/${suffix}${extension}`),
+  return ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"].some(
+    (extension) => absolutePath === `${resolvedSpecifier}${extension}`,
   );
 }
 
@@ -3790,6 +3819,30 @@ function buildRuntimeObservedValueExpr(
     ],
     [valueExpr],
   ) as ExpressionKind;
+}
+
+function buildObservedExpressionFallbackValueExpr(args: {
+  j: JSCodeshift;
+  expression: ExpressionKind;
+  jsxProp: string;
+  param: ExpressionKind;
+  prefix: string;
+  suffix: string;
+}): ExpressionKind | null {
+  const { j, expression, jsxProp, param, prefix, suffix } = args;
+  const propNames = new Set([jsxProp, jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp]);
+  let replaced = false;
+  const rewritten = mapAst(cloneAstNode(expression), (node) => {
+    if (node.type === "Identifier" && propNames.has(node.name as string)) {
+      replaced = true;
+      return cloneAstNode(param);
+    }
+    return undefined;
+  }) as ExpressionKind;
+  if (!replaced) {
+    return null;
+  }
+  return prefix || suffix ? buildTemplateWithStaticParts(j, rewritten, prefix, suffix) : rewritten;
 }
 
 function isNumberLikeTsType(tsType: unknown): boolean {
