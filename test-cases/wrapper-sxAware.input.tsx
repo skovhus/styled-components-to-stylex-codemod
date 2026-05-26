@@ -14,6 +14,8 @@ import type { BarrelWrapperSxProps } from "./lib/sx-aware-wrapper-barrel";
 import type { DefaultBarrelWrapperProps } from "./lib/sx-aware-wrapper-default-barrel";
 import type DefaultWrapperProps from "./lib/sx-aware-wrapper-default-props";
 import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-props";
+import DefaultSxButton from "./lib/sx-default-button";
+import DirectorySxButton from "./lib/sx-directory-button";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
 import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
@@ -26,6 +28,20 @@ const StyledButton = styled(SxAwareButton)`
 
 // Media-only overrides forwarded through sx must keep SxAwareButton's base default.
 const PrintButton = styled(SxAwareButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Default imports must infer the source declaration name when preserving sx defaults.
+const DefaultPrintButton = styled(DefaultSxButton)`
+  @media print {
+    display: block;
+  }
+`;
+
+// Directory imports must continue probing to index.tsx when preserving sx defaults.
+const DirectoryPrintButton = styled(DirectorySxButton)`
   @media print {
     display: block;
   }
@@ -211,6 +227,8 @@ export const App = () => (
     {/* Caller passes its own sx — must compose with the wrapper's internal sx */}
     <StyledButton sx={callerStyles.caller}>Caller sx</StyledButton>
     <PrintButton>Print display</PrintButton>
+    <DefaultPrintButton>Default export print</DefaultPrintButton>
+    <DirectoryPrintButton>Directory import print</DirectoryPrintButton>
     <StyledPrimary>Primary 1</StyledPrimary>
     <StyledPrimary>Primary 2</StyledPrimary>
     <InlinedAccent sx={callerStyles.caller}>Inlined with caller sx</InlinedAccent>

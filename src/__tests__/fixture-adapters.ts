@@ -38,7 +38,10 @@ export const fixtureAdapter = defineAdapter({
   markerFile: () => ({ kind: "specifier", value: "./markers.stylex" }),
 
   wrappedComponentInterface(ctx) {
-    if (ctx.importSource.includes("sx-dynamic-flex")) {
+    if (
+      ctx.importSource.includes("sx-dynamic-flex") ||
+      ctx.importSource.includes("sx-directory-button")
+    ) {
       return { acceptsSx: true };
     }
     return undefined;

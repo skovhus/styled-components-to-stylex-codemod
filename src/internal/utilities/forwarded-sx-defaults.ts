@@ -193,7 +193,7 @@ function readSourceFile(ctx: TransformContext, absolutePath: string): string | n
       try {
         return readFileSync(candidate, "utf8");
       } catch {
-        return null;
+        continue;
       }
     }
   }
@@ -201,7 +201,17 @@ function readSourceFile(ctx: TransformContext, absolutePath: string): string | n
 }
 
 function sourcePathCandidates(absolutePath: string): string[] {
-  return ["", ".tsx", ".ts", ".jsx", ".js"].map((ext) => absolutePath + ext);
+  return [
+    "",
+    ".tsx",
+    ".ts",
+    ".jsx",
+    ".js",
+    "/index.tsx",
+    "/index.ts",
+    "/index.jsx",
+    "/index.js",
+  ].map((ext) => absolutePath + ext);
 }
 
 function parseSource(jscodeshift: API["jscodeshift"], source: string): { ast: unknown } | null {
@@ -339,6 +349,23 @@ function findComponentFunction(ast: unknown, componentNames: readonly string[]):
   let found: AstRecord | null = null;
   walk(ast, (node) => {
     if (found) {
+      return;
+    }
+    if (node.type === "ExportDefaultDeclaration") {
+      const declaration = node.declaration;
+      if (isFunctionLike(declaration)) {
+        const declarationId = declaration.id;
+        if (
+          names.has("default") ||
+          (isIdentifier(declarationId) && names.has(declarationId.name))
+        ) {
+          found = declaration;
+        }
+        return;
+      }
+      if (isIdentifier(declaration)) {
+        names.add(declaration.name);
+      }
       return;
     }
     if (node.type === "FunctionDeclaration" && isIdentifier(node.id) && names.has(node.id.name)) {
