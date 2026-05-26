@@ -7339,6 +7339,68 @@ export const App = () => <Button>Click me</Button>;
     );
   });
 
+  it("should bail when adapter returns the same helper imported through a directory index", () => {
+    const source = `
+import styled from "styled-components";
+import { getPrimaryStyles } from "../external-helpers";
+
+const Button = styled.button\`
+  padding: 8px 16px;
+  \${getPrimaryStyles()}
+\`;
+
+export const App = () => <Button>Click me</Button>;
+`;
+
+    const adapterThatReturnsUnchangedHelper = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false } as const;
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall() {
+        return {
+          usage: "props" as const,
+          expr: "getPrimaryStyles()",
+          imports: [
+            {
+              from: { kind: "specifier" as const, value: "../external-helpers" },
+              names: [{ imported: "getPrimaryStyles" }],
+            },
+          ],
+        };
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "/workspace/src/components/imported-helper-call.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: adapterThatReturnsUnchangedHelper,
+        resolveModule(fromFile, specifier) {
+          if (
+            fromFile === "/workspace/src/components/imported-helper-call.tsx" &&
+            specifier === "../external-helpers"
+          ) {
+            return "/workspace/src/external-helpers/index.ts";
+          }
+          return undefined;
+        },
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((warning) => warning.type)).toContain(
+      "Adapter resolved an imported helper call as StyleX styles without replacing the RuleSet helper",
+    );
+  });
+
   it("should not treat different parent-relative helper imports with the same basename as the same source", () => {
     const source = `
 import styled from "styled-components";
@@ -12446,6 +12508,30 @@ export const App = () => <Box $width={320}>content</Box>;
 
     expect(result.code).toContain('import { testVariables } from "./test.stylex"');
     expect(result.code).toContain('[testVariables["--panel-width"]]');
+    expect(result.sidecarFiles?.[0]?.content).toContain("export const testVariables");
+    expect(result.sidecarFiles?.[0]?.content).toContain('"--panel-width": "200px"');
+  });
+
+  it("should emit defineVars sidecars for inline-only local custom property reads", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  --panel-width: 200px;
+  width: var(--panel-width, 200px);
+\`;
+
+export const App = () => <Box>content</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toContain('import { testVariables } from "./test.stylex"');
+    expect(result.code).toContain('width: testVariables["--panel-width"]');
     expect(result.sidecarFiles?.[0]?.content).toContain("export const testVariables");
     expect(result.sidecarFiles?.[0]?.content).toContain('"--panel-width": "200px"');
   });

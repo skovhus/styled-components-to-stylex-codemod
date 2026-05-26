@@ -624,7 +624,10 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   emitLocalDefineVarsSidecars(ctx, [
     ...nonEmptyStyleEntries.map(([, value]) => value),
     ...styledDecls.flatMap((decl) =>
-      (decl.inlineStyleProps ?? []).flatMap((prop) => (prop.keyExpr ? [prop.keyExpr] : [])),
+      (decl.inlineStyleProps ?? []).flatMap((prop) => [
+        prop.expr,
+        ...(prop.keyExpr ? [prop.keyExpr] : []),
+      ]),
     ),
   ]);
   const programBody = root.get().node.program.body as any[];

@@ -3777,9 +3777,15 @@ function specifierMatchesAbsolutePath(
   }
   const resolvedSpecifier = pathResolve(dirname(callSiteFilePath), specifier).replace(/\\/g, "/");
   const absolutePath = maybeAbsolute.value.replace(/\\/g, "/");
-  return ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"].some(
-    (extension) => absolutePath === `${resolvedSpecifier}${extension}`,
-  );
+  return importPathCandidates(resolvedSpecifier).some((candidate) => absolutePath === candidate);
+}
+
+function importPathCandidates(resolvedSpecifier: string): string[] {
+  const extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".cts", ".cjs"];
+  return extensions.flatMap((extension) => [
+    `${resolvedSpecifier}${extension}`,
+    `${resolvedSpecifier}/index${extension}`,
+  ]);
 }
 
 function isCallExpressionLike(node: unknown): node is { type: "CallExpression"; callee: unknown } {
