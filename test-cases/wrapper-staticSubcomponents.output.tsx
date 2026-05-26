@@ -23,12 +23,21 @@ const SelectOption = (props: React.PropsWithChildren<{ value: string }>) => (
 );
 const SelectSeparator = () => <hr />;
 
-export const Select = Object.assign(SelectBase, {
-  Group: SelectGroup,
+const selectOptionStatics = {
   Option: SelectOption,
-  Separator: SelectSeparator,
   "sub-component": SelectSeparator,
-});
+};
+
+export const Select = Object.assign(
+  SelectBase,
+  {
+    Group: SelectGroup,
+  },
+  selectOptionStatics,
+  {
+    Separator: SelectSeparator,
+  },
+);
 
 function WideSelect(
   props: Omit<React.ComponentPropsWithRef<typeof Select>, "className" | "style">,
@@ -38,8 +47,8 @@ function WideSelect(
 
 WideSelect.Group = (Select as any).Group;
 WideSelect.Option = (Select as any).Option;
-WideSelect.Separator = (Select as any).Separator;
 (WideSelect as any)["sub-component"] = (Select as any)["sub-component"];
+WideSelect.Separator = (Select as any).Separator;
 
 function BaseWideSelect(
   props: Omit<React.ComponentPropsWithRef<typeof SelectBase>, "className" | "style">,
@@ -49,8 +58,8 @@ function BaseWideSelect(
 
 BaseWideSelect.Group = (SelectBase as any).Group;
 BaseWideSelect.Option = (SelectBase as any).Option;
-BaseWideSelect.Separator = (SelectBase as any).Separator;
 (BaseWideSelect as any)["sub-component"] = (SelectBase as any)["sub-component"];
+BaseWideSelect.Separator = (SelectBase as any).Separator;
 
 export const App = () => (
   <>

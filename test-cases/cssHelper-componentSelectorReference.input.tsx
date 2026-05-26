@@ -23,8 +23,11 @@ export const glowOverridesCss = css`
   ${ChildA} {
     opacity: 1;
   }
-  ${ChildB} {
+  ${ChildA}, ${ChildB} {
     opacity: 0.5;
+  }
+  ${ChildA} + & {
+    border-color: red;
   }
 `;
 

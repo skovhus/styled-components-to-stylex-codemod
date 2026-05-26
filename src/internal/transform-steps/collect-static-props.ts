@@ -9,6 +9,10 @@ import { TransformContext } from "../transform-context.js";
 import { getEffectiveBaseIdent } from "../utilities/delegation-utils.js";
 
 type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
+type ObjectExpressionLike = {
+  type: "ObjectExpression";
+  properties?: unknown[];
+};
 
 /**
  * Collects static property assignments and generates inheritance statements.
@@ -29,6 +33,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   const staticPropertyAssignments = new Map<string, any[]>();
   const staticPropertyNames = new Map<string, string[]>(); // componentName -> [propName, ...]
   const styledNames = new Set(styledDecls.map((d) => d.localName));
+  const objectExpressionByName = collectObjectExpressionVariables(root, j);
 
   // Also track base components of styled components (they may have static properties to inherit)
   const baseComponentNames = new Set<string>();
@@ -103,7 +108,6 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
         ? parent.id.name
         : null;
     const target = path.node.arguments?.[0];
-    const statics = path.node.arguments?.[1];
     if (target?.type !== "Identifier") {
       return;
     }
@@ -113,14 +117,17 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     if (componentNames.length === 0) {
       return;
     }
-    if (statics?.type !== "ObjectExpression") {
-      return;
-    }
     for (const componentName of componentNames) {
-      for (const prop of statics.properties ?? []) {
-        const propName = getStaticPropertyNameFromObjectProperty(prop);
-        if (propName) {
-          addStaticPropertyName(staticPropertyNames, componentName, propName);
+      for (const source of path.node.arguments.slice(1)) {
+        const statics = getObjectAssignStaticSource(source, objectExpressionByName);
+        if (!statics) {
+          continue;
+        }
+        for (const prop of statics.properties ?? []) {
+          const propName = getStaticPropertyNameFromObjectProperty(prop);
+          if (propName) {
+            addStaticPropertyName(staticPropertyNames, componentName, propName);
+          }
         }
       }
     }
@@ -246,6 +253,32 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   ctx.staticPropertyNames = staticPropertyNames;
 
   return CONTINUE;
+}
+
+function collectObjectExpressionVariables(
+  root: any,
+  j: TransformContext["j"],
+): Map<string, ObjectExpressionLike> {
+  const objectExpressionByName = new Map<string, ObjectExpressionLike>();
+  root.find(j.VariableDeclarator).forEach((path: any) => {
+    if (path.node.id?.type === "Identifier" && path.node.init?.type === "ObjectExpression") {
+      objectExpressionByName.set(path.node.id.name, path.node.init);
+    }
+  });
+  return objectExpressionByName;
+}
+
+function getObjectAssignStaticSource(
+  source: { type?: string; name?: string },
+  objectExpressionByName: Map<string, ObjectExpressionLike>,
+): ObjectExpressionLike | null {
+  if (source?.type === "ObjectExpression") {
+    return source as ObjectExpressionLike;
+  }
+  if (source?.type === "Identifier" && source.name) {
+    return objectExpressionByName.get(source.name) ?? null;
+  }
+  return null;
 }
 
 function addStaticPropertyName(

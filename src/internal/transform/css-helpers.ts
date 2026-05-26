@@ -666,15 +666,10 @@ function templateReferencesStyledComponentSelector(
     if (expr.type !== "Identifier" || !expr.name || !styledLocalNames.has(expr.name)) {
       continue;
     }
-    const before = parsed.rawCss.slice(0, slot.startOffset);
     const after = parsed.rawCss.slice(slot.endOffset);
-    const previousBoundary = Math.max(before.lastIndexOf("{"), before.lastIndexOf(";"));
-    const selectorPrefix = before.slice(previousBoundary + 1).trim();
-    const selectorSuffix = after.split("{", 1)[0]?.trim() ?? "";
-    if (!selectorPrefix && after.trimStart().startsWith("{")) {
-      return true;
-    }
-    if (!selectorPrefix && selectorSuffix.startsWith(":")) {
+    const nextBlockStart = after.indexOf("{");
+    const nextDeclarationEnd = after.indexOf(";");
+    if (nextBlockStart >= 0 && (nextDeclarationEnd < 0 || nextBlockStart < nextDeclarationEnd)) {
       return true;
     }
   }

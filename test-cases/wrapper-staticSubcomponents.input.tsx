@@ -23,12 +23,21 @@ const SelectOption = (props: React.PropsWithChildren<{ value: string }>) => (
 );
 const SelectSeparator = () => <hr />;
 
-export const Select = Object.assign(SelectBase, {
-  Group: SelectGroup,
+const selectOptionStatics = {
   Option: SelectOption,
-  Separator: SelectSeparator,
   "sub-component": SelectSeparator,
-});
+};
+
+export const Select = Object.assign(
+  SelectBase,
+  {
+    Group: SelectGroup,
+  },
+  selectOptionStatics,
+  {
+    Separator: SelectSeparator,
+  },
+);
 
 const WideSelect = styled(Select)`
   width: 200px;
