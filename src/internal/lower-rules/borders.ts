@@ -32,6 +32,7 @@ type BorderHandlerContext = Pick<
   | "hasLocalThemeBinding"
 > & {
   decl: StyledDecl;
+  extraStyleObjects: Map<string, Record<string, unknown>>;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   inlineStyleProps: Array<{ prop: string; expr: unknown }>;
@@ -60,6 +61,7 @@ export function tryHandleInterpolatedBorder(
     j,
     filePath,
     decl,
+    extraStyleObjects,
     resolveValue,
     resolveCall,
     importMap,
@@ -578,13 +580,39 @@ export function tryHandleInterpolatedBorder(
       if (!hasStaticWidthOrStyle) {
         const parsedTpl = parseTemplateLiteralBorderShorthand(resolved.exprAst);
         if (parsedTpl) {
+          const expandedBorderEntries: Array<[string, unknown]> = [];
           if (parsedTpl.width) {
-            applyResolvedPropValue(widthProp, parsedTpl.width);
+            expandedBorderEntries.push([widthProp, parsedTpl.width]);
           }
           if (parsedTpl.style) {
-            applyResolvedPropValue(styleProp, parsedTpl.style);
+            expandedBorderEntries.push([styleProp, parsedTpl.style]);
           }
-          applyResolvedPropValue(colorProp, parsedTpl.colorExpr);
+          expandedBorderEntries.push([colorProp, parsedTpl.colorExpr]);
+
+          if (
+            selector.trim() === "&" &&
+            (atRuleStack ?? []).length === 0 &&
+            hasConflictingEarlierVariant(Array.from(variantBuckets.values()), expandedBorderEntries)
+          ) {
+            const fullProp = direction ? `border${direction}` : "border";
+            const extraKey = styleKeyWithSuffix(decl.styleKey, fullProp);
+            const bucket = extraStyleObjects.get(extraKey) ?? {};
+            for (const [entryProp, entryValue] of expandedBorderEntries) {
+              bucket[entryProp] = entryValue;
+            }
+            extraStyleObjects.set(extraKey, bucket);
+
+            decl.extraStylexPropsArgs ??= [];
+            decl.extraStylexPropsArgs.push({
+              expr: j.memberExpression(j.identifier("styles"), j.identifier(extraKey)),
+              afterVariants: true,
+            });
+            decl.needsWrapperComponent = true;
+          } else {
+            for (const [entryProp, entryValue] of expandedBorderEntries) {
+              applyResolvedPropValue(entryProp, entryValue);
+            }
+          }
           // Import insertion currently always happens right after the stylex import, which means
           // later inserts appear above earlier inserts. For this pattern, we want helper imports
           // (e.g. `borders`) to appear above theme token imports (e.g. `$colors`), matching
@@ -717,4 +745,41 @@ function classifyBorderSlotRole(ast: unknown): "width" | "color" | null {
     return looksLikeLength(node.value) ? "width" : "color";
   }
   return null;
+}
+
+function hasConflictingEarlierVariant(
+  variantBuckets: Array<Record<string, unknown>>,
+  borderEntries: Array<[string, unknown]>,
+): boolean {
+  const borderProps = borderEntries.map(([prop]) => prop);
+  return variantBuckets.some((bucket) =>
+    Object.keys(bucket).some((variantProp) =>
+      borderProps.some((borderProp) => borderLonghandsConflict(variantProp, borderProp)),
+    ),
+  );
+}
+
+function borderLonghandsConflict(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  const leftParts = parseBorderLonghand(left);
+  const rightParts = parseBorderLonghand(right);
+  if (!leftParts || !rightParts || leftParts.aspect !== rightParts.aspect) {
+    return false;
+  }
+  return leftParts.side === null || rightParts.side === null || leftParts.side === rightParts.side;
+}
+
+function parseBorderLonghand(prop: string): {
+  side: "Top" | "Right" | "Bottom" | "Left" | null;
+  aspect: "Width" | "Style" | "Color";
+} | null {
+  const match = prop.match(/^border(?:(Top|Right|Bottom|Left))?(Width|Style|Color)$/);
+  if (!match) {
+    return null;
+  }
+  const side = (match[1] ?? null) as "Top" | "Right" | "Bottom" | "Left" | null;
+  const aspect = match[2] as "Width" | "Style" | "Color";
+  return { side, aspect };
 }

@@ -876,6 +876,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           j,
           filePath,
           decl,
+          extraStyleObjects,
           hasLocalThemeBinding,
           resolveValue,
           resolveCall,

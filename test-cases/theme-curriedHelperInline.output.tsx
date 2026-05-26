@@ -9,7 +9,11 @@ type BoxProps = { position: "top" | "bottom" } & Omit<
 
 function Box(props: BoxProps) {
   const { children, position } = props;
-  return <div sx={[styles.box, position === "top" && styles.boxPositionTop]}>{children}</div>;
+  return (
+    <div sx={[styles.box, position === "top" && styles.boxPositionTop, styles.boxBorderBottom]}>
+      {children}
+    </div>
+  );
 }
 
 export const App = () => (
@@ -24,6 +28,8 @@ const styles = stylex.create({
   box: {
     padding: 8,
     borderStyle: "none",
+  },
+  boxBorderBottom: {
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgSub,
