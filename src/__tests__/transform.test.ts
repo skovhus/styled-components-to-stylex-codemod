@@ -3180,6 +3180,38 @@ export default Button;
     );
   });
 
+  it("checks default export specifier support before enabled normalization", () => {
+    const input = `
+import styled from "styled-components";
+
+const Button = styled.button\`
+  padding: 8px 12px;
+  background-color: white;
+
+  &:enabled:hover {
+    background-color: #dbeafe;
+  }
+\`;
+
+export { Button as default };
+`;
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      externalInterface(ctx) {
+        return { styles: false, as: ctx.isDefaultExport, ref: false };
+      },
+    };
+    const diagnostics = runTransformWithDiagnostics(
+      input,
+      { adapter },
+      "external-default-specifier-as.tsx",
+    );
+
+    expect(diagnostics.warnings.map((warning) => warning.type)).toContain(
+      "Unsupported selector: compound pseudo selector",
+    );
+  });
+
   it("does not treat shadowed JSX aliases as enabled selector usages", () => {
     const input = `
 import styled from "styled-components";

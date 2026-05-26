@@ -2400,9 +2400,10 @@ function collectDirectExportInfosForLocal(
       ) {
         continue;
       }
+      const exportName = staticPropertyKeyName(specifier.exported) ?? localName;
       infos.push({
-        exportName: staticPropertyKeyName(specifier.exported) ?? localName,
-        isDefault: false,
+        exportName,
+        isDefault: exportName === "default",
       });
     }
   });
