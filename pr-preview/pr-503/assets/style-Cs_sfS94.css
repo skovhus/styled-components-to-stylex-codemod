@@ -1452,6 +1452,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   padding-block: 2rem;
 }
 
+.xf4egzd:not(#\#):not(#\#) {
+  padding-block: 3px;
+}
+
 .x12ulsxz:not(#\#):not(#\#) {
   padding-block: 4px;
 }
