@@ -514,7 +514,7 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
   if (hasAnyJsxAttribute(root, j, decl.localName, CLASS_OR_STYLE_ATTRS)) {
     return false;
   }
-  if (hasAttrsAsOverride(decl.attrsInfo) || hasUnsupportedAttrsForInlineComponent(decl.attrsInfo)) {
+  if (hasAttrsAsOverride(decl.attrsInfo) || hasAttrsPayload(decl.attrsInfo)) {
     return false;
   }
   if (
@@ -535,16 +535,24 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
   ) {
     return false;
   }
-  return wrappedComponentInterfaceFor(ctx, decl.base.ident)?.acceptsSx === true;
+  const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
+  return (
+    componentInterface?.acceptsSx === true &&
+    (componentInterface.sxExcludedProperties?.length ?? 0) === 0 &&
+    componentInterface.sxAllowedProperties === undefined
+  );
 }
 
-function hasUnsupportedAttrsForInlineComponent(attrsInfo: StyledDecl["attrsInfo"]): boolean {
+function hasAttrsPayload(attrsInfo: StyledDecl["attrsInfo"]): boolean {
   return !!(
+    Object.keys(attrsInfo?.staticAttrs ?? {}).length > 0 ||
     (attrsInfo?.conditionalAttrs?.length ?? 0) > 0 ||
     (attrsInfo?.defaultAttrs?.length ?? 0) > 0 ||
     (attrsInfo?.dynamicAttrs?.length ?? 0) > 0 ||
     (attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0 ||
-    attrsInfo?.attrsStaticStyleExpr
+    Object.keys(attrsInfo?.attrsStaticStyles ?? {}).length > 0 ||
+    attrsInfo?.attrsStaticStyleExpr ||
+    (attrsInfo?.attrsDynamicStyles?.length ?? 0) > 0
   );
 }
 

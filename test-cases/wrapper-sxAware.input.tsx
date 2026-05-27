@@ -6,7 +6,7 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import styled, { css } from "styled-components";
-import { draggableRegion, flexCenter } from "./lib/helpers";
+import { draggableRegion } from "./lib/helpers";
 import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
 import type * as WrapperTypes from "./lib/sx-aware-imported-types";
@@ -17,7 +17,6 @@ import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-
 import DefaultSxButton from "./lib/sx-default-button";
 import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
 import DirectorySxButton from "./lib/sx-directory-button";
-import { DynamicFlex } from "./lib/sx-dynamic-flex";
 import { NestedSxBox } from "./lib/sx-branchy-box";
 // Generic component whose props type intersects an aliased object literal
 // containing `sx?:` — exercises type-alias resolution + intersection walking.
@@ -240,16 +239,6 @@ const OmitSxWrapper = styled(InterfaceBase)<OmitSxWrapperProps>`
   color: #581c87;
 `;
 
-// Single call site wrapping an sx-aware component with regular props and an
-// imported StyleX mixin should inline to <DynamicFlex sx={[...]}>.
-const TombstoneContainer = styled(DynamicFlex)`
-  grid-area: br;
-  background-color: #e0f2fe;
-  border-radius: 4px;
-  padding: 16px;
-  ${flexCenter()}
-`;
-
 const callerStyles = stylex.create({
   caller: { textDecorationLine: "underline" },
 });
@@ -311,9 +300,6 @@ export const App = () => (
     </LocalDefaultTypeWrapper>
     <ExplicitWrapper sx={callerStyles.caller}>Explicit wrapper</ExplicitWrapper>
     <OmitSxWrapper>Omit sx wrapper</OmitSxWrapper>
-    <TombstoneContainer justify="center" align="center" gap={16}>
-      Tombstone flex
-    </TombstoneContainer>
     <div style={identifierRowStyle}>
       <Identifier color="labelMuted">ABC-123</Identifier>
       <span>Item title</span>

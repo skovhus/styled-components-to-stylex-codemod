@@ -10,18 +10,20 @@ export type DynamicFlexProps = React.ComponentPropsWithRef<"div"> & {
 };
 
 export function DynamicFlex(props: DynamicFlexProps) {
-  const { align, gap, inline, justify, sx, children, ...rest } = props;
+  const { align, className, gap, inline, justify, style, sx, children, ...rest } = props;
+  const stylexProps = stylex.props(
+    styles.flex,
+    inline && styles.flexInline,
+    align != null && styles.align(align),
+    justify != null && styles.justify(justify),
+    gap != null && styles.gap(gap),
+    sx,
+  );
   return (
     <div
       {...rest}
-      sx={[
-        styles.flex,
-        inline && styles.flexInline,
-        align != null && styles.align(align),
-        justify != null && styles.justify(justify),
-        gap != null && styles.gap(gap),
-        sx,
-      ]}
+      className={[stylexProps.className, className].filter(Boolean).join(" ")}
+      style={{ ...stylexProps.style, ...style }}
     >
       {children}
     </div>
@@ -31,7 +33,6 @@ export function DynamicFlex(props: DynamicFlexProps) {
 const styles = stylex.create({
   flex: {
     display: "flex",
-    padding: 8,
   },
   flexInline: {
     display: "inline-flex",

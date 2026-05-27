@@ -5,7 +5,6 @@
 // wrapped component.
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
-import { helpers } from "./lib/helpers.stylex";
 import electronStyles from "./lib/electronMixins.module.css";
 import { SxAwareButton } from "./lib/sx-aware-component";
 import type { ImportedFlexProps, ImportedWrapperSxProps } from "./lib/sx-aware-imported-types";
@@ -17,7 +16,6 @@ import type LocalDefaultWrapperProps from "./lib/sx-aware-wrapper-local-default-
 import DefaultSxButton from "./lib/sx-default-button";
 import DefaultIdentifierSxButton from "./lib/sx-default-identifier-button";
 import DirectorySxButton from "./lib/sx-directory-button";
-import { DynamicFlex } from "./lib/sx-dynamic-flex";
 import { NestedSxBox } from "./lib/sx-branchy-box";
 
 // Generic component whose props type intersects an aliased object literal
@@ -288,12 +286,6 @@ const callerStyles = stylex.create({
   omitSxWrapper: {
     color: "#581c87",
   },
-  tombstoneContainer: {
-    gridArea: "br",
-    backgroundColor: "#e0f2fe",
-    borderRadius: 4,
-    padding: 16,
-  },
 });
 
 const identifierRowStyle = {
@@ -401,14 +393,6 @@ export const App = () => (
     <SxAwareButton sx={[callerStyles.interfaceBase, callerStyles.omitSxWrapper]}>
       Omit sx wrapper
     </SxAwareButton>
-    <DynamicFlex
-      justify="center"
-      align="center"
-      gap={16}
-      sx={[callerStyles.tombstoneContainer, helpers.flexCenter]}
-    >
-      Tombstone flex
-    </DynamicFlex>
     <div style={identifierRowStyle}>
       <Text color="labelMuted" sx={callerStyles.identifier}>
         ABC-123
