@@ -13,6 +13,7 @@ import {
   needsShouldForwardPropWrapper,
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
+import { getRootJsxIdentifierName } from "../utilities/jscodeshift-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 
@@ -512,6 +513,9 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
   if (countComponentJsxUsages(root, j, decl.localName) !== INLINE_USAGE_THRESHOLD) {
     return false;
   }
+  if (hasJsxNamespaceUsage(root, j, decl.localName)) {
+    return false;
+  }
   if (hasSpreadInJsx(root, j, decl.localName)) {
     return false;
   }
@@ -567,6 +571,20 @@ function hasOnlyForwardedAsPolymorphicUsage(
     hasAnyJsxAttribute(root, j, decl.localName, FORWARDED_AS_ATTR) &&
     !hasAnyJsxAttribute(root, j, decl.localName, AS_ATTR)
   );
+}
+
+function hasJsxNamespaceUsage(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  localName: string,
+): boolean {
+  let found = false;
+  root.find(j.JSXMemberExpression).forEach((p) => {
+    if (getRootJsxIdentifierName(p.node) === localName) {
+      found = true;
+    }
+  });
+  return found;
 }
 
 function hasAnyJsxAttribute(
