@@ -2,10 +2,17 @@
  * Step: collect static property assignments on styled components.
  * Core concepts: static metadata capture and inheritance generation.
  */
+import type { JSCodeshift } from "jscodeshift";
 import { CONTINUE, getActiveStyledDecls, type StepResult } from "../transform-types.js";
 import type { StyledDecl } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { getEffectiveBaseIdent } from "../utilities/delegation-utils.js";
+
+type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
+type ObjectExpressionLike = {
+  type: "ObjectExpression";
+  properties?: unknown[];
+};
 
 /**
  * Collects static property assignments and generates inheritance statements.
@@ -26,6 +33,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   const staticPropertyAssignments = new Map<string, any[]>();
   const staticPropertyNames = new Map<string, string[]>(); // componentName -> [propName, ...]
   const styledNames = new Set(styledDecls.map((d) => d.localName));
+  const objectExpressionByName = collectObjectExpressionVariables(root, j);
 
   // Also track base components of styled components (they may have static properties to inherit)
   const baseComponentNames = new Set<string>();
@@ -57,13 +65,11 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     .forEach((p) => {
       const expr = p.node.expression as any;
       const componentName = expr.left.object.name as string;
-      const propName = expr.left.property?.name ?? expr.left.property?.value;
+      const propName = getStaticPropertyNameFromMemberExpression(expr.left);
 
       // Track property names for inheritance generation
       if (propName) {
-        const names = staticPropertyNames.get(componentName) ?? [];
-        names.push(propName);
-        staticPropertyNames.set(componentName, names);
+        addStaticPropertyName(staticPropertyNames, componentName, propName);
       }
 
       // For non-styled base components, only track properties for inheritance (don't remove or reposition)
@@ -84,6 +90,48 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       // Remove from current position
       j(p).remove();
     });
+
+  root.find(j.CallExpression).forEach((path: any) => {
+    const callee = path.node.callee;
+    if (
+      callee?.type !== "MemberExpression" ||
+      callee.object?.type !== "Identifier" ||
+      callee.object.name !== "Object" ||
+      callee.property?.type !== "Identifier" ||
+      callee.property.name !== "assign"
+    ) {
+      return;
+    }
+    const parent = path.parentPath?.node;
+    const assignedName =
+      parent?.type === "VariableDeclarator" && parent.id?.type === "Identifier"
+        ? parent.id.name
+        : null;
+    const target = path.node.arguments?.[0];
+    if (target?.type !== "Identifier") {
+      return;
+    }
+    const componentNames = [target.name, ...(assignedName ? [assignedName] : [])].filter(
+      (name, index, names) => names.indexOf(name) === index && baseComponentNames.has(name),
+    );
+    if (componentNames.length === 0) {
+      return;
+    }
+    for (const componentName of componentNames) {
+      for (const source of path.node.arguments.slice(1)) {
+        const statics = getObjectAssignStaticSource(source, objectExpressionByName);
+        if (!statics) {
+          continue;
+        }
+        for (const prop of statics.properties ?? []) {
+          const propName = getStaticPropertyNameFromObjectProperty(prop);
+          if (propName) {
+            addStaticPropertyName(staticPropertyNames, componentName, propName);
+          }
+        }
+      }
+    }
+  });
 
   // Generate static property inheritance for extended components
   // e.g., ExtendedButton.HEIGHT = BaseButton.HEIGHT
@@ -113,21 +161,11 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    const inheritanceStatements: any[] = [];
+    const inheritanceStatements: StatementKind[] = [];
     for (const propName of baseProps) {
-      // Accessing arbitrary static properties on a function component is legal at runtime,
-      // but TypeScript doesn't know about ad-hoc statics. Cast the base to `any` to keep
-      // generated outputs typecheck-friendly.
-      const rhs = ctx.j(`const __x = (${baseComponentName} as any).${propName};`).get().node.program
-        .body[0].declarations[0].init;
-      const stmt = ctx.j.expressionStatement(
-        ctx.j.assignmentExpression(
-          "=",
-          ctx.j.memberExpression(ctx.j.identifier(decl.localName), ctx.j.identifier(propName)),
-          rhs as any,
-        ),
+      inheritanceStatements.push(
+        buildStaticInheritanceStatement(ctx.j, decl.localName, baseComponentName, propName),
       );
-      inheritanceStatements.push(stmt);
     }
 
     if (inheritanceStatements.length > 0) {
@@ -192,7 +230,7 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
     }
 
     // Generate inheritance statements for each accessed property
-    const inheritanceStatements: any[] = [];
+    const inheritanceStatements: StatementKind[] = [];
     for (const propName of accessedProps) {
       const stmt = j.expressionStatement(
         j.assignmentExpression(
@@ -215,4 +253,100 @@ export function collectStaticPropsStep(ctx: TransformContext): StepResult {
   ctx.staticPropertyNames = staticPropertyNames;
 
   return CONTINUE;
+}
+
+function collectObjectExpressionVariables(
+  root: any,
+  j: TransformContext["j"],
+): Map<string, ObjectExpressionLike> {
+  const objectExpressionByName = new Map<string, ObjectExpressionLike>();
+  root.find(j.VariableDeclarator).forEach((path: any) => {
+    if (path.node.id?.type === "Identifier" && path.node.init?.type === "ObjectExpression") {
+      objectExpressionByName.set(path.node.id.name, path.node.init);
+    }
+  });
+  return objectExpressionByName;
+}
+
+function getObjectAssignStaticSource(
+  source: { type?: string; name?: string },
+  objectExpressionByName: Map<string, ObjectExpressionLike>,
+): ObjectExpressionLike | null {
+  if (source?.type === "ObjectExpression") {
+    return source as ObjectExpressionLike;
+  }
+  if (source?.type === "Identifier" && source.name) {
+    return objectExpressionByName.get(source.name) ?? null;
+  }
+  return null;
+}
+
+function addStaticPropertyName(
+  staticPropertyNames: Map<string, string[]>,
+  componentName: string,
+  propName: string,
+): void {
+  const names = staticPropertyNames.get(componentName) ?? [];
+  if (!names.includes(propName)) {
+    names.push(propName);
+    staticPropertyNames.set(componentName, names);
+  }
+}
+
+function getStaticPropertyNameFromMemberExpression(memberExpression: {
+  computed?: boolean;
+  property?: { type?: string; name?: string; value?: unknown };
+}): string | null {
+  const property = memberExpression.property;
+  if (!memberExpression.computed && property?.type === "Identifier") {
+    return property.name ?? null;
+  }
+  if (
+    (property?.type === "Literal" || property?.type === "StringLiteral") &&
+    typeof property.value === "string"
+  ) {
+    return property.value;
+  }
+  return null;
+}
+
+function getStaticPropertyNameFromObjectProperty(prop: unknown): string | null {
+  if (!prop || typeof prop !== "object") {
+    return null;
+  }
+  const property = prop as {
+    type?: string;
+    computed?: boolean;
+    key?: { type?: string; name?: string; value?: unknown };
+  };
+  if (property.type === "SpreadElement" || property.type === "SpreadProperty") {
+    return null;
+  }
+  const key = property.key;
+  if (!property.computed && key?.type === "Identifier") {
+    return key.name ?? null;
+  }
+  if ((key?.type === "Literal" || key?.type === "StringLiteral") && typeof key.value === "string") {
+    return key.value;
+  }
+  return null;
+}
+
+function buildStaticInheritanceStatement(
+  j: TransformContext["j"],
+  componentName: string,
+  baseComponentName: string,
+  propName: string,
+): StatementKind {
+  const target = isIdentifierPropertyName(propName)
+    ? `${componentName}.${propName}`
+    : `(${componentName} as any)[${JSON.stringify(propName)}]`;
+  const source = isIdentifierPropertyName(propName)
+    ? `(${baseComponentName} as any).${propName}`
+    : `(${baseComponentName} as any)[${JSON.stringify(propName)}]`;
+  return j(`${target} = ${source};`).get().node.program.body[0];
+}
+
+function isIdentifierPropertyName(propName: string): boolean {
+  return /^[$A-Z_a-z][$\w]*$/.test(propName);
 }

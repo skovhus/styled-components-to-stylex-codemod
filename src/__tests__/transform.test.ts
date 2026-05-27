@@ -34,7 +34,10 @@ const BAIL_OUT_PREFIXES = ["_unsupported.", "_unimplemented."] as const;
 const CSS_IMPORT_ALLOWED_FIXTURES = new Set(["naming-inlinedComponentSelector"]);
 const KEYFRAMES_IMPORT_ALLOWED_FIXTURES = new Set(["partial-keyframesPreserveTemplateUsage"]);
 
-const PRESERVED_FIXTURES = new Set(["selector-pseudoElementConditionalValue"]);
+const PRESERVED_FIXTURES = new Set([
+  "cssHelper-componentSelectorReference",
+  "selector-pseudoElementConditionalValue",
+]);
 
 /**
  * Fixtures that intentionally test partial-file transforms: at least one styled
@@ -3123,6 +3126,42 @@ export const App = () => (
     expect(result).toContain("const titleMixin = css");
     expect(result).toContain("const Title = styled(Text)");
     expect(result).toContain("<div sx={styles.notice}>");
+  });
+
+  it("preserves exported css helpers with selectors for skipped imported roots", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const Title = styled(Text)\`
+  color: #1d4ed8;
+\`;
+
+export const titleSelectorCss = css\`
+  \${Title} {
+    font-weight: 600;
+  }
+\`;
+
+const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root selector helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toContain("export const titleSelectorCss = css");
+    expect(result).toContain("${Title}");
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("<div sx={styles.notice}>");
+    expect(result).not.toContain("titleSelectorCss:");
   });
 
   it("emits css helper styles when the helper is referenced by both a converted component and a skipped imported root", () => {

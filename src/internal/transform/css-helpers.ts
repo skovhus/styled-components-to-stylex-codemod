@@ -627,6 +627,55 @@ function findEnclosingFunction(path: any): any {
   return null;
 }
 
+function collectStyledComponentLocalNames(
+  root: any,
+  j: JSCodeshift,
+  styledLocalNames: Set<string>,
+): Set<string> {
+  const names = new Set<string>();
+  root.find(j.VariableDeclarator).forEach((path: any) => {
+    if (path.node.id?.type !== "Identifier") {
+      return;
+    }
+    const init = path.node.init;
+    if (!init) {
+      return;
+    }
+    if (init.type === "TaggedTemplateExpression" && isStyledTag(styledLocalNames, init.tag)) {
+      names.add(path.node.id.name);
+      return;
+    }
+    if (
+      init.type === "CallExpression" &&
+      init.callee?.type === "TaggedTemplateExpression" &&
+      isStyledTag(styledLocalNames, init.callee.tag)
+    ) {
+      names.add(path.node.id.name);
+    }
+  });
+  return names;
+}
+
+function templateReferencesStyledComponentSelector(
+  template: TemplateLiteral,
+  styledLocalNames: Set<string>,
+): boolean {
+  const parsed = parseStyledTemplateLiteral(template);
+  for (const slot of parsed.slots) {
+    const expr = slot.expression as { type?: string; name?: string };
+    if (expr.type !== "Identifier" || !expr.name || !styledLocalNames.has(expr.name)) {
+      continue;
+    }
+    const after = parsed.rawCss.slice(slot.endOffset);
+    const nextBlockStart = after.indexOf("{");
+    const nextDeclarationEnd = after.indexOf(";");
+    if (nextBlockStart >= 0 && (nextDeclarationEnd < 0 || nextBlockStart < nextDeclarationEnd)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Checks a CSS template for closure variable references and returns an UnsupportedCssUsage
  * if any are found. Returns null if no closure variables are detected.
@@ -872,6 +921,7 @@ export function extractAndRemoveCssHelpers(args: {
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
   preserveDeclarationOnlyNames?: Set<string>;
+  preservedStyledComponentSelectorNames?: Set<string>;
 }): {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
@@ -884,9 +934,22 @@ export function extractAndRemoveCssHelpers(args: {
   cssHelperTemplateReplacements: CssHelperTemplateReplacement[];
   changed: boolean;
 } {
-  const { root, j, styledImports, cssLocal, toStyleKey, preserveDeclarationOnlyNames } = args;
+  const {
+    root,
+    j,
+    styledImports,
+    cssLocal,
+    toStyleKey,
+    preserveDeclarationOnlyNames,
+    preservedStyledComponentSelectorNames,
+  } = args;
 
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
+  const styledComponentLocalNames = collectStyledComponentLocalNames(root, j, styledLocalNames);
+  const preservedSelectorNames = preservedStyledComponentSelectorNames ?? new Set<string>();
+  const rewrittenStyledComponentLocalNames = new Set(
+    [...styledComponentLocalNames].filter((name) => !preservedSelectorNames.has(name)),
+  );
   const exportedLocalNames = buildExportedLocalNames(root, j);
 
   const cssHelperFunctions = new Map<string, CssHelperFunction>();
@@ -971,13 +1034,28 @@ export function extractAndRemoveCssHelpers(args: {
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
       const isExported = exportedLocalNames.has(localName);
-      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       const template = init.quasi as TemplateLiteral;
       const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
         template,
         noteUniversalSelector: noteCssHelperUniversalSelector,
       });
+      if (
+        isExported &&
+        templateReferencesStyledComponentSelector(template, rewrittenStyledComponentLocalNames)
+      ) {
+        unsupportedCssUsages.push({
+          loc: getNodeLocStart(template),
+          reason: "outside-styled-template",
+        });
+        return;
+      }
+      const referencesPreservedStyledComponentSelector =
+        isExported && templateReferencesStyledComponentSelector(template, preservedSelectorNames);
+      if (referencesPreservedStyledComponentSelector) {
+        return;
+      }
+      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       cssHelperDecls.push({
         ...placementHints,
@@ -1024,6 +1102,21 @@ export function extractAndRemoveCssHelpers(args: {
       }
       changed = true;
     });
+
+  if (unsupportedCssUsages.length > 0) {
+    return {
+      unsupportedCssUsages,
+      cssHelperFunctions,
+      cssHelperNames,
+      cssHelperObjectMembers,
+      cssHelperDecls,
+      cssHelperHasUniversalSelectors,
+      cssHelperUniversalSelectorLoc,
+      cssHelperReplacements,
+      cssHelperTemplateReplacements,
+      changed,
+    };
+  }
 
   // Collect css helper functions like: const helper = (x) => css`...`
   // These are NOT converted here; they are collected for later inlining.

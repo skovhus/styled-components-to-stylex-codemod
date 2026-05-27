@@ -3175,6 +3175,13 @@ function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType 
   if (isStylexStringOnlyCssProp(cssProp)) {
     return "string";
   }
+  const conditionalType = inferTypeFromConditionalBranches(expr);
+  if (conditionalType) {
+    if (conditionalType === "number" && LENGTH_LIKE_CSS_PROP_RE.test(cssProp)) {
+      return "numberOrString";
+    }
+    return conditionalType;
+  }
   const staticVal = literalToStaticValue(expr);
   if (typeof staticVal === "number") {
     return "number";
@@ -3189,6 +3196,43 @@ function inferTypeForCssProp(cssProp: string, expr: unknown): PromotedParamType 
     return "numberOrString";
   }
   return "string";
+}
+
+function inferTypeFromConditionalBranches(expr: unknown): PromotedParamType | null {
+  if (!expr || typeof expr !== "object") {
+    return null;
+  }
+  const node = expr as { type?: string; consequent?: unknown; alternate?: unknown };
+  if (node.type !== "ConditionalExpression") {
+    return null;
+  }
+  const consequent = inferTypeFromExpressionValue(node.consequent);
+  const alternate = inferTypeFromExpressionValue(node.alternate);
+  if (!consequent || !alternate) {
+    return null;
+  }
+  if (consequent === alternate) {
+    return consequent;
+  }
+  return "numberOrString";
+}
+
+function inferTypeFromExpressionValue(expr: unknown): PromotedParamType | null {
+  const nested = inferTypeFromConditionalBranches(expr);
+  if (nested) {
+    return nested;
+  }
+  if (expr && typeof expr === "object" && (expr as { type?: string }).type === "TemplateLiteral") {
+    return "string";
+  }
+  const value = literalToStaticValue(expr);
+  if (typeof value === "string") {
+    return "string";
+  }
+  if (typeof value === "number") {
+    return "number";
+  }
+  return null;
 }
 
 /**
