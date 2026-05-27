@@ -14,8 +14,10 @@ import {
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
+import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
+const CLASS_OR_STYLE_ATTRS = new Set(["className", "style"]);
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -380,6 +382,21 @@ export function analyzeAfterEmitStep(ctx: TransformContext): StepResult {
     decl.needsWrapperComponent = false;
   }
 
+  for (const decl of styledDecls) {
+    if (
+      !canInlineSingleUseSxAwareComponentWrapper({
+        ctx,
+        decl,
+        exportedComponents,
+        extendedBy,
+        wrapperNames,
+      })
+    ) {
+      continue;
+    }
+    decl.needsWrapperComponent = false;
+  }
+
   ctx.wrapperNames = wrapperNames;
 
   return CONTINUE;
@@ -465,4 +482,103 @@ function canDowngradeStyleFnIntrinsicWrapper(
     return false;
   }
   return true;
+}
+
+function canInlineSingleUseSxAwareComponentWrapper(args: {
+  ctx: TransformContext;
+  decl: StyledDecl;
+  exportedComponents: Map<string, unknown>;
+  extendedBy: Map<string, string[]>;
+  wrapperNames: Set<string>;
+}): boolean {
+  const { ctx, decl, exportedComponents, extendedBy, wrapperNames } = args;
+  const { root, j } = ctx;
+  if (!decl.needsWrapperComponent || decl.isCssHelper || decl.isDirectJsxResolution) {
+    return false;
+  }
+  if (decl.base.kind !== "component") {
+    return false;
+  }
+  if (wrapperNames.has(decl.localName) || exportedComponents.has(decl.localName)) {
+    return false;
+  }
+  if (extendedBy.has(decl.localName) || decl.usedAsValue) {
+    return false;
+  }
+  if (countComponentJsxUsages(root, j, decl.localName) !== INLINE_USAGE_THRESHOLD) {
+    return false;
+  }
+  if (hasSpreadInJsx(root, j, decl.localName)) {
+    return false;
+  }
+  if (hasAnyJsxAttribute(root, j, decl.localName, CLASS_OR_STYLE_ATTRS)) {
+    return false;
+  }
+  if (hasAttrsAsOverride(decl.attrsInfo) || hasUnsupportedAttrsForInlineComponent(decl.attrsInfo)) {
+    return false;
+  }
+  if (
+    needsShouldForwardPropWrapper(decl) ||
+    decl.attrWrapper ||
+    decl.bridgeClassName ||
+    decl.enumVariant ||
+    (decl.inlineStyleProps?.length ?? 0) > 0 ||
+    (decl.styleFnFromProps?.length ?? 0) > 0 ||
+    (decl.variantDimensions?.length ?? 0) > 0 ||
+    Object.keys(decl.variantStyleKeys ?? {}).length > 0 ||
+    (decl.compoundVariants?.length ?? 0) > 0 ||
+    (decl.pseudoAliasSelectors?.length ?? 0) > 0 ||
+    (decl.pseudoExpandSelectors?.length ?? 0) > 0 ||
+    (decl.localElementOverrides?.length ?? 0) > 0 ||
+    (decl.needsUseThemeHook?.length ?? 0) > 0 ||
+    (decl.extraStylexPropsArgs?.some((arg) => arg.when) ?? false)
+  ) {
+    return false;
+  }
+  return wrappedComponentInterfaceFor(ctx, decl.base.ident)?.acceptsSx === true;
+}
+
+function hasUnsupportedAttrsForInlineComponent(attrsInfo: StyledDecl["attrsInfo"]): boolean {
+  return !!(
+    (attrsInfo?.conditionalAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.defaultAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.dynamicAttrs?.length ?? 0) > 0 ||
+    (attrsInfo?.invertedBoolAttrs?.length ?? 0) > 0 ||
+    attrsInfo?.attrsStaticStyleExpr
+  );
+}
+
+function hasAnyJsxAttribute(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  name: string,
+  attrNames: ReadonlySet<string>,
+): boolean {
+  let found = false;
+  const checkOpening = (opening: { attributes?: Array<{ type?: string; name?: unknown }> }) => {
+    for (const attr of opening.attributes ?? []) {
+      const attrName = (attr.name as { type?: string; name?: string } | undefined)?.name;
+      if (attr.type === "JSXAttribute" && attrName && attrNames.has(attrName)) {
+        found = true;
+        return;
+      }
+    }
+  };
+  root
+    .find(j.JSXElement, {
+      openingElement: { name: { type: "JSXIdentifier", name } },
+    } as object)
+    .forEach((p) => {
+      if (!found) {
+        checkOpening(p.node.openingElement as { attributes?: Array<{ type?: string }> });
+      }
+    });
+  root
+    .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name } } as object)
+    .forEach((p) => {
+      if (!found) {
+        checkOpening(p.node as { attributes?: Array<{ type?: string }> });
+      }
+    });
+  return found;
 }
