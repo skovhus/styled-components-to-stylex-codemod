@@ -17,7 +17,6 @@ import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
-const CLASS_OR_STYLE_ATTRS = new Set(["className", "style"]);
 const AS_ATTR = new Set(["as"]);
 const FORWARDED_AS_ATTR = new Set(["forwardedAs"]);
 
@@ -514,9 +513,6 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
     return false;
   }
   if (hasSpreadInJsx(root, j, decl.localName)) {
-    return false;
-  }
-  if (hasAnyJsxAttribute(root, j, decl.localName, CLASS_OR_STYLE_ATTRS)) {
     return false;
   }
   if (hasAttrsAsOverride(decl.attrsInfo) || hasAttrsPayload(decl.attrsInfo)) {

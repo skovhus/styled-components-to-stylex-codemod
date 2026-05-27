@@ -1,5 +1,6 @@
 // Single-use styled(Component) with an sx-aware base should inline into the JSX call site.
 import styled from "styled-components";
+import * as stylex from "@stylexjs/stylex";
 import { flexCenter } from "./lib/helpers";
 import { DynamicFlex } from "./lib/sx-dynamic-flex";
 import { Text } from "./lib/sx-aware-text";
@@ -16,7 +17,13 @@ const TitleText = styled(Text)`
   margin-bottom: 12px;
 `;
 
-export const App = () => (
+const BasicContainer = styled(DynamicFlex)`
+  padding: 3px 6px;
+  gap: 8px;
+  align-items: center;
+`;
+
+export const App = (props: { className?: string; sx?: stylex.StyleXStyles }) => (
   <div style={{ display: "grid", gridTemplateAreas: '"br"', padding: 16, gap: 12 }}>
     <TombstoneContainer justify="center" align="center" gap={16}>
       Tombstone flex
@@ -24,5 +31,8 @@ export const App = () => (
     <TitleText size="md" color="labelTitle" forwardedAs="p" align="center">
       Link
     </TitleText>
+    <BasicContainer className={props.className} sx={props.sx}>
+      Basic container
+    </BasicContainer>
   </div>
 );
