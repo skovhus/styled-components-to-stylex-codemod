@@ -484,7 +484,7 @@ describe("runTransform (e2e)", () => {
     expect(result.errors).toBe(0);
     expect(result.transformed).toBe(1);
     expect(component).toContain('Omit<React.ComponentProps<"div">, "className" | "style" | "sx">');
-    expect(component).toContain("<div {...rest} sx={styles.elementOnly}>");
+    expect(component).toContain("<div {...props} sx={styles.elementOnly} />");
     expect(component).not.toContain("sx?: stylex.StyleXStyles");
     expect(component).not.toContain("mergedSx");
     expect(component).not.toContain("const { className");

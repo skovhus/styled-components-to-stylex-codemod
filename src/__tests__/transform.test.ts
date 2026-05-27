@@ -7075,7 +7075,7 @@ export const App = () => <Box>Hello</Box>;
     expect(result.code).toContain('React.ComponentProps<"div">');
   });
 
-  it("should forward ref through rest when wrapper supports external refs", async () => {
+  it("should forward ref through props spread when wrapper supports external refs", async () => {
     const adapterWithRef = {
       styleMerger: null,
       useSxProp: false,
@@ -7112,8 +7112,10 @@ export const App = () => {
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toMatch(/const\s*\{\s*children,\s*\.\.\.rest\s*\}\s*=\s*props;/);
-    expect(result.code).toMatch(/<div\s+\{\.\.\.rest\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}>/);
+    expect(result.code).not.toMatch(/const\s*\{\s*children,\s*\.\.\.rest\s*\}\s*=\s*props;/);
+    expect(result.code).toMatch(
+      /<div\s+\{\.\.\.props\}\s+\{\.\.\.stylex\.props\(styles\.box\)\}\s*\/>/,
+    );
     expect(result.code).not.toMatch(/<div[^>]*\bref=\{ref\}/);
   });
 
@@ -10401,9 +10403,7 @@ export const App = () => (
     expect(output).toContain(
       'function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles })',
     );
-    expect(output).toMatch(
-      /const \{\s*className,\s*children,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/,
-    );
+    expect(output).toMatch(/const \{\s*className,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/);
     expect(output).toContain("{...mergedSx([styles.innerContainer, sx], className, style)}");
   });
 });

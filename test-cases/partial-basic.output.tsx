@@ -1,11 +1,5 @@
-// Partial-file transform: a component with an unsupported selector stays as
-// styled-components while the other component in the same file converts to StyleX.
+import * as stylex from "@stylexjs/stylex";
 import styled from "styled-components";
-
-const Container = styled.div`
-  padding: 12px;
-  background: papayawhip;
-`;
 
 // Descendant element selectors are not representable in StyleX — this component
 // must be preserved as styled-components in the output.
@@ -19,7 +13,7 @@ const Complex = styled.nav`
 
 export const App = () => (
   <div>
-    <Container>Converted</Container>
+    <div sx={styles.container}>Converted</div>
     <Complex>
       <a className="active" href="#">
         Preserved
@@ -27,3 +21,10 @@ export const App = () => (
     </Complex>
   </div>
 );
+
+const styles = stylex.create({
+  container: {
+    padding: 12,
+    backgroundColor: "papayawhip",
+  },
+});

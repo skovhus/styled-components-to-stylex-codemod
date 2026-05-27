@@ -107,7 +107,12 @@ async function updateFixture(name: string, ext: string) {
   const sidecarFiles = new Map<string, string>();
   const result = applyTransform(
     transform,
-    { adapter, crossFilePrepassResult, sidecarFiles },
+    {
+      adapter,
+      crossFilePrepassResult,
+      sidecarFiles,
+      allowPartialMigration: name.startsWith("partial-"),
+    },
     { source: input, path: inputPath },
     { parser },
   );

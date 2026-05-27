@@ -1,4 +1,4 @@
-// Partial conversion must preserve styled-components keyframes used by skipped styled templates.
+import * as stylex from "@stylexjs/stylex";
 import styled, { keyframes } from "styled-components";
 
 const shimmer = keyframes`
@@ -9,11 +9,6 @@ const shimmer = keyframes`
   to {
     background-position: 100% 50%;
   }
-`;
-
-const ConvertedText = styled.div`
-  padding: 12px;
-  color: #1d4ed8;
 `;
 
 const PreservedAnimatedText = styled.span`
@@ -28,7 +23,7 @@ const PreservedAnimatedText = styled.span`
 
 export const App = () => (
   <div style={{ display: "grid", gap: 8, padding: 12 }}>
-    <ConvertedText>Converted text</ConvertedText>
+    <div sx={styles.convertedText}>Converted text</div>
     <PreservedAnimatedText>
       <a className="active" href="#">
         Preserved animated text
@@ -36,3 +31,10 @@ export const App = () => (
     </PreservedAnimatedText>
   </div>
 );
+
+const styles = stylex.create({
+  convertedText: {
+    padding: 12,
+    color: "#1d4ed8",
+  },
+});
