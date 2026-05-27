@@ -10,12 +10,7 @@ function Button({ children }: { children?: React.ReactNode }) {
 function DisabledAwareButton(
   props: Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} sx={styles.disabledAwareButton}>
-      {children}
-    </button>
-  );
+  return <button {...props} sx={styles.disabledAwareButton} />;
 }
 
 export function App() {

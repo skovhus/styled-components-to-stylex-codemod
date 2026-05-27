@@ -10,12 +10,8 @@ type OptionLabelProps = { disabled?: boolean } & Omit<
 // the wrapper type should include HTML element props like title, onClick, etc.
 
 function OptionLabel(props: OptionLabelProps) {
-  const { children, disabled, ...rest } = props;
-  return (
-    <label {...rest} sx={[styles.optionLabel, disabled && styles.optionLabelDisabled]}>
-      {children}
-    </label>
-  );
+  const { disabled, ...rest } = props;
+  return <label {...rest} sx={[styles.optionLabel, disabled && styles.optionLabelDisabled]} />;
 }
 
 export const App = () => (

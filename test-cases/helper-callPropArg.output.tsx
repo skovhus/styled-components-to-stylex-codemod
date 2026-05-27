@@ -13,12 +13,8 @@ type BoxProps = React.PropsWithChildren<{
 }>;
 
 export function Box(props: BoxProps) {
-  const { children, shadow, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.box(shadow)}>
-      {children}
-    </div>
-  );
+  const { shadow, ...rest } = props;
+  return <div {...rest} sx={styles.box(shadow)} />;
 }
 
 export const App = () => <Box shadow="rgba(0,0,0,0.2)">Shadow</Box>;

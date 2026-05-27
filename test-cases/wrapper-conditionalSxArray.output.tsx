@@ -10,7 +10,7 @@ type CompactButtonProps = {
 } & Omit<React.ComponentPropsWithRef<typeof SxAwareButton>, "className" | "style">;
 
 function CompactButton(props: CompactButtonProps) {
-  const { children, sx, compact, width, ...rest } = props;
+  const { sx, compact, width, ...rest } = props;
   return (
     <SxAwareButton
       {...rest}
@@ -19,9 +19,7 @@ function CompactButton(props: CompactButtonProps) {
         compact ? callerStyles.compactButtonCompact : null,
         sx,
       ]}
-    >
-      {children}
-    </SxAwareButton>
+    />
   );
 }
 

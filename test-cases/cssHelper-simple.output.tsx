@@ -8,7 +8,7 @@ type ContainerProps = {
 } & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 export function Container(props: ContainerProps) {
-  const { children, size, padding, ...rest } = props;
+  const { size, padding, ...rest } = props;
   return (
     <div
       {...rest}
@@ -19,9 +19,7 @@ export function Container(props: ContainerProps) {
           padding,
         }),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -32,7 +30,7 @@ type BranchedContainerProps = { size: number } & Omit<
 
 // css helper called from a function with if/else branches
 export function BranchedContainer(props: BranchedContainerProps) {
-  const { children, size, ...rest } = props;
+  const { size, ...rest } = props;
   return (
     <div
       {...rest}
@@ -42,9 +40,7 @@ export function BranchedContainer(props: BranchedContainerProps) {
           ? styles.branchedContainerBrowserIsSafari(size)
           : styles.branchedContainerDefault(size),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

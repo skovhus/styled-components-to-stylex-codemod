@@ -13,7 +13,7 @@ type StripProps = {
 export function Strip(
   props: StripProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { children, style, sx, enabled, column, ...rest } = props;
+  const { style, sx, enabled, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -27,9 +27,7 @@ export function Strip(
         undefined,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

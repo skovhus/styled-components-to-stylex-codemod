@@ -14,12 +14,7 @@ function Container({ children }: { children?: React.ReactNode }) {
 }
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} sx={styles.tab}>
-      {children}
-    </button>
-  );
+  return <button {...props} sx={styles.tab} />;
 }
 
 export const App = () => (

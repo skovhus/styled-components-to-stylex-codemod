@@ -643,12 +643,23 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const destructurePartsForPattern = needsUseTheme
       ? destructureParts.filter((name) => name !== "theme")
       : destructureParts;
+    const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+      includeChildren,
+      includeRest,
+      restId,
+      destructureProps: destructurePartsForPattern,
+      defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+      dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
+      staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+    });
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
         ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-        ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+        ...(includeChildren && !passChildrenThroughRest
+          ? [ctx.patternProp("children", childrenId)]
+          : []),
         ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
         ...(shouldForwardRefExplicitly ? [ctx.patternProp("ref", refId)] : []),
         ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
@@ -741,7 +752,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const jsx = emitter.buildJsxElement({
       tagName: allowAsProp ? "Component" : tagName,
       attrs: openingAttrs,
-      includeChildren,
+      includeChildren: includeChildren && !passChildrenThroughRest,
       childrenExpr: childrenId,
     });
 

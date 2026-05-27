@@ -9,7 +9,7 @@ type ScrollableProps<C extends React.ElementType = "div"> = Omit<
   Omit<React.ComponentPropsWithRef<C>, "applyBackground"> & { sx?: stylex.StyleXStyles; as?: C };
 
 export function Scrollable<C extends React.ElementType = "div">(props: ScrollableProps) {
-  const { as: Component = "div", className, children, style, sx, applyBackground, ...rest } = props;
+  const { as: Component = "div", className, style, sx, applyBackground, ...rest } = props;
   return (
     <Component
       {...rest}
@@ -18,9 +18,7 @@ export function Scrollable<C extends React.ElementType = "div">(props: Scrollabl
         className,
         style,
       )}
-    >
-      {children}
-    </Component>
+    />
   );
 }
 
@@ -31,7 +29,7 @@ type ScrollableDivProps = Pick<React.ComponentProps<"div">, "ref" | "children"> 
 // ScrollableDiv wraps Scrollable and re-uses $applyBackground in its own template.
 // Without explicit type param, it inherits the prop from the base component.
 export function ScrollableDiv(props: ScrollableDivProps) {
-  const { children, applyBackground, ...rest } = props;
+  const { applyBackground, ...rest } = props;
   return (
     <div
       {...rest}
@@ -42,9 +40,7 @@ export function ScrollableDiv(props: ScrollableDivProps) {
           ? styles.scrollableDivApplyBackground
           : styles.scrollableDivNotApplyBackground,
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

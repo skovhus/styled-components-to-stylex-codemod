@@ -9,7 +9,7 @@ type ComponentWrapperProps = {
 } & Omit<React.ComponentPropsWithRef<typeof motion.div>, "className">;
 
 function ComponentWrapper(props: ComponentWrapperProps) {
-  const { children, style, sx, isOpen, ...rest } = props;
+  const { style, sx, isOpen, ...rest } = props;
   const _sx = stylex.props(styles.componentWrapper, isOpen && styles.componentWrapperOpen, sx);
 
   return (
@@ -20,9 +20,7 @@ function ComponentWrapper(props: ComponentWrapperProps) {
         ..._sx.style,
         ...style,
       }}
-    >
-      {children}
-    </motion.div>
+    />
   );
 }
 
@@ -69,7 +67,7 @@ type MotionIframeWrapperProps = {
 } & Omit<React.ComponentPropsWithRef<typeof motion.div>, "className" | "style">;
 
 function MotionIframeWrapper(props: MotionIframeWrapperProps) {
-  const { children, svgWidth, svgHeight, ...rest } = props;
+  const { svgWidth, svgHeight, ...rest } = props;
   return (
     <motion.div
       {...rest}
@@ -78,9 +76,7 @@ function MotionIframeWrapper(props: MotionIframeWrapperProps) {
         styles.motionIframeWrapperWidth(svgWidth),
         styles.motionIframeWrapperAspectRatio(svgWidth, svgHeight),
       )}
-    >
-      {children}
-    </motion.div>
+    />
   );
 }
 

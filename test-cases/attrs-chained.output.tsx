@@ -33,12 +33,8 @@ type ClickableTextProps = { ref?: React.Ref<HTMLButtonElement> } & Omit<
 
 // A extends B - this MUST preserve B's as="button" semantics
 export function ClickableText(props: ClickableTextProps) {
-  const { children, sx, ...rest } = props;
-  return (
-    <StyledButton {...rest} as="button" sx={[styles.clickableText, sx]}>
-      {children}
-    </StyledButton>
-  );
+  const { sx, ...rest } = props;
+  return <StyledButton {...rest} as="button" sx={[styles.clickableText, sx]} />;
 }
 
 export const App = () => (

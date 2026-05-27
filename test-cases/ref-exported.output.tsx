@@ -9,12 +9,7 @@ export function StyledInput(
 }
 
 export function StyledDiv(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.div}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.div} />;
 }
 
 export const App = () => {

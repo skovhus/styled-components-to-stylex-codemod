@@ -14,7 +14,7 @@ type ScrollableProps = {
  * The gutter prop is only used in the CSS template and should NOT be forwarded to Flex.
  */
 export function Scrollable(props: ScrollableProps) {
-  const { children, applyBackground, ...rest } = props;
+  const { applyBackground, ...rest } = props;
   return (
     <Flex
       {...rest}
@@ -23,9 +23,7 @@ export function Scrollable(props: ScrollableProps) {
         applyBackground ? styles.scrollableApplyBackground : undefined,
         props.gutter != null && styles.scrollableScrollbarGutter(props.gutter),
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 

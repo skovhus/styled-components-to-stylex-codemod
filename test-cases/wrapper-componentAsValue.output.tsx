@@ -26,21 +26,13 @@ function VirtualList({
 
 // These styled components are passed as values, not just rendered
 function OuterWrapper(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.outerWrapper, sx], className, style)}>
-      {children}
-    </div>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.outerWrapper, sx], className, style)} />;
 }
 
 function InnerWrapper(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.innerWrapper, sx], className, style)}>
-      {children}
-    </div>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.innerWrapper, sx], className, style)} />;
 }
 
 export function App() {

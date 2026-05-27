@@ -11,7 +11,7 @@ type ContainerProps = {
   >;
 
 export function Container(props: ContainerProps) {
-  const { className, children, style, sx, column, overflowHidden, ...rest } = props;
+  const { className, style, sx, column, overflowHidden, ...rest } = props;
   return (
     <div
       {...rest}
@@ -25,9 +25,7 @@ export function Container(props: ContainerProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

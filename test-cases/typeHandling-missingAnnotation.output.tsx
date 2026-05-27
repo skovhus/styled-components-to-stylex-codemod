@@ -15,7 +15,7 @@ interface BoxProps {
 export function Box(
   props: BoxProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
-  const { children, bordered, bg, ...rest } = props;
+  const { bordered, bg, ...rest } = props;
   return (
     <div
       {...rest}
@@ -24,9 +24,7 @@ export function Box(
         bordered ? styles.boxBordered : styles.boxNotBordered,
         bg != null && styles.boxBackgroundColor(bg),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

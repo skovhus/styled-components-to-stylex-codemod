@@ -346,7 +346,7 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("<Panel {...rest} sx={[styles.wrapped, sx]}>");
+      expect(after.code).toContain("<Panel {...rest} sx={[styles.wrapped, sx]} />");
       expect(after.code).not.toContain("{...stylex.props(styles.wrapped)}");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });

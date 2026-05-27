@@ -11,7 +11,7 @@ interface TextProps extends React.HTMLAttributes<HTMLSpanElement> {
 export function Text(
   props: TextProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
 ) {
-  const { children, align, selectable, ...rest } = props;
+  const { align, selectable, ...rest } = props;
   return (
     <span
       {...rest}
@@ -20,9 +20,7 @@ export function Text(
         align ? styles.textTextAlign(align) : undefined,
         selectable && styles.textSelectable,
       ]}
-    >
-      {children}
-    </span>
+    />
   );
 }
 

@@ -2023,6 +2023,17 @@ export class WrapperEmitter {
       this.emitTypes && (allowAsProp || inlineTypeNeedsElementGeneric(inlineTypeText));
     const propsId = j.identifier("props");
 
+    let restId: Identifier | null = includeRest ? j.identifier("rest") : null;
+    const passChildrenThroughRest = jb.shouldPassChildrenThroughRest({
+      includeChildren: !isVoidTag,
+      includeRest,
+      restId,
+      destructureProps,
+      defaultAttrs,
+      dynamicAttrs,
+      staticAttrs,
+    });
+
     const patternProps: Array<Property | RestElement> = [];
     if (allowAsProp) {
       patternProps.push(
@@ -2037,7 +2048,7 @@ export class WrapperEmitter {
     if (allowForwardedAsProp) {
       patternProps.push(this.patternProp("forwardedAs"));
     }
-    if (!isVoidTag) {
+    if (!isVoidTag && !passChildrenThroughRest) {
       patternProps.push(this.patternProp("children"));
     }
     const shouldForwardRefExplicitly = includeRefProp && !includeRest;
@@ -2081,7 +2092,6 @@ export class WrapperEmitter {
       }
     }
 
-    let restId: Identifier | null = includeRest ? j.identifier("rest") : null;
     if (includeRest && restId) {
       patternProps.push(j.restElement(restId));
     }
@@ -2248,12 +2258,16 @@ export class WrapperEmitter {
 
     const renderedTagName = allowAsProp ? "Component" : (attrsAsTag ?? tagName);
     const renderedJsxName = jsxNameFromString(j, renderedTagName);
-    const openingEl = j.jsxOpeningElement(renderedJsxName, jsxAttrs, isVoidTag);
+    const openingEl = j.jsxOpeningElement(
+      renderedJsxName,
+      jsxAttrs,
+      isVoidTag || passChildrenThroughRest,
+    );
     const childrenExpr = j.identifier("children");
     const jsx = j.jsxElement(
       openingEl,
-      isVoidTag ? null : j.jsxClosingElement(renderedJsxName),
-      isVoidTag ? [] : [j.jsxExpressionContainer(childrenExpr)],
+      isVoidTag || passChildrenThroughRest ? null : j.jsxClosingElement(renderedJsxName),
+      isVoidTag || passChildrenThroughRest ? [] : [j.jsxExpressionContainer(childrenExpr)],
     );
 
     const bodyStmts: BlockStatementBody = [];
@@ -2450,6 +2464,12 @@ export class WrapperEmitter {
     restId?: Identifier;
   }): Array<Property | RestElement> {
     return jb.buildDestructurePatternProps(this.j, this.patternProp, args);
+  }
+
+  shouldPassChildrenThroughRest(
+    args: Parameters<typeof jb.shouldPassChildrenThroughRest>[0],
+  ): boolean {
+    return jb.shouldPassChildrenThroughRest(args);
   }
 
   isChildrenOnlyDestructurePattern(patternProps: Array<Property | RestElement>): boolean {

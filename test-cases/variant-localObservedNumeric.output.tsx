@@ -7,7 +7,7 @@ type PanelProps = { height: number } & Omit<
 >;
 
 export function Panel(props: PanelProps) {
-  const { children, height, ...rest } = props;
+  const { height, ...rest } = props;
   return (
     <div
       {...rest}
@@ -16,9 +16,7 @@ export function Panel(props: PanelProps) {
         panelHeightVariants[height as keyof typeof panelHeightVariants] ??
           styles.panelHeight(height),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -28,7 +26,7 @@ type TransientPanelProps = { height: number } & Omit<
 >;
 
 export function TransientPanel(props: TransientPanelProps) {
-  const { children, height, ...rest } = props;
+  const { height, ...rest } = props;
   return (
     <div
       {...rest}
@@ -37,9 +35,7 @@ export function TransientPanel(props: TransientPanelProps) {
         transientPanelHeightVariants[height as keyof typeof transientPanelHeightVariants] ??
           styles.transientPanelHeight(height),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -49,7 +45,7 @@ type FaderProps = { opacity: number } & Omit<
 >;
 
 export function Fader(props: FaderProps) {
-  const { children, opacity, ...rest } = props;
+  const { opacity, ...rest } = props;
   return (
     <div
       {...rest}
@@ -58,9 +54,7 @@ export function Fader(props: FaderProps) {
         faderOpacityVariants[opacity as keyof typeof faderOpacityVariants] ??
           styles.faderOpacity(opacity),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -70,7 +64,7 @@ type TransientFaderProps = { opacity: number } & Omit<
 >;
 
 export function TransientFader(props: TransientFaderProps) {
-  const { children, opacity, ...rest } = props;
+  const { opacity, ...rest } = props;
   return (
     <div
       {...rest}
@@ -79,9 +73,7 @@ export function TransientFader(props: TransientFaderProps) {
         transientFaderOpacityVariants[opacity as keyof typeof transientFaderOpacityVariants] ??
           styles.transientFaderOpacity(opacity),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

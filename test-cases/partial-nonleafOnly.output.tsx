@@ -6,12 +6,8 @@ import styled from "styled-components";
 function Base<C extends React.ElementType = "div">(
   props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles } & { as?: C },
 ) {
-  const { as: Component = "div", className, children, style, sx, ...rest } = props;
-  return (
-    <Component {...rest} {...mergedSx([styles.base, sx], className, style)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "div", className, style, sx, ...rest } = props;
+  return <Component {...rest} {...mergedSx([styles.base, sx], className, style)} />;
 }
 
 const Derived = styled(Base)`

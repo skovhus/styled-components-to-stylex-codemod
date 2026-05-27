@@ -27,12 +27,8 @@ export function ToolbarButton(
     "className"
   >,
 ) {
-  const { children, style, sx, ...rest } = props;
-  return (
-    <BaseButton {...rest} {...mergedSx([styles.toolbarButton, sx], undefined, style)}>
-      {children}
-    </BaseButton>
-  );
+  const { style, sx, ...rest } = props;
+  return <BaseButton {...rest} {...mergedSx([styles.toolbarButton, sx], undefined, style)} />;
 }
 
 export const App = () => (

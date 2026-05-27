@@ -12,12 +12,7 @@ const bounce = stylex.keyframes({
 });
 
 function AnimatedPath(props: Omit<React.ComponentProps<"path">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <path {...rest} sx={styles.animatedPath}>
-      {children}
-    </path>
-  );
+  return <path {...props} sx={styles.animatedPath} />;
 }
 
 export const App = () => (

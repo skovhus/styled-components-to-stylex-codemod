@@ -4,12 +4,8 @@ import * as stylex from "@stylexjs/stylex";
 export function ContentViewContainer<C extends React.ElementType = "div">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
-  const { as: Component = "div", children, ...rest } = props;
-  return (
-    <Component {...rest} {...stylex.props(styles.contentViewContainer)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "div", ...rest } = props;
+  return <Component {...rest} {...stylex.props(styles.contentViewContainer)} />;
 }
 
 // Pattern 2: styled(Component) with explicit props type that needs adapter-driven `as` support.

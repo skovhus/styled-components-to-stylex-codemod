@@ -7,30 +7,18 @@ import { mergedSx } from "./lib/mergedSx";
 function OptionsList(
   props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <ul {...rest} {...mergedSx([styles.optionsList, sx], className, style)}>
-      {children}
-    </ul>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <ul {...rest} {...mergedSx([styles.optionsList, sx], className, style)} />;
 }
 
 function AliasedOptionsList(props: React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles }) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <ul {...rest} {...mergedSx([styles.aliasedOptionsList, sx], className, style)}>
-      {children}
-    </ul>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <ul {...rest} {...mergedSx([styles.aliasedOptionsList, sx], className, style)} />;
 }
 
 function TransitiveOptionsList(props: React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles }) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <ul {...rest} {...mergedSx([styles.transitiveOptionsList, sx], className, style)}>
-      {children}
-    </ul>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <ul {...rest} {...mergedSx([styles.transitiveOptionsList, sx], className, style)} />;
 }
 
 type ListWrapperProps = React.HTMLAttributes<HTMLUListElement> & {

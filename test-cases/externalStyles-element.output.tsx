@@ -17,12 +17,8 @@ export type Props = {
 export function ColorBadge(
   props: Props & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <span {...rest} {...mergedSx([styles.colorBadge, sx], className, style)}>
-      {children}
-    </span>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <span {...rest} {...mergedSx([styles.colorBadge, sx], className, style)} />;
 }
 
 // Usage: ColorBadge should accept className and style from external code

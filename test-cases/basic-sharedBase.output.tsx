@@ -21,18 +21,7 @@ function PositionBase<C extends React.ElementType = "div">(
       as?: C;
     },
 ) {
-  const {
-    as: Component = "div",
-    className,
-    children,
-    style,
-    sx,
-    top,
-    right,
-    bottom,
-    left,
-    ...rest
-  } = props;
+  const { as: Component = "div", className, style, sx, top, right, bottom, left, ...rest } = props;
   return (
     <Component
       {...rest}
@@ -47,9 +36,7 @@ function PositionBase<C extends React.ElementType = "div">(
         className,
         style,
       )}
-    >
-      {children}
-    </Component>
+    />
   );
 }
 
@@ -57,24 +44,16 @@ function PositionBase<C extends React.ElementType = "div">(
 export function Relative(
   props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
 ) {
-  const { children, sx, ...rest } = props;
-  return (
-    <PositionBase {...rest} sx={[styles.relative, sx]}>
-      {children}
-    </PositionBase>
-  );
+  const { sx, ...rest } = props;
+  return <PositionBase {...rest} sx={[styles.relative, sx]} />;
 }
 
 /** An absolutely positioned container. */
 export function Absolute(
   props: Omit<React.ComponentPropsWithRef<typeof PositionBase>, "className" | "style">,
 ) {
-  const { children, sx, ...rest } = props;
-  return (
-    <PositionBase {...rest} sx={[styles.absolute, sx]}>
-      {children}
-    </PositionBase>
-  );
+  const { sx, ...rest } = props;
+  return <PositionBase {...rest} sx={[styles.absolute, sx]} />;
 }
 
 export function App() {

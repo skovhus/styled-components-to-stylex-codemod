@@ -7,12 +7,8 @@ type CircleProps = { isAnimated?: boolean } & Omit<
 >;
 
 function Circle(props: CircleProps) {
-  const { children, isAnimated, ...rest } = props;
-  return (
-    <path {...rest} sx={[styles.circle, isAnimated && styles.circleAnimated]}>
-      {children}
-    </path>
-  );
+  const { isAnimated, ...rest } = props;
+  return <path {...rest} sx={[styles.circle, isAnimated && styles.circleAnimated]} />;
 }
 
 type RingProps = { isAnimated?: boolean } & Omit<
@@ -21,12 +17,8 @@ type RingProps = { isAnimated?: boolean } & Omit<
 >;
 
 function Ring(props: RingProps) {
-  const { children, isAnimated, ...rest } = props;
-  return (
-    <path {...rest} sx={isAnimated && styles.ringAnimated}>
-      {children}
-    </path>
-  );
+  const { isAnimated, ...rest } = props;
+  return <path {...rest} sx={isAnimated && styles.ringAnimated} />;
 }
 
 export function App() {

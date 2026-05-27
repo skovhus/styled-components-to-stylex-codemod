@@ -15,7 +15,7 @@ type StackProps = {
 export function Stack(
   props: StackProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { children, style, sx, gap, column, ...rest } = props;
+  const { style, sx, gap, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -32,9 +32,7 @@ export function Stack(
         undefined,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

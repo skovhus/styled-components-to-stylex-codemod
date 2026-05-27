@@ -1141,7 +1141,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const classNameId = j.identifier("className");
       const styleId = j.identifier("style");
       const sxId = j.identifier("sx");
-      const restId = j.identifier("rest");
+      let restId = j.identifier("rest");
       const componentId = j.identifier("Component");
       const forwardedAsId = j.identifier("forwardedAs");
       const wrappedComponentExpr = buildWrappedComponentExpr();
@@ -1184,6 +1184,15 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const destructurePropsForPattern = needsUseTheme
         ? destructureProps.filter((name) => name !== "theme")
         : destructureProps;
+      const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+        includeChildren,
+        includeRest: true,
+        restId,
+        destructureProps: destructurePropsForPattern,
+        defaultAttrs,
+        dynamicAttrs,
+        staticAttrs: staticAttrsForJsx,
+      });
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(isPolymorphicComponentWrapper
@@ -1196,7 +1205,9 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
               ]
             : []),
           ...(destructureClassName ? [patternProp("className", classNameId)] : []),
-          ...(includeChildren ? [patternProp("children", childrenId)] : []),
+          ...(includeChildren && !passChildrenThroughRest
+            ? [patternProp("children", childrenId)]
+            : []),
           ...(destructureStyle ? [patternProp("style", styleId)] : []),
           ...(destructureSx ? [patternProp("sx", sxId)] : []),
           ...(shouldLowerForwardedAs ? [patternProp("forwardedAs", forwardedAsId)] : []),
@@ -1206,10 +1217,17 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         includeRest: true,
         restId,
       });
+      const usePropsDirectlyForRest =
+        patternProps.length === 1 && patternProps[0]?.type === "RestElement";
+      if (usePropsDirectlyForRest) {
+        restId = propsId;
+      }
 
-      const declStmt = j.variableDeclaration("const", [
-        j.variableDeclarator(j.objectPattern(patternProps), propsId),
-      ]);
+      const declStmt = usePropsDirectlyForRest
+        ? null
+        : j.variableDeclaration("const", [
+            j.variableDeclarator(j.objectPattern(patternProps), propsId),
+          ]);
 
       // Use the style merger helper
       const merging = emitStyleMerging({
@@ -1229,7 +1247,10 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         keepStylePropSeparate: shouldKeepStylePropSeparate(renderedComponent),
       });
 
-      const stmts: StatementKind[] = [declStmt];
+      const stmts: StatementKind[] = [];
+      if (declStmt) {
+        stmts.push(declStmt);
+      }
       if (needsUseTheme) {
         stmts.push(buildUseThemeDeclaration(j, emitter.themeHookLocalName));
       }
@@ -1439,7 +1460,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       const jsx = emitter.buildJsxElement({
         tagName: jsxTagName,
         attrs: openingAttrs,
-        includeChildren,
+        includeChildren: includeChildren && !passChildrenThroughRest,
         childrenExpr: childrenId,
       });
       stmts.push(j.returnStatement(jsx as any));

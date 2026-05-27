@@ -29,15 +29,13 @@ type BadgeProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Badge_>, "className" | "style">;
 
 function Badge(props: BadgeProps) {
-  const { children, highlighted, ...rest } = props;
+  const { highlighted, ...rest } = props;
   return (
     <Badge_
       highlighted={highlighted}
       {...rest}
       {...stylex.props(styles.badge, highlighted && styles.badgeHighlighted)}
-    >
-      {children}
-    </Badge_>
+    />
   );
 }
 

@@ -192,6 +192,15 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         styleArgs.push(sxId);
       }
 
+      const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+        includeChildren,
+        includeRest: true,
+        restId,
+        destructureProps,
+        defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+        dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
+        staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+      });
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(allowAsProp
@@ -206,7 +215,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
             : []),
           ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-          ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+          ...(includeChildren && !passChildrenThroughRest
+            ? [ctx.patternProp("children", childrenId)]
+            : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
         ],
@@ -270,7 +281,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const jsx = emitter.buildJsxElement({
         tagName: allowAsProp ? "Component" : tagName,
         attrs,
-        includeChildren,
+        includeChildren: includeChildren && !passChildrenThroughRest,
         childrenExpr: childrenId,
       });
 

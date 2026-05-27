@@ -110,14 +110,12 @@ type FaderProps = {
 // Pattern 6: Transient props with spread at call site — $-prefixed props
 // explicitly passed should still be renamed even when spread is present
 function Fader(props: FaderProps) {
-  const { className, children, style, sx, $duration, $open, ...rest } = props;
+  const { className, style, sx, $duration, $open, ...rest } = props;
   return (
     <div
       {...rest}
       {...mergedSx([styles.fader($duration), $open && styles.faderOpen, sx], className, style)}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -148,12 +146,8 @@ type OverlayContainerProps = { zIndex: number } & Omit<
 
 // Pattern 8: Single-use unexported intrinsic with identity prop interpolation should inline
 function OverlayContainer(props: OverlayContainerProps) {
-  const { children, zIndex, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.overlayContainer(zIndex)}>
-      {children}
-    </div>
-  );
+  const { zIndex, ...rest } = props;
+  return <div {...rest} sx={styles.overlayContainer(zIndex)} />;
 }
 
 function Overlay() {
@@ -173,12 +167,8 @@ type SpreadOverlayProps = { zIndex: number } & {
 // Pattern 9: Same as Pattern 8 but with JSX spread — must keep wrapper
 // because the inline path can't extract styleFn props from spreads
 function SpreadOverlay(props: SpreadOverlayProps) {
-  const { className, children, style, sx, zIndex, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.spreadOverlay(zIndex), sx], className, style)}>
-      {children}
-    </div>
-  );
+  const { className, style, sx, zIndex, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.spreadOverlay(zIndex), sx], className, style)} />;
 }
 
 function SpreadOverlayConsumer(props: React.HTMLAttributes<HTMLDivElement>) {

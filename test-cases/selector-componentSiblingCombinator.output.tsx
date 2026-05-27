@@ -3,12 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { LinkMarker } from "./selector-componentSiblingCombinator.input.stylex";
 
 function Link(props: Omit<React.ComponentProps<"a">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <a {...rest} sx={[styles.link, LinkMarker, stylex.defaultMarker()]}>
-      {children}
-    </a>
-  );
+  return <a {...props} sx={[styles.link, LinkMarker, stylex.defaultMarker()]} />;
 }
 
 export const App = () => (

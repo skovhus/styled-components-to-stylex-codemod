@@ -12,14 +12,12 @@ type StyledBoxProps = { inline?: boolean } & Omit<
 >;
 
 function StyledBox(props: StyledBoxProps) {
-  const { children, inline, ...rest } = props;
+  const { inline, ...rest } = props;
   return (
     <BaseBox
       {...rest}
       {...stylex.props(styles.box, inline === true ? styles.boxInline : styles.boxNotInline)}
-    >
-      {children}
-    </BaseBox>
+    />
   );
 }
 

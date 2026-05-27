@@ -7,12 +7,7 @@ type StyledBoxProps = React.PropsWithChildren<{
 }>;
 
 function StyledBox(props: StyledBoxProps) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} color="crimson" sx={styles.box}>
-      {children}
-    </div>
-  );
+  return <div {...props} color="crimson" sx={styles.box} />;
 }
 
 type ClassNameBoxProps = React.PropsWithChildren<{

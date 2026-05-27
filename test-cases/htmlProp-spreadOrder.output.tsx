@@ -30,12 +30,8 @@ function Box(
     "data-test"?: boolean | string;
   } & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.box, sx], className, style)}>
-      {children}
-    </div>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.box, sx], className, style)} />;
 }
 
 export function MultiSpread(a: BoxProps, b: BoxProps) {

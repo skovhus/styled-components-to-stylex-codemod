@@ -8,12 +8,7 @@ function ListRow(
     "data-selected"?: boolean | string;
   }>,
 ) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.listRow}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.listRow} />;
 }
 
 export function App() {

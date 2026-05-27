@@ -40,7 +40,7 @@ export const flexPropKeys = ["wrap", "alignSelf", "gap", "wrapGap", "column"];
 export function FlexBox(
   props: FlexProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { children, style, sx, wrap, alignSelf, gap, wrapGap, column, ...rest } = props;
+  const { style, sx, wrap, alignSelf, gap, wrapGap, column, ...rest } = props;
   return (
     <div
       {...rest}
@@ -59,9 +59,7 @@ export function FlexBox(
         undefined,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

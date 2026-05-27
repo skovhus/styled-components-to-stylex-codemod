@@ -2,30 +2,15 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Button(props: Omit<React.ComponentProps<"button">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} sx={styles.button}>
-      {children}
-    </button>
-  );
+  return <button {...props} sx={styles.button} />;
 }
 
 function Select(props: Omit<React.ComponentProps<"select">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <select {...rest} sx={styles.select}>
-      {children}
-    </select>
-  );
+  return <select {...props} sx={styles.select} />;
 }
 
 function Textarea(props: Omit<React.ComponentProps<"textarea">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <textarea {...rest} sx={styles.textarea}>
-      {children}
-    </textarea>
-  );
+  return <textarea {...props} sx={styles.textarea} />;
 }
 
 export const App = () => (

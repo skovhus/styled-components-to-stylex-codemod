@@ -11,19 +11,9 @@ type TextProps = React.PropsWithChildren<{
 }> & { sx?: stylex.StyleXStyles };
 
 function Text(props: TextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles }) {
-  const {
-    as: Component = "span",
-    className,
-    children,
-    style,
-    sx,
-    variant = "regular",
-    ...rest
-  } = props;
+  const { as: Component = "span", className, style, sx, variant = "regular", ...rest } = props;
   return (
-    <Component {...rest} {...mergedSx([styles.text, variants[variant], sx], className, style)}>
-      {children}
-    </Component>
+    <Component {...rest} {...mergedSx([styles.text, variants[variant], sx], className, style)} />
   );
 }
 
@@ -37,12 +27,8 @@ type LabelProps = {
  * Uses .attrs({ as: "label" }) to set the element type.
  */
 export function Label(props: LabelProps) {
-  const { children, sx, ...rest } = props;
-  return (
-    <Text {...rest} as="label" sx={[styles.label, sx]}>
-      {children}
-    </Text>
-  );
+  const { sx, ...rest } = props;
+  return <Text {...rest} as="label" sx={[styles.label, sx]} />;
 }
 
 export function FormField() {

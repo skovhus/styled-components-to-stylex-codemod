@@ -11,14 +11,12 @@ type Props = {
 export function Badge(
   props: Props & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
-  const { children, size = "normal", color, ...rest } = props;
+  const { size = "normal", color, ...rest } = props;
   return (
     <div
       {...rest}
       sx={[styles.badge, sizeVariants[size], color != null && styles.badgeBackgroundColor(color)]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

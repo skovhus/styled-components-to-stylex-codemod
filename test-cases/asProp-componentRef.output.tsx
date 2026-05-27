@@ -30,12 +30,8 @@ function AnimatedText<C extends React.ElementType = "span">(
     as?: C;
   },
 ) {
-  const { as: Component = "span", children, style, sx, ...rest } = props;
-  return (
-    <Component {...rest} {...mergedSx([styles.animatedText, sx], undefined, style)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "span", style, sx, ...rest } = props;
+  return <Component {...rest} {...mergedSx([styles.animatedText, sx], undefined, style)} />;
 }
 
 type Props = {

@@ -7,12 +7,8 @@ type ButtonProps = React.PropsWithChildren<{
 }>;
 
 export function Button(props: ButtonProps) {
-  const { children, primary, ...rest } = props;
-  return (
-    <button {...rest} sx={[styles.button, primary && styles.buttonPrimary]}>
-      {children}
-    </button>
-  );
+  const { primary, ...rest } = props;
+  return <button {...rest} sx={[styles.button, primary && styles.buttonPrimary]} />;
 }
 
 export function App() {

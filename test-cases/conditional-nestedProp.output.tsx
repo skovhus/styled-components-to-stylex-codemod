@@ -14,12 +14,8 @@ type User = {
 type BadgeProps = { user: User } & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">;
 
 export function Badge(props: BadgeProps) {
-  const { children, user, ...rest } = props;
-  return (
-    <div {...rest} sx={user.role === Role.admin && styles.badgeUserRoleAdmin}>
-      {children}
-    </div>
-  );
+  const { user, ...rest } = props;
+  return <div {...rest} sx={user.role === Role.admin && styles.badgeUserRoleAdmin} />;
 }
 
 export function App() {

@@ -7,12 +7,8 @@ type ConditionalContainerProps = { size: number } & Omit<
 >;
 
 export function ConditionalContainer(props: ConditionalContainerProps) {
-  const { children, size, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.conditionalContainerFontSize(size)}>
-      {children}
-    </div>
-  );
+  const { size, ...rest } = props;
+  return <div {...rest} sx={styles.conditionalContainerFontSize(size)} />;
 }
 
 export const App = () => <ConditionalContainer size={16}>Hello</ConditionalContainer>;

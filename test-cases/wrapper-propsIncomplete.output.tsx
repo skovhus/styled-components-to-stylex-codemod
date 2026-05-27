@@ -18,12 +18,8 @@ interface TextColorProps {
 export function TextColor(
   props: TextColorProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, color, ...rest } = props;
-  return (
-    <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)}>
-      {children}
-    </span>
-  );
+  const { className, style, sx, color, ...rest } = props;
+  return <span {...rest} {...mergedSx([styles.textColorColor(color), sx], className, style)} />;
 }
 
 // Pattern 2: styled(Component) - wrapper needs component's props + HTML attributes
@@ -36,14 +32,12 @@ interface HighlightProps extends Omit<React.ComponentPropsWithRef<typeof BaseTex
 }
 
 export function Highlight(props: HighlightProps) {
-  const { className, children, sx, highlighted, ...rest } = props;
+  const { className, sx, highlighted, ...rest } = props;
   return (
     <BaseText
       {...rest}
       {...mergedSx([styles.highlight, highlighted && styles.highlightHighlighted, sx], className)}
-    >
-      {children}
-    </BaseText>
+    />
   );
 }
 
@@ -71,12 +65,8 @@ interface ThemeTextProps {
 export function ThemeText(
   props: ThemeTextProps & React.ComponentProps<"span"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, themeColor, ...rest } = props;
-  return (
-    <span {...rest} {...mergedSx([$colorMixins.color[themeColor], sx], className, style)}>
-      {children}
-    </span>
-  );
+  const { className, style, sx, themeColor, ...rest } = props;
+  return <span {...rest} {...mergedSx([$colorMixins.color[themeColor], sx], className, style)} />;
 }
 
 const styles = stylex.create({

@@ -8,11 +8,9 @@ function Button<C extends React.ElementType = "button">(
     as?: C;
   } & { forwardedAs?: React.ElementType },
 ) {
-  const { as: Component = "button", forwardedAs, className, children, style, sx, ...rest } = props;
+  const { as: Component = "button", forwardedAs, className, style, sx, ...rest } = props;
   return (
-    <Component {...rest} as={forwardedAs} {...mergedSx([styles.button, sx], className, style)}>
-      {children}
-    </Component>
+    <Component {...rest} as={forwardedAs} {...mergedSx([styles.button, sx], className, style)} />
   );
 }
 
@@ -23,12 +21,8 @@ function ButtonWrapper(
     "className" | "style"
   >,
 ) {
-  const { children, sx, ...rest } = props;
-  return (
-    <Button {...rest} sx={[styles.buttonWrapper, sx]}>
-      {children}
-    </Button>
-  );
+  const { sx, ...rest } = props;
+  return <Button {...rest} sx={[styles.buttonWrapper, sx]} />;
 }
 
 export const App = () => (

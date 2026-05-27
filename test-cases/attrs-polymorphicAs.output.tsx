@@ -36,12 +36,8 @@ type LabelProps = {
  * The wrapper should use label-specific props (htmlFor)
  */
 export function Label(props: LabelProps) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <Text {...rest} as="label" {...mergedSx([styles.label, sx], className, style)}>
-      {children}
-    </Text>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <Text {...rest} as="label" {...mergedSx([styles.label, sx], className, style)} />;
 }
 
 type FixedHrefTextProps<C extends React.ElementType = typeof Text> = Omit<
@@ -73,12 +69,8 @@ export function FixedHrefText<C extends React.ElementType = typeof Text>(
 export function ForwardedAsText(
   props: { sx?: stylex.StyleXStyles } & Omit<React.ComponentPropsWithRef<typeof Text>, "as">,
 ) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <Text {...rest} as="em" {...mergedSx([styles.forwardedAsText, sx], className, style)}>
-      {children}
-    </Text>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <Text {...rest} as="em" {...mergedSx([styles.forwardedAsText, sx], className, style)} />;
 }
 
 // Usage with label-specific props

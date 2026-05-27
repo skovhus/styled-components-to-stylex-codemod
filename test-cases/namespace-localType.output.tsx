@@ -11,12 +11,8 @@ export namespace WidgetSet {
   export function Grid(
     props: GridProps & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
   ) {
-    const { className, children, style, sx, dense, columnCount, ...rest } = props;
-    return (
-      <div {...rest} {...mergedSx([styles.grid(dense, columnCount), sx], className, style)}>
-        {children}
-      </div>
-    );
+    const { className, style, sx, dense, columnCount, ...rest } = props;
+    return <div {...rest} {...mergedSx([styles.grid(dense, columnCount), sx], className, style)} />;
   }
 }
 

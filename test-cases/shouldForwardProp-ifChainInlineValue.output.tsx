@@ -8,7 +8,7 @@ type FlexContainerProps = React.PropsWithChildren<{
 }>;
 
 function FlexContainer(props: FlexContainerProps) {
-  const { children, column, reverse, ...rest } = props;
+  const { column, reverse, ...rest } = props;
   return (
     <div
       {...rest}
@@ -22,9 +22,7 @@ function FlexContainer(props: FlexContainerProps) {
             ? styles.flexContainerReverse
             : styles.flexContainerDefault,
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

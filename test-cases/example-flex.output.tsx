@@ -89,7 +89,6 @@ export function Flex<C extends React.ElementType = "div">(
   const {
     as: Component = "div",
     className,
-    children,
     style,
     sx,
     column,
@@ -147,20 +146,13 @@ export function Flex<C extends React.ElementType = "div">(
         className,
         style,
       )}
-    >
-      {children}
-    </Component>
+    />
   );
 }
 
 /** A flex spacer */
 export function FlexSpacer(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.flexSpacer}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.flexSpacer} />;
 }
 
 export const App = () => (
