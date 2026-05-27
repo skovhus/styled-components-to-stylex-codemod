@@ -12,6 +12,7 @@ import type { ImportedIconProps, ImportedTooltipProps } from "./sx-aware-importe
 type TextProps = {
   size?: "sm" | "md";
   color?: string;
+  align?: React.CSSProperties["textAlign"];
 };
 
 type TextComponentProps<C extends React.ElementType> = TextProps &
@@ -21,17 +22,18 @@ type TextComponentProps<C extends React.ElementType> = TextProps &
   };
 
 export function Text<C extends React.ElementType = "span">(props: TextComponentProps<C>) {
-  const { as, sx, size, color, className, style, ...rest } = props as TextComponentProps<C> & {
-    className?: string;
-    style?: React.CSSProperties;
-  };
+  const { align, as, sx, size, color, className, style, ...rest } =
+    props as TextComponentProps<C> & {
+      className?: string;
+      style?: React.CSSProperties;
+    };
   const Component = (as ?? "span") as React.ElementType;
   const sp = stylex.props(styles.base, size === "md" ? styles.md : styles.sm, sx);
   return (
     <Component
       {...rest}
       className={[sp.className, className].filter(Boolean).join(" ")}
-      style={{ color, ...sp.style, ...style }}
+      style={{ textAlign: align, color, ...sp.style, ...style }}
     />
   );
 }
