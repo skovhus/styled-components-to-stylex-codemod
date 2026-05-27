@@ -18,6 +18,8 @@ import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-int
 
 const INLINE_USAGE_THRESHOLD = 1;
 const CLASS_OR_STYLE_ATTRS = new Set(["className", "style"]);
+const AS_ATTR = new Set(["as"]);
+const FORWARDED_AS_ATTR = new Set(["forwardedAs"]);
 
 /**
  * Finalizes wrapper decisions, polymorphic handling, and base flattening after style emission.
@@ -499,7 +501,10 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
   if (decl.base.kind !== "component") {
     return false;
   }
-  if (wrapperNames.has(decl.localName) || exportedComponents.has(decl.localName)) {
+  if (exportedComponents.has(decl.localName)) {
+    return false;
+  }
+  if (wrapperNames.has(decl.localName) && !hasOnlyForwardedAsPolymorphicUsage(root, j, decl)) {
     return false;
   }
   if (extendedBy.has(decl.localName) || decl.usedAsValue) {
@@ -553,6 +558,18 @@ function hasAttrsPayload(attrsInfo: StyledDecl["attrsInfo"]): boolean {
     Object.keys(attrsInfo?.attrsStaticStyles ?? {}).length > 0 ||
     attrsInfo?.attrsStaticStyleExpr ||
     (attrsInfo?.attrsDynamicStyles?.length ?? 0) > 0
+  );
+}
+
+function hasOnlyForwardedAsPolymorphicUsage(
+  root: ReturnType<JSCodeshift>,
+  j: JSCodeshift,
+  decl: StyledDecl,
+): boolean {
+  return (
+    decl.base.kind === "component" &&
+    hasAnyJsxAttribute(root, j, decl.localName, FORWARDED_AS_ATTR) &&
+    !hasAnyJsxAttribute(root, j, decl.localName, AS_ATTR)
   );
 }
 

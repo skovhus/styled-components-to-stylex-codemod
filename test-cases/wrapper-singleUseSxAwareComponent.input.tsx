@@ -2,6 +2,7 @@
 import styled from "styled-components";
 import { flexCenter } from "./lib/helpers";
 import { DynamicFlex } from "./lib/sx-dynamic-flex";
+import { Text } from "./lib/sx-aware-text";
 
 const TombstoneContainer = styled(DynamicFlex)`
   grid-area: br;
@@ -11,10 +12,17 @@ const TombstoneContainer = styled(DynamicFlex)`
   ${flexCenter()}
 `;
 
+const TitleText = styled(Text)`
+  margin-bottom: 12px;
+`;
+
 export const App = () => (
-  <div style={{ display: "grid", gridTemplateAreas: '"br"', padding: 16 }}>
+  <div style={{ display: "grid", gridTemplateAreas: '"br"', padding: 16, gap: 12 }}>
     <TombstoneContainer justify="center" align="center" gap={16}>
       Tombstone flex
     </TombstoneContainer>
+    <TitleText size="md" color="labelTitle" forwardedAs="p" align="center">
+      Link
+    </TitleText>
   </div>
 );
