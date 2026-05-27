@@ -9,7 +9,7 @@ type EmojiContainerProps = { size: number } & Omit<
 
 /** A container for emojis that standardizes sizing across browsers */
 export function EmojiContainer(props: EmojiContainerProps) {
-  const { children, size, ...rest } = props;
+  const { size, ...rest } = props;
   return (
     <div
       {...rest}
@@ -20,9 +20,7 @@ export function EmojiContainer(props: EmojiContainerProps) {
           ? styles.emojiContainerBrowserIsSafari(size)
           : styles.emojiContainerDefault(size),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

@@ -21,15 +21,13 @@ type StyledSubmitButtonProps = { hasLabel: boolean } & Omit<
 
 // .attrs sets onlyIcon to undefined, and styled wraps with $hasLabel prop
 function StyledSubmitButton(props: StyledSubmitButtonProps) {
-  const { children, hasLabel, ...rest } = props;
+  const { hasLabel, ...rest } = props;
   return (
     <SubmitButton
       {...rest}
       onlyIcon={undefined}
       {...stylex.props(styles.submitButton, hasLabel && styles.submitButtonHasLabel)}
-    >
-      {children}
-    </SubmitButton>
+    />
   );
 }
 

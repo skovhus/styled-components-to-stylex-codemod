@@ -21,7 +21,7 @@ export interface CardProps {
 export function Card(
   props: CardProps & Omit<React.ComponentProps<"div">, "style"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, sx, highlighted, ...rest } = props;
+  const { className, sx, highlighted, ...rest } = props;
   return (
     <div
       {...rest}
@@ -29,9 +29,7 @@ export function Card(
         [styles.card, highlighted ? styles.cardHighlighted : styles.cardNotHighlighted, sx],
         className,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

@@ -5,22 +5,12 @@ import { $colorMixins } from "./lib/colorMixins.stylex";
 // This component uses JSX but has no explicit React import
 // (modern JSX transform doesn't require it for styled-components)
 export function Card(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.card}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.card} />;
 }
 
 // Another component to ensure multiple components work
 export function Button(props: Pick<React.ComponentProps<"button">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <button {...rest} sx={styles.button}>
-      {children}
-    </button>
-  );
+  return <button {...props} sx={styles.button} />;
 }
 
 // Pattern 2: Component with theme access (like TextColor.tsx in a design system)
@@ -32,12 +22,8 @@ interface ThemeSpanProps {
 export function ThemeSpan(
   props: ThemeSpanProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
 ) {
-  const { children, variant, ...rest } = props;
-  return (
-    <span {...rest} {...stylex.props($colorMixins.color[variant])}>
-      {children}
-    </span>
-  );
+  const { variant, ...rest } = props;
+  return <span {...rest} {...stylex.props($colorMixins.color[variant])} />;
 }
 
 type ChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
@@ -46,12 +32,8 @@ export function ChoiceButton(
   props: Omit<ChoiceButtonProps, "className" | "style" | "sx"> &
     Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
-  const { children, active, ...rest } = props;
-  return (
-    <button {...rest} sx={[styles.choiceButton, active && styles.choiceButtonActive]}>
-      {children}
-    </button>
-  );
+  const { active, ...rest } = props;
+  return <button {...rest} sx={[styles.choiceButton, active && styles.choiceButtonActive]} />;
 }
 
 type LocalChoiceButtonProps = { active: boolean } & React.ComponentProps<"button">;
@@ -60,11 +42,9 @@ function LocalChoiceButton(
   props: Omit<LocalChoiceButtonProps, "className" | "style" | "sx"> &
     Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
-  const { children, active, ...rest } = props;
+  const { active, ...rest } = props;
   return (
-    <button {...rest} sx={[styles.localChoiceButton, active && styles.localChoiceButtonActive]}>
-      {children}
-    </button>
+    <button {...rest} sx={[styles.localChoiceButton, active && styles.localChoiceButtonActive]} />
   );
 }
 

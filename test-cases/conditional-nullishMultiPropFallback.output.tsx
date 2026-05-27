@@ -20,7 +20,7 @@ type GutterBoxProps = {
 export function GutterBox(
   props: GutterBoxProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
-  const { children, $gutter, $zIndex, ...rest } = props;
+  const { $gutter, $zIndex, ...rest } = props;
   return (
     <div
       {...rest}
@@ -30,9 +30,7 @@ export function GutterBox(
         styles.gutterBoxMarginBottom(`-${$gutter ?? DEFAULT_GUTTER}px`),
         styles.gutterBoxZIndex($zIndex ?? gutterTokens.sticky),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

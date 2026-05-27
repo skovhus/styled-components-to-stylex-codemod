@@ -72,7 +72,7 @@ export const App = () => (
 type ContainerProps = { size: number } & React.ComponentProps<"div">;
 
 function Container(props: ContainerProps) {
-  const { className, children, style, sx, size, ...rest } = props;
+  const { className, style, sx, size, ...rest } = props;
   const theme = useTheme();
 
   return (
@@ -91,9 +91,7 @@ function Container(props: ContainerProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

@@ -21,7 +21,7 @@ const showProperty = (size?: number | string) => {
 export function Spacer(
   props: Props & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { children, style, sx, width, height, ...rest } = props;
+  const { style, sx, width, height, ...rest } = props;
   return (
     <div
       {...rest}
@@ -34,9 +34,7 @@ export function Spacer(
         undefined,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

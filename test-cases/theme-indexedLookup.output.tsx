@@ -34,12 +34,8 @@ interface TextColorProps {
 export function TextColor(
   props: TextColorProps & Omit<React.ComponentProps<"span">, "className" | "style" | "sx">,
 ) {
-  const { children, color, ...rest } = props;
-  return (
-    <span {...rest} {...stylex.props($colorMixins.color[color])}>
-      {children}
-    </span>
-  );
+  const { color, ...rest } = props;
+  return <span {...rest} {...stylex.props($colorMixins.color[color])} />;
 }
 
 const styles = stylex.create({

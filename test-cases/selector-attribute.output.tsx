@@ -20,7 +20,7 @@ type LinkProps = React.PropsWithChildren<
 >;
 
 function Link(props: LinkProps) {
-  const { href, target, children, ...rest } = props;
+  const { href, target, ...rest } = props;
   const isHttps = href?.startsWith("https");
   const isPdf = href?.endsWith(".pdf");
   const isExternal = target === "_blank";
@@ -32,11 +32,7 @@ function Link(props: LinkProps) {
     isPdf && styles.linkPdf,
   );
 
-  return (
-    <a href={href} target={target} {...rest} {...sx}>
-      {children}
-    </a>
-  );
+  return <a href={href} target={target} {...rest} {...sx} />;
 }
 
 export const App = () => (

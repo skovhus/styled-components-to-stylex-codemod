@@ -20,12 +20,8 @@ function Text(props: TextProps) {
 type EmphasisLabelProps = TextProps & { forwardedAs?: TextProps["as"] };
 
 function EmphasisLabel(props: EmphasisLabelProps) {
-  const { children, forwardedAs, ...rest } = props;
-  return (
-    <Text {...rest} as={forwardedAs ?? rest.as} {...stylex.props(styles.emphasisLabel)}>
-      {children}
-    </Text>
-  );
+  const { forwardedAs, ...rest } = props;
+  return <Text {...rest} as={forwardedAs ?? rest.as} {...stylex.props(styles.emphasisLabel)} />;
 }
 
 export const App = () => (

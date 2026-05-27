@@ -4,21 +4,18 @@ import * as stylex from "@stylexjs/stylex";
 import { $colors } from "./tokens.stylex";
 
 export function Chip(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
-  const { children, ...rest } = props;
   const theme = useTheme();
   const sx = stylex.props(styles.chip);
 
   return (
     <div
-      {...rest}
+      {...props}
       {...sx}
       style={{
         ...sx.style,
         backgroundColor: theme.isDark ? theme.highlightVariant(theme.color.bgFocus) : undefined,
       }}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

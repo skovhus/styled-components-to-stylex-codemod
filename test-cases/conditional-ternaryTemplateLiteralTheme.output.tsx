@@ -10,12 +10,8 @@ type DropZoneProps = React.PropsWithChildren<{
 // The adapter should resolve the theme color.
 
 export function DropZone(props: DropZoneProps) {
-  const { children, isDraggingOver, ...rest } = props;
-  return (
-    <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]}>
-      {children}
-    </div>
-  );
+  const { isDraggingOver, ...rest } = props;
+  return <div {...rest} sx={[styles.dropZone, isDraggingOver && styles.dropZoneDraggingOver]} />;
 }
 
 export const App = () => (

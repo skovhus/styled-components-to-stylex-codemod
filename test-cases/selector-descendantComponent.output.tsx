@@ -13,12 +13,7 @@ import { $colors } from "./tokens.stylex";
 export function ContainerLink(
   props: Omit<React.ComponentProps<"a">, "className" | "style" | "sx">,
 ) {
-  const { children, ...rest } = props;
-  return (
-    <a {...rest} sx={stylex.defaultMarker()}>
-      {children}
-    </a>
-  );
+  return <a {...props} sx={stylex.defaultMarker()} />;
 }
 
 export const App = () => (

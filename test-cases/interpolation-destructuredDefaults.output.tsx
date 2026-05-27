@@ -22,16 +22,13 @@ type CardProps = { size?: number } & Omit<
 // Destructured prop with ternary using default
 // When size is undefined, should use 16 (default), then check if it equals 16
 function Card(props: CardProps) {
-  const { children, ...rest } = props;
   return (
     <div
-      {...rest}
+      {...props}
       style={{
         padding: (props.size ?? 16) === 16 ? "1rem" : `${props.size ?? 16}px`,
       }}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -42,16 +39,13 @@ type BoxProps = { margin?: number } & Omit<
 
 // Renamed destructured prop with default AND fallback
 function Box(props: BoxProps) {
-  const { children, ...rest } = props;
   return (
     <div
-      {...rest}
+      {...props}
       style={{
         margin: `${(props.margin ?? 10) || 5}px`,
       }}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

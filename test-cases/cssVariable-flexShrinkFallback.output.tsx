@@ -12,7 +12,7 @@ type ColumnContainerProps = {
  * The codemod should preserve this via a stylex function.
  */
 export function ColumnContainer(props: ColumnContainerProps) {
-  const { children, style, sx, noGrowOrShrink, basis, ...rest } = props;
+  const { style, sx, noGrowOrShrink, basis, ...rest } = props;
   return (
     <div
       {...rest}
@@ -24,9 +24,7 @@ export function ColumnContainer(props: ColumnContainerProps) {
           ...style,
         },
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

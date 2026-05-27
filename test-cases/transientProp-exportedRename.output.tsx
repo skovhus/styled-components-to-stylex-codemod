@@ -41,15 +41,13 @@ export function TreeToggle(
     "className" | "style" | "$isExpanded"
   > & { [K in "$isExpanded" as "isExpanded"]: React.ComponentPropsWithRef<typeof ExpandIcon>[K] },
 ) {
-  const { children, isExpanded, ...rest } = props;
+  const { isExpanded, ...rest } = props;
   return (
     <ExpandIcon
       $isExpanded={isExpanded}
       {...rest}
       {...stylex.props(styles.treeToggle, isExpanded ? styles.treeToggleExpanded : undefined)}
-    >
-      {children}
-    </ExpandIcon>
+    />
   );
 }
 
@@ -61,14 +59,12 @@ type StatusBadgeProps = React.PropsWithChildren<{
 // Exported styled.div with multiple $-prefixed props.
 // All should be renamed for the same sc v6 forwarding reason.
 export function StatusBadge(props: StatusBadgeProps) {
-  const { children, compact, variant, ...rest } = props;
+  const { compact, variant, ...rest } = props;
   return (
     <div
       {...rest}
       sx={[styles.statusBadge, compact && styles.statusBadgeCompact, variantVariants[variant]]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -89,14 +85,12 @@ type ColorChipProps = {
 
 // Collision: $color cannot be renamed because `color` already exists as a prop
 export function ColorChip(props: ColorChipProps) {
-  const { children, $color, color, ...rest } = props;
+  const { $color, color, ...rest } = props;
   return (
     <div
       {...rest}
       sx={[styles.colorChip, styles.colorChipBackgroundColor($color), styles.colorChipColor(color)]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -106,7 +100,7 @@ type SpecifierTagProps = { highlighted?: boolean } & React.ComponentProps<"div">
 
 // Specifier export (export { ... }) — should also be renamed
 function SpecifierTag(props: SpecifierTagProps) {
-  const { className, children, style, sx, highlighted, ...rest } = props;
+  const { className, style, sx, highlighted, ...rest } = props;
   return (
     <div
       {...rest}
@@ -115,9 +109,7 @@ function SpecifierTag(props: SpecifierTagProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

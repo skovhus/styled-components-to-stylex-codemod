@@ -8,12 +8,8 @@ type TopContainerProps = { accentColor?: string } & Omit<
 >;
 
 export function TopContainer(props: TopContainerProps) {
-  const { children, sx, accentColor, ...rest } = props;
-  return (
-    <SxAwareButton {...rest} sx={[styles.topContainerColor(accentColor), sx]}>
-      {children}
-    </SxAwareButton>
-  );
+  const { sx, accentColor, ...rest } = props;
+  return <SxAwareButton {...rest} sx={[styles.topContainerColor(accentColor), sx]} />;
 }
 
 export const App = () => (

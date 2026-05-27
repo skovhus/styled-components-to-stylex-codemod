@@ -6,12 +6,8 @@ import { Text } from "./lib/text";
 function Button<C extends React.ElementType = "button">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
-  const { as: Component = "button", children, ...rest } = props;
-  return (
-    <Component {...rest} {...stylex.props(styles.button)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "button", ...rest } = props;
+  return <Component {...rest} {...stylex.props(styles.button)} />;
 }
 
 type StyledTextProps<C extends React.ElementType = typeof Text> = React.ComponentPropsWithRef<
@@ -35,12 +31,8 @@ function StyledText<C extends React.ElementType = typeof Text>(props: StyledText
 function FullWidthCopyText<C extends React.ElementType = "div">(
   props: Omit<React.ComponentPropsWithRef<C>, "className" | "style" | "sx"> & { as?: C },
 ) {
-  const { as: Component = "div", children, ...rest } = props;
-  return (
-    <Component {...rest} {...stylex.props(styles.fullWidthCopyText)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "div", ...rest } = props;
+  return <Component {...rest} {...stylex.props(styles.fullWidthCopyText)} />;
 }
 
 export const App = () => (

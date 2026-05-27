@@ -61,6 +61,12 @@ function buildAttrWrapperBody(
   const forwardedAsId = j.identifier("forwardedAs");
   const componentId = j.identifier("Component");
   const sxId = j.identifier("sx");
+  const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+    includeChildren,
+    includeRest: true,
+    restId,
+    destructureProps: [...extraDestructureProps, ...pseudoGuardProps],
+  });
 
   // Build base props in the order matching the original template output:
   // as, forwardedAs, extraProps (type/href/target), className, children
@@ -78,7 +84,9 @@ function buildAttrWrapperBody(
     ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
     ...extraDestructureProps.map((name) => ctx.patternProp(name, j.identifier(name))),
     ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-    ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+    ...(includeChildren && !passChildrenThroughRest
+      ? [ctx.patternProp("children", childrenId)]
+      : []),
   ];
 
   const patternProps = emitter.buildDestructurePatternProps({
@@ -153,7 +161,7 @@ function buildAttrWrapperBody(
   const jsx = emitter.buildJsxElement({
     tagName: jsxTag,
     attrs: openingAttrs,
-    includeChildren,
+    includeChildren: includeChildren && !passChildrenThroughRest,
     childrenExpr: childrenId,
   });
 

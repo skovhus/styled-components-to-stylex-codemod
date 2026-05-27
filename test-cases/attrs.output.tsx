@@ -138,16 +138,14 @@ interface BackgroundProps extends Omit<
 }
 
 export function Background(props: BackgroundProps) {
-  const { children, loaded, ...rest } = props;
+  const { loaded, ...rest } = props;
   return (
     <Flex
       {...rest}
       column={true}
       center={true}
       {...stylex.props(styles.background, loaded && styles.backgroundLoaded)}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 
@@ -166,21 +164,19 @@ export function ImportedSection(
 
 // Pattern 3d: transient prop renames should still apply when explicit props overlap attrs
 export function HighlightSection(props: HighlightSectionProps) {
-  const { children, active, ...rest } = props;
+  const { active, ...rest } = props;
   return (
     <Text
       {...rest}
       someAttribute={true}
       {...stylex.props(styles.highlightSection, active ? styles.highlightSectionActive : undefined)}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
 // Pattern 3e: utility-wrapped explicit attrs props should be omitted from the local alias
 export function UtilitySection(props: UtilitySectionProps) {
-  const { children, tone, ...rest } = props;
+  const { tone, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -189,9 +185,7 @@ export function UtilitySection(props: UtilitySectionProps) {
         styles.utilitySection,
         tone === "success" && styles.utilitySectionToneSuccess,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -207,7 +201,7 @@ type SharedPlainSectionProps = SharedSectionProps &
   Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style">;
 
 export function SharedPlainSection(props: SharedPlainSectionProps) {
-  const { children, tone, ...rest } = props;
+  const { tone, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -215,9 +209,7 @@ export function SharedPlainSection(props: SharedPlainSectionProps) {
         styles.sharedPlainSection,
         tone === "secondary" && styles.sharedPlainSectionToneSecondary,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -243,16 +235,14 @@ type FocusIndexSectionProps = { focusIndex?: number } & Omit<
 
 // Pattern 3h: dynamic attrs emitted after rest should omit the overwritten target prop
 export function FocusIndexSection(props: FocusIndexSectionProps) {
-  const { children, focusIndex, ...rest } = props;
+  const { focusIndex, ...rest } = props;
   return (
     <Text
       focusIndex={focusIndex}
       {...rest}
       tabIndex={focusIndex}
       {...stylex.props(styles.focusIndexSection)}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -328,7 +318,7 @@ export function TransientUnionSection(
     : never) &
     Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$tone">,
 ) {
-  const { children, tone, ...rest } = props;
+  const { tone, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -336,9 +326,7 @@ export function TransientUnionSection(
         styles.transientUnionSection,
         tone === "warm" && styles.transientUnionSectionToneWarm,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -355,7 +343,7 @@ type SharedTransientAttrsSectionProps = SharedTransientSectionProps &
 
 // Pattern 3n: shared transient aliases should keep shared alias and remap wrapper-local props
 export function SharedTransientAttrsSection(props: SharedTransientAttrsSectionProps) {
-  const { children, active, ...rest } = props;
+  const { active, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -364,9 +352,7 @@ export function SharedTransientAttrsSection(props: SharedTransientAttrsSectionPr
         styles.sharedTransientAttrsSection,
         active ? styles.sharedTransientAttrsSectionActive : undefined,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -374,7 +360,7 @@ type SharedTransientPlainSectionProps = SharedTransientSectionProps &
   Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "$active">;
 
 export function SharedTransientPlainSection(props: SharedTransientPlainSectionProps) {
-  const { children, active, ...rest } = props;
+  const { active, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -382,9 +368,7 @@ export function SharedTransientPlainSection(props: SharedTransientPlainSectionPr
         styles.sharedTransientPlainSection,
         active ? styles.sharedTransientPlainSectionActive : undefined,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -398,12 +382,8 @@ interface ScrollableProps extends Omit<
 }
 
 export function Scrollable(props: ScrollableProps) {
-  const { children, tabIndex, ...rest } = props;
-  return (
-    <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollable)}>
-      {children}
-    </Flex>
-  );
+  const { tabIndex, ...rest } = props;
+  return <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollable)} />;
 }
 
 // Pattern 5: styled(Component).attrs with TYPE ALIAS (not interface)
@@ -416,12 +396,8 @@ type TypeAliasProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 export function ScrollableWithType(props: TypeAliasProps) {
-  const { children, $applyBackground, tabIndex, ...rest } = props;
-  return (
-    <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollableWithType)}>
-      {children}
-    </Flex>
-  );
+  const { $applyBackground, tabIndex, ...rest } = props;
+  return <Flex tabIndex={tabIndex ?? 0} {...rest} {...stylex.props(styles.scrollableWithType)} />;
 }
 
 // Pattern 6: defaultAttrs with different prop name than attr name
@@ -435,16 +411,14 @@ interface FocusableProps extends Omit<
 }
 
 export function FocusableScroll(props: FocusableProps) {
-  const { children, focusIndex, ...rest } = props;
+  const { focusIndex, ...rest } = props;
   return (
     <Flex
       tabIndex={focusIndex ?? 0}
       focusIndex={focusIndex}
       {...rest}
       {...stylex.props(styles.focusableScroll)}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 
@@ -452,12 +426,8 @@ export function FocusableScroll(props: FocusableProps) {
 // When an intrinsic element has defaultAttrs, it generates a wrapper component
 // that destructures the referenced prop and applies the default value
 function Box(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
-  const { children, tabIndex, ...rest } = props;
-  return (
-    <div tabIndex={tabIndex ?? 0} {...rest} sx={styles.box}>
-      {children}
-    </div>
-  );
+  const { tabIndex, ...rest } = props;
+  return <div tabIndex={tabIndex ?? 0} {...rest} sx={styles.box} />;
 }
 
 type AlignedFlexProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
@@ -465,12 +435,8 @@ type AlignedFlexProps = Omit<React.ComponentPropsWithRef<typeof Flex>, "classNam
 // Pattern 8: defaultAttrs with same-name prop that IS in base component's explicit props
 // Verifies no duplication when attrName === jsxProp and prop is in baseExplicitProps
 export function AlignedFlex(props: AlignedFlexProps) {
-  const { children, column, ...rest } = props;
-  return (
-    <Flex column={column ?? true} {...rest} {...stylex.props(styles.alignedFlex)}>
-      {children}
-    </Flex>
-  );
+  const { column, ...rest } = props;
+  return <Flex column={column ?? true} {...rest} {...stylex.props(styles.alignedFlex)} />;
 }
 
 type DynamicHeightBoxProps = React.PropsWithChildren<{
@@ -618,12 +584,7 @@ function StyledIcon(
 }
 
 function AttrsSxButton(props: { children?: React.ReactNode }) {
-  const { children, ...rest } = props;
-  return (
-    <SxAwareButton {...rest} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]}>
-      {children}
-    </SxAwareButton>
-  );
+  return <SxAwareButton {...props} type="button" sx={[styles.attrsSxButton, attrsMarkerStyle]} />;
 }
 
 export const App = () => (

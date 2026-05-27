@@ -57,12 +57,8 @@ export function StatusBadge(
     "className"
   >,
 ) {
-  const { children, style, sx, ...rest } = props;
-  return (
-    <BadgeBase {...rest} {...mergedSx([styles.statusBadge, sx], undefined, style)}>
-      {children}
-    </BadgeBase>
-  );
+  const { style, sx, ...rest } = props;
+  return <BadgeBase {...rest} {...mergedSx([styles.statusBadge, sx], undefined, style)} />;
 }
 
 function DecorativeBadge(

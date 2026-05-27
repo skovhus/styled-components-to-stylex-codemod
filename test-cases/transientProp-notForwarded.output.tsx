@@ -43,7 +43,7 @@ interface ScrollableProps extends React.ComponentPropsWithRef<typeof Flex> {
  * The $applyBackground prop must NOT be passed to Flex since Flex doesn't accept it.
  */
 export function Scrollable(props: ScrollableProps) {
-  const { className, children, style, sx, applyBackground, ...rest } = props;
+  const { className, style, sx, applyBackground, ...rest } = props;
   return (
     <Flex
       {...rest}
@@ -52,9 +52,7 @@ export function Scrollable(props: ScrollableProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 
@@ -65,7 +63,7 @@ type BoxProps = {
 
 // DOM elements: transient props must NOT leak to the underlying element
 export function Box(props: BoxProps) {
-  const { className, children, style, sx, isActive, size, ...rest } = props;
+  const { className, style, sx, isActive, size, ...rest } = props;
   return (
     <div
       {...rest}
@@ -74,9 +72,7 @@ export function Box(props: BoxProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

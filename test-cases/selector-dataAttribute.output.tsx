@@ -10,7 +10,7 @@ function StyledMotionDiv(
     "className"
   >,
 ) {
-  const { children, style, sx, ...rest } = props;
+  const { style, sx, ...rest } = props;
   const _sx = stylex.props(styles.motionDiv, sx);
 
   return (
@@ -21,9 +21,7 @@ function StyledMotionDiv(
         ..._sx.style,
         ...style,
       }}
-    >
-      {children}
-    </motion.div>
+    />
   );
 }
 

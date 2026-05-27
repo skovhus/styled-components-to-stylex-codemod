@@ -31,12 +31,8 @@ type HighlightProps = React.PropsWithChildren<{
 
 // Ternary CSS block returning declaration text or empty string
 export function Highlight(props: HighlightProps) {
-  const { children, dim, ...rest } = props;
-  return (
-    <span {...rest} sx={[styles.highlight, dim && styles.highlightDim]}>
-      {children}
-    </span>
-  );
+  const { dim, ...rest } = props;
+  return <span {...rest} sx={[styles.highlight, dim && styles.highlightDim]} />;
 }
 
 type TooltipProps = React.PropsWithChildren<{
@@ -45,12 +41,8 @@ type TooltipProps = React.PropsWithChildren<{
 
 // Negated boolean conditions in ternary CSS blocks
 export function Tooltip(props: TooltipProps) {
-  const { children, open, ...rest } = props;
-  return (
-    <div {...rest} sx={!open && styles.tooltipNotOpen}>
-      {children}
-    </div>
-  );
+  const { open, ...rest } = props;
+  return <div {...rest} sx={!open && styles.tooltipNotOpen} />;
 }
 
 type OverlayProps = React.PropsWithChildren<{
@@ -59,12 +51,8 @@ type OverlayProps = React.PropsWithChildren<{
 
 // Negated ternary with styles in both branches
 export function Overlay(props: OverlayProps) {
-  const { children, visible, ...rest } = props;
-  return (
-    <div {...rest} sx={[styles.overlay, !visible && styles.overlayNotVisible]}>
-      {children}
-    </div>
-  );
+  const { visible, ...rest } = props;
+  return <div {...rest} sx={[styles.overlay, !visible && styles.overlayNotVisible]} />;
 }
 
 // String comparison: !== false (treated as boolean conditional)
@@ -76,7 +64,7 @@ type StyledIconButtonProps = { useRoundStyle?: boolean } & Omit<
 >;
 
 function StyledIconButton(props: StyledIconButtonProps) {
-  const { children, useRoundStyle, ...rest } = props;
+  const { useRoundStyle, ...rest } = props;
   return (
     <IconButton
       {...rest}
@@ -84,9 +72,7 @@ function StyledIconButton(props: StyledIconButtonProps) {
         styles.iconButton,
         useRoundStyle !== false && styles.iconButtonUseRoundStyle,
       )}
-    >
-      {children}
-    </IconButton>
+    />
   );
 }
 

@@ -24,7 +24,7 @@ type ErrorMessageProps = { inline?: boolean } & Omit<
 >;
 
 function ErrorMessage(props: ErrorMessageProps) {
-  const { children, inline, ...rest } = props;
+  const { inline, ...rest } = props;
   return (
     <div
       {...rest}
@@ -32,9 +32,7 @@ function ErrorMessage(props: ErrorMessageProps) {
         styles.errorMessage,
         inline === true ? styles.errorMessageInline : styles.errorMessageNotInline,
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -44,7 +42,7 @@ type StyledTextProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Text>, "className" | "style" | "gap" | "column">;
 
 function StyledText(props: StyledTextProps) {
-  const { children, addBottomBorder, hasSubtitle, ...rest } = props;
+  const { addBottomBorder, hasSubtitle, ...rest } = props;
   return (
     <Text
       {...rest}
@@ -56,9 +54,7 @@ function StyledText(props: StyledTextProps) {
         addBottomBorder && hasSubtitle && styles.textAddBottomBorderHasSubtitle,
         addBottomBorder && !hasSubtitle && styles.textAddBottomBorderNotHasSubtitle,
       )}
-    >
-      {children}
-    </Text>
+    />
   );
 }
 
@@ -292,7 +288,7 @@ type ConsolidatedKeyCollisionBoxProps = React.PropsWithChildren<{
 }>;
 
 function ConsolidatedKeyCollisionBox(props: ConsolidatedKeyCollisionBoxProps) {
-  const { children, add, hasSubtitle, ...rest } = props;
+  const { add, hasSubtitle, ...rest } = props;
   return (
     <div
       {...rest}
@@ -303,9 +299,7 @@ function ConsolidatedKeyCollisionBox(props: ConsolidatedKeyCollisionBoxProps) {
         add && hasSubtitle ? styles.consolidatedKeyCollisionBoxAddHasSubtitle : undefined,
         add && !hasSubtitle ? styles.consolidatedKeyCollisionBoxAddNotHasSubtitle : undefined,
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

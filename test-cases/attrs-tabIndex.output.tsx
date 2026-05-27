@@ -16,7 +16,7 @@ type ScrollableFlexProps = Props & {
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "$applyBackground">;
 
 export function ScrollableFlex(props: ScrollableFlexProps) {
-  const { className, children, style, sx, applyBackground, tabIndex, ...rest } = props;
+  const { className, style, sx, applyBackground, tabIndex, ...rest } = props;
   return (
     <Flex
       tabIndex={tabIndex ?? 0}
@@ -31,16 +31,14 @@ export function ScrollableFlex(props: ScrollableFlexProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 
 export function ScrollableDiv(
   props: Props & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, applyBackground, gutter, tabIndex, ...rest } = props;
+  const { className, style, sx, applyBackground, gutter, tabIndex, ...rest } = props;
   return (
     <div
       tabIndex={tabIndex ?? 0}
@@ -55,9 +53,7 @@ export function ScrollableDiv(
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -67,7 +63,7 @@ type TabIndexInStyleProps = { applyBackground?: boolean } & React.ComponentProps
 
 // tabIndex used in BOTH attrs (with default) AND in styles
 export function TabIndexInStyle(props: TabIndexInStyleProps) {
-  const { className, children, style, sx, applyBackground, tabIndex = 0, ...rest } = props;
+  const { className, style, sx, applyBackground, tabIndex = 0, ...rest } = props;
   return (
     <div
       tabIndex={tabIndex ?? 0}
@@ -82,9 +78,7 @@ export function TabIndexInStyle(props: TabIndexInStyleProps) {
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

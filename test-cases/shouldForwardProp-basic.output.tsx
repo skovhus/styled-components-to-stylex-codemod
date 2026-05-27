@@ -8,7 +8,7 @@ type ButtonProps = React.PropsWithChildren<{
 
 // Using shouldForwardProp to filter props (v5 pattern)
 function Button(props: ButtonProps) {
-  const { children, color, size, ...rest } = props;
+  const { color, size, ...rest } = props;
   return (
     <button
       {...rest}
@@ -17,9 +17,7 @@ function Button(props: ButtonProps) {
         color != null && styles.buttonBackgroundColor(color),
         size === "large" && styles.buttonSizeLarge,
       ]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 
@@ -30,12 +28,8 @@ type LinkProps = { isActive?: boolean } & Omit<
 
 // Using isPropValid from @emotion
 function Link(props: LinkProps) {
-  const { children, isActive, ...rest } = props;
-  return (
-    <a {...rest} sx={[styles.link, isActive && styles.linkActive]}>
-      {children}
-    </a>
-  );
+  const { isActive, ...rest } = props;
+  return <a {...rest} sx={[styles.link, isActive && styles.linkActive]} />;
 }
 
 type BoxProps = React.PropsWithChildren<{
@@ -45,7 +39,7 @@ type BoxProps = React.PropsWithChildren<{
 
 // Custom prop filtering logic (transient props pattern)
 function Box(props: BoxProps) {
-  const { children, background, padding, ...rest } = props;
+  const { background, padding, ...rest } = props;
   return (
     <div
       {...rest}
@@ -54,9 +48,7 @@ function Box(props: BoxProps) {
         background != null && styles.boxBackgroundColor(background),
         padding != null && styles.boxPadding(padding),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 
@@ -68,7 +60,7 @@ type CardProps = React.PropsWithChildren<{
 
 // Filter multiple custom props
 function Card(props: CardProps) {
-  const { children, variant, elevation, rounded, ...rest } = props;
+  const { variant, elevation, rounded, ...rest } = props;
   return (
     <div
       {...rest}
@@ -77,9 +69,7 @@ function Card(props: CardProps) {
         variant === "primary" && styles.cardVariantPrimary,
         rounded && styles.cardRounded,
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

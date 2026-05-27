@@ -372,6 +372,40 @@ export function buildShorthandDefaultPatternProp(
   }) as Property;
 }
 
+export function shouldPassChildrenThroughRest(args: {
+  includeChildren: boolean;
+  includeRest?: boolean;
+  restId?: Identifier | null;
+  destructureProps?: Array<string | null | undefined>;
+  defaultAttrs?: Array<{ attrName?: string; jsxProp?: string }>;
+  dynamicAttrs?: Array<{ attrName?: string; jsxProp?: string }>;
+  staticAttrs?: Record<string, unknown>;
+}): boolean {
+  const {
+    includeChildren,
+    includeRest = false,
+    restId,
+    destructureProps = [],
+    defaultAttrs = [],
+    dynamicAttrs = [],
+    staticAttrs = {},
+  } = args;
+  if (!includeChildren || !includeRest || !restId) {
+    return false;
+  }
+  if (destructureProps.some((name) => name === "children")) {
+    return false;
+  }
+  if (
+    [...defaultAttrs, ...dynamicAttrs].some(
+      (attr) => attr.attrName === "children" || attr.jsxProp === "children",
+    )
+  ) {
+    return false;
+  }
+  return !Object.hasOwn(staticAttrs, "children");
+}
+
 export function buildDestructurePatternProps(
   j: JSCodeshift,
   patternProp: (keyName: string, valueId?: ASTNode) => Property,

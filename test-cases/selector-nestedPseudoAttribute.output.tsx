@@ -2,21 +2,11 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function MenuDiv(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.menuDiv}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.menuDiv} />;
 }
 
 function InteractiveBox(props: Omit<React.ComponentProps<"div">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.interactiveBox}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.interactiveBox} />;
 }
 
 export function App() {

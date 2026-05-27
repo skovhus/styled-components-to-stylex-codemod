@@ -30,7 +30,7 @@ type ContainerProps = { color?: string } & Omit<
 >;
 
 export function Container(props: ContainerProps) {
-  const { children, color, ...rest } = props;
+  const { color, ...rest } = props;
   return (
     <Flex
       {...rest}
@@ -38,9 +38,7 @@ export function Container(props: ContainerProps) {
         styles.container,
         props.color ? styles.containerBackgroundColor(props.color) : undefined,
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 

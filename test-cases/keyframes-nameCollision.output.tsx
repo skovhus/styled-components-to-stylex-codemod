@@ -3,12 +3,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 export function Move(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={styles.move}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={styles.move} />;
 }
 
 type MoveIconProps = { animated?: boolean } & Omit<
@@ -17,12 +12,8 @@ type MoveIconProps = { animated?: boolean } & Omit<
 >;
 
 export function MoveIcon(props: MoveIconProps) {
-  const { children, animated, ...rest } = props;
-  return (
-    <svg {...rest} sx={[styles.moveIcon, animated && styles.moveIconAnimated]}>
-      {children}
-    </svg>
-  );
+  const { animated, ...rest } = props;
+  return <svg {...rest} sx={[styles.moveIcon, animated && styles.moveIconAnimated]} />;
 }
 
 export function App() {

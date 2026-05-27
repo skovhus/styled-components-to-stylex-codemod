@@ -17,14 +17,12 @@ const EASING = "cubic-bezier(0.25, 0.46, 0.45, 0.94)";
 function Container(
   props: ContainerProps & { sx?: stylex.StyleXStyles } & React.ComponentProps<"div">,
 ) {
-  const { className, children, style, sx, $delay, $open, ...rest } = props;
+  const { className, style, sx, $delay, $open, ...rest } = props;
   return (
     <div
       {...rest}
       {...mergedSx([styles.container, $open && styles.containerOpen($delay), sx], className, style)}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

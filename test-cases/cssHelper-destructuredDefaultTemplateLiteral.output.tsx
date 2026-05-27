@@ -12,12 +12,8 @@ type TileProps = {
 export function Tile(
   props: TileProps & Omit<React.ComponentProps<"div">, "className"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { children, style, sx, gap, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.tile(`${gap ?? 8}px`), sx], undefined, style)}>
-      {children}
-    </div>
-  );
+  const { style, sx, gap, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.tile(`${gap ?? 8}px`), sx], undefined, style)} />;
 }
 
 export const App = () => (

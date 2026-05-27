@@ -11,12 +11,8 @@ export function TextDividerContainer(
     "className" | "style" | "ref" | "children"
   >,
 ) {
-  const { className, children, style, sx, ...rest } = props;
-  return (
-    <div {...rest} {...mergedSx([styles.textDividerContainer, sx], className, style)}>
-      {children}
-    </div>
-  );
+  const { className, style, sx, ...rest } = props;
+  return <div {...rest} {...mergedSx([styles.textDividerContainer, sx], className, style)} />;
 }
 
 type ActionMenuTextDividerProps = {

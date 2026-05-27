@@ -12,12 +12,8 @@ export function ExportedButton<C extends React.ElementType = "button">(
     as?: C;
   },
 ) {
-  const { as: Component = "button", className, children, style, sx, ...rest } = props;
-  return (
-    <Component {...rest} {...mergedSx([styles.exportedButton, sx], className, style)}>
-      {children}
-    </Component>
-  );
+  const { as: Component = "button", className, style, sx, ...rest } = props;
+  return <Component {...rest} {...mergedSx([styles.exportedButton, sx], className, style)} />;
 }
 
 export const App = () => (

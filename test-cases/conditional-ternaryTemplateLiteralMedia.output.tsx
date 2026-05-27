@@ -6,12 +6,8 @@ type CardProps = React.PropsWithChildren<{
 }>;
 
 export function Card(props: CardProps) {
-  const { children, compact, ...rest } = props;
-  return (
-    <div {...rest} sx={[styles.card, compact ? styles.cardCompact : styles.cardNotCompact]}>
-      {children}
-    </div>
-  );
+  const { compact, ...rest } = props;
+  return <div {...rest} sx={[styles.card, compact ? styles.cardCompact : styles.cardNotCompact]} />;
 }
 
 export function App() {

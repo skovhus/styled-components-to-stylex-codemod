@@ -9,12 +9,8 @@ export function TextColor(
     "className" | "ref" | "children"
   >,
 ) {
-  const { className, children, sx, ...rest } = props;
-  return (
-    <span {...rest} {...mergedSx([styles.textColor, sx], className)}>
-      {children}
-    </span>
-  );
+  const { className, sx, ...rest } = props;
+  return <span {...rest} {...mergedSx([styles.textColor, sx], className)} />;
 }
 
 export const App = () => (

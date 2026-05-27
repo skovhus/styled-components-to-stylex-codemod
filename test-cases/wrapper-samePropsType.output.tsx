@@ -16,14 +16,12 @@ function Base<C extends React.ElementType = "div">(
   props: SharedProps &
     Omit<React.ComponentPropsWithRef<C>, keyof SharedProps> & { sx?: stylex.StyleXStyles; as?: C },
 ) {
-  const { as: Component = "div", className, children, style, sx, gap, column, ...rest } = props;
+  const { as: Component = "div", className, style, sx, gap, column, ...rest } = props;
   return (
     <Component
       {...rest}
       {...mergedSx([styles.base(gap), column && styles.baseColumn, sx], className, style)}
-    >
-      {children}
-    </Component>
+    />
   );
 }
 
@@ -34,12 +32,8 @@ export function Wrapper(
       sx?: stylex.StyleXStyles;
     },
 ) {
-  const { children, sx, ...rest } = props;
-  return (
-    <Base {...rest} sx={[styles.wrapper, sx]}>
-      {children}
-    </Base>
-  );
+  const { sx, ...rest } = props;
+  return <Base {...rest} sx={[styles.wrapper, sx]} />;
 }
 
 // P2: Type with parameters (tests that type arguments are preserved)
@@ -53,14 +47,12 @@ export function Button(
   props: GenericProps<"primary" | "secondary"> &
     Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
-  const { children, size, variant, ...rest } = props;
+  const { size, variant, ...rest } = props;
   return (
     <button
       {...rest}
       sx={[styles.button(size), variant === "primary" && styles.buttonVariantPrimary]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 

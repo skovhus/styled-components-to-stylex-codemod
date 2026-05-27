@@ -10,7 +10,7 @@ type TransientButtonProps = { variant?: "primary" | "secondary" } & Omit<
 // The cleanup loop should filter unknown $-prefixed props from rest
 // so external callers can't accidentally forward $unknown to the DOM
 export function TransientButton(props: TransientButtonProps) {
-  const { children, variant, ...rest } = props;
+  const { variant, ...rest } = props;
   const restRecord = rest as Record<string, unknown>;
 
   for (const k of Object.keys(rest)) {
@@ -21,9 +21,7 @@ export function TransientButton(props: TransientButtonProps) {
     <button
       {...rest}
       sx={[styles.transientButton, variant === "primary" && styles.transientButtonVariantPrimary]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 
@@ -34,7 +32,7 @@ type ExplicitFilterButtonProps = {
 
 // Exported component with explicit list-based shouldForwardProp
 export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
-  const { children, customProp, anotherProp, ...rest } = props;
+  const { customProp, anotherProp, ...rest } = props;
   return (
     <button
       {...rest}
@@ -43,9 +41,7 @@ export function ExplicitFilterButton(props: ExplicitFilterButtonProps) {
         customProp != null && styles.explicitFilterButtonBackgroundColor(customProp),
         styles.explicitFilterButtonPadding(anotherProp),
       ]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 

@@ -9,7 +9,7 @@ type ContainerProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 function Container(props: ContainerProps) {
-  const { children, duration, delay, open, ...rest } = props;
+  const { duration, delay, open, ...rest } = props;
   return (
     <Flex
       {...rest}
@@ -19,9 +19,7 @@ function Container(props: ContainerProps) {
           styles.containerDuration(duration),
         open && styles.containerOpen(delay),
       )}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 

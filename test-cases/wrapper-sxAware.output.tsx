@@ -24,12 +24,8 @@ import { ImportedIcon, ImportedTooltip, Text } from "./lib/sx-aware-text";
 
 // Single call site → inlined into JSX directly.
 function StyledButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
-  const { children, sx, ...rest } = props;
-  return (
-    <SxAwareButton {...rest} sx={[callerStyles.button, sx]}>
-      {children}
-    </SxAwareButton>
-  );
+  const { sx, ...rest } = props;
+  return <SxAwareButton {...rest} sx={[callerStyles.button, sx]} />;
 }
 
 type StyledActiveProps = { active?: boolean } & Omit<
@@ -40,15 +36,13 @@ type StyledActiveProps = { active?: boolean } & Omit<
 // Non-transient props used for styling must still be forwarded to sx-aware wrapped components
 // when the wrapped component explicitly accepts them.
 function StyledActive(props: StyledActiveProps) {
-  const { children, sx, active, ...rest } = props;
+  const { sx, active, ...rest } = props;
   return (
     <SxAwareButton
       active={active}
       {...rest}
       sx={[callerStyles.active, active ? callerStyles.activeActive : null, sx]}
-    >
-      {children}
-    </SxAwareButton>
+    />
   );
 }
 
@@ -57,12 +51,8 @@ function StyledActive(props: StyledActiveProps) {
 // wrapper itself accepts an external `sx` prop and must compose it with the
 // internal `styles.exportedAccent` style.
 export function ExportedAccentButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
-  const { children, sx, ...rest } = props;
-  return (
-    <SxAwareButton {...rest} sx={[callerStyles.exportedAccentButton, sx]}>
-      {children}
-    </SxAwareButton>
-  );
+  const { sx, ...rest } = props;
+  return <SxAwareButton {...rest} sx={[callerStyles.exportedAccentButton, sx]} />;
 }
 
 type ExportedToggleButtonProps = { open?: boolean } & Omit<
@@ -71,7 +61,7 @@ type ExportedToggleButtonProps = { open?: boolean } & Omit<
 >;
 
 export function ExportedToggleButton(props: ExportedToggleButtonProps) {
-  const { children, sx, open, ...rest } = props;
+  const { sx, open, ...rest } = props;
   return (
     <SxAwareButton
       {...rest}
@@ -81,14 +71,12 @@ export function ExportedToggleButton(props: ExportedToggleButtonProps) {
         open ? callerStyles.exportedToggleButtonOpen : null,
         sx,
       ]}
-    >
-      {children}
-    </SxAwareButton>
+    />
   );
 }
 
 export function DraggableSxButton(props: React.ComponentPropsWithRef<typeof SxAwareButton>) {
-  const { className, children, style, sx, ...rest } = props;
+  const { className, style, sx, ...rest } = props;
   return (
     <SxAwareButton
       {...rest}
@@ -97,9 +85,7 @@ export function DraggableSxButton(props: React.ComponentPropsWithRef<typeof SxAw
         .join(" ")}
       style={style}
       sx={[callerStyles.draggableSxButton, sx]}
-    >
-      {children}
-    </SxAwareButton>
+    />
   );
 }
 

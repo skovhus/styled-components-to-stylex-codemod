@@ -8,7 +8,7 @@ type ContainerProps = { size: number } & Omit<
 >;
 
 export function Container(props: ContainerProps) {
-  const { children, size, ...rest } = props;
+  const { size, ...rest } = props;
   return (
     <div
       {...rest}
@@ -16,9 +16,7 @@ export function Container(props: ContainerProps) {
         styles.container,
         Browser.isSafari ? styles.containerBrowserIsSafari(size) : styles.containerDefault(size),
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

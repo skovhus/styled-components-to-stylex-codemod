@@ -12,12 +12,8 @@ type BadgeProps = { size: BadgeSize } & Omit<
 >;
 
 export function Badge(props: BadgeProps) {
-  const { children, size, ...rest } = props;
-  return (
-    <span {...rest} sx={[styles.badge, size === "micro" && styles.badgeSizeMicro]}>
-      {children}
-    </span>
-  );
+  const { size, ...rest } = props;
+  return <span {...rest} sx={[styles.badge, size === "micro" && styles.badgeSizeMicro]} />;
 }
 
 export const App = () => (

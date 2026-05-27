@@ -8,14 +8,12 @@ type PanelProps = {
 } & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style">;
 
 function Panel(props: PanelProps) {
-  const { children, compact, isExpanded, ...rest } = props;
+  const { compact, isExpanded, ...rest } = props;
   return (
     <Flex
       {...rest}
       {...stylex.props(styles.panel(compact, isExpanded), compact && styles.panelCompact)}
-    >
-      {children}
-    </Flex>
+    />
   );
 }
 

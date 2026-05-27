@@ -26,11 +26,12 @@ type TabItemProps = React.PropsWithChildren<{
 
 // Arrow function in border-bottom (6 occurrences)
 function TabItem(props: TabItemProps) {
-  const { children, isActive, ...rest } = props;
+  const { isActive, ...rest } = props;
   return (
-    <div {...rest} sx={[styles.tabItem, isActive ? styles.tabItemActive : styles.tabItemNotActive]}>
-      {children}
-    </div>
+    <div
+      {...rest}
+      sx={[styles.tabItem, isActive ? styles.tabItemActive : styles.tabItemNotActive]}
+    />
   );
 }
 

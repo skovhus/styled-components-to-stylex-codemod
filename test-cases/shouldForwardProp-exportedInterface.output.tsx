@@ -13,7 +13,7 @@ interface TransientButtonProps {
 export function TransientButton(
   props: TransientButtonProps & Omit<React.ComponentProps<"button">, "className" | "style" | "sx">,
 ) {
-  const { children, variant, size, ...rest } = props;
+  const { variant, size, ...rest } = props;
   const restRecord = rest as Record<string, unknown>;
 
   for (const k of Object.keys(rest)) {
@@ -28,9 +28,7 @@ export function TransientButton(
         variant === "primary" && styles.transientButtonVariantPrimary,
         size === "large" && styles.transientButtonSizeLarge,
       ]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 

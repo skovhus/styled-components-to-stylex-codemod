@@ -346,11 +346,22 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       styleArgs.push(sxId);
     }
 
+    const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+      includeChildren: !isVoidTag,
+      includeRest: true,
+      restId,
+      destructureProps: [...pseudoGuardProps],
+      defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+      dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
+      staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+    });
     const patternProps = emitter.buildDestructurePatternProps({
       baseProps: [
         ...(allowAsProp ? [asDestructureProp(tagName)] : []),
         emitter.patternProp("className", classNameId),
-        ...(isVoidTag ? [] : [emitter.patternProp("children", childrenId)]),
+        ...(!isVoidTag && !passChildrenThroughRest
+          ? [emitter.patternProp("children", childrenId)]
+          : []),
         emitter.patternProp("style", styleId),
         ...(allowSxProp ? [emitter.patternProp("sx", sxId)] : []),
       ],
@@ -399,21 +410,22 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
     const openingEl = j.jsxOpeningElement(
       j.jsxIdentifier(allowAsProp ? "Component" : tagName),
       openingAttrs,
-      false,
+      isVoidTag || passChildrenThroughRest,
     );
 
-    const jsx = isVoidTag
-      ? ({
-          type: "JSXElement",
-          openingElement: { ...openingEl, selfClosing: true },
-          closingElement: null,
-          children: [],
-        } as any)
-      : j.jsxElement(
-          openingEl,
-          j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : tagName)),
-          [j.jsxExpressionContainer(childrenId)],
-        );
+    const jsx =
+      isVoidTag || passChildrenThroughRest
+        ? ({
+            type: "JSXElement",
+            openingElement: { ...openingEl, selfClosing: true },
+            closingElement: null,
+            children: [],
+          } as any)
+        : j.jsxElement(
+            openingEl,
+            j.jsxClosingElement(j.jsxIdentifier(allowAsProp ? "Component" : tagName)),
+            [j.jsxExpressionContainer(childrenId)],
+          );
 
     const bodyStmts: StatementKind[] = [declStmt];
     if (needsUseThemeWithConfig) {
@@ -1082,7 +1094,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const styleId = j.identifier("style");
       const sxId = j.identifier("sx");
       const refId = j.identifier("ref");
-      const restId = shouldIncludeRest ? j.identifier("rest") : null;
+      let restId = shouldIncludeRest ? j.identifier("rest") : null;
       const shouldForwardRefExplicitly =
         !restId && ((d.supportsRefProp ?? false) || willForwardRef);
       const forwardedAsId = j.identifier("forwardedAs");
@@ -1112,6 +1124,15 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const destructurePropsForPattern = needsUseTheme
         ? destructureProps.filter((name) => name !== "theme")
         : destructureProps;
+      const passChildrenThroughRest = emitter.shouldPassChildrenThroughRest({
+        includeChildren,
+        includeRest: Boolean(restId),
+        restId,
+        destructureProps: destructurePropsForPattern,
+        defaultAttrs: d.attrsInfo?.defaultAttrs ?? [],
+        dynamicAttrs: d.attrsInfo?.dynamicAttrs ?? [],
+        staticAttrs: d.attrsInfo?.staticAttrs ?? {},
+      });
       const patternProps = emitter.buildDestructurePatternProps({
         baseProps: [
           ...(useAsProp
@@ -1126,7 +1147,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             : []),
           ...(includesForwardedAs ? [ctx.patternProp("forwardedAs", forwardedAsId)] : []),
           ...(allowClassNameProp ? [ctx.patternProp("className", classNameId)] : []),
-          ...(includeChildren ? [ctx.patternProp("children", childrenId)] : []),
+          ...(includeChildren && !passChildrenThroughRest
+            ? [ctx.patternProp("children", childrenId)]
+            : []),
           ...(allowStyleProp ? [ctx.patternProp("style", styleId)] : []),
           ...(shouldForwardRefExplicitly ? [ctx.patternProp("ref", refId)] : []),
           ...(allowSxProp ? [ctx.patternProp("sx", sxId)] : []),
@@ -1136,6 +1159,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
         includeRest: Boolean(restId),
         restId: restId ?? undefined,
       });
+      const usePropsDirectlyForRest =
+        Boolean(restId) && patternProps.length === 1 && patternProps[0]?.type === "RestElement";
+      if (usePropsDirectlyForRest) {
+        restId = propsId;
+      }
       const usePropsChildrenDirectly = emitter.isChildrenOnlyDestructurePattern(patternProps);
       const propsParam = usePropsChildrenDirectly
         ? emitter.buildChildrenOnlyParam(inlineTypeText ?? emitter.propsTypeNameFor(d.localName))
@@ -1143,11 +1171,12 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       if (!usePropsChildrenDirectly) {
         emitter.annotatePropsParam(propsParam, d.localName, inlineTypeText);
       }
-      const declStmt = usePropsChildrenDirectly
-        ? null
-        : j.variableDeclaration("const", [
-            j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
-          ]);
+      const declStmt =
+        usePropsChildrenDirectly || usePropsDirectlyForRest
+          ? null
+          : j.variableDeclaration("const", [
+              j.variableDeclarator(j.objectPattern(patternProps as any), propsId),
+            ]);
 
       // Use the style merger helper
       const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
@@ -1204,7 +1233,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       const jsx = emitter.buildJsxElement({
         tagName: useAsProp ? "Component" : tagName,
         attrs: openingAttrs,
-        includeChildren,
+        includeChildren: includeChildren && !passChildrenThroughRest,
         childrenExpr: childrenId,
       });
 

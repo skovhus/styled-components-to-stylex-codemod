@@ -14,13 +14,11 @@ type IconWithTeamColorProps = { color?: string } & Omit<
 // Styled component with conditional CSS based on prop
 // Uses ternary: props.$color ? `fill: ${props.$color};` : ""
 export function IconWithTeamColor(props: IconWithTeamColorProps) {
-  const { children, color, ...rest } = props;
+  const { color, ...rest } = props;
   const sx = stylex.props(color ? styles.iconWithTeamColorFill(color) : undefined);
 
   return (
-    <svg {...rest} {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")}>
-      {children}
-    </svg>
+    <svg {...rest} {...sx} className={["color-override", sx.className].filter(Boolean).join(" ")} />
   );
 }
 

@@ -8,12 +8,8 @@ type JsonTextareaProps = { hasError?: boolean } & Omit<
 >;
 
 function JsonTextarea(props: JsonTextareaProps) {
-  const { children, hasError, ...rest } = props;
-  return (
-    <textarea {...rest} sx={[styles.jsonTextarea, hasError && styles.jsonTextareaHasError]}>
-      {children}
-    </textarea>
-  );
+  const { hasError, ...rest } = props;
+  return <textarea {...rest} sx={[styles.jsonTextarea, hasError && styles.jsonTextareaHasError]} />;
 }
 
 export const App = () => (

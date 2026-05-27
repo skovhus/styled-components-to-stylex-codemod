@@ -5,14 +5,9 @@ import { $interaction } from "./lib/interaction.stylex";
 import { $colors } from "./tokens.stylex";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
-  const { children, ...rest } = props;
   const theme = useTheme();
 
-  return (
-    <button {...rest} sx={[styles.tab, theme.isDark ? styles.tabDark : styles.tabLight]}>
-      {children}
-    </button>
-  );
+  return <button {...props} sx={[styles.tab, theme.isDark ? styles.tabDark : styles.tabLight]} />;
 }
 
 type CardButtonProps = React.PropsWithChildren<{

@@ -1,3 +1,4 @@
+// Partial conversion must not remove styled component symbols still referenced by preserved templates.
 import styled from "styled-components";
 
 const ConvertedChild = styled.span`

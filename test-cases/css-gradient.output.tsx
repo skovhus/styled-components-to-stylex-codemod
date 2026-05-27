@@ -3,12 +3,7 @@ import * as stylex from "@stylexjs/stylex";
 import { helpers } from "./lib/helpers.stylex";
 
 export function GradientText(props: Pick<React.ComponentProps<"span">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <span {...rest} sx={[helpers.gradient, styles.gradientText]}>
-      {children}
-    </span>
-  );
+  return <span {...props} sx={[helpers.gradient, styles.gradientText]} />;
 }
 
 export const App = () => <GradientText>Gradient text</GradientText>;

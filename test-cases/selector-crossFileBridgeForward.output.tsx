@@ -5,12 +5,7 @@ import { CollapseArrowIcon } from "./lib/converted-collapse-icon";
 import { StyledCollapseButtonMarker } from "./markers.stylex";
 
 export function StyledCollapseButton(props: Pick<React.ComponentProps<"div">, "ref" | "children">) {
-  const { children, ...rest } = props;
-  return (
-    <div {...rest} sx={[styles.collapseButton, StyledCollapseButtonMarker]}>
-      {children}
-    </div>
-  );
+  return <div {...props} sx={[styles.collapseButton, StyledCollapseButtonMarker]} />;
 }
 
 export function App() {

@@ -9,18 +9,14 @@ type SharedProps = {
 export function CardA(
   props: SharedProps & Omit<React.ComponentProps<"div">, "className" | "style" | "sx">,
 ) {
-  const { children, highlight, ...rest } = props;
-  return (
-    <div {...rest} sx={[styles.cardA, highlight ? styles.cardAHighlight : undefined]}>
-      {children}
-    </div>
-  );
+  const { highlight, ...rest } = props;
+  return <div {...rest} sx={[styles.cardA, highlight ? styles.cardAHighlight : undefined]} />;
 }
 
 export function CardB(
   props: SharedProps & React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, highlight, ...rest } = props;
+  const { className, style, sx, highlight, ...rest } = props;
   return (
     <div
       {...rest}
@@ -29,9 +25,7 @@ export function CardB(
         className,
         style,
       )}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

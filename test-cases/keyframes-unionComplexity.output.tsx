@@ -21,14 +21,12 @@ type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
   Omit<React.ComponentPropsWithRef<C>, "delay"> & { sx?: stylex.StyleXStyles; as?: C };
 
 export function LoaderCaret<C extends React.ElementType = "div">(props: LoaderCaretProps<C>) {
-  const { as: Component = "div", className, children, style, sx, delay, ...rest } = props;
+  const { as: Component = "div", className, style, sx, delay, ...rest } = props;
   return (
     <Component
       {...rest}
       {...mergedSx([styles.loaderCaret(`${delay ?? 1000}ms`), sx], className, style)}
-    >
-      {children}
-    </Component>
+    />
   );
 }
 

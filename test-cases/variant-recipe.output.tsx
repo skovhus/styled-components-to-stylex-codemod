@@ -11,7 +11,7 @@ type Props = {
 };
 
 function Button(props: Props & Omit<React.ComponentProps<"button">, "className" | "style" | "sx">) {
-  const { children, size = "small", color = "secondary", disabled, ...rest } = props;
+  const { size = "small", color = "secondary", disabled, ...rest } = props;
   return (
     <button
       {...rest}
@@ -21,9 +21,7 @@ function Button(props: Props & Omit<React.ComponentProps<"button">, "className" 
         sizeVariants[size],
         disabled ? buttonColorDisabledVariants[color] : buttonColorEnabledVariants[color],
       ]}
-    >
-      {children}
-    </button>
+    />
   );
 }
 
@@ -35,7 +33,7 @@ type LinkProps = {
 };
 
 function Link(props: LinkProps & Omit<React.ComponentProps<"a">, "className" | "style" | "sx">) {
-  const { children, disabled, color = "secondary", ...rest } = props;
+  const { disabled, color = "secondary", ...rest } = props;
   return (
     <a
       {...rest}
@@ -43,9 +41,7 @@ function Link(props: LinkProps & Omit<React.ComponentProps<"a">, "className" | "
         styles.link,
         disabled ? linkColorDisabledVariants[color] : linkColorEnabledVariants[color],
       ]}
-    >
-      {children}
-    </a>
+    />
   );
 }
 

@@ -2,12 +2,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 function Link(props: Omit<React.ComponentProps<"a">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <a {...rest} sx={[styles.link, stylex.defaultMarker()]}>
-      {children}
-    </a>
-  );
+  return <a {...props} sx={[styles.link, stylex.defaultMarker()]} />;
 }
 
 type BadgeProps = React.PropsWithChildren<{

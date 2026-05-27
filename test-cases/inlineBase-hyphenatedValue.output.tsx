@@ -7,7 +7,7 @@ type SpacedRowProps = {
 } & Pick<React.ComponentProps<"div">, "ref" | "children">;
 
 export function SpacedRow(props: SpacedRowProps) {
-  const { children, align, justify, ...rest } = props;
+  const { align, justify, ...rest } = props;
   return (
     <div
       {...rest}
@@ -16,9 +16,7 @@ export function SpacedRow(props: SpacedRowProps) {
         align === "flex-start" && styles.spacedRowAlignFlexStart,
         justify != null && spacedRowJustifyVariants[justify],
       ]}
-    >
-      {children}
-    </div>
+    />
   );
 }
 

@@ -16,7 +16,7 @@ export type ButtonVariant = ButtonProps["variant"];
 function Button(
   props: ButtonProps & React.ComponentProps<"button"> & { sx?: stylex.StyleXStyles },
 ) {
-  const { className, children, style, sx, size, variant, ...rest } = props;
+  const { className, style, sx, size, variant, ...rest } = props;
   return (
     <button
       {...rest}
@@ -30,9 +30,7 @@ function Button(
         className,
         style,
       )}
-    >
-      {children}
-    </button>
+    />
   );
 }
 

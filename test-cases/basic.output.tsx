@@ -2,12 +2,7 @@ import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
 export function Select(props: Omit<React.ComponentProps<"select">, "className" | "style" | "sx">) {
-  const { children, ...rest } = props;
-  return (
-    <select {...rest} sx={styles.select}>
-      {children}
-    </select>
-  );
+  return <select {...props} sx={styles.select} />;
 }
 
 function Link(props: { to: string; children: React.ReactNode }) {
