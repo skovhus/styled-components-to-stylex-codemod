@@ -921,6 +921,7 @@ export function extractAndRemoveCssHelpers(args: {
   cssLocal: string | undefined;
   toStyleKey: (name: string) => string;
   preserveDeclarationOnlyNames?: Set<string>;
+  preservedStyledComponentSelectorNames?: Set<string>;
 }): {
   unsupportedCssUsages: UnsupportedCssUsage[];
   cssHelperFunctions: Map<string, CssHelperFunction>;
@@ -933,10 +934,22 @@ export function extractAndRemoveCssHelpers(args: {
   cssHelperTemplateReplacements: CssHelperTemplateReplacement[];
   changed: boolean;
 } {
-  const { root, j, styledImports, cssLocal, toStyleKey, preserveDeclarationOnlyNames } = args;
+  const {
+    root,
+    j,
+    styledImports,
+    cssLocal,
+    toStyleKey,
+    preserveDeclarationOnlyNames,
+    preservedStyledComponentSelectorNames,
+  } = args;
 
   const styledLocalNames = collectStyledDefaultImportLocalNames(styledImports);
   const styledComponentLocalNames = collectStyledComponentLocalNames(root, j, styledLocalNames);
+  const preservedSelectorNames = preservedStyledComponentSelectorNames ?? new Set<string>();
+  const rewrittenStyledComponentLocalNames = new Set(
+    [...styledComponentLocalNames].filter((name) => !preservedSelectorNames.has(name)),
+  );
   const exportedLocalNames = buildExportedLocalNames(root, j);
 
   const cssHelperFunctions = new Map<string, CssHelperFunction>();
@@ -1021,7 +1034,6 @@ export function extractAndRemoveCssHelpers(args: {
       const styleKey = toStyleKey(localName);
       const placementHints = getCssHelperPlacementHints(root, p);
       const isExported = exportedLocalNames.has(localName);
-      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       const template = init.quasi as TemplateLiteral;
       const { rules, rawCss, templateExpressions } = parseCssHelperTemplate({
@@ -1030,7 +1042,7 @@ export function extractAndRemoveCssHelpers(args: {
       });
       if (
         isExported &&
-        templateReferencesStyledComponentSelector(template, styledComponentLocalNames)
+        templateReferencesStyledComponentSelector(template, rewrittenStyledComponentLocalNames)
       ) {
         unsupportedCssUsages.push({
           loc: getNodeLocStart(template),
@@ -1038,6 +1050,12 @@ export function extractAndRemoveCssHelpers(args: {
         });
         return;
       }
+      const referencesPreservedStyledComponentSelector =
+        isExported && templateReferencesStyledComponentSelector(template, preservedSelectorNames);
+      if (referencesPreservedStyledComponentSelector) {
+        return;
+      }
+      const preserveDeclarationOnly = preserveDeclarationOnlyNames?.has(localName) ?? false;
 
       cssHelperDecls.push({
         ...placementHints,

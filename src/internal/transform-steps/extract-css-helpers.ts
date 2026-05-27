@@ -38,6 +38,7 @@ export function extractCssHelpersStep(ctx: TransformContext): StepResult {
     cssLocal,
     toStyleKey,
     preserveDeclarationOnlyNames: collectCssHelpersUsedBySkippedImportedRoots(ctx),
+    preservedStyledComponentSelectorNames: collectSkippedImportedRootStyledComponentNames(ctx),
   });
 
   if (cssHelpers.unsupportedCssUsages.length > 0) {
@@ -54,6 +55,40 @@ export function extractCssHelpersStep(ctx: TransformContext): StepResult {
   }
 
   return CONTINUE;
+}
+
+function collectSkippedImportedRootStyledComponentNames(ctx: TransformContext): Set<string> {
+  if (ctx.options.allowPartialMigration !== true || ctx.options.transformMode === "leavesOnly") {
+    return new Set();
+  }
+  const names = new Set<string>();
+  ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
+    const id = path.node.id;
+    if (id.type !== "Identifier") {
+      return;
+    }
+    if (initializerWrapsImportedComponent(ctx, path.node.init)) {
+      names.add(id.name);
+    }
+  });
+  return names;
+}
+
+function initializerWrapsImportedComponent(ctx: TransformContext, init: unknown): boolean {
+  const node = init as { type?: string; tag?: unknown; callee?: unknown } | null;
+  if (!node) {
+    return false;
+  }
+  if (node.type === "TaggedTemplateExpression") {
+    return tagWrapsImportedComponent(ctx, node.tag);
+  }
+  if (node.type === "CallExpression") {
+    const callee = node.callee as { type?: string; tag?: unknown } | null;
+    return (
+      callee?.type === "TaggedTemplateExpression" && tagWrapsImportedComponent(ctx, callee.tag)
+    );
+  }
+  return false;
 }
 
 function collectCssHelpersUsedBySkippedImportedRoots(ctx: TransformContext): Set<string> {

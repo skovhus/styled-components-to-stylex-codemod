@@ -3128,6 +3128,42 @@ export const App = () => (
     expect(result).toContain("<div sx={styles.notice}>");
   });
 
+  it("preserves exported css helpers with selectors for skipped imported roots", () => {
+    const input = `
+import styled, { css } from "styled-components";
+import { Text } from "./lib/text";
+
+const Title = styled(Text)\`
+  color: #1d4ed8;
+\`;
+
+export const titleSelectorCss = css\`
+  \${Title} {
+    font-weight: 600;
+  }
+\`;
+
+const Notice = styled.div\`
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <Notice>
+    <Title>Imported root selector helper</Title>
+  </Notice>
+);
+`;
+    const diagnostics = runTransformWithDiagnostics(input, { allowPartialMigration: true });
+    const result = diagnostics.code ?? "";
+
+    expect(diagnostics.code).not.toBeNull();
+    expect(result).toContain("export const titleSelectorCss = css");
+    expect(result).toContain("${Title}");
+    expect(result).toContain("const Title = styled(Text)");
+    expect(result).toContain("<div sx={styles.notice}>");
+    expect(result).not.toContain("titleSelectorCss:");
+  });
+
   it("emits css helper styles when the helper is referenced by both a converted component and a skipped imported root", () => {
     const input = `
 import styled, { css } from "styled-components";
