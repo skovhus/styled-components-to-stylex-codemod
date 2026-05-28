@@ -76,6 +76,12 @@ describe("parseCssDeclarationBlock", () => {
       gridColumn: "1 / -1",
     });
   });
+
+  it("preserves escaped slashes in grid line names", () => {
+    expect(parseCssDeclarationBlock("grid-column: foo\\/bar")).toEqual({
+      gridColumn: "foo\\/bar",
+    });
+  });
 });
 
 describe("parseCssDeclarationBlockWithTemplateExpr", () => {

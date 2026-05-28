@@ -289,7 +289,32 @@ function normalizeGridLineSlashSpacing(stylexProp: string, value: CssValue): Css
   if (!GRID_LINE_STYLEX_PROPS.has(stylexProp) || value.kind !== "static") {
     return value;
   }
-  return { kind: "static", value: value.value.replace(/\s*\/\s*/g, " / ") };
+  return { kind: "static", value: normalizeUnescapedSlashSpacing(value.value) };
+}
+
+function normalizeUnescapedSlashSpacing(value: string): string {
+  let output = "";
+  for (let index = 0; index < value.length; index++) {
+    const char = value.charAt(index);
+    if (char === "/" && !isEscapedAt(value, index)) {
+      output = output.replace(/\s+$/g, "");
+      output += " / ";
+      while (index + 1 < value.length && /\s/.test(value.charAt(index + 1))) {
+        index++;
+      }
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function isEscapedAt(value: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value.charAt(cursor) === "\\"; cursor--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 1;
 }
 
 /**
