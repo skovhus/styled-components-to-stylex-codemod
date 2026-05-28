@@ -108,12 +108,7 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
       }
     }
     for (let index = 0; index < propsArgs.length; index++) {
-      const entry = propsArgEntry(decl, index);
-      if (propsArgs[index]?.afterVariants) {
-        groups.afterVariants.push(entry);
-      } else {
-        groups.afterBase.push(entry);
-      }
+      pushPropsArgEntry(groups, decl, index, "afterBase");
     }
     return groups;
   }
@@ -125,7 +120,7 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
       pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
       styleKeyIndex += 1;
     } else if (entryKind === "propsArg" && propsArgIndex < propsArgs.length) {
-      pushPropsArgEntry(groups, decl, propsArgIndex);
+      pushPropsArgEntry(groups, decl, propsArgIndex, "beforeBase");
       propsArgIndex += 1;
     }
   }
@@ -134,7 +129,7 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
     pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
   }
   for (; propsArgIndex < propsArgs.length; propsArgIndex++) {
-    pushPropsArgEntry(groups, decl, propsArgIndex);
+    pushPropsArgEntry(groups, decl, propsArgIndex, "afterBase");
   }
 
   return groups;
@@ -154,12 +149,17 @@ function pushStyleKeyEntry(
   }
 }
 
-function pushPropsArgEntry(groups: ExtraStyleEntryGroups, decl: StyledDecl, index: number): void {
+function pushPropsArgEntry(
+  groups: ExtraStyleEntryGroups,
+  decl: StyledDecl,
+  index: number,
+  fallbackGroup: "beforeBase" | "afterBase",
+): void {
   const arg = decl.extraStylexPropsArgs?.[index];
   const entry = propsArgEntry(decl, index);
   if (arg?.afterVariants) {
     groups.afterVariants.push(entry);
-  } else if (arg?.afterBase) {
+  } else if (arg?.afterBase || fallbackGroup === "afterBase") {
     groups.afterBase.push(entry);
   } else {
     groups.beforeBase.push(entry);
