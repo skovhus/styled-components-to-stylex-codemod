@@ -11968,7 +11968,7 @@ export const App = () => <Box>Test</Box>;
     const source = `
 import styled from "styled-components";
 
-const Unassigned = styled.div\`
+const Icon = styled.div\`
   width: 20px !important;
   height: 20px !important;
 
@@ -11976,7 +11976,7 @@ const Unassigned = styled.div\`
   margin: 0 -1px;
 \`;
 
-export const App = () => <Unassigned />;
+export const App = () => <Icon />;
 `;
 
     const result = transformWithWarnings(
