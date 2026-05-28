@@ -921,19 +921,19 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const propDefaults: WrapperPropDefaults = new Map();
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
+    const propsArgGroups = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprGroups({
           entries: d.extraStylexPropsArgs,
           destructureProps,
         })
-      : [];
+      : null;
 
     // Build interleaved before/after-base args using mixinOrder
     const {
       beforeBase: extraStyleArgs,
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
-    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgGroups?.orderedExprs ?? []);
     const styleArgs = buildInitialStyleArgs(
       j,
       stylesIdentifier,
@@ -941,6 +941,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       extraStyleArgs,
       extraStyleArgsAfterBase,
     );
+    if (propsArgGroups) {
+      styleArgs.push(...propsArgGroups.conditionalAfterBaseExprs);
+    }
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
@@ -960,7 +963,9 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
       destructureProps,
       propDefaults,
       compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
-      afterVariantStyleArgs,
+      afterVariantStyleArgs: propsArgGroups
+        ? [...afterVariantStyleArgs, ...propsArgGroups.conditionalAfterVariantExprs]
+        : afterVariantStyleArgs,
       enableComplementaryMerging: true,
       buildCompoundVariantExpressions,
     });

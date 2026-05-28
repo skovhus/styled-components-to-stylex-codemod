@@ -700,21 +700,27 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
+    const propsArgGroups = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprGroups({
           entries: d.extraStylexPropsArgs,
           destructureProps,
         })
-      : [];
+      : null;
 
     // Build interleaved before/after-base args using mixinOrder
-    const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-      emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    const {
+      beforeBase: extraStyleArgs,
+      afterBase: extraStyleArgsAfterBase,
+      afterVariants: afterVariantStyleArgs,
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgGroups?.orderedExprs ?? []);
     const styleArgs: ExpressionKind[] = [
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
+    if (propsArgGroups) {
+      styleArgs.push(...propsArgGroups.conditionalAfterBaseExprs);
+    }
 
     // Collect variant and styleFn expressions with source order for interleaving.
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
@@ -810,10 +816,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
+    const allAfterVariantStyleArgs = propsArgGroups
+      ? [...afterVariantStyleArgs, ...propsArgGroups.conditionalAfterVariantExprs]
+      : afterVariantStyleArgs;
+    if (allAfterVariantStyleArgs.length > 0) {
+      styleArgs.push(...allAfterVariantStyleArgs);
+    }
 
-    // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
-    // In styled-components, transient props are automatically filtered before passing to wrapped component.
-    // We need to mimic this behavior by destructuring them out when not used for conditional styles.
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.
     // In styled-components, transient props are automatically filtered before passing to wrapped component.
     // We need to mimic this behavior by destructuring them out when not used for conditional styles.

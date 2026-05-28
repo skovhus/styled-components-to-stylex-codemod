@@ -174,7 +174,7 @@ export function buildInterleavedExtraStyleArgs(
   const mixinOrder = d.mixinOrder;
   const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
   const extraStyleKeys = d.extraStyleKeys ?? [];
-  const propsArgs = d.extraStylexPropsArgs ?? [];
+  const propsArgs = (d.extraStylexPropsArgs ?? []).filter((arg) => !arg.when);
 
   if (!mixinOrder || mixinOrder.length === 0) {
     // No mixinOrder: fall back to legacy behavior

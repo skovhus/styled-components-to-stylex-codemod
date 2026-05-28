@@ -95,7 +95,9 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
   const groups: ExtraStyleEntryGroups = { beforeBase: [], afterBase: [], afterVariants: [] };
   const mixinOrder = decl.mixinOrder;
   const extraStyleKeys = decl.extraStyleKeys ?? [];
-  const propsArgs = decl.extraStylexPropsArgs ?? [];
+  const propsArgs = (decl.extraStylexPropsArgs ?? []).map((arg, index) => ({ arg, index }));
+  const orderedPropsArgs = propsArgs.filter(({ arg }) => !arg.when);
+  const conditionalPropsArgs = propsArgs.filter(({ arg }) => arg.when);
   const afterBaseKeys = new Set(decl.extraStyleKeysAfterBase ?? []);
 
   if (!mixinOrder || mixinOrder.length === 0) {
@@ -107,8 +109,11 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
         groups.beforeBase.push(entry);
       }
     }
-    for (let index = 0; index < propsArgs.length; index++) {
-      pushPropsArgEntry(groups, decl, index, "afterBase");
+    for (const propsArg of orderedPropsArgs) {
+      pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
+    }
+    for (const propsArg of conditionalPropsArgs) {
+      pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
     }
     return groups;
   }
@@ -119,8 +124,8 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
     if (entryKind === "styleKey" && styleKeyIndex < extraStyleKeys.length) {
       pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
       styleKeyIndex += 1;
-    } else if (entryKind === "propsArg" && propsArgIndex < propsArgs.length) {
-      pushPropsArgEntry(groups, decl, propsArgIndex, "beforeBase");
+    } else if (entryKind === "propsArg" && propsArgIndex < orderedPropsArgs.length) {
+      pushPropsArgEntry(groups, decl, orderedPropsArgs[propsArgIndex]!.index, "beforeBase");
       propsArgIndex += 1;
     }
   }
@@ -128,8 +133,11 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
   for (; styleKeyIndex < extraStyleKeys.length; styleKeyIndex++) {
     pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
   }
-  for (; propsArgIndex < propsArgs.length; propsArgIndex++) {
-    pushPropsArgEntry(groups, decl, propsArgIndex, "afterBase");
+  for (; propsArgIndex < orderedPropsArgs.length; propsArgIndex++) {
+    pushPropsArgEntry(groups, decl, orderedPropsArgs[propsArgIndex]!.index, "afterBase");
+  }
+  for (const propsArg of conditionalPropsArgs) {
+    pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
   }
 
   return groups;

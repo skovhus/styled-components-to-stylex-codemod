@@ -354,18 +354,18 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const propDefaults: WrapperPropDefaults = new Map();
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
+    const propsArgGroups = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprGroups({
           entries: d.extraStylexPropsArgs,
         })
-      : [];
+      : null;
 
     // Build interleaved before/after-base args using mixinOrder
     const {
       beforeBase: extraStyleArgs,
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
-    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgGroups?.orderedExprs ?? []);
     const styleArgs = buildInitialStyleArgs(
       j,
       stylesIdentifier,
@@ -373,6 +373,9 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       extraStyleArgs,
       extraStyleArgsAfterBase,
     );
+    if (propsArgGroups) {
+      styleArgs.push(...propsArgGroups.conditionalAfterBaseExprs);
+    }
 
     // Handle theme boolean conditionals - add conditional true/false style args
     const needsUseTheme = appendThemeBooleanStyleArgs(
@@ -542,8 +545,11 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Add adapter-resolved StyleX styles that should come after variant styles
     // to preserve CSS cascade order (e.g., unconditional border-bottom after conditional border).
-    if (afterVariantStyleArgs.length > 0) {
-      styleArgs.push(...afterVariantStyleArgs);
+    const allAfterVariantStyleArgs = propsArgGroups
+      ? [...afterVariantStyleArgs, ...propsArgGroups.conditionalAfterVariantExprs]
+      : afterVariantStyleArgs;
+    if (allAfterVariantStyleArgs.length > 0) {
+      styleArgs.push(...allAfterVariantStyleArgs);
     }
     for (const p of knownPrefixProps) {
       if (!destructureParts.includes(p)) {

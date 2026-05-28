@@ -134,16 +134,19 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
       const propDefaults: WrapperPropDefaults = new Map();
 
       // Build propsArg expressions first (may be needed for interleaving)
-      const propsArgExprs = d.extraStylexPropsArgs
-        ? emitter.buildExtraStylexPropsExprs({
+      const propsArgGroups = d.extraStylexPropsArgs
+        ? emitter.buildExtraStylexPropsExprGroups({
             entries: d.extraStylexPropsArgs,
             destructureProps,
           })
-        : [];
+        : null;
 
       // Build interleaved before/after-base args using mixinOrder
-      const { beforeBase: extraStyleArgs, afterBase: extraStyleArgsAfterBase } =
-        emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
+      const {
+        beforeBase: extraStyleArgs,
+        afterBase: extraStyleArgsAfterBase,
+        afterVariants: afterVariantStyleArgs,
+      } = emitter.buildInterleavedExtraStyleArgs(d, propsArgGroups?.orderedExprs ?? []);
       const styleArgs = buildInitialStyleArgs(
         j,
         stylesIdentifier,
@@ -151,6 +154,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         extraStyleArgs,
         extraStyleArgsAfterBase,
       );
+      if (propsArgGroups) {
+        styleArgs.push(...propsArgGroups.conditionalAfterBaseExprs);
+      }
 
       buildAllVariantAndStyleExprs({
         d,
@@ -161,6 +167,9 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
         destructureProps,
         propDefaults,
         compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
+        afterVariantStyleArgs: propsArgGroups
+          ? [...afterVariantStyleArgs, ...propsArgGroups.conditionalAfterVariantExprs]
+          : afterVariantStyleArgs,
         buildCompoundVariantExpressions,
       });
 
