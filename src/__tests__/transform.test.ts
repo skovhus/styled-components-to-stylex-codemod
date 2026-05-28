@@ -11100,17 +11100,23 @@ export function App() {
   it("preserves inline JSX props args left out of mixinOrder", () => {
     const source = `
 import styled from "styled-components";
-import { borderStyles } from "./lib/helpers";
+import { borderStyles, themedBorder } from "./lib/helpers";
 
 type Color = "labelBase" | "labelMuted";
 
-const Box = styled.div<{ color: Color }>\`
+const Box = styled.div<{ active?: boolean; color: Color }>\`
   border: \${borderStyles()};
+  border-color: \${(props) => (props.active ? "red" : "blue")};
+  border: \${themedBorder("labelMuted")};
   color: \${(props) => props.theme.color[props.color]};
   padding: 4px;
 \`;
 
-export const App = () => <Box color="labelBase">Label</Box>;
+export const App = () => (
+  <Box active color="labelBase">
+    Label
+  </Box>
+);
 `;
 
     const adapter: Adapter = {
@@ -11143,6 +11149,7 @@ export const App = () => <Box color="labelBase">Label</Box>;
     expect(result.code).toMatch(
       /stylex\.props\([\s\S]*borderMixins\.default[\s\S]*\$colorMixins\.color/,
     );
+    expect(result.code).toMatch(/stylex\.props\([\s\S]*styles\.boxActive[\s\S]*styles\.boxBorder/);
   });
 });
 

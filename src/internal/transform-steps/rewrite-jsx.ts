@@ -635,6 +635,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build interleaved extra args based on mixinOrder (if available)
         const extraMixinArgs: ExpressionKind[] = [];
         const extraAfterBaseArgs: ExpressionKind[] = [];
+        const extraAfterVariantArgs: ExpressionKind[] = [];
         if (mixinOrder && mixinOrder.length > 0) {
           let styleKeyIdx = 0;
           let propsArgIdx = 0;
@@ -657,7 +658,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const arg = extraStylexPropsArgs[propsArgIdx];
               propsArgIdx++;
               if (arg) {
-                if (arg.afterBase) {
+                if (arg.afterVariants) {
+                  extraAfterVariantArgs.push(arg.expr);
+                } else if (arg.afterBase) {
                   extraAfterBaseArgs.push(arg.expr);
                 } else {
                   extraMixinArgs.push(arg.expr);
@@ -682,7 +685,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
           for (; propsArgIdx < extraStylexPropsArgs.length; propsArgIdx++) {
             const arg = extraStylexPropsArgs[propsArgIdx];
             if (arg) {
-              extraAfterBaseArgs.push(arg.expr);
+              if (arg.afterVariants) {
+                extraAfterVariantArgs.push(arg.expr);
+              } else {
+                extraAfterBaseArgs.push(arg.expr);
+              }
             }
           }
         } else {
@@ -699,7 +706,11 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             }
           }
           for (const arg of extraStylexPropsArgs) {
-            extraAfterBaseArgs.push(arg.expr);
+            if (arg.afterVariants) {
+              extraAfterVariantArgs.push(arg.expr);
+            } else {
+              extraAfterBaseArgs.push(arg.expr);
+            }
           }
         }
 
@@ -969,6 +980,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         for (const attr of rest) {
           processAttr(attr, keptRestAfterVariants);
         }
+
+        styleArgs.push(...extraAfterVariantArgs);
 
         if (adjacentSiblingStyleKey && hasPreviousStaticSiblingWithName(p, decl.localName)) {
           styleArgs.push(
