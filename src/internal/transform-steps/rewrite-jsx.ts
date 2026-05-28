@@ -665,6 +665,26 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               }
             }
           }
+          for (; styleKeyIdx < extraStyleKeys.length; styleKeyIdx++) {
+            const key = extraStyleKeys[styleKeyIdx];
+            if (key) {
+              const expr = j.memberExpression(
+                j.identifier(ctx.stylesIdentifier ?? "styles"),
+                j.identifier(key),
+              );
+              if (afterBaseKeys.has(key)) {
+                extraAfterBaseArgs.push(expr);
+              } else {
+                extraMixinArgs.push(expr);
+              }
+            }
+          }
+          for (; propsArgIdx < extraStylexPropsArgs.length; propsArgIdx++) {
+            const arg = extraStylexPropsArgs[propsArgIdx];
+            if (arg) {
+              extraAfterBaseArgs.push(arg.expr);
+            }
+          }
         } else {
           // Fallback: no order tracking, use the wrapper emitter's legacy order.
           for (const key of extraStyleKeys) {

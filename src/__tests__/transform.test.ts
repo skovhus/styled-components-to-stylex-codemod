@@ -11096,6 +11096,54 @@ export function App() {
     expect(result.code).not.toContain('borderWidth: "red"');
     expect(result.code).not.toContain('borderColor: "0.5px"');
   });
+
+  it("preserves inline JSX props args left out of mixinOrder", () => {
+    const source = `
+import styled from "styled-components";
+import { borderStyles } from "./lib/helpers";
+
+type Color = "labelBase" | "labelMuted";
+
+const Box = styled.div<{ color: Color }>\`
+  border: \${borderStyles()};
+  color: \${(props) => props.theme.color[props.color]};
+  padding: 4px;
+\`;
+
+export const App = () => <Box color="labelBase">Label</Box>;
+`;
+
+    const adapter: Adapter = {
+      ...fixtureAdapter,
+      useSxProp: false,
+      resolveCall(ctx) {
+        if (ctx.calleeImportedName === "borderStyles") {
+          return {
+            usage: "props",
+            expr: "borderMixins.default",
+            imports: [
+              {
+                from: { kind: "specifier", value: "./lib/borderMixins.stylex" },
+                names: [{ imported: "borderMixins" }],
+              },
+            ],
+          };
+        }
+        return fixtureAdapter.resolveCall?.(ctx);
+      },
+    };
+
+    const result = transformWithWarnings(
+      { source, path: "inline-leftover-props-args.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toMatch(
+      /stylex\.props\([\s\S]*borderMixins\.default[\s\S]*\$colorMixins\.color/,
+    );
+  });
 });
 
 describe("conditional border helper with complex color", () => {
