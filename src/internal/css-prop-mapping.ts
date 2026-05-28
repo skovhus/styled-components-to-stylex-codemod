@@ -59,6 +59,8 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "outlineOffset",
 ]);
 
+const GRID_LINE_STYLEX_PROPS = new Set(["gridArea", "gridColumn", "gridRow"]);
+
 const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
   // StyleX rejects the CSS-wide reset property. It is too broad to expand
   // safely without element-specific knowledge, so callers should bail instead
@@ -258,7 +260,8 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     return borderShorthandToStylex(raw, directionCapitalized);
   }
 
-  return [{ prop: cssPropertyToStylexProp(prop), value: decl.value }];
+  const stylexProp = cssPropertyToStylexProp(prop);
+  return [{ prop: stylexProp, value: normalizeGridLineSlashSpacing(stylexProp, decl.value) }];
 }
 
 export function cssPropertyToStylexProp(prop: string): string {
@@ -281,6 +284,13 @@ export const BORDER_STYLES = new Set([
   "inset",
   "outset",
 ]);
+
+function normalizeGridLineSlashSpacing(stylexProp: string, value: CssValue): CssValue {
+  if (!GRID_LINE_STYLEX_PROPS.has(stylexProp) || value.kind !== "static") {
+    return value;
+  }
+  return { kind: "static", value: value.value.replace(/\s*\/\s*/g, " / ") };
+}
 
 /**
  * Expands an interpolated border shorthand into separate width/style/color properties.
