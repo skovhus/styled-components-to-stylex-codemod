@@ -157,8 +157,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     annotateParamFromJsxProp,
     isJsxPropOptional,
     applyVariant,
+    getBaseStyleTarget,
     notifyResolvedStylesArg,
   } = ctx;
+  const hasStaticPropsBeforeResolvedStylesArg = (): boolean =>
+    Object.keys(styleObj).length > 0 || getBaseStyleTarget() !== styleObj;
   const annotateScalarParams = (params: unknown[], propNames: readonly string[]): void => {
     if (!/\.(ts|tsx)$/.test(filePath)) {
       return;
@@ -886,6 +889,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           variantBuckets,
           variantStyleKeys,
           inlineStyleProps,
+          hasStaticPropsBeforeResolvedStylesArg,
+          notifyResolvedStylesArg,
         },
         {
           d,

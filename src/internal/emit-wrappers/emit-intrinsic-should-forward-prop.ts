@@ -355,7 +355,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
+      ? emitter.buildExtraStylexPropsExprEntries({
           entries: d.extraStylexPropsArgs,
         })
       : [];

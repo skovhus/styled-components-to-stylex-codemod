@@ -635,6 +635,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         // Build interleaved extra args based on mixinOrder (if available)
         const extraMixinArgs: ExpressionKind[] = [];
         const extraAfterBaseArgs: ExpressionKind[] = [];
+        const extraAfterVariantArgs: ExpressionKind[] = [];
         if (mixinOrder && mixinOrder.length > 0) {
           let styleKeyIdx = 0;
           let propsArgIdx = 0;
@@ -657,7 +658,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               const arg = extraStylexPropsArgs[propsArgIdx];
               propsArgIdx++;
               if (arg) {
-                if (arg.afterBase) {
+                if (arg.afterVariants) {
+                  extraAfterVariantArgs.push(arg.expr);
+                } else if (arg.afterBase) {
                   extraAfterBaseArgs.push(arg.expr);
                 } else {
                   extraMixinArgs.push(arg.expr);
@@ -665,11 +668,32 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               }
             }
           }
-        } else {
-          // Fallback: no order tracking, use legacy behavior (propsArgs first, then styleKeys)
-          for (const arg of extraStylexPropsArgs) {
-            extraMixinArgs.push(arg.expr);
+          for (; styleKeyIdx < extraStyleKeys.length; styleKeyIdx++) {
+            const key = extraStyleKeys[styleKeyIdx];
+            if (key) {
+              const expr = j.memberExpression(
+                j.identifier(ctx.stylesIdentifier ?? "styles"),
+                j.identifier(key),
+              );
+              if (afterBaseKeys.has(key)) {
+                extraAfterBaseArgs.push(expr);
+              } else {
+                extraMixinArgs.push(expr);
+              }
+            }
           }
+          for (; propsArgIdx < extraStylexPropsArgs.length; propsArgIdx++) {
+            const arg = extraStylexPropsArgs[propsArgIdx];
+            if (arg) {
+              if (arg.afterVariants) {
+                extraAfterVariantArgs.push(arg.expr);
+              } else {
+                extraAfterBaseArgs.push(arg.expr);
+              }
+            }
+          }
+        } else {
+          // Fallback: no order tracking, use the wrapper emitter's legacy order.
           for (const key of extraStyleKeys) {
             const expr = j.memberExpression(
               j.identifier(ctx.stylesIdentifier ?? "styles"),
@@ -679,6 +703,13 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
               extraAfterBaseArgs.push(expr);
             } else {
               extraMixinArgs.push(expr);
+            }
+          }
+          for (const arg of extraStylexPropsArgs) {
+            if (arg.afterVariants) {
+              extraAfterVariantArgs.push(arg.expr);
+            } else {
+              extraAfterBaseArgs.push(arg.expr);
             }
           }
         }
@@ -949,6 +980,8 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
         for (const attr of rest) {
           processAttr(attr, keptRestAfterVariants);
         }
+
+        styleArgs.push(...extraAfterVariantArgs);
 
         if (adjacentSiblingStyleKey && hasPreviousStaticSiblingWithName(p, decl.localName)) {
           styleArgs.push(

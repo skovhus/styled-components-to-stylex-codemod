@@ -2325,6 +2325,14 @@ export class WrapperEmitter {
     return vc.buildExtraStylexPropsExprs(this.j, args);
   }
 
+  buildExtraStylexPropsExprEntries(args: {
+    entries: NonNullable<StyledDecl["extraStylexPropsArgs"]>;
+    destructureProps?: string[];
+    booleanProps?: ReadonlySet<string>;
+  }): vc.ExtraStylexPropsExprEntry[] {
+    return vc.buildExtraStylexPropsExprEntries(this.j, args);
+  }
+
   private literalExpr(value: unknown): ExpressionKind {
     return jb.literalExpr(this.j, value);
   }
@@ -2484,7 +2492,7 @@ export class WrapperEmitter {
     return seb.splitExtraStyleArgs(this.j, this.stylesIdentifier, d);
   }
 
-  buildInterleavedExtraStyleArgs(d: StyledDecl, propsArgExprs: ExpressionKind[]) {
+  buildInterleavedExtraStyleArgs(d: StyledDecl, propsArgExprs: vc.ExtraStylexPropsExprEntry[]) {
     return seb.buildInterleavedExtraStyleArgs(this.j, this.stylesIdentifier, d, propsArgExprs);
   }
 
