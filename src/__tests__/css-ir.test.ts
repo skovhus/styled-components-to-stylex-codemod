@@ -363,6 +363,39 @@ describe("normalizeStylisAstToIR – placeholders inside CSS functions are not r
   });
 });
 
+describe("normalizeStylisAstToIR – line comment placement", () => {
+  it("keeps standalone // comments as leading comments for the next declaration", () => {
+    const rawCss = `& {
+  width: 20px !important;
+  height: 20px !important;
+
+  // aligns due to empty space around the icon
+  margin: 0 -1px;
+}`;
+    const rules = normalizeStylisAstToIR(compile(rawCss), [], { rawCss });
+    const declarations = rules.find((rule) => rule.selector === "&")?.declarations ?? [];
+    const height = declarations.find((decl) => decl.property === "height");
+    const margin = declarations.find((decl) => decl.property === "margin");
+
+    expect(height?.trailingLineComment).toBeUndefined();
+    expect(margin?.leadingLineComment).toBe("aligns due to empty space around the icon");
+  });
+
+  it("keeps inline // comments as trailing comments on the current declaration", () => {
+    const rawCss = `& {
+  color: red; // document the color
+  margin: 0 -1px;
+}`;
+    const rules = normalizeStylisAstToIR(compile(rawCss), [], { rawCss });
+    const declarations = rules.find((rule) => rule.selector === "&")?.declarations ?? [];
+    const color = declarations.find((decl) => decl.property === "color");
+    const margin = declarations.find((decl) => decl.property === "margin");
+
+    expect(color?.trailingLineComment).toBe("document the color");
+    expect(margin?.leadingLineComment).toBeUndefined();
+  });
+});
+
 describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {
   it("placeholder inside @media + selector gets the @media at-rule", () => {
     const rawCss = `& {

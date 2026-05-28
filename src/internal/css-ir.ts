@@ -68,7 +68,9 @@ export function normalizeStylisAstToIR(
   const rules: CssRuleIR[] = [];
   const atRuleStack: string[] = [];
   let pendingComment: string | null = null;
+  let pendingLineComment: string | null = null;
   let lastDecl: CssDeclarationIR | null = null;
+  let lineCommentCursor = 0;
 
   const stripBlockComment = (raw: string): string => {
     const trimmed = raw.trim();
@@ -117,14 +119,63 @@ export function normalizeStylisAstToIR(
     return false;
   };
 
+  const appendLineComment = (existing: string | undefined | null, next: string): string =>
+    existing ? `${existing}\n${next}` : next;
+
+  const findRawLineCommentPlacement = (body: string): "leading" | "trailing" | null => {
+    if (!rawCss) {
+      return null;
+    }
+    let searchStart = lineCommentCursor;
+    while (searchStart < rawCss.length) {
+      const idx = rawCss.indexOf("//", searchStart);
+      if (idx === -1) {
+        return null;
+      }
+      const nextLf = rawCss.indexOf("\n", idx);
+      const nextCr = rawCss.indexOf("\r", idx);
+      const newlineIdx =
+        nextLf === -1 ? nextCr : nextCr === -1 ? nextLf : Math.min(nextLf, nextCr);
+      const lineEnd = newlineIdx === -1 ? rawCss.length : newlineIdx;
+      const rawBody = rawCss.slice(idx + 2, lineEnd).trim();
+      if (rawBody !== body.trim()) {
+        searchStart = idx + 2;
+        continue;
+      }
+      lineCommentCursor = lineEnd;
+      const previousLf = rawCss.lastIndexOf("\n", idx - 1);
+      const previousCr = rawCss.lastIndexOf("\r", idx - 1);
+      const lineStart = Math.max(previousLf, previousCr) + 1;
+      const beforeComment = rawCss.slice(lineStart, idx);
+      return beforeComment.trim() ? "trailing" : "leading";
+    }
+    return null;
+  };
+
+  const attachPendingComments = (decl: CssDeclarationIR): void => {
+    if (pendingComment) {
+      decl.leadingComment = pendingComment;
+      pendingComment = null;
+    }
+    if (pendingLineComment) {
+      decl.leadingLineComment = appendLineComment(decl.leadingLineComment, pendingLineComment);
+      pendingLineComment = null;
+    }
+  };
+
   const handleCommentNode = (raw: string): void => {
     const body = stripBlockComment(raw);
     if (isPrettierIgnoreComment(body)) {
       return;
     }
-    // Preserve actual `// ...` (stylis-converted) comments as trailing line comments.
-    if (lastDecl && isStylisConvertedLineComment(raw)) {
-      lastDecl.trailingLineComment = body;
+    // Preserve actual `// ...` (stylis-converted) comments in their raw CSS position.
+    if (isStylisConvertedLineComment(raw)) {
+      const placement = findRawLineCommentPlacement(body);
+      if (placement === "leading" || !lastDecl) {
+        pendingLineComment = appendLineComment(pendingLineComment, body);
+        return;
+      }
+      lastDecl.trailingLineComment = appendLineComment(lastDecl.trailingLineComment, body);
       return;
     }
     // Preserve inline trailing block comments like:
@@ -167,10 +218,7 @@ export function normalizeStylisAstToIR(
       const decls = parseDeclarations(String(node.value ?? ""), slotByPlaceholder);
       const firstDecl = decls[0];
       if (decls.length && firstDecl) {
-        if (pendingComment) {
-          firstDecl.leadingComment = pendingComment;
-          pendingComment = null;
-        }
+        attachPendingComments(firstDecl);
         ensureRule("&", atRuleStack).declarations.push(...decls);
         lastDecl = decls[decls.length - 1] ?? null;
       }
@@ -180,8 +228,10 @@ export function normalizeStylisAstToIR(
     if (node.type === "rule") {
       // Comments inside a rule should not leak out to following top-level nodes.
       const prevPending = pendingComment;
+      const prevPendingLine = pendingLineComment;
       const prevLastDecl = lastDecl;
       pendingComment = null;
+      pendingLineComment = null;
       lastDecl = null;
 
       const selectorValue = String(node.value ?? "");
@@ -231,10 +281,7 @@ export function normalizeStylisAstToIR(
               const decls = parseDeclarations(String(child.value ?? ""), slotByPlaceholder);
               const firstDeclInner = decls[0];
               if (decls.length && firstDeclInner) {
-                if (pendingComment) {
-                  firstDeclInner.leadingComment = pendingComment;
-                  pendingComment = null;
-                }
+                attachPendingComments(firstDeclInner);
                 rule.declarations.push(...decls);
                 lastDecl = decls[decls.length - 1] ?? null;
               }
@@ -257,10 +304,7 @@ export function normalizeStylisAstToIR(
                     const decls = parseDeclarations(String(atChild.value ?? ""), slotByPlaceholder);
                     const firstDeclInner = decls[0];
                     if (decls.length && firstDeclInner) {
-                      if (pendingComment) {
-                        firstDeclInner.leadingComment = pendingComment;
-                        pendingComment = null;
-                      }
+                      attachPendingComments(firstDeclInner);
                       nestedRule.declarations.push(...decls);
                       lastDecl = decls[decls.length - 1] ?? null;
                     }
@@ -284,6 +328,7 @@ export function normalizeStylisAstToIR(
       }
 
       pendingComment = prevPending;
+      pendingLineComment = prevPendingLine;
       lastDecl = prevLastDecl;
       return;
     }
