@@ -134,8 +134,7 @@ export function normalizeStylisAstToIR(
       }
       const nextLf = rawCss.indexOf("\n", idx);
       const nextCr = rawCss.indexOf("\r", idx);
-      const newlineIdx =
-        nextLf === -1 ? nextCr : nextCr === -1 ? nextLf : Math.min(nextLf, nextCr);
+      const newlineIdx = nextLf === -1 ? nextCr : nextCr === -1 ? nextLf : Math.min(nextLf, nextCr);
       const lineEnd = newlineIdx === -1 ? rawCss.length : newlineIdx;
       const rawBody = rawCss.slice(idx + 2, lineEnd).trim();
       if (rawBody !== body.trim()) {
