@@ -266,6 +266,13 @@ export function areEquivalentWhen(left: string, right: string): boolean {
   return normalizeWhenForComparison(left) === normalizeWhenForComparison(right);
 }
 
+export type ExtraStylexPropsExprEntry = {
+  expr: ExpressionKind;
+  conditional: boolean;
+  afterBase?: boolean;
+  afterVariants?: boolean;
+};
+
 /**
  * Builds style expressions from extraStylexPropsArgs entries, merging
  * complementary boolean condition pairs into single ternary expressions.
@@ -273,16 +280,21 @@ export function areEquivalentWhen(left: string, right: string): boolean {
  * Two entries with `when: "prop"` and `when: "!prop"` are merged into
  * `prop ? trueExpr : falseExpr` instead of emitting separate conditionals.
  */
-export function buildExtraStylexPropsExprs(
+export function buildExtraStylexPropsExprEntries(
   j: JSCodeshift,
   args: {
-    entries: ReadonlyArray<{ when?: string; expr: ExpressionKind }>;
+    entries: ReadonlyArray<{
+      when?: string;
+      expr: ExpressionKind;
+      afterBase?: boolean;
+      afterVariants?: boolean;
+    }>;
     destructureProps?: string[];
     booleanProps?: ReadonlySet<string>;
   },
-): ExpressionKind[] {
+): ExtraStylexPropsExprEntry[] {
   const { entries, destructureProps, booleanProps } = args;
-  const result: ExpressionKind[] = [];
+  const result: ExtraStylexPropsExprEntry[] = [];
   const consumed = new Set<number>();
 
   for (let i = 0; i < entries.length; i++) {
@@ -292,7 +304,12 @@ export function buildExtraStylexPropsExprs(
     const entry = entries[i]!;
 
     if (!entry.when) {
-      result.push(entry.expr);
+      result.push({
+        expr: entry.expr,
+        conditional: false,
+        afterBase: entry.afterBase,
+        afterVariants: entry.afterVariants,
+      });
       continue;
     }
 
@@ -308,7 +325,12 @@ export function buildExtraStylexPropsExprs(
       const trueExpr = isEntryPositive ? entry.expr : other.expr;
       const falseExpr = isEntryPositive ? other.expr : entry.expr;
 
-      result.push(j.conditionalExpression(cond, trueExpr, falseExpr));
+      result.push({
+        expr: j.conditionalExpression(cond, trueExpr, falseExpr),
+        conditional: true,
+        afterBase: entry.afterBase || other.afterBase,
+        afterVariants: entry.afterVariants || other.afterVariants,
+      });
       continue;
     }
 
@@ -318,10 +340,22 @@ export function buildExtraStylexPropsExprs(
       destructureProps,
       booleanProps,
     });
-    result.push(makeConditionalStyleExpr(j, { cond, expr: entry.expr, isBoolean }));
+    result.push({
+      expr: makeConditionalStyleExpr(j, { cond, expr: entry.expr, isBoolean }),
+      conditional: true,
+      afterBase: entry.afterBase,
+      afterVariants: entry.afterVariants,
+    });
   }
 
   return result;
+}
+
+export function buildExtraStylexPropsExprs(
+  j: JSCodeshift,
+  args: Parameters<typeof buildExtraStylexPropsExprEntries>[1],
+): ExpressionKind[] {
+  return buildExtraStylexPropsExprEntries(j, args).map((entry) => entry.expr);
 }
 
 /**

@@ -135,7 +135,7 @@ export function emitIntrinsicPolymorphicWrappers(ctx: EmitIntrinsicContext): voi
 
       // Build propsArg expressions first (may be needed for interleaving)
       const propsArgExprs = d.extraStylexPropsArgs
-        ? emitter.buildExtraStylexPropsExprs({
+        ? emitter.buildExtraStylexPropsExprEntries({
             entries: d.extraStylexPropsArgs,
             destructureProps,
           })

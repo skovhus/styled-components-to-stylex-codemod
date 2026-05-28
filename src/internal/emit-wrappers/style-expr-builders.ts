@@ -26,6 +26,7 @@ import {
   getPositiveWhen,
   makeConditionalStyleExpr,
   parseVariantWhenToAst,
+  type ExtraStylexPropsExprEntry,
 } from "./variant-condition.js";
 import type { StatementKind, WrapperEmitter } from "./wrapper-emitter.js";
 
@@ -165,7 +166,7 @@ export function buildInterleavedExtraStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
   d: StyledDecl,
-  propsArgExprs: ExpressionKind[],
+  propsArgExprs: ExtraStylexPropsExprEntry[],
 ): {
   beforeBase: ExpressionKind[];
   afterBase: ExpressionKind[];
@@ -174,18 +175,18 @@ export function buildInterleavedExtraStyleArgs(
   const mixinOrder = d.mixinOrder;
   const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
   const extraStyleKeys = d.extraStyleKeys ?? [];
-  const propsArgs = d.extraStylexPropsArgs ?? [];
+  const propsArgs = propsArgExprs;
 
   if (!mixinOrder || mixinOrder.length === 0) {
     // No mixinOrder: fall back to legacy behavior
     const { beforeBase, afterBase } = splitExtraStyleArgs(j, stylesIdentifier, d);
     // Legacy: propsArgs go after base, unless afterVariants
     const afterVariants: ExpressionKind[] = [];
-    for (let i = 0; i < propsArgExprs.length; i++) {
-      if (propsArgs[i]?.afterVariants) {
-        afterVariants.push(propsArgExprs[i]!);
+    for (const propsArg of propsArgExprs) {
+      if (propsArg.afterVariants) {
+        afterVariants.push(propsArg.expr);
       } else {
-        afterBase.push(propsArgExprs[i]!);
+        afterBase.push(propsArg.expr);
       }
     }
     return { beforeBase, afterBase, afterVariants };
@@ -197,26 +198,25 @@ export function buildInterleavedExtraStyleArgs(
   let styleKeyIdx = 0;
   let propsArgIdx = 0;
 
-  // Guarded props args are not represented in mixinOrder, but their array
-  // position still reflects source order relative to unconditional props args.
+  // Guarded props args are not represented in mixinOrder, but the expression
+  // entry order still reflects source order relative to unconditional props args.
   const pushPropsArg = (index: number, fallbackGroup: "beforeBase" | "afterBase"): void => {
     const arg = propsArgs[index];
-    const argExpr = propsArgExprs[index];
-    if (!arg || !argExpr) {
+    if (!arg) {
       return;
     }
     if (arg.afterVariants) {
-      afterVariants.push(argExpr);
+      afterVariants.push(arg.expr);
     } else if (arg.afterBase || fallbackGroup === "afterBase") {
-      afterBase.push(argExpr);
+      afterBase.push(arg.expr);
     } else {
-      beforeBase.push(argExpr);
+      beforeBase.push(arg.expr);
     }
   };
   const pushPropsArgsThroughNextUnconditional = (
     fallbackGroup: "beforeBase" | "afterBase",
   ): void => {
-    while (propsArgIdx < propsArgs.length && propsArgs[propsArgIdx]?.when) {
+    while (propsArgIdx < propsArgs.length && propsArgs[propsArgIdx]?.conditional) {
       pushPropsArg(propsArgIdx, fallbackGroup);
       propsArgIdx++;
     }

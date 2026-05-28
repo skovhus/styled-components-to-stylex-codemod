@@ -701,7 +701,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Build propsArg expressions first (may be needed for interleaving)
     const propsArgExprs = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprs({
+      ? emitter.buildExtraStylexPropsExprEntries({
           entries: d.extraStylexPropsArgs,
           destructureProps,
         })
