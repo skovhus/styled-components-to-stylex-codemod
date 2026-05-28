@@ -700,27 +700,24 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     }
 
     // Build propsArg expressions first (may be needed for interleaving)
-    const propsArgGroups = d.extraStylexPropsArgs
-      ? emitter.buildExtraStylexPropsExprGroups({
+    const propsArgExprs = d.extraStylexPropsArgs
+      ? emitter.buildExtraStylexPropsExprs({
           entries: d.extraStylexPropsArgs,
           destructureProps,
         })
-      : null;
+      : [];
 
     // Build interleaved before/after-base args using mixinOrder
     const {
       beforeBase: extraStyleArgs,
       afterBase: extraStyleArgsAfterBase,
       afterVariants: afterVariantStyleArgs,
-    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgGroups?.orderedExprs ?? []);
+    } = emitter.buildInterleavedExtraStyleArgs(d, propsArgExprs);
     const styleArgs: ExpressionKind[] = [
       ...extraStyleArgs,
       ...emitter.baseStyleExpr(d),
       ...extraStyleArgsAfterBase,
     ];
-    if (propsArgGroups) {
-      styleArgs.push(...propsArgGroups.conditionalAfterBaseExprs);
-    }
 
     // Collect variant and styleFn expressions with source order for interleaving.
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
@@ -816,11 +813,8 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
 
     // Merge ordered entries (variants + styleFns) by source order to preserve CSS cascade
     mergeOrderedEntries(orderedEntries, styleArgs);
-    const allAfterVariantStyleArgs = propsArgGroups
-      ? [...afterVariantStyleArgs, ...propsArgGroups.conditionalAfterVariantExprs]
-      : afterVariantStyleArgs;
-    if (allAfterVariantStyleArgs.length > 0) {
-      styleArgs.push(...allAfterVariantStyleArgs);
+    if (afterVariantStyleArgs.length > 0) {
+      styleArgs.push(...afterVariantStyleArgs);
     }
 
     // For component wrappers, filter out transient props ($-prefixed) that are NOT used in styling.

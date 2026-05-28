@@ -2325,38 +2325,6 @@ export class WrapperEmitter {
     return vc.buildExtraStylexPropsExprs(this.j, args);
   }
 
-  buildExtraStylexPropsExprGroups(args: {
-    entries: NonNullable<StyledDecl["extraStylexPropsArgs"]>;
-    destructureProps?: string[];
-    booleanProps?: ReadonlySet<string>;
-  }): {
-    orderedExprs: ExpressionKind[];
-    conditionalAfterBaseExprs: ExpressionKind[];
-    conditionalAfterVariantExprs: ExpressionKind[];
-  } {
-    const orderedEntries = args.entries.filter((entry) => !entry.when);
-    const conditionalAfterBaseEntries = args.entries.filter(
-      (entry) => entry.when && !entry.afterVariants,
-    );
-    const conditionalAfterVariantEntries = args.entries.filter(
-      (entry) => entry.when && entry.afterVariants,
-    );
-    return {
-      orderedExprs: vc.buildExtraStylexPropsExprs(this.j, {
-        ...args,
-        entries: orderedEntries,
-      }),
-      conditionalAfterBaseExprs: vc.buildExtraStylexPropsExprs(this.j, {
-        ...args,
-        entries: conditionalAfterBaseEntries,
-      }),
-      conditionalAfterVariantExprs: vc.buildExtraStylexPropsExprs(this.j, {
-        ...args,
-        entries: conditionalAfterVariantEntries,
-      }),
-    };
-  }
-
   private literalExpr(value: unknown): ExpressionKind {
     return jb.literalExpr(this.j, value);
   }

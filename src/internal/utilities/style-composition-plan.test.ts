@@ -125,9 +125,9 @@ describe("buildStyleKeySequence", () => {
         dynamic: entry.contributesDynamic === true,
       })),
     ).toEqual([
+      { key: "buttonExtraStylexPropsArg0", source: "propsArg", dynamic: true },
       { key: "buttonExtraStylexPropsArg1", source: "propsArg", dynamic: true },
       { key: "button", source: "base", dynamic: false },
-      { key: "buttonExtraStylexPropsArg0", source: "propsArg", dynamic: true },
     ]);
   });
 });

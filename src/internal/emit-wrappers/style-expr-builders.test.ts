@@ -8,6 +8,11 @@ const j = jscodeshift.withParser("tsx");
 
 describe("buildInterleavedExtraStyleArgs", () => {
   it("does not let conditional props args consume mixinOrder propsArg markers", () => {
+    const conditionalExpr = j.logicalExpression(
+      "&&",
+      j.identifier("active"),
+      j.identifier("conditionalSx"),
+    ) as ExpressionKind;
     const orderedExpr = j.identifier("sourceOrderedSx") as ExpressionKind;
     const decl = {
       localName: "Button",
@@ -25,9 +30,15 @@ describe("buildInterleavedExtraStyleArgs", () => {
       ],
     } satisfies StyledDecl;
 
-    const result = buildInterleavedExtraStyleArgs(j, "styles", decl, [orderedExpr]);
+    const result = buildInterleavedExtraStyleArgs(j, "styles", decl, [
+      conditionalExpr,
+      orderedExpr,
+    ]);
 
-    expect(result.beforeBase.map((expr) => j(expr).toSource())).toEqual(["sourceOrderedSx"]);
+    expect(result.beforeBase.map((expr) => j(expr).toSource())).toEqual([
+      "active && conditionalSx",
+      "sourceOrderedSx",
+    ]);
     expect(result.afterBase).toEqual([]);
     expect(result.afterVariants).toEqual([]);
   });

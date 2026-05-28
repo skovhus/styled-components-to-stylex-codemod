@@ -96,8 +96,6 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
   const mixinOrder = decl.mixinOrder;
   const extraStyleKeys = decl.extraStyleKeys ?? [];
   const propsArgs = (decl.extraStylexPropsArgs ?? []).map((arg, index) => ({ arg, index }));
-  const orderedPropsArgs = propsArgs.filter(({ arg }) => !arg.when);
-  const conditionalPropsArgs = propsArgs.filter(({ arg }) => arg.when);
   const afterBaseKeys = new Set(decl.extraStyleKeysAfterBase ?? []);
 
   if (!mixinOrder || mixinOrder.length === 0) {
@@ -109,10 +107,7 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
         groups.beforeBase.push(entry);
       }
     }
-    for (const propsArg of orderedPropsArgs) {
-      pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
-    }
-    for (const propsArg of conditionalPropsArgs) {
+    for (const propsArg of propsArgs) {
       pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
     }
     return groups;
@@ -124,23 +119,57 @@ function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
     if (entryKind === "styleKey" && styleKeyIndex < extraStyleKeys.length) {
       pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
       styleKeyIndex += 1;
-    } else if (entryKind === "propsArg" && propsArgIndex < orderedPropsArgs.length) {
-      pushPropsArgEntry(groups, decl, orderedPropsArgs[propsArgIndex]!.index, "beforeBase");
-      propsArgIndex += 1;
+    } else if (entryKind === "propsArg" && propsArgIndex < propsArgs.length) {
+      propsArgIndex = pushPropsArgsThroughNextUnconditional({
+        groups,
+        decl,
+        propsArgs,
+        propsArgIndex,
+        fallbackGroup: "beforeBase",
+      });
     }
   }
 
   for (; styleKeyIndex < extraStyleKeys.length; styleKeyIndex++) {
     pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
   }
-  for (; propsArgIndex < orderedPropsArgs.length; propsArgIndex++) {
-    pushPropsArgEntry(groups, decl, orderedPropsArgs[propsArgIndex]!.index, "afterBase");
-  }
-  for (const propsArg of conditionalPropsArgs) {
-    pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
+  for (; propsArgIndex < propsArgs.length; propsArgIndex++) {
+    const propsArg = propsArgs[propsArgIndex];
+    if (propsArg) {
+      pushPropsArgEntry(groups, decl, propsArg.index, "afterBase");
+    }
   }
 
   return groups;
+}
+
+// Guarded props args are not represented in mixinOrder, but their array
+// position still reflects source order relative to unconditional props args.
+function pushPropsArgsThroughNextUnconditional(args: {
+  groups: ExtraStyleEntryGroups;
+  decl: StyledDecl;
+  propsArgs: Array<{
+    arg: NonNullable<StyledDecl["extraStylexPropsArgs"]>[number];
+    index: number;
+  }>;
+  propsArgIndex: number;
+  fallbackGroup: "beforeBase" | "afterBase";
+}): number {
+  let propsArgIndex = args.propsArgIndex;
+  while (propsArgIndex < args.propsArgs.length) {
+    const propsArg = args.propsArgs[propsArgIndex];
+    if (!propsArg?.arg.when) {
+      break;
+    }
+    pushPropsArgEntry(args.groups, args.decl, propsArg.index, args.fallbackGroup);
+    propsArgIndex += 1;
+  }
+  const propsArg = args.propsArgs[propsArgIndex];
+  if (propsArg) {
+    pushPropsArgEntry(args.groups, args.decl, propsArg.index, args.fallbackGroup);
+    propsArgIndex += 1;
+  }
+  return propsArgIndex;
 }
 
 function pushStyleKeyEntry(

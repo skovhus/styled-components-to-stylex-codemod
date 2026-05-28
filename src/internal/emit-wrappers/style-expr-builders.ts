@@ -174,7 +174,7 @@ export function buildInterleavedExtraStyleArgs(
   const mixinOrder = d.mixinOrder;
   const afterBaseKeys = new Set(d.extraStyleKeysAfterBase ?? []);
   const extraStyleKeys = d.extraStyleKeys ?? [];
-  const propsArgs = (d.extraStylexPropsArgs ?? []).filter((arg) => !arg.when);
+  const propsArgs = d.extraStylexPropsArgs ?? [];
 
   if (!mixinOrder || mixinOrder.length === 0) {
     // No mixinOrder: fall back to legacy behavior
@@ -197,6 +197,35 @@ export function buildInterleavedExtraStyleArgs(
   let styleKeyIdx = 0;
   let propsArgIdx = 0;
 
+  // Guarded props args are not represented in mixinOrder, but their array
+  // position still reflects source order relative to unconditional props args.
+  const pushPropsArg = (index: number, fallbackGroup: "beforeBase" | "afterBase"): void => {
+    const arg = propsArgs[index];
+    const argExpr = propsArgExprs[index];
+    if (!arg || !argExpr) {
+      return;
+    }
+    if (arg.afterVariants) {
+      afterVariants.push(argExpr);
+    } else if (arg.afterBase || fallbackGroup === "afterBase") {
+      afterBase.push(argExpr);
+    } else {
+      beforeBase.push(argExpr);
+    }
+  };
+  const pushPropsArgsThroughNextUnconditional = (
+    fallbackGroup: "beforeBase" | "afterBase",
+  ): void => {
+    while (propsArgIdx < propsArgs.length && propsArgs[propsArgIdx]?.when) {
+      pushPropsArg(propsArgIdx, fallbackGroup);
+      propsArgIdx++;
+    }
+    if (propsArgIdx < propsArgs.length) {
+      pushPropsArg(propsArgIdx, fallbackGroup);
+      propsArgIdx++;
+    }
+  };
+
   for (const entry of mixinOrder) {
     if (entry === "styleKey" && styleKeyIdx < extraStyleKeys.length) {
       const key = extraStyleKeys[styleKeyIdx]!;
@@ -207,17 +236,8 @@ export function buildInterleavedExtraStyleArgs(
       } else {
         beforeBase.push(expr);
       }
-    } else if (entry === "propsArg" && propsArgIdx < propsArgExprs.length) {
-      const arg = propsArgs[propsArgIdx];
-      const argExpr = propsArgExprs[propsArgIdx]!;
-      propsArgIdx++;
-      if (arg?.afterVariants) {
-        afterVariants.push(argExpr);
-      } else if (arg?.afterBase) {
-        afterBase.push(argExpr);
-      } else {
-        beforeBase.push(argExpr);
-      }
+    } else if (entry === "propsArg" && propsArgIdx < propsArgs.length) {
+      pushPropsArgsThroughNextUnconditional("beforeBase");
     }
   }
 
@@ -231,13 +251,8 @@ export function buildInterleavedExtraStyleArgs(
       beforeBase.push(expr);
     }
   }
-  for (; propsArgIdx < propsArgExprs.length; propsArgIdx++) {
-    const arg = propsArgs[propsArgIdx];
-    if (arg?.afterVariants) {
-      afterVariants.push(propsArgExprs[propsArgIdx]!);
-    } else {
-      afterBase.push(propsArgExprs[propsArgIdx]!);
-    }
+  for (; propsArgIdx < propsArgs.length; propsArgIdx++) {
+    pushPropsArg(propsArgIdx, "afterBase");
   }
 
   return { beforeBase, afterBase, afterVariants };
