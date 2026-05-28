@@ -39,36 +39,35 @@ type SequenceEntryGroup = {
   ordered: OrderedTailEntry[];
 };
 
+type ExtraStyleEntryGroups = {
+  beforeBase: StyleSequenceEntry[];
+  afterBase: StyleSequenceEntry[];
+  afterVariants: StyleSequenceEntry[];
+};
+
 export function buildStyleKeySequence(
   ctx: TransformContext,
   decl: StyledDecl,
   options?: { includeLocalBase?: boolean },
 ): StyleSequenceEntry[] {
   const entries: StyleSequenceEntry[] = [];
-  const afterBase = new Set(decl.extraStyleKeysAfterBase ?? []);
+  const extraEntries = buildExtraStyleEntries(decl);
 
   if (options?.includeLocalBase !== false) {
     for (const styleKey of localBaseStyleKeys(ctx, decl)) {
       entries.push({ styleKey, patchable: false, source: "base" });
     }
   }
-  for (const styleKey of decl.extraStyleKeys ?? []) {
-    if (!afterBase.has(styleKey)) {
-      entries.push({ styleKey, patchable: false, source: "mixin" });
-    }
-  }
+  entries.push(...extraEntries.beforeBase);
   if (!decl.skipBaseStyleRef) {
     entries.push({ styleKey: decl.styleKey, patchable: true, source: "base" });
   }
-  for (const styleKey of decl.extraStyleKeysAfterBase ?? []) {
-    entries.push({ styleKey, patchable: true, source: "mixin" });
-  }
+  entries.push(...extraEntries.afterBase);
 
   const variantAndStyleFnEntries = buildVariantAndStyleFnEntries(decl);
   const variantDimensionEntries = buildVariantDimensionEntries(decl);
   entries.push(...variantAndStyleFnEntries.immediate);
   entries.push(...variantDimensionEntries.immediate);
-  entries.push(...buildExtraStylexPropsArgEntries(decl));
   entries.push(...buildThemeEntries(decl));
   entries.push(...buildAttrWrapperEntries(decl));
   entries.push(...buildPseudoExpandEntries(decl));
@@ -77,6 +76,7 @@ export function buildStyleKeySequence(
   entries.push(
     ...mergeOrderedEntries([variantDimensionEntries.ordered, variantAndStyleFnEntries.ordered]),
   );
+  entries.push(...extraEntries.afterVariants);
   entries.push(...buildEnumVariantEntries(decl));
   entries.push(...buildCallSiteCombinedEntries(decl));
   entries.push(...buildPromotedStyleEntries(decl));
@@ -91,13 +91,92 @@ export function buildStyleKeySequence(
   return entries;
 }
 
-function buildExtraStylexPropsArgEntries(decl: StyledDecl): StyleSequenceEntry[] {
-  return (decl.extraStylexPropsArgs ?? []).map((_, index) => ({
+function buildExtraStyleEntries(decl: StyledDecl): ExtraStyleEntryGroups {
+  const groups: ExtraStyleEntryGroups = { beforeBase: [], afterBase: [], afterVariants: [] };
+  const mixinOrder = decl.mixinOrder;
+  const extraStyleKeys = decl.extraStyleKeys ?? [];
+  const propsArgs = decl.extraStylexPropsArgs ?? [];
+  const afterBaseKeys = new Set(decl.extraStyleKeysAfterBase ?? []);
+
+  if (!mixinOrder || mixinOrder.length === 0) {
+    for (const styleKey of extraStyleKeys) {
+      const entry = styleKeyEntry(styleKey, afterBaseKeys.has(styleKey));
+      if (afterBaseKeys.has(styleKey)) {
+        groups.afterBase.push(entry);
+      } else {
+        groups.beforeBase.push(entry);
+      }
+    }
+    for (let index = 0; index < propsArgs.length; index++) {
+      const entry = propsArgEntry(decl, index);
+      if (propsArgs[index]?.afterVariants) {
+        groups.afterVariants.push(entry);
+      } else {
+        groups.afterBase.push(entry);
+      }
+    }
+    return groups;
+  }
+
+  let styleKeyIndex = 0;
+  let propsArgIndex = 0;
+  for (const entryKind of mixinOrder) {
+    if (entryKind === "styleKey" && styleKeyIndex < extraStyleKeys.length) {
+      pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
+      styleKeyIndex += 1;
+    } else if (entryKind === "propsArg" && propsArgIndex < propsArgs.length) {
+      pushPropsArgEntry(groups, decl, propsArgIndex);
+      propsArgIndex += 1;
+    }
+  }
+
+  for (; styleKeyIndex < extraStyleKeys.length; styleKeyIndex++) {
+    pushStyleKeyEntry(groups, extraStyleKeys[styleKeyIndex]!, afterBaseKeys);
+  }
+  for (; propsArgIndex < propsArgs.length; propsArgIndex++) {
+    pushPropsArgEntry(groups, decl, propsArgIndex);
+  }
+
+  return groups;
+}
+
+function pushStyleKeyEntry(
+  groups: ExtraStyleEntryGroups,
+  styleKey: string,
+  afterBaseKeys: ReadonlySet<string>,
+): void {
+  const afterBase = afterBaseKeys.has(styleKey);
+  const entry = styleKeyEntry(styleKey, afterBase);
+  if (afterBase) {
+    groups.afterBase.push(entry);
+  } else {
+    groups.beforeBase.push(entry);
+  }
+}
+
+function pushPropsArgEntry(groups: ExtraStyleEntryGroups, decl: StyledDecl, index: number): void {
+  const arg = decl.extraStylexPropsArgs?.[index];
+  const entry = propsArgEntry(decl, index);
+  if (arg?.afterVariants) {
+    groups.afterVariants.push(entry);
+  } else if (arg?.afterBase) {
+    groups.afterBase.push(entry);
+  } else {
+    groups.beforeBase.push(entry);
+  }
+}
+
+function styleKeyEntry(styleKey: string, patchable: boolean): StyleSequenceEntry {
+  return { styleKey, patchable, source: "mixin" };
+}
+
+function propsArgEntry(decl: StyledDecl, index: number): StyleSequenceEntry {
+  return {
     styleKey: `${decl.styleKey}ExtraStylexPropsArg${index}`,
     patchable: false,
     contributesDynamic: true,
     source: "propsArg",
-  }));
+  };
 }
 
 function localBaseStyleKeys(ctx: TransformContext, decl: StyledDecl): string[] {

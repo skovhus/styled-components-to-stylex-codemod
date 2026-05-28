@@ -160,6 +160,42 @@ describe("guardGeneratedConditionalDefaults", () => {
     );
   });
 
+  it("treats source-ordered props args before base as dynamic contributors", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "badge",
+        {
+          borderColor: {
+            default: null,
+            ":hover": "#fee2e2",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Badge",
+      styleKey: "badge",
+      base: { kind: "intrinsic", tagName: "span" },
+      rules: [],
+      templateExpressions: [],
+      mixinOrder: ["propsArg"],
+      extraStylexPropsArgs: [
+        {
+          expr: { type: "MemberExpression" } as never,
+        },
+      ],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Conditional StyleX default would override an unproven earlier style for the same property",
+    );
+  });
+
   it("orders variant dimensions with source-ordered variant entries", () => {
     const styles = new Map<string, unknown>([
       ["button", { backgroundColor: "#ffffff" }],

@@ -11,6 +11,7 @@ describe("buildStyleKeySequence", () => {
       base: { kind: "intrinsic", tagName: "button" },
       rules: [],
       templateExpressions: [],
+      needsWrapperComponent: true,
       extraStyleKeys: ["mixinBefore", "mixinAfter"],
       extraStyleKeysAfterBase: ["mixinAfter"],
       extraStylexPropsArgs: [{ expr: { type: "Identifier", name: "externalSx" } as never }],
@@ -48,6 +49,29 @@ describe("buildStyleKeySequence", () => {
       { key: "buttonTone", source: "styleFn", dynamic: false },
       { key: "buttonActive", source: "variant", dynamic: false },
       { key: "sizeVariants.large", source: "variant", dynamic: false },
+    ]);
+  });
+
+  it("orders fallback props args after the base style without consulting wrapper state", () => {
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStylexPropsArgs: [{ expr: { type: "Identifier", name: "externalSx" } as never }],
+    } satisfies StyledDecl;
+    const ctx = { resolvedStyleObjects: new Map() } as unknown as TransformContext;
+
+    expect(
+      buildStyleKeySequence(ctx, decl).map((entry) => ({
+        key: entry.styleKey,
+        source: entry.source,
+        dynamic: entry.contributesDynamic === true,
+      })),
+    ).toEqual([
+      { key: "button", source: "base", dynamic: false },
+      { key: "buttonExtraStylexPropsArg0", source: "propsArg", dynamic: true },
     ]);
   });
 });

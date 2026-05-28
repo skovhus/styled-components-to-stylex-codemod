@@ -36,6 +36,8 @@ type BorderHandlerContext = Pick<
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   inlineStyleProps: Array<{ prop: string; expr: unknown }>;
+  hasStaticPropsBeforeResolvedStylesArg: () => boolean;
+  notifyResolvedStylesArg: () => void;
 };
 
 type BorderHandlerArgs = {
@@ -70,6 +72,8 @@ export function tryHandleInterpolatedBorder(
     variantBuckets,
     variantStyleKeys,
     inlineStyleProps,
+    hasStaticPropsBeforeResolvedStylesArg,
+    notifyResolvedStylesArg,
   } = ctx;
   const { hasLocalThemeBinding } = ctx;
   const {
@@ -567,9 +571,14 @@ export function tryHandleInterpolatedBorder(
           return true;
         }
         decl.extraStylexPropsArgs ??= [];
+        const order = decl.mixinOrder ?? [];
+        order.push("propsArg");
+        decl.mixinOrder = order;
         decl.extraStylexPropsArgs.push({
           expr: resolved.exprAst as any,
+          afterBase: hasStaticPropsBeforeResolvedStylesArg(),
         });
+        notifyResolvedStylesArg();
         decl.needsWrapperComponent = true;
         return true;
       }

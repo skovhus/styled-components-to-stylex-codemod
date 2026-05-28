@@ -666,10 +666,7 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             }
           }
         } else {
-          // Fallback: no order tracking, use legacy behavior (propsArgs first, then styleKeys)
-          for (const arg of extraStylexPropsArgs) {
-            extraMixinArgs.push(arg.expr);
-          }
+          // Fallback: no order tracking, use the wrapper emitter's legacy order.
           for (const key of extraStyleKeys) {
             const expr = j.memberExpression(
               j.identifier(ctx.stylesIdentifier ?? "styles"),
@@ -680,6 +677,9 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             } else {
               extraMixinArgs.push(expr);
             }
+          }
+          for (const arg of extraStylexPropsArgs) {
+            extraAfterBaseArgs.push(arg.expr);
           }
         }
 
