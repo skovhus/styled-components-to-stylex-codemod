@@ -59,6 +59,8 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "outlineOffset",
 ]);
 
+const GRID_LINE_STYLEX_PROPS = new Set(["gridArea", "gridColumn", "gridRow"]);
+
 const UNSUPPORTED_STYLEX_CSS_PROPS = new Set([
   // StyleX rejects the CSS-wide reset property. It is too broad to expand
   // safely without element-specific knowledge, so callers should bail instead
@@ -258,7 +260,8 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     return borderShorthandToStylex(raw, directionCapitalized);
   }
 
-  return [{ prop: cssPropertyToStylexProp(prop), value: decl.value }];
+  const stylexProp = cssPropertyToStylexProp(prop);
+  return [{ prop: stylexProp, value: normalizeGridLineSlashSpacing(stylexProp, decl.value) }];
 }
 
 export function cssPropertyToStylexProp(prop: string): string {
@@ -281,6 +284,38 @@ export const BORDER_STYLES = new Set([
   "inset",
   "outset",
 ]);
+
+function normalizeGridLineSlashSpacing(stylexProp: string, value: CssValue): CssValue {
+  if (!GRID_LINE_STYLEX_PROPS.has(stylexProp) || value.kind !== "static") {
+    return value;
+  }
+  return { kind: "static", value: normalizeUnescapedSlashSpacing(value.value) };
+}
+
+function normalizeUnescapedSlashSpacing(value: string): string {
+  let output = "";
+  for (let index = 0; index < value.length; index++) {
+    const char = value.charAt(index);
+    if (char === "/" && !isEscapedAt(value, index)) {
+      output = output.replace(/\s+$/g, "");
+      output += " / ";
+      while (index + 1 < value.length && /\s/.test(value.charAt(index + 1))) {
+        index++;
+      }
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function isEscapedAt(value: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value.charAt(cursor) === "\\"; cursor--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 1;
+}
 
 /**
  * Expands an interpolated border shorthand into separate width/style/color properties.

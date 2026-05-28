@@ -41,7 +41,7 @@ const styles = stylex.create({
   rowBase: {
     display: "grid",
     gridTemplateColumns: "1fr 2fr",
-    gridColumn: "1/-1",
+    gridColumn: "1 / -1",
     alignItems: "center",
     paddingBlock: 0,
     paddingInline: 8,

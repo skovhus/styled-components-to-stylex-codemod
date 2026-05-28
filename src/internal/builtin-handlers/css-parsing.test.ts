@@ -70,6 +70,18 @@ describe("parseCssDeclarationBlock", () => {
   it("preserves non-numeric strings as strings", () => {
     expect(parseCssDeclarationBlock("display: flex")).toEqual({ display: "flex" });
   });
+
+  it("normalizes grid line slash separators for readability", () => {
+    expect(parseCssDeclarationBlock("grid-column: 1/-1")).toEqual({
+      gridColumn: "1 / -1",
+    });
+  });
+
+  it("preserves escaped slashes in grid line names", () => {
+    expect(parseCssDeclarationBlock("grid-column: foo\\/bar")).toEqual({
+      gridColumn: "foo\\/bar",
+    });
+  });
 });
 
 describe("parseCssDeclarationBlockWithTemplateExpr", () => {
