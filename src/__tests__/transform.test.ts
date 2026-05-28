@@ -11986,12 +11986,12 @@ export const App = () => <Unassigned />;
     );
 
     expect(result.code).not.toBeNull();
-    expect(result.code).toContain(`height: 20,
+    expect(result.code).toContain(`height: "20px !important",
     // aligns due to empty space around the icon
     marginBlock: 0,
     marginInline: -1,`);
     expect(result.code).not.toContain(`// aligns due to empty space around the icon
-    height: 20,`);
+    height: "20px !important",`);
   });
 });
 
