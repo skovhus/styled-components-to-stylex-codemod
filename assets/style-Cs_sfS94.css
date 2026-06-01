@@ -3989,6 +3989,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   z-index: calc(var(--x1ofp3te) + 1);
 }
 
+.x12a506k:not(#\#):not(#\#):not(#\#) {
+  z-index: calc(var(--x1ofp3te) + 2);
+}
+
 .x18uyez6:not(#\#):not(#\#):not(#\#) {
   z-index: calc(var(--xdughlu) - 1);
 }
@@ -5179,6 +5183,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xqui205:not(#\#):not(#\#):not(#\#):not(#\#) {
   margin-top: 24px;
+}
+
+.xr9ek0c:not(#\#):not(#\#):not(#\#):not(#\#) {
+  margin-top: 2px;
 }
 
 .x1gslohp:not(#\#):not(#\#):not(#\#):not(#\#) {
