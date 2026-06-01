@@ -41,7 +41,11 @@ function IconWrapper(props: IconWrapperProps) {
             })
           : undefined,
         background != null && styles.iconWrapperBackgroundColor(background),
-        background ? styles.iconWrapperBackground : undefined,
+        background
+          ? styles.iconWrapperBackground({
+              background,
+            })
+          : undefined,
       ]}
     >
       {children}
@@ -177,11 +181,12 @@ const styles = stylex.create({
       ":hover": transitionSpeedVars.fast,
     },
   },
-  iconWrapperBackground: {
-    borderRadius: 4,
-  },
   iconWrapperBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  iconWrapperBackground: (props) => ({
+    borderRadius: 4,
+    opacity: props.background ? 1 : 0.8,
   }),
   falsyGuardIcon: {
     display: "inline-flex",

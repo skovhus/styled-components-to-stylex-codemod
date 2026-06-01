@@ -52,6 +52,7 @@ const IconWrapper = styled.span<{ $background?: string }>`
     props.$background
       ? css`
           border-radius: 4px;
+          opacity: ${(props: any) => (props.$background ? 1 : 0.8)};
 
           &:${highlight} {
             background-color: ${color("bgBorderSolid")};

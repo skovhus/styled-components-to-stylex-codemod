@@ -26,6 +26,7 @@ import { extractConditionName } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
   getArrowFnParamBindings,
+  getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isCallExpressionNode,
@@ -750,7 +751,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!slotExpr || typeof slotExpr !== "object") {
             return null;
           }
-          const rawExpr = replaceParamWithProps(slotExpr as ExpressionKind);
+          const slotExprNode = slotExpr as ExpressionKind;
+          const slotValueExpr =
+            slotExprNode.type === "ArrowFunctionExpression" ||
+            slotExprNode.type === "FunctionExpression"
+              ? getFunctionBodyExpr(slotExprNode)
+              : slotExprNode;
+          if (!slotValueExpr) {
+            return null;
+          }
+          const rawExpr = replaceParamWithProps(slotValueExpr);
           let resolvedExpr: ExpressionKind = rawExpr;
           if (rawExpr.type === "CallExpression") {
             const resolvedCall = tryResolveAdapterCall(rawExpr, d.property, {
@@ -983,7 +993,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
 
       if (Object.keys(rootStyle).length > 0) {
-        applyVariant(testInfo, rootStyle);
+        if (!tryApplyRuntimeStyleFunction(testInfo, rootStyle)) {
+          applyVariant(testInfo, rootStyle);
+        }
       }
 
       const styleKeys: string[] = [];
