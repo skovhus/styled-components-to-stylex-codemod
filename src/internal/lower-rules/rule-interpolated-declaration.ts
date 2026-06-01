@@ -67,6 +67,7 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
+  getImportedStylexIdentifiers,
   hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
   hasThemeReferenceInExpression,
@@ -276,9 +277,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return false;
     }
     const cssProperty = d.property.trim();
-    if (cssProperty !== "background" && cssProperty !== "background-image") {
-      return false;
-    }
     if (media || attrTarget || pseudos?.length || pseudoElement || resolvedSelectorMedia) {
       return false;
     }
@@ -288,6 +286,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
     );
     if (slotParts.length < 2) {
+      return false;
+    }
+    if (
+      cssProperty !== "background" &&
+      cssProperty !== "background-image" &&
+      cssProperty !== "box-shadow" &&
+      cssProperty !== "transform"
+    ) {
+      return false;
+    }
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+    if (stylexDecls.length !== 1 || !stylexDecls[0]?.prop) {
       return false;
     }
     if (cssProperty === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")) {
@@ -361,16 +371,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
       currentStaticPart = "";
-      expressions.push(normalizeDollarProps(j, slotExpr));
+      const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+      expressions.push(
+        normalizeDollarProps(j, slotExpr, { skipIdentifiers: importedStylexIdentifiers }),
+      );
     }
 
     quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
 
     const valueExpr = j.templateLiteral(quasis, expressions) as ExpressionKind;
-    const stylexDecls = cssDeclarationToStylexDeclarations(d);
-    if (stylexDecls.length === 0) {
-      return false;
-    }
     const normalizedPropNames = [...propsUsed].map((propName) =>
       propName.startsWith("$") ? propName.slice(1) : propName,
     );

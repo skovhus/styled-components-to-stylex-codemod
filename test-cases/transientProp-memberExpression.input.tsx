@@ -1,5 +1,6 @@
 import React from "react";
 import styled from "styled-components";
+import { color } from "./lib/helpers";
 import { motion, type MotionValue } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
@@ -12,6 +13,16 @@ const ComponentWrapper = styled(motion.div)<{ $isOpen: boolean }>`
 const HighlightedAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
   box-shadow: 0 0 0 2px ${(props) => props.$highlightColor ?? "transparent"};
   border-radius: 50%;
+`;
+
+const PresenceAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
+  box-shadow:
+    0 0 0 1px ${color("bgBase")},
+    0 0 0 2px ${(props) => props.$highlightColor ?? "transparent"},
+    0 0 0 3px ${(props) => (props.$highlightColor ? props.theme.color.bgBase : "transparent")};
+  border-radius: 50%;
+  margin: 2px;
+  transition: box-shadow 0.3s ease-in-out;
 `;
 
 const ZoomPreviewImage = styled(motion.img)<{
@@ -63,6 +74,8 @@ export const App = () => (
     <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
     <HighlightedAvatar user="Alice" size="small" $highlightColor="blue" />
     <HighlightedAvatar user="Bob" size="tiny" />
+    <PresenceAvatar user="Carol" size="small" $highlightColor="green" />
+    <PresenceAvatar user="Dave" size="tiny" />
   </div>
 );
 

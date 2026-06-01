@@ -3,6 +3,7 @@
  * Core concepts: prop extraction, conditional detection, and template assembly.
  */
 import type { JSCodeshift } from "jscodeshift";
+import type { ImportSpec } from "../../adapter.js";
 import {
   type ASTNodeRecord,
   cloneAstNode,
@@ -13,6 +14,29 @@ import {
 } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
+
+type StylexImportMapEntry = { source?: { value?: string } } | null | undefined;
+
+export function getImportedStylexIdentifiers(
+  importMap: ReadonlyMap<string, StylexImportMapEntry>,
+  resolverImports: ReadonlyMap<string, ImportSpec>,
+): Set<string> {
+  const identifiers = new Set<string>();
+  for (const [localName, importEntry] of importMap) {
+    if (importEntry?.source?.value?.includes(".stylex")) {
+      identifiers.add(localName);
+    }
+  }
+  for (const importSpec of resolverImports.values()) {
+    if (!importSpec.from.value.includes(".stylex")) {
+      continue;
+    }
+    for (const name of importSpec.names) {
+      identifiers.add(name.local ?? name.imported);
+    }
+  }
+  return identifiers;
+}
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`

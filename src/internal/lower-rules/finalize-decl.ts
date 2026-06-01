@@ -2724,8 +2724,10 @@ function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
         : { ...shorthandMap };
       endVal = hasEnd ? computeMergedLonghand(styleObj[end], shorthandMap) : { ...shorthandMap };
     } else {
-      startVal = hasStart ? styleObj[start] : shorthandVal;
-      endVal = hasEnd ? styleObj[end] : shorthandVal;
+      startVal = hasStart
+        ? mergeScalarDefaultIntoLonghand(styleObj[start], shorthandVal)
+        : shorthandVal;
+      endVal = hasEnd ? mergeScalarDefaultIntoLonghand(styleObj[end], shorthandVal) : shorthandVal;
     }
 
     // Rebuild the object in order: replace the shorthand position with start+end,
@@ -2773,6 +2775,17 @@ function computeMergedLonghand(
     if (key !== "default") {
       merged[key] = val;
     }
+  }
+  return merged;
+}
+
+function mergeScalarDefaultIntoLonghand(longhandVal: unknown, scalarDefault: unknown): unknown {
+  if (!isMediaOrPseudoMap(longhandVal)) {
+    return longhandVal;
+  }
+  const merged = { ...(longhandVal as Record<string, unknown>) };
+  if (merged.default === null || merged.default === undefined) {
+    merged.default = scalarDefault;
   }
   return merged;
 }

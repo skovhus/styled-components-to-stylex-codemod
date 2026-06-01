@@ -17,6 +17,7 @@ import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
   collectPropsFromExpressions,
+  getImportedStylexIdentifiers,
   normalizeDollarProps,
   rewritePropsThemeToThemeVar,
 } from "./inline-styles.js";
@@ -2985,27 +2986,6 @@ function styleReferencesRuntimeTheme(style: Record<string, unknown>): boolean {
 
 function normalizeTransientPropName(propName: string): string {
   return propName.startsWith("$") ? propName.slice(1) : propName;
-}
-
-function getImportedStylexIdentifiers(
-  importMap: Map<string, { source?: { value?: string } }>,
-  resolverImports: Map<string, ImportSpec>,
-): Set<string> {
-  const identifiers = new Set<string>();
-  for (const [localName, importEntry] of importMap) {
-    if (importEntry.source?.value?.includes(".stylex")) {
-      identifiers.add(localName);
-    }
-  }
-  for (const importSpec of resolverImports.values()) {
-    if (!importSpec.from.value.includes(".stylex")) {
-      continue;
-    }
-    for (const name of importSpec.names) {
-      identifiers.add(name.local ?? name.imported);
-    }
-  }
-  return identifiers;
 }
 
 /**

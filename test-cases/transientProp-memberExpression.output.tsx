@@ -1,5 +1,7 @@
 import React from "react";
+import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
+import { $colors } from "./tokens.stylex";
 import { motion, type MotionValue } from "./lib/framer-motion";
 import { UserAvatar } from "./lib/user-avatar";
 
@@ -35,6 +37,30 @@ function HighlightedAvatar(props: HighlightedAvatarProps) {
     <UserAvatar
       {...rest}
       {...stylex.props(styles.highlightedAvatar(`0 0 0 2px ${highlightColor ?? "transparent"}`))}
+    />
+  );
+}
+
+type PresenceAvatarProps = { highlightColor?: string } & Omit<
+  React.ComponentPropsWithRef<typeof UserAvatar>,
+  "className" | "style"
+>;
+
+function PresenceAvatar(props: PresenceAvatarProps) {
+  const { highlightColor, ...rest } = props;
+  const theme = useTheme();
+
+  return (
+    <UserAvatar
+      {...rest}
+      {...stylex.props(
+        styles.presenceAvatar(
+          {
+            highlightColor,
+          },
+          theme,
+        ),
+      )}
     />
   );
 }
@@ -111,6 +137,8 @@ export const App = () => (
     <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
     <HighlightedAvatar user="Alice" size="small" highlightColor="blue" />
     <HighlightedAvatar user="Bob" size="tiny" />
+    <PresenceAvatar user="Carol" size="small" highlightColor="green" />
+    <PresenceAvatar user="Dave" size="tiny" />
   </div>
 );
 
@@ -134,6 +162,12 @@ const styles = stylex.create({
   highlightedAvatar: (boxShadow: string) => ({
     borderRadius: "50%",
     boxShadow,
+  }),
+  presenceAvatar: (props, theme) => ({
+    borderRadius: "50%",
+    margin: 2,
+    transition: "box-shadow 0.3s ease-in-out",
+    boxShadow: `0 0 0 1px ${$colors.bgBase},0 0 0 2px ${props.highlightColor ?? "transparent"},0 0 0 3px ${props.highlightColor ? theme.color.bgBase : "transparent"}`,
   }),
   zoomPreviewImage: {
     objectFit: "contain",

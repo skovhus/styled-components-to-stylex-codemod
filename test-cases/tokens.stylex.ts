@@ -92,6 +92,17 @@ export const transitionSpeed = stylex.defineVars({
   fast: "0.1s",
 });
 
+export const moveUp = stylex.keyframes({
+  from: {
+    opacity: 0,
+    transform: "translate3d(0, 10px, 0)",
+  },
+  to: {
+    opacity: 1,
+    transform: "none",
+  },
+});
+
 // Font weight variables
 export const fontWeightVars = stylex.defineVars({
   normal: "400",
