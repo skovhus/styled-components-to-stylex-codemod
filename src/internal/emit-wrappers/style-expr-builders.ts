@@ -518,6 +518,22 @@ export function buildVariantDimensionLookups(
     return j.logicalExpression("??", lookup, fallbackCall) as ExpressionKind;
   };
 
+  const buildConditionallyGuardedLookup = (
+    dim: VariantDimension,
+    lookup: ExpressionKind,
+  ): ExpressionKind => {
+    if (!dim.conditionWhen) {
+      return lookup;
+    }
+    const booleanProps = namespaceBooleanProps ? new Set(namespaceBooleanProps) : undefined;
+    const { cond, isBoolean } = collectConditionProps(j, {
+      when: dim.conditionWhen,
+      destructureProps,
+      ...(booleanProps ? { booleanProps } : {}),
+    });
+    return makeConditionalStyleExpr(j, { cond, expr: lookup, isBoolean });
+  };
+
   // Group namespace dimensions by their boolean prop and propName
   const namespacePairs = new Map<
     string,
@@ -584,7 +600,9 @@ export function buildVariantDimensionLookups(
             true /* computed */,
           );
       // Guard optional props without defaults to avoid `undefined` index type error
-      if (dim.isOptional && !dim.defaultValue) {
+      if (dim.conditionWhen) {
+        pushExpr(buildConditionallyGuardedLookup(dim, lookup), dim);
+      } else if (dim.isOptional && !dim.defaultValue) {
         const guard = j.binaryExpression("!=", j.identifier(dim.propName), j.literal(null));
         pushExpr(j.logicalExpression("&&", guard, lookup), dim);
       } else {
@@ -755,7 +773,6 @@ export function buildStyleFnExpressions(
   };
 
   const booleanProps = collectBooleanPropNames(d);
-
   for (const p of styleFnPairs) {
     const propExpr =
       p.jsxProp === "__props" || p.jsxProp === "__helper" ? propsId : propExprBuilder(p.jsxProp);

@@ -36,6 +36,7 @@ export function wrappedComponentInterfaceFor(
       if (adapterResult.acceptsSx && hasTypedSxConstraints(typedInterface)) {
         return {
           ...adapterResult,
+          ...(typedInterface.sxTarget ? { sxTarget: typedInterface.sxTarget } : {}),
           sxExcludedProperties: mergeUniqueStrings(
             adapterResult.sxExcludedProperties,
             typedInterface.sxExcludedProperties ?? [],
@@ -78,6 +79,7 @@ function typedComponentInterfaceFor(
   if (typedComponent?.supportsSxProp) {
     return {
       acceptsSx: true,
+      ...(typedComponent.sxTarget ? { sxTarget: typedComponent.sxTarget } : {}),
       sxExcludedProperties: typedComponent.sxExcludedProperties,
       sxAllowedProperties: typedComponent.sxAllowedProperties,
     };

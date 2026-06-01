@@ -2,8 +2,10 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { InnerSxControl } from "./lib/inner-sx-control";
 
-function StyledControl(props: Omit<React.ComponentPropsWithRef<typeof InnerSxControl>, "sx">) {
-  return <InnerSxControl {...props} {...stylex.props(styles.styledControl)} />;
+function StyledControl(
+  props: Omit<React.ComponentPropsWithRef<typeof InnerSxControl>, "className" | "style">,
+) {
+  return <InnerSxControl {...props} {...stylex.props(styles.control)} />;
 }
 
 export const App = () => (
@@ -14,7 +16,7 @@ export const App = () => (
 );
 
 const styles = stylex.create({
-  styledControl: {
+  control: {
     marginTop: 2,
   },
 });

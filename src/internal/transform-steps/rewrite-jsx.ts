@@ -103,7 +103,7 @@ function wrappedComponentAcceptsSxProp(
     });
     if (adapterResult !== undefined) {
       visiting.delete(componentLocalName);
-      return adapterResult.acceptsSx === true;
+      return adapterResult.acceptsSx === true && adapterResult.sxTarget !== "inner";
     }
   }
 
@@ -126,7 +126,7 @@ function wrappedComponentAcceptsSxProp(
     );
   })();
   if (typedComponent) {
-    if (typedComponent.supportsSxProp) {
+    if (typedComponent.supportsSxProp && typedComponent.sxTarget !== "inner") {
       visiting.delete(componentLocalName);
       return true;
     }

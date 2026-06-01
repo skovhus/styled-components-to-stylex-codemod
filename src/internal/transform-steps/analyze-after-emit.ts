@@ -543,6 +543,7 @@ function canInlineSingleUseSxAwareComponentWrapper(args: {
   const componentInterface = wrappedComponentInterfaceFor(ctx, decl.base.ident);
   return (
     componentInterface?.acceptsSx === true &&
+    componentInterface.sxTarget !== "inner" &&
     (componentInterface.sxExcludedProperties?.length ?? 0) === 0 &&
     componentInterface.sxAllowedProperties === undefined
   );

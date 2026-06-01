@@ -44,6 +44,7 @@ import {
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
+import { evaluateObservedDynamicExpression } from "./static-evaluator.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -528,6 +529,16 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
 
+  promoteGuardedObservedStyleFnsToVariants({
+    state,
+    decl,
+    variantBuckets,
+    variantStyleKeys,
+    observedVariantFallbackFns,
+    styleFnFromProps,
+    styleFnDecls,
+  });
+
   // Prevent flat variant values from clobbering pseudo/media maps.
   // Promotes flat values to pseudo-maps so StyleX merges them correctly.
   liftFlatVariantsToPseudoMaps(variantBuckets);
@@ -713,6 +724,105 @@ function alignComputedCallArgStyleFnParams(
     }
     renameIdentifierInAst(fnAst, entry.jsxProp, paramName);
   }
+}
+
+function promoteGuardedObservedStyleFnsToVariants(args: {
+  state: DeclProcessingState["state"];
+  decl: StyledDecl;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  variantStyleKeys: Record<string, string>;
+  observedVariantFallbackFns: Map<string, string>;
+  styleFnFromProps: NonNullable<StyledDecl["styleFnFromProps"]>;
+  styleFnDecls: Map<string, unknown>;
+}): void {
+  const usage = args.state.propUsageByComponent.get(args.decl.localName);
+  if (!usage) {
+    return;
+  }
+
+  for (let index = args.styleFnFromProps.length - 1; index >= 0; index--) {
+    const entry = args.styleFnFromProps[index];
+    if (
+      !entry ||
+      !entry.conditionWhen?.includes("(") ||
+      entry.jsxProp === "__props" ||
+      entry.jsxProp === "__helper"
+    ) {
+      continue;
+    }
+    const propUsage = usage.props[entry.jsxProp];
+    if (!propUsage || propUsage.values.length < 2) {
+      continue;
+    }
+    const observedValues = propUsage.values.filter(
+      (value: string | number | boolean): value is string | number =>
+        typeof value === "string" || typeof value === "number",
+    );
+    if (observedValues.length !== propUsage.values.length || observedValues.length > 20) {
+      continue;
+    }
+    const styleProperty = readSingleStyleFnProperty(args.styleFnDecls.get(entry.fnKey));
+    if (!styleProperty) {
+      continue;
+    }
+    const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
+    for (const propValue of observedValues) {
+      const cssValue = evaluateObservedDynamicExpression({
+        j: args.state.j,
+        root: args.state.root,
+        expression: styleProperty.value,
+        propName: entry.jsxProp,
+        propValue,
+        paramName: entry.jsxProp,
+      });
+      if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+        transformedValues.length = 0;
+        break;
+      }
+      transformedValues.push({ propValue, cssValue });
+    }
+    if (transformedValues.length !== observedValues.length) {
+      continue;
+    }
+    for (const { propValue, cssValue } of transformedValues) {
+      const propValueExpr =
+        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+      const when = `${entry.conditionWhen} && ${entry.jsxProp} === ${propValueExpr}`;
+      args.variantBuckets.set(when, {
+        ...args.variantBuckets.get(when),
+        [styleProperty.key]: cssValue,
+      });
+      args.variantStyleKeys[when] ??= styleKeyWithSuffix(args.decl.styleKey, when);
+    }
+    args.observedVariantFallbackFns.set(entry.jsxProp, entry.fnKey);
+    args.styleFnFromProps.splice(index, 1);
+  }
+}
+
+function readSingleStyleFnProperty(fnAst: unknown): { key: string; value: ExpressionKind } | null {
+  const body = getFunctionBodyExpr(fnAst as { body?: unknown });
+  if (!body || (body as { type?: string }).type !== "ObjectExpression") {
+    return null;
+  }
+  const properties = (body as { properties?: unknown[] }).properties ?? [];
+  if (properties.length !== 1) {
+    return null;
+  }
+  const property = properties[0] as { type?: string; key?: unknown; value?: unknown };
+  if (property.type !== "Property" && property.type !== "ObjectProperty") {
+    return null;
+  }
+  const key = property.key as { type?: string; name?: string; value?: unknown };
+  const keyName =
+    key.type === "Identifier"
+      ? key.name
+      : key.type === "Literal" || key.type === "StringLiteral"
+        ? String(key.value)
+        : null;
+  if (!keyName || !property.value) {
+    return null;
+  }
+  return { key: keyName, value: property.value as ExpressionKind };
 }
 
 /**

@@ -26,6 +26,7 @@ export interface TypeScriptComponentMetadata {
   restProps: TypeScriptRestPropMetadata[];
   hasIndexSignature: boolean;
   supportsSxProp: boolean;
+  sxTarget?: "root" | "inner";
   sxExcludedProperties: string[];
   sxAllowedProperties?: string[];
 }
@@ -233,6 +234,7 @@ function readReactComponentFromFunction(
     parameters: readParameters(node.parameters, checker),
     restProps: readRestProps(node.parameters[0], node.body),
     bodySupportsSxProp: readsSxProp(node.parameters[0], node.body),
+    bodySxTarget: detectSxTarget(node.parameters[0], node.body),
     checker,
     location: node,
   });
@@ -257,6 +259,7 @@ function readReactComponentFromVariable(
     parameters: readParameters(node.parameters, checker),
     restProps: readRestProps(node.parameters[0], node.body),
     bodySupportsSxProp: readsSxProp(node.parameters[0], node.body),
+    bodySxTarget: detectSxTarget(node.parameters[0], node.body),
     checker,
     location: node,
   });
@@ -272,6 +275,7 @@ function buildComponentMetadata(args: {
   parameters: TypeScriptParameterMetadata[];
   restProps: TypeScriptRestPropMetadata[];
   bodySupportsSxProp?: boolean;
+  bodySxTarget?: "root" | "inner";
   checker: ts.TypeChecker;
   location: ts.Node;
 }): TypeScriptComponentMetadata {
@@ -308,6 +312,7 @@ function buildComponentMetadata(args: {
       explicitPropNames.includes("sx") ||
       supportsResolvedSxProp ||
       args.bodySupportsSxProp === true,
+    ...(args.bodySxTarget ? { sxTarget: args.bodySxTarget } : {}),
     sxExcludedProperties,
     ...(sxAllowedProperties !== undefined ? { sxAllowedProperties } : {}),
   };
@@ -1305,6 +1310,204 @@ function readsSxProp(
   };
   ts.forEachChild(body, visit);
   return found;
+}
+
+function detectSxTarget(
+  parameter: ts.ParameterDeclaration | undefined,
+  body: ts.ConciseBody | undefined,
+): "root" | "inner" | undefined {
+  if (!body) {
+    return undefined;
+  }
+  const sxNames = collectSxBindingNames(parameter, body);
+  if (sxNames.size === 0) {
+    return undefined;
+  }
+  const sxPropsNames = collectStylexPropsBindingNames(body, sxNames);
+  const root = returnedJsxRoot(body);
+  if (!root) {
+    return undefined;
+  }
+  if (jsxOpeningUsesSx(jsxRootOpening(root), sxNames, sxPropsNames)) {
+    return "root";
+  }
+  return jsxChildrenUseSx(root, sxNames, sxPropsNames) ? "inner" : undefined;
+}
+
+function collectSxBindingNames(
+  parameter: ts.ParameterDeclaration | undefined,
+  body: ts.ConciseBody,
+): Set<string> {
+  const names = new Set<string>();
+  if (parameter?.name && ts.isObjectBindingPattern(parameter.name)) {
+    collectBindingElementLocalNames(parameter.name, "sx", names);
+  } else {
+    names.add("sx");
+  }
+  if (parameter?.name && ts.isIdentifier(parameter.name)) {
+    const propsName = parameter.name.text;
+    const visit = (node: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isObjectBindingPattern(node.name) &&
+        node.initializer &&
+        isIdentifierNamed(unwrapExpression(node.initializer), propsName)
+      ) {
+        collectBindingElementLocalNames(node.name, "sx", names);
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(body, visit);
+  }
+  return names;
+}
+
+function collectBindingElementLocalNames(
+  pattern: ts.ObjectBindingPattern,
+  propertyName: string,
+  names: Set<string>,
+): void {
+  for (const element of pattern.elements) {
+    const name = bindingElementPropertyNameText(element);
+    if (name === propertyName && ts.isIdentifier(element.name)) {
+      names.add(element.name.text);
+    }
+  }
+}
+
+function bindingElementPropertyNameText(element: ts.BindingElement): string | null {
+  if (element.propertyName) {
+    return ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)
+      ? element.propertyName.text
+      : null;
+  }
+  return ts.isIdentifier(element.name) ? element.name.text : null;
+}
+
+function collectStylexPropsBindingNames(
+  body: ts.ConciseBody,
+  sxNames: ReadonlySet<string>,
+): Set<string> {
+  const names = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      isStylexPropsCallWithSx(node.initializer, sxNames)
+    ) {
+      names.add(node.name.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(body, visit);
+  return names;
+}
+
+function isStylexPropsCallWithSx(expr: ts.Expression, sxNames: ReadonlySet<string>): boolean {
+  const unwrapped = unwrapExpression(expr);
+  return (
+    ts.isCallExpression(unwrapped) &&
+    isStylexPropsCallee(unwrapped.expression) &&
+    unwrapped.arguments.some((arg) => ts.isIdentifier(arg) && sxNames.has(arg.text))
+  );
+}
+
+function isStylexPropsCallee(expr: ts.Expression): boolean {
+  return (
+    ts.isPropertyAccessExpression(expr) &&
+    expr.name.text === "props" &&
+    ts.isIdentifier(expr.expression) &&
+    expr.expression.text === "stylex"
+  );
+}
+
+type JsxRoot = ts.JsxElement | ts.JsxSelfClosingElement;
+
+function returnedJsxRoot(body: ts.ConciseBody): JsxRoot | null {
+  if (ts.isJsxElement(body) || ts.isJsxSelfClosingElement(body)) {
+    return body;
+  }
+  if (!ts.isBlock(body)) {
+    return null;
+  }
+  for (const statement of body.statements) {
+    if (!ts.isReturnStatement(statement) || !statement.expression) {
+      continue;
+    }
+    const expr = unwrapExpression(statement.expression);
+    if (ts.isJsxElement(expr) || ts.isJsxSelfClosingElement(expr)) {
+      return expr;
+    }
+  }
+  return null;
+}
+
+function jsxChildrenUseSx(
+  root: JsxRoot,
+  sxNames: ReadonlySet<string>,
+  sxPropsNames: ReadonlySet<string>,
+): boolean {
+  if (!ts.isJsxElement(root)) {
+    return false;
+  }
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) {
+      return;
+    }
+    if (
+      (ts.isJsxElement(node) && jsxOpeningUsesSx(node.openingElement, sxNames, sxPropsNames)) ||
+      (ts.isJsxSelfClosingElement(node) && jsxOpeningUsesSx(node, sxNames, sxPropsNames))
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  for (const child of root.children) {
+    visit(child);
+  }
+  return found;
+}
+
+function jsxRootOpening(root: JsxRoot): ts.JsxOpeningLikeElement {
+  return ts.isJsxElement(root) ? root.openingElement : root;
+}
+
+function jsxOpeningUsesSx(
+  opening: ts.JsxOpeningLikeElement,
+  sxNames: ReadonlySet<string>,
+  sxPropsNames: ReadonlySet<string>,
+): boolean {
+  return opening.attributes.properties.some((attribute) => {
+    if (ts.isJsxSpreadAttribute(attribute)) {
+      return expressionReferencesNames(attribute.expression, sxNames, sxPropsNames);
+    }
+    if (
+      !ts.isIdentifier(attribute.name) ||
+      attribute.name.text !== "sx" ||
+      !attribute.initializer
+    ) {
+      return false;
+    }
+    if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) {
+      return false;
+    }
+    return expressionReferencesNames(attribute.initializer.expression, sxNames, sxPropsNames);
+  });
+}
+
+function expressionReferencesNames(
+  expr: ts.Expression,
+  sxNames: ReadonlySet<string>,
+  sxPropsNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapExpression(expr);
+  if (ts.isIdentifier(unwrapped)) {
+    return sxNames.has(unwrapped.text) || sxPropsNames.has(unwrapped.text);
+  }
+  return isStylexPropsCallWithSx(unwrapped, sxNames);
 }
 
 function isFunctionWithParameterNamed(node: ts.Node, name: string): boolean {

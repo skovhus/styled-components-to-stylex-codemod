@@ -223,6 +223,8 @@ export type VariantDimension = {
   isDisabledNamespace?: boolean;
   /** Dynamic style function used when observed consumer values do not cover a runtime value. */
   fallbackFnKey?: string;
+  /** Optional guard that must be true before applying this variant lookup. */
+  conditionWhen?: string;
   /** Whether the prop is optional (has ? in its type annotation) - used for emitting destructuring defaults */
   isOptional?: boolean;
   /** Minimum source order from the original variant entries that were grouped into this dimension.

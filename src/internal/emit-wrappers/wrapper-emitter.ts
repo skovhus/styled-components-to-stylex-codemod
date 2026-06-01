@@ -162,7 +162,8 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
-    return this.wrappedComponentInterfaceFor(componentLocalName)?.acceptsSx === true;
+    const componentInterface = this.wrappedComponentInterfaceFor(componentLocalName);
+    return componentInterface?.acceptsSx === true && componentInterface.sxTarget !== "inner";
   }
 
   wrappedComponentInterfaceFor(
@@ -188,6 +189,7 @@ export class WrapperEmitter {
       if (typedComponent.supportsSxProp) {
         return {
           acceptsSx: true,
+          ...(typedComponent.sxTarget ? { sxTarget: typedComponent.sxTarget } : {}),
           sxExcludedProperties: typedComponent.sxExcludedProperties,
           sxAllowedProperties: typedComponent.sxAllowedProperties,
         };

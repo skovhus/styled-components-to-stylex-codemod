@@ -645,6 +645,74 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     return true;
   };
 
+  const tryEmitObservedGuardedScalarVariantBuckets = (args: {
+    jsxProp: string;
+    stylexProp: string;
+    valueExpr: ExpressionKind;
+    paramName: string;
+    conditionWhen: string;
+    fallbackFnKey: string;
+  }): boolean => {
+    if (media || pseudos?.length) {
+      return false;
+    }
+    const observedValues = getObservedStaticVariantValues(args.jsxProp);
+    if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+      return false;
+    }
+
+    const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
+    for (const propValue of observedValues) {
+      const cssValue = evaluateObservedDynamicExpression({
+        j,
+        root: state.root,
+        expression: args.valueExpr,
+        propName: args.jsxProp,
+        propValue,
+        paramName: args.paramName,
+      });
+      if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+        return false;
+      }
+      transformedValues.push({ propValue, cssValue });
+    }
+
+    const fallbackFnKey = ensureObservedVariantFallbackFn(
+      args.jsxProp,
+      args.stylexProp,
+      (param) =>
+        buildObservedExpressionFallbackValueExpr({
+          j,
+          expression: args.valueExpr,
+          jsxProp: args.jsxProp,
+          paramName: args.paramName,
+          param,
+          prefix: "",
+          suffix: "",
+        }),
+      args.fallbackFnKey,
+    );
+    if (!fallbackFnKey) {
+      return false;
+    }
+
+    for (const { propValue, cssValue } of transformedValues) {
+      const propValueExpr =
+        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+      const when = `${args.conditionWhen} && ${args.jsxProp} === ${propValueExpr}`;
+      applyVariant(
+        { when, propName: args.jsxProp },
+        {
+          [args.stylexProp]: cssValue,
+        },
+      );
+    }
+    observedVariantFallbackFns.set(args.jsxProp, fallbackFnKey);
+    markStyleValueVariantProp(args.jsxProp);
+    ensureObservedVariantPropDrop(args.jsxProp);
+    return true;
+  };
+
   const observedExpressionFallbackFnKey = (jsxProp: string, conditionWhen: string): string => {
     const normalizedJsxProp = jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp;
     const baseFnKey = styleKeyWithSuffix(decl.styleKey, normalizedJsxProp);
@@ -2691,6 +2759,28 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     suffix,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
+            const guardedDynamic = extractGuardedDynamicBranch(bodyExpr);
+            const guardedConditionWhen =
+              guardedDynamic && scalarProps?.paramNames.length === 1
+                ? printScalarizedExpression({
+                    j,
+                    expr: guardedDynamic.test,
+                    paramName,
+                    propNames: scalarProps.paramNames,
+                    bindings: bindings ?? undefined,
+                  })
+                : null;
+            const observedVariantApplied =
+              guardedConditionWhen && scalarProps?.paramNames.length === 1
+                ? tryEmitObservedGuardedScalarVariantBuckets({
+                    jsxProp: scalarProps.paramNames[0]!,
+                    stylexProp: out.prop,
+                    valueExpr,
+                    paramName: scalarProps.paramNames[0]!,
+                    conditionWhen: guardedConditionWhen,
+                    fallbackFnKey: fnKey,
+                  })
+                : false;
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
@@ -2736,6 +2826,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               }),
             );
             styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
+            if (observedVariantApplied) {
+              continue;
+            }
           }
           if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {
             const needsOriginalParam =
@@ -4579,6 +4672,62 @@ function scalarStyleFnEntryFromProps(args: {
         }
       : {}),
   };
+}
+
+function extractGuardedDynamicBranch(
+  expr: unknown,
+): { test: ExpressionKind; value: ExpressionKind } | null {
+  if (
+    !expr ||
+    typeof expr !== "object" ||
+    (expr as { type?: string }).type !== "ConditionalExpression"
+  ) {
+    return null;
+  }
+  const conditional = expr as {
+    test?: ExpressionKind;
+    consequent?: ExpressionKind;
+    alternate?: ExpressionKind;
+  };
+  if (!conditional.test || !conditional.consequent || !conditional.alternate) {
+    return null;
+  }
+  const consequentEmpty = isEmptyRuntimeStyleBranch(conditional.consequent);
+  const alternateEmpty = isEmptyRuntimeStyleBranch(conditional.alternate);
+  if (consequentEmpty === alternateEmpty) {
+    return null;
+  }
+  return {
+    test: conditional.test,
+    value: consequentEmpty ? conditional.alternate : conditional.consequent,
+  };
+}
+
+function isEmptyRuntimeStyleBranch(expr: unknown): boolean {
+  const value = literalToStaticValue(expr);
+  return value === "" || value === null || value === false || value === undefined;
+}
+
+function printScalarizedExpression(args: {
+  j: JSCodeshift;
+  expr: ExpressionKind;
+  paramName: string;
+  propNames: readonly string[];
+  bindings?: ArrowFnParamBindings;
+}): string | null {
+  const scalar = scalarizePropsObjectDynamicValue({
+    j: args.j,
+    valueExpr: args.expr,
+    paramName: args.paramName,
+    propNames: args.propNames,
+    ...(args.bindings ? { bindings: args.bindings } : {}),
+  });
+  const expr = scalar?.valueExpr ?? args.expr;
+  try {
+    return args.j(expr).toSource();
+  } catch {
+    return null;
+  }
 }
 
 function uniqueScalarPropNames(propNames: readonly string[]): string[] {

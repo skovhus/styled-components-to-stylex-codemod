@@ -2,14 +2,13 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $zIndex } from "./tokens.stylex";
 
-type ContainerProps = { isSmall?: boolean } & Omit<
-  React.ComponentProps<"div">,
-  "className" | "style" | "sx"
->;
+type ContainerProps = React.PropsWithChildren<{
+  isSmall?: boolean;
+}>;
 
 export function Container(props: ContainerProps) {
   const { isSmall, ...rest } = props;
-  return <div {...rest} sx={[styles.container, isSmall ? styles.containerSmall : null]} />;
+  return <div {...rest} sx={[styles.container, isSmall && styles.containerSmall]} />;
 }
 
 export const App = () => (
