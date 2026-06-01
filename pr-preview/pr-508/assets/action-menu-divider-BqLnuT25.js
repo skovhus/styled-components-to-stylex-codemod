@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-BVHlTX5E.js";t();var n=e(),r=e=>{let{text:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};r.HEIGHT=30;var i=e=>{let{title:t,...r}=e;return(0,n.jsx)(`div`,{...r,children:t})};i.HEIGHT=28;export{r as n,i as t};
