@@ -33,21 +33,7 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
-      if (adapterResult.acceptsSx && hasTypedSxConstraints(typedInterface)) {
-        return {
-          ...adapterResult,
-          ...(typedInterface.sxTarget ? { sxTarget: typedInterface.sxTarget } : {}),
-          sxExcludedProperties: mergeUniqueStrings(
-            adapterResult.sxExcludedProperties,
-            typedInterface.sxExcludedProperties ?? [],
-          ),
-          sxAllowedProperties: mergeAllowedPropertyLists(
-            adapterResult.sxAllowedProperties,
-            typedInterface.sxAllowedProperties,
-          ),
-        };
-      }
-      return adapterResult;
+      return mergeWrappedComponentInterface(adapterResult, typedInterface);
     }
 
     return typedInterface;
@@ -56,12 +42,34 @@ export function wrappedComponentInterfaceFor(
   return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
 }
 
-function hasTypedSxConstraints(
+export function mergeWrappedComponentInterface(
+  adapterResult: WrappedComponentInterfaceResult,
+  typedInterface: WrappedComponentInterfaceResult | undefined,
+): WrappedComponentInterfaceResult {
+  if (!adapterResult.acceptsSx || !hasTypedSxMetadata(typedInterface)) {
+    return adapterResult;
+  }
+  return {
+    ...adapterResult,
+    ...(typedInterface.sxTarget ? { sxTarget: typedInterface.sxTarget } : {}),
+    sxExcludedProperties: mergeUniqueStrings(
+      adapterResult.sxExcludedProperties,
+      typedInterface.sxExcludedProperties ?? [],
+    ),
+    sxAllowedProperties: mergeAllowedPropertyLists(
+      adapterResult.sxAllowedProperties,
+      typedInterface.sxAllowedProperties,
+    ),
+  };
+}
+
+function hasTypedSxMetadata(
   typedInterface: WrappedComponentInterfaceResult | undefined,
 ): typedInterface is WrappedComponentInterfaceResult {
   return (
     typedInterface !== undefined &&
-    ((typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
+    (typedInterface.sxTarget !== undefined ||
+      (typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
       typedInterface.sxAllowedProperties !== undefined)
   );
 }

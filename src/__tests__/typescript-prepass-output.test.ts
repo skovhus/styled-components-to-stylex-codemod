@@ -1225,6 +1225,70 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("preserves typed inner sx target when adapter returns acceptsSx without constraints", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-imported-inner-sx-"));
+    const controlPath = path.join(fixtureDir, "Control.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    const controlSource = [
+      'import * as React from "react";',
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export function Control(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input sx={props.sx} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
+    ].join("\n");
+    const wrapperSource = [
+      'import styled from "styled-components";',
+      'import { Control } from "./Control";',
+      "",
+      "const WrappedControl = styled(Control)`",
+      "  margin-top: 2px;",
+      "`;",
+      "",
+      "export const App = () => <WrappedControl>Field</WrappedControl>;",
+    ].join("\n");
+    writeFileSync(controlPath, controlSource);
+    writeFileSync(wrapperPath, wrapperSource);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [controlPath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      expect(
+        typeScriptMetadata.files
+          .flatMap((file) => file.components)
+          .find((component) => component.name === "Control")?.sxTarget,
+      ).toBe("inner");
+
+      const after = transformWithWarnings({ source: wrapperSource, path: wrapperPath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Control" ? { acceptsSx: true } : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain(
+        "<Control {...props} {...stylex.props(styles.wrappedControl)} />",
+      );
+      expect(after.code).not.toContain("sx={[styles.wrappedControl, props.sx]}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("expands generated styles rejected by a local wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");

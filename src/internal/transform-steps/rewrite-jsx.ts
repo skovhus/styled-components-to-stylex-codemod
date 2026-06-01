@@ -21,6 +21,7 @@ import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
+import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 
 /** Returns true if `shouldForwardProp` indicates the prop should be dropped from DOM output. */
 function shouldDropProp(decl: StyledDecl, propName: string): boolean {
@@ -93,20 +94,13 @@ function wrappedComponentAcceptsSxProp(
     return true;
   }
 
-  const importInfo = ctx.importMap?.get(componentLocalName);
-  if (importInfo) {
-    const adapterResult = ctx.adapter.wrappedComponentInterface?.({
-      localName: componentLocalName,
-      importSource: importInfo.source.value,
-      importedName: importInfo.importedName,
-      filePath: ctx.file.path,
-    });
-    if (adapterResult !== undefined) {
-      visiting.delete(componentLocalName);
-      return adapterResult.acceptsSx === true && adapterResult.sxTarget !== "inner";
-    }
+  const componentInterface = wrappedComponentInterfaceFor(ctx, componentLocalName);
+  if (componentInterface !== undefined) {
+    visiting.delete(componentLocalName);
+    return componentInterface.acceptsSx === true && componentInterface.sxTarget !== "inner";
   }
 
+  const importInfo = ctx.importMap?.get(componentLocalName);
   const typedComponent = (() => {
     if (importInfo?.source.kind === "absolutePath") {
       const names =
