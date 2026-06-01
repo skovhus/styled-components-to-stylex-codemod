@@ -1,4 +1,4 @@
-// Spacer-like dynamic size props should use observed static variants before dynamic fallbacks.
+// Spacer-like dynamic size props with helper guards should keep guarded dynamic fallbacks.
 import styled from "styled-components";
 
 type Props = {

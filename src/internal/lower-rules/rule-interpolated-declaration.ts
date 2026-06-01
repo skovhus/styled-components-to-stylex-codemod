@@ -656,6 +656,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (media || pseudos?.length) {
       return false;
     }
+    if (isHelperCallGuard(args.conditionWhen)) {
+      return false;
+    }
     const observedValues = getObservedStaticVariantValues(args.jsxProp);
     if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
       return false;
@@ -2690,6 +2693,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           let helperCallArgs: DynamicHelperCallArgument[] = [];
           let scalarPropNames: string[] | null = null;
+          let guardedConditionWhenForScalar: string | null = null;
           if (!styleFnDecls.has(fnKey)) {
             const originalValueExpr = cloneAstNode(bodyExpr);
             const helperResolution = resolveHelperCallsInDynamicValue({
@@ -2759,7 +2763,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     suffix,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
-            const guardedDynamic = extractGuardedDynamicBranch(bodyExpr);
+            const guardedDynamic = extractGuardedDynamicBranch(j, bodyExpr);
             const guardedConditionWhen =
               guardedDynamic && scalarProps?.paramNames.length === 1
                 ? printScalarizedExpression({
@@ -2769,6 +2773,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     propNames: scalarProps.paramNames,
                     bindings: bindings ?? undefined,
                   })
+                : null;
+            guardedConditionWhenForScalar =
+              guardedConditionWhen && isHelperCallGuard(guardedConditionWhen)
+                ? guardedConditionWhen
                 : null;
             const observedVariantApplied =
               guardedConditionWhen && scalarProps?.paramNames.length === 1
@@ -2840,7 +2848,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               ? helperCallArgs
               : helperCallArgs.slice(1);
             const scalarEntry = scalarPropNames
-              ? scalarStyleFnEntryFromProps({ j, fnKey, propNames: scalarPropNames })
+              ? scalarStyleFnEntryFromProps({
+                  j,
+                  fnKey,
+                  propNames: scalarPropNames,
+                  ...(guardedConditionWhenForScalar
+                    ? { conditionWhen: guardedConditionWhenForScalar }
+                    : {}),
+                })
               : null;
             styleFnFromProps.push(
               scalarEntry ?? {
@@ -4675,6 +4690,7 @@ function scalarStyleFnEntryFromProps(args: {
 }
 
 function extractGuardedDynamicBranch(
+  j: JSCodeshift,
   expr: unknown,
 ): { test: ExpressionKind; value: ExpressionKind } | null {
   if (
@@ -4698,7 +4714,7 @@ function extractGuardedDynamicBranch(
     return null;
   }
   return {
-    test: conditional.test,
+    test: consequentEmpty ? j.unaryExpression("!", conditional.test, true) : conditional.test,
     value: consequentEmpty ? conditional.alternate : conditional.consequent,
   };
 }
@@ -4706,6 +4722,10 @@ function extractGuardedDynamicBranch(
 function isEmptyRuntimeStyleBranch(expr: unknown): boolean {
   const value = literalToStaticValue(expr);
   return value === "" || value === null || value === false || value === undefined;
+}
+
+function isHelperCallGuard(conditionWhen: string): boolean {
+  return conditionWhen.includes("(");
 }
 
 function printScalarizedExpression(args: {

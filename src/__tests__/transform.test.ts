@@ -7312,6 +7312,34 @@ export const App = () => <Button>Click</Button>;
     expect(result.code).not.toMatch(/cursor:\s*"pointer"\s*[,}]/);
   });
 
+  it("negates observed guarded variants when the populated branch is the alternate", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "inverse-guarded-observed-variant.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain('!active && color === "blue"');
+    expect(result.code).toContain('!active && color === "green"');
+    expect(result.code).not.toMatch(/(^|[^!])active && color === "blue"/);
+  });
+
   it("should bail when true is used as a CSS value in conditional expression", () => {
     const source = `
 import styled from "styled-components";

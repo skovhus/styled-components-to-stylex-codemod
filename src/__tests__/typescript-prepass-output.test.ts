@@ -1174,6 +1174,57 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("does not pass root styles through sx when props.sx targets an inner element", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-props-sx-target-"));
+    const filePath = path.join(fixtureDir, "Field.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import * as stylex from "@stylexjs/stylex";',
+      'import styled from "styled-components";',
+      "",
+      "function LabeledInput(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input sx={props.sx} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
+      "",
+      "const WrappedInput = styled(LabeledInput)`",
+      "  margin-top: 2px;",
+      "`;",
+      "",
+      "export const App = () => <WrappedInput>Field</WrappedInput>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      expect(
+        typeScriptMetadata.files[0]!.components.find(
+          (component) => component.name === "LabeledInput",
+        )?.sxTarget,
+      ).toBe("inner");
+
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain(
+        "<LabeledInput {...props} {...stylex.props(styles.wrappedInput)} />",
+      );
+      expect(after.code).not.toContain("sx={[styles.wrappedInput, props.sx]}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("expands generated styles rejected by a local wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
