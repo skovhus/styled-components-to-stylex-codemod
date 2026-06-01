@@ -2388,9 +2388,10 @@ export const App = () => (
 `;
     const result = runTransform(input, {}, "observed-expression-variants.tsx");
 
+    // Now that simple guards are recognized, variants are grouped into a dimension
+    // with a fallback function for runtime values not observed in JSX
+    expect(result).toContain("!active && badgeColorVariants[color]");
     expect(result).toContain("!active && styles.badgeColor(color)");
-    expect(result).toContain('!active && color === "blue" && styles.badgeNotActiveColorBlue');
-    expect(result).toContain('!active && color === "green" && styles.badgeNotActiveColorGreen');
     expect(result).toContain("color: color");
   });
 
@@ -7334,10 +7335,11 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
+    // With simple guard recognition, variants are grouped into a dimension
+    expect(result.code).toContain("!active && badgeColorVariants[color]");
     expect(result.code).toContain("!active && styles.badgeColor(color)");
-    expect(result.code).toContain('!active && color === "blue"');
-    expect(result.code).toContain('!active && color === "green"');
-    expect(result.code).not.toMatch(/(^|[^!])active && color === "blue"/);
+    // Should NOT have positive guard since the ternary's true branch is the static value
+    expect(result.code).not.toMatch(/(^|[^!])active && badgeColorVariants/);
   });
 
   it("keeps a runtime fallback for simple guarded observed scalar variants", () => {
@@ -7363,9 +7365,10 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
+    // With simple guard recognition, variants are grouped into a dimension
+    // The ternary uses the dimension lookup for non-boolean condition
+    expect(result.code).toContain("active ? badgeColorVariants[color] : undefined");
     expect(result.code).toContain("active && styles.badgeColor(color)");
-    expect(result.code).toContain('active && color === "blue"');
-    expect(result.code).toContain('active && color === "green"');
   });
 
   it("should bail when true is used as a CSS value in conditional expression", () => {

@@ -63,14 +63,21 @@ export function mergeWrappedComponentInterface(
   };
 }
 
+/**
+ * Checks if the typed interface has any sx metadata to merge with the adapter result.
+ * This includes sxTarget (even without property constraints), property exclusions,
+ * or allowed property lists.
+ */
 function hasTypedSxMetadata(
   typedInterface: WrappedComponentInterfaceResult | undefined,
 ): typedInterface is WrappedComponentInterfaceResult {
+  if (!typedInterface) {
+    return false;
+  }
   return (
-    typedInterface !== undefined &&
-    (typedInterface.sxTarget !== undefined ||
-      (typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
-      typedInterface.sxAllowedProperties !== undefined)
+    typedInterface.sxTarget !== undefined ||
+    (typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
+    typedInterface.sxAllowedProperties !== undefined
   );
 }
 

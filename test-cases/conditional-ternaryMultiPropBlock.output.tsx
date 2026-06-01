@@ -156,7 +156,7 @@ type InverseMergeBoxProps = React.PropsWithChildren<{
 }>;
 
 function InverseMergeBox(props: InverseMergeBoxProps) {
-  const { children, tone, hasSubtitle, warn } = props;
+  const { children, tone, warn, hasSubtitle } = props;
   return (
     <div
       sx={[
@@ -514,6 +514,12 @@ const styles = stylex.create({
     paddingBottom: 8,
     paddingLeft: 8,
   },
+  inverseMergeBoxWarn: {
+    color: "green",
+  },
+  inverseMergeBoxToneNotPrimary: {
+    color: "blue",
+  },
   inverseMergeBoxTonePrimaryHasSubtitle: {
     color: "red",
     paddingBottom: 20,
@@ -521,12 +527,6 @@ const styles = stylex.create({
   inverseMergeBoxTonePrimaryNotHasSubtitle: {
     color: "red",
     paddingBottom: 40,
-  },
-  inverseMergeBoxWarn: {
-    color: "green",
-  },
-  inverseMergeBoxToneNotPrimary: {
-    color: "blue",
   },
   groupedInverseBox: {
     paddingTop: 8,

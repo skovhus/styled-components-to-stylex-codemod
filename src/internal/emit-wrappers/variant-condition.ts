@@ -315,7 +315,9 @@ function collectMemberExpressionProp(
   const property = node.property as Record<string, unknown> | undefined;
   const rootName = readMemberRootIdentifier(object);
   if (rootName === "props" || rootName === "p") {
-    const propName = property?.type === "Identifier" ? property.name : null;
+    // For chained member expressions like `props.size.startsWith`, we need to
+    // find the property directly on `props`, not the outermost property.
+    const propName = findPropsDirectProperty(node);
     if (typeof propName === "string" && isConditionPropIdentifier(propName, knownProps)) {
       props.add(propName);
     }
@@ -344,13 +346,55 @@ function readMemberRootIdentifier(node: Record<string, unknown> | undefined): st
   return null;
 }
 
+/**
+ * For chained member expressions rooted at `props` or `p`, finds the property
+ * directly on `props`. For `props.size.startsWith`, returns "size".
+ * For `props.foo`, returns "foo".
+ */
+function findPropsDirectProperty(node: Record<string, unknown>): string | null {
+  const object = node.object as Record<string, unknown> | undefined;
+  const property = node.property as Record<string, unknown> | undefined;
+
+  if (!object) {
+    return null;
+  }
+
+  // If the direct object is `props` or `p`, the property is what we want
+  if (object.type === "Identifier") {
+    const objName = object.name;
+    if (objName === "props" || objName === "p") {
+      return property?.type === "Identifier" ? (property.name as string) : null;
+    }
+    return null;
+  }
+
+  // For nested member expressions, recurse into the object chain
+  if (object.type === "MemberExpression" || object.type === "OptionalMemberExpression") {
+    return findPropsDirectProperty(object);
+  }
+
+  return null;
+}
+
 function isConditionPropIdentifier(name: string, knownProps?: ReadonlySet<string>): boolean {
-  if (knownProps && !knownProps.has(name)) {
+  if (knownProps) {
+    // Strict mode: only accept identifiers that are explicitly known props
+    return knownProps.has(name);
+  }
+  // Heuristic mode: filter out likely non-prop identifiers
+  // - Reserved words and special values
+  if (name === "undefined" || name === "NaN" || name === "Infinity") {
     return false;
   }
-  return (
-    isValidIdentifierName(name) && name !== "undefined" && name !== "NaN" && name !== "Infinity"
-  );
+  // - ALL_CAPS identifiers are likely constants, not props
+  if (/^[A-Z][A-Z0-9_]*$/.test(name)) {
+    return false;
+  }
+  // - PascalCase without underscores are likely class/component names
+  if (/^[A-Z][a-zA-Z0-9]*$/.test(name) && !name.includes("_")) {
+    return false;
+  }
+  return isValidIdentifierName(name);
 }
 
 /**

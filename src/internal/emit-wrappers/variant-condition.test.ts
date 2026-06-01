@@ -72,6 +72,33 @@ describe("collectConditionProps", () => {
     expect(destructureProps).toEqual(["size"]);
   });
 
+  it("adds chained method-call receiver props from props.x.method pattern", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: 'props.size.startsWith("l")', destructureProps });
+    expect(destructureProps).toEqual(["size"]);
+  });
+
+  it("filters out ALL_CAPS constants without knownProps", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "isLarge(size, LIMIT) && size > MIN_SIZE",
+      destructureProps,
+    });
+    // Without knownProps, should filter out ALL_CAPS identifiers as constants
+    expect(destructureProps).toEqual(["size"]);
+  });
+
+  it("filters out PascalCase component names without knownProps", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "Component.isReady && isActive",
+      destructureProps,
+    });
+    // PascalCase without underscores are filtered as component names
+    // Only lowercase/camelCase identifiers are kept
+    expect(destructureProps).toEqual(["isActive"]);
+  });
+
   it("does not add guard constants when known props are available", () => {
     const destructureProps: string[] = [];
     collectConditionProps(j, {

@@ -32,7 +32,9 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
       const equality = equalityParts[0] as Extract<ParsedVariantCondition, { type: "equality" }>;
       const equalityIndex = parsedParts.findIndex((part) => part === equality);
       const guardParts = parts.filter((_, index) => index !== equalityIndex);
-      if (guardParts.some((part) => part.includes("("))) {
+      // Allow any guard condition (boolean props, function calls, etc.)
+      // This enables observed variant fallbacks for guarded dimensions
+      if (guardParts.length > 0) {
         return {
           ...equality,
           conditionWhen: guardParts.join(" && "),
@@ -336,15 +338,16 @@ export function groupVariantBucketsIntoDimensions(
       }
     }
 
-    if (overlappingBoolProp && overlappingBoolStyles) {
+    if (overlappingBoolProp && overlappingBoolStyles && !conditionWhen) {
       // Create namespace dimensions: enabled and disabled
+      // NOTE: Guarded buckets (with conditionWhen) are excluded from namespace optimization
+      // because the emission code cannot properly wrap the namespace lookup with the guard.
       // Enabled namespace: original variants
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName, "Enabled", !!conditionWhen),
+        variantObjectName: getVariantObjectName(propName, "Enabled"),
         variants: variantMap,
         defaultValue,
-        ...(conditionWhen ? { conditionWhen } : {}),
         namespaceBooleanProp: overlappingBoolProp,
         isDisabledNamespace: false,
         isOptional: propIsOptional,
@@ -380,10 +383,9 @@ export function groupVariantBucketsIntoDimensions(
 
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName, "Disabled", !!conditionWhen),
+        variantObjectName: getVariantObjectName(propName, "Disabled"),
         variants: disabledVariantMap,
         defaultValue,
-        ...(conditionWhen ? { conditionWhen } : {}),
         namespaceBooleanProp: overlappingBoolProp,
         isDisabledNamespace: true,
         isOptional: propIsOptional,
