@@ -867,12 +867,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         importedStylexIdentifiers,
       );
       const referencesTheme = styleReferencesRuntimeTheme(style);
-      if (basePropNames.size === 0 && !referencesTheme) {
+      const dynamicProps = opts?.dynamicProps ?? [];
+      if (
+        basePropNames.size === 0 &&
+        (dynamicProps.length === 0 || Object.keys(style).length === 0) &&
+        !referencesTheme
+      ) {
         return false;
       }
 
       const runtimeStyle = { ...style };
-      for (const dyn of opts?.dynamicProps ?? []) {
+      for (const dyn of dynamicProps) {
         runtimeStyle[dyn.stylexProp] = j.memberExpression(
           j.identifier("props"),
           j.identifier(normalizeTransientPropName(dyn.jsxProp)),

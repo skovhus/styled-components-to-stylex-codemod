@@ -42,10 +42,37 @@ export function Container(props: ContainerProps) {
   );
 }
 
+type MixedContainerProps = {
+  active?: boolean;
+  opacity?: number;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "$active" | "$opacity">;
+
+export function MixedContainer(props: MixedContainerProps) {
+  const { active, opacity, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.mixedContainer,
+        active &&
+          styles.mixedContainerActive({
+            active,
+            opacity,
+          }),
+      )}
+    />
+  );
+}
+
 export const App = () => (
-  <Container gap={4} color="rebeccapurple">
-    Hello
-  </Container>
+  <>
+    <Container gap={4} color="rebeccapurple">
+      Hello
+    </Container>
+    <MixedContainer gap={4} active opacity={0.75}>
+      Mixed
+    </MixedContainer>
+  </>
 );
 
 const styles = stylex.create({
@@ -56,5 +83,14 @@ const styles = stylex.create({
   },
   containerBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
+  }),
+  mixedContainer: {
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
+  },
+  mixedContainerActive: (props) => ({
+    cursor: "pointer",
+    opacity: props.opacity,
   }),
 });
