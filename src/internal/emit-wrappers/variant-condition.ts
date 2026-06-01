@@ -251,6 +251,9 @@ function collectGuardProps(node: unknown, props: Set<string>): void {
   }
 
   if (type === "CallExpression" || type === "OptionalCallExpression") {
+    if (isMemberExpressionRecord(record.callee)) {
+      collectMemberExpressionProp(record.callee, props);
+    }
     const args = record.arguments;
     if (Array.isArray(args)) {
       for (const arg of args) {
@@ -277,6 +280,14 @@ function collectGuardProps(node: unknown, props: Set<string>): void {
       collectGuardProps(value, props);
     }
   }
+}
+
+function isMemberExpressionRecord(node: unknown): node is Record<string, unknown> {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const type = (node as { type?: unknown }).type;
+  return type === "MemberExpression" || type === "OptionalMemberExpression";
 }
 
 function collectMemberExpressionProp(node: Record<string, unknown>, props: Set<string>): void {

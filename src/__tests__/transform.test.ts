@@ -2391,7 +2391,6 @@ export const App = () => (
     expect(result).toContain("!active && styles.badgeColor(color)");
     expect(result).toContain('!active && color === "blue" && styles.badgeNotActiveColorBlue');
     expect(result).toContain('!active && color === "green" && styles.badgeNotActiveColorGreen');
-    expect(result).toContain("styles.badgeColor(color)");
     expect(result).toContain("color: color");
   });
 
@@ -7335,9 +7334,38 @@ export const App = () => (
     );
 
     expect(result.code).not.toBeNull();
+    expect(result.code).toContain("!active && styles.badgeColor(color)");
     expect(result.code).toContain('!active && color === "blue"');
     expect(result.code).toContain('!active && color === "green"');
     expect(result.code).not.toMatch(/(^|[^!])active && color === "blue"/);
+  });
+
+  it("keeps a runtime fallback for simple guarded observed scalar variants", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? props.color : ""};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge active color="blue">Blue</Badge>
+    <Badge active color="green">Green</Badge>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "simple-guarded-observed-variant.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("active && styles.badgeColor(color)");
+    expect(result.code).toContain('active && color === "blue"');
+    expect(result.code).toContain('active && color === "green"');
   });
 
   it("should bail when true is used as a CSS value in conditional expression", () => {

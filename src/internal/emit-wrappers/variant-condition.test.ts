@@ -65,6 +65,12 @@ describe("collectConditionProps", () => {
     collectConditionProps(j, { when: "showProperty(width)", destructureProps });
     expect(destructureProps).toEqual(["width"]);
   });
+
+  it("adds method-call receiver props to destructure list", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: 'size.startsWith("l")', destructureProps });
+    expect(destructureProps).toEqual(["size"]);
+  });
 });
 
 describe("mergeAdjacentComplementaryStyleExprs", () => {
