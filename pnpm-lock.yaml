@@ -3050,8 +3050,8 @@ packages:
     resolution: {integrity: sha512-azl+t0z7pw/z958Gy9svOTuzqIk6xq+NSheJzn5MMWtWTFywIacg2wUlzKFGtt3cthx0r2SxMK0yzJOR0IES7Q==}
     engines: {node: '>=14.0.0'}
 
-  tmp@0.2.5:
-    resolution: {integrity: sha512-voyz6MApa1rQGUxT3E+BK7/ROe8itEx7vD8/HEvt4xwXucvQ5G5oeEiHkmHZJuBO21RpOf+YYm9MOivj709jow==}
+  tmp@0.2.7:
+    resolution: {integrity: sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==}
     engines: {node: '>=14.14'}
 
   to-regex-range@5.0.1:
@@ -5429,7 +5429,7 @@ snapshots:
       neo-async: 2.6.2
       picocolors: 1.1.1
       recast: 0.23.11
-      tmp: 0.2.5
+      tmp: 0.2.7
       write-file-atomic: 5.0.1
     transitivePeerDependencies:
       - supports-color
@@ -6169,7 +6169,7 @@ snapshots:
 
   tinyspy@4.0.4: {}
 
-  tmp@0.2.5: {}
+  tmp@0.2.7: {}
 
   to-regex-range@5.0.1:
     dependencies:

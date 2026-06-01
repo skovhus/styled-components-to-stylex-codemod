@@ -3,6 +3,7 @@
  * Core concepts: condition parsing and dimension construction.
  */
 import type { VariantDimension } from "../transform-types.js";
+import { styleKeyWithSuffix } from "../transform/helpers.js";
 
 type ParsedVariantCondition =
   | {
@@ -11,6 +12,7 @@ type ParsedVariantCondition =
       operator: "===" | "!==";
       value: string;
       staticValue: string | number | boolean;
+      conditionWhen?: string;
     }
   | { type: "boolean"; propName: string; negated: boolean }
   | { type: "compound" | "unknown" };
@@ -20,6 +22,25 @@ function parseVariantCondition(when: string): ParsedVariantCondition {
 
   // Compound condition (contains &&)
   if (trimmed.includes("&&")) {
+    const parts = trimmed
+      .split("&&")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const parsedParts = parts.map(parseVariantCondition);
+    const equalityParts = parsedParts.filter((part) => part.type === "equality");
+    if (equalityParts.length === 1) {
+      const equality = equalityParts[0] as Extract<ParsedVariantCondition, { type: "equality" }>;
+      const equalityIndex = parsedParts.findIndex((part) => part === equality);
+      const guardParts = parts.filter((_, index) => index !== equalityIndex);
+      // Allow any guard condition (boolean props, function calls, etc.)
+      // This enables observed variant fallbacks for guarded dimensions
+      if (guardParts.length > 0) {
+        return {
+          ...equality,
+          conditionWhen: guardParts.join(" && "),
+        };
+      }
+    }
     return { type: "compound" };
   }
 
@@ -126,7 +147,7 @@ export function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean
 export function groupVariantBucketsIntoDimensions(
   variantBuckets: Map<string, Record<string, unknown>>,
   variantStyleKeys: Record<string, string>,
-  _baseStyleKey: string,
+  baseStyleKey: string,
   baseStyles: Record<string, unknown>,
   findJsxPropTsType?: (propName: string) => unknown,
   isJsxPropOptional?: (propName: string) => boolean,
@@ -137,17 +158,22 @@ export function groupVariantBucketsIntoDimensions(
   propsToStrip: Set<string>;
 } {
   // Helper to generate variant object name, avoiding redundant "variantVariants"
-  const getVariantObjectName = (propName: string, suffix?: "Enabled" | "Disabled"): string => {
+  const getVariantObjectName = (
+    propName: string,
+    suffix?: "Enabled" | "Disabled",
+    useBaseStyleKey?: boolean,
+  ): string => {
+    const baseName = useBaseStyleKey ? styleKeyWithSuffix(baseStyleKey, propName) : propName;
     if (propName === "variant") {
       return suffix ? `${suffix.toLowerCase()}Variants` : "variants";
     }
-    return suffix ? `${propName}${suffix}Variants` : `${propName}Variants`;
+    return suffix ? `${baseName}${suffix}Variants` : `${baseName}Variants`;
   };
 
   // Group conditions by prop name (only equality conditions)
   const propGroups = new Map<
     string,
-    Array<{ when: string; value: string; styles: Record<string, unknown> }>
+    Array<{ when: string; value: string; styles: Record<string, unknown>; conditionWhen?: string }>
   >();
   const remainingBuckets = new Map<string, Record<string, unknown>>();
   const remainingStyleKeys: Record<string, string> = {};
@@ -159,7 +185,7 @@ export function groupVariantBucketsIntoDimensions(
 
     if (parsed.type === "equality" && parsed.operator === "===") {
       const existing = propGroups.get(parsed.propName) ?? [];
-      existing.push({ when, value: parsed.value, styles });
+      existing.push({ when, value: parsed.value, styles, conditionWhen: parsed.conditionWhen });
       propGroups.set(parsed.propName, existing);
     } else {
       // Keep compound, boolean, and other conditions as-is
@@ -240,6 +266,18 @@ export function groupVariantBucketsIntoDimensions(
     // Build variant map with explicit values and infer default from base styles
     const variantMap: Record<string, Record<string, unknown>> = {};
     const allOverriddenProps = new Set<string>();
+    const conditionGroup = commonConditionWhen(variants);
+    if (!conditionGroup.canGroup) {
+      for (const v of variants) {
+        remainingBuckets.set(v.when, v.styles);
+        const styleKey = variantStyleKeys[v.when];
+        if (styleKey) {
+          remainingStyleKeys[v.when] = styleKey;
+        }
+      }
+      continue;
+    }
+    const { conditionWhen } = conditionGroup;
 
     for (const v of variants) {
       variantMap[v.value] = v.styles;
@@ -300,8 +338,10 @@ export function groupVariantBucketsIntoDimensions(
       }
     }
 
-    if (overlappingBoolProp && overlappingBoolStyles) {
+    if (overlappingBoolProp && overlappingBoolStyles && !conditionWhen) {
       // Create namespace dimensions: enabled and disabled
+      // NOTE: Guarded buckets (with conditionWhen) are excluded from namespace optimization
+      // because the emission code cannot properly wrap the namespace lookup with the guard.
       // Enabled namespace: original variants
       dimensions.push({
         propName,
@@ -364,13 +404,26 @@ export function groupVariantBucketsIntoDimensions(
       // Simple dimension without namespace
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName),
+        variantObjectName: getVariantObjectName(propName, undefined, !!conditionWhen),
         variants: variantMap,
         defaultValue,
+        ...(conditionWhen ? { conditionWhen } : {}),
         isOptional: propIsOptional,
       });
     }
   }
 
   return { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip };
+}
+
+function commonConditionWhen(variants: Array<{ conditionWhen?: string }>): {
+  canGroup: boolean;
+  conditionWhen?: string;
+} {
+  const conditions = [...new Set(variants.map((variant) => variant.conditionWhen))];
+  if (conditions.length !== 1) {
+    return { canGroup: false };
+  }
+  const conditionWhen = conditions[0];
+  return conditionWhen ? { canGroup: true, conditionWhen } : { canGroup: true };
 }

@@ -2622,6 +2622,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
           let helperCallArgs: DynamicHelperCallArgument[] = [];
           let scalarPropNames: string[] | null = null;
+          let guardedConditionWhenForScalar: string | null = null;
           if (!styleFnDecls.has(fnKey)) {
             const originalValueExpr = cloneAstNode(bodyExpr);
             const helperResolution = resolveHelperCallsInDynamicValue({
@@ -2691,6 +2692,21 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     suffix,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
+            const guardedDynamic = extractGuardedDynamicBranch(j, bodyExpr);
+            const guardedConditionWhen =
+              guardedDynamic && scalarProps?.paramNames.length === 1
+                ? printScalarizedExpression({
+                    j,
+                    expr: guardedDynamic.test,
+                    paramName,
+                    propNames: scalarProps.paramNames,
+                    bindings: bindings ?? undefined,
+                  })
+                : null;
+            guardedConditionWhenForScalar =
+              guardedConditionWhen && isHelperCallGuard(guardedConditionWhen)
+                ? guardedConditionWhen
+                : null;
             const params = styleFnParamNames.map((name) => j.identifier(name));
             if (/\.(ts|tsx)$/.test(filePath)) {
               const propsTypeKind = (decl.propsType as { type?: string } | undefined)?.type;
@@ -2747,7 +2763,14 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
               ? helperCallArgs
               : helperCallArgs.slice(1);
             const scalarEntry = scalarPropNames
-              ? scalarStyleFnEntryFromProps({ j, fnKey, propNames: scalarPropNames })
+              ? scalarStyleFnEntryFromProps({
+                  j,
+                  fnKey,
+                  propNames: scalarPropNames,
+                  ...(guardedConditionWhenForScalar
+                    ? { conditionWhen: guardedConditionWhenForScalar }
+                    : {}),
+                })
               : null;
             styleFnFromProps.push(
               scalarEntry ?? {
@@ -4579,6 +4602,67 @@ function scalarStyleFnEntryFromProps(args: {
         }
       : {}),
   };
+}
+
+function extractGuardedDynamicBranch(
+  j: JSCodeshift,
+  expr: unknown,
+): { test: ExpressionKind; value: ExpressionKind } | null {
+  if (
+    !expr ||
+    typeof expr !== "object" ||
+    (expr as { type?: string }).type !== "ConditionalExpression"
+  ) {
+    return null;
+  }
+  const conditional = expr as {
+    test?: ExpressionKind;
+    consequent?: ExpressionKind;
+    alternate?: ExpressionKind;
+  };
+  if (!conditional.test || !conditional.consequent || !conditional.alternate) {
+    return null;
+  }
+  const consequentEmpty = isEmptyRuntimeStyleBranch(conditional.consequent);
+  const alternateEmpty = isEmptyRuntimeStyleBranch(conditional.alternate);
+  if (consequentEmpty === alternateEmpty) {
+    return null;
+  }
+  return {
+    test: consequentEmpty ? j.unaryExpression("!", conditional.test, true) : conditional.test,
+    value: consequentEmpty ? conditional.alternate : conditional.consequent,
+  };
+}
+
+function isEmptyRuntimeStyleBranch(expr: unknown): boolean {
+  const value = literalToStaticValue(expr);
+  return value === "" || value === null || value === false || value === undefined;
+}
+
+function isHelperCallGuard(conditionWhen: string): boolean {
+  return conditionWhen.includes("(");
+}
+
+function printScalarizedExpression(args: {
+  j: JSCodeshift;
+  expr: ExpressionKind;
+  paramName: string;
+  propNames: readonly string[];
+  bindings?: ArrowFnParamBindings;
+}): string | null {
+  const scalar = scalarizePropsObjectDynamicValue({
+    j: args.j,
+    valueExpr: args.expr,
+    paramName: args.paramName,
+    propNames: args.propNames,
+    ...(args.bindings ? { bindings: args.bindings } : {}),
+  });
+  const expr = scalar?.valueExpr ?? args.expr;
+  try {
+    return args.j(expr).toSource();
+  } catch {
+    return null;
+  }
 }
 
 function uniqueScalarPropNames(propNames: readonly string[]): string[] {

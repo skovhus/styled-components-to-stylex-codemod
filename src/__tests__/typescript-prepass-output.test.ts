@@ -1174,6 +1174,151 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
+  it("does not pass root styles through sx when props.sx targets an inner element", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-props-sx-target-"));
+    const filePath = path.join(fixtureDir, "Field.tsx");
+    const source = [
+      'import * as React from "react";',
+      'import * as stylex from "@stylexjs/stylex";',
+      'import styled from "styled-components";',
+      "",
+      "function LabeledInput(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input sx={props.sx} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
+      "",
+      "const WrappedInput = styled(LabeledInput)`",
+      "  margin-top: 2px;",
+      "`;",
+      "",
+      "export const App = () => <WrappedInput>Field</WrappedInput>;",
+    ].join("\n");
+    writeFileSync(filePath, source);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({ files: [filePath], cwd: fixtureDir });
+      expect(
+        typeScriptMetadata.files[0]!.components.find(
+          (component) => component.name === "LabeledInput",
+        )?.sxTarget,
+      ).toBe("inner");
+
+      const after = transformWithWarnings({ source, path: filePath }, api, {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain(
+        "<LabeledInput {...props} {...stylex.props(styles.wrappedInput)} />",
+      );
+      expect(after.code).not.toContain("sx={[styles.wrappedInput, props.sx]}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves typed inner sx target when adapter returns acceptsSx without constraints", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-imported-inner-sx-"));
+    const controlPath = path.join(fixtureDir, "Control.tsx");
+    const wrapperPath = path.join(fixtureDir, "Wrapper.tsx");
+    const controlSource = [
+      'import * as React from "react";',
+      'import * as stylex from "@stylexjs/stylex";',
+      "",
+      "export function Control(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input sx={props.sx} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
+      "",
+      "export function DestructuredControl(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  const { className, style } = stylex.props(props.sx);",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input className={className} style={style} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
+    ].join("\n");
+    const wrapperSource = [
+      'import styled from "styled-components";',
+      'import { Control, DestructuredControl } from "./Control";',
+      "",
+      "const WrappedControl = styled(Control)`",
+      "  margin-top: 2px;",
+      "`;",
+      "",
+      "const WrappedDestructuredControl = styled(DestructuredControl)`",
+      "  margin-top: 4px;",
+      "`;",
+      "",
+      "export const App = () => (",
+      "  <>",
+      "    <WrappedControl>Field</WrappedControl>",
+      "    <WrappedDestructuredControl>Destructured field</WrappedDestructuredControl>",
+      "  </>",
+      ");",
+    ].join("\n");
+    writeFileSync(controlPath, controlSource);
+    writeFileSync(wrapperPath, wrapperSource);
+
+    try {
+      const typeScriptMetadata = analyzeTypeScriptProgram({
+        files: [controlPath, wrapperPath],
+        cwd: fixtureDir,
+      });
+      expect(
+        typeScriptMetadata.files
+          .flatMap((file) => file.components)
+          .find((component) => component.name === "Control")?.sxTarget,
+      ).toBe("inner");
+      expect(
+        typeScriptMetadata.files
+          .flatMap((file) => file.components)
+          .find((component) => component.name === "DestructuredControl")?.sxTarget,
+      ).toBe("inner");
+
+      const after = transformWithWarnings({ source: wrapperSource, path: wrapperPath }, api, {
+        adapter: {
+          ...fixtureAdapter,
+          wrappedComponentInterface(ctx) {
+            return ctx.importedName === "Control" || ctx.importedName === "DestructuredControl"
+              ? { acceptsSx: true }
+              : undefined;
+          },
+        },
+        crossFileInfo: {
+          selectorUsages: [],
+          typeScriptMetadata,
+        },
+      });
+
+      expect(after.code).not.toBeNull();
+      expect(after.code).toContain(
+        "<Control {...props} {...stylex.props(styles.wrappedControl)} />",
+      );
+      expect(after.code).toContain(
+        "<DestructuredControl {...props} {...stylex.props(styles.wrappedDestructuredControl)} />",
+      );
+      expect(after.code).not.toContain("sx={[styles.wrappedControl, props.sx]}");
+      expect(after.code).not.toContain("sx={[styles.wrappedDestructuredControl, props.sx]}");
+    } finally {
+      rmSync(fixtureDir, { recursive: true, force: true });
+    }
+  });
+
   it("expands generated styles rejected by a local wrapped component sx surface", () => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-local-sx-without-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");

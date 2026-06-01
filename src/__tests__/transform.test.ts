@@ -2388,10 +2388,10 @@ export const App = () => (
 `;
     const result = runTransform(input, {}, "observed-expression-variants.tsx");
 
+    // Now that simple guards are recognized, variants are grouped into a dimension
+    // with a fallback function for runtime values not observed in JSX
+    expect(result).toContain("!active && badgeColorVariants[color]");
     expect(result).toContain("!active && styles.badgeColor(color)");
-    expect(result).toContain('!active && color === "blue" && styles.badgeNotActiveColorBlue');
-    expect(result).toContain('!active && color === "green" && styles.badgeNotActiveColorGreen');
-    expect(result).toContain("styles.badgeColor(color)");
     expect(result).toContain("color: color");
   });
 
@@ -5613,6 +5613,57 @@ export const Box = styled.div\`
     expect(code).not.toContain(")px");
   });
 
+  it("should bail instead of emitting calc for resolved helper arithmetic with string operands", () => {
+    const source = `
+import styled from "styled-components";
+import { runtimeValue } from "./helpers";
+
+export const Box = styled.div\`
+  padding-top: \${runtimeValue() + "2px"};
+\`;
+`;
+
+    const adapterWithTokenResolution = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return undefined;
+      },
+      resolveCall(ctx: CallResolveContext) {
+        if (ctx.calleeImportedName === "runtimeValue") {
+          return {
+            usage: "create" as const,
+            expr: "$spacing.runtimeValue",
+            imports: [
+              {
+                from: { kind: "specifier" as const, value: "./tokens.stylex" },
+                names: [{ imported: "$spacing" }],
+              },
+            ],
+          };
+        }
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      {
+        source,
+        path: join(testCasesDir, "helper-resolvedArithmeticStringOperand.input.tsx"),
+      },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithTokenResolution },
+    );
+
+    expect(result.code ?? "").not.toContain("calc(");
+  });
+
   it.each([
     {
       name: "nested conditional arithmetic",
@@ -7259,6 +7310,65 @@ export const App = () => <Button>Click</Button>;
     // base style rule (which would set cursor: "pointer" for ALL <Button> uses,
     // including when $disabled is true).
     expect(result.code).not.toMatch(/cursor:\s*"pointer"\s*[,}]/);
+  });
+
+  it("negates observed guarded variants when the populated branch is the alternate", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? "" : props.color};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge color="blue">Blue</Badge>
+    <Badge color="green">Green</Badge>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "inverse-guarded-observed-variant.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // With simple guard recognition, variants are grouped into a dimension
+    expect(result.code).toContain("!active && badgeColorVariants[color]");
+    expect(result.code).toContain("!active && styles.badgeColor(color)");
+    // Should NOT have positive guard since the ternary's true branch is the static value
+    expect(result.code).not.toMatch(/(^|[^!])active && badgeColorVariants/);
+  });
+
+  it("keeps a runtime fallback for simple guarded observed scalar variants", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Badge = styled.div<{ active?: boolean; color: string }>\`
+  color: \${(props) => props.active ? props.color : ""};
+\`;
+
+export const App = () => (
+  <div>
+    <Badge active color="blue">Blue</Badge>
+    <Badge active color="green">Green</Badge>
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "simple-guarded-observed-variant.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    // With simple guard recognition, variants are grouped into a dimension
+    // The ternary uses the dimension lookup for non-boolean condition
+    expect(result.code).toContain("active ? badgeColorVariants[color] : undefined");
+    expect(result.code).toContain("active && styles.badgeColor(color)");
   });
 
   it("should bail when true is used as a CSS value in conditional expression", () => {

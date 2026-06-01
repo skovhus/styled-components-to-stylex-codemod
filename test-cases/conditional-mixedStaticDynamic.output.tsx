@@ -79,14 +79,14 @@ const styles = stylex.create({
     backgroundColor: "paleturquoise",
     padding: 8,
   },
-  containerPositionFixedSidebarCollapsed: {
-    left: "0px",
-    right: "0px",
-  },
   containerPositionFixed: {
     position: "absolute",
     bottom: 16,
     left: `${MAIN_PAGE_MARGIN}px`,
     right: `${MAIN_PAGE_MARGIN}px`,
+  },
+  containerPositionFixedSidebarCollapsed: {
+    left: "0px",
+    right: "0px",
   },
 });

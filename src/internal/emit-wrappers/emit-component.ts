@@ -45,6 +45,7 @@ import {
   appendAllPseudoStyleArgs,
   appendThemeBooleanStyleArgs,
   buildUseThemeDeclaration,
+  collectKnownConditionPropNames,
   buildVariantStyleExprs,
   mergeOrderedEntries,
   type OrderedStyleEntry,
@@ -723,6 +724,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
     const orderedEntries: OrderedStyleEntry[] = [];
     const booleanProps = collectBooleanPropNames(d);
+    const knownProps = collectKnownConditionPropNames(emitter, d);
 
     // Add variant style arguments if this component has variants
     buildVariantStyleExprs({
@@ -735,6 +737,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       hasSourceOrder,
       destructureProps,
       booleanProps,
+      knownProps,
       compoundVariantKeys: collectCompoundVariantKeys(d.compoundVariants),
       enableComplementaryMerging: true,
       onNewDestructureProp: (prop) => styleOnlyConditionProps.add(prop),
@@ -749,6 +752,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
         propDefaults,
         namespaceBooleanProps,
         orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+        knownProps,
       });
     }
 

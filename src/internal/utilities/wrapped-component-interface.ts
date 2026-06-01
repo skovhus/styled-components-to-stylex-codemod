@@ -33,20 +33,7 @@ export function wrappedComponentInterfaceFor(
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
-      if (adapterResult.acceptsSx && hasTypedSxConstraints(typedInterface)) {
-        return {
-          ...adapterResult,
-          sxExcludedProperties: mergeUniqueStrings(
-            adapterResult.sxExcludedProperties,
-            typedInterface.sxExcludedProperties ?? [],
-          ),
-          sxAllowedProperties: mergeAllowedPropertyLists(
-            adapterResult.sxAllowedProperties,
-            typedInterface.sxAllowedProperties,
-          ),
-        };
-      }
-      return adapterResult;
+      return mergeWrappedComponentInterface(adapterResult, typedInterface);
     }
 
     return typedInterface;
@@ -55,13 +42,42 @@ export function wrappedComponentInterfaceFor(
   return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
 }
 
-function hasTypedSxConstraints(
+export function mergeWrappedComponentInterface(
+  adapterResult: WrappedComponentInterfaceResult,
+  typedInterface: WrappedComponentInterfaceResult | undefined,
+): WrappedComponentInterfaceResult {
+  if (!adapterResult.acceptsSx || !hasTypedSxMetadata(typedInterface)) {
+    return adapterResult;
+  }
+  return {
+    ...adapterResult,
+    ...(typedInterface.sxTarget ? { sxTarget: typedInterface.sxTarget } : {}),
+    sxExcludedProperties: mergeUniqueStrings(
+      adapterResult.sxExcludedProperties,
+      typedInterface.sxExcludedProperties ?? [],
+    ),
+    sxAllowedProperties: mergeAllowedPropertyLists(
+      adapterResult.sxAllowedProperties,
+      typedInterface.sxAllowedProperties,
+    ),
+  };
+}
+
+/**
+ * Checks if the typed interface has any sx metadata to merge with the adapter result.
+ * This includes sxTarget (even without property constraints), property exclusions,
+ * or allowed property lists.
+ */
+function hasTypedSxMetadata(
   typedInterface: WrappedComponentInterfaceResult | undefined,
 ): typedInterface is WrappedComponentInterfaceResult {
+  if (!typedInterface) {
+    return false;
+  }
   return (
-    typedInterface !== undefined &&
-    ((typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
-      typedInterface.sxAllowedProperties !== undefined)
+    typedInterface.sxTarget !== undefined ||
+    (typedInterface.sxExcludedProperties?.length ?? 0) > 0 ||
+    typedInterface.sxAllowedProperties !== undefined
   );
 }
 
@@ -78,6 +94,7 @@ function typedComponentInterfaceFor(
   if (typedComponent?.supportsSxProp) {
     return {
       acceptsSx: true,
+      ...(typedComponent.sxTarget ? { sxTarget: typedComponent.sxTarget } : {}),
       sxExcludedProperties: typedComponent.sxExcludedProperties,
       sxAllowedProperties: typedComponent.sxAllowedProperties,
     };

@@ -33,6 +33,7 @@ export function parseVariantWhenToAst(
   j: JSCodeshift,
   when: string,
   booleanProps?: ReadonlySet<string>,
+  knownProps?: ReadonlySet<string>,
 ): VariantConditionResult {
   const buildMemberExpr = (raw: string): ExpressionKind | null => {
     if (!raw.includes(".")) {
@@ -79,20 +80,28 @@ export function parseVariantWhenToAst(
             (acc, part) => j.memberExpression(acc, j.identifier(part)),
             j.identifier(propRoot),
           );
-        return { propName: propRoot, expr };
+        return {
+          propName: isConditionPropIdentifier(propRoot) ? propRoot : null,
+          expr,
+        };
       }
       const memberExpr = buildMemberExpr(trimmedRaw);
       if (memberExpr) {
         // Treat dotted refs as prop-root conditions (e.g., user.role, $layer.isTop)
         // so wrapper emitters can destructure the root identifier. Theme refs are
         // resolved via useTheme and should not be pulled from component props.
-        return { propName: root === "theme" ? null : (root ?? null), expr: memberExpr };
+        const propName = root && root !== "theme" && isConditionPropIdentifier(root) ? root : null;
+        return { propName, expr: memberExpr };
       }
       return { propName: null, expr: j.identifier(trimmedRaw) };
     }
     // Bare "theme" is resolved via useTheme(), not from component props — same
     // treatment as dotted theme refs (line 90) to avoid dual-binding conflicts.
-    return { propName: trimmedRaw === "theme" ? null : trimmedRaw, expr: j.identifier(trimmedRaw) };
+    return {
+      propName:
+        trimmedRaw === "theme" || !isConditionPropIdentifier(trimmedRaw) ? null : trimmedRaw,
+      expr: j.identifier(trimmedRaw),
+    };
   };
 
   const trimmed = String(when ?? "").trim();
@@ -104,7 +113,7 @@ export function parseVariantWhenToAst(
   // before checking for || to avoid incorrect splitting
   if (trimmed.startsWith("!(") && trimmed.endsWith(")")) {
     const inner = trimmed.slice(2, -1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -118,7 +127,7 @@ export function parseVariantWhenToAst(
       .split("&&")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps));
+    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps));
     const firstParsed = parsed[0];
     if (!firstParsed) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -138,7 +147,7 @@ export function parseVariantWhenToAst(
       .split(" || ")
       .map((s) => s.trim())
       .filter(Boolean);
-    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps));
+    const parsed = parts.map((p) => parseVariantWhenToAst(j, p, booleanProps, knownProps));
     const firstParsedOr = parsed[0];
     if (!firstParsedOr) {
       return { cond: j.identifier("true"), props: [], isBoolean: true };
@@ -155,7 +164,7 @@ export function parseVariantWhenToAst(
   // Handle simple negation without parentheses: !prop
   if (trimmed.startsWith("!")) {
     const inner = trimmed.slice(1).trim();
-    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps);
+    const innerParsed = parseVariantWhenToAst(j, inner, booleanProps, knownProps);
     // Negation always produces boolean
     return {
       cond: j.unaryExpression("!", innerParsed.cond),
@@ -186,6 +195,15 @@ export function parseVariantWhenToAst(
     };
   }
 
+  const expression = parseConditionExpression(j, trimmed);
+  if (expression) {
+    return {
+      cond: expression,
+      props: collectGuardExpressionPropNames(expression, knownProps),
+      isBoolean: true,
+    };
+  }
+
   // Simple identifier — NOT guaranteed to be boolean (could be "" or 0).
   // When callers provide booleanProps, identifiers matching known boolean props
   // produce `cond && expr` instead of `cond ? expr : undefined`.
@@ -198,6 +216,187 @@ export function parseVariantWhenToAst(
   };
 }
 
+function parseConditionExpression(j: JSCodeshift, source: string): ExpressionKind | null {
+  if (!source.includes("(") && !/[<>?[\]]/.test(source)) {
+    return null;
+  }
+  try {
+    const declarator = j(`const __condition = (${source});`)
+      .find(j.VariableDeclarator)
+      .nodes()[0] as { init?: ExpressionKind } | undefined;
+    return unwrapParenthesizedExpression(declarator?.init) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function unwrapParenthesizedExpression(expr: ExpressionKind | undefined): ExpressionKind | null {
+  let current = expr;
+  while (current && current.type === "ParenthesizedExpression") {
+    current = (current as { expression?: ExpressionKind }).expression;
+  }
+  return current ?? null;
+}
+
+function collectGuardExpressionPropNames(
+  expr: ExpressionKind,
+  knownProps?: ReadonlySet<string>,
+): string[] {
+  const props = new Set<string>();
+  collectGuardProps(expr, props, knownProps);
+  return [...props];
+}
+
+function collectGuardProps(
+  node: unknown,
+  props: Set<string>,
+  knownProps?: ReadonlySet<string>,
+): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  const type = record.type;
+
+  if (type === "Identifier") {
+    const name = record.name;
+    if (typeof name === "string" && isConditionPropIdentifier(name, knownProps)) {
+      props.add(name);
+    }
+    return;
+  }
+
+  if (type === "CallExpression" || type === "OptionalCallExpression") {
+    if (isMemberExpressionRecord(record.callee)) {
+      collectMemberExpressionProp(record.callee, props, knownProps);
+    }
+    const args = record.arguments;
+    if (Array.isArray(args)) {
+      for (const arg of args) {
+        collectGuardProps(arg, props, knownProps);
+      }
+    }
+    return;
+  }
+
+  if (type === "MemberExpression" || type === "OptionalMemberExpression") {
+    collectMemberExpressionProp(record, props, knownProps);
+    return;
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "type" || key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectGuardProps(item, props, knownProps);
+      }
+    } else {
+      collectGuardProps(value, props, knownProps);
+    }
+  }
+}
+
+function isMemberExpressionRecord(node: unknown): node is Record<string, unknown> {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const type = (node as { type?: unknown }).type;
+  return type === "MemberExpression" || type === "OptionalMemberExpression";
+}
+
+function collectMemberExpressionProp(
+  node: Record<string, unknown>,
+  props: Set<string>,
+  knownProps?: ReadonlySet<string>,
+): void {
+  const object = node.object as Record<string, unknown> | undefined;
+  const property = node.property as Record<string, unknown> | undefined;
+  const rootName = readMemberRootIdentifier(object);
+  if (rootName === "props" || rootName === "p") {
+    // For chained member expressions like `props.size.startsWith`, we need to
+    // find the property directly on `props`, not the outermost property.
+    const propName = findPropsDirectProperty(node);
+    if (typeof propName === "string" && isConditionPropIdentifier(propName, knownProps)) {
+      props.add(propName);
+    }
+  } else if (
+    typeof rootName === "string" &&
+    rootName !== "theme" &&
+    isConditionPropIdentifier(rootName, knownProps)
+  ) {
+    props.add(rootName);
+  }
+  if (node.computed) {
+    collectGuardProps(property, props, knownProps);
+  }
+}
+
+function readMemberRootIdentifier(node: Record<string, unknown> | undefined): string | null {
+  if (!node) {
+    return null;
+  }
+  if (node.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+  if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+    return readMemberRootIdentifier(node.object as Record<string, unknown> | undefined);
+  }
+  return null;
+}
+
+/**
+ * For chained member expressions rooted at `props` or `p`, finds the property
+ * directly on `props`. For `props.size.startsWith`, returns "size".
+ * For `props.foo`, returns "foo".
+ */
+function findPropsDirectProperty(node: Record<string, unknown>): string | null {
+  const object = node.object as Record<string, unknown> | undefined;
+  const property = node.property as Record<string, unknown> | undefined;
+
+  if (!object) {
+    return null;
+  }
+
+  // If the direct object is `props` or `p`, the property is what we want
+  if (object.type === "Identifier") {
+    const objName = object.name;
+    if (objName === "props" || objName === "p") {
+      return property?.type === "Identifier" ? (property.name as string) : null;
+    }
+    return null;
+  }
+
+  // For nested member expressions, recurse into the object chain
+  if (object.type === "MemberExpression" || object.type === "OptionalMemberExpression") {
+    return findPropsDirectProperty(object);
+  }
+
+  return null;
+}
+
+function isConditionPropIdentifier(name: string, knownProps?: ReadonlySet<string>): boolean {
+  if (knownProps) {
+    // Strict mode: only accept identifiers that are explicitly known props
+    return knownProps.has(name);
+  }
+  // Heuristic mode: filter out likely non-prop identifiers
+  // - Reserved words and special values
+  if (name === "undefined" || name === "NaN" || name === "Infinity") {
+    return false;
+  }
+  // - ALL_CAPS identifiers are likely constants, not props
+  if (/^[A-Z][A-Z0-9_]*$/.test(name)) {
+    return false;
+  }
+  // - PascalCase without underscores are likely class/component names
+  if (/^[A-Z][a-zA-Z0-9]*$/.test(name) && !name.includes("_")) {
+    return false;
+  }
+  return isValidIdentifierName(name);
+}
+
 /**
  * Parses a "when" string and optionally collects the referenced prop names
  * into a `destructureProps` array so they can be included in the wrapper
@@ -205,10 +404,15 @@ export function parseVariantWhenToAst(
  */
 export function collectConditionProps(
   j: JSCodeshift,
-  args: { when: string; destructureProps?: string[]; booleanProps?: ReadonlySet<string> },
+  args: {
+    when: string;
+    destructureProps?: string[];
+    booleanProps?: ReadonlySet<string>;
+    knownProps?: ReadonlySet<string>;
+  },
 ): VariantConditionResult {
-  const { when, destructureProps, booleanProps } = args;
-  const parsed = parseVariantWhenToAst(j, when, booleanProps);
+  const { when, destructureProps, booleanProps, knownProps } = args;
+  const parsed = parseVariantWhenToAst(j, when, booleanProps, knownProps);
   if (destructureProps) {
     for (const p of parsed.props) {
       if (p && !destructureProps.includes(p)) {

@@ -36,6 +36,7 @@ import { isIdentifierNode } from "../utilities/jscodeshift-utils.js";
 import { resolveExistingFilePath } from "../utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "../utilities/sx-surface.js";
 import { findTypeScriptComponentMetadata } from "../utilities/typescript-metadata.js";
+import { mergeWrappedComponentInterface } from "../utilities/wrapped-component-interface.js";
 import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection.js";
 import type { FunctionParams, JsxAttr, JsxTagName, StatementKind } from "./jsx-builders.js";
 import * as jb from "./jsx-builders.js";
@@ -162,7 +163,8 @@ export class WrapperEmitter {
    * configure the hook.
    */
   wrappedComponentAcceptsSxProp(componentLocalName: string): boolean {
-    return this.wrappedComponentInterfaceFor(componentLocalName)?.acceptsSx === true;
+    const componentInterface = this.wrappedComponentInterfaceFor(componentLocalName);
+    return componentInterface?.acceptsSx === true && componentInterface.sxTarget !== "inner";
   }
 
   wrappedComponentInterfaceFor(
@@ -172,6 +174,15 @@ export class WrapperEmitter {
       return undefined;
     }
     const importInfo = this.importMap.get(componentLocalName);
+    const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
+    const typedInterface = typedComponent?.supportsSxProp
+      ? {
+          acceptsSx: true,
+          ...(typedComponent.sxTarget ? { sxTarget: typedComponent.sxTarget } : {}),
+          sxExcludedProperties: typedComponent.sxExcludedProperties,
+          sxAllowedProperties: typedComponent.sxAllowedProperties,
+        }
+      : undefined;
     if (importInfo) {
       const adapterResult = this.wrappedComponentInterface?.({
         localName: componentLocalName,
@@ -180,17 +191,12 @@ export class WrapperEmitter {
         filePath: this.filePath,
       });
       if (adapterResult !== undefined) {
-        return adapterResult;
+        return mergeWrappedComponentInterface(adapterResult, typedInterface);
       }
     }
-    const typedComponent = this.typeScriptComponentMetadataFor(componentLocalName);
     if (typedComponent) {
-      if (typedComponent.supportsSxProp) {
-        return {
-          acceptsSx: true,
-          sxExcludedProperties: typedComponent.sxExcludedProperties,
-          sxAllowedProperties: typedComponent.sxAllowedProperties,
-        };
+      if (typedInterface) {
+        return typedInterface;
       }
       if (!this.hasSourceOverrideFor(componentLocalName)) {
         return { acceptsSx: false };
@@ -2305,6 +2311,7 @@ export class WrapperEmitter {
     when: string;
     destructureProps?: string[];
     booleanProps?: ReadonlySet<string>;
+    knownProps?: ReadonlySet<string>;
   }) {
     return vc.collectConditionProps(this.j, args);
   }
@@ -2511,6 +2518,7 @@ export class WrapperEmitter {
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
     orderedEntries?: seb.OrderedStyleEntry[];
+    knownProps?: ReadonlySet<string>;
   }): void {
     seb.buildVariantDimensionLookups(this.j, { ...args, stylesIdentifier: this.stylesIdentifier });
   }

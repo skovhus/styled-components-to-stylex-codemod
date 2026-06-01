@@ -44,6 +44,13 @@ describe("parseVariantWhenToAst", () => {
     const parsed = parseVariantWhenToAst(j, "disabled");
     expect(parsed.isBoolean).toBe(false);
   });
+
+  it("parses call-expression guards without collecting the callee as a prop", () => {
+    const parsed = parseVariantWhenToAst(j, "showProperty(width)");
+    expect(j(parsed.cond).toSource()).toContain("showProperty(width)");
+    expect(parsed.props).toEqual(["width"]);
+    expect(parsed.isBoolean).toBe(true);
+  });
 });
 
 describe("collectConditionProps", () => {
@@ -51,6 +58,55 @@ describe("collectConditionProps", () => {
     const destructureProps: string[] = [];
     collectConditionProps(j, { when: "$layer.isTop && $zIndex", destructureProps });
     expect(destructureProps).toEqual(["$layer", "$zIndex"]);
+  });
+
+  it("adds only guard argument props to destructure list for call-expression guards", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: "showProperty(width)", destructureProps });
+    expect(destructureProps).toEqual(["width"]);
+  });
+
+  it("adds method-call receiver props to destructure list", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: 'size.startsWith("l")', destructureProps });
+    expect(destructureProps).toEqual(["size"]);
+  });
+
+  it("adds chained method-call receiver props from props.x.method pattern", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: 'props.size.startsWith("l")', destructureProps });
+    expect(destructureProps).toEqual(["size"]);
+  });
+
+  it("filters out ALL_CAPS constants without knownProps", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "isLarge(size, LIMIT) && size > MIN_SIZE",
+      destructureProps,
+    });
+    // Without knownProps, should filter out ALL_CAPS identifiers as constants
+    expect(destructureProps).toEqual(["size"]);
+  });
+
+  it("filters out PascalCase component names without knownProps", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "Component.isReady && isActive",
+      destructureProps,
+    });
+    // PascalCase without underscores are filtered as component names
+    // Only lowercase/camelCase identifiers are kept
+    expect(destructureProps).toEqual(["isActive"]);
+  });
+
+  it("does not add guard constants when known props are available", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "isLarge(size, LIMIT) && size > MIN_SIZE",
+      destructureProps,
+      knownProps: new Set(["size"]),
+    });
+    expect(destructureProps).toEqual(["size"]);
   });
 });
 

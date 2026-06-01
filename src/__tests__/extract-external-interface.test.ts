@@ -1740,6 +1740,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/conditional-spacerObservedSizeVariants.input.tsx:Spacer": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": true,
+          "styles": true,
+        },
         "test-cases/conditional-styleType.input.tsx:IconWithTransform": {
           "as": false,
           "className": false,
@@ -2029,6 +2038,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": true,
         },
         "test-cases/lib/inline-base-flex.tsx:Flex": {
+          "as": false,
+          "className": true,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": true,
+          "style": true,
+          "styles": true,
+        },
+        "test-cases/lib/inner-sx-control.tsx:InnerSxControl": {
           "as": false,
           "className": true,
           "elementProps": true,

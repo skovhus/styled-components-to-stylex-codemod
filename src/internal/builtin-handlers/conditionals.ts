@@ -290,6 +290,29 @@ export function tryResolveConditionalValue(
       return null;
     }
 
+    if ((b as { type?: string }).type === "BinaryExpression") {
+      const binary = b as { operator?: string; left?: unknown; right?: unknown };
+      if (isCssCalcOperator(binary.operator)) {
+        const left = branchToExpr(binary.left);
+        const right = branchToExpr(binary.right);
+        if (
+          left &&
+          right &&
+          left.usage === expectedUsage &&
+          right.usage === expectedUsage &&
+          (left.imports.length > 0 || right.imports.length > 0) &&
+          isCssCalcSafeOperand(left) &&
+          isCssCalcSafeOperand(right)
+        ) {
+          return {
+            usage: expectedUsage,
+            expr: buildCssCalcExprSource(left, binary.operator!, right),
+            imports: [...left.imports, ...right.imports],
+          };
+        }
+      }
+    }
+
     // Check if a call expression has any arguments that are theme member accesses
     // (e.g., props.theme.isDark or theme.color.bgBase).
     const callHasThemeArg = (call: CallExpressionNode): boolean =>
@@ -1011,6 +1034,30 @@ export function tryResolveConditionalValue(
   }
 
   return buildRuntimeCallResult();
+}
+
+function isCssCalcOperator(operator: string | undefined): operator is "+" | "-" | "*" | "/" {
+  return operator === "+" || operator === "-" || operator === "*" || operator === "/";
+}
+
+function isCssCalcSafeOperand(branch: { expr: string; imports: ImportSpec[] }): boolean {
+  return branch.imports.length > 0 || isNumericExpressionSource(branch.expr);
+}
+
+function isNumericExpressionSource(expr: string): boolean {
+  return /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(expr);
+}
+
+function buildCssCalcExprSource(
+  left: { expr: string; imports: ImportSpec[] },
+  operator: string,
+  right: { expr: string; imports: ImportSpec[] },
+): string {
+  return `\`calc(${cssCalcOperandSource(left)} ${operator} ${cssCalcOperandSource(right)})\``;
+}
+
+function cssCalcOperandSource(branch: { expr: string; imports: ImportSpec[] }): string {
+  return branch.imports.length > 0 ? `\${${branch.expr}}` : branch.expr;
 }
 
 export function tryResolveConditionalCssBlock(

@@ -26,6 +26,7 @@ import {
   buildInitialStyleArgs,
   buildUseThemeDeclaration,
   buildVariantStyleExprs,
+  collectKnownConditionPropNames,
   mergeOrderedEntries,
   styleRef,
   wrapCallArgForPropsObject,
@@ -103,13 +104,17 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const allowAsProp = shouldAllowAsProp(d, tagName);
 
     const extraProps = new Set<string>();
+    const knownConditionProps = collectKnownConditionPropNames(emitter, d);
     for (const p of d.shouldForwardProp?.dropProps ?? []) {
       if (p) {
         extraProps.add(p);
       }
     }
     for (const when of Object.keys(d.variantStyleKeys ?? {})) {
-      const { props } = emitter.collectConditionProps({ when });
+      const { props } = emitter.collectConditionProps({
+        when,
+        ...(knownConditionProps ? { knownProps: knownConditionProps } : {}),
+      });
       for (const p of props) {
         if (p) {
           extraProps.add(p);
@@ -387,6 +392,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
 
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
     const booleanProps = collectBooleanPropNames(d);
+    const knownProps = collectKnownConditionPropNames(emitter, d);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
@@ -402,6 +408,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       orderedEntries,
       hasSourceOrder,
       booleanProps,
+      knownProps,
       compoundVariantKeys,
     });
 
@@ -415,7 +422,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         if (compoundVariantKeys.has(when)) {
           continue;
         }
-        const { props } = emitter.collectConditionProps({ when });
+        const { props } = emitter.collectConditionProps({
+          when,
+          ...(knownProps ? { knownProps } : {}),
+        });
         for (const p of props) {
           if (p && !dropProps.includes(p)) {
             dropProps.push(p);
@@ -436,7 +446,10 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     if (d.extraStylexPropsArgs) {
       for (const extra of d.extraStylexPropsArgs) {
         if (extra.when) {
-          const { props } = emitter.collectConditionProps({ when: extra.when });
+          const { props } = emitter.collectConditionProps({
+            when: extra.when,
+            ...(knownProps ? { knownProps } : {}),
+          });
           for (const p of props) {
             if (p && !destructureParts.includes(p)) {
               destructureParts.push(p);
@@ -462,6 +475,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
         destructureProps: destructureParts,
         propDefaults,
         orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+        knownProps,
       });
     }
 
@@ -513,6 +527,7 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
           when: p.conditionWhen,
           destructureProps: destructureParts,
           booleanProps,
+          ...(knownProps ? { knownProps } : {}),
         });
         expr = emitter.makeConditionalStyleExpr({ cond, expr: call, isBoolean });
       } else {

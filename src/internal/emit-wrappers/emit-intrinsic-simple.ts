@@ -34,6 +34,7 @@ import {
   buildAllVariantAndStyleExprs,
   buildInitialStyleArgs,
   buildUseThemeDeclaration,
+  collectKnownConditionPropNames,
 } from "./style-expr-builders.js";
 
 export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
@@ -250,9 +251,13 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
         usedAttrs.size > 0 ||
         hasElementPropsInDefaultAttrs(d);
       const variantProps = new Set<string>();
+      const knownProps = collectKnownConditionPropNames(emitter, d);
       if (d.variantStyleKeys) {
         for (const [when] of Object.entries(d.variantStyleKeys)) {
-          const { props } = emitter.collectConditionProps({ when });
+          const { props } = emitter.collectConditionProps({
+            when,
+            ...(knownProps ? { knownProps } : {}),
+          });
           for (const p of props) {
             if (p) {
               variantProps.add(p);
@@ -275,7 +280,10 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           if (!extra.when) {
             continue;
           }
-          const { props } = emitter.collectConditionProps({ when: extra.when });
+          const { props } = emitter.collectConditionProps({
+            when: extra.when,
+            ...(knownProps ? { knownProps } : {}),
+          });
           for (const p of props) {
             if (p) {
               extraProps.add(p);
@@ -1501,6 +1509,7 @@ function getTypeNameText(typeName: unknown): string | null {
 function collectPropsUsedOutsideExtraStyleConditionals(
   j: JSCodeshift,
   d: StyledDecl,
+  knownProps?: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const used = new Set<string>();
   const add = (name: string | null | undefined): void => {
@@ -1510,7 +1519,7 @@ function collectPropsUsedOutsideExtraStyleConditionals(
   };
 
   for (const [when] of Object.entries(d.variantStyleKeys ?? {})) {
-    const parsed = parseVariantWhenToAst(j, when);
+    const parsed = parseVariantWhenToAst(j, when, undefined, knownProps);
     for (const prop of parsed.props) {
       add(prop);
     }

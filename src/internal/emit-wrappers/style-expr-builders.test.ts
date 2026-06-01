@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import jscodeshift from "jscodeshift";
-import type { StyledDecl } from "../transform-types.js";
+import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { buildExtraStylexPropsExprEntries } from "./variant-condition.js";
-import { buildInterleavedExtraStyleArgs } from "./style-expr-builders.js";
+import {
+  buildInterleavedExtraStyleArgs,
+  buildVariantDimensionLookups,
+} from "./style-expr-builders.js";
 import type { ExpressionKind } from "./types.js";
 
 const j = jscodeshift.withParser("tsx");
@@ -73,5 +76,35 @@ describe("buildInterleavedExtraStyleArgs", () => {
     ]);
     expect(result.afterBase.map((expr) => j(expr).toSource())).toEqual(["afterBaseSx"]);
     expect(result.afterVariants).toEqual([]);
+  });
+});
+
+describe("buildVariantDimensionLookups", () => {
+  it("guards default fallback variant lookups", () => {
+    const styleArgs: ExpressionKind[] = [];
+    const destructureProps: string[] = [];
+    const dimension: VariantDimension = {
+      propName: "color",
+      variantObjectName: "colorVariants",
+      variants: {
+        blue: { color: "blue" },
+        red: { color: "red" },
+        default: { color: "black" },
+      },
+      defaultValue: "default",
+      conditionWhen: "active",
+    };
+
+    buildVariantDimensionLookups(j, {
+      dimensions: [dimension],
+      styleArgs,
+      destructureProps,
+      stylesIdentifier: "styles",
+    });
+
+    expect(destructureProps).toEqual(["color", "active"]);
+    expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
+      "active ? colorVariants[color as keyof typeof colorVariants] ?? colorVariants.default : undefined",
+    ]);
   });
 });

@@ -343,6 +343,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Helper to determine if a styled(ImportedComponent) wrapper is simple enough to inline.
   // Returns true if there's no complex logic that requires a wrapper function.
   const canInlineImportedComponentWrapper = (decl: StyledDecl): boolean => {
+    if (
+      decl.base.kind === "component" &&
+      wrappedComponentInterfaceFor(ctx, decl.base.ident)?.sxTarget === "inner"
+    ) {
+      return false;
+    }
     if (decl.variantStyleKeys && Object.keys(decl.variantStyleKeys).length > 0) {
       return false;
     }
@@ -4914,7 +4920,8 @@ function validateWrappedComponentStyleChannels(
     if (!declHasEmittedStyle(ctx, decl)) {
       continue;
     }
-    if (wrappedComponentInterfaceFor(ctx, baseIdent)?.acceptsSx === true) {
+    const componentInterface = wrappedComponentInterfaceFor(ctx, baseIdent);
+    if (componentInterface?.acceptsSx === true && componentInterface.sxTarget !== "inner") {
       continue;
     }
 
