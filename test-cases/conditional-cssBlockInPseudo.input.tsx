@@ -1,6 +1,6 @@
 // Function interpolation inside a pseudo selector returning css blocks should not be silently dropped.
 import styled, { css } from "styled-components";
-import { highlightExpand } from "./lib/helpers";
+import { color, glowShadow, highlight, highlightExpand, transitionSpeed } from "./lib/helpers";
 
 const Tab = styled.button`
   color: #111;
@@ -40,10 +40,35 @@ const CardButton = styled.button<{ $interactive?: boolean }>`
       : undefined}
 `;
 
+const IconWrapper = styled.span<{ $background?: string }>`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: ${(props) => props.$background || "transparent"};
+  transition-property: background-color, border;
+  transition-duration: ${transitionSpeed("normal")};
+
+  ${(props) =>
+    props.$background
+      ? css`
+          border-radius: 4px;
+
+          &:${highlight} {
+            background-color: ${color("bgBorderSolid")};
+            border-color: ${color("bgBorderSolid")};
+            box-shadow: ${glowShadow("dark")};
+            transition-duration: ${transitionSpeed("fast")};
+          }
+        `
+      : ""}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton $interactive>Interactive</CardButton>
+    <IconWrapper $background="#fed7aa">Icon</IconWrapper>
+    <IconWrapper>Plain icon</IconWrapper>
   </div>
 );

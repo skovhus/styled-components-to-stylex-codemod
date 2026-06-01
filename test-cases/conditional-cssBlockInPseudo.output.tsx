@@ -2,7 +2,8 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
-import { $colors } from "./tokens.stylex";
+import { $colors, transitionSpeed as transitionSpeedVars, $glowShadow } from "./tokens.stylex";
+import { highlightStyles } from "./lib/helpers";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const theme = useTheme();
@@ -23,11 +24,38 @@ function CardButton(props: CardButtonProps) {
   );
 }
 
+type IconWrapperProps = React.PropsWithChildren<{
+  background?: string;
+}>;
+
+function IconWrapper(props: IconWrapperProps) {
+  const { children, background } = props;
+  return (
+    <span
+      sx={[
+        styles.iconWrapper,
+        background
+          ? highlightStyles({
+              active: styles.iconWrapperBackgroundPseudoActive,
+              hover: styles.iconWrapperBackgroundPseudoHover,
+            })
+          : undefined,
+        background != null && styles.iconWrapperBackgroundColor(background),
+        background ? styles.iconWrapperBackground : undefined,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton interactive>Interactive</CardButton>
+    <IconWrapper background="#fed7aa">Icon</IconWrapper>
+    <IconWrapper>Plain icon</IconWrapper>
   </div>
 );
 
@@ -80,4 +108,54 @@ const styles = stylex.create({
       },
     },
   },
+  iconWrapper: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    transitionProperty: "background-color,border",
+    transitionDuration: transitionSpeedVars.normal,
+  },
+  iconWrapperBackgroundPseudoActive: {
+    backgroundColor: {
+      default: "transparent",
+      ":active": $colors.bgBorderSolid,
+    },
+    borderColor: {
+      default: null,
+      ":active": $colors.bgBorderSolid,
+    },
+    boxShadow: {
+      default: null,
+      ":active": $glowShadow.dark,
+    },
+    transitionDuration: {
+      default: transitionSpeedVars.normal,
+      ":active": transitionSpeedVars.fast,
+    },
+  },
+  iconWrapperBackgroundPseudoHover: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover": $colors.bgBorderSolid,
+    },
+    borderColor: {
+      default: null,
+      ":hover": $colors.bgBorderSolid,
+    },
+    boxShadow: {
+      default: null,
+      ":hover": $glowShadow.dark,
+    },
+    transitionDuration: {
+      default: transitionSpeedVars.normal,
+      ":hover": transitionSpeedVars.fast,
+    },
+  },
+  iconWrapperBackground: {
+    borderRadius: 4,
+  },
+  iconWrapperBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
 });

@@ -418,7 +418,11 @@ export function collectPropsFromExpressions(
  * - `props.$foo` -> `props.foo` (strip $ prefix)
  * - `props.foo` -> unchanged
  */
-export function normalizeDollarProps(j: JSCodeshift, exprNode: ExpressionKind): ExpressionKind {
+export function normalizeDollarProps(
+  j: JSCodeshift,
+  exprNode: ExpressionKind,
+  opts?: { skipIdentifiers?: ReadonlySet<string> },
+): ExpressionKind {
   return mapAst(cloneAstNode(exprNode), (n) => {
     // Handle props.$foo -> props.foo (strip $ from property name)
     if (
@@ -438,7 +442,7 @@ export function normalizeDollarProps(j: JSCodeshift, exprNode: ExpressionKind): 
     // Handle $foo identifier -> props.foo
     if (n.type === "Identifier") {
       const identName = n.name as string | undefined;
-      if (identName?.startsWith("$")) {
+      if (identName?.startsWith("$") && !opts?.skipIdentifiers?.has(identName)) {
         return j.memberExpression(j.identifier("props"), j.identifier(identName.slice(1)));
       }
     }
