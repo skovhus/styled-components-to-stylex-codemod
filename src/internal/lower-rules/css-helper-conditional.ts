@@ -1101,13 +1101,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
         if (dynamicProps.length > 0) {
           const propName = testInfo.propName;
-          const hasMismatchedProp = dynamicProps.some((p) => p.jsxProp !== propName);
           const isComparison = testInfo.when.includes("===") || testInfo.when.includes("!==");
-          if (!propName || hasMismatchedProp || testInfo.when.startsWith("!") || isComparison) {
+          if (!propName || testInfo.when.startsWith("!") || isComparison) {
             return false;
           }
           for (const dyn of dynamicProps) {
             const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
+            const conditionWhen =
+              normalizeTransientPropName(dyn.jsxProp) === normalizeTransientPropName(propName)
+                ? undefined
+                : testInfo.when;
             if (!styleFnDecls.has(fnKey)) {
               const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
               const param = j.identifier(dynParamName);
@@ -1118,13 +1121,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             }
             if (
               !styleFnFromProps.some(
-                (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
+                (p) =>
+                  p.fnKey === fnKey &&
+                  p.jsxProp === dyn.jsxProp &&
+                  p.condition === "truthy" &&
+                  p.conditionWhen === conditionWhen,
               )
             ) {
               styleFnFromProps.push({
                 fnKey,
                 jsxProp: dyn.jsxProp,
                 condition: "truthy",
+                ...(conditionWhen ? { conditionWhen } : {}),
               });
             }
             ensureShouldForwardPropDrop(decl, dyn.jsxProp);

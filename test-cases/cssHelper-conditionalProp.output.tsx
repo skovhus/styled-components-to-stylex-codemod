@@ -64,6 +64,24 @@ export function MixedContainer(props: MixedContainerProps) {
   );
 }
 
+type PureDynamicContainerProps = {
+  active?: boolean;
+  color: string;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "$color" | "$active">;
+
+export function PureDynamicContainer(props: PureDynamicContainerProps) {
+  const { color, active, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.pureDynamicContainer,
+        active && styles.pureDynamicContainerColor(props.color),
+      )}
+    />
+  );
+}
+
 export const App = () => (
   <>
     <Container gap={4} color="rebeccapurple">
@@ -72,6 +90,9 @@ export const App = () => (
     <MixedContainer gap={4} active opacity={0.75}>
       Mixed
     </MixedContainer>
+    <PureDynamicContainer gap={4} active color="crimson">
+      Pure dynamic
+    </PureDynamicContainer>
   </>
 );
 
@@ -92,5 +113,13 @@ const styles = stylex.create({
   mixedContainerActive: (props) => ({
     cursor: "pointer",
     opacity: props.opacity,
+  }),
+  pureDynamicContainer: {
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
+  },
+  pureDynamicContainerColor: (color: string) => ({
+    color,
   }),
 });

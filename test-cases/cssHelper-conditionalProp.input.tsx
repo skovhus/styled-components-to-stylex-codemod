@@ -44,6 +44,16 @@ export const MixedContainer = styled(Flex)<{ $active?: boolean; $opacity?: numbe
   border-radius: 3px;
 `;
 
+export const PureDynamicContainer = styled(Flex)<{ $active?: boolean; $color: string }>`
+  ${(props) =>
+    props.$active &&
+    css`
+      color: ${props.$color};
+    `}
+  padding: 2px 6px;
+  border-radius: 3px;
+`;
+
 export const App = () => (
   <>
     <Container gap={4} $color="rebeccapurple">
@@ -52,5 +62,8 @@ export const App = () => (
     <MixedContainer gap={4} $active $opacity={0.75}>
       Mixed
     </MixedContainer>
+    <PureDynamicContainer gap={4} $active $color="crimson">
+      Pure dynamic
+    </PureDynamicContainer>
   </>
 );
