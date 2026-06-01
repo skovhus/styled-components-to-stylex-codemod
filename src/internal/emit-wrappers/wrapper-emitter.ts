@@ -2311,6 +2311,7 @@ export class WrapperEmitter {
     when: string;
     destructureProps?: string[];
     booleanProps?: ReadonlySet<string>;
+    knownProps?: ReadonlySet<string>;
   }) {
     return vc.collectConditionProps(this.j, args);
   }
@@ -2517,6 +2518,7 @@ export class WrapperEmitter {
     propDefaults?: WrapperPropDefaults;
     namespaceBooleanProps?: string[];
     orderedEntries?: seb.OrderedStyleEntry[];
+    knownProps?: ReadonlySet<string>;
   }): void {
     seb.buildVariantDimensionLookups(this.j, { ...args, stylesIdentifier: this.stylesIdentifier });
   }

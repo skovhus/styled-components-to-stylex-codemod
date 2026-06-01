@@ -264,7 +264,18 @@ export function groupVariantBucketsIntoDimensions(
     // Build variant map with explicit values and infer default from base styles
     const variantMap: Record<string, Record<string, unknown>> = {};
     const allOverriddenProps = new Set<string>();
-    const conditionWhen = commonConditionWhen(variants);
+    const conditionGroup = commonConditionWhen(variants);
+    if (!conditionGroup.canGroup) {
+      for (const v of variants) {
+        remainingBuckets.set(v.when, v.styles);
+        const styleKey = variantStyleKeys[v.when];
+        if (styleKey) {
+          remainingStyleKeys[v.when] = styleKey;
+        }
+      }
+      continue;
+    }
+    const { conditionWhen } = conditionGroup;
 
     for (const v of variants) {
       variantMap[v.value] = v.styles;
@@ -403,7 +414,14 @@ export function groupVariantBucketsIntoDimensions(
   return { dimensions, remainingBuckets, remainingStyleKeys, propsToStrip };
 }
 
-function commonConditionWhen(variants: Array<{ conditionWhen?: string }>): string | undefined {
+function commonConditionWhen(variants: Array<{ conditionWhen?: string }>): {
+  canGroup: boolean;
+  conditionWhen?: string;
+} {
   const conditions = [...new Set(variants.map((variant) => variant.conditionWhen))];
-  return conditions.length === 1 ? conditions[0] : undefined;
+  if (conditions.length !== 1) {
+    return { canGroup: false };
+  }
+  const conditionWhen = conditions[0];
+  return conditionWhen ? { canGroup: true, conditionWhen } : { canGroup: true };
 }

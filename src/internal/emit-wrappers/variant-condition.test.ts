@@ -71,6 +71,16 @@ describe("collectConditionProps", () => {
     collectConditionProps(j, { when: 'size.startsWith("l")', destructureProps });
     expect(destructureProps).toEqual(["size"]);
   });
+
+  it("does not add guard constants when known props are available", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, {
+      when: "isLarge(size, LIMIT) && size > MIN_SIZE",
+      destructureProps,
+      knownProps: new Set(["size"]),
+    });
+    expect(destructureProps).toEqual(["size"]);
+  });
 });
 
 describe("mergeAdjacentComplementaryStyleExprs", () => {

@@ -99,6 +99,45 @@ export function wrapCallArgForPropsObject(
   return j.objectExpression([prop]) as unknown as ExpressionKind;
 }
 
+export function collectKnownConditionPropNames(
+  emitter: WrapperEmitter,
+  d: StyledDecl,
+): ReadonlySet<string> | undefined {
+  const names = new Set<string>();
+  const add = (name: string | null | undefined): void => {
+    if (name && name !== "__props" && name !== "__helper") {
+      names.add(name);
+    }
+  };
+
+  if (d.propsType) {
+    for (const name of emitter.getExplicitPropNames(d.propsType)) {
+      add(name);
+    }
+  }
+  for (const dim of d.variantDimensions ?? []) {
+    add(dim.propName);
+    add(dim.namespaceBooleanProp);
+  }
+  for (const entry of d.styleFnFromProps ?? []) {
+    add(entry.jsxProp);
+    for (const extra of entry.extraCallArgs ?? []) {
+      add(extra.jsxProp);
+    }
+  }
+  for (const prop of d.styleValueVariantProps ?? []) {
+    add(prop);
+  }
+  for (const prop of collectInlineStylePropNames(d.inlineStyleProps ?? [])) {
+    add(prop);
+  }
+  for (const prop of d.shouldForwardProp?.dropProps ?? []) {
+    add(prop);
+  }
+
+  return names.size > 0 ? names : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Initial style args assembly
 // ---------------------------------------------------------------------------
@@ -493,9 +532,17 @@ export function buildVariantDimensionLookups(
     namespaceBooleanProps?: string[];
     orderedEntries?: OrderedStyleEntry[];
     stylesIdentifier: string;
+    knownProps?: ReadonlySet<string>;
   },
 ): void {
-  const { dimensions, styleArgs, destructureProps, propDefaults, namespaceBooleanProps } = args;
+  const {
+    dimensions,
+    styleArgs,
+    destructureProps,
+    propDefaults,
+    namespaceBooleanProps,
+    knownProps,
+  } = args;
 
   /** Push a style expression to orderedEntries (if source order available) or styleArgs. */
   const pushExpr = (expr: ExpressionKind, dim: VariantDimension): void => {
@@ -530,6 +577,7 @@ export function buildVariantDimensionLookups(
       when: dim.conditionWhen,
       destructureProps,
       ...(booleanProps ? { booleanProps } : {}),
+      ...(knownProps ? { knownProps } : {}),
     });
     return makeConditionalStyleExpr(j, { cond, expr: lookup, isBoolean });
   };
@@ -731,6 +779,7 @@ export function buildStyleFnExpressions(
 
   const styleFnPairs = d.styleFnFromProps ?? [];
   const explicitPropNames = d.propsType ? emitter.getExplicitPropNames(d.propsType) : null;
+  const knownProps = collectKnownConditionPropNames(emitter, d);
 
   const inferPropFromCallArg = (expr: ExpressionKind | null | undefined): string | null => {
     if (!expr || typeof expr !== "object") {
@@ -847,6 +896,7 @@ export function buildStyleFnExpressions(
         when: p.conditionWhen,
         destructureProps,
         booleanProps,
+        ...(knownProps ? { knownProps } : {}),
       });
       pushExpr(makeConditionalStyleExpr(j, { cond, expr: call, isBoolean }));
       continue;
@@ -889,6 +939,7 @@ export function collectDestructurePropsFromStyleFns(
 ): void {
   const { j } = emitter;
   const { d, styleArgs, destructureProps } = args;
+  const knownProps = collectKnownConditionPropNames(emitter, d);
 
   // Collect jsxProp and conditionWhen props from styleFnFromProps
   for (const p of d.styleFnFromProps ?? []) {
@@ -901,7 +952,7 @@ export function collectDestructurePropsFromStyleFns(
       destructureProps.push(p.jsxProp);
     }
     if (p.conditionWhen) {
-      collectConditionProps(j, { when: p.conditionWhen, destructureProps });
+      collectConditionProps(j, { when: p.conditionWhen, destructureProps, knownProps });
     }
     // Collect extra call arg props for multi-param style functions
     for (const extra of p.extraCallArgs ?? []) {
@@ -965,6 +1016,7 @@ export function buildVariantStyleExprs(opts: {
   hasSourceOrder: boolean;
   destructureProps?: string[];
   booleanProps?: ReadonlySet<string>;
+  knownProps?: ReadonlySet<string>;
   compoundVariantKeys?: ReadonlySet<string>;
   enableComplementaryMerging?: boolean;
   /** Called for each newly added destructure prop (e.g., to track style-only condition props). */
@@ -980,6 +1032,7 @@ export function buildVariantStyleExprs(opts: {
     hasSourceOrder,
     destructureProps,
     booleanProps,
+    knownProps: providedKnownProps,
     compoundVariantKeys,
     enableComplementaryMerging,
     onNewDestructureProp,
@@ -990,6 +1043,7 @@ export function buildVariantStyleExprs(opts: {
   }
 
   const sortedEntries = sortVariantEntriesBySpecificity(Object.entries(d.variantStyleKeys));
+  const knownProps = providedKnownProps ?? collectKnownConditionPropNames(emitter, d);
 
   /** Push an expression to orderedEntries (if source ordering) or directly to styleArgs. */
   const pushExpr = (expr: ExpressionKind, when: string): void => {
@@ -1030,6 +1084,7 @@ export function buildVariantStyleExprs(opts: {
           when: positiveWhen,
           destructureProps,
           booleanProps,
+          ...(knownProps ? { knownProps } : {}),
         });
         if (onNewDestructureProp && prevLengthRef && destructureProps) {
           for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
@@ -1049,6 +1104,7 @@ export function buildVariantStyleExprs(opts: {
         when,
         destructureProps,
         booleanProps,
+        ...(knownProps ? { knownProps } : {}),
       });
       if (onNewDestructureProp && prevLengthRef && destructureProps) {
         for (let i = prevLengthRef.value; i < destructureProps.length; i++) {
@@ -1068,6 +1124,7 @@ export function buildVariantStyleExprs(opts: {
         when,
         destructureProps,
         booleanProps,
+        ...(knownProps ? { knownProps } : {}),
       });
       const styleExpr = styleRef(j, stylesIdentifier, variantKey);
       pushExpr(emitter.makeConditionalStyleExpr({ cond, expr: styleExpr, isBoolean }), when);
@@ -1276,6 +1333,7 @@ export function buildAllVariantAndStyleExprs(opts: {
   } = opts;
 
   const booleanProps = collectBooleanPropNames(d);
+  const knownProps = collectKnownConditionPropNames(emitter, d);
   const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
   const orderedEntries: OrderedStyleEntry[] = [];
 
@@ -1289,6 +1347,7 @@ export function buildAllVariantAndStyleExprs(opts: {
     hasSourceOrder,
     destructureProps,
     booleanProps,
+    knownProps,
     compoundVariantKeys,
     enableComplementaryMerging,
   });
@@ -1300,6 +1359,7 @@ export function buildAllVariantAndStyleExprs(opts: {
       destructureProps,
       propDefaults,
       orderedEntries: hasSourceOrder ? orderedEntries : undefined,
+      knownProps,
     });
   }
 
