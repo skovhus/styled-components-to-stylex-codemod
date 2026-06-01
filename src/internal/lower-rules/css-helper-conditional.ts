@@ -2207,6 +2207,27 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     }
 
     if (consIsEmpty && altIsCss) {
+      const invertedWhen = invertWhen(testInfo.when);
+      if (!invertedWhen) {
+        return false;
+      }
+      const invertedTestInfo = { ...testInfo, when: invertedWhen };
+      const altMap = resolveCssBranchToInlineMap(alt as ExpressionKind, {
+        requireResolvedPseudoSelector: true,
+      });
+      if (altMap) {
+        const altStyle = Object.fromEntries(altMap);
+        const pseudoAlias = inlineMapPseudoAliases.get(altMap);
+        if (pseudoAlias) {
+          const handled = applyStaticPseudoAliasVariant(invertedTestInfo, altStyle, pseudoAlias);
+          if (!handled) {
+            markBail();
+          }
+        } else if (!tryApplyRuntimeStyleFunction(invertedTestInfo, altStyle)) {
+          applyVariant(invertedTestInfo, altStyle);
+        }
+        return true;
+      }
       const altResolved = resolveCssBranch(alt);
       if (!altResolved) {
         markBail();
@@ -2215,11 +2236,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (altResolved.dynamicProps.length > 0) {
         return false;
       }
-      const invertedWhen = invertWhen(testInfo.when);
-      if (!invertedWhen) {
-        return false;
-      }
-      const invertedTestInfo = { ...testInfo, when: invertedWhen };
       if (!tryApplyRuntimeStyleFunction(invertedTestInfo, altResolved.style)) {
         applyVariant(invertedTestInfo, altResolved.style);
       }

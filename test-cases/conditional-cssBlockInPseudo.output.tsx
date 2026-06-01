@@ -49,6 +49,29 @@ function IconWrapper(props: IconWrapperProps) {
   );
 }
 
+type FalsyGuardIconProps = React.PropsWithChildren<{
+  disabled?: boolean;
+}>;
+
+function FalsyGuardIcon(props: FalsyGuardIconProps) {
+  const { children, disabled } = props;
+  return (
+    <span
+      sx={[
+        styles.falsyGuardIcon,
+        !disabled &&
+          highlightStyles({
+            active: styles.falsyGuardIconNotDisabledPseudoActive,
+            hover: styles.falsyGuardIconNotDisabledPseudoHover,
+          }),
+        !disabled && styles.falsyGuardIconNotDisabled,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -56,6 +79,8 @@ export const App = () => (
     <CardButton interactive>Interactive</CardButton>
     <IconWrapper background="#fed7aa">Icon</IconWrapper>
     <IconWrapper>Plain icon</IconWrapper>
+    <FalsyGuardIcon>Enabled icon</FalsyGuardIcon>
+    <FalsyGuardIcon disabled>Disabled icon</FalsyGuardIcon>
   </div>
 );
 
@@ -158,4 +183,34 @@ const styles = stylex.create({
   iconWrapperBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
   }),
+  falsyGuardIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "#eef2ff",
+    color: "#312e81",
+  },
+  falsyGuardIconNotDisabledPseudoActive: {
+    backgroundColor: {
+      default: "#eef2ff",
+      ":active": $colors.bgBaseHover,
+    },
+    color: {
+      default: "#312e81",
+      ":active": $colors.labelTitle,
+    },
+  },
+  falsyGuardIconNotDisabledPseudoHover: {
+    backgroundColor: {
+      default: "#eef2ff",
+      ":hover": $colors.bgBaseHover,
+    },
+    color: {
+      default: "#312e81",
+      ":hover": $colors.labelTitle,
+    },
+  },
+  falsyGuardIconNotDisabled: {
+    cursor: "pointer",
+  },
 });
