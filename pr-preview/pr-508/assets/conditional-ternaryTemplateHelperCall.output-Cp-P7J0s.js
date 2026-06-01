@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-BK5tE9a6.js";t();var n=e();function r(e){let{children:t,faded:r}=e;return(0,n.jsx)(`div`,{...{0:{className:`x98rzlu x1exxlbk xpyat2d x2siyzw`},1:{className:`x98rzlu x1exxlbk xpyat2d xn8bucy`}}[!!r<<0],children:t})}var i=()=>(0,n.jsx)(r,{faded:!0});export{i as App};

@@ -4747,6 +4747,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   }
 }
 
+.xy69fu9:focus:hover:not(#\#):not(#\#):not(#\#) {
+  color: var(--xupw61s);
+}
+
 @container sidebar (width >= 300px) {
   .x16fd72j.x16fd72j:not(#\#):not(#\#):not(#\#) {
     display: flex;
@@ -4757,6 +4761,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .xvsisug.xvsisug:not(#\#):not(#\#):not(#\#) {
     flex-wrap: wrap;
   }
+}
+
+.x1pxev7q:focus:active:not(#\#):not(#\#):not(#\#) {
+  color: var(--xupw61s);
 }
 
 @media (hover: hover) {
