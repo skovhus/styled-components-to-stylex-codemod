@@ -47,6 +47,7 @@ import {
   buildUseThemeDeclaration,
   collectKnownConditionPropNames,
   buildVariantStyleExprs,
+  hasStyleSourceOrder,
   mergeOrderedEntries,
   type OrderedStyleEntry,
 } from "./style-expr-builders.js";
@@ -721,7 +722,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
     ];
 
     // Collect variant and styleFn expressions with source order for interleaving.
-    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const hasSourceOrder = hasStyleSourceOrder(d);
     const orderedEntries: OrderedStyleEntry[] = [];
     const booleanProps = collectBooleanPropNames(d);
     const knownProps = collectKnownConditionPropNames(emitter, d);
@@ -781,7 +782,13 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       },
     );
 
-    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
+    for (const gp of appendAllPseudoStyleArgs(
+      d,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      hasSourceOrder ? orderedEntries : undefined,
+    )) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
         styleOnlyConditionProps.add(gp);

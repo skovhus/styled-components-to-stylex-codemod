@@ -448,6 +448,8 @@ export type StyledDecl = {
     pseudoNames: string[];
     /** When present, the pseudo-alias call is guarded by a boolean prop condition. */
     guard?: { when: string };
+    /** Source order index for CSS cascade ordering against variant/styleFn entries. */
+    sourceOrder?: number;
   }>;
   /**
    * Pseudo-expand selectors from `&:${expr}` patterns resolved via

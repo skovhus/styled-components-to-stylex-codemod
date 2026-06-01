@@ -68,13 +68,14 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const variantSourceOrder: Record<string, number> = {};
   /** Monotonically increasing counter for tracking CSS source order of variants and styleFns. */
   let dynamicSlotOrder = 0;
+  const allocateSourceOrder = (): number => dynamicSlotOrder++;
   // Use a Proxy to automatically record source order when a variant key is first set.
   // This avoids changing every `variantStyleKeys[when] ??= ...` call site.
   const variantStyleKeysRaw: Record<string, string> = {};
   const variantStyleKeys: Record<string, string> = new Proxy(variantStyleKeysRaw, {
     set(target, prop, value) {
       if (typeof prop === "string" && !(prop in target)) {
-        variantSourceOrder[prop] = dynamicSlotOrder++;
+        variantSourceOrder[prop] = allocateSourceOrder();
       }
       target[prop as string] = value;
       return true;
@@ -89,7 +90,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
         return (...entries: StyleFnFromPropsEntry[]) => {
           for (const entry of entries) {
             if (entry.sourceOrder === undefined) {
-              entry.sourceOrder = dynamicSlotOrder++;
+              entry.sourceOrder = allocateSourceOrder();
             }
             target.push(entry);
           }
@@ -415,6 +416,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     annotateParamFromJsxProp,
     findJsxPropTsType,
     isJsxPropOptional,
+    allocateSourceOrder,
     extraStyleObjects,
     resolvedStyleObjects: state.resolvedStyleObjects,
     keyframesNames: state.keyframesNames,
@@ -432,6 +434,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     variantBuckets,
     variantStyleKeys,
     variantSourceOrder,
+    allocateSourceOrder,
     extraStyleObjects,
     styleFnFromProps,
     styleFnDecls,

@@ -2,7 +2,8 @@ import * as React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
-import { $colors } from "./tokens.stylex";
+import { $colors, transitionSpeed as transitionSpeedVars, $glowShadow } from "./tokens.stylex";
+import { highlightStyles } from "./lib/helpers";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const theme = useTheme();
@@ -23,11 +24,93 @@ function CardButton(props: CardButtonProps) {
   );
 }
 
+type IconWrapperProps = React.PropsWithChildren<{
+  background?: string;
+}>;
+
+function IconWrapper(props: IconWrapperProps) {
+  const { children, background } = props;
+  return (
+    <span
+      sx={[
+        styles.iconWrapper,
+        background != null && styles.iconWrapperBackgroundColor(background),
+        background
+          ? styles.iconWrapperBackground({
+              background,
+            })
+          : undefined,
+        background
+          ? highlightStyles({
+              active: styles.iconWrapperBackgroundPseudoActive,
+              hover: styles.iconWrapperBackgroundPseudoHover,
+            })
+          : undefined,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
+type FalsyGuardIconProps = React.PropsWithChildren<{
+  disabled?: boolean;
+}>;
+
+function FalsyGuardIcon(props: FalsyGuardIconProps) {
+  const { children, disabled } = props;
+  return (
+    <span
+      sx={[
+        styles.falsyGuardIcon,
+        !disabled && styles.falsyGuardIconNotDisabled,
+        !disabled &&
+          highlightStyles({
+            active: styles.falsyGuardIconNotDisabledPseudoActive,
+            hover: styles.falsyGuardIconNotDisabledPseudoHover,
+          }),
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
+type FocusAliasIconProps = { active?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+function FocusAliasIcon(props: FocusAliasIconProps) {
+  const { active, ...rest } = props;
+  return (
+    <span
+      {...rest}
+      sx={[
+        styles.focusAliasIcon,
+        active
+          ? highlightStyles({
+              active: styles.focusAliasIconActivePseudoActive,
+              hover: styles.focusAliasIconActivePseudoHover,
+            })
+          : undefined,
+      ]}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton interactive>Interactive</CardButton>
+    <IconWrapper background="#fed7aa">Icon</IconWrapper>
+    <IconWrapper>Plain icon</IconWrapper>
+    <FalsyGuardIcon>Enabled icon</FalsyGuardIcon>
+    <FalsyGuardIcon disabled>Disabled icon</FalsyGuardIcon>
+    <FocusAliasIcon active tabIndex={0}>
+      Focus alias
+    </FocusAliasIcon>
   </div>
 );
 
@@ -78,6 +161,105 @@ const styles = stylex.create({
         default: "#334155",
         [$interaction.canHover]: $colors.labelTitle,
       },
+    },
+  },
+  iconWrapper: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    transitionProperty: "background-color,border",
+    transitionDuration: transitionSpeedVars.normal,
+  },
+  iconWrapperBackgroundPseudoActive: {
+    backgroundColor: {
+      default: "transparent",
+      ":active": $colors.bgBorderSolid,
+    },
+    borderColor: {
+      default: null,
+      ":active": $colors.bgBorderSolid,
+    },
+    boxShadow: {
+      default: null,
+      ":active": $glowShadow.dark,
+    },
+    transitionDuration: {
+      default: transitionSpeedVars.normal,
+      ":active": transitionSpeedVars.fast,
+    },
+  },
+  iconWrapperBackgroundPseudoHover: {
+    backgroundColor: {
+      default: "transparent",
+      ":hover": $colors.bgBorderSolid,
+    },
+    borderColor: {
+      default: null,
+      ":hover": $colors.bgBorderSolid,
+    },
+    boxShadow: {
+      default: null,
+      ":hover": $glowShadow.dark,
+    },
+    transitionDuration: {
+      default: transitionSpeedVars.normal,
+      ":hover": transitionSpeedVars.fast,
+    },
+  },
+  iconWrapperBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  iconWrapperBackground: (props) => ({
+    borderRadius: 4,
+    opacity: props.background ? 1 : 0.8,
+  }),
+  falsyGuardIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "#eef2ff",
+    color: "#312e81",
+  },
+  falsyGuardIconNotDisabledPseudoActive: {
+    backgroundColor: {
+      default: "#eef2ff",
+      ":active": $colors.bgBaseHover,
+    },
+    color: {
+      default: "#312e81",
+      ":active": $colors.labelTitle,
+    },
+  },
+  falsyGuardIconNotDisabledPseudoHover: {
+    backgroundColor: {
+      default: "#eef2ff",
+      ":hover": $colors.bgBaseHover,
+    },
+    color: {
+      default: "#312e81",
+      ":hover": $colors.labelTitle,
+    },
+  },
+  falsyGuardIconNotDisabled: {
+    cursor: "pointer",
+  },
+  focusAliasIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    color: "#475569",
+  },
+  focusAliasIconActivePseudoActive: {
+    color: {
+      default: "#475569",
+      ":focus:active": $colors.labelTitle,
+    },
+  },
+  focusAliasIconActivePseudoHover: {
+    color: {
+      default: "#475569",
+      ":focus:hover": $colors.labelTitle,
     },
   },
 });

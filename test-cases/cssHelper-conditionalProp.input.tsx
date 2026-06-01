@@ -33,8 +33,37 @@ export const Container = styled(Flex)<{ $color?: string }>`
   border-radius: 3px;
 `;
 
+export const MixedContainer = styled(Flex)<{ $active?: boolean; $opacity?: number }>`
+  ${(props) =>
+    props.$active &&
+    css`
+      cursor: pointer;
+      opacity: ${props.$opacity};
+    `}
+  padding: 2px 6px;
+  border-radius: 3px;
+`;
+
+export const PureDynamicContainer = styled(Flex)<{ $active?: boolean; $color: string }>`
+  ${(props) =>
+    props.$active &&
+    css`
+      color: ${props.$color};
+    `}
+  padding: 2px 6px;
+  border-radius: 3px;
+`;
+
 export const App = () => (
-  <Container gap={4} $color="rebeccapurple">
-    Hello
-  </Container>
+  <>
+    <Container gap={4} $color="rebeccapurple">
+      Hello
+    </Container>
+    <MixedContainer gap={4} $active $opacity={0.75}>
+      Mixed
+    </MixedContainer>
+    <PureDynamicContainer gap={4} $active $color="crimson">
+      Pure dynamic
+    </PureDynamicContainer>
+  </>
 );

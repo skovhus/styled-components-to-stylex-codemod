@@ -3,7 +3,7 @@
  * Core concepts: analyzing conditional branches, extracting variant conditions,
  * and emitting StyleX-compatible style objects or style functions.
  */
-import type { ASTNode } from "jscodeshift";
+import type { ASTNode, JSCodeshift } from "jscodeshift";
 import type { ImportSpec } from "../../adapter.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind, StyleFnFromPropsEntry, TestInfo } from "./decl-types.js";
@@ -17,6 +17,7 @@ import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
   collectPropsFromExpressions,
+  getImportedStylexIdentifiers,
   normalizeDollarProps,
   rewritePropsThemeToThemeVar,
 } from "./inline-styles.js";
@@ -25,6 +26,7 @@ import { extractConditionName } from "../utilities/style-key-naming.js";
 import {
   cloneAstNode,
   getArrowFnParamBindings,
+  getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isCallExpressionNode,
@@ -52,13 +54,15 @@ import {
 import { evaluateObservedDynamicExpression } from "./static-evaluator.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
-import { capitalize } from "../utilities/string-utils.js";
+import { camelToKebabCase, capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   findSupportedAtRule,
+  findInAst,
   hasUnsupportedAtRule,
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  tryResolveAdapterCall,
 } from "./utils.js";
 import {
   expandInterpolatedAnimationShorthand,
@@ -101,6 +105,7 @@ type CssHelperConditionalContext = Pick<
   isJsxPropOptional: (jsxProp: string) => boolean;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
+  allocateSourceOrder: () => number;
 };
 
 export function createCssHelperConditionalHandler(ctx: CssHelperConditionalContext) {
@@ -136,6 +141,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     root,
     extraStyleObjects,
     resolvedStyleObjects,
+    allocateSourceOrder,
   } = ctx;
   const avoidNames = new Set(importMap.keys());
   const cssHelperTemplateOptions = {
@@ -183,6 +189,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
   type ResolvedPseudoEntry = {
     pseudo: string;
     conditionExpr?: ExpressionKind;
+    alias?: RuntimePseudoAlias;
+  };
+
+  type RuntimePseudoAlias = {
+    pseudoNames: string[];
+    pseudoKeys: string[];
+    styleSelectorExpr: ExpressionKind;
   };
 
   return (d: any, pseudos?: string[] | null, pseudoElement?: string | null): boolean => {
@@ -427,6 +440,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       const { rules, slotExprById } = parseCssTemplateToRules(tpl);
       const out = new Map<string, ExpressionKind>();
+      let runtimePseudoAlias: RuntimePseudoAlias | null = null;
       // Track @media values per property: Map<cssProp, Map<mediaQuery, ExpressionKind>>
       const mediaValues = new Map<string, Map<string, ExpressionKind>>();
       // Track computed media keys per property (from resolveSelector)
@@ -470,14 +484,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (selector === "&") {
           return [];
         }
-        const match = selector.match(
-          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
-        );
-        if (!match?.[2]) {
+        const placeholderMatch = selector.match(/__SC_EXPR_(\d+)__/);
+        const beforePlaceholder =
+          placeholderMatch?.index === undefined ? "" : selector.slice(0, placeholderMatch.index);
+        const afterPlaceholder =
+          placeholderMatch?.index === undefined
+            ? ""
+            : selector.slice(placeholderMatch.index + placeholderMatch[0].length);
+        const normalizedAfterPlaceholder = afterPlaceholder.trim();
+        const prefixPseudo = beforePlaceholder.replace(/^&/, "").replace(/:$/, "");
+        if (
+          !placeholderMatch?.[1] ||
+          (normalizedAfterPlaceholder !== "" && normalizedAfterPlaceholder !== "&") ||
+          !(prefixPseudo === "" || /^(?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)+$/.test(prefixPseudo))
+        ) {
           return null;
         }
-        const prefixPseudo = match[1] || "";
-        const slotExpr = slotExprById.get(Number(match[2]));
+        const slotExpr = slotExprById.get(Number(placeholderMatch[1]));
         if (!slotExpr || typeof slotExpr !== "object") {
           return null;
         }
@@ -522,7 +545,21 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         registerImports(selectorResult.imports, resolverImports);
         if (selectorResult.kind === "pseudoAlias") {
-          return selectorResult.values.map((value) => ({ pseudo: `${prefixPseudo}:${value}` }));
+          const styleSelectorExpr = parseExpr(selectorResult.styleSelectorExpr);
+          if (!styleSelectorExpr) {
+            return null;
+          }
+          const pseudoKeys = selectorResult.values.map((value) => `${prefixPseudo}:${value}`);
+          const alias = {
+            pseudoNames: selectorResult.values,
+            pseudoKeys,
+            styleSelectorExpr: styleSelectorExpr as ExpressionKind,
+          };
+          runtimePseudoAlias = alias;
+          return pseudoKeys.map((pseudo) => ({
+            pseudo,
+            alias,
+          }));
         }
         if (selectorResult.kind !== "pseudoExpand") {
           return null;
@@ -728,13 +765,34 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!slotExpr || typeof slotExpr !== "object") {
             return null;
           }
-          const rawExpr = replaceParamWithProps(slotExpr as ExpressionKind);
+          const slotExprNode = slotExpr as ExpressionKind;
+          const slotValueExpr =
+            slotExprNode.type === "ArrowFunctionExpression" ||
+            slotExprNode.type === "FunctionExpression"
+              ? getFunctionBodyExpr(slotExprNode)
+              : slotExprNode;
+          if (!slotValueExpr) {
+            return null;
+          }
+          const rawExpr = replaceParamWithProps(slotValueExpr);
           let resolvedExpr: ExpressionKind = rawExpr;
+          if (rawExpr.type === "CallExpression") {
+            const resolvedCall = tryResolveAdapterCall(rawExpr, d.property, {
+              resolveCall,
+              resolveImportInScope,
+              parseExpr,
+              resolverImports,
+              filePath,
+            });
+            if (resolvedCall) {
+              resolvedExpr = resolvedCall.ast as ExpressionKind;
+            }
+          }
           const memberPath =
             paramName && isMemberExpression(slotExpr)
               ? getMemberPathFromIdentifier(slotExpr as any, paramName)
               : null;
-          if (memberPath?.[0] === "theme") {
+          if (rawExpr.type !== "CallExpression" && memberPath?.[0] === "theme") {
             const themePath = memberPath.slice(1).join(".");
             const resolved = resolveValue({
               kind: "theme",
@@ -801,7 +859,191 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return null;
       }
 
+      if (runtimePseudoAlias) {
+        inlineMapPseudoAliases.set(out, runtimePseudoAlias);
+      }
       return out;
+    };
+
+    const inlineMapPseudoAliases = new WeakMap<Map<string, ExpressionKind>, RuntimePseudoAlias>();
+
+    const tryApplyRuntimeStyleFunction = (
+      testInfo: TestInfo,
+      style: Record<string, unknown>,
+      opts?: {
+        dynamicProps?: Array<{ jsxProp: string; stylexProp: string }>;
+      },
+    ): boolean => {
+      const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+      const basePropNames = collectRuntimeStylePropNames(
+        style,
+        importMap,
+        importedStylexIdentifiers,
+      );
+      const referencesTheme = styleReferencesRuntimeTheme(style);
+      const dynamicProps = opts?.dynamicProps ?? [];
+      if (
+        basePropNames.size === 0 &&
+        (dynamicProps.length === 0 || Object.keys(style).length === 0) &&
+        !referencesTheme
+      ) {
+        return false;
+      }
+
+      const runtimeStyle = { ...style };
+      for (const dyn of dynamicProps) {
+        runtimeStyle[dyn.stylexProp] = j.memberExpression(
+          j.identifier("props"),
+          j.identifier(normalizeTransientPropName(dyn.jsxProp)),
+        );
+      }
+
+      const propNames = collectRuntimeStylePropNames(
+        runtimeStyle,
+        importMap,
+        importedStylexIdentifiers,
+      );
+
+      for (const propName of testInfo.allPropNames ?? [testInfo.propName]) {
+        if (propName) {
+          propNames.add(normalizeTransientPropName(propName));
+        }
+      }
+
+      const fnKey = ensureUniqueKey(
+        [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
+        styleKeyWithSuffix(
+          decl.styleKey,
+          normalizeTransientPropName(testInfo.propName) || "dynamic",
+        ),
+      );
+      const params = [j.identifier("props")];
+      if (referencesTheme) {
+        params.push(j.identifier("theme"));
+      }
+
+      const callArg = j.objectExpression(
+        [...propNames].sort().map((propName) => {
+          const id = j.identifier(propName);
+          const prop = j.property("init", id, id) as ReturnType<typeof j.property> & {
+            shorthand?: boolean;
+          };
+          prop.shorthand = true;
+          return prop;
+        }),
+      ) as ExpressionKind;
+      const addRuntimeStyleFn = (key: string, body: ExpressionKind): void => {
+        styleFnDecls.set(
+          key,
+          j.arrowFunctionExpression(
+            params.map((param) => cloneAstNode(param)),
+            body,
+          ),
+        );
+        styleFnFromProps.push({
+          fnKey: key,
+          jsxProp: "__props",
+          callArg: cloneAstNode(callArg) as ExpressionKind,
+          conditionWhen: testInfo.when,
+          ...(referencesTheme
+            ? {
+                extraCallArgs: [
+                  {
+                    jsxProp: "__helper" as const,
+                    callArg: j.identifier("theme") as ExpressionKind,
+                  },
+                ],
+              }
+            : {}),
+        });
+      };
+
+      const styleProperties = Object.entries(runtimeStyle).flatMap(([prop, value]) => {
+        const { expression, customProps } = bridgeRuntimePseudoColorValues(
+          j,
+          fnKey,
+          prop,
+          toRuntimeStyleExpression(j, value, importedStylexIdentifiers),
+        );
+        return [...customProps, j.property("init", makeCssPropKey(j, prop), expression)];
+      });
+      addRuntimeStyleFn(fnKey, j.objectExpression(styleProperties) as ExpressionKind);
+
+      for (const propName of propNames) {
+        ensureShouldForwardPropDrop(decl, propName);
+      }
+      if (referencesTheme) {
+        decl.needsUseThemeHook ??= [];
+        if (!decl.needsUseThemeHook.some((entry) => entry.themeProp === "__runtime")) {
+          decl.needsUseThemeHook.push({
+            themeProp: "__runtime",
+            trueStyleKey: null,
+            falseStyleKey: null,
+          });
+        }
+      }
+      decl.needsWrapperComponent = true;
+      return true;
+    };
+
+    const applyStaticPseudoAliasVariant = (
+      testInfo: TestInfo,
+      style: Record<string, unknown>,
+      pseudoAlias: RuntimePseudoAlias,
+    ): boolean => {
+      const { rootStyle, pseudoAliasStyles } = splitStaticPseudoAliasStyle(
+        j,
+        style,
+        pseudoAlias.pseudoNames,
+        pseudoAlias.pseudoKeys,
+      );
+      if (!pseudoAliasStyles) {
+        return false;
+      }
+      if (styleReferencesRuntimeTheme(Object.fromEntries(pseudoAliasStyles))) {
+        return false;
+      }
+      const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+      for (const pseudoStyle of pseudoAliasStyles.values()) {
+        if (
+          collectRuntimeStylePropNames(pseudoStyle, importMap, importedStylexIdentifiers).size > 0
+        ) {
+          return false;
+        }
+      }
+
+      if (Object.keys(rootStyle).length > 0) {
+        if (!tryApplyRuntimeStyleFunction(testInfo, rootStyle)) {
+          applyVariant(testInfo, rootStyle);
+        }
+      }
+
+      const styleKeys: string[] = [];
+      const guardBase = styleKeyWithSuffix(decl.styleKey, testInfo.when);
+      for (const pseudoName of pseudoAlias.pseudoNames) {
+        const styleKey = ensureUniqueKey(
+          [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
+          `${guardBase}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`,
+        );
+        const pseudoStyle = pseudoAliasStyles.get(pseudoName);
+        if (!pseudoStyle) {
+          return false;
+        }
+        styleKeys.push(styleKey);
+        extraStyleObjects.set(styleKey, pseudoStyle);
+      }
+
+      decl.pseudoAliasSelectors ??= [];
+      decl.pseudoAliasSelectors.push({
+        styleKeys,
+        styleSelectorExpr: cloneAstNode(pseudoAlias.styleSelectorExpr),
+        pseudoNames: pseudoAlias.pseudoNames,
+        guard: { when: testInfo.when },
+        sourceOrder: allocateSourceOrder(),
+      });
+      dropAllTestInfoProps(testInfo);
+      decl.needsWrapperComponent = true;
+      return true;
     };
 
     // Handle LogicalExpression: props.$x && css`...` or chained: props.$x && props.$y && css`...`
@@ -822,6 +1064,22 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return false;
       }
       if (isCssHelperTaggedTemplate(body.right)) {
+        const inlineMap = resolveCssBranchToInlineMap(body.right as ExpressionKind, {
+          requireResolvedPseudoSelector: true,
+        });
+        if (inlineMap) {
+          const inlineStyle = Object.fromEntries(inlineMap);
+          const pseudoAlias = inlineMapPseudoAliases.get(inlineMap);
+          if (pseudoAlias) {
+            const handled = applyStaticPseudoAliasVariant(testInfo, inlineStyle, pseudoAlias);
+            if (!handled) {
+              markBail();
+            }
+          } else if (!tryApplyRuntimeStyleFunction(testInfo, inlineStyle)) {
+            applyVariant(testInfo, inlineStyle);
+          }
+          return true;
+        }
         const cssNode = body.right as { quasi: ExpressionKind };
         const resolved = resolveCssHelperTemplate(
           cssNode.quasi,
@@ -835,15 +1093,24 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         const { style: consStyle, dynamicProps, conditionalVariants } = resolved;
 
+        if (tryApplyRuntimeStyleFunction(testInfo, consStyle, { dynamicProps })) {
+          applyConditionalVariantsInline(conditionalVariants, testInfo.when);
+          dropAllTestInfoProps(testInfo);
+          return true;
+        }
+
         if (dynamicProps.length > 0) {
           const propName = testInfo.propName;
-          const hasMismatchedProp = dynamicProps.some((p) => p.jsxProp !== propName);
           const isComparison = testInfo.when.includes("===") || testInfo.when.includes("!==");
-          if (!propName || hasMismatchedProp || testInfo.when.startsWith("!") || isComparison) {
+          if (!propName || testInfo.when.startsWith("!") || isComparison) {
             return false;
           }
           for (const dyn of dynamicProps) {
             const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
+            const conditionWhen =
+              normalizeTransientPropName(dyn.jsxProp) === normalizeTransientPropName(propName)
+                ? undefined
+                : testInfo.when;
             if (!styleFnDecls.has(fnKey)) {
               const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
               const param = j.identifier(dynParamName);
@@ -854,13 +1121,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             }
             if (
               !styleFnFromProps.some(
-                (p) => p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.condition === "truthy",
+                (p) =>
+                  p.fnKey === fnKey &&
+                  p.jsxProp === dyn.jsxProp &&
+                  p.condition === "truthy" &&
+                  p.conditionWhen === conditionWhen,
               )
             ) {
               styleFnFromProps.push({
                 fnKey,
                 jsxProp: dyn.jsxProp,
                 condition: "truthy",
+                ...(conditionWhen ? { conditionWhen } : {}),
               });
             }
             ensureShouldForwardPropDrop(decl, dyn.jsxProp);
@@ -1964,7 +2236,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         requireResolvedPseudoSelector: true,
       });
       if (consMap) {
-        applyVariant(testInfo, Object.fromEntries(consMap));
+        const consStyle = Object.fromEntries(consMap);
+        const pseudoAlias = inlineMapPseudoAliases.get(consMap);
+        if (pseudoAlias) {
+          const handled = applyStaticPseudoAliasVariant(testInfo, consStyle, pseudoAlias);
+          if (!handled) {
+            markBail();
+          }
+        } else if (!tryApplyRuntimeStyleFunction(testInfo, consStyle)) {
+          applyVariant(testInfo, consStyle);
+        }
         return true;
       }
       const consResolved = resolveCssBranch(cons);
@@ -1975,12 +2256,35 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (consResolved.dynamicProps.length > 0) {
         return false;
       }
-      applyVariant(testInfo, consResolved.style);
+      if (!tryApplyRuntimeStyleFunction(testInfo, consResolved.style)) {
+        applyVariant(testInfo, consResolved.style);
+      }
       applyConditionalVariants(consResolved.conditionalVariants, testInfo.when);
       return true;
     }
 
     if (consIsEmpty && altIsCss) {
+      const invertedWhen = invertWhen(testInfo.when);
+      if (!invertedWhen) {
+        return false;
+      }
+      const invertedTestInfo = { ...testInfo, when: invertedWhen };
+      const altMap = resolveCssBranchToInlineMap(alt as ExpressionKind, {
+        requireResolvedPseudoSelector: true,
+      });
+      if (altMap) {
+        const altStyle = Object.fromEntries(altMap);
+        const pseudoAlias = inlineMapPseudoAliases.get(altMap);
+        if (pseudoAlias) {
+          const handled = applyStaticPseudoAliasVariant(invertedTestInfo, altStyle, pseudoAlias);
+          if (!handled) {
+            markBail();
+          }
+        } else if (!tryApplyRuntimeStyleFunction(invertedTestInfo, altStyle)) {
+          applyVariant(invertedTestInfo, altStyle);
+        }
+        return true;
+      }
       const altResolved = resolveCssBranch(alt);
       if (!altResolved) {
         markBail();
@@ -1989,11 +2293,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (altResolved.dynamicProps.length > 0) {
         return false;
       }
-      const invertedWhen = invertWhen(testInfo.when);
-      if (!invertedWhen) {
-        return false;
+      if (!tryApplyRuntimeStyleFunction(invertedTestInfo, altResolved.style)) {
+        applyVariant(invertedTestInfo, altResolved.style);
       }
-      applyVariant({ ...testInfo, when: invertedWhen }, altResolved.style);
       applyConditionalVariants(altResolved.conditionalVariants, invertedWhen);
       return true;
     }
@@ -2468,10 +2770,298 @@ function tryResolveBlockLevelThemeConditional(args: BlockThemeConditionalArgs): 
 }
 
 function styleValueToExpression(j: any, value: unknown): ExpressionKind {
+  if (value === null) {
+    return j.literal(null) as ExpressionKind;
+  }
   if (value !== null && typeof value === "object" && "type" in value) {
     return cloneAstNode(value) as ExpressionKind;
   }
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return j.objectExpression(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) =>
+        j.property(
+          "init",
+          /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? j.identifier(key) : j.literal(key),
+          styleValueToExpression(j, nestedValue),
+        ),
+      ),
+    ) as ExpressionKind;
+  }
   return staticValueToLiteral(j, value as string | number | boolean) as ExpressionKind;
+}
+
+function toRuntimeStyleExpression(
+  j: JSCodeshift,
+  value: unknown,
+  stylexTokenIdentifiers: ReadonlySet<string>,
+): ExpressionKind {
+  const expr = styleValueToExpression(j, value);
+  return rewritePropsThemeToThemeVar(
+    normalizeDollarProps(j, expr, { skipIdentifiers: stylexTokenIdentifiers }),
+  );
+}
+
+function splitStaticPseudoAliasStyle(
+  j: JSCodeshift,
+  style: Record<string, unknown>,
+  pseudoNames: string[],
+  pseudoKeys: string[],
+): {
+  rootStyle: Record<string, unknown>;
+  pseudoAliasStyles: Map<string, Record<string, unknown>> | null;
+} {
+  const rootStyle: Record<string, unknown> = {};
+  const pseudoAliasStyles = new Map<string, Record<string, unknown>>();
+  for (const pseudoName of pseudoNames) {
+    pseudoAliasStyles.set(pseudoName, {});
+  }
+
+  let hasAliasStyle = false;
+  for (const [prop, value] of Object.entries(style)) {
+    const byPseudo = splitPseudoObjectByAliasName(j, value, pseudoNames, pseudoKeys);
+    if (!byPseudo) {
+      rootStyle[prop] = value;
+      continue;
+    }
+    hasAliasStyle = true;
+    for (const [pseudoName, pseudoValue] of byPseudo) {
+      const styleForPseudo = pseudoAliasStyles.get(pseudoName);
+      if (styleForPseudo) {
+        styleForPseudo[prop] = pseudoValue;
+      }
+    }
+  }
+
+  return {
+    rootStyle,
+    pseudoAliasStyles: hasAliasStyle ? pseudoAliasStyles : null,
+  };
+}
+
+function splitPseudoObjectByAliasName(
+  j: JSCodeshift,
+  value: unknown,
+  pseudoNames: string[],
+  pseudoKeys: string[],
+): Map<string, ExpressionKind> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const node = value as ASTNodeRecord;
+  if (node.type !== "ObjectExpression") {
+    return null;
+  }
+
+  const properties = node.properties as ASTNodeRecord[] | undefined;
+  const byKey = new Map<string, ExpressionKind>();
+  for (const property of properties ?? []) {
+    if (!property || property.type !== "Property") {
+      continue;
+    }
+    const keyName = getStaticObjectPropertyKeyName(property);
+    if (keyName) {
+      byKey.set(keyName, property.value as ExpressionKind);
+    }
+  }
+
+  const defaultValue = byKey.get("default") ?? null;
+  const byPseudoName = new Map<string, ExpressionKind>();
+  for (let index = 0; index < pseudoNames.length; index++) {
+    const pseudoName = pseudoNames[index]!;
+    const pseudoKey = pseudoKeys[index] ?? `:${pseudoName}`;
+    const pseudoValue = byKey.get(pseudoKey);
+    if (!pseudoValue) {
+      return null;
+    }
+    byPseudoName.set(
+      pseudoName,
+      j.objectExpression([
+        j.property(
+          "init",
+          j.identifier("default"),
+          defaultValue ? cloneAstNode(defaultValue) : j.literal(null),
+        ),
+        j.property("init", j.literal(pseudoKey), cloneAstNode(pseudoValue) as ExpressionKind),
+      ]) as ExpressionKind,
+    );
+  }
+  return byPseudoName;
+}
+
+function bridgeRuntimePseudoColorValues(
+  j: JSCodeshift,
+  styleKey: string,
+  stylexProp: string,
+  expression: ExpressionKind,
+): { expression: ExpressionKind; customProps: ReturnType<typeof j.property>[] } {
+  if (!isColorLikeStylexProp(stylexProp) || expression.type !== "ObjectExpression") {
+    return { expression, customProps: [] };
+  }
+
+  const customProps: ReturnType<typeof j.property>[] = [];
+  for (const property of expression.properties ?? []) {
+    if (!property || property.type !== "Property") {
+      continue;
+    }
+    const keyName = getStaticObjectPropertyKeyName(property as unknown as ASTNodeRecord);
+    if (!keyName?.startsWith(":")) {
+      continue;
+    }
+    const value = property.value as ExpressionKind;
+    if (!referencesRuntimeValue(value)) {
+      continue;
+    }
+
+    const variableName = buildRuntimePseudoVariableName(styleKey, stylexProp, keyName);
+    customProps.push(j.property("init", j.literal(variableName), cloneAstNode(value)));
+    property.value = j.literal(`var(${variableName})`);
+  }
+
+  return { expression, customProps };
+}
+
+function isColorLikeStylexProp(stylexProp: string): boolean {
+  return (
+    stylexProp === "color" ||
+    stylexProp === "fill" ||
+    stylexProp === "stroke" ||
+    stylexProp.endsWith("Color")
+  );
+}
+
+function referencesRuntimeValue(value: ExpressionKind): boolean {
+  return findInAst(value, (node) => {
+    if (node.type === "Identifier" && (node as { name?: string }).name === "theme") {
+      return true;
+    }
+    return (
+      isMemberExpression(node) &&
+      (node.object as ASTNodeRecord | undefined)?.type === "Identifier" &&
+      ((node.object as { name?: string }).name === "props" ||
+        (node.object as { name?: string }).name === "theme") &&
+      node.computed === false
+    );
+  });
+}
+
+function getStaticObjectPropertyKeyName(property: ASTNodeRecord): string | null {
+  const key = property.key as ASTNodeRecord | undefined;
+  if (!key) {
+    return null;
+  }
+  if (key.type === "Identifier") {
+    return (key as { name?: string }).name ?? null;
+  }
+  if (key.type === "Literal" || key.type === "StringLiteral") {
+    const value = (key as { value?: unknown }).value;
+    return typeof value === "string" ? value : null;
+  }
+  return null;
+}
+
+function buildRuntimePseudoVariableName(
+  styleKey: string,
+  stylexProp: string,
+  pseudo: string,
+): string {
+  const pseudoSuffix =
+    pseudo
+      .replace(/^:+/, "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "state";
+  return `--${camelToKebabCase(styleKey)}-${camelToKebabCase(stylexProp)}-${pseudoSuffix}`;
+}
+
+function collectRuntimeStylePropNames(
+  style: Record<string, unknown>,
+  importMap: Map<string, unknown>,
+  stylexTokenIdentifiers: ReadonlySet<string>,
+): Set<string> {
+  const names = new Set<string>();
+  for (const value of Object.values(style)) {
+    collectRuntimePropNames(value, names, importMap, stylexTokenIdentifiers);
+  }
+  return names;
+}
+
+function collectRuntimePropNames(
+  value: unknown,
+  names: Set<string>,
+  importMap: Map<string, unknown>,
+  stylexTokenIdentifiers: ReadonlySet<string>,
+): void {
+  if (!value || typeof value !== "object") {
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectRuntimePropNames(item, names, importMap, stylexTokenIdentifiers);
+    }
+    return;
+  }
+  const node = value as ASTNodeRecord;
+  if (node.type === "Identifier") {
+    const name = (node as { name?: string }).name;
+    if (name?.startsWith("$") && !importMap.has(name) && !stylexTokenIdentifiers.has(name)) {
+      names.add(normalizeTransientPropName(name));
+    }
+    return;
+  }
+  if (isMemberExpression(node)) {
+    const object = node.object as ASTNodeRecord | undefined;
+    const property = node.property as ASTNodeRecord | undefined;
+    if (
+      object?.type === "Identifier" &&
+      (object as { name?: string }).name === "props" &&
+      property?.type === "Identifier" &&
+      node.computed === false
+    ) {
+      const propName = (property as { name?: string }).name;
+      if (propName && propName !== "theme") {
+        names.add(normalizeTransientPropName(propName));
+      }
+      if (propName === "theme") {
+        return;
+      }
+    }
+    collectRuntimePropNames(node.object, names, importMap, stylexTokenIdentifiers);
+    if (node.computed) {
+      collectRuntimePropNames(node.property, names, importMap, stylexTokenIdentifiers);
+    }
+    return;
+  }
+  if (node.type === "Property") {
+    if (node.computed) {
+      collectRuntimePropNames(node.key, names, importMap, stylexTokenIdentifiers);
+    }
+    collectRuntimePropNames(node.value, names, importMap, stylexTokenIdentifiers);
+    return;
+  }
+  for (const [key, child] of Object.entries(node)) {
+    if (key === "loc" || key === "comments" || key === "type") {
+      continue;
+    }
+    collectRuntimePropNames(child, names, importMap, stylexTokenIdentifiers);
+  }
+}
+
+function styleReferencesRuntimeTheme(style: Record<string, unknown>): boolean {
+  return Object.values(style).some((value) =>
+    findInAst(
+      value,
+      (node) =>
+        isMemberExpression(node) &&
+        (node.object as ASTNodeRecord | undefined)?.type === "Identifier" &&
+        (node.object as { name?: string }).name === "props" &&
+        (node.property as ASTNodeRecord | undefined)?.type === "Identifier" &&
+        (node.property as { name?: string }).name === "theme" &&
+        node.computed === false,
+    ),
+  );
+}
+
+function normalizeTransientPropName(propName: string): string {
+  return propName.startsWith("$") ? propName.slice(1) : propName;
 }
 
 /**
