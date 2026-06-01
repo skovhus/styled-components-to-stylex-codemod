@@ -105,6 +105,7 @@ type CssHelperConditionalContext = Pick<
   isJsxPropOptional: (jsxProp: string) => boolean;
   extraStyleObjects: Map<string, Record<string, unknown>>;
   resolvedStyleObjects: Map<string, unknown>;
+  allocateSourceOrder: () => number;
 };
 
 export function createCssHelperConditionalHandler(ctx: CssHelperConditionalContext) {
@@ -140,6 +141,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     root,
     extraStyleObjects,
     resolvedStyleObjects,
+    allocateSourceOrder,
   } = ctx;
   const avoidNames = new Set(importMap.keys());
   const cssHelperTemplateOptions = {
@@ -1024,6 +1026,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         styleSelectorExpr: cloneAstNode(pseudoAlias.styleSelectorExpr),
         pseudoNames: pseudoAlias.pseudoNames,
         guard: { when: testInfo.when },
+        sourceOrder: allocateSourceOrder(),
       });
       dropAllTestInfoProps(testInfo);
       decl.needsWrapperComponent = true;

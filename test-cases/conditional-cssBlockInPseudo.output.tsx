@@ -34,16 +34,16 @@ function IconWrapper(props: IconWrapperProps) {
     <span
       sx={[
         styles.iconWrapper,
-        background
-          ? highlightStyles({
-              active: styles.iconWrapperBackgroundPseudoActive,
-              hover: styles.iconWrapperBackgroundPseudoHover,
-            })
-          : undefined,
         background != null && styles.iconWrapperBackgroundColor(background),
         background
           ? styles.iconWrapperBackground({
               background,
+            })
+          : undefined,
+        background
+          ? highlightStyles({
+              active: styles.iconWrapperBackgroundPseudoActive,
+              hover: styles.iconWrapperBackgroundPseudoHover,
             })
           : undefined,
       ]}
@@ -63,12 +63,12 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
     <span
       sx={[
         styles.falsyGuardIcon,
+        !disabled && styles.falsyGuardIconNotDisabled,
         !disabled &&
           highlightStyles({
             active: styles.falsyGuardIconNotDisabledPseudoActive,
             hover: styles.falsyGuardIconNotDisabledPseudoHover,
           }),
-        !disabled && styles.falsyGuardIconNotDisabled,
       ]}
     >
       {children}

@@ -27,6 +27,7 @@ import {
   buildUseThemeDeclaration,
   buildVariantStyleExprs,
   collectKnownConditionPropNames,
+  hasStyleSourceOrder,
   mergeOrderedEntries,
   styleRef,
   wrapCallArgForPropsObject,
@@ -388,16 +389,22 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
-
     const compoundVariantKeys = collectCompoundVariantKeys(d.compoundVariants);
     const booleanProps = collectBooleanPropNames(d);
     const knownProps = collectKnownConditionPropNames(emitter, d);
 
     // Collect variant and styleFn expressions with source order for interleaving.
     // When source order is available, entries are sorted to preserve CSS cascade order.
-    const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+    const hasSourceOrder = hasStyleSourceOrder(d);
     const orderedEntries: OrderedStyleEntry[] = [];
+
+    const pseudoGuardProps = appendAllPseudoStyleArgs(
+      d,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      hasSourceOrder ? orderedEntries : undefined,
+    );
 
     buildVariantStyleExprs({
       d,

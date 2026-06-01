@@ -45,13 +45,13 @@ function HighlightCard(props: HighlightCardProps) {
     <div
       sx={[
         styles.highlightCard,
+        interactive && styles.highlightCardInteractive,
         interactive
           ? highlightStyles({
               active: styles.highlightCardInteractivePseudoActive,
               hover: styles.highlightCardInteractivePseudoHover,
             })
           : undefined,
-        interactive && styles.highlightCardInteractive,
       ]}
     >
       {children}
