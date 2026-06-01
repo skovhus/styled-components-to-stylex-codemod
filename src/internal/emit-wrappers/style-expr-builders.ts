@@ -633,7 +633,10 @@ export function buildVariantDimensionLookups(
         j.identifier(dim.variantObjectName),
         j.identifier("default"),
       );
-      pushExpr(j.logicalExpression("??", lookup, defaultAccess), dim);
+      pushExpr(
+        buildConditionallyGuardedLookup(dim, j.logicalExpression("??", lookup, defaultAccess)),
+        dim,
+      );
     } else {
       if (dim.defaultValue && dim.isOptional && propDefaults) {
         propDefaults.set(dim.propName, dim.defaultValue);
