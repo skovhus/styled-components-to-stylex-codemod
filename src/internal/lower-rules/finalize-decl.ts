@@ -10,7 +10,7 @@ import {
   toStyleKey,
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { ComponentPropUsageInfo, StyledDecl } from "../transform-types.js";
 import type { JSCodeshift } from "jscodeshift";
 import {
   extractUnionLiteralValues,
@@ -529,6 +529,14 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
 
+  promoteGuardedObservedExtraStylexPropsArgsToVariants({
+    state,
+    decl,
+    variantBuckets,
+    variantStyleKeys,
+    observedVariantFallbackFns,
+    styleFnDecls,
+  });
   promoteGuardedObservedStyleFnsToVariants({
     state,
     decl,
@@ -726,6 +734,55 @@ function alignComputedCallArgStyleFnParams(
   }
 }
 
+function promoteGuardedObservedExtraStylexPropsArgsToVariants(args: {
+  state: DeclProcessingState["state"];
+  decl: StyledDecl;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  variantStyleKeys: Record<string, string>;
+  observedVariantFallbackFns: Map<string, string>;
+  styleFnDecls: Map<string, unknown>;
+}): void {
+  const entries = args.decl.extraStylexPropsArgs;
+  const usage = args.state.propUsageByComponent.get(args.decl.localName);
+  if (!entries?.length || !usage) {
+    return;
+  }
+
+  const remainingEntries: NonNullable<StyledDecl["extraStylexPropsArgs"]> = [];
+  for (const entry of entries) {
+    const call = readExtraStylexPropsArgCall(entry.expr);
+    if (!call?.condition || !call.argName) {
+      remainingEntries.push(entry);
+      continue;
+    }
+    const conditionWhen = args.state.j(call.condition).toSource();
+    if (
+      !conditionWhen.includes("(") ||
+      !promoteObservedStyleFnCallToVariantBuckets({
+        state: args.state,
+        decl: args.decl,
+        usage,
+        variantBuckets: args.variantBuckets,
+        variantStyleKeys: args.variantStyleKeys,
+        observedVariantFallbackFns: args.observedVariantFallbackFns,
+        styleFnDecls: args.styleFnDecls,
+        fnKey: call.fnKey,
+        jsxProp: call.argName,
+        conditionWhen,
+        minObservedValues: 3,
+      })
+    ) {
+      remainingEntries.push(entry);
+    }
+  }
+
+  if (remainingEntries.length > 0) {
+    args.decl.extraStylexPropsArgs = remainingEntries;
+  } else {
+    delete args.decl.extraStylexPropsArgs;
+  }
+}
+
 function promoteGuardedObservedStyleFnsToVariants(args: {
   state: DeclProcessingState["state"];
   decl: StyledDecl;
@@ -750,53 +807,81 @@ function promoteGuardedObservedStyleFnsToVariants(args: {
     ) {
       continue;
     }
-    const propUsage = usage.props[entry.jsxProp];
-    if (!propUsage || propUsage.values.length < 2) {
-      continue;
+    if (
+      promoteObservedStyleFnCallToVariantBuckets({
+        state: args.state,
+        decl: args.decl,
+        usage,
+        variantBuckets: args.variantBuckets,
+        variantStyleKeys: args.variantStyleKeys,
+        observedVariantFallbackFns: args.observedVariantFallbackFns,
+        styleFnDecls: args.styleFnDecls,
+        fnKey: entry.fnKey,
+        jsxProp: entry.jsxProp,
+        conditionWhen: entry.conditionWhen,
+        minObservedValues: 2,
+      })
+    ) {
+      args.styleFnFromProps.splice(index, 1);
     }
-    const observedValues = propUsage.values.filter(
-      (value: string | number | boolean): value is string | number =>
-        typeof value === "string" || typeof value === "number",
-    );
-    if (observedValues.length !== propUsage.values.length || observedValues.length > 20) {
-      continue;
-    }
-    const styleProperty = readSingleStyleFnProperty(args.styleFnDecls.get(entry.fnKey));
-    if (!styleProperty) {
-      continue;
-    }
-    const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
-    for (const propValue of observedValues) {
-      const cssValue = evaluateObservedDynamicExpression({
-        j: args.state.j,
-        root: args.state.root,
-        expression: styleProperty.value,
-        propName: entry.jsxProp,
-        propValue,
-        paramName: entry.jsxProp,
-      });
-      if (typeof cssValue !== "string" && typeof cssValue !== "number") {
-        transformedValues.length = 0;
-        break;
-      }
-      transformedValues.push({ propValue, cssValue });
-    }
-    if (transformedValues.length !== observedValues.length) {
-      continue;
-    }
-    for (const { propValue, cssValue } of transformedValues) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-      const when = `${entry.conditionWhen} && ${entry.jsxProp} === ${propValueExpr}`;
-      args.variantBuckets.set(when, {
-        ...args.variantBuckets.get(when),
-        [styleProperty.key]: cssValue,
-      });
-      args.variantStyleKeys[when] ??= styleKeyWithSuffix(args.decl.styleKey, when);
-    }
-    args.observedVariantFallbackFns.set(entry.jsxProp, entry.fnKey);
-    args.styleFnFromProps.splice(index, 1);
   }
+}
+
+function promoteObservedStyleFnCallToVariantBuckets(args: {
+  state: DeclProcessingState["state"];
+  decl: StyledDecl;
+  usage: ComponentPropUsageInfo;
+  variantBuckets: Map<string, Record<string, unknown>>;
+  variantStyleKeys: Record<string, string>;
+  observedVariantFallbackFns: Map<string, string>;
+  styleFnDecls: Map<string, unknown>;
+  fnKey: string;
+  jsxProp: string;
+  conditionWhen: string;
+  minObservedValues: number;
+}): boolean {
+  const propUsage = args.usage.props[args.jsxProp];
+  if (!propUsage || propUsage.values.length < args.minObservedValues) {
+    return false;
+  }
+  const observedValues = propUsage.values.filter(
+    (value: string | number | boolean): value is string | number =>
+      typeof value === "string" || typeof value === "number",
+  );
+  if (observedValues.length !== propUsage.values.length || observedValues.length > 20) {
+    return false;
+  }
+  const styleProperty = readSingleStyleFnProperty(args.styleFnDecls.get(args.fnKey));
+  if (!styleProperty) {
+    return false;
+  }
+  const transformedValues: Array<{ propValue: string | number; cssValue: string | number }> = [];
+  for (const propValue of observedValues) {
+    const cssValue = evaluateObservedDynamicExpression({
+      j: args.state.j,
+      root: args.state.root,
+      expression: styleProperty.value,
+      propName: args.jsxProp,
+      propValue,
+      paramName: args.jsxProp,
+    });
+    if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+      return false;
+    }
+    transformedValues.push({ propValue, cssValue });
+  }
+  for (const { propValue, cssValue } of transformedValues) {
+    const propValueExpr =
+      typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+    const when = `${args.conditionWhen} && ${args.jsxProp} === ${propValueExpr}`;
+    args.variantBuckets.set(when, {
+      ...args.variantBuckets.get(when),
+      [styleProperty.key]: cssValue,
+    });
+    args.variantStyleKeys[when] ??= styleKeyWithSuffix(args.decl.styleKey, when);
+  }
+  args.observedVariantFallbackFns.set(args.jsxProp, args.fnKey);
+  return true;
 }
 
 function readSingleStyleFnProperty(fnAst: unknown): { key: string; value: ExpressionKind } | null {

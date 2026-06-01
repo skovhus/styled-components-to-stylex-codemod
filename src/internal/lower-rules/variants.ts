@@ -3,6 +3,7 @@
  * Core concepts: condition parsing and dimension construction.
  */
 import type { VariantDimension } from "../transform-types.js";
+import { styleKeyWithSuffix } from "../transform/helpers.js";
 
 type ParsedVariantCondition =
   | {
@@ -144,7 +145,7 @@ export function hasFiniteNumericVariantKey(dimension: VariantDimension): boolean
 export function groupVariantBucketsIntoDimensions(
   variantBuckets: Map<string, Record<string, unknown>>,
   variantStyleKeys: Record<string, string>,
-  _baseStyleKey: string,
+  baseStyleKey: string,
   baseStyles: Record<string, unknown>,
   findJsxPropTsType?: (propName: string) => unknown,
   isJsxPropOptional?: (propName: string) => boolean,
@@ -155,11 +156,16 @@ export function groupVariantBucketsIntoDimensions(
   propsToStrip: Set<string>;
 } {
   // Helper to generate variant object name, avoiding redundant "variantVariants"
-  const getVariantObjectName = (propName: string, suffix?: "Enabled" | "Disabled"): string => {
+  const getVariantObjectName = (
+    propName: string,
+    suffix?: "Enabled" | "Disabled",
+    useBaseStyleKey?: boolean,
+  ): string => {
+    const baseName = useBaseStyleKey ? styleKeyWithSuffix(baseStyleKey, propName) : propName;
     if (propName === "variant") {
       return suffix ? `${suffix.toLowerCase()}Variants` : "variants";
     }
-    return suffix ? `${propName}${suffix}Variants` : `${propName}Variants`;
+    return suffix ? `${baseName}${suffix}Variants` : `${baseName}Variants`;
   };
 
   // Group conditions by prop name (only equality conditions)
@@ -324,7 +330,7 @@ export function groupVariantBucketsIntoDimensions(
       // Enabled namespace: original variants
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName, "Enabled"),
+        variantObjectName: getVariantObjectName(propName, "Enabled", !!conditionWhen),
         variants: variantMap,
         defaultValue,
         ...(conditionWhen ? { conditionWhen } : {}),
@@ -363,7 +369,7 @@ export function groupVariantBucketsIntoDimensions(
 
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName, "Disabled"),
+        variantObjectName: getVariantObjectName(propName, "Disabled", !!conditionWhen),
         variants: disabledVariantMap,
         defaultValue,
         ...(conditionWhen ? { conditionWhen } : {}),
@@ -385,7 +391,7 @@ export function groupVariantBucketsIntoDimensions(
       // Simple dimension without namespace
       dimensions.push({
         propName,
-        variantObjectName: getVariantObjectName(propName),
+        variantObjectName: getVariantObjectName(propName, undefined, !!conditionWhen),
         variants: variantMap,
         defaultValue,
         ...(conditionWhen ? { conditionWhen } : {}),

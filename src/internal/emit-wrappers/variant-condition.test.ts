@@ -44,6 +44,13 @@ describe("parseVariantWhenToAst", () => {
     const parsed = parseVariantWhenToAst(j, "disabled");
     expect(parsed.isBoolean).toBe(false);
   });
+
+  it("parses call-expression guards without collecting the callee as a prop", () => {
+    const parsed = parseVariantWhenToAst(j, "showProperty(width)");
+    expect(j(parsed.cond).toSource()).toContain("showProperty(width)");
+    expect(parsed.props).toEqual(["width"]);
+    expect(parsed.isBoolean).toBe(true);
+  });
 });
 
 describe("collectConditionProps", () => {
@@ -51,6 +58,12 @@ describe("collectConditionProps", () => {
     const destructureProps: string[] = [];
     collectConditionProps(j, { when: "$layer.isTop && $zIndex", destructureProps });
     expect(destructureProps).toEqual(["$layer", "$zIndex"]);
+  });
+
+  it("adds only guard argument props to destructure list for call-expression guards", () => {
+    const destructureProps: string[] = [];
+    collectConditionProps(j, { when: "showProperty(width)", destructureProps });
+    expect(destructureProps).toEqual(["width"]);
   });
 });
 

@@ -186,6 +186,15 @@ export function parseVariantWhenToAst(
     };
   }
 
+  const expression = parseConditionExpression(j, trimmed);
+  if (expression) {
+    return {
+      cond: expression,
+      props: collectGuardExpressionPropNames(expression),
+      isBoolean: true,
+    };
+  }
+
   // Simple identifier — NOT guaranteed to be boolean (could be "" or 0).
   // When callers provide booleanProps, identifiers matching known boolean props
   // produce `cond && expr` instead of `cond ? expr : undefined`.
@@ -196,6 +205,118 @@ export function parseVariantWhenToAst(
     props: simple.propName ? [simple.propName] : [],
     isBoolean: propIsBoolean,
   };
+}
+
+function parseConditionExpression(j: JSCodeshift, source: string): ExpressionKind | null {
+  if (!source.includes("(") && !/[<>?[\]]/.test(source)) {
+    return null;
+  }
+  try {
+    const declarator = j(`const __condition = (${source});`)
+      .find(j.VariableDeclarator)
+      .nodes()[0] as { init?: ExpressionKind } | undefined;
+    return unwrapParenthesizedExpression(declarator?.init) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function unwrapParenthesizedExpression(expr: ExpressionKind | undefined): ExpressionKind | null {
+  let current = expr;
+  while (current && current.type === "ParenthesizedExpression") {
+    current = (current as { expression?: ExpressionKind }).expression;
+  }
+  return current ?? null;
+}
+
+function collectGuardExpressionPropNames(expr: ExpressionKind): string[] {
+  const props = new Set<string>();
+  collectGuardProps(expr, props);
+  return [...props];
+}
+
+function collectGuardProps(node: unknown, props: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  const type = record.type;
+
+  if (type === "Identifier") {
+    const name = record.name;
+    if (typeof name === "string" && isConditionPropIdentifier(name)) {
+      props.add(name);
+    }
+    return;
+  }
+
+  if (type === "CallExpression" || type === "OptionalCallExpression") {
+    const args = record.arguments;
+    if (Array.isArray(args)) {
+      for (const arg of args) {
+        collectGuardProps(arg, props);
+      }
+    }
+    return;
+  }
+
+  if (type === "MemberExpression" || type === "OptionalMemberExpression") {
+    collectMemberExpressionProp(record, props);
+    return;
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "type" || key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectGuardProps(item, props);
+      }
+    } else {
+      collectGuardProps(value, props);
+    }
+  }
+}
+
+function collectMemberExpressionProp(node: Record<string, unknown>, props: Set<string>): void {
+  const object = node.object as Record<string, unknown> | undefined;
+  const property = node.property as Record<string, unknown> | undefined;
+  const rootName = readMemberRootIdentifier(object);
+  if (rootName === "props" || rootName === "p") {
+    const propName = property?.type === "Identifier" ? property.name : null;
+    if (typeof propName === "string" && isConditionPropIdentifier(propName)) {
+      props.add(propName);
+    }
+  } else if (
+    typeof rootName === "string" &&
+    rootName !== "theme" &&
+    isConditionPropIdentifier(rootName)
+  ) {
+    props.add(rootName);
+  }
+  if (node.computed) {
+    collectGuardProps(property, props);
+  }
+}
+
+function readMemberRootIdentifier(node: Record<string, unknown> | undefined): string | null {
+  if (!node) {
+    return null;
+  }
+  if (node.type === "Identifier" && typeof node.name === "string") {
+    return node.name;
+  }
+  if (node.type === "MemberExpression" || node.type === "OptionalMemberExpression") {
+    return readMemberRootIdentifier(node.object as Record<string, unknown> | undefined);
+  }
+  return null;
+}
+
+function isConditionPropIdentifier(name: string): boolean {
+  return (
+    isValidIdentifierName(name) && name !== "undefined" && name !== "NaN" && name !== "Infinity"
+  );
 }
 
 /**

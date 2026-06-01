@@ -296,9 +296,13 @@ export function tryResolveConditionalValue(
         const left = branchToExpr(binary.left);
         const right = branchToExpr(binary.right);
         if (
-          left?.usage === expectedUsage &&
-          right?.usage === expectedUsage &&
-          (left.imports.length > 0 || right.imports.length > 0)
+          left &&
+          right &&
+          left.usage === expectedUsage &&
+          right.usage === expectedUsage &&
+          (left.imports.length > 0 || right.imports.length > 0) &&
+          isCssCalcSafeOperand(left) &&
+          isCssCalcSafeOperand(right)
         ) {
           return {
             usage: expectedUsage,
@@ -1034,6 +1038,14 @@ export function tryResolveConditionalValue(
 
 function isCssCalcOperator(operator: string | undefined): operator is "+" | "-" | "*" | "/" {
   return operator === "+" || operator === "-" || operator === "*" || operator === "/";
+}
+
+function isCssCalcSafeOperand(branch: { expr: string; imports: ImportSpec[] }): boolean {
+  return branch.imports.length > 0 || isNumericExpressionSource(branch.expr);
+}
+
+function isNumericExpressionSource(expr: string): boolean {
+  return /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(expr);
 }
 
 function buildCssCalcExprSource(
