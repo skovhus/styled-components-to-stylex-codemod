@@ -83,6 +83,20 @@ const FalsyGuardIcon = styled.span<{ $disabled?: boolean }>`
         `}
 `;
 
+const FocusAliasIcon = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  color: #475569;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:focus:${highlight} {
+        color: ${color("labelTitle")};
+      }
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -92,5 +106,8 @@ export const App = () => (
     <IconWrapper>Plain icon</IconWrapper>
     <FalsyGuardIcon>Enabled icon</FalsyGuardIcon>
     <FalsyGuardIcon $disabled>Disabled icon</FalsyGuardIcon>
+    <FocusAliasIcon $active tabIndex={0}>
+      Focus alias
+    </FocusAliasIcon>
   </div>
 );

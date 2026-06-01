@@ -194,6 +194,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
   type RuntimePseudoAlias = {
     pseudoNames: string[];
+    pseudoKeys: string[];
     styleSelectorExpr: ExpressionKind;
   };
 
@@ -483,14 +484,23 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (selector === "&") {
           return [];
         }
-        const match = selector.match(
-          /^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)*):__SC_EXPR_(\d+)__\s*$/,
-        );
-        if (!match?.[2]) {
+        const placeholderMatch = selector.match(/__SC_EXPR_(\d+)__/);
+        const beforePlaceholder =
+          placeholderMatch?.index === undefined ? "" : selector.slice(0, placeholderMatch.index);
+        const afterPlaceholder =
+          placeholderMatch?.index === undefined
+            ? ""
+            : selector.slice(placeholderMatch.index + placeholderMatch[0].length);
+        const normalizedAfterPlaceholder = afterPlaceholder.trim();
+        const prefixPseudo = beforePlaceholder.replace(/^&/, "").replace(/:$/, "");
+        if (
+          !placeholderMatch?.[1] ||
+          (normalizedAfterPlaceholder !== "" && normalizedAfterPlaceholder !== "&") ||
+          !(prefixPseudo === "" || /^(?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)+$/.test(prefixPseudo))
+        ) {
           return null;
         }
-        const prefixPseudo = match[1] || "";
-        const slotExpr = slotExprById.get(Number(match[2]));
+        const slotExpr = slotExprById.get(Number(placeholderMatch[1]));
         if (!slotExpr || typeof slotExpr !== "object") {
           return null;
         }
@@ -539,13 +549,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!styleSelectorExpr) {
             return null;
           }
+          const pseudoKeys = selectorResult.values.map((value) => `${prefixPseudo}:${value}`);
           const alias = {
             pseudoNames: selectorResult.values,
+            pseudoKeys,
             styleSelectorExpr: styleSelectorExpr as ExpressionKind,
           };
           runtimePseudoAlias = alias;
-          return selectorResult.values.map((value) => ({
-            pseudo: `${prefixPseudo}:${value}`,
+          return pseudoKeys.map((pseudo) => ({
+            pseudo,
             alias,
           }));
         }
@@ -983,6 +995,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         j,
         style,
         pseudoAlias.pseudoNames,
+        pseudoAlias.pseudoKeys,
       );
       if (!pseudoAliasStyles) {
         return false;
@@ -1051,6 +1064,22 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return false;
       }
       if (isCssHelperTaggedTemplate(body.right)) {
+        const inlineMap = resolveCssBranchToInlineMap(body.right as ExpressionKind, {
+          requireResolvedPseudoSelector: true,
+        });
+        if (inlineMap) {
+          const inlineStyle = Object.fromEntries(inlineMap);
+          const pseudoAlias = inlineMapPseudoAliases.get(inlineMap);
+          if (pseudoAlias) {
+            const handled = applyStaticPseudoAliasVariant(testInfo, inlineStyle, pseudoAlias);
+            if (!handled) {
+              markBail();
+            }
+          } else if (!tryApplyRuntimeStyleFunction(testInfo, inlineStyle)) {
+            applyVariant(testInfo, inlineStyle);
+          }
+          return true;
+        }
         const cssNode = body.right as { quasi: ExpressionKind };
         const resolved = resolveCssHelperTemplate(
           cssNode.quasi,
@@ -2768,6 +2797,7 @@ function splitStaticPseudoAliasStyle(
   j: JSCodeshift,
   style: Record<string, unknown>,
   pseudoNames: string[],
+  pseudoKeys: string[],
 ): {
   rootStyle: Record<string, unknown>;
   pseudoAliasStyles: Map<string, Record<string, unknown>> | null;
@@ -2780,7 +2810,7 @@ function splitStaticPseudoAliasStyle(
 
   let hasAliasStyle = false;
   for (const [prop, value] of Object.entries(style)) {
-    const byPseudo = splitPseudoObjectByAliasName(j, value, pseudoNames);
+    const byPseudo = splitPseudoObjectByAliasName(j, value, pseudoNames, pseudoKeys);
     if (!byPseudo) {
       rootStyle[prop] = value;
       continue;
@@ -2804,6 +2834,7 @@ function splitPseudoObjectByAliasName(
   j: JSCodeshift,
   value: unknown,
   pseudoNames: string[],
+  pseudoKeys: string[],
 ): Map<string, ExpressionKind> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -2827,8 +2858,9 @@ function splitPseudoObjectByAliasName(
 
   const defaultValue = byKey.get("default") ?? null;
   const byPseudoName = new Map<string, ExpressionKind>();
-  for (const pseudoName of pseudoNames) {
-    const pseudoKey = `:${pseudoName}`;
+  for (let index = 0; index < pseudoNames.length; index++) {
+    const pseudoName = pseudoNames[index]!;
+    const pseudoKey = pseudoKeys[index] ?? `:${pseudoName}`;
     const pseudoValue = byKey.get(pseudoKey);
     if (!pseudoValue) {
       return null;

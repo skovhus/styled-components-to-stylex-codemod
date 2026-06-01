@@ -76,6 +76,29 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
   );
 }
 
+type FocusAliasIconProps = { active?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+function FocusAliasIcon(props: FocusAliasIconProps) {
+  const { active, ...rest } = props;
+  return (
+    <span
+      {...rest}
+      sx={[
+        styles.focusAliasIcon,
+        active
+          ? highlightStyles({
+              active: styles.focusAliasIconActivePseudoActive,
+              hover: styles.focusAliasIconActivePseudoHover,
+            })
+          : undefined,
+      ]}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -85,6 +108,9 @@ export const App = () => (
     <IconWrapper>Plain icon</IconWrapper>
     <FalsyGuardIcon>Enabled icon</FalsyGuardIcon>
     <FalsyGuardIcon disabled>Disabled icon</FalsyGuardIcon>
+    <FocusAliasIcon active tabIndex={0}>
+      Focus alias
+    </FocusAliasIcon>
   </div>
 );
 
@@ -217,5 +243,23 @@ const styles = stylex.create({
   },
   falsyGuardIconNotDisabled: {
     cursor: "pointer",
+  },
+  focusAliasIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    color: "#475569",
+  },
+  focusAliasIconActivePseudoActive: {
+    color: {
+      default: "#475569",
+      ":focus:active": $colors.labelTitle,
+    },
+  },
+  focusAliasIconActivePseudoHover: {
+    color: {
+      default: "#475569",
+      ":focus:hover": $colors.labelTitle,
+    },
   },
 });
