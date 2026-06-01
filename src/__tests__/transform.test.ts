@@ -11963,6 +11963,36 @@ export const App = () => <Box>Test</Box>;
     expect(result.code).not.toContain("prettier-ignore");
     expect(result.code).toContain("Component description");
   });
+
+  it("should attach standalone // comments to expanded shorthand declarations", () => {
+    const source = `
+import styled from "styled-components";
+
+const Icon = styled.div\`
+  width: 20px !important;
+  height: 20px !important;
+
+  // aligns due to empty space around the icon
+  margin: 0 -1px;
+\`;
+
+export const App = () => <Icon />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "comment-shorthand.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain(`height: "20px !important",
+    // aligns due to empty space around the icon
+    marginBlock: 0,
+    marginInline: -1,`);
+    expect(result.code).not.toContain(`// aligns due to empty space around the icon
+    height: "20px !important",`);
+  });
 });
 
 describe("keyframes in css helper", () => {
