@@ -5703,6 +5703,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   width: 24px;
 }
 
+.xs5h3dt:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 2rem;
+}
+
 .xdzyupr:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: 300px;
 }
