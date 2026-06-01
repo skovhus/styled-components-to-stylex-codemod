@@ -1241,16 +1241,35 @@ describe("TypeScript prepass output refinement", () => {
       "    </label>",
       "  );",
       "}",
+      "",
+      "export function DestructuredControl(props: { className?: string; sx?: stylex.StyleXStyles; children?: React.ReactNode }) {",
+      "  const { className, style } = stylex.props(props.sx);",
+      "  return (",
+      "    <label className={props.className}>",
+      "      <input className={className} style={style} />",
+      "      {props.children}",
+      "    </label>",
+      "  );",
+      "}",
     ].join("\n");
     const wrapperSource = [
       'import styled from "styled-components";',
-      'import { Control } from "./Control";',
+      'import { Control, DestructuredControl } from "./Control";',
       "",
       "const WrappedControl = styled(Control)`",
       "  margin-top: 2px;",
       "`;",
       "",
-      "export const App = () => <WrappedControl>Field</WrappedControl>;",
+      "const WrappedDestructuredControl = styled(DestructuredControl)`",
+      "  margin-top: 4px;",
+      "`;",
+      "",
+      "export const App = () => (",
+      "  <>",
+      "    <WrappedControl>Field</WrappedControl>",
+      "    <WrappedDestructuredControl>Destructured field</WrappedDestructuredControl>",
+      "  </>",
+      ");",
     ].join("\n");
     writeFileSync(controlPath, controlSource);
     writeFileSync(wrapperPath, wrapperSource);
@@ -1265,12 +1284,19 @@ describe("TypeScript prepass output refinement", () => {
           .flatMap((file) => file.components)
           .find((component) => component.name === "Control")?.sxTarget,
       ).toBe("inner");
+      expect(
+        typeScriptMetadata.files
+          .flatMap((file) => file.components)
+          .find((component) => component.name === "DestructuredControl")?.sxTarget,
+      ).toBe("inner");
 
       const after = transformWithWarnings({ source: wrapperSource, path: wrapperPath }, api, {
         adapter: {
           ...fixtureAdapter,
           wrappedComponentInterface(ctx) {
-            return ctx.importedName === "Control" ? { acceptsSx: true } : undefined;
+            return ctx.importedName === "Control" || ctx.importedName === "DestructuredControl"
+              ? { acceptsSx: true }
+              : undefined;
           },
         },
         crossFileInfo: {
@@ -1283,7 +1309,11 @@ describe("TypeScript prepass output refinement", () => {
       expect(after.code).toContain(
         "<Control {...props} {...stylex.props(styles.wrappedControl)} />",
       );
+      expect(after.code).toContain(
+        "<DestructuredControl {...props} {...stylex.props(styles.wrappedDestructuredControl)} />",
+      );
       expect(after.code).not.toContain("sx={[styles.wrappedControl, props.sx]}");
+      expect(after.code).not.toContain("sx={[styles.wrappedDestructuredControl, props.sx]}");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });
     }

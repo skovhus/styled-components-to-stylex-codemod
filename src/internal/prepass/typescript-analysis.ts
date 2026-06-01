@@ -1402,16 +1402,30 @@ function collectStylexPropsBindingNames(
   const visit = (node: ts.Node): void => {
     if (
       ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
       node.initializer &&
       isStylexPropsCallWithSx(node.initializer, sxNames, sxPropContainerNames)
     ) {
-      names.add(node.name.text);
+      if (ts.isIdentifier(node.name)) {
+        names.add(node.name.text);
+      } else if (ts.isObjectBindingPattern(node.name)) {
+        collectBindingPatternIdentifierNames(node.name, names);
+      }
     }
     ts.forEachChild(node, visit);
   };
   ts.forEachChild(body, visit);
   return names;
+}
+
+function collectBindingPatternIdentifierNames(
+  pattern: ts.ObjectBindingPattern,
+  names: Set<string>,
+): void {
+  for (const element of pattern.elements) {
+    if (ts.isIdentifier(element.name)) {
+      names.add(element.name.text);
+    }
+  }
 }
 
 function isStylexPropsCallWithSx(
@@ -1513,14 +1527,16 @@ function jsxOpeningUsesSx(
         sxPropContainerNames,
       );
     }
-    if (
-      !ts.isIdentifier(attribute.name) ||
-      attribute.name.text !== "sx" ||
-      !attribute.initializer
-    ) {
+    if (!ts.isIdentifier(attribute.name) || !attribute.initializer) {
       return false;
     }
     if (!ts.isJsxExpression(attribute.initializer) || !attribute.initializer.expression) {
+      return false;
+    }
+    if (attribute.name.text === "className" || attribute.name.text === "style") {
+      return expressionReferencesStylexPropsBinding(attribute.initializer.expression, sxPropsNames);
+    }
+    if (attribute.name.text !== "sx") {
       return false;
     }
     return expressionReferencesNames(
@@ -1530,6 +1546,14 @@ function jsxOpeningUsesSx(
       sxPropContainerNames,
     );
   });
+}
+
+function expressionReferencesStylexPropsBinding(
+  expr: ts.Expression,
+  sxPropsNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapExpression(expr);
+  return ts.isIdentifier(unwrapped) && sxPropsNames.has(unwrapped.text);
 }
 
 function expressionReferencesNames(
