@@ -34,6 +34,7 @@ pnpm check       # Run full validation (lint, typecheck, tests, knip, Storybook 
 - adjacent sibling selectors (`+`) are not representable losslessly with current StyleX APIs; bail instead of approximating them as general siblings (`~`)
 - run `pnpm check` to validate changes. It covers the same validation categories as `pnpm run ci`, so do not run both unless explicitly requested.
 - when fixing bugs or addressing review comments, add test coverage to document the regression and prevent future breakage. **Prefer extending an existing test case** over creating a new one — only create a new test case when no existing case covers the same category/feature area
+- when addressing PR review comments, resolve the addressed review threads after pushing the fix, then re-fetch thread state to verify they are resolved. Leave only unaddressed, ambiguous, or reviewer-confirmation-needed threads open.
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
 - when `adapter.externalInterface` is `"auto"`, treat prepass as required: if prepass fails, throw (do not silently fall back); only function-based `externalInterface` may continue on prepass failure with a warning
 
