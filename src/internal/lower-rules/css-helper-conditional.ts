@@ -309,7 +309,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return null;
     };
 
-    const replaceParamWithProps = (exprNode: ExpressionKind): ExpressionKind => {
+    const replaceParamWithProps = (
+      exprNode: ExpressionKind,
+      localParamName?: string,
+    ): ExpressionKind => {
       const cloned = cloneAstNode(exprNode);
       // AST traversal requires flexible typing due to jscodeshift's complex type system
       const replace = (node: unknown, parent?: unknown): unknown => {
@@ -321,10 +324,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         const n = node as ASTNodeRecord;
         if (
-          bindings.kind === "simple" &&
+          (bindings.kind === "simple" || localParamName) &&
           isMemberExpression(n) &&
           (n.object as ASTNodeRecord)?.type === "Identifier" &&
-          (n.object as { name?: string })?.name === bindings.paramName &&
+          ((bindings.kind === "simple" &&
+            (n.object as { name?: string })?.name === bindings.paramName) ||
+            (localParamName && (n.object as { name?: string })?.name === localParamName)) &&
           (n.property as ASTNodeRecord)?.type === "Identifier" &&
           ((n.property as { name?: string })?.name ?? "").startsWith("$") &&
           n.computed === false
@@ -333,7 +338,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         if (n.type === "Identifier") {
           const nodeName = (n as { name?: string }).name ?? "";
-          if (bindings.kind === "simple" && nodeName === bindings.paramName) {
+          if (
+            (bindings.kind === "simple" && nodeName === bindings.paramName) ||
+            (localParamName && nodeName === localParamName)
+          ) {
             const p = parent as ASTNodeRecord | undefined;
             const isMemberProp =
               p && isMemberExpression(p) && p.property === n && p.computed === false;
@@ -393,6 +401,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return n;
       };
       return replace(cloned, undefined) as ExpressionKind;
+    };
+
+    const getFunctionParamName = (node: ExpressionKind): string | undefined => {
+      if (node.type !== "ArrowFunctionExpression" && node.type !== "FunctionExpression") {
+        return undefined;
+      }
+      const firstParam = (node as { params?: ASTNode[] }).params?.[0];
+      return firstParam?.type === "Identifier" ? (firstParam as { name: string }).name : undefined;
     };
 
     /** Apply conditional variants, composing with an outer condition, and inject useTheme() for theme refs. */
@@ -774,7 +790,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!slotValueExpr) {
             return null;
           }
-          const rawExpr = replaceParamWithProps(slotValueExpr);
+          const rawExpr = replaceParamWithProps(slotValueExpr, getFunctionParamName(slotExprNode));
           let resolvedExpr: ExpressionKind = rawExpr;
           if (rawExpr.type === "CallExpression") {
             const resolvedCall = tryResolveAdapterCall(rawExpr, d.property, {
@@ -1043,6 +1059,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (
           collectRuntimeStylePropNames(pseudoStyle, importMap, importedStylexIdentifiers).size > 0
         ) {
+          warnings.push({
+            severity: "warning",
+            type: "Conditional `css` block: runtime pseudo-alias styles are not supported",
+            loc: decl.loc,
+          });
           return false;
         }
       }
