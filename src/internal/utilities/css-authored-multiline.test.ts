@@ -1,6 +1,8 @@
+import { compile } from "stylis";
 import jscodeshift from "jscodeshift";
 import { describe, expect, it } from "vitest";
 
+import { normalizeStylisAstToIR } from "../css-ir.js";
 import {
   applyAuthoredMultilineTemplateFormatting,
   findAuthoredDeclarationValue,
@@ -37,7 +39,7 @@ describe("findAuthoredDeclarationValue", () => {
 });
 
 describe("applyAuthoredMultilineTemplateFormatting", () => {
-  it("formats template literal quasis with a leading newline and two-space indent", () => {
+  it("formats template literal quasis with a leading newline and four-space indent", () => {
     const templateLiteral = j.templateLiteral(
       [
         j.templateElement({ raw: "0 0 0 1px ", cooked: "0 0 0 1px " }, false),
@@ -50,8 +52,8 @@ describe("applyAuthoredMultilineTemplateFormatting", () => {
     );
     const authoredValue = "0 0 0 1px __SC_EXPR_0__,\n      0 1px 2px rgba(0, 0, 0, 0.1)";
     const formatted = applyAuthoredMultilineTemplateFormatting(j, templateLiteral, authoredValue);
-    expect(formatted.quasis[0]?.value.raw).toBe("\n  0 0 0 1px ");
-    expect(formatted.quasis[1]?.value.raw).toBe(",\n  0 1px 2px rgba(0, 0, 0, 0.1)");
+    expect(formatted.quasis[0]?.value.raw).toBe("\n    0 0 0 1px ");
+    expect(formatted.quasis[1]?.value.raw).toBe(",\n    0 1px 2px rgba(0, 0, 0, 0.1)");
   });
 });
 
@@ -75,9 +77,6 @@ describe("maybeApplyAuthoredMultilineTemplateFormatting", () => {
     expect(formatted).toBe(templateLiteral);
   });
 });
-
-import { compile } from "stylis";
-import { normalizeStylisAstToIR } from "../css-ir.js";
 
 describe("findAuthoredDeclarationValue integration", () => {
   it("matches stylis IR box-shadow values from nested selectors", () => {
@@ -135,7 +134,7 @@ describe("maybeApplyAuthoredMultilineTemplateFormatting end-to-end", () => {
       property: "box-shadow",
       stylisValueRaw: "0 0 0 1px __SC_EXPR_0__,0 1px 2px rgba(0, 0, 0, 0.1)",
     });
-    expect(formatted.quasis[0]?.value.raw).toBe("\n  0 0 0 1px ");
-    expect(formatted.quasis[1]?.value.raw).toBe(",\n  0 1px 2px rgba(0, 0, 0, 0.1)");
+    expect(formatted.quasis[0]?.value.raw).toBe("\n    0 0 0 1px ");
+    expect(formatted.quasis[1]?.value.raw).toBe(",\n    0 1px 2px rgba(0, 0, 0, 0.1)");
   });
 });

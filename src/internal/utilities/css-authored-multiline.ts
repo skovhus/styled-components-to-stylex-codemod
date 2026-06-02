@@ -7,7 +7,8 @@ import type { API, TemplateLiteral } from "jscodeshift";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { escapeRegex } from "./string-utils.js";
 
-const MULTILINE_INDENT = "  ";
+/** Indentation for continuation lines inside multiline CSS template literals in style objects. */
+const MULTILINE_INDENT = "    ";
 
 type AuthoredValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
 
