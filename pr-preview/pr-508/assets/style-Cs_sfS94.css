@@ -1580,10 +1580,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   transition: box-shadow .2s;
 }
 
-.xspwnv8:not(#\#):not(#\#) {
-  transition: box-shadow .3s ease-in-out;
-}
-
 .x4lopbt:not(#\#):not(#\#) {
   transition: color var(--x1gjurbz);
 }
