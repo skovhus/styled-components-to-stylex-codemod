@@ -77,20 +77,7 @@ export function styleRef(j: JSCodeshift, stylesIdentifier: string, key: string):
   return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)) as ExpressionKind;
 }
 
-function styleXStylesType(j: JSCodeshift) {
-  return j.tsTypeReference(
-    j.tsQualifiedName(j.identifier("stylex"), j.identifier("StyleXStyles")),
-    j.tsTypeParameterInstantiation([
-      j.tsTypeReference(
-        j.identifier("Record"),
-        j.tsTypeParameterInstantiation([
-          j.tsStringKeyword(),
-          j.tsUnionType([j.tsTypeLiteral([]), j.tsNullKeyword()]),
-        ]),
-      ),
-    ]),
-  );
-}
+export const PSEUDO_ALIAS_STYLE_TYPE_NAME = "PseudoAliasStyle";
 
 /**
  * When a style function uses a `props` object parameter, wraps the raw call
@@ -1269,7 +1256,9 @@ function appendPseudoAliasStyleArgs(
     if (emitTypeSyntax) {
       (
         expr as { typeParameters?: ReturnType<JSCodeshift["tsTypeParameterInstantiation"]> }
-      ).typeParameters = j.tsTypeParameterInstantiation([styleXStylesType(j)]);
+      ).typeParameters = j.tsTypeParameterInstantiation([
+        j.tsTypeReference(j.identifier(PSEUDO_ALIAS_STYLE_TYPE_NAME)),
+      ]);
     }
 
     let finalExpr = expr;

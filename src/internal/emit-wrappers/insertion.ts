@@ -6,8 +6,10 @@ import type { ASTNode, Comment } from "jscodeshift";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { buildPolymorphicTypeParams } from "./jsx-builders.js";
 import { ensureReactBinding } from "../utilities/ensure-react-binding.js";
+import { insertAfterLastImport } from "../utilities/import-insertion.js";
 import { importSourceToModuleSpecifier } from "../utilities/import-source.js";
 import { extractDefaultAsTagFromDestructure } from "../utilities/polymorphic-as-detection.js";
+import { PSEUDO_ALIAS_STYLE_TYPE_NAME } from "./style-expr-builders.js";
 
 export function insertEmittedWrappers(args: {
   emitter: WrapperEmitter;
@@ -17,6 +19,13 @@ export function insertEmittedWrappers(args: {
 }): void {
   const { emitter, emitted, needsReactTypeImport, needsUseThemeImport } = args;
   const { root, j, wrapperDecls, exportedComponents, emitTypes } = emitter;
+  const needsPseudoAliasStyleType =
+    emitTypes && wrapperDecls.some((decl) => (decl.pseudoAliasSelectors?.length ?? 0) > 0);
+
+  if (needsPseudoAliasStyleType && !hasTopLevelTypeAlias(emitter, PSEUDO_ALIAS_STYLE_TYPE_NAME)) {
+    const body = root.get().node.program.body as Array<{ type?: string }>;
+    insertAfterLastImport(body, buildPseudoAliasStyleTypeAlias(j) as { type?: string });
+  }
 
   if (emitted.length > 0) {
     // Re-order emitted wrapper nodes to match `wrapperDecls` source order.
@@ -298,6 +307,32 @@ export function insertEmittedWrappers(args: {
       }
     }
   }
+}
+
+function buildPseudoAliasStyleTypeAlias(j: WrapperEmitter["j"]): ASTNode {
+  return j.tsTypeAliasDeclaration(
+    j.identifier(PSEUDO_ALIAS_STYLE_TYPE_NAME),
+    j.tsTypeReference(
+      j.tsQualifiedName(j.identifier("stylex"), j.identifier("StyleXStyles")),
+      j.tsTypeParameterInstantiation([
+        j.tsTypeReference(
+          j.identifier("Record"),
+          j.tsTypeParameterInstantiation([
+            j.tsStringKeyword(),
+            j.tsUnionType([j.tsTypeLiteral([]), j.tsNullKeyword()]),
+          ]),
+        ),
+      ]),
+    ),
+  ) as ASTNode;
+}
+
+function hasTopLevelTypeAlias(emitter: WrapperEmitter, name: string): boolean {
+  return (
+    emitter.root
+      .find(emitter.j.TSTypeAliasDeclaration, { id: { type: "Identifier", name } } as any)
+      .size() > 0
+  );
 }
 
 function buildThemeHookImportSpecifier(

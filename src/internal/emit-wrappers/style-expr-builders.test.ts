@@ -142,7 +142,7 @@ describe("appendAllPseudoStyleArgs", () => {
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
       "baseSx",
       "earlierHoverSx",
-      "active ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n}) : undefined",
+      "active ? highlightStyles<PseudoAliasStyle>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n}) : undefined",
     ]);
   });
 
@@ -167,7 +167,7 @@ describe("appendAllPseudoStyleArgs", () => {
 
     expect(guardProps).toEqual([]);
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
-      "highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n})",
+      "highlightStyles<PseudoAliasStyle>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n})",
       "baseSx",
     ]);
   });

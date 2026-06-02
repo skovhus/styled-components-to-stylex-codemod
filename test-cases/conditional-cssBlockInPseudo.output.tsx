@@ -5,6 +5,8 @@ import { $interaction } from "./lib/interaction.stylex";
 import { $colors, transitionSpeed as transitionSpeedVars, $glowShadow } from "./tokens.stylex";
 import { color, highlightStyles } from "./lib/helpers";
 
+type PseudoAliasStyle = stylex.StyleXStyles<Record<string, {} | null>>;
+
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const theme = useTheme();
 
@@ -34,7 +36,7 @@ function IconWrapper(props: IconWrapperProps) {
     <span
       sx={[
         background
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.iconWrapperBackgroundPseudoActive,
               hover: styles.iconWrapperBackgroundPseudoHover,
             })
@@ -64,7 +66,7 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
     <span
       sx={[
         !disabled &&
-          highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          highlightStyles<PseudoAliasStyle>({
             active: styles.falsyGuardIconNotDisabledPseudoActive,
             hover: styles.falsyGuardIconNotDisabledPseudoHover,
           }),
@@ -89,7 +91,7 @@ function FocusAliasIcon(props: FocusAliasIconProps) {
       {...rest}
       sx={[
         active
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.focusAliasIconActivePseudoActive,
               hover: styles.focusAliasIconActivePseudoHover,
             })
@@ -112,7 +114,7 @@ function AliasWithDefaultIcon(props: AliasWithDefaultIconProps) {
       {...rest}
       sx={[
         active
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.aliasWithDefaultIconActivePseudoActive,
               hover: styles.aliasWithDefaultIconActivePseudoHover,
             })
@@ -135,7 +137,7 @@ function OrderedAliasIcon(props: OrderedAliasIconProps) {
     <span
       sx={[
         active
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.orderedAliasIconActivePseudoActive,
               hover: styles.orderedAliasIconActivePseudoHover,
             })
@@ -161,13 +163,13 @@ function DualAliasIcon(props: DualAliasIconProps) {
       {...rest}
       sx={[
         active
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.dualAliasIconActivePseudoActive,
               hover: styles.dualAliasIconActivePseudoHover,
             })
           : undefined,
         active
-          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          ? highlightStyles<PseudoAliasStyle>({
               active: styles.dualAliasIconActivePseudoActive2,
               hover: styles.dualAliasIconActivePseudoHover2,
             })
