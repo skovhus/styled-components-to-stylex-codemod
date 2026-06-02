@@ -7,11 +7,11 @@ function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        styles.button,
         highlightStyles({
-          active: styles.buttonPseudoActive,
-          hover: styles.buttonPseudoHover,
+          active: styles.buttonPseudoActive as unknown as stylex.StyleXStyles,
+          hover: styles.buttonPseudoHover as unknown as stylex.StyleXStyles,
         }),
+        styles.button,
       ]}
     >
       {children}
@@ -23,11 +23,11 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        styles.resetButton,
         highlightStyles({
-          active: styles.resetButtonPseudoActive,
-          hover: styles.resetButtonPseudoHover,
+          active: styles.resetButtonPseudoActive as unknown as stylex.StyleXStyles,
+          hover: styles.resetButtonPseudoHover as unknown as stylex.StyleXStyles,
         }),
+        styles.resetButton,
       ]}
     >
       {children}
@@ -44,14 +44,14 @@ function HighlightCard(props: HighlightCardProps) {
   return (
     <div
       sx={[
-        styles.highlightCard,
-        interactive && styles.highlightCardInteractive,
         interactive
           ? highlightStyles({
-              active: styles.highlightCardInteractivePseudoActive,
-              hover: styles.highlightCardInteractivePseudoHover,
+              active: styles.highlightCardInteractivePseudoActive as unknown as stylex.StyleXStyles,
+              hover: styles.highlightCardInteractivePseudoHover as unknown as stylex.StyleXStyles,
             })
           : undefined,
+        styles.highlightCard,
+        interactive && styles.highlightCardInteractive,
       ]}
     >
       {children}
@@ -138,13 +138,11 @@ const styles = stylex.create({
   },
   highlightCardInteractivePseudoActive: {
     backgroundColor: {
-      default: "#f8fafc",
       ":active": "#e0f2fe",
     },
   },
   highlightCardInteractivePseudoHover: {
     backgroundColor: {
-      default: "#f8fafc",
       ":hover": "#e0f2fe",
     },
   },

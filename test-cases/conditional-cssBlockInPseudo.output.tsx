@@ -33,17 +33,17 @@ function IconWrapper(props: IconWrapperProps) {
   return (
     <span
       sx={[
+        background
+          ? highlightStyles({
+              active: styles.iconWrapperBackgroundPseudoActive as unknown as stylex.StyleXStyles,
+              hover: styles.iconWrapperBackgroundPseudoHover as unknown as stylex.StyleXStyles,
+            })
+          : undefined,
         styles.iconWrapper,
         background != null && styles.iconWrapperBackgroundColor(background),
         background
           ? styles.iconWrapperBackground({
               background,
-            })
-          : undefined,
-        background
-          ? highlightStyles({
-              active: styles.iconWrapperBackgroundPseudoActive,
-              hover: styles.iconWrapperBackgroundPseudoHover,
             })
           : undefined,
       ]}
@@ -62,13 +62,13 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
   return (
     <span
       sx={[
-        styles.falsyGuardIcon,
-        !disabled && styles.falsyGuardIconNotDisabled,
         !disabled &&
           highlightStyles({
-            active: styles.falsyGuardIconNotDisabledPseudoActive,
-            hover: styles.falsyGuardIconNotDisabledPseudoHover,
+            active: styles.falsyGuardIconNotDisabledPseudoActive as unknown as stylex.StyleXStyles,
+            hover: styles.falsyGuardIconNotDisabledPseudoHover as unknown as stylex.StyleXStyles,
           }),
+        styles.falsyGuardIcon,
+        !disabled && styles.falsyGuardIconNotDisabled,
       ]}
     >
       {children}
@@ -87,13 +87,13 @@ function FocusAliasIcon(props: FocusAliasIconProps) {
     <span
       {...rest}
       sx={[
-        styles.focusAliasIcon,
         active
           ? highlightStyles({
-              active: styles.focusAliasIconActivePseudoActive,
-              hover: styles.focusAliasIconActivePseudoHover,
+              active: styles.focusAliasIconActivePseudoActive as unknown as stylex.StyleXStyles,
+              hover: styles.focusAliasIconActivePseudoHover as unknown as stylex.StyleXStyles,
             })
           : undefined,
+        styles.focusAliasIcon,
       ]}
     />
   );
@@ -173,37 +173,29 @@ const styles = stylex.create({
   },
   iconWrapperBackgroundPseudoActive: {
     backgroundColor: {
-      default: "transparent",
       ":active": $colors.bgBorderSolid,
     },
     borderColor: {
-      default: null,
       ":active": $colors.bgBorderSolid,
     },
     boxShadow: {
-      default: null,
       ":active": $glowShadow.dark,
     },
     transitionDuration: {
-      default: transitionSpeedVars.normal,
       ":active": transitionSpeedVars.fast,
     },
   },
   iconWrapperBackgroundPseudoHover: {
     backgroundColor: {
-      default: "transparent",
       ":hover": $colors.bgBorderSolid,
     },
     borderColor: {
-      default: null,
       ":hover": $colors.bgBorderSolid,
     },
     boxShadow: {
-      default: null,
       ":hover": $glowShadow.dark,
     },
     transitionDuration: {
-      default: transitionSpeedVars.normal,
       ":hover": transitionSpeedVars.fast,
     },
   },
@@ -223,21 +215,17 @@ const styles = stylex.create({
   },
   falsyGuardIconNotDisabledPseudoActive: {
     backgroundColor: {
-      default: "#eef2ff",
       ":active": $colors.bgBaseHover,
     },
     color: {
-      default: "#312e81",
       ":active": $colors.labelTitle,
     },
   },
   falsyGuardIconNotDisabledPseudoHover: {
     backgroundColor: {
-      default: "#eef2ff",
       ":hover": $colors.bgBaseHover,
     },
     color: {
-      default: "#312e81",
       ":hover": $colors.labelTitle,
     },
   },
@@ -252,13 +240,11 @@ const styles = stylex.create({
   },
   focusAliasIconActivePseudoActive: {
     color: {
-      default: "#475569",
       ":focus:active": $colors.labelTitle,
     },
   },
   focusAliasIconActivePseudoHover: {
     color: {
-      default: "#475569",
       ":focus:hover": $colors.labelTitle,
     },
   },

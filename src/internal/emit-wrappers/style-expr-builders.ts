@@ -77,6 +77,17 @@ export function styleRef(j: JSCodeshift, stylesIdentifier: string, key: string):
   return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)) as ExpressionKind;
 }
 
+function styleRefAsStyleXStyles(
+  j: JSCodeshift,
+  stylesIdentifier: string,
+  key: string,
+): ExpressionKind {
+  return j.tsAsExpression(
+    j.tsAsExpression(styleRef(j, stylesIdentifier, key), j.tsUnknownKeyword()),
+    j.tsTypeReference(j.tsQualifiedName(j.identifier("stylex"), j.identifier("StyleXStyles"))),
+  ) as ExpressionKind;
+}
+
 /**
  * When a style function uses a `props` object parameter, wraps the raw call
  * argument in `{ [propsObjectKey]: rawArg }`. Returns `rawArg` unchanged when
@@ -1232,18 +1243,18 @@ function appendPseudoAliasStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   if (!entries?.length) {
     return [];
   }
   const guardProps: string[] = [];
+  const aliasExprs: ExpressionKind[] = [];
   for (const entry of entries) {
     const properties = entry.pseudoNames.map((name, i) =>
       j.property(
         "init",
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
-        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
+        styleRefAsStyleXStyles(j, stylesIdentifier, entry.styleKeys[i]!),
       ),
     );
     const expr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
@@ -1265,11 +1276,16 @@ function appendPseudoAliasStyleArgs(
       });
     }
 
-    if (orderedEntries && entry.sourceOrder !== undefined) {
-      orderedEntries.push({ order: entry.sourceOrder, expr: finalExpr });
-    } else {
-      styleArgs.push(finalExpr);
-    }
+    aliasExprs.push(finalExpr);
+  }
+
+  if (aliasExprs.length > 0) {
+    // StyleX composition de-dupes by CSS property key. If a runtime-selected
+    // pseudo-alias style is placed after normal-state styles, it can replace
+    // those classes even when the selected style only contains pseudo branches.
+    // Prepending keeps normal-state declarations active while the pseudo
+    // selector specificity still wins for hover/active/focus states.
+    styleArgs.unshift(...aliasExprs);
   }
   return guardProps;
 }
@@ -1310,14 +1326,12 @@ export function appendAllPseudoStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
-  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   const guardProps = appendPseudoAliasStyleArgs(
     d.pseudoAliasSelectors,
     styleArgs,
     j,
     stylesIdentifier,
-    orderedEntries,
   );
   for (const gp of appendPseudoExpandStyleArgs(
     d.pseudoExpandSelectors,
@@ -1405,13 +1419,7 @@ export function buildAllVariantAndStyleExprs(opts: {
     buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
   }
 
-  for (const gp of appendAllPseudoStyleArgs(
-    d,
-    styleArgs,
-    j,
-    stylesIdentifier,
-    hasSourceOrder ? orderedEntries : undefined,
-  )) {
+  for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
     if (!destructureProps.includes(gp)) {
       destructureProps.push(gp);
     }

@@ -782,13 +782,7 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       },
     );
 
-    for (const gp of appendAllPseudoStyleArgs(
-      d,
-      styleArgs,
-      j,
-      stylesIdentifier,
-      hasSourceOrder ? orderedEntries : undefined,
-    )) {
+    for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
         styleOnlyConditionProps.add(gp);

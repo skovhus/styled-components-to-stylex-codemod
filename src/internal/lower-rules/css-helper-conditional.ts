@@ -2864,7 +2864,6 @@ function splitPseudoObjectByAliasName(
     }
   }
 
-  const defaultValue = byKey.get("default") ?? null;
   const byPseudoName = new Map<string, ExpressionKind>();
   for (let index = 0; index < pseudoNames.length; index++) {
     const pseudoName = pseudoNames[index]!;
@@ -2876,11 +2875,6 @@ function splitPseudoObjectByAliasName(
     byPseudoName.set(
       pseudoName,
       j.objectExpression([
-        j.property(
-          "init",
-          j.identifier("default"),
-          defaultValue ? cloneAstNode(defaultValue) : j.literal(null),
-        ),
         j.property("init", j.literal(pseudoKey), cloneAstNode(pseudoValue) as ExpressionKind),
       ]) as ExpressionKind,
     );
