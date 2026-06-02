@@ -246,7 +246,10 @@ export const highlightExpand = () => (Browser.isTouchDevice ? "active" : "hover"
  * Helper that wraps the conditional pseudo selection in a function call,
  * making the pairing explicit and enabling lint enforcement.
  */
-export function highlightStyles<T>(variants: { active: T; hover: T }): T {
+export function highlightStyles<TActive, THover>(variants: {
+  active: TActive;
+  hover: THover;
+}): TActive | THover {
   return Browser.isTouchDevice ? variants.active : variants.hover;
 }
 

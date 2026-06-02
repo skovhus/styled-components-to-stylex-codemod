@@ -3,8 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 import { TouchDeviceToggle } from "./lib/TouchDeviceToggle";
 
-type PseudoAliasStyle = stylex.StyleXStyles<Record<string, {} | null>>;
-
 /**
  * Interpolated pseudo-class selector using a runtime variable.
  * `&:${highlight}` expands to `:active` and `:hover` pseudo style objects,
@@ -14,7 +12,7 @@ function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles<PseudoAliasStyle>({
+        highlightStyles({
           active: styles.buttonPseudoActive,
           hover: styles.buttonPseudoHover,
         }),
@@ -34,7 +32,7 @@ function SpecificButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles<PseudoAliasStyle>({
+        highlightStyles({
           active: styles.specificButtonPseudoActive,
           hover: styles.specificButtonPseudoHover,
         }),

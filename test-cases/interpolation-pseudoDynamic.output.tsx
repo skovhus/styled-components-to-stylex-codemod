@@ -2,7 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-type PseudoAliasStyle = stylex.StyleXStyles<Record<string, {} | null>>;
 type ButtonProps = { active?: boolean } & Omit<
   React.ComponentProps<"button">,
   "className" | "style" | "sx"
@@ -14,7 +13,7 @@ function Button(props: ButtonProps) {
     <button
       sx={[
         active
-          ? highlightStyles<PseudoAliasStyle>({
+          ? highlightStyles({
               active: styles.buttonActivePseudoActive,
               hover: styles.buttonActivePseudoHover,
             })
@@ -41,7 +40,7 @@ function InvertedButton(props: InvertedButtonProps) {
     <button
       sx={[
         !$disabled &&
-          highlightStyles<PseudoAliasStyle>({
+          highlightStyles({
             active: styles.invertedButtonNotDisabledPseudoActive,
             hover: styles.invertedButtonNotDisabledPseudoHover,
           }),

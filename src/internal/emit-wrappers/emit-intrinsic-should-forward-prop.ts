@@ -404,7 +404,6 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
       j,
       stylesIdentifier,
       hasSourceOrder ? orderedEntries : undefined,
-      emitter.emitTypes,
     );
 
     buildVariantStyleExprs({

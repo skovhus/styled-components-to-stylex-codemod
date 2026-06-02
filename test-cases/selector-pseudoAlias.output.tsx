@@ -3,13 +3,11 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { highlightStyles } from "./lib/helpers";
 
-type PseudoAliasStyle = stylex.StyleXStyles<Record<string, {} | null>>;
-
 function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles<PseudoAliasStyle>({
+        highlightStyles({
           active: styles.buttonPseudoActive,
           hover: styles.buttonPseudoHover,
         }),
@@ -25,7 +23,7 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles<PseudoAliasStyle>({
+        highlightStyles({
           active: styles.resetButtonPseudoActive,
           hover: styles.resetButtonPseudoHover,
         }),
@@ -48,7 +46,7 @@ function HighlightCard(props: HighlightCardProps) {
     <div
       sx={[
         interactive
-          ? highlightStyles<PseudoAliasStyle>({
+          ? highlightStyles({
               active: styles.highlightCardInteractivePseudoActive,
               hover: styles.highlightCardInteractivePseudoHover,
             })

@@ -142,7 +142,7 @@ describe("appendAllPseudoStyleArgs", () => {
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
       "baseSx",
       "earlierHoverSx",
-      "active ? highlightStyles<PseudoAliasStyle>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n}) : undefined",
+      "active ? highlightStyles({\n    active: styles.iconActive,\n    hover: styles.iconHover\n}) : undefined",
     ]);
   });
 
@@ -167,12 +167,12 @@ describe("appendAllPseudoStyleArgs", () => {
 
     expect(guardProps).toEqual([]);
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
-      "highlightStyles<PseudoAliasStyle>({\n    active: styles.iconActive,\n    hover: styles.iconHover\n})",
+      "highlightStyles({\n    active: styles.iconActive,\n    hover: styles.iconHover\n})",
       "baseSx",
     ]);
   });
 
-  it("omits pseudo alias type arguments for JS output", () => {
+  it("omits pseudo alias type arguments", () => {
     const styleArgs = [j.identifier("baseSx") as ExpressionKind];
     const decl = {
       localName: "Icon",
@@ -189,7 +189,7 @@ describe("appendAllPseudoStyleArgs", () => {
       ],
     } satisfies StyledDecl;
 
-    const guardProps = appendAllPseudoStyleArgs(decl, styleArgs, j, "styles", undefined, false);
+    const guardProps = appendAllPseudoStyleArgs(decl, styleArgs, j, "styles");
 
     expect(guardProps).toEqual([]);
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([

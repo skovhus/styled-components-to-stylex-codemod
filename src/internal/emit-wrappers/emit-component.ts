@@ -788,7 +788,6 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       j,
       stylesIdentifier,
       hasSourceOrder ? orderedEntries : undefined,
-      emitter.emitTypes,
     )) {
       if (!destructureProps.includes(gp)) {
         destructureProps.push(gp);
