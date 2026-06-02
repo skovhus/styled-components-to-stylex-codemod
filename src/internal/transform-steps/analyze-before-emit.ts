@@ -1071,7 +1071,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         if (
           hasDollarModuleBinding &&
           (!transientRenameHasNormalizedPropUsage(decl, prop) ||
-            transientRenameWouldTouchExpressionIdentifier(decl, prop))
+            transientRenameWouldTouchExpressionIdentifier(decl, prop) ||
+            transientRenameWouldTouchResolvedStyleObject(decl, prop, ctx.resolvedStyleObjects))
         ) {
           propsToSkip.push(prop);
         }
@@ -2739,6 +2740,23 @@ function transientRenameWouldTouchExpressionIdentifier(
   }
   for (const inlineStyle of decl.inlineStyleProps ?? []) {
     if (astContainsIdentifier(inlineStyle.expr, propName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function transientRenameWouldTouchResolvedStyleObject(
+  decl: StyledDecl,
+  propName: string,
+  resolvedStyleObjects: Map<string, unknown> | undefined,
+): boolean {
+  if (!resolvedStyleObjects) {
+    return false;
+  }
+  for (const styleKey of collectAllStyleKeysForDecl(decl)) {
+    const value = resolvedStyleObjects.get(styleKey);
+    if (value && typeof value === "object" && astContainsIdentifier(value, propName)) {
       return true;
     }
   }
