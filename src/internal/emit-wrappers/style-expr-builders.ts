@@ -1248,6 +1248,7 @@ function appendPseudoAliasStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
   orderedEntries?: OrderedStyleEntry[],
+  emitTypeSyntax = true,
 ): string[] {
   if (!entries?.length) {
     return [];
@@ -1265,9 +1266,11 @@ function appendPseudoAliasStyleArgs(
     const expr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
       j.objectExpression(properties),
     ]) as ExpressionKind;
-    (
-      expr as { typeParameters?: ReturnType<JSCodeshift["tsTypeParameterInstantiation"]> }
-    ).typeParameters = j.tsTypeParameterInstantiation([styleXStylesType(j)]);
+    if (emitTypeSyntax) {
+      (
+        expr as { typeParameters?: ReturnType<JSCodeshift["tsTypeParameterInstantiation"]> }
+      ).typeParameters = j.tsTypeParameterInstantiation([styleXStylesType(j)]);
+    }
 
     let finalExpr = expr;
     if (entry.guard) {
@@ -1339,6 +1342,7 @@ export function appendAllPseudoStyleArgs(
   j: JSCodeshift,
   stylesIdentifier: string,
   orderedEntries?: OrderedStyleEntry[],
+  emitTypeSyntax = true,
 ): string[] {
   const guardProps = appendPseudoAliasStyleArgs(
     d.pseudoAliasSelectors,
@@ -1346,6 +1350,7 @@ export function appendAllPseudoStyleArgs(
     j,
     stylesIdentifier,
     orderedEntries,
+    emitTypeSyntax,
   );
   for (const gp of appendPseudoExpandStyleArgs(
     d.pseudoExpandSelectors,
@@ -1439,6 +1444,7 @@ export function buildAllVariantAndStyleExprs(opts: {
     j,
     stylesIdentifier,
     hasSourceOrder ? orderedEntries : undefined,
+    emitter.emitTypes,
   )) {
     if (!destructureProps.includes(gp)) {
       destructureProps.push(gp);

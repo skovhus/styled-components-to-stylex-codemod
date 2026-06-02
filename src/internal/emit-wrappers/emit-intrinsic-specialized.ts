@@ -253,7 +253,14 @@ export function emitInputWrappers(ctx: EmitIntrinsicContext): void {
       ]),
     ];
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendAllPseudoStyleArgs(
+      d,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      undefined,
+      emitter.emitTypes,
+    );
 
     // Extra props to destructure: type, plus readOnly if [readonly] is used
     const extraDestructureProps = ["type"];
@@ -343,7 +350,14 @@ export function emitLinkWrappers(ctx: EmitIntrinsicContext): void {
       ]),
     ];
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendAllPseudoStyleArgs(
+      d,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      undefined,
+      emitter.emitTypes,
+    );
 
     // Derived variable declarations (isHttps, isPdf, isExternal)
     // Use optional chaining on href: href?.startsWith("https")
@@ -499,7 +513,14 @@ export function emitEnumVariantWrappers(ctx: EmitIntrinsicContext): void {
         ),
       ];
 
-      const pseudoGuardPropsEnum = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+      const pseudoGuardPropsEnum = appendAllPseudoStyleArgs(
+        d,
+        styleArgs,
+        j,
+        stylesIdentifier,
+        undefined,
+        emitter.emitTypes,
+      );
 
       // Inject guard props into the destructuring pattern
       if (pseudoGuardPropsEnum.length > 0) {

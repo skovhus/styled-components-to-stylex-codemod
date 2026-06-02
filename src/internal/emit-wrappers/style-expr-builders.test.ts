@@ -171,4 +171,30 @@ describe("appendAllPseudoStyleArgs", () => {
       "baseSx",
     ]);
   });
+
+  it("omits pseudo alias type arguments for JS output", () => {
+    const styleArgs = [j.identifier("baseSx") as ExpressionKind];
+    const decl = {
+      localName: "Icon",
+      styleKey: "icon",
+      base: { kind: "intrinsic", tagName: "span" },
+      rules: [],
+      templateExpressions: [],
+      pseudoAliasSelectors: [
+        {
+          styleKeys: ["iconActive", "iconHover"],
+          styleSelectorExpr: j.identifier("highlightStyles"),
+          pseudoNames: ["active", "hover"],
+        },
+      ],
+    } satisfies StyledDecl;
+
+    const guardProps = appendAllPseudoStyleArgs(decl, styleArgs, j, "styles", undefined, false);
+
+    expect(guardProps).toEqual([]);
+    expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
+      "highlightStyles({\n    active: styles.iconActive,\n    hover: styles.iconHover\n})",
+      "baseSx",
+    ]);
+  });
 });
