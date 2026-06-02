@@ -13,7 +13,7 @@ import type {
   ResolveValueContext,
 } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { LocalStylexVarRef, StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
@@ -91,6 +91,7 @@ import {
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
+import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
@@ -3503,15 +3504,8 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   d: CssDeclarationIR;
   decl: StyledDecl;
   expr: unknown;
-  getOrCreateLocalStylexVar: (
-    cssName: string,
-    defaultValue: string,
-  ) => {
-    cssName: string;
-    groupName: string;
-    keyName: string;
-  };
-  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
 }): boolean {
   const { j, d, decl, expr, getOrCreateLocalStylexVar, inlineStyleProps } = args;
   if (!expr || typeof expr !== "object") {
@@ -3557,7 +3551,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (!defaultValue) {
     return false;
   }
-  getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
+  const localVar = getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
   const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
   const valueExpr = buildTemplateWithStaticParts(
     j,
@@ -3568,6 +3562,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   inlineStyleProps.push({
     prop: customValue.cssName,
     expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
+    keyExpr: stylexVarMemberExpression(j, localVar),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);

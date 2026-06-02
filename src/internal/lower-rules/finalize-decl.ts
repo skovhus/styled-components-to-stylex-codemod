@@ -44,6 +44,7 @@ import {
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
+import { stylexVarMemberExpression } from "../transform-css-vars.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -152,7 +153,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     if (!defaultValue) {
       continue;
     }
-    state.getOrCreateLocalStylexVar(prop, defaultValue);
+    const localVar = state.getOrCreateLocalStylexVar(prop, defaultValue);
+    inlineStyleProp.keyExpr = stylexVarMemberExpression(state.j, localVar);
     if (expr && typeof expr === "object" && isAstNode(expr)) {
       rewriteCssVarsInAstNode(expr as { type: string }, localVarValues, varsToDrop);
     }

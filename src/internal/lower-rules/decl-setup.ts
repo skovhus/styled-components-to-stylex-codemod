@@ -107,6 +107,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     prop: string;
     expr: ExpressionKind;
     jsxProp?: string;
+    keyExpr?: ExpressionKind;
   }> = [];
   const localVarValues = new Map<string, string>();
   // Track properties defined by composed css helpers along with their values
