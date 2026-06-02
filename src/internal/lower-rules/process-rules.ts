@@ -33,6 +33,7 @@ import {
   toStyleKey,
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
+import { maybeApplyAuthoredMultilineTemplateFormatting } from "../utilities/css-authored-multiline.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
@@ -1900,7 +1901,7 @@ function processDeclarationsIntoBucket(
   rule: { declarations: CssDeclarationIR[] },
   bucket: Record<string, unknown>,
   j: DeclProcessingState["state"]["j"],
-  decl: { templateExpressions: unknown[] },
+  decl: { templateExpressions: unknown[]; rawCss?: string },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   options?: {
@@ -1941,7 +1942,7 @@ function writeResolvedDeclaration(
   d: CssDeclarationIR,
   bucket: Record<string, unknown>,
   j: DeclProcessingState["state"]["j"],
-  decl: { templateExpressions: unknown[] },
+  decl: { templateExpressions: unknown[]; rawCss?: string },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   writtenProps: Set<string>,
@@ -1977,7 +1978,21 @@ function writeResolvedDeclaration(
     if (out.value.kind === "static") {
       bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
     } else {
-      bucket[out.prop] = buildInterpolatedValue(j, { value: out.value }, resolveResult);
+      const built = buildInterpolatedValue(j, { value: out.value }, resolveResult);
+      const cssProperty = (d.property ?? "").trim();
+      bucket[out.prop] =
+        built &&
+        typeof built === "object" &&
+        "type" in built &&
+        (built as { type?: string }).type === "TemplateLiteral"
+          ? maybeApplyAuthoredMultilineTemplateFormatting({
+              j,
+              templateLiteral: built as import("jscodeshift").TemplateLiteral,
+              rawCss: decl.rawCss,
+              property: cssProperty,
+              stylisValueRaw: d.valueRaw ?? "",
+            })
+          : built;
     }
     writtenProps.add(out.prop);
   }
@@ -1997,7 +2012,7 @@ function resolveAllSlots(
     value: { kind: string; parts?: Array<{ kind: string; slotId?: number }> };
     property?: string;
   },
-  decl: { templateExpressions: unknown[] },
+  decl: { templateExpressions: unknown[]; rawCss?: string },
   resolveThemeValue: (expr: unknown) => unknown,
   resolveThemeValueFromFn: (expr: unknown) => unknown,
   callResolver?: AdapterCallResolver,

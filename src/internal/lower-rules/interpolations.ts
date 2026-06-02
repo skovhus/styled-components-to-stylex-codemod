@@ -8,6 +8,7 @@ import {
   getMemberPathFromIdentifier,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
+import { maybeApplyAuthoredMultilineTemplateFormatting } from "../utilities/css-authored-multiline.js";
 import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
@@ -249,7 +250,7 @@ export function tryHandleInterpolatedStringValue(args: {
     return true;
   }
 
-  const tl = buildInterpolatedTemplate({
+  const built = buildInterpolatedTemplate({
     j,
     decl,
     cssValue: d.value,
@@ -257,9 +258,23 @@ export function tryHandleInterpolatedStringValue(args: {
     resolveImportedValueExpr,
     addImport,
   });
-  if (!tl) {
+  if (!built) {
     return false;
   }
+  const cssProperty = (d.property ?? "").trim();
+  const tl =
+    built &&
+    typeof built === "object" &&
+    "type" in built &&
+    (built as { type?: string }).type === "TemplateLiteral"
+      ? maybeApplyAuthoredMultilineTemplateFormatting({
+          j,
+          templateLiteral: built as import("jscodeshift").TemplateLiteral,
+          rawCss: decl.rawCss,
+          property: cssProperty,
+          stylisValueRaw: d.valueRaw ?? "",
+        })
+      : built;
 
   const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
