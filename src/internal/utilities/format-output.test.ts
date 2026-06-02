@@ -34,7 +34,7 @@ describe("indentMultilineTemplateLiterals", () => {
 });
 
 describe("formatOutput", () => {
-  it("applies multiline template literal indentation", () => {
+  it("applies multiline template literal indentation inside stylex.create", () => {
     const input = [
       "const styles = stylex.create({",
       "  tab: {",
@@ -50,5 +50,28 @@ describe("formatOutput", () => {
     expect(output).toContain("':is([data-state=\"active\"])': `");
     expect(output).toContain("      0 0 0 1px,");
     expect(output).toContain("      0 1px`,");
+  });
+
+  it("does not reindent multiline template literals outside stylex.create", () => {
+    const input = [
+      "const messages = {",
+      "  text: `",
+      "    hello",
+      "  `,",
+      "};",
+      "const styles = stylex.create({",
+      "  tab: {",
+      "    ':is([data-state=\"active\"])': `",
+      "  0 0 0 1px,",
+      "  0 1px`,",
+      "  },",
+      "});",
+      "",
+    ].join("\n");
+
+    const output = formatOutput(input);
+    expect(output).toContain("    hello");
+    expect(output).toContain("  `,");
+    expect(output).toContain("      0 0 0 1px,");
   });
 });
