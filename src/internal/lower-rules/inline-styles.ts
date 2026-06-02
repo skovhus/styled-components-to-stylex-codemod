@@ -197,6 +197,23 @@ export function collectPropsFromArrowFnDestructured(expr: any): Set<string> {
   return props;
 }
 
+export function collectDollarParamBindingIdentifiers(expr: any): Set<string> {
+  const identifiers = new Set<string>();
+  if (!expr || expr.type !== "ArrowFunctionExpression") {
+    return identifiers;
+  }
+  const bindings = getArrowFnParamBindings(expr);
+  if (!bindings || bindings.kind !== "destructured") {
+    return identifiers;
+  }
+  for (const localName of bindings.bindings.keys()) {
+    if (localName.startsWith("$")) {
+      identifiers.add(localName);
+    }
+  }
+  return identifiers;
+}
+
 export function countConditionalExpressions(node: any): number {
   let count = 0;
   walkAst(node, (n) => {
@@ -445,7 +462,10 @@ export function collectPropsFromExpressions(
 export function normalizeDollarProps(
   j: JSCodeshift,
   exprNode: ExpressionKind,
-  opts?: { skipIdentifiers?: ReadonlySet<string> },
+  opts?: {
+    skipIdentifiers?: ReadonlySet<string>;
+    localDollarIdentifiers?: ReadonlySet<string>;
+  },
 ): ExpressionKind {
   return mapAst(cloneAstNode(exprNode), (n) => {
     // Handle props.$foo -> props.foo (strip $ from property name)
@@ -466,7 +486,11 @@ export function normalizeDollarProps(
     // Handle $foo identifier -> props.foo
     if (n.type === "Identifier") {
       const identName = n.name as string | undefined;
-      if (identName?.startsWith("$") && !opts?.skipIdentifiers?.has(identName)) {
+      const isLocalDollarIdentifier = !!identName && opts?.localDollarIdentifiers?.has(identName);
+      if (
+        identName?.startsWith("$") &&
+        (isLocalDollarIdentifier || !opts?.skipIdentifiers?.has(identName))
+      ) {
         return j.memberExpression(j.identifier("props"), j.identifier(identName.slice(1)));
       }
     }

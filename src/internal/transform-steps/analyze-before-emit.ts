@@ -1066,7 +1066,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       // renameIdentifiersInAst cannot distinguish prop references from other bindings.
       const propsToSkip: string[] = [];
       for (const prop of renames.keys()) {
-        if (isModuleScopeBinding(root, j, prop, decl.localName) || resolverImportNames.has(prop)) {
+        const hasDollarModuleBinding =
+          isModuleScopeBinding(root, j, prop, decl.localName) || resolverImportNames.has(prop);
+        if (
+          hasDollarModuleBinding &&
+          (!transientRenameHasNormalizedPropUsage(decl, prop) ||
+            transientRenameWouldTouchExpressionIdentifier(decl, prop))
+        ) {
           propsToSkip.push(prop);
         }
       }
@@ -2715,6 +2721,74 @@ function renameIdentifiersInAst(node: unknown, renames: Map<string, string>): vo
       renameIdentifiersInAst(value, renames);
     }
   }
+}
+
+function transientRenameWouldTouchExpressionIdentifier(
+  decl: StyledDecl,
+  propName: string,
+): boolean {
+  for (const styleFn of decl.styleFnFromProps ?? []) {
+    if (astContainsIdentifier(styleFn.callArg, propName)) {
+      return true;
+    }
+    for (const extra of styleFn.extraCallArgs ?? []) {
+      if (astContainsIdentifier(extra.callArg, propName)) {
+        return true;
+      }
+    }
+  }
+  for (const inlineStyle of decl.inlineStyleProps ?? []) {
+    if (astContainsIdentifier(inlineStyle.expr, propName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function transientRenameHasNormalizedPropUsage(decl: StyledDecl, propName: string): boolean {
+  const normalized = propName.startsWith("$") ? propName.slice(1) : propName;
+  for (const styleFn of decl.styleFnFromProps ?? []) {
+    if (astContainsIdentifier(styleFn.callArg, normalized)) {
+      return true;
+    }
+    for (const extra of styleFn.extraCallArgs ?? []) {
+      if (astContainsIdentifier(extra.callArg, normalized)) {
+        return true;
+      }
+    }
+  }
+  for (const inlineStyle of decl.inlineStyleProps ?? []) {
+    if (astContainsIdentifier(inlineStyle.expr, normalized)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function astContainsIdentifier(node: unknown, name: string): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  const n = node as Record<string, unknown>;
+  if (typeof n.type !== "string") {
+    return false;
+  }
+  if (n.type === "Identifier" && n.name === name) {
+    return true;
+  }
+  for (const [key, value] of Object.entries(n)) {
+    if (AST_METADATA_KEYS.has(key)) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      if (value.some((item) => astContainsIdentifier(item, name))) {
+        return true;
+      }
+    } else if (value && typeof value === "object" && astContainsIdentifier(value, name)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

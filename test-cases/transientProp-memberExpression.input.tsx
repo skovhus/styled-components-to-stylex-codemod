@@ -2,6 +2,7 @@ import React from "react";
 import styled from "styled-components";
 import { color } from "./lib/helpers";
 import { motion, type MotionValue } from "./lib/framer-motion";
+import { $colors as $glowShadow } from "./tokens.stylex";
 import { UserAvatar } from "./lib/user-avatar";
 
 const ComponentWrapper = styled(motion.div)<{ $isOpen: boolean }>`
@@ -25,8 +26,8 @@ const PresenceAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
   transition: box-shadow 0.3s ease-in-out;
 `;
 
-const DestructuredShadow = styled.div<{ $blur: number; $color: string }>`
-  box-shadow: 0 0 ${({ $blur }) => $blur}px ${({ $color }) => $color};
+const DestructuredShadow = styled.div<{ $blur: number; $glowShadow: string }>`
+  box-shadow: 0 0 ${({ $blur }) => $blur}px ${({ $glowShadow }) => $glowShadow};
 `;
 
 const ZoomPreviewImage = styled(motion.img)<{
@@ -80,7 +81,7 @@ export const App = () => (
     <HighlightedAvatar user="Bob" size="tiny" />
     <PresenceAvatar user="Carol" size="small" $highlightColor="green" />
     <PresenceAvatar user="Dave" size="tiny" />
-    <DestructuredShadow $blur={4} $color="rgba(0, 0, 0, 0.35)">
+    <DestructuredShadow $blur={4} $glowShadow="rgba(0, 0, 0, 0.35)">
       Destructured shadow
     </DestructuredShadow>
   </div>

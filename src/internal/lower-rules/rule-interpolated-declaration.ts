@@ -66,6 +66,7 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 
 import {
   buildTemplateWithStaticParts,
+  collectDollarParamBindingIdentifiers,
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
   getImportedStylexIdentifiers,
@@ -373,8 +374,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
       currentStaticPart = "";
       const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+      const localDollarIdentifiers =
+        rawExpr.type === "ArrowFunctionExpression"
+          ? collectDollarParamBindingIdentifiers(rawExpr)
+          : undefined;
       expressions.push(
-        normalizeDollarProps(j, slotExpr, { skipIdentifiers: importedStylexIdentifiers }),
+        normalizeDollarProps(j, slotExpr, {
+          skipIdentifiers: importedStylexIdentifiers,
+          localDollarIdentifiers,
+        }),
       );
     }
 

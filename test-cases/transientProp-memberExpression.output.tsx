@@ -1,8 +1,8 @@
 import React from "react";
 import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
-import { $colors } from "./tokens.stylex";
 import { motion, type MotionValue } from "./lib/framer-motion";
+import { $colors } from "./tokens.stylex";
 import { UserAvatar } from "./lib/user-avatar";
 
 type ComponentWrapperProps = {
@@ -67,16 +67,16 @@ function PresenceAvatar(props: PresenceAvatarProps) {
 
 type DestructuredShadowProps = React.PropsWithChildren<{
   blur: number;
-  color: string;
+  glowShadow: string;
 }>;
 
 function DestructuredShadow(props: DestructuredShadowProps) {
-  const { children, blur, color } = props;
+  const { children, blur, glowShadow } = props;
   return (
     <div
       sx={styles.destructuredShadowBoxShadow({
         blur,
-        color,
+        glowShadow,
       })}
     >
       {children}
@@ -158,7 +158,7 @@ export const App = () => (
     <HighlightedAvatar user="Bob" size="tiny" />
     <PresenceAvatar user="Carol" size="small" highlightColor="green" />
     <PresenceAvatar user="Dave" size="tiny" />
-    <DestructuredShadow blur={4} color="rgba(0, 0, 0, 0.35)">
+    <DestructuredShadow blur={4} glowShadow="rgba(0, 0, 0, 0.35)">
       Destructured shadow
     </DestructuredShadow>
   </div>
@@ -192,7 +192,7 @@ const styles = stylex.create({
     boxShadow: `0 0 0 1px ${$colors.bgBase},0 0 0 2px ${props.highlightColor ?? "transparent"},0 0 0 3px ${props.highlightColor ? theme.color.bgBase : "transparent"}`,
   }),
   destructuredShadowBoxShadow: (props) => ({
-    boxShadow: `0 0 ${props.blur}px ${props.color}`,
+    boxShadow: `0 0 ${props.blur}px ${props.glowShadow}`,
   }),
   zoomPreviewImage: {
     objectFit: "contain",
