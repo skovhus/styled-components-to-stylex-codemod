@@ -1785,6 +1785,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/cssHelper-conditionalProp.input.tsx:InvertedTernaryPureDynamicContainer": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/cssHelper-conditionalProp.input.tsx:MixedContainer": {
           "as": false,
           "className": false,
@@ -1795,6 +1804,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "styles": false,
         },
         "test-cases/cssHelper-conditionalProp.input.tsx:PureDynamicContainer": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
+        "test-cases/cssHelper-conditionalProp.input.tsx:TernaryPureDynamicContainer": {
           "as": false,
           "className": false,
           "elementProps": true,

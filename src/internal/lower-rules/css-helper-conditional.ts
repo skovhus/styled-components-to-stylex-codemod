@@ -882,12 +882,47 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       );
       const referencesTheme = styleReferencesRuntimeTheme(style);
       const dynamicProps = opts?.dynamicProps ?? [];
-      if (
-        basePropNames.size === 0 &&
-        (dynamicProps.length === 0 || Object.keys(style).length === 0) &&
-        !referencesTheme
-      ) {
+      if (basePropNames.size === 0 && dynamicProps.length === 0 && !referencesTheme) {
         return false;
+      }
+
+      if (Object.keys(style).length === 0 && dynamicProps.length > 0 && !referencesTheme) {
+        for (const dyn of dynamicProps) {
+          const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
+          const conditionWhen =
+            normalizeTransientPropName(dyn.jsxProp) ===
+            normalizeTransientPropName(testInfo.propName)
+              ? undefined
+              : testInfo.when;
+          if (!styleFnDecls.has(fnKey)) {
+            const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
+            const param = j.identifier(dynParamName);
+            annotateParamFromJsxProp(param, dyn.jsxProp);
+            const p = makeCssProperty(j, dyn.stylexProp, dynParamName);
+            const bodyExpr = j.objectExpression([p]);
+            styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
+          }
+          if (
+            !styleFnFromProps.some(
+              (p) =>
+                p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.conditionWhen === conditionWhen,
+            )
+          ) {
+            styleFnFromProps.push({
+              fnKey,
+              jsxProp: dyn.jsxProp,
+              conditionWhen,
+            });
+          }
+          ensureShouldForwardPropDrop(decl, dyn.jsxProp);
+        }
+        for (const propName of testInfo.allPropNames ?? [testInfo.propName]) {
+          if (propName) {
+            ensureShouldForwardPropDrop(decl, propName);
+          }
+        }
+        decl.needsWrapperComponent = true;
+        return true;
       }
 
       const runtimeStyle = { ...style };
@@ -2253,6 +2288,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         markBail();
         return true;
       }
+      if (
+        tryApplyRuntimeStyleFunction(testInfo, consResolved.style, {
+          dynamicProps: consResolved.dynamicProps,
+        })
+      ) {
+        applyConditionalVariants(consResolved.conditionalVariants, testInfo.when);
+        dropAllTestInfoProps(testInfo);
+        return true;
+      }
       if (consResolved.dynamicProps.length > 0) {
         return false;
       }
@@ -2288,6 +2332,15 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const altResolved = resolveCssBranch(alt);
       if (!altResolved) {
         markBail();
+        return true;
+      }
+      if (
+        tryApplyRuntimeStyleFunction(invertedTestInfo, altResolved.style, {
+          dynamicProps: altResolved.dynamicProps,
+        })
+      ) {
+        applyConditionalVariants(altResolved.conditionalVariants, invertedWhen);
+        dropAllTestInfoProps(testInfo);
         return true;
       }
       if (altResolved.dynamicProps.length > 0) {

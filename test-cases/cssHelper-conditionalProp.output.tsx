@@ -36,7 +36,7 @@ export function Container(props: ContainerProps) {
       {...rest}
       {...stylex.props(
         styles.container,
-        props.color ? styles.containerBackgroundColor(props.color) : undefined,
+        props.color != null && styles.containerBackgroundColor(props.color),
       )}
     />
   );
@@ -82,6 +82,44 @@ export function PureDynamicContainer(props: PureDynamicContainerProps) {
   );
 }
 
+type TernaryPureDynamicContainerProps = {
+  active?: boolean;
+  color: string;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "$color" | "$active">;
+
+export function TernaryPureDynamicContainer(props: TernaryPureDynamicContainerProps) {
+  const { color, active, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.ternaryPureDynamicContainer,
+        active && styles.ternaryPureDynamicContainerColor(props.color),
+      )}
+    />
+  );
+}
+
+type InvertedTernaryPureDynamicContainerProps = {
+  active?: boolean;
+  color: string;
+} & Omit<React.ComponentPropsWithRef<typeof Flex>, "className" | "style" | "$color" | "$active">;
+
+export function InvertedTernaryPureDynamicContainer(
+  props: InvertedTernaryPureDynamicContainerProps,
+) {
+  const { color, active, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.invertedTernaryPureDynamicContainer,
+        !active && styles.invertedTernaryPureDynamicContainerColor(props.color),
+      )}
+    />
+  );
+}
+
 export const App = () => (
   <>
     <Container gap={4} color="rebeccapurple">
@@ -93,6 +131,12 @@ export const App = () => (
     <PureDynamicContainer gap={4} active color="crimson">
       Pure dynamic
     </PureDynamicContainer>
+    <TernaryPureDynamicContainer gap={4} active color="darkgreen">
+      Ternary pure dynamic
+    </TernaryPureDynamicContainer>
+    <InvertedTernaryPureDynamicContainer gap={4} color="darkblue">
+      Inverted ternary pure dynamic
+    </InvertedTernaryPureDynamicContainer>
   </>
 );
 
@@ -120,6 +164,22 @@ const styles = stylex.create({
     borderRadius: 3,
   },
   pureDynamicContainerColor: (color: string) => ({
+    color,
+  }),
+  ternaryPureDynamicContainer: {
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
+  },
+  ternaryPureDynamicContainerColor: (color: string) => ({
+    color,
+  }),
+  invertedTernaryPureDynamicContainer: {
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
+  },
+  invertedTernaryPureDynamicContainerColor: (color: string) => ({
     color,
   }),
 });
