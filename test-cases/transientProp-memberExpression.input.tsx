@@ -21,9 +21,7 @@ const PresenceAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
     0 0 0 1px ${color("bgBase")},
     0 0 0 2px ${(props) => props.$highlightColor ?? "transparent"},
     0 0 0 3px ${(props) => (props.$highlightColor ? props.theme.color.bgBase : "transparent")};
-  border-radius: 50%;
   margin: 2px;
-  transition: box-shadow 0.3s ease-in-out;
 `;
 
 const DestructuredShadow = styled.div<{ $blur: number; $glowShadow: string }>`
@@ -49,7 +47,7 @@ const MotionIframeWrapper = styled(motion.div)<{
 `;
 
 export const App = () => (
-  <div>
+  <div style={{ width: 512 }}>
     <ComponentWrapper
       $isOpen={true}
       initial={{ height: 40 }}

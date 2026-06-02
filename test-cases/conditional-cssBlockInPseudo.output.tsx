@@ -179,7 +179,7 @@ function DualAliasIcon(props: DualAliasIconProps) {
 }
 
 export const App = () => (
-  <div style={{ display: "flex", gap: 8, padding: 16 }}>
+  <div style={{ display: "flex", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton interactive>Interactive</CardButton>

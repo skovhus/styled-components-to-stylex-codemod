@@ -126,7 +126,7 @@ function MotionIframeWrapper(props: MotionIframeWrapperProps) {
 }
 
 export const App = () => (
-  <div>
+  <div style={{ width: 512 }}>
     <ComponentWrapper
       isOpen={true}
       initial={{ height: 40 }}
@@ -186,9 +186,7 @@ const styles = stylex.create({
     boxShadow,
   }),
   presenceAvatar: (props, theme) => ({
-    borderRadius: "50%",
     margin: 2,
-    transition: "box-shadow 0.3s ease-in-out",
     boxShadow: `0 0 0 1px ${$colors.bgBase},0 0 0 2px ${props.highlightColor ?? "transparent"},0 0 0 3px ${props.highlightColor ? theme.color.bgBase : "transparent"}`,
   }),
   destructuredShadowBoxShadow: (props) => ({
