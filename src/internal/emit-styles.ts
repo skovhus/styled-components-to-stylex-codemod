@@ -623,12 +623,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
 
   emitLocalDefineVarsSidecars(ctx, [
     ...nonEmptyStyleEntries.map(([, value]) => value),
-    ...styledDecls.flatMap((decl) =>
-      (decl.inlineStyleProps ?? []).flatMap((prop) => [
-        prop.expr,
-        ...(prop.keyExpr ? [prop.keyExpr] : []),
-      ]),
-    ),
+    ...styledDecls.flatMap((decl) => (decl.inlineStyleProps ?? []).map((prop) => prop.expr)),
   ]);
   const programBody = root.get().node.program.body as any[];
   const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];

@@ -700,7 +700,6 @@ export type StyledDecl = {
     prop: string;
     expr: ExpressionKind;
     jsxProp?: string;
-    keyExpr?: ExpressionKind;
   }>;
   /**
    * Static normal-property values that cannot be emitted through stylex.create()

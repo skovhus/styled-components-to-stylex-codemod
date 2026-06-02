@@ -12,7 +12,7 @@ import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
  */
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
-type InlineStyleProp = { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind };
+type InlineStyleProp = { prop: string; expr: ExpressionKind };
 
 export interface StyleMergingResult {
   /**
@@ -89,7 +89,7 @@ export function emitStyleMerging(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   allowSxProp?: boolean;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
+  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind }>;
   staticStyleExpr?: ExpressionKind;
   staticClassNameExpr?: ExpressionKind;
   /** Set to true when the rendered tag is an intrinsic HTML element (lowercase).
@@ -701,13 +701,9 @@ function isCustomPropertyKey(prop: string): boolean {
 
 function inlineStyleProperty(
   j: JSCodeshift,
-  prop: { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind },
+  prop: { prop: string; expr: ExpressionKind },
 ): ReturnType<JSCodeshift["property"]> {
-  const property = j.property("init", prop.keyExpr ?? inlineStylePropKey(j, prop.prop), prop.expr);
-  if (prop.keyExpr) {
-    (property as { computed?: boolean }).computed = true;
-  }
-  return property;
+  return j.property("init", inlineStylePropKey(j, prop.prop), prop.expr);
 }
 
 /** Wraps an object expression with `as React.CSSProperties` when it contains CSS custom properties (TypeScript only). */

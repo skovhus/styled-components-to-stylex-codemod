@@ -152,14 +152,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     if (!defaultValue) {
       continue;
     }
-    const localVar = state.getOrCreateLocalStylexVar(prop, defaultValue);
-    inlineStyleProp.keyExpr = state.j.memberExpression(
-      state.j.identifier(localVar.groupName),
-      localVar.keyName.startsWith("--")
-        ? state.j.literal(localVar.keyName)
-        : state.j.identifier(localVar.keyName),
-      localVar.keyName.startsWith("--"),
-    );
+    state.getOrCreateLocalStylexVar(prop, defaultValue);
     if (expr && typeof expr === "object" && isAstNode(expr)) {
       rewriteCssVarsInAstNode(expr as { type: string }, localVarValues, varsToDrop);
     }

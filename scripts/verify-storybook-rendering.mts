@@ -102,7 +102,6 @@ const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
 ]);
 
 type Page = Awaited<ReturnType<Awaited<ReturnType<typeof chromium.launch>>["newPage"]>>;
-type Locator = ReturnType<Page["locator"]>;
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -264,45 +263,6 @@ function startStaticServer(root: string): Promise<{ server: http.Server; port: n
 const { server, port } = await startStaticServer(storybookStaticDir);
 const baseUrl = `http://127.0.0.1:${port}`;
 
-function boxesMatchAtCssPixelPrecision(
-  a: { width: number; height: number },
-  b: { width: number; height: number },
-): boolean {
-  return (
-    Math.round(a.width) === Math.round(b.width) && Math.round(a.height) === Math.round(b.height)
-  );
-}
-
-function cropPng(img: PNG, width: number, height: number): PNG {
-  const cropped = new PNG({ width, height });
-  PNG.bitblt(img, cropped, 0, 0, width, height, 0, 0);
-  return cropped;
-}
-
-async function screenshotFrameAtOrigin(p: Page, frame: Locator, token: string): Promise<Buffer> {
-  await frame.evaluate((el, cloneToken) => {
-    const rect = el.getBoundingClientRect();
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.setAttribute("data-render-compare-clone", cloneToken);
-    Object.assign(clone.style, {
-      position: "fixed",
-      left: "0",
-      top: "0",
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      margin: "0",
-      zIndex: "2147483647",
-    });
-    document.body.appendChild(clone);
-  }, token);
-  const clone = p.locator(`[data-render-compare-clone="${token}"]`);
-  try {
-    return await clone.screenshot();
-  } finally {
-    await clone.evaluate((el) => el.remove()).catch(() => {});
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Launch browser (auto-install Chromium if needed)
 // ---------------------------------------------------------------------------
@@ -343,37 +303,22 @@ async function compareRenderedPanels(
     return null;
   }
 
-  const inputFrame = debugFrames.nth(0).locator(":scope > div").first();
-  const outputFrame = debugFrames.nth(1).locator(":scope > div").first();
+  const inputFrame = debugFrames.nth(0);
+  const outputFrame = debugFrames.nth(1);
 
-  const [inputBox, outputBox] = await Promise.all([
-    inputFrame.boundingBox(),
-    outputFrame.boundingBox(),
+  const [inputShot, outputShot] = await Promise.all([
+    inputFrame.screenshot(),
+    outputFrame.screenshot(),
   ]);
-  if (!inputBox || !outputBox) {
-    return null;
-  }
-  const inputShot = await screenshotFrameAtOrigin(p, inputFrame, "input");
-  const outputShot = await screenshotFrameAtOrigin(p, outputFrame, "output");
 
-  let imgA = PNG.sync.read(inputShot);
-  let imgB = PNG.sync.read(outputShot);
+  const imgA = PNG.sync.read(inputShot);
+  const imgB = PNG.sync.read(outputShot);
 
   if (imgA.width !== imgB.width || imgA.height !== imgB.height) {
-    const canNormalize =
-      boxesMatchAtCssPixelPrecision(inputBox, outputBox) &&
-      Math.abs(imgA.width - imgB.width) <= 1 &&
-      Math.abs(imgA.height - imgB.height) <= 1;
-    if (!canNormalize) {
-      return {
-        message: `Screenshot sizes differ: ${imgA.width}\u00d7${imgA.height} vs ${imgB.width}\u00d7${imgB.height}`,
-        diffPng: null,
-      };
-    }
-    const commonWidth = Math.min(imgA.width, imgB.width);
-    const commonHeight = Math.min(imgA.height, imgB.height);
-    imgA = cropPng(imgA, commonWidth, commonHeight);
-    imgB = cropPng(imgB, commonWidth, commonHeight);
+    return {
+      message: `Screenshot sizes differ: ${imgA.width}\u00d7${imgA.height} vs ${imgB.width}\u00d7${imgB.height}`,
+      diffPng: null,
+    };
   }
 
   const { width, height } = imgA;

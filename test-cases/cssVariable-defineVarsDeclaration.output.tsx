@@ -16,9 +16,7 @@ function WidthMenu(props: WidthMenuProps) {
       style={
         {
           ...sx.style,
-          [cssVariableDefineVarsDeclarationInputVariables["--menu-width"]]: menuWidth
-            ? `${menuWidth}px`
-            : undefined,
+          "--menu-width": menuWidth ? `${menuWidth}px` : undefined,
         } as React.CSSProperties
       }
     >

@@ -3511,7 +3511,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
     groupName: string;
     keyName: string;
   };
-  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
+  inlineStyleProps: Array<{ prop: string; expr: ExpressionKind }>;
 }): boolean {
   const { j, d, decl, expr, getOrCreateLocalStylexVar, inlineStyleProps } = args;
   if (!expr || typeof expr !== "object") {
@@ -3557,7 +3557,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (!defaultValue) {
     return false;
   }
-  const ref = getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
+  getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
   const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
   const valueExpr = buildTemplateWithStaticParts(
     j,
@@ -3568,7 +3568,6 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   inlineStyleProps.push({
     prop: customValue.cssName,
     expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
-    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.literal(ref.keyName), true),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
