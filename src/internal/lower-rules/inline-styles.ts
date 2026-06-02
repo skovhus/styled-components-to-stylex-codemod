@@ -12,14 +12,11 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
-import { maybeApplyAuthoredMultilineTemplateFormatting } from "../utilities/css-authored-multiline.js";
+import {
+  type AuthoredMultilineContext,
+  maybeApplyAuthoredMultilineTemplateFormatting,
+} from "../utilities/css-authored-multiline.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
-
-type TemplateStaticPartsMultilineContext = {
-  rawCss?: string | null;
-  property: string;
-  stylisValueRaw: string;
-};
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
@@ -30,7 +27,7 @@ export function buildTemplateWithStaticParts(
   expr: ExpressionKind,
   prefix: string,
   suffix: string,
-  multilineContext?: TemplateStaticPartsMultilineContext,
+  multilineContext?: AuthoredMultilineContext,
 ): ExpressionKind {
   if (!prefix && !suffix) {
     return expr;
@@ -53,10 +50,8 @@ export function buildTemplateWithStaticParts(
   return maybeApplyAuthoredMultilineTemplateFormatting({
     j,
     templateLiteral,
-    rawCss: multilineContext.rawCss,
-    property: multilineContext.property,
-    stylisValueRaw: multilineContext.stylisValueRaw,
-  }) as ExpressionKind;
+    ...multilineContext,
+  });
 }
 
 /**

@@ -76,6 +76,45 @@ function removeBlankLinesInStylexCreate(code: string): string {
   return result;
 }
 
+/**
+ * Indents lines inside multiline template literal object values so each continuation
+ * line is two spaces deeper than the property line that opens the template.
+ */
+export function indentMultilineTemplateLiterals(code: string): string {
+  const lines = code.split("\n");
+  const result: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const openerMatch = line.match(/^(\s+).+:\s*`$/);
+    if (!openerMatch) {
+      result.push(line);
+      continue;
+    }
+
+    const continuationIndent = `${openerMatch[1]}  `;
+    result.push(line);
+    i++;
+
+    while (i < lines.length) {
+      const innerLine = lines[i] ?? "";
+      const closeIdx = innerLine.lastIndexOf("`");
+      if (closeIdx === -1) {
+        result.push(continuationIndent + innerLine.trimStart());
+        i++;
+        continue;
+      }
+
+      const content = innerLine.slice(0, closeIdx).trimStart();
+      const afterBacktick = innerLine.slice(closeIdx);
+      result.push(continuationIndent + content + afterBacktick);
+      break;
+    }
+  }
+
+  return result.join("\n");
+}
+
 export function formatOutput(code: string): string {
   // Normalize stylex.create blocks (targeted, defensive approach)
   let out = removeBlankLinesInStylexCreate(code);
@@ -163,6 +202,8 @@ export function formatOutput(code: string): string {
   // Anchored to statement-level lines (leading whitespace + `const`) to avoid
   // matching inside string/template literals or comments.
   out = out.replace(/(^\s+const\s+\{[^}]*\} = props;\n)\n(\s+)/gm, "$1$2");
+
+  out = indentMultilineTemplateLiterals(out);
 
   // Normalize EOF: trim all trailing whitespace, then ensure a single trailing newline.
   return out.trimEnd() + "\n";

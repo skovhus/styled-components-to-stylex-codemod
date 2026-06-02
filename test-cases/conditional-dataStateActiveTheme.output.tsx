@@ -49,8 +49,8 @@ const styles = stylex.create({
     boxShadow: {
       default: "none",
       ':is([data-state="active"])': `
-    0 0 0 1px ${$colors.bgBorderFaint},
-    0 1px 2px rgba(0, 0, 0, 0.1)`,
+        0 0 0 1px ${$colors.bgBorderFaint},
+        0 1px 2px rgba(0, 0, 0, 0.1)`,
     },
     backgroundColor: {
       default: null,

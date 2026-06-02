@@ -5,12 +5,23 @@
 import type { API, TemplateLiteral } from "jscodeshift";
 
 import { PLACEHOLDER_RE } from "../styled-css.js";
+import { isAstNode } from "./jscodeshift-utils.js";
 import { escapeRegex } from "./string-utils.js";
 
-/** Indentation for continuation lines inside multiline CSS template literals in style objects. */
-const MULTILINE_INDENT = "    ";
+/** Extra indent for continuation lines relative to the property line that opens the template literal. */
+const MULTILINE_INDENT = "  ";
+
+export type AuthoredMultilineContext = {
+  rawCss?: string | null;
+  property: string;
+  stylisValueRaw: string;
+};
 
 type AuthoredValuePart = { kind: "static"; value: string } | { kind: "slot"; slotId: number };
+
+function isTemplateLiteralNode(node: unknown): node is TemplateLiteral {
+  return isAstNode(node) && node.type === "TemplateLiteral";
+}
 
 function normalizeValueForMatch(value: string): string {
   return value
@@ -133,41 +144,12 @@ function normalizeStaticMultilineChunk(
   return text.replace(/,\s*\r?\n\s*/g, `,\n${MULTILINE_INDENT}`);
 }
 
-function formatAuthoredMultilineValue(authoredValue: string): string | null {
+function isAuthoredMultilineInterpolatedValue(authoredValue: string): boolean {
   if (!/\r?\n/.test(authoredValue)) {
-    return null;
+    return false;
   }
   const parts = parseAuthoredValueParts(authoredValue);
-  if (parts.length === 0) {
-    return null;
-  }
-  const slotCount = parts.filter((part) => part.kind === "slot").length;
-  if (slotCount === 0) {
-    return null;
-  }
-
-  let formatted = "";
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!;
-    if (part.kind === "slot") {
-      continue;
-    }
-    const isFirst = i === 0;
-    const isLast = i === parts.length - 1;
-    const nextPart = parts[i + 1];
-    const beforeSlot = nextPart?.kind === "slot";
-    const staticText = normalizeStaticMultilineChunk(part.value, isFirst, isLast, beforeSlot);
-    if (!staticText) {
-      continue;
-    }
-    if (isFirst) {
-      formatted += `\n${MULTILINE_INDENT}${staticText}`;
-      continue;
-    }
-    formatted += staticText;
-  }
-
-  return formatted || null;
+  return parts.some((part) => part.kind === "slot");
 }
 
 export function applyAuthoredMultilineTemplateFormatting(
@@ -175,7 +157,7 @@ export function applyAuthoredMultilineTemplateFormatting(
   templateLiteral: TemplateLiteral,
   authoredValue: string,
 ): TemplateLiteral {
-  if (!formatAuthoredMultilineValue(authoredValue)) {
+  if (!isAuthoredMultilineInterpolatedValue(authoredValue)) {
     return templateLiteral;
   }
 
@@ -209,13 +191,12 @@ export function applyAuthoredMultilineTemplateFormatting(
   return j.templateLiteral(quasis, templateLiteral.expressions);
 }
 
-export function maybeApplyAuthoredMultilineTemplateFormatting(args: {
-  j: API["jscodeshift"];
-  templateLiteral: TemplateLiteral;
-  rawCss?: string | null;
-  property: string;
-  stylisValueRaw: string;
-}): TemplateLiteral {
+export function maybeApplyAuthoredMultilineTemplateFormatting(
+  args: AuthoredMultilineContext & {
+    j: API["jscodeshift"];
+    templateLiteral: TemplateLiteral;
+  },
+): TemplateLiteral {
   const authoredValue = findAuthoredDeclarationValue(
     args.rawCss,
     args.property,
@@ -225,4 +206,20 @@ export function maybeApplyAuthoredMultilineTemplateFormatting(args: {
     return args.templateLiteral;
   }
   return applyAuthoredMultilineTemplateFormatting(args.j, args.templateLiteral, authoredValue);
+}
+
+/** Applies multiline CSS formatting when `built` is a template literal. */
+export function maybeApplyAuthoredMultilineToExpression<T>(
+  j: API["jscodeshift"],
+  built: T,
+  context: AuthoredMultilineContext,
+): T {
+  if (!isTemplateLiteralNode(built)) {
+    return built;
+  }
+  return maybeApplyAuthoredMultilineTemplateFormatting({
+    j,
+    templateLiteral: built,
+    ...context,
+  }) as T;
 }

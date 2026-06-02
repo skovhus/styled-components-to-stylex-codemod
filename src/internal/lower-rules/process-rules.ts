@@ -33,7 +33,7 @@ import {
   toStyleKey,
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
-import { maybeApplyAuthoredMultilineTemplateFormatting } from "../utilities/css-authored-multiline.js";
+import { maybeApplyAuthoredMultilineToExpression } from "../utilities/css-authored-multiline.js";
 import { capitalize, kebabToCamelCase } from "../utilities/string-utils.js";
 import {
   cssPropertyToIdentifier,
@@ -1979,20 +1979,11 @@ function writeResolvedDeclaration(
       bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
     } else {
       const built = buildInterpolatedValue(j, { value: out.value }, resolveResult);
-      const cssProperty = (d.property ?? "").trim();
-      bucket[out.prop] =
-        built &&
-        typeof built === "object" &&
-        "type" in built &&
-        (built as { type?: string }).type === "TemplateLiteral"
-          ? maybeApplyAuthoredMultilineTemplateFormatting({
-              j,
-              templateLiteral: built as import("jscodeshift").TemplateLiteral,
-              rawCss: decl.rawCss,
-              property: cssProperty,
-              stylisValueRaw: d.valueRaw ?? "",
-            })
-          : built;
+      bucket[out.prop] = maybeApplyAuthoredMultilineToExpression(j, built, {
+        rawCss: decl.rawCss,
+        property: (d.property ?? "").trim(),
+        stylisValueRaw: d.valueRaw ?? "",
+      });
     }
     writtenProps.add(out.prop);
   }
