@@ -12,6 +12,10 @@ import {
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
 import type { ExpressionKind } from "./decl-types.js";
+import {
+  type AuthoredMultilineContext,
+  maybeApplyAuthoredMultilineTemplateFormatting,
+} from "../utilities/css-authored-multiline.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
 
 // Build a template literal with static prefix/suffix around a dynamic expression.
@@ -23,6 +27,7 @@ export function buildTemplateWithStaticParts(
   expr: ExpressionKind,
   prefix: string,
   suffix: string,
+  multilineContext?: AuthoredMultilineContext,
 ): ExpressionKind {
   if (!prefix && !suffix) {
     return expr;
@@ -32,13 +37,21 @@ export function buildTemplateWithStaticParts(
   if (staticValue !== null) {
     return j.stringLiteral(prefix + String(staticValue) + suffix);
   }
-  return j.templateLiteral(
+  const templateLiteral = j.templateLiteral(
     [
       j.templateElement({ raw: prefix, cooked: prefix }, false),
       j.templateElement({ raw: suffix, cooked: suffix }, true),
     ],
     [expr],
   );
+  if (!multilineContext) {
+    return templateLiteral;
+  }
+  return maybeApplyAuthoredMultilineTemplateFormatting({
+    j,
+    templateLiteral,
+    ...multilineContext,
+  });
 }
 
 /**

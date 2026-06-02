@@ -938,6 +938,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         resolved as ExpressionKind,
         prefix,
         suffix,
+        {
+          rawCss: decl.rawCss,
+          property: (d.property ?? "").trim(),
+          stylisValueRaw: d.valueRaw ?? "",
+        },
       );
       // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
       // delegate to applyResolvedPropValue which correctly scopes the pseudo-class

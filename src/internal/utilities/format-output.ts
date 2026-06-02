@@ -1,63 +1,79 @@
+const STYLEX_CREATE_MARKER = "stylex.create({";
+
+function findStylexCreateBlockEnd(code: string, blockStart: number): number {
+  let depth = 1;
+  let blockEnd = blockStart;
+  let inString: string | null = null;
+  let escaped = false;
+
+  for (let i = blockStart; i < code.length && depth > 0; i++) {
+    const ch = code[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (inString) {
+      if (ch === inString) {
+        inString = null;
+      }
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = ch;
+      continue;
+    }
+    if (ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        blockEnd = i;
+      }
+    }
+  }
+
+  return blockEnd;
+}
+
+function transformStylexCreateBlocks(
+  code: string,
+  transformBlock: (blockContent: string) => string,
+): string {
+  let result = "";
+  let pos = 0;
+
+  while (pos < code.length) {
+    const markerIdx = code.indexOf(STYLEX_CREATE_MARKER, pos);
+    if (markerIdx === -1) {
+      result += code.slice(pos);
+      break;
+    }
+
+    result += code.slice(pos, markerIdx);
+    const blockStart = markerIdx + STYLEX_CREATE_MARKER.length;
+    const blockEnd = findStylexCreateBlockEnd(code, blockStart);
+    const blockContent = code.slice(markerIdx, blockEnd + 1);
+    result += transformBlock(blockContent);
+    pos = blockEnd + 1;
+  }
+
+  return result;
+}
+
 /**
  * Remove blank lines inside stylex.create({...}) blocks.
  * Finds each `stylex.create({` and tracks brace depth to the matching `})`,
  * then removes blank lines between properties within that region.
  */
 function removeBlankLinesInStylexCreate(code: string): string {
-  const marker = "stylex.create({";
-  let result = "";
-  let pos = 0;
-
-  while (pos < code.length) {
-    const markerIdx = code.indexOf(marker, pos);
-    if (markerIdx === -1) {
-      result += code.slice(pos);
-      break;
-    }
-
-    // Copy everything before the marker
-    result += code.slice(pos, markerIdx);
-
-    // Find the matching closing brace by tracking depth
-    const blockStart = markerIdx + marker.length;
-    let depth = 1;
-    let blockEnd = blockStart;
-    let inString: string | null = null;
-    let escaped = false;
-
-    for (let i = blockStart; i < code.length && depth > 0; i++) {
-      const ch = code[i];
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (ch === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (inString) {
-        if (ch === inString) {
-          inString = null;
-        }
-        continue;
-      }
-      if (ch === '"' || ch === "'" || ch === "`") {
-        inString = ch;
-        continue;
-      }
-      if (ch === "{") {
-        depth++;
-      } else if (ch === "}") {
-        depth--;
-        if (depth === 0) {
-          blockEnd = i;
-        }
-      }
-    }
-
-    // Extract the block content and normalize it
-    const blockContent = code.slice(markerIdx, blockEnd + 1);
-    const cleaned = blockContent
+  return transformStylexCreateBlocks(code, (blockContent) =>
+    blockContent
       // Remove blank lines after closing braces followed by property
       .replace(
         /(\n\s*\},)\n\n+(\s+(?:[a-zA-Z_$][a-zA-Z0-9_$]*|["'].*?["']|\d+|::[a-zA-Z-]+|@[a-zA-Z-]+|:[a-zA-Z-]+)\s*:)/g,
@@ -67,13 +83,52 @@ function removeBlankLinesInStylexCreate(code: string): string {
       .replace(/,\n\n+(\s+(?:[a-zA-Z_$"']|\/\/|\/\*))/g, ",\n$1")
       // Normalize `content` strings: prefer `'\"...\"'` form over escaped double-quotes
       .replace(/content:\s+"\\"([\s\S]*?)\\""/g, "content: '\"$1\"'")
-      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'");
+      .replace(/content:\s+"'\s*([\s\S]*?)\s*'"/g, "content: '\"$1\"'"),
+  );
+}
 
-    result += cleaned;
-    pos = blockEnd + 1;
+/**
+ * Indents lines inside multiline template literal object values so each continuation
+ * line is two spaces deeper than the property line that opens the template.
+ */
+export function indentMultilineTemplateLiterals(code: string): string {
+  const lines = code.split("\n");
+  const result: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const openerMatch = line.match(/^(\s+).+:\s*`$/);
+    if (!openerMatch) {
+      result.push(line);
+      continue;
+    }
+
+    const continuationIndent = `${openerMatch[1]}  `;
+    result.push(line);
+    i++;
+
+    while (i < lines.length) {
+      const innerLine = lines[i] ?? "";
+      const closeIdx = innerLine.lastIndexOf("`");
+      if (closeIdx === -1) {
+        result.push(continuationIndent + innerLine.trimStart());
+        i++;
+        continue;
+      }
+
+      const content = innerLine.slice(0, closeIdx).trimStart();
+      const afterBacktick = innerLine.slice(closeIdx);
+      result.push(continuationIndent + content + afterBacktick);
+      break;
+    }
   }
 
-  return result;
+  return result.join("\n");
+}
+
+/** Applies multiline template literal indentation only inside `stylex.create({...})` blocks. */
+function indentMultilineTemplateLiteralsInStylexCreate(code: string): string {
+  return transformStylexCreateBlocks(code, indentMultilineTemplateLiterals);
 }
 
 export function formatOutput(code: string): string {
@@ -163,6 +218,8 @@ export function formatOutput(code: string): string {
   // Anchored to statement-level lines (leading whitespace + `const`) to avoid
   // matching inside string/template literals or comments.
   out = out.replace(/(^\s+const\s+\{[^}]*\} = props;\n)\n(\s+)/gm, "$1$2");
+
+  out = indentMultilineTemplateLiteralsInStylexCreate(out);
 
   // Normalize EOF: trim all trailing whitespace, then ensure a single trailing newline.
   return out.trimEnd() + "\n";

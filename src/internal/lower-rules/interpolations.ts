@@ -8,6 +8,7 @@ import {
   getMemberPathFromIdentifier,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
+import { maybeApplyAuthoredMultilineToExpression } from "../utilities/css-authored-multiline.js";
 import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
@@ -256,6 +257,10 @@ export function tryHandleInterpolatedStringValue(args: {
     resolveCallExpr,
     resolveImportedValueExpr,
     addImport,
+    multiline: {
+      property: (d.property ?? "").trim(),
+      stylisValueRaw: d.valueRaw ?? "",
+    },
   });
   if (!tl) {
     return false;
@@ -285,8 +290,10 @@ function buildInterpolatedTemplate(args: {
     expr: any,
   ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
+  multiline?: { property: string; stylisValueRaw: string };
 }): unknown {
-  const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport } = args;
+  const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport, multiline } =
+    args;
   // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
   // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
@@ -400,7 +407,15 @@ function buildInterpolatedTemplate(args: {
     return fullStaticValue;
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
-  return j.templateLiteral(quasis, exprs);
+  const templateLiteral = j.templateLiteral(quasis, exprs);
+  if (!multiline) {
+    return templateLiteral;
+  }
+  return maybeApplyAuthoredMultilineToExpression(j, templateLiteral, {
+    rawCss: decl.rawCss,
+    property: multiline.property,
+    stylisValueRaw: multiline.stylisValueRaw,
+  });
 }
 
 function hasAdjacentUnitInParts(parts: any[], slotIndex: number): boolean {
