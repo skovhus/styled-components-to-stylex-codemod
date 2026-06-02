@@ -1111,13 +1111,19 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         extraStyleObjects.set(styleKey, pseudoStyle);
       }
 
+      const aliasPropNames = collectStylePropNames(pseudoAliasStyles.values());
+      const canApplySourceOrder =
+        !hasRootStyleForProps(styleObj, aliasPropNames) &&
+        !hasRootStyleForProps(rootStyle, aliasPropNames) &&
+        !hasPriorRootStyleFnForProps(styleFnFromProps, styleFnDecls, aliasPropNames);
+      const sourceOrder = canApplySourceOrder ? allocateSourceOrder() : undefined;
       decl.pseudoAliasSelectors ??= [];
       decl.pseudoAliasSelectors.push({
         styleKeys,
         styleSelectorExpr: cloneAstNode(pseudoAlias.styleSelectorExpr),
         pseudoNames: pseudoAlias.pseudoNames,
         guard: { when: testInfo.when },
-        sourceOrder: allocateSourceOrder(),
+        ...(sourceOrder !== undefined ? { sourceOrder } : {}),
       });
       dropAllTestInfoProps(testInfo);
       decl.needsWrapperComponent = true;
@@ -3186,6 +3192,105 @@ function normalizeTransientPropName(propName: string): string {
 
 function normalizeTransientWhen(when: string): string {
   return when.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, "$1");
+}
+
+function collectStylePropNames(styles: Iterable<Record<string, unknown>>): Set<string> {
+  const propNames = new Set<string>();
+  for (const style of styles) {
+    for (const propName of Object.keys(style)) {
+      propNames.add(propName);
+    }
+  }
+  return propNames;
+}
+
+function hasRootStyleForProps(
+  style: Record<string, unknown>,
+  propNames: ReadonlySet<string>,
+): boolean {
+  for (const propName of propNames) {
+    if (
+      Object.prototype.hasOwnProperty.call(style, propName) &&
+      styleValueIncludesRootDefault(style[propName])
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasPriorRootStyleFnForProps(
+  styleFnFromProps: StyleFnFromPropsEntry[],
+  styleFnDecls: Map<string, unknown>,
+  propNames: ReadonlySet<string>,
+): boolean {
+  for (const entry of styleFnFromProps) {
+    const styleFn = styleFnDecls.get(entry.fnKey);
+    if (
+      styleFn &&
+      typeof styleFn === "object" &&
+      (styleFn as { type?: string }).type === "ArrowFunctionExpression"
+    ) {
+      const body = (styleFn as { body?: unknown }).body;
+      if (objectExpressionHasRootStyleForProps(body, propNames)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function objectExpressionHasRootStyleForProps(
+  node: unknown,
+  propNames: ReadonlySet<string>,
+): boolean {
+  if (
+    !node ||
+    typeof node !== "object" ||
+    (node as { type?: string }).type !== "ObjectExpression"
+  ) {
+    return false;
+  }
+  const properties = (node as ASTNodeRecord).properties as ASTNodeRecord[] | undefined;
+  for (const property of properties ?? []) {
+    if (!property || property.type !== "Property") {
+      continue;
+    }
+    const keyName = getStaticObjectPropertyKeyName(property);
+    if (keyName && propNames.has(keyName) && styleValueIncludesRootDefault(property.value)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function styleValueIncludesRootDefault(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return true;
+  }
+  if ((value as { type?: string }).type === "ObjectExpression") {
+    const properties = (value as ASTNodeRecord).properties as ASTNodeRecord[] | undefined;
+    for (const property of properties ?? []) {
+      if (!property || property.type !== "Property") {
+        continue;
+      }
+      const keyName = getStaticObjectPropertyKeyName(property);
+      if (keyName && isRootStyleValueKey(keyName)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  for (const keyName of Object.keys(value)) {
+    if (isRootStyleValueKey(keyName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isRootStyleValueKey(keyName: string): boolean {
+  return keyName === "default" || (!keyName.startsWith(":") && !keyName.startsWith("@"));
 }
 
 function copyObjectExpressionPropertiesToRootValue(

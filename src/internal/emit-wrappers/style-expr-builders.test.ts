@@ -3,8 +3,11 @@ import jscodeshift from "jscodeshift";
 import type { StyledDecl, VariantDimension } from "../transform-types.js";
 import { buildExtraStylexPropsExprEntries } from "./variant-condition.js";
 import {
+  appendAllPseudoStyleArgs,
   buildInterleavedExtraStyleArgs,
   buildVariantDimensionLookups,
+  mergeOrderedEntries,
+  type OrderedStyleEntry,
 } from "./style-expr-builders.js";
 import type { ExpressionKind } from "./types.js";
 
@@ -105,6 +108,67 @@ describe("buildVariantDimensionLookups", () => {
     expect(destructureProps).toEqual(["color", "active"]);
     expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
       "active ? colorVariants[color as keyof typeof colorVariants] ?? colorVariants.default : undefined",
+    ]);
+  });
+});
+
+describe("appendAllPseudoStyleArgs", () => {
+  it("merges source-ordered pseudo aliases with ordered style args", () => {
+    const styleArgs = [j.identifier("baseSx") as ExpressionKind];
+    const orderedEntries: OrderedStyleEntry[] = [
+      { order: 0, expr: j.identifier("earlierHoverSx") as ExpressionKind },
+    ];
+    const decl = {
+      localName: "Icon",
+      styleKey: "icon",
+      base: { kind: "intrinsic", tagName: "span" },
+      rules: [],
+      templateExpressions: [],
+      pseudoAliasSelectors: [
+        {
+          styleKeys: ["iconActive", "iconHover"],
+          styleSelectorExpr: j.identifier("highlightStyles"),
+          pseudoNames: ["active", "hover"],
+          guard: { when: "active" },
+          sourceOrder: 2,
+        },
+      ],
+    } satisfies StyledDecl;
+
+    const guardProps = appendAllPseudoStyleArgs(decl, styleArgs, j, "styles", orderedEntries);
+    mergeOrderedEntries(orderedEntries, styleArgs);
+
+    expect(guardProps).toEqual(["active"]);
+    expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
+      "baseSx",
+      "earlierHoverSx",
+      "active ? highlightStyles({\n    active: styles.iconActive as unknown as stylex.StyleXStyles,\n    hover: styles.iconHover as unknown as stylex.StyleXStyles\n}) : undefined",
+    ]);
+  });
+
+  it("prepends pseudo aliases when no source order is available", () => {
+    const styleArgs = [j.identifier("baseSx") as ExpressionKind];
+    const decl = {
+      localName: "Icon",
+      styleKey: "icon",
+      base: { kind: "intrinsic", tagName: "span" },
+      rules: [],
+      templateExpressions: [],
+      pseudoAliasSelectors: [
+        {
+          styleKeys: ["iconActive", "iconHover"],
+          styleSelectorExpr: j.identifier("highlightStyles"),
+          pseudoNames: ["active", "hover"],
+        },
+      ],
+    } satisfies StyledDecl;
+
+    const guardProps = appendAllPseudoStyleArgs(decl, styleArgs, j, "styles");
+
+    expect(guardProps).toEqual([]);
+    expect(styleArgs.map((expr) => j(expr).toSource())).toEqual([
+      "highlightStyles({\n    active: styles.iconActive as unknown as stylex.StyleXStyles,\n    hover: styles.iconHover as unknown as stylex.StyleXStyles\n})",
+      "baseSx",
     ]);
   });
 });

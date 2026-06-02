@@ -1243,6 +1243,7 @@ function appendPseudoAliasStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
+  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   if (!entries?.length) {
     return [];
@@ -1276,7 +1277,11 @@ function appendPseudoAliasStyleArgs(
       });
     }
 
-    aliasExprs.push(finalExpr);
+    if (orderedEntries && entry.sourceOrder !== undefined) {
+      orderedEntries.push({ order: entry.sourceOrder, expr: finalExpr });
+    } else {
+      aliasExprs.push(finalExpr);
+    }
   }
 
   if (aliasExprs.length > 0) {
@@ -1326,12 +1331,14 @@ export function appendAllPseudoStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
+  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   const guardProps = appendPseudoAliasStyleArgs(
     d.pseudoAliasSelectors,
     styleArgs,
     j,
     stylesIdentifier,
+    orderedEntries,
   );
   for (const gp of appendPseudoExpandStyleArgs(
     d.pseudoExpandSelectors,
@@ -1419,7 +1426,13 @@ export function buildAllVariantAndStyleExprs(opts: {
     buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
   }
 
-  for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
+  for (const gp of appendAllPseudoStyleArgs(
+    d,
+    styleArgs,
+    j,
+    stylesIdentifier,
+    hasSourceOrder ? orderedEntries : undefined,
+  )) {
     if (!destructureProps.includes(gp)) {
       destructureProps.push(gp);
     }

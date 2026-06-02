@@ -3,7 +3,7 @@ import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { $interaction } from "./lib/interaction.stylex";
 import { $colors, transitionSpeed as transitionSpeedVars, $glowShadow } from "./tokens.stylex";
-import { highlightStyles } from "./lib/helpers";
+import { color, highlightStyles } from "./lib/helpers";
 
 function Tab(props: React.PropsWithChildren<{ "data-state"?: boolean | string }>) {
   const theme = useTheme();
@@ -125,6 +125,31 @@ function AliasWithDefaultIcon(props: AliasWithDefaultIconProps) {
   );
 }
 
+type OrderedAliasIconProps = React.PropsWithChildren<{
+  active?: boolean;
+  color: string;
+}>;
+
+function OrderedAliasIcon(props: OrderedAliasIconProps) {
+  const { children, color, active } = props;
+  return (
+    <span
+      sx={[
+        active
+          ? highlightStyles({
+              active: styles.orderedAliasIconActivePseudoActive as unknown as stylex.StyleXStyles,
+              hover: styles.orderedAliasIconActivePseudoHover as unknown as stylex.StyleXStyles,
+            })
+          : undefined,
+        styles.orderedAliasIcon,
+        styles.orderedAliasIconColor(color),
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -140,6 +165,9 @@ export const App = () => (
     <AliasWithDefaultIcon active tabIndex={0}>
       Alias default
     </AliasWithDefaultIcon>
+    <OrderedAliasIcon active color="#2563eb">
+      Alias order
+    </OrderedAliasIcon>
   </div>
 );
 
@@ -299,4 +327,22 @@ const styles = stylex.create({
       ":hover": $colors.labelTitle,
     },
   },
+  orderedAliasIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+  },
+  orderedAliasIconActivePseudoActive: {
+    color: {
+      ":active": "#dc2626",
+    },
+  },
+  orderedAliasIconActivePseudoHover: {
+    color: {
+      ":hover": "#dc2626",
+    },
+  },
+  orderedAliasIconColor: (colorValue: string) => ({
+    color: colorValue,
+  }),
 });

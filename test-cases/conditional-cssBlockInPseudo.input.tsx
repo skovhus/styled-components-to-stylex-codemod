@@ -117,6 +117,20 @@ const AliasWithDefaultIcon = styled.span<{ $active?: boolean }>`
     `}
 `;
 
+const OrderedAliasIcon = styled.span<{ $active?: boolean; $color: string }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  color: ${(props) => props.$color};
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:${highlight} {
+        color: #dc2626;
+      }
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -132,5 +146,8 @@ export const App = () => (
     <AliasWithDefaultIcon $active tabIndex={0}>
       Alias default
     </AliasWithDefaultIcon>
+    <OrderedAliasIcon $active $color="#2563eb">
+      Alias order
+    </OrderedAliasIcon>
   </div>
 );

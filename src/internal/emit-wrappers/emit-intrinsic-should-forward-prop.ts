@@ -398,7 +398,13 @@ export function emitShouldForwardPropWrappers(ctx: EmitIntrinsicContext): void {
     const hasSourceOrder = hasStyleSourceOrder(d);
     const orderedEntries: OrderedStyleEntry[] = [];
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendAllPseudoStyleArgs(
+      d,
+      styleArgs,
+      j,
+      stylesIdentifier,
+      hasSourceOrder ? orderedEntries : undefined,
+    );
 
     buildVariantStyleExprs({
       d,
