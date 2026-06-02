@@ -150,8 +150,26 @@ const DualAliasIcon = styled.span<{ $active?: boolean }>`
     `}
 `;
 
+const MultiPseudoIcon = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  color: #475569;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:hover {
+        color: #dc2626;
+      }
+
+      &:focus {
+        color: #2563eb;
+      }
+    `}
+`;
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 8, padding: 16, width: 718 }}>
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton $interactive>Interactive</CardButton>
@@ -171,5 +189,8 @@ export const App = () => (
     <DualAliasIcon $active tabIndex={0}>
       Dual alias
     </DualAliasIcon>
+    <MultiPseudoIcon $active tabIndex={0}>
+      Multi pseudo
+    </MultiPseudoIcon>
   </div>
 );

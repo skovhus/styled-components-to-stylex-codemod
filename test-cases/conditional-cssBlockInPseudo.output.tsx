@@ -178,8 +178,18 @@ function DualAliasIcon(props: DualAliasIconProps) {
   );
 }
 
+type MultiPseudoIconProps = { active?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+function MultiPseudoIcon(props: MultiPseudoIconProps) {
+  const { active, ...rest } = props;
+  return <span {...rest} sx={[styles.multiPseudoIcon, active && styles.multiPseudoIconActive]} />;
+}
+
 export const App = () => (
-  <div style={{ display: "flex", gap: 8, padding: 16, width: 718 }}>
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
     <Tab data-state="inactive">Inactive</Tab>
     <CardButton interactive>Interactive</CardButton>
@@ -199,6 +209,9 @@ export const App = () => (
     <DualAliasIcon active tabIndex={0}>
       Dual alias
     </DualAliasIcon>
+    <MultiPseudoIcon active tabIndex={0}>
+      Multi pseudo
+    </MultiPseudoIcon>
   </div>
 );
 
@@ -411,6 +424,19 @@ const styles = stylex.create({
     color: {
       default: "#334155",
       ":focus:hover": $colors.labelTitle,
+    },
+  },
+  multiPseudoIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    color: "#475569",
+  },
+  multiPseudoIconActive: {
+    color: {
+      default: "#475569",
+      ":hover": "#dc2626",
+      ":focus": "#2563eb",
     },
   },
 });

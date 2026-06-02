@@ -197,6 +197,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     pseudoKeys: string[];
     styleSelectorExpr: ExpressionKind;
   };
+  type ArrowFunctionNode = Parameters<typeof getArrowFnParamBindings>[0];
 
   return (d: any, pseudos?: string[] | null, pseudoElement?: string | null): boolean => {
     if (d.value.kind !== "interpolated") {
@@ -312,6 +313,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const replaceParamWithProps = (
       exprNode: ExpressionKind,
       localParamName?: string,
+      localBindings?: NonNullable<ReturnType<typeof getArrowFnParamBindings>>,
     ): ExpressionKind => {
       const cloned = cloneAstNode(exprNode);
       // AST traversal requires flexible typing due to jscodeshift's complex type system
@@ -324,12 +326,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
         const n = node as ASTNodeRecord;
         if (
-          (bindings.kind === "simple" || localParamName) &&
+          (bindings.kind === "simple" || localParamName || localBindings?.kind === "simple") &&
           isMemberExpression(n) &&
           (n.object as ASTNodeRecord)?.type === "Identifier" &&
           ((bindings.kind === "simple" &&
             (n.object as { name?: string })?.name === bindings.paramName) ||
-            (localParamName && (n.object as { name?: string })?.name === localParamName)) &&
+            (localParamName && (n.object as { name?: string })?.name === localParamName) ||
+            (localBindings?.kind === "simple" &&
+              (n.object as { name?: string })?.name === localBindings.paramName)) &&
           (n.property as ASTNodeRecord)?.type === "Identifier" &&
           ((n.property as { name?: string })?.name ?? "").startsWith("$") &&
           n.computed === false
@@ -340,7 +344,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           const nodeName = (n as { name?: string }).name ?? "";
           if (
             (bindings.kind === "simple" && nodeName === bindings.paramName) ||
-            (localParamName && nodeName === localParamName)
+            (localParamName && nodeName === localParamName) ||
+            (localBindings?.kind === "simple" && nodeName === localBindings.paramName)
           ) {
             const p = parent as ASTNodeRecord | undefined;
             const isMemberProp =
@@ -349,6 +354,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             if (!isMemberProp && !isObjectKey) {
               return j.identifier("props");
             }
+          }
+          if (localBindings?.kind === "destructured" && localBindings.bindings.has(nodeName)) {
+            const propName = localBindings.bindings.get(nodeName)!;
+            const defaultValue = localBindings.defaults?.get(propName);
+            const base = propName.startsWith("$")
+              ? j.identifier(propName)
+              : j.memberExpression(j.identifier("props"), j.identifier(propName));
+            if (defaultValue) {
+              return j.logicalExpression("??", base, cloneAstNode(defaultValue) as ExpressionKind);
+            }
+            return base;
           }
           if (bindings.kind === "destructured" && bindings.bindings.has(nodeName)) {
             const propName = bindings.bindings.get(nodeName)!;
@@ -483,7 +499,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             (styleObj[prop] !== undefined
               ? (styleValueToExpression(j, styleObj[prop]) as ExpressionKind)
               : (j.literal(null) as ExpressionKind));
-          const wrapped = wrapValueWithResolvedPseudos(value, defaultExpr, pseudoEntries);
+          const wrapped =
+            localDefaultExpr?.type === "ObjectExpression"
+              ? appendValueWithResolvedPseudos(localDefaultExpr, value, defaultExpr, pseudoEntries)
+              : wrapValueWithResolvedPseudos(value, defaultExpr, pseudoEntries);
           if (localDefaultExpr) {
             inlineMapPseudoRootDefaults.set(wrapped, true);
           }
@@ -622,6 +641,39 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         const properties = [
           j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind),
         ];
+        for (const entry of pseudoEntries) {
+          let entryValue = value;
+          if (entry.conditionExpr) {
+            const conditioned = j.objectExpression([
+              j.property(
+                "init",
+                j.identifier("default"),
+                cloneAstNode(defaultExpr) as ExpressionKind,
+              ),
+              (() => {
+                const p = j.property("init", entry.conditionExpr!, value);
+                (p as { computed?: boolean }).computed = true;
+                return p;
+              })(),
+            ]);
+            entryValue = conditioned as ExpressionKind;
+          }
+          properties.push(j.property("init", j.literal(entry.pseudo), entryValue));
+        }
+        return j.objectExpression(properties) as ExpressionKind;
+      };
+
+      const appendValueWithResolvedPseudos = (
+        existing: ExpressionKind,
+        value: ExpressionKind,
+        defaultExpr: ExpressionKind,
+        pseudoEntries: ResolvedPseudoEntry[],
+      ): ExpressionKind => {
+        const existingProperties =
+          existing.type === "ObjectExpression"
+            ? ([...existing.properties] as Parameters<typeof j.objectExpression>[0])
+            : [];
+        const properties = existingProperties ?? [];
         for (const entry of pseudoEntries) {
           let entryValue = value;
           if (entry.conditionExpr) {
@@ -801,7 +853,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (!slotValueExpr) {
             return null;
           }
-          const rawExpr = replaceParamWithProps(slotValueExpr, getFunctionParamName(slotExprNode));
+          const localBindings =
+            slotExprNode.type === "ArrowFunctionExpression" ||
+            slotExprNode.type === "FunctionExpression"
+              ? getArrowFnParamBindings(slotExprNode as ArrowFunctionNode)
+              : undefined;
+          const rawExpr = replaceParamWithProps(
+            slotValueExpr,
+            getFunctionParamName(slotExprNode),
+            localBindings ?? undefined,
+          );
           let resolvedExpr: ExpressionKind = rawExpr;
           if (rawExpr.type === "CallExpression") {
             const resolvedCall = tryResolveAdapterCall(rawExpr, d.property, {
