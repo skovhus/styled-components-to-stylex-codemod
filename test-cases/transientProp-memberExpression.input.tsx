@@ -25,6 +25,10 @@ const PresenceAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
   transition: box-shadow 0.3s ease-in-out;
 `;
 
+const DestructuredShadow = styled.div<{ $blur: number; $color: string }>`
+  box-shadow: 0 0 ${({ $blur }) => $blur}px ${({ $color }) => $color};
+`;
+
 const ZoomPreviewImage = styled(motion.img)<{
   $isZoomable: boolean;
   $isDragging: boolean;
@@ -76,6 +80,9 @@ export const App = () => (
     <HighlightedAvatar user="Bob" size="tiny" />
     <PresenceAvatar user="Carol" size="small" $highlightColor="green" />
     <PresenceAvatar user="Dave" size="tiny" />
+    <DestructuredShadow $blur={4} $color="rgba(0, 0, 0, 0.35)">
+      Destructured shadow
+    </DestructuredShadow>
   </div>
 );
 

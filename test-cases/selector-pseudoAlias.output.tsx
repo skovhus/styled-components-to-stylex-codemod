@@ -35,9 +35,10 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   );
 }
 
-type HighlightCardProps = React.PropsWithChildren<{
-  interactive?: boolean;
-}>;
+type HighlightCardProps = { interactive?: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 function HighlightCard(props: HighlightCardProps) {
   const { children, interactive } = props;
@@ -51,7 +52,7 @@ function HighlightCard(props: HighlightCardProps) {
             })
           : undefined,
         styles.highlightCard,
-        interactive && styles.highlightCardInteractive,
+        interactive ? styles.highlightCardInteractiveRoot : undefined,
       ]}
     >
       {children}
@@ -136,6 +137,9 @@ const styles = stylex.create({
     borderRadius: 6,
     backgroundColor: "#f8fafc",
   },
+  highlightCardInteractiveRoot: {
+    cursor: "pointer",
+  },
   highlightCardInteractivePseudoActive: {
     backgroundColor: {
       ":active": "#e0f2fe",
@@ -145,8 +149,5 @@ const styles = stylex.create({
     backgroundColor: {
       ":hover": "#e0f2fe",
     },
-  },
-  highlightCardInteractive: {
-    cursor: "pointer",
   },
 });

@@ -53,9 +53,10 @@ function IconWrapper(props: IconWrapperProps) {
   );
 }
 
-type FalsyGuardIconProps = React.PropsWithChildren<{
-  disabled?: boolean;
-}>;
+type FalsyGuardIconProps = { disabled?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
 
 function FalsyGuardIcon(props: FalsyGuardIconProps) {
   const { children, disabled } = props;
@@ -68,7 +69,7 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
             hover: styles.falsyGuardIconNotDisabledPseudoHover as unknown as stylex.StyleXStyles,
           }),
         styles.falsyGuardIcon,
-        !disabled && styles.falsyGuardIconNotDisabled,
+        !disabled && styles.falsyGuardIconNotDisabledRoot,
       ]}
     >
       {children}
@@ -99,6 +100,31 @@ function FocusAliasIcon(props: FocusAliasIconProps) {
   );
 }
 
+type AliasWithDefaultIconProps = { active?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+function AliasWithDefaultIcon(props: AliasWithDefaultIconProps) {
+  const { active, ...rest } = props;
+  return (
+    <span
+      {...rest}
+      sx={[
+        active
+          ? highlightStyles({
+              active:
+                styles.aliasWithDefaultIconActivePseudoActive as unknown as stylex.StyleXStyles,
+              hover: styles.aliasWithDefaultIconActivePseudoHover as unknown as stylex.StyleXStyles,
+            })
+          : undefined,
+        styles.aliasWithDefaultIcon,
+        active ? styles.aliasWithDefaultIconActiveRoot : undefined,
+      ]}
+    />
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -111,6 +137,9 @@ export const App = () => (
     <FocusAliasIcon active tabIndex={0}>
       Focus alias
     </FocusAliasIcon>
+    <AliasWithDefaultIcon active tabIndex={0}>
+      Alias default
+    </AliasWithDefaultIcon>
   </div>
 );
 
@@ -213,6 +242,9 @@ const styles = stylex.create({
     backgroundColor: "#eef2ff",
     color: "#312e81",
   },
+  falsyGuardIconNotDisabledRoot: {
+    cursor: "pointer",
+  },
   falsyGuardIconNotDisabledPseudoActive: {
     backgroundColor: {
       ":active": $colors.bgBaseHover,
@@ -229,9 +261,6 @@ const styles = stylex.create({
       ":hover": $colors.labelTitle,
     },
   },
-  falsyGuardIconNotDisabled: {
-    cursor: "pointer",
-  },
   focusAliasIcon: {
     display: "inline-flex",
     paddingBlock: 4,
@@ -246,6 +275,28 @@ const styles = stylex.create({
   focusAliasIconActivePseudoHover: {
     color: {
       ":focus:hover": $colors.labelTitle,
+    },
+  },
+  aliasWithDefaultIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    color: "#475569",
+  },
+  aliasWithDefaultIconActiveRoot: {
+    color: {
+      default: "#2563eb",
+      ":focus": "#16a34a",
+    },
+  },
+  aliasWithDefaultIconActivePseudoActive: {
+    color: {
+      ":active": $colors.labelTitle,
+    },
+  },
+  aliasWithDefaultIconActivePseudoHover: {
+    color: {
+      ":hover": $colors.labelTitle,
     },
   },
 });

@@ -97,6 +97,26 @@ const FocusAliasIcon = styled.span<{ $active?: boolean }>`
     `}
 `;
 
+const AliasWithDefaultIcon = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  color: #475569;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      color: #2563eb;
+
+      &:focus {
+        color: #16a34a;
+      }
+
+      &:${highlight} {
+        color: ${color("labelTitle")};
+      }
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -109,5 +129,8 @@ export const App = () => (
     <FocusAliasIcon $active tabIndex={0}>
       Focus alias
     </FocusAliasIcon>
+    <AliasWithDefaultIcon $active tabIndex={0}>
+      Alias default
+    </AliasWithDefaultIcon>
   </div>
 );

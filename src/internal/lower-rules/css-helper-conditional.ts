@@ -464,7 +464,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         string,
         Array<{ keyExpr: unknown; value: ExpressionKind }>
       >();
-      let sawResolvedPseudoSelector = false;
+      let sawInterpolatedPseudoSelector = false;
 
       const setValueForProp = (
         prop: string,
@@ -477,8 +477,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (media || computedKey) {
             return false;
           }
-          sawResolvedPseudoSelector = true;
-          out.set(prop, wrapValueWithResolvedPseudos(prop, value, pseudoEntries));
+          const localDefaultExpr = out.get(prop);
+          const defaultExpr =
+            localDefaultExpr ??
+            (styleObj[prop] !== undefined
+              ? (styleValueToExpression(j, styleObj[prop]) as ExpressionKind)
+              : (j.literal(null) as ExpressionKind));
+          const wrapped = wrapValueWithResolvedPseudos(value, defaultExpr, pseudoEntries);
+          if (localDefaultExpr) {
+            inlineMapPseudoRootDefaults.set(wrapped, true);
+          }
+          out.set(prop, wrapped);
           return true;
         }
         if (computedKey) {
@@ -499,6 +508,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const resolveRulePseudoEntries = (selector: string): ResolvedPseudoEntry[] | null => {
         if (selector === "&") {
           return [];
+        }
+        const staticPseudo = selector.match(/^&((?::[a-zA-Z][a-zA-Z0-9-]*(?:\([^)]*\))?)+)$/);
+        if (staticPseudo?.[1]) {
+          return [{ pseudo: staticPseudo[1] }];
         }
         const placeholderMatch = selector.match(/__SC_EXPR_(\d+)__/);
         const beforePlaceholder =
@@ -572,6 +585,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             styleSelectorExpr: styleSelectorExpr as ExpressionKind,
           };
           runtimePseudoAlias = alias;
+          sawInterpolatedPseudoSelector = true;
           return pseudoKeys.map((pseudo) => ({
             pseudo,
             alias,
@@ -580,6 +594,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (selectorResult.kind !== "pseudoExpand") {
           return null;
         }
+        sawInterpolatedPseudoSelector = true;
         const entries: ResolvedPseudoEntry[] = [];
         for (const expansion of selectorResult.expansions) {
           let conditionExpr: ExpressionKind | undefined;
@@ -600,14 +615,10 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       };
 
       const wrapValueWithResolvedPseudos = (
-        prop: string,
         value: ExpressionKind,
+        defaultExpr: ExpressionKind,
         pseudoEntries: ResolvedPseudoEntry[],
       ): ExpressionKind => {
-        const defaultExpr =
-          styleObj[prop] !== undefined
-            ? (styleValueToExpression(j, styleObj[prop]) as ExpressionKind)
-            : (j.literal(null) as ExpressionKind);
         const properties = [
           j.property("init", j.identifier("default"), cloneAstNode(defaultExpr) as ExpressionKind),
         ];
@@ -871,7 +882,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         out.set(prop, j.objectExpression(properties) as unknown as ExpressionKind);
       }
 
-      if (opts?.requireResolvedPseudoSelector && !sawResolvedPseudoSelector) {
+      if (opts?.requireResolvedPseudoSelector && !sawInterpolatedPseudoSelector) {
         return null;
       }
 
@@ -882,6 +893,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     };
 
     const inlineMapPseudoAliases = new WeakMap<Map<string, ExpressionKind>, RuntimePseudoAlias>();
+    const inlineMapPseudoRootDefaults = new WeakMap<object, true>();
 
     const tryApplyRuntimeStyleFunction = (
       testInfo: TestInfo,
@@ -1047,6 +1059,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         style,
         pseudoAlias.pseudoNames,
         pseudoAlias.pseudoKeys,
+        inlineMapPseudoRootDefaults,
       );
       if (!pseudoAliasStyles) {
         return false;
@@ -1070,7 +1083,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       if (Object.keys(rootStyle).length > 0) {
         if (!tryApplyRuntimeStyleFunction(testInfo, rootStyle)) {
-          applyVariant(testInfo, rootStyle);
+          const rootStyleKey = ensureUniqueKey(
+            [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
+            `${styleKeyWithSuffix(decl.styleKey, testInfo.when)}Root`,
+          );
+          extraStyleObjects.set(rootStyleKey, rootStyle);
+          decl.pseudoExpandSelectors ??= [];
+          decl.pseudoExpandSelectors.push({
+            styleKey: rootStyleKey,
+            guard: { when: normalizeTransientWhen(testInfo.when) },
+          });
         }
       }
 
@@ -2880,6 +2902,7 @@ function splitStaticPseudoAliasStyle(
   style: Record<string, unknown>,
   pseudoNames: string[],
   pseudoKeys: string[],
+  rootDefaultObjects: WeakMap<object, true>,
 ): {
   rootStyle: Record<string, unknown>;
   pseudoAliasStyles: Map<string, Record<string, unknown>> | null;
@@ -2892,13 +2915,22 @@ function splitStaticPseudoAliasStyle(
 
   let hasAliasStyle = false;
   for (const [prop, value] of Object.entries(style)) {
-    const byPseudo = splitPseudoObjectByAliasName(j, value, pseudoNames, pseudoKeys);
-    if (!byPseudo) {
+    const split = splitPseudoObjectByAliasName(
+      j,
+      value,
+      pseudoNames,
+      pseudoKeys,
+      rootDefaultObjects,
+    );
+    if (!split) {
       rootStyle[prop] = value;
       continue;
     }
     hasAliasStyle = true;
-    for (const [pseudoName, pseudoValue] of byPseudo) {
+    if (split.rootValue) {
+      rootStyle[prop] = split.rootValue;
+    }
+    for (const [pseudoName, pseudoValue] of split.byPseudoName) {
       const styleForPseudo = pseudoAliasStyles.get(pseudoName);
       if (styleForPseudo) {
         styleForPseudo[prop] = pseudoValue;
@@ -2917,7 +2949,11 @@ function splitPseudoObjectByAliasName(
   value: unknown,
   pseudoNames: string[],
   pseudoKeys: string[],
-): Map<string, ExpressionKind> | null {
+  rootDefaultObjects: WeakMap<object, true>,
+): {
+  byPseudoName: Map<string, ExpressionKind>;
+  rootValue?: Record<string, unknown>;
+} | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
@@ -2928,6 +2964,8 @@ function splitPseudoObjectByAliasName(
 
   const properties = node.properties as ASTNodeRecord[] | undefined;
   const byKey = new Map<string, ExpressionKind>();
+  const pseudoKeySet = new Set(pseudoKeys);
+  const rootValue: Record<string, unknown> = {};
   for (const property of properties ?? []) {
     if (!property || property.type !== "Property") {
       continue;
@@ -2935,6 +2973,17 @@ function splitPseudoObjectByAliasName(
     const keyName = getStaticObjectPropertyKeyName(property);
     if (keyName) {
       byKey.set(keyName, property.value as ExpressionKind);
+      if (!pseudoKeySet.has(keyName) && (keyName !== "default" || rootDefaultObjects.has(node))) {
+        if (
+          keyName === "default" &&
+          (property.value as ASTNodeRecord | undefined)?.type === "ObjectExpression"
+        ) {
+          copyObjectExpressionPropertiesToRootValue(rootValue, property.value as ASTNodeRecord);
+        } else {
+          rootValue[keyName] =
+            staticValueFromExpression(property.value) ?? cloneAstNode(property.value);
+        }
+      }
     }
   }
 
@@ -2953,7 +3002,10 @@ function splitPseudoObjectByAliasName(
       ]) as ExpressionKind,
     );
   }
-  return byPseudoName;
+  return {
+    byPseudoName,
+    ...(Object.keys(rootValue).length > 0 ? { rootValue } : {}),
+  };
 }
 
 function bridgeRuntimePseudoColorValues(
@@ -3130,6 +3182,40 @@ function styleReferencesRuntimeTheme(style: Record<string, unknown>): boolean {
 
 function normalizeTransientPropName(propName: string): string {
   return propName.startsWith("$") ? propName.slice(1) : propName;
+}
+
+function normalizeTransientWhen(when: string): string {
+  return when.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, "$1");
+}
+
+function copyObjectExpressionPropertiesToRootValue(
+  rootValue: Record<string, unknown>,
+  objectExpression: ASTNodeRecord,
+): void {
+  const properties = objectExpression.properties as ASTNodeRecord[] | undefined;
+  for (const property of properties ?? []) {
+    if (!property || property.type !== "Property") {
+      continue;
+    }
+    const keyName = getStaticObjectPropertyKeyName(property);
+    if (!keyName) {
+      continue;
+    }
+    rootValue[keyName] = staticValueFromExpression(property.value) ?? cloneAstNode(property.value);
+  }
+}
+
+function staticValueFromExpression(node: unknown): string | number | boolean | null | undefined {
+  if (
+    node &&
+    typeof node === "object" &&
+    (node as { type?: string }).type === "Literal" &&
+    (node as { value?: unknown }).value === null
+  ) {
+    return null;
+  }
+  const value = literalToStaticValue(node);
+  return value === null ? undefined : value;
 }
 
 /**

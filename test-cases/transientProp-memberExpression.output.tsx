@@ -65,6 +65,25 @@ function PresenceAvatar(props: PresenceAvatarProps) {
   );
 }
 
+type DestructuredShadowProps = React.PropsWithChildren<{
+  blur: number;
+  color: string;
+}>;
+
+function DestructuredShadow(props: DestructuredShadowProps) {
+  const { children, blur, color } = props;
+  return (
+    <div
+      sx={styles.destructuredShadowBoxShadow({
+        blur,
+        color,
+      })}
+    >
+      {children}
+    </div>
+  );
+}
+
 type ZoomPreviewImageProps = {
   isZoomable: boolean;
   isDragging: boolean;
@@ -139,6 +158,9 @@ export const App = () => (
     <HighlightedAvatar user="Bob" size="tiny" />
     <PresenceAvatar user="Carol" size="small" highlightColor="green" />
     <PresenceAvatar user="Dave" size="tiny" />
+    <DestructuredShadow blur={4} color="rgba(0, 0, 0, 0.35)">
+      Destructured shadow
+    </DestructuredShadow>
   </div>
 );
 
@@ -168,6 +190,9 @@ const styles = stylex.create({
     margin: 2,
     transition: "box-shadow 0.3s ease-in-out",
     boxShadow: `0 0 0 1px ${$colors.bgBase},0 0 0 2px ${props.highlightColor ?? "transparent"},0 0 0 3px ${props.highlightColor ? theme.color.bgBase : "transparent"}`,
+  }),
+  destructuredShadowBoxShadow: (props) => ({
+    boxShadow: `0 0 ${props.blur}px ${props.color}`,
   }),
   zoomPreviewImage: {
     objectFit: "contain",

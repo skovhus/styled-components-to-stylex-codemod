@@ -67,6 +67,7 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 import {
   buildTemplateWithStaticParts,
   collectPropsFromArrowFn,
+  collectPropsFromArrowFnDestructured,
   getImportedStylexIdentifiers,
   hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
@@ -356,7 +357,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
 
       if (rawExpr.type === "ArrowFunctionExpression") {
-        for (const propName of collectPropsFromArrowFn(rawExpr)) {
+        for (const propName of collectPropsFromArrowFnDestructured(rawExpr)) {
           if (propName !== "theme") {
             propsUsed.add(propName);
           }
