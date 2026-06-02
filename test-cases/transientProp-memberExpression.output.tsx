@@ -1,8 +1,6 @@
 import React from "react";
-import { useTheme } from "styled-components";
 import * as stylex from "@stylexjs/stylex";
 import { motion, type MotionValue } from "./lib/framer-motion";
-import { $colors } from "./tokens.stylex";
 import { UserAvatar } from "./lib/user-avatar";
 
 type ComponentWrapperProps = {
@@ -22,45 +20,6 @@ function ComponentWrapper(props: ComponentWrapperProps) {
         ..._sx.style,
         ...style,
       }}
-    />
-  );
-}
-
-type HighlightedAvatarProps = { highlightColor?: string } & Omit<
-  React.ComponentPropsWithRef<typeof UserAvatar>,
-  "className" | "style"
->;
-
-function HighlightedAvatar(props: HighlightedAvatarProps) {
-  const { highlightColor, ...rest } = props;
-  return (
-    <UserAvatar
-      {...rest}
-      {...stylex.props(styles.highlightedAvatar(`0 0 0 2px ${highlightColor ?? "transparent"}`))}
-    />
-  );
-}
-
-type PresenceAvatarProps = { highlightColor?: string } & Omit<
-  React.ComponentPropsWithRef<typeof UserAvatar>,
-  "className" | "style"
->;
-
-function PresenceAvatar(props: PresenceAvatarProps) {
-  const { highlightColor, ...rest } = props;
-  const theme = useTheme();
-
-  return (
-    <UserAvatar
-      {...rest}
-      {...stylex.props(
-        styles.presenceAvatar(
-          {
-            highlightColor,
-          },
-          theme,
-        ),
-      )}
     />
   );
 }
@@ -154,10 +113,12 @@ export const App = () => (
       16:9 iframe
     </MotionIframeWrapper>
     <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
-    <HighlightedAvatar user="Alice" size="small" highlightColor="blue" />
-    <HighlightedAvatar user="Bob" size="tiny" />
-    <PresenceAvatar user="Carol" size="small" highlightColor="green" />
-    <PresenceAvatar user="Dave" size="tiny" />
+    <UserAvatar
+      user="Alice"
+      size="small"
+      {...stylex.props(styles.highlightedAvatar, styles.highlightedAvatarBackgroundColor("blue"))}
+    />
+    <UserAvatar user="Bob" size="tiny" {...stylex.props(styles.highlightedAvatar)} />
     <DestructuredShadow blur={4} glowShadow="rgba(0, 0, 0, 0.35)">
       Destructured shadow
     </DestructuredShadow>
@@ -181,13 +142,14 @@ const styles = stylex.create({
   componentWrapperOpen: {
     borderRadius: "8px",
   },
-  highlightedAvatar: (boxShadow: string) => ({
-    borderRadius: "50%",
-    boxShadow,
-  }),
-  presenceAvatar: (props, theme) => ({
-    margin: 2,
-    boxShadow: `0 0 0 1px ${$colors.bgBase},0 0 0 2px ${props.highlightColor ?? "transparent"},0 0 0 3px ${props.highlightColor ? theme.color.bgBase : "transparent"}`,
+  highlightedAvatar: {
+    backgroundColor: "transparent",
+    color: "white",
+    paddingBlock: 2,
+    paddingInline: 4,
+  },
+  highlightedAvatarBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
   }),
   destructuredShadowBoxShadow: (props) => ({
     boxShadow: `0 0 ${props.blur}px ${props.glowShadow}`,
