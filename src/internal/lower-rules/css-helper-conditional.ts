@@ -917,11 +917,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       if (Object.keys(style).length === 0 && dynamicProps.length > 0 && !referencesTheme) {
         for (const dyn of dynamicProps) {
           const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
-          const conditionWhen =
+          const isGuardedBySameProp =
             normalizeTransientPropName(dyn.jsxProp) ===
-            normalizeTransientPropName(testInfo.propName)
-              ? undefined
-              : testInfo.when;
+            normalizeTransientPropName(testInfo.propName);
+          const conditionWhen = isGuardedBySameProp ? undefined : testInfo.when;
+          const condition = isGuardedBySameProp ? ("truthy" as const) : undefined;
           if (!styleFnDecls.has(fnKey)) {
             const dynParamName = cssPropertyToIdentifier(dyn.stylexProp, avoidNames);
             const param = j.identifier(dynParamName);
@@ -933,13 +933,17 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           if (
             !styleFnFromProps.some(
               (p) =>
-                p.fnKey === fnKey && p.jsxProp === dyn.jsxProp && p.conditionWhen === conditionWhen,
+                p.fnKey === fnKey &&
+                p.jsxProp === dyn.jsxProp &&
+                p.condition === condition &&
+                p.conditionWhen === conditionWhen,
             )
           ) {
             styleFnFromProps.push({
               fnKey,
               jsxProp: dyn.jsxProp,
-              conditionWhen,
+              ...(condition ? { condition } : {}),
+              ...(conditionWhen ? { conditionWhen } : {}),
             });
           }
           ensureShouldForwardPropDrop(decl, dyn.jsxProp);
