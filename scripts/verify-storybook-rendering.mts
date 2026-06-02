@@ -97,8 +97,6 @@ const CASE_THRESHOLD_OVERRIDES = new Map<string, number>([
  * The pixel differences are purely cosmetic browser rendering artifacts.
  */
 const CASE_MISMATCH_TOLERANCE_OVERRIDES = new Map<string, number>([
-  ["conditional-cssBlockInPseudo", 0.005], // Text antialiasing after matching computed pseudo-alias styles
-  ["interpolation-pseudoConditional", 0.002], // Text antialiasing after pseudo-alias style ordering
   ["selector-componentDynamicProp", 0.03], // TODO: investigate if this override can be removed
   ["selector-dataAttribute", 0.01], // Sub-pixel anti-aliasing from defaultMarker() class on ancestor elements
 ]);
