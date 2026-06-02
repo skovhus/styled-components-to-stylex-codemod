@@ -7,9 +7,9 @@ function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles({
-          active: styles.buttonPseudoActive as unknown as stylex.StyleXStyles,
-          hover: styles.buttonPseudoHover as unknown as stylex.StyleXStyles,
+        highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          active: styles.buttonPseudoActive,
+          hover: styles.buttonPseudoHover,
         }),
         styles.button,
       ]}
@@ -23,9 +23,9 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles({
-          active: styles.resetButtonPseudoActive as unknown as stylex.StyleXStyles,
-          hover: styles.resetButtonPseudoHover as unknown as stylex.StyleXStyles,
+        highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          active: styles.resetButtonPseudoActive,
+          hover: styles.resetButtonPseudoHover,
         }),
         styles.resetButton,
       ]}
@@ -46,9 +46,9 @@ function HighlightCard(props: HighlightCardProps) {
     <div
       sx={[
         interactive
-          ? highlightStyles({
-              active: styles.highlightCardInteractivePseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.highlightCardInteractivePseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.highlightCardInteractivePseudoActive,
+              hover: styles.highlightCardInteractivePseudoHover,
             })
           : undefined,
         styles.highlightCard,
@@ -137,17 +137,19 @@ const styles = stylex.create({
     borderRadius: 6,
     backgroundColor: "#f8fafc",
   },
-  highlightCardInteractiveRoot: {
-    cursor: "pointer",
-  },
   highlightCardInteractivePseudoActive: {
     backgroundColor: {
+      default: "#f8fafc",
       ":active": "#e0f2fe",
     },
   },
   highlightCardInteractivePseudoHover: {
     backgroundColor: {
+      default: "#f8fafc",
       ":hover": "#e0f2fe",
     },
+  },
+  highlightCardInteractiveRoot: {
+    cursor: "pointer",
   },
 });

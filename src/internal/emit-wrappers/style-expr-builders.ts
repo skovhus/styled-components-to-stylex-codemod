@@ -77,15 +77,19 @@ export function styleRef(j: JSCodeshift, stylesIdentifier: string, key: string):
   return j.memberExpression(j.identifier(stylesIdentifier), j.identifier(key)) as ExpressionKind;
 }
 
-function styleRefAsStyleXStyles(
-  j: JSCodeshift,
-  stylesIdentifier: string,
-  key: string,
-): ExpressionKind {
-  return j.tsAsExpression(
-    j.tsAsExpression(styleRef(j, stylesIdentifier, key), j.tsUnknownKeyword()),
-    j.tsTypeReference(j.tsQualifiedName(j.identifier("stylex"), j.identifier("StyleXStyles"))),
-  ) as ExpressionKind;
+function styleXStylesType(j: JSCodeshift) {
+  return j.tsTypeReference(
+    j.tsQualifiedName(j.identifier("stylex"), j.identifier("StyleXStyles")),
+    j.tsTypeParameterInstantiation([
+      j.tsTypeReference(
+        j.identifier("Record"),
+        j.tsTypeParameterInstantiation([
+          j.tsStringKeyword(),
+          j.tsUnionType([j.tsTypeLiteral([]), j.tsNullKeyword()]),
+        ]),
+      ),
+    ]),
+  );
 }
 
 /**
@@ -1255,12 +1259,15 @@ function appendPseudoAliasStyleArgs(
       j.property(
         "init",
         /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? j.identifier(name) : j.literal(name),
-        styleRefAsStyleXStyles(j, stylesIdentifier, entry.styleKeys[i]!),
+        styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
       ),
     );
     const expr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
       j.objectExpression(properties),
     ]) as ExpressionKind;
+    (
+      expr as { typeParameters?: ReturnType<JSCodeshift["tsTypeParameterInstantiation"]> }
+    ).typeParameters = j.tsTypeParameterInstantiation([styleXStylesType(j)]);
 
     let finalExpr = expr;
     if (entry.guard) {

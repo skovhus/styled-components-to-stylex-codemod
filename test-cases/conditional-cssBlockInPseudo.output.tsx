@@ -34,9 +34,9 @@ function IconWrapper(props: IconWrapperProps) {
     <span
       sx={[
         background
-          ? highlightStyles({
-              active: styles.iconWrapperBackgroundPseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.iconWrapperBackgroundPseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.iconWrapperBackgroundPseudoActive,
+              hover: styles.iconWrapperBackgroundPseudoHover,
             })
           : undefined,
         styles.iconWrapper,
@@ -64,9 +64,9 @@ function FalsyGuardIcon(props: FalsyGuardIconProps) {
     <span
       sx={[
         !disabled &&
-          highlightStyles({
-            active: styles.falsyGuardIconNotDisabledPseudoActive as unknown as stylex.StyleXStyles,
-            hover: styles.falsyGuardIconNotDisabledPseudoHover as unknown as stylex.StyleXStyles,
+          highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+            active: styles.falsyGuardIconNotDisabledPseudoActive,
+            hover: styles.falsyGuardIconNotDisabledPseudoHover,
           }),
         styles.falsyGuardIcon,
         !disabled && styles.falsyGuardIconNotDisabledRoot,
@@ -89,9 +89,9 @@ function FocusAliasIcon(props: FocusAliasIconProps) {
       {...rest}
       sx={[
         active
-          ? highlightStyles({
-              active: styles.focusAliasIconActivePseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.focusAliasIconActivePseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.focusAliasIconActivePseudoActive,
+              hover: styles.focusAliasIconActivePseudoHover,
             })
           : undefined,
         styles.focusAliasIcon,
@@ -112,10 +112,9 @@ function AliasWithDefaultIcon(props: AliasWithDefaultIconProps) {
       {...rest}
       sx={[
         active
-          ? highlightStyles({
-              active:
-                styles.aliasWithDefaultIconActivePseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.aliasWithDefaultIconActivePseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.aliasWithDefaultIconActivePseudoActive,
+              hover: styles.aliasWithDefaultIconActivePseudoHover,
             })
           : undefined,
         styles.aliasWithDefaultIcon,
@@ -136,9 +135,9 @@ function OrderedAliasIcon(props: OrderedAliasIconProps) {
     <span
       sx={[
         active
-          ? highlightStyles({
-              active: styles.orderedAliasIconActivePseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.orderedAliasIconActivePseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.orderedAliasIconActivePseudoActive,
+              hover: styles.orderedAliasIconActivePseudoHover,
             })
           : undefined,
         styles.orderedAliasIcon,
@@ -147,6 +146,35 @@ function OrderedAliasIcon(props: OrderedAliasIconProps) {
     >
       {children}
     </span>
+  );
+}
+
+type DualAliasIconProps = { active?: boolean } & Omit<
+  React.ComponentProps<"span">,
+  "className" | "style" | "sx"
+>;
+
+function DualAliasIcon(props: DualAliasIconProps) {
+  const { active, ...rest } = props;
+  return (
+    <span
+      {...rest}
+      sx={[
+        active
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.dualAliasIconActivePseudoActive,
+              hover: styles.dualAliasIconActivePseudoHover,
+            })
+          : undefined,
+        active
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.dualAliasIconActivePseudoActive2,
+              hover: styles.dualAliasIconActivePseudoHover2,
+            })
+          : undefined,
+        styles.dualAliasIcon,
+      ]}
+    />
   );
 }
 
@@ -168,6 +196,9 @@ export const App = () => (
     <OrderedAliasIcon active color="#2563eb">
       Alias order
     </OrderedAliasIcon>
+    <DualAliasIcon active tabIndex={0}>
+      Dual alias
+    </DualAliasIcon>
   </div>
 );
 
@@ -270,24 +301,28 @@ const styles = stylex.create({
     backgroundColor: "#eef2ff",
     color: "#312e81",
   },
-  falsyGuardIconNotDisabledRoot: {
-    cursor: "pointer",
-  },
   falsyGuardIconNotDisabledPseudoActive: {
     backgroundColor: {
+      default: "#eef2ff",
       ":active": $colors.bgBaseHover,
     },
     color: {
+      default: "#312e81",
       ":active": $colors.labelTitle,
     },
   },
   falsyGuardIconNotDisabledPseudoHover: {
     backgroundColor: {
+      default: "#eef2ff",
       ":hover": $colors.bgBaseHover,
     },
     color: {
+      default: "#312e81",
       ":hover": $colors.labelTitle,
     },
+  },
+  falsyGuardIconNotDisabledRoot: {
+    cursor: "pointer",
   },
   focusAliasIcon: {
     display: "inline-flex",
@@ -297,11 +332,13 @@ const styles = stylex.create({
   },
   focusAliasIconActivePseudoActive: {
     color: {
+      default: "#475569",
       ":focus:active": $colors.labelTitle,
     },
   },
   focusAliasIconActivePseudoHover: {
     color: {
+      default: "#475569",
       ":focus:hover": $colors.labelTitle,
     },
   },
@@ -311,12 +348,6 @@ const styles = stylex.create({
     paddingInline: 8,
     color: "#475569",
   },
-  aliasWithDefaultIconActiveRoot: {
-    color: {
-      default: "#2563eb",
-      ":focus": "#16a34a",
-    },
-  },
   aliasWithDefaultIconActivePseudoActive: {
     color: {
       ":active": $colors.labelTitle,
@@ -325,6 +356,12 @@ const styles = stylex.create({
   aliasWithDefaultIconActivePseudoHover: {
     color: {
       ":hover": $colors.labelTitle,
+    },
+  },
+  aliasWithDefaultIconActiveRoot: {
+    color: {
+      default: "#2563eb",
+      ":focus": "#16a34a",
     },
   },
   orderedAliasIcon: {
@@ -345,4 +382,35 @@ const styles = stylex.create({
   orderedAliasIconColor: (colorValue: string) => ({
     color: colorValue,
   }),
+  dualAliasIcon: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "#f8fafc",
+    color: "#334155",
+  },
+  dualAliasIconActivePseudoActive: {
+    backgroundColor: {
+      default: "#f8fafc",
+      ":active": $colors.bgBaseHover,
+    },
+  },
+  dualAliasIconActivePseudoHover: {
+    backgroundColor: {
+      default: "#f8fafc",
+      ":hover": $colors.bgBaseHover,
+    },
+  },
+  dualAliasIconActivePseudoActive2: {
+    color: {
+      default: "#334155",
+      ":focus:active": $colors.labelTitle,
+    },
+  },
+  dualAliasIconActivePseudoHover2: {
+    color: {
+      default: "#334155",
+      ":focus:hover": $colors.labelTitle,
+    },
+  },
 });

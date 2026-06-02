@@ -456,7 +456,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
       const { rules, slotExprById } = parseCssTemplateToRules(tpl);
       const out = new Map<string, ExpressionKind>();
-      let runtimePseudoAlias: RuntimePseudoAlias | null = null;
+      const runtimePseudoAliases: RuntimePseudoAlias[] = [];
       // Track @media values per property: Map<cssProp, Map<mediaQuery, ExpressionKind>>
       const mediaValues = new Map<string, Map<string, ExpressionKind>>();
       // Track computed media keys per property (from resolveSelector)
@@ -584,7 +584,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             pseudoKeys,
             styleSelectorExpr: styleSelectorExpr as ExpressionKind,
           };
-          runtimePseudoAlias = alias;
+          runtimePseudoAliases.push(alias);
           sawInterpolatedPseudoSelector = true;
           return pseudoKeys.map((pseudo) => ({
             pseudo,
@@ -886,13 +886,13 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return null;
       }
 
-      if (runtimePseudoAlias) {
-        inlineMapPseudoAliases.set(out, runtimePseudoAlias);
+      if (runtimePseudoAliases.length > 0) {
+        inlineMapPseudoAliases.set(out, runtimePseudoAliases);
       }
       return out;
     };
 
-    const inlineMapPseudoAliases = new WeakMap<Map<string, ExpressionKind>, RuntimePseudoAlias>();
+    const inlineMapPseudoAliases = new WeakMap<Map<string, ExpressionKind>, RuntimePseudoAlias[]>();
     const inlineMapPseudoRootDefaults = new WeakMap<object, true>();
 
     const tryApplyRuntimeStyleFunction = (
@@ -1053,36 +1053,73 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return true;
     };
 
-    const applyStaticPseudoAliasVariant = (
+    const applyStaticPseudoAliasVariants = (
       testInfo: TestInfo,
       style: Record<string, unknown>,
-      pseudoAlias: RuntimePseudoAlias,
+      pseudoAliases: RuntimePseudoAlias[],
     ): boolean => {
-      const { rootStyle, pseudoAliasStyles } = splitStaticPseudoAliasStyle(
-        j,
-        style,
-        pseudoAlias.pseudoNames,
-        pseudoAlias.pseudoKeys,
-        inlineMapPseudoRootDefaults,
-      );
-      if (!pseudoAliasStyles) {
-        return false;
-      }
-      if (styleReferencesRuntimeTheme(Object.fromEntries(pseudoAliasStyles))) {
-        return false;
-      }
-      const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
-      for (const pseudoStyle of pseudoAliasStyles.values()) {
-        if (
-          collectRuntimeStylePropNames(pseudoStyle, importMap, importedStylexIdentifiers).size > 0
-        ) {
-          warnings.push({
-            severity: "warning",
-            type: "Conditional `css` block: runtime pseudo-alias styles are not supported",
-            loc: decl.loc,
-          });
+      let rootStyle = style;
+      for (const pseudoAlias of pseudoAliases) {
+        const split = splitStaticPseudoAliasStyle(
+          j,
+          rootStyle,
+          pseudoAlias.pseudoNames,
+          pseudoAlias.pseudoKeys,
+          inlineMapPseudoRootDefaults,
+          (propName) =>
+            !hasPriorRootStyleFnForProps(styleFnFromProps, styleFnDecls, new Set([propName])),
+        );
+        const { pseudoAliasStyles } = split;
+        if (!pseudoAliasStyles) {
           return false;
         }
+        if (styleReferencesRuntimeTheme(Object.fromEntries(pseudoAliasStyles))) {
+          return false;
+        }
+        const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+        for (const pseudoStyle of pseudoAliasStyles.values()) {
+          if (
+            collectRuntimeStylePropNames(pseudoStyle, importMap, importedStylexIdentifiers).size > 0
+          ) {
+            warnings.push({
+              severity: "warning",
+              type: "Conditional `css` block: runtime pseudo-alias styles are not supported",
+              loc: decl.loc,
+            });
+            return false;
+          }
+        }
+
+        const styleKeys: string[] = [];
+        const guardBase = styleKeyWithSuffix(decl.styleKey, testInfo.when);
+        for (const pseudoName of pseudoAlias.pseudoNames) {
+          const styleKey = ensureUniqueKey(
+            [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
+            `${guardBase}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`,
+          );
+          const pseudoStyle = pseudoAliasStyles.get(pseudoName);
+          if (!pseudoStyle) {
+            return false;
+          }
+          styleKeys.push(styleKey);
+          extraStyleObjects.set(styleKey, pseudoStyle);
+        }
+
+        const aliasPropNames = collectStylePropNames(pseudoAliasStyles.values());
+        const canApplySourceOrder =
+          !hasRootStyleForProps(styleObj, aliasPropNames) &&
+          !hasRootStyleForProps(split.rootStyle, aliasPropNames) &&
+          !hasPriorRootStyleFnForProps(styleFnFromProps, styleFnDecls, aliasPropNames);
+        const sourceOrder = canApplySourceOrder ? allocateSourceOrder() : undefined;
+        decl.pseudoAliasSelectors ??= [];
+        decl.pseudoAliasSelectors.push({
+          styleKeys,
+          styleSelectorExpr: cloneAstNode(pseudoAlias.styleSelectorExpr),
+          pseudoNames: pseudoAlias.pseudoNames,
+          guard: { when: testInfo.when },
+          ...(sourceOrder !== undefined ? { sourceOrder } : {}),
+        });
+        rootStyle = split.rootStyle;
       }
 
       if (Object.keys(rootStyle).length > 0) {
@@ -1100,35 +1137,6 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         }
       }
 
-      const styleKeys: string[] = [];
-      const guardBase = styleKeyWithSuffix(decl.styleKey, testInfo.when);
-      for (const pseudoName of pseudoAlias.pseudoNames) {
-        const styleKey = ensureUniqueKey(
-          [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
-          `${guardBase}Pseudo${capitalize(kebabToCamelCase(pseudoName))}`,
-        );
-        const pseudoStyle = pseudoAliasStyles.get(pseudoName);
-        if (!pseudoStyle) {
-          return false;
-        }
-        styleKeys.push(styleKey);
-        extraStyleObjects.set(styleKey, pseudoStyle);
-      }
-
-      const aliasPropNames = collectStylePropNames(pseudoAliasStyles.values());
-      const canApplySourceOrder =
-        !hasRootStyleForProps(styleObj, aliasPropNames) &&
-        !hasRootStyleForProps(rootStyle, aliasPropNames) &&
-        !hasPriorRootStyleFnForProps(styleFnFromProps, styleFnDecls, aliasPropNames);
-      const sourceOrder = canApplySourceOrder ? allocateSourceOrder() : undefined;
-      decl.pseudoAliasSelectors ??= [];
-      decl.pseudoAliasSelectors.push({
-        styleKeys,
-        styleSelectorExpr: cloneAstNode(pseudoAlias.styleSelectorExpr),
-        pseudoNames: pseudoAlias.pseudoNames,
-        guard: { when: testInfo.when },
-        ...(sourceOrder !== undefined ? { sourceOrder } : {}),
-      });
       dropAllTestInfoProps(testInfo);
       decl.needsWrapperComponent = true;
       return true;
@@ -1157,9 +1165,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         });
         if (inlineMap) {
           const inlineStyle = Object.fromEntries(inlineMap);
-          const pseudoAlias = inlineMapPseudoAliases.get(inlineMap);
-          if (pseudoAlias) {
-            const handled = applyStaticPseudoAliasVariant(testInfo, inlineStyle, pseudoAlias);
+          const pseudoAliases = inlineMapPseudoAliases.get(inlineMap);
+          if (pseudoAliases) {
+            const handled = applyStaticPseudoAliasVariants(testInfo, inlineStyle, pseudoAliases);
             if (!handled) {
               markBail();
             }
@@ -2325,9 +2333,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       });
       if (consMap) {
         const consStyle = Object.fromEntries(consMap);
-        const pseudoAlias = inlineMapPseudoAliases.get(consMap);
-        if (pseudoAlias) {
-          const handled = applyStaticPseudoAliasVariant(testInfo, consStyle, pseudoAlias);
+        const pseudoAliases = inlineMapPseudoAliases.get(consMap);
+        if (pseudoAliases) {
+          const handled = applyStaticPseudoAliasVariants(testInfo, consStyle, pseudoAliases);
           if (!handled) {
             markBail();
           }
@@ -2371,9 +2379,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       });
       if (altMap) {
         const altStyle = Object.fromEntries(altMap);
-        const pseudoAlias = inlineMapPseudoAliases.get(altMap);
-        if (pseudoAlias) {
-          const handled = applyStaticPseudoAliasVariant(invertedTestInfo, altStyle, pseudoAlias);
+        const pseudoAliases = inlineMapPseudoAliases.get(altMap);
+        if (pseudoAliases) {
+          const handled = applyStaticPseudoAliasVariants(invertedTestInfo, altStyle, pseudoAliases);
           if (!handled) {
             markBail();
           }
@@ -2913,6 +2921,7 @@ function splitStaticPseudoAliasStyle(
   pseudoNames: string[],
   pseudoKeys: string[],
   rootDefaultObjects: WeakMap<object, true>,
+  shouldPreserveAliasDefault: (propName: string) => boolean,
 ): {
   rootStyle: Record<string, unknown>;
   pseudoAliasStyles: Map<string, Record<string, unknown>> | null;
@@ -2931,6 +2940,7 @@ function splitStaticPseudoAliasStyle(
       pseudoNames,
       pseudoKeys,
       rootDefaultObjects,
+      shouldPreserveAliasDefault(prop),
     );
     if (!split) {
       rootStyle[prop] = value;
@@ -2960,6 +2970,7 @@ function splitPseudoObjectByAliasName(
   pseudoNames: string[],
   pseudoKeys: string[],
   rootDefaultObjects: WeakMap<object, true>,
+  preserveAliasDefault: boolean,
 ): {
   byPseudoName: Map<string, ExpressionKind>;
   rootValue?: Record<string, unknown>;
@@ -2976,6 +2987,7 @@ function splitPseudoObjectByAliasName(
   const byKey = new Map<string, ExpressionKind>();
   const pseudoKeySet = new Set(pseudoKeys);
   const rootValue: Record<string, unknown> = {};
+  let aliasDefaultValue: ExpressionKind | null = null;
   for (const property of properties ?? []) {
     if (!property || property.type !== "Property") {
       continue;
@@ -2983,6 +2995,12 @@ function splitPseudoObjectByAliasName(
     const keyName = getStaticObjectPropertyKeyName(property);
     if (keyName) {
       byKey.set(keyName, property.value as ExpressionKind);
+      if (preserveAliasDefault && keyName === "default" && !rootDefaultObjects.has(node)) {
+        const staticDefault = staticValueFromExpression(property.value);
+        if (staticDefault !== null && staticDefault !== undefined) {
+          aliasDefaultValue = property.value as ExpressionKind;
+        }
+      }
       if (!pseudoKeySet.has(keyName) && (keyName !== "default" || rootDefaultObjects.has(node))) {
         if (
           keyName === "default" &&
@@ -3008,6 +3026,15 @@ function splitPseudoObjectByAliasName(
     byPseudoName.set(
       pseudoName,
       j.objectExpression([
+        ...(aliasDefaultValue
+          ? [
+              j.property(
+                "init",
+                j.identifier("default"),
+                cloneAstNode(aliasDefaultValue) as ExpressionKind,
+              ),
+            ]
+          : []),
         j.property("init", j.literal(pseudoKey), cloneAstNode(pseudoValue) as ExpressionKind),
       ]) as ExpressionKind,
     );

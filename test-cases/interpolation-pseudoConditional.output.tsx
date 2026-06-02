@@ -12,9 +12,9 @@ function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles({
-          active: styles.buttonPseudoActive as unknown as stylex.StyleXStyles,
-          hover: styles.buttonPseudoHover as unknown as stylex.StyleXStyles,
+        highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          active: styles.buttonPseudoActive,
+          hover: styles.buttonPseudoHover,
         }),
         styles.button,
       ]}
@@ -32,9 +32,9 @@ function SpecificButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        highlightStyles({
-          active: styles.specificButtonPseudoActive as unknown as stylex.StyleXStyles,
-          hover: styles.specificButtonPseudoHover as unknown as stylex.StyleXStyles,
+        highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+          active: styles.specificButtonPseudoActive,
+          hover: styles.specificButtonPseudoHover,
         }),
         styles.specificButton,
       ]}

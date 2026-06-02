@@ -131,6 +131,25 @@ const OrderedAliasIcon = styled.span<{ $active?: boolean; $color: string }>`
     `}
 `;
 
+const DualAliasIcon = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #f8fafc;
+  color: #334155;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:${highlight} {
+        background-color: ${color("bgBaseHover")};
+      }
+
+      &:focus:${highlight} {
+        color: ${color("labelTitle")};
+      }
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", gap: 8, padding: 16 }}>
     <Tab data-state="active">Active</Tab>
@@ -149,5 +168,8 @@ export const App = () => (
     <OrderedAliasIcon $active $color="#2563eb">
       Alias order
     </OrderedAliasIcon>
+    <DualAliasIcon $active tabIndex={0}>
+      Dual alias
+    </DualAliasIcon>
   </div>
 );

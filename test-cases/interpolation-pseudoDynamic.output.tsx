@@ -13,9 +13,9 @@ function Button(props: ButtonProps) {
     <button
       sx={[
         active
-          ? highlightStyles({
-              active: styles.buttonActivePseudoActive as unknown as stylex.StyleXStyles,
-              hover: styles.buttonActivePseudoHover as unknown as stylex.StyleXStyles,
+          ? highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+              active: styles.buttonActivePseudoActive,
+              hover: styles.buttonActivePseudoHover,
             })
           : undefined,
         styles.button,
@@ -40,9 +40,9 @@ function InvertedButton(props: InvertedButtonProps) {
     <button
       sx={[
         !$disabled &&
-          highlightStyles({
-            active: styles.invertedButtonNotDisabledPseudoActive as unknown as stylex.StyleXStyles,
-            hover: styles.invertedButtonNotDisabledPseudoHover as unknown as stylex.StyleXStyles,
+          highlightStyles<stylex.StyleXStyles<Record<string, {} | null>>>({
+            active: styles.invertedButtonNotDisabledPseudoActive,
+            hover: styles.invertedButtonNotDisabledPseudoHover,
           }),
         styles.invertedButton,
       ]}
