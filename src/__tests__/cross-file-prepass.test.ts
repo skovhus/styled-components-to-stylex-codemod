@@ -1393,3 +1393,71 @@ export const App = () => (
     expect(code).toContain('"blue"');
   });
 });
+
+/* ── Static identifier resolution scope safety ───────────────────────── */
+
+describe("consumer static identifier resolution", () => {
+  const resolver = createModuleResolver();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "prepass-static-ident-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function write(name: string, content: string): string {
+    const filePath = join(tmpDir, name);
+    writeFileSync(filePath, content, "utf-8");
+    return filePath;
+  }
+
+  it("does not resolve a JSX identifier to a module const shadowed by a prop", async () => {
+    const defFile = write(
+      "spacer.tsx",
+      [
+        'import styled from "styled-components";',
+        "export const Spacer = styled.div<{ height?: number }>`",
+        "  height: ${(p) => p.height}px;",
+        "`;",
+      ].join("\n"),
+    );
+    const consumerFile = write(
+      "consumer.tsx",
+      [
+        'import * as React from "react";',
+        'import { Spacer } from "./spacer";',
+        "const height = 40;",
+        // `height` here is the parameter, NOT the module constant above.
+        "export function Row({ height }: { height: number }) {",
+        "  return <Spacer height={height} />;",
+        "}",
+        "export const Fixed = () => <Spacer height={height} />;",
+      ].join("\n"),
+    );
+
+    const result = await runPrepass({
+      filesToTransform: [defFile],
+      consumerPaths: [consumerFile],
+      resolver,
+      parserName: "tsx",
+      createExternalInterface: false,
+    });
+
+    let heightUsage: { hasUnknown: boolean; values: unknown[] } | undefined;
+    for (const byComponent of (result.crossFileInfo.propUsageByFile ?? new Map()).values()) {
+      const info = byComponent.get("Spacer");
+      if (info?.props.height) {
+        heightUsage = info.props.height;
+      }
+    }
+
+    expect(heightUsage).toBeDefined();
+    // The shadowed `<Spacer height={height}>` must be treated as dynamic, not as the module
+    // constant 40, so observed-variant bucketing cannot drop the runtime value.
+    expect(heightUsage?.hasUnknown).toBe(true);
+    expect(heightUsage?.values).not.toContain(40);
+  });
+});

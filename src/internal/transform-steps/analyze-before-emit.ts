@@ -25,6 +25,7 @@ import {
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
+import { isStyleOnlyElementTypeHost } from "../utilities/element-type-host.js";
 import {
   astNodesEqual,
   type ExpressionKind,
@@ -605,6 +606,47 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       current = current.parentPath;
     }
     return null;
+  };
+
+  // The narrow element-type wrapper contract (drop className) is only safe when every host that
+  // receives this component via an element-type prop is provably style-only. Otherwise a host that
+  // forwards `className` to the slot would have it overwritten by the narrow wrapper, so we keep the
+  // broad value wrapper instead.
+  const styleOnlyElementTypeHostCache = new Map<string, boolean>();
+  const elementTypeHostsAreStyleOnly = (name: string): boolean => {
+    const refs = nonJsxComponentValueReferences(name);
+    if (refs.size() === 0) {
+      return false;
+    }
+    let allStyleOnly = true;
+    refs.forEach((p: any) => {
+      const usage = findContainingJsxAttributeExpression(p);
+      const openingElement = (usage?.attrPath as { parentPath?: { node?: unknown } } | undefined)
+        ?.parentPath?.node;
+      if (!isNodeOfType(openingElement, "JSXOpeningElement")) {
+        allStyleOnly = false;
+        return;
+      }
+      const hostName = getRootJsxIdentifierName(openingElement.name);
+      if (!hostName) {
+        allStyleOnly = false;
+        return;
+      }
+      let styleOnly = styleOnlyElementTypeHostCache.get(hostName);
+      if (styleOnly === undefined) {
+        styleOnly = isStyleOnlyElementTypeHost({
+          j,
+          root,
+          hostName,
+          elementTypePropNames: ELEMENT_TYPE_PROP_NAMES,
+        });
+        styleOnlyElementTypeHostCache.set(hostName, styleOnly);
+      }
+      if (!styleOnly) {
+        allStyleOnly = false;
+      }
+    });
+    return allStyleOnly;
   };
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
@@ -1206,7 +1248,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
     if (usedAsValue) {
       decl.usedAsValue = true;
-      if (hasOnlyElementTypePropValueReferences(decl.localName)) {
+      if (
+        hasOnlyElementTypePropValueReferences(decl.localName) &&
+        elementTypeHostsAreStyleOnly(decl.localName)
+      ) {
         decl.valueUsageKind = "elementTypeProp";
         if (!exportedComponents.has(decl.localName)) {
           decl.supportsExternalStyles = false;
