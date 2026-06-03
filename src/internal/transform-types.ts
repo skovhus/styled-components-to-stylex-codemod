@@ -527,14 +527,19 @@ export type StyledDecl = {
   };
   /**
    * True when the styled component identifier is used as a value (not only rendered in JSX),
-   * e.g. passed as a prop: `<VirtualList outerElementType={StyledDiv} />`.
+   * e.g. passed as an element type prop: `<List outerElementType={StyledDiv} />`.
    *
    * In these cases, the component can be consumed by another component that may pass `className`
    * and/or `style` even if there are no direct JSX callsites with those attributes in this file.
    */
   usedAsValue?: boolean;
-  /** Narrow known component-value usage contract, such as react-window element type props. */
-  valueUsageKind?: "virtualListElementType";
+  /**
+   * Narrow component-value usage contract for element-type props. Detection is purely by prop
+   * name (`innerElementType`/`outerElementType`) — see `ELEMENT_TYPE_PROP_NAMES` — so any host
+   * component exposing such a prop opts into the style-only wrapper contract, not just a fixed
+   * allow-list of library components.
+   */
+  valueUsageKind?: "elementTypeProp";
   /** Original component base before post-emit flattening mutates `base` to an intrinsic target. */
   originalBaseIdent?: string;
   /** True when same-file JSX usage passes className or style into this component. */

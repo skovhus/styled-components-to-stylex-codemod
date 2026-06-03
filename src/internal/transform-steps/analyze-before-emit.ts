@@ -25,6 +25,8 @@ import {
   propagateDelegationWrapperRequirements,
 } from "../utilities/delegation-utils.js";
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
+import { isStyleOnlyElementTypeHost } from "../utilities/element-type-host.js";
+import { isNonJsxStyledValueReferencePath } from "../utilities/component-value-references.js";
 import {
   astNodesEqual,
   type ExpressionKind,
@@ -32,6 +34,7 @@ import {
   isAstNode,
   isConditionalExpressionNode,
   isFunctionNode,
+  isNodeOfType,
   isPureIdempotentExpression,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
@@ -70,16 +73,7 @@ import { guardForwardedSxConditionalDefaults } from "../utilities/forwarded-sx-d
 import { guardGeneratedConditionalDefaults } from "../utilities/conditional-style-defaults.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
-const REACT_WINDOW_SOURCE = "react-window";
-const REACT_WINDOW_ELEMENT_TYPE_PROPS = new Set(["innerElementType", "outerElementType"]);
-const REACT_WINDOW_COMPONENT_EXPORTS = new Set([
-  "FixedSizeGrid",
-  "FixedSizeList",
-  "Grid",
-  "List",
-  "VariableSizeGrid",
-  "VariableSizeList",
-]);
+const ELEMENT_TYPE_PROP_NAMES = new Set(["innerElementType", "outerElementType"]);
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -512,81 +506,99 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     );
   };
   const nonJsxComponentValueReferences = (name: string) =>
-    root.find(j.Identifier, { name }).filter((p) => {
-      // Skip the styled component declaration itself, but still count
-      // `const Alias = StyledComponent` as a value use.
-      if (p.parentPath?.node?.type === "VariableDeclarator" && p.parentPath.node.id === p.node) {
-        return false;
-      }
-      // Skip JSX element names (these are handled by inline substitution).
-      if (
-        p.parentPath?.node?.type === "JSXOpeningElement" ||
-        p.parentPath?.node?.type === "JSXClosingElement"
-      ) {
-        return false;
-      }
-      // Skip JSX member expressions like <Styled.Component />.
-      if (
-        p.parentPath?.node?.type === "JSXMemberExpression" &&
-        (p.parentPath.node as any).object === p.node
-      ) {
-        return false;
-      }
-      // Skip styled(Component) extensions.
-      if (p.parentPath?.node?.type === "CallExpression") {
-        const callExpr = p.parentPath.node as any;
-        const callee = callExpr.callee;
-        if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
-          return false;
-        }
-        if (
-          callee?.type === "MemberExpression" &&
-          callee.object?.type === "CallExpression" &&
-          callee.object.callee?.type === "Identifier" &&
-          callee.object.callee.name === ctx.styledDefaultImport
-        ) {
-          return false;
-        }
-      }
-      // Skip TaggedTemplateExpression tags and styled(Component)`...` calls.
-      if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
-        return false;
-      }
-      if (
-        p.parentPath?.node?.type === "CallExpression" &&
-        p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
-      ) {
-        return false;
-      }
-      // Skip template literal interpolations (e.g., ${Link}:hover &).
-      if (p.parentPath?.node?.type === "TemplateLiteral") {
-        return false;
-      }
-      return true;
-    });
+    root
+      .find(j.Identifier, { name })
+      .filter((p) => isNonJsxStyledValueReferencePath(p, ctx.styledDefaultImport));
   const hasNonJsxComponentValueReference = (name: string): boolean =>
     nonJsxComponentValueReferences(name).size() > 0;
-  const hasOnlyVirtualListElementTypeValueReferences = (name: string): boolean => {
+  const hasOnlyElementTypePropValueReferences = (name: string): boolean => {
     const refs = nonJsxComponentValueReferences(name);
     if (refs.size() === 0) {
       return false;
     }
-    let onlyVirtualListElementType = true;
+    let onlyElementTypeProp = true;
     refs.forEach((p: any) => {
-      const expressionContainer = p.parentPath?.node;
-      const attr = p.parentPath?.parentPath?.node;
-      const attrName = attr?.name;
+      const usage = findContainingJsxAttributeExpression(p);
+      const expressionContainer = usage?.expressionContainer;
+      const attr = usage?.attr;
       if (
-        expressionContainer?.type !== "JSXExpressionContainer" ||
-        attr?.type !== "JSXAttribute" ||
-        attrName?.type !== "JSXIdentifier" ||
-        !REACT_WINDOW_ELEMENT_TYPE_PROPS.has(attrName.name) ||
-        !isKnownReactWindowElementTypeAttribute(p.parentPath?.parentPath, ctx.importMap)
+        !isNodeOfType(expressionContainer, "JSXExpressionContainer") ||
+        !isNodeOfType(attr, "JSXAttribute") ||
+        !isNodeOfType(attr.name, "JSXIdentifier") ||
+        typeof attr.name.name !== "string" ||
+        !ELEMENT_TYPE_PROP_NAMES.has(attr.name.name)
       ) {
-        onlyVirtualListElementType = false;
+        onlyElementTypeProp = false;
       }
     });
-    return onlyVirtualListElementType;
+    return onlyElementTypeProp;
+  };
+
+  const findContainingJsxAttributeExpression = (
+    path: any,
+  ): { expressionContainer: unknown; attr: unknown; attrPath: unknown } | null => {
+    let current = path.parentPath;
+    while (current) {
+      const node = current.node;
+      if (node?.type === "JSXExpressionContainer") {
+        const attrPath = current.parentPath;
+        return {
+          expressionContainer: node,
+          attr: attrPath?.node,
+          attrPath,
+        };
+      }
+      if (
+        node?.type === "JSXElement" ||
+        node?.type === "JSXOpeningElement" ||
+        node?.type === "Program"
+      ) {
+        return null;
+      }
+      current = current.parentPath;
+    }
+    return null;
+  };
+
+  // The narrow element-type wrapper contract (drop className) is only safe when every host that
+  // receives this component via an element-type prop is provably style-only. Otherwise a host that
+  // forwards `className` to the slot would have it overwritten by the narrow wrapper, so we keep the
+  // broad value wrapper instead.
+  const styleOnlyElementTypeHostCache = new Map<string, boolean>();
+  const elementTypeHostsAreStyleOnly = (name: string): boolean => {
+    const refs = nonJsxComponentValueReferences(name);
+    if (refs.size() === 0) {
+      return false;
+    }
+    let allStyleOnly = true;
+    refs.forEach((p: any) => {
+      const usage = findContainingJsxAttributeExpression(p);
+      const openingElement = (usage?.attrPath as { parentPath?: { node?: unknown } } | undefined)
+        ?.parentPath?.node;
+      if (!isNodeOfType(openingElement, "JSXOpeningElement")) {
+        allStyleOnly = false;
+        return;
+      }
+      const hostName = getRootJsxIdentifierName(openingElement.name);
+      if (!hostName) {
+        allStyleOnly = false;
+        return;
+      }
+      let styleOnly = styleOnlyElementTypeHostCache.get(hostName);
+      if (styleOnly === undefined) {
+        styleOnly = isStyleOnlyElementTypeHost({
+          j,
+          root,
+          hostName,
+          elementTypePropNames: ELEMENT_TYPE_PROP_NAMES,
+        });
+        styleOnlyElementTypeHostCache.set(hostName, styleOnly);
+      }
+      if (!styleOnly) {
+        allStyleOnly = false;
+      }
+    });
+    return allStyleOnly;
   };
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
@@ -1176,6 +1188,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
+    if (canInlinePrivateMemberBaseJsx(decl)) {
+      decl.isDirectJsxResolution = true;
+      decl.needsWrapperComponent = false;
+      continue;
+    }
     if (decl.isDirectJsxResolution) {
       continue;
     }
@@ -1183,11 +1200,70 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
     if (usedAsValue) {
       decl.usedAsValue = true;
-      if (hasOnlyVirtualListElementTypeValueReferences(decl.localName)) {
-        decl.valueUsageKind = "virtualListElementType";
+      if (
+        hasOnlyElementTypePropValueReferences(decl.localName) &&
+        elementTypeHostsAreStyleOnly(decl.localName)
+      ) {
+        decl.valueUsageKind = "elementTypeProp";
+        if (!exportedComponents.has(decl.localName)) {
+          decl.supportsExternalStyles = false;
+          decl.consumerUsesClassName = false;
+          decl.consumerUsesStyle = false;
+          decl.consumerUsesElementProps = false;
+          decl.consumerUsesSpread = false;
+        }
       }
       decl.needsWrapperComponent = true;
     }
+  }
+
+  // A private `styled(Foo.Bar)` (member-expression base) rendered at a single JSX site can be
+  // inlined directly, dropping the wrapper entirely. That is only safe when the component exposes
+  // no external surface (preconditions below) and carries no prop-driven styling at all — both the
+  // cases the imported-component inline path rejects and the dynamic ones it would otherwise push
+  // into the JSX rewriter.
+  function canInlinePrivateMemberBaseJsx(decl: StyledDecl): boolean {
+    if (
+      decl.base.kind !== "component" ||
+      !decl.base.ident.includes(".") ||
+      decl.isExported ||
+      exportedComponents.has(decl.localName) ||
+      decl.propsType ||
+      decl.attrsInfo ||
+      // `decl.usedAsValue` is computed later in this loop, so check value references directly here:
+      // a binding rendered once in JSX but also passed as a value must keep its wrapper.
+      decl.usedAsValue ||
+      hasNonJsxComponentValueReference(decl.localName) ||
+      decl.supportsExternalStyles ||
+      decl.supportsAsProp ||
+      decl.supportsRefProp ||
+      decl.consumerUsesSpread ||
+      decl.consumerUsesClassName ||
+      decl.consumerUsesStyle ||
+      decl.consumerUsesElementProps ||
+      decl.isCssHelper ||
+      decl.rules.some((rule) => rule.selector.trim() !== "&")
+    ) {
+      return false;
+    }
+    if (!canInlineImportedComponentWrapper(decl) || hasDynamicPropStyling(decl)) {
+      return false;
+    }
+    return getJsxUsageCount(decl.localName) === 1;
+  }
+
+  // Prop-driven styling that the imported-component inline path tolerates (it can defer dynamic
+  // work to the JSX rewriter) but full member-base inlining cannot, since there is no wrapper left
+  // to host it.
+  function hasDynamicPropStyling(decl: StyledDecl): boolean {
+    return !!(
+      (decl.styleFnFromProps?.length ?? 0) > 0 ||
+      (decl.variantDimensions?.length ?? 0) > 0 ||
+      (decl.compoundVariants?.length ?? 0) > 0 ||
+      (decl.transientPropRenames?.size ?? 0) > 0 ||
+      (decl.observedExpressionConditionDropProps?.size ?? 0) > 0 ||
+      (decl.styleValueVariantProps?.size ?? 0) > 0
+    );
   }
 
   const jsxNamespaceRoots = new Set<string>();
@@ -5130,63 +5206,6 @@ function staticObjectPropertyName(prop: unknown): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
-}
-
-function isKnownReactWindowElementTypeAttribute(
-  attrPath:
-    | { parentPath?: { node?: { type?: string; name?: unknown } | null } | null }
-    | null
-    | undefined,
-  importMap: TransformContext["importMap"],
-): boolean {
-  const openingElement = attrPath?.parentPath?.node;
-  if (openingElement?.type !== "JSXOpeningElement") {
-    return false;
-  }
-  return jsxNameIsKnownReactWindowComponent(openingElement.name, importMap);
-}
-
-function jsxNameIsKnownReactWindowComponent(
-  jsxName: unknown,
-  importMap: TransformContext["importMap"],
-): boolean {
-  const name = jsxName as {
-    type?: string;
-    name?: string;
-    object?: unknown;
-    property?: unknown;
-  };
-  if (name.type === "JSXIdentifier") {
-    return localNameIsReactWindowComponent(name.name, importMap);
-  }
-  if (name.type !== "JSXMemberExpression") {
-    return false;
-  }
-  const namespace = name.object as { type?: string; name?: string } | undefined;
-  const member = name.property as { type?: string; name?: string } | undefined;
-  if (
-    namespace?.type !== "JSXIdentifier" ||
-    member?.type !== "JSXIdentifier" ||
-    !REACT_WINDOW_COMPONENT_EXPORTS.has(member.name ?? "")
-  ) {
-    return false;
-  }
-  const importInfo = namespace.name ? importMap?.get(namespace.name) : undefined;
-  return importInfo?.source.value === REACT_WINDOW_SOURCE && importInfo.importedName === "*";
-}
-
-function localNameIsReactWindowComponent(
-  localName: string | undefined,
-  importMap: TransformContext["importMap"],
-): boolean {
-  if (!localName) {
-    return false;
-  }
-  const importInfo = importMap?.get(localName);
-  return (
-    importInfo?.source.value === REACT_WINDOW_SOURCE &&
-    REACT_WINDOW_COMPONENT_EXPORTS.has(importInfo.importedName)
-  );
 }
 
 function isStylexConditionKey(key: string): boolean {

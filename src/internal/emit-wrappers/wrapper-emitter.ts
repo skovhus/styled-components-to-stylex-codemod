@@ -366,7 +366,7 @@ export class WrapperEmitter {
   }
 
   isBroadValueUsage(d: StyledDecl): boolean {
-    return this.isUsedAsValue(d) && d.valueUsageKind !== "virtualListElementType";
+    return this.isUsedAsValue(d) && d.valueUsageKind !== "elementTypeProp";
   }
 
   requiresRestForValueUsage(d: StyledDecl): boolean {
@@ -441,7 +441,7 @@ export class WrapperEmitter {
     if (d.consumerUsesSpread) {
       return this.spreadMayContainProp(d, "style");
     }
-    if (d.valueUsageKind === "virtualListElementType") {
+    if (d.valueUsageKind === "elementTypeProp") {
       return true;
     }
     if (this.isBroadValueUsage(d)) {
@@ -452,7 +452,7 @@ export class WrapperEmitter {
   }
 
   shouldAllowSxProp(d: StyledDecl): boolean {
-    if (d.valueUsageKind === "virtualListElementType") {
+    if (d.valueUsageKind === "elementTypeProp") {
       return (d.supportsExternalStyles ?? false) || d.typeScriptSupportsSxProp === true;
     }
     return (

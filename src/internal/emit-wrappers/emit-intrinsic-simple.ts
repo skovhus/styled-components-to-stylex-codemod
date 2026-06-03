@@ -126,7 +126,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
           return true;
         }
         const used = emitter.getUsedAttrs(d.localName);
-        if (used.has("*") || d.valueUsageKind === "virtualListElementType") {
+        if (used.has("*") || d.valueUsageKind === "elementTypeProp") {
           return true;
         }
         // If any attribute is passed, prefer intrinsic props.
@@ -541,7 +541,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
     const willForwardRef =
       (d.supportsRefProp ?? false) ||
       isExportedComponent ||
-      d.valueUsageKind === "virtualListElementType" ||
+      d.valueUsageKind === "elementTypeProp" ||
       hasComplementaryVariantPairs(d) ||
       !!d.variantDimensions?.some((dim) => dim.namespaceBooleanProp);
     // Non-exported components use PropsWithChildren for simple cases, but

@@ -14,8 +14,9 @@ import type {
   ResolveBaseComponentContext,
   ResolveBaseComponentResult,
 } from "../../adapter.js";
-import type { ComponentPropUsageInfo } from "../transform-types.js";
+import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
 import { Logger } from "../logger.js";
+import { walkAst } from "../utilities/ast-walk.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import {
@@ -984,8 +985,10 @@ function scanConsumerJsxUsages(
 
   const importNodes: AstNode[] = [];
   const jsxOpenings: AstNode[] = [];
-  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
+  const program = (ast.program ?? ast) as AstNode;
+  walkForImportsAndJsxOpenings(program, importNodes, jsxOpenings);
   const importMap = buildImportMapFromNodes(importNodes);
+  const staticIdentifierValues = collectStaticIdentifierValues(program);
 
   const resultMap = new Map<string, ConsumerPropResult>();
   const staticPropUsages: ConsumerStaticPropUsage[] = [];
@@ -1000,7 +1003,7 @@ function scanConsumerJsxUsages(
       continue;
     }
 
-    const openingUsage = readConsumerOpeningUsage(opening);
+    const openingUsage = readConsumerOpeningUsage(opening, staticIdentifierValues);
     const { externalProps } = openingUsage;
     if (
       externalProps.className ||
@@ -1066,7 +1069,10 @@ function resolveJsxOpeningComponent(
     : undefined;
 }
 
-function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
+function readConsumerOpeningUsage(
+  opening: AstNode,
+  staticIdentifierValues: ReadonlyMap<string, StaticPropValue>,
+): ConsumerOpeningUsage {
   const externalProps = {
     className: false,
     style: false,
@@ -1102,12 +1108,176 @@ function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
     }
 
     if (!KNOWN_NON_ELEMENT_PROPS.has(propName)) {
-      const value = readStaticJsxLiteral(attr);
+      const value =
+        readStaticJsxLiteral(attr) ?? readStaticIdentifierJsxValue(attr, staticIdentifierValues);
       props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
     }
   }
 
   return { externalProps, staticUsage: { props, hasSpread } };
+}
+
+// Resolves only *unshadowed module-level* `const` literals. Resolving by identifier name alone is
+// unsafe when the same name is also bound in another scope: a JSX value like `<Spacer height={height}>`
+// inside `({ height }) => ...` refers to the parameter, not the module constant. Treating it as the
+// constant would wrongly mark the prop as statically observed and let observed-variant bucketing drop
+// the dynamic value. So we keep a candidate only when its name is bound exactly once in the module.
+function collectStaticIdentifierValues(program: AstNode): Map<string, StaticPropValue> {
+  const values = new Map<string, StaticPropValue>();
+  for (const declaration of moduleLevelVariableDeclarations(program)) {
+    if (declaration.kind !== "const") {
+      continue;
+    }
+    const declarators = (declaration.declarations ?? []) as Array<{ id?: AstNode; init?: AstNode }>;
+    for (const decl of declarators) {
+      const name = decl.id?.type === "Identifier" ? (decl.id as { name?: string }).name : null;
+      const value = staticValueFromNode(decl.init);
+      if (name && value !== undefined) {
+        values.set(name, value);
+      }
+    }
+  }
+  if (values.size === 0) {
+    return values;
+  }
+  const bindingCounts = countBoundNames(program);
+  const shadowedNames: string[] = [];
+  for (const [name] of values) {
+    if ((bindingCounts.get(name) ?? 0) > 1) {
+      shadowedNames.push(name);
+    }
+  }
+  for (const name of shadowedNames) {
+    values.delete(name);
+  }
+  return values;
+}
+
+/** Top-level `const`/`let`/`var` declarations, unwrapping `export` declarations. */
+function moduleLevelVariableDeclarations(
+  program: AstNode,
+): Array<AstNode & { kind?: string; declarations?: unknown }> {
+  const body = (program.body ?? []) as AstNode[];
+  const declarations: Array<AstNode & { kind?: string; declarations?: unknown }> = [];
+  for (const node of body) {
+    if (node.type === "VariableDeclaration") {
+      declarations.push(node);
+    } else if (node.type === "ExportNamedDeclaration") {
+      const inner = (node as { declaration?: AstNode }).declaration;
+      if (inner?.type === "VariableDeclaration") {
+        declarations.push(inner);
+      }
+    }
+  }
+  return declarations;
+}
+
+/** Counts how many times each name is introduced as a binding anywhere in the module. */
+function countBoundNames(program: AstNode): Map<string, number> {
+  const counts = new Map<string, number>();
+  const bump = (name: string): void => {
+    if (name) {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  };
+  const bumpId = (node: AstNode | undefined): void => {
+    if (node?.type === "Identifier") {
+      bump((node as { name?: string }).name ?? "");
+    }
+  };
+  walkAst(program, (node) => {
+    switch (node.type) {
+      case "VariableDeclarator":
+        collectPatternNames(node.id as AstNode | undefined, bump);
+        break;
+      case "FunctionDeclaration":
+      case "FunctionExpression":
+      case "ArrowFunctionExpression":
+        bumpId((node as { id?: AstNode }).id);
+        for (const param of (node.params as AstNode[] | undefined) ?? []) {
+          collectPatternNames(param, bump);
+        }
+        break;
+      case "ClassDeclaration":
+      case "ClassExpression":
+        bumpId((node as { id?: AstNode }).id);
+        break;
+      case "CatchClause":
+        collectPatternNames((node as { param?: AstNode }).param, bump);
+        break;
+      case "ImportSpecifier":
+      case "ImportDefaultSpecifier":
+      case "ImportNamespaceSpecifier":
+        bumpId((node as { local?: AstNode }).local);
+        break;
+    }
+  });
+  return counts;
+}
+
+/** Collects every identifier name bound by a (possibly destructured) binding pattern. */
+function collectPatternNames(node: AstNode | undefined, add: (name: string) => void): void {
+  if (!node) {
+    return;
+  }
+  switch (node.type) {
+    case "Identifier":
+      add((node as { name?: string }).name ?? "");
+      break;
+    case "ObjectPattern":
+      for (const property of (node.properties as AstNode[] | undefined) ?? []) {
+        if (property.type === "RestElement") {
+          collectPatternNames((property as { argument?: AstNode }).argument, add);
+        } else {
+          collectPatternNames((property as { value?: AstNode }).value, add);
+        }
+      }
+      break;
+    case "ArrayPattern":
+      for (const element of (node.elements as Array<AstNode | null> | undefined) ?? []) {
+        collectPatternNames(element ?? undefined, add);
+      }
+      break;
+    case "AssignmentPattern":
+      collectPatternNames((node as { left?: AstNode }).left, add);
+      break;
+    case "RestElement":
+      collectPatternNames((node as { argument?: AstNode }).argument, add);
+      break;
+    case "TSParameterProperty":
+      collectPatternNames((node as { parameter?: AstNode }).parameter, add);
+      break;
+  }
+}
+
+function readStaticIdentifierJsxValue(
+  attr: AstNode,
+  staticIdentifierValues: ReadonlyMap<string, StaticPropValue>,
+): StaticPropValue | undefined {
+  const value = attr.value as AstNode | undefined;
+  const expr =
+    value?.type === "JSXExpressionContainer"
+      ? (value as { expression?: AstNode }).expression
+      : null;
+  const name = expr?.type === "Identifier" ? (expr as { name?: string }).name : null;
+  return name ? staticIdentifierValues.get(name) : undefined;
+}
+
+const STATIC_LITERAL_NODE_TYPES = new Set([
+  "Literal",
+  "StringLiteral",
+  "NumericLiteral",
+  "BooleanLiteral",
+]);
+
+function staticValueFromNode(node: AstNode | undefined): StaticPropValue | undefined {
+  if (!node || !STATIC_LITERAL_NODE_TYPES.has(node.type as string)) {
+    return undefined;
+  }
+  const value = (node as { value?: unknown }).value;
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? value
+    : undefined;
 }
 
 function isElementConsumerProp(propName: string): boolean {

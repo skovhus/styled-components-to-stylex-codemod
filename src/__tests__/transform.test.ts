@@ -2371,6 +2371,126 @@ export const App = () => (
     expect(result).toContain("gap: toGap(size)");
   });
 
+  it("does not bucket an exported component's observed CSS block (would drop unobserved values)", () => {
+    const input = `
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+export const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-exported.tsx");
+
+    // Exported: an external <Spacer width={42}> is not observable, so static-only buckets would
+    // resolve to undefined and lose styling. Keep the dynamic style function instead.
+    expect(result).not.toContain("widthVariants[");
+    expect(result).toContain("getSize(width)");
+  });
+
+  it("buckets a private component's observed CSS block (all call sites observable)", () => {
+    const input = `
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-private.tsx");
+
+    // Private: every call site is observable, so static buckets are safe.
+    expect(result).toContain("widthVariants[");
+    expect(result).toContain("100: {");
+    expect(result).toContain("50: {");
+  });
+
+  it("does not bucket a private component that escapes as a value", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+function List(props: { itemComponent: React.ElementType }) {
+  const Item = props.itemComponent;
+  return <Item />;
+}
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+    <List itemComponent={Spacer} />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-escapes.tsx");
+
+    // Passed to itemComponent: a host could render <Spacer width={42}>, which is unobserved.
+    expect(result).not.toContain("widthVariants[");
+    expect(result).toContain("getSize(width)");
+  });
+
+  it("keeps the wrapper for a member-base styled component that escapes as a value", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+import { animated } from "./lib/react-spring";
+
+const Box = styled(animated.div)\`
+  color: red;
+\`;
+
+function Picker(props: { optionComponent: React.ElementType }) {
+  const Option = props.optionComponent;
+  return <Option />;
+}
+
+export const App = () => (
+  <div>
+    <Box />
+    <Picker optionComponent={Box} />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "member-base-escapes.tsx");
+
+    // Box is rendered once in JSX but also passed as a value, so its wrapper must not be inlined
+    // away — otherwise optionComponent={Box} would dangle.
+    expect(result).toContain("optionComponent={Box}");
+    expect(result).toContain("<Box");
+  });
+
   it("adds a runtime fallback for observed expression variant buckets", () => {
     const input = `
 import styled from "styled-components";
@@ -10359,6 +10479,36 @@ export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
     expect(output).not.toContain("<Box className={props.className} sx={props.sx}>");
   });
 
+  it("passes static member component paths to sx-aware wrapped component detection", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+
+import { Select } from "./select";
+
+const StyledOption = styled(Select.Option)\`
+  color: red;
+\`;
+
+export const App = () => <StyledOption value="home">Home</StyledOption>;
+`;
+    const output = runTransform(source, {
+      adapter: {
+        ...fixtureAdapter,
+        wrappedComponentInterface(ctx) {
+          if (ctx.localName === "Select.Option" && ctx.memberPath?.join(".") === "Option") {
+            return { acceptsSx: true };
+          }
+          return fixtureAdapter.wrappedComponentInterface?.(ctx);
+        },
+      },
+    });
+
+    expect(output).toContain('<Select.Option value="home" sx={styles.option}>');
+    expect(output).not.toContain("stylex.props(styles.option)");
+  });
+
   it("does not treat component props aliases with non-StyleX sx overrides as sx-aware", () => {
     const source = `
 import styled from "styled-components";
@@ -10487,10 +10637,9 @@ export const App = () => <Parent />;
 });
 
 describe("component value usage", () => {
-  it("keeps react-window elementType props on the narrow style-only wrapper contract", () => {
+  it("keeps elementType props on the narrow style-only wrapper contract", () => {
     const source = `
 import * as React from "react";
-import { FixedSizeList as WindowList } from "react-window";
 import styled from "styled-components";
 
 const InnerContainer = styled.div\`
@@ -10498,10 +10647,18 @@ const InnerContainer = styled.div\`
   background-color: red;
 \`;
 
+function List(props: {
+  innerElementType: React.ComponentType<React.PropsWithChildren<{ style?: React.CSSProperties }>>;
+  children: () => React.ReactNode;
+}) {
+  const Inner = props.innerElementType;
+  return <Inner style={{ height: 20 }}>{props.children()}</Inner>;
+}
+
 export const App = () => (
-  <WindowList innerElementType={InnerContainer} height={100} itemCount={1} itemSize={20} width={100}>
+  <List innerElementType={InnerContainer}>
     {() => <div>Row</div>}
-  </WindowList>
+  </List>
 );
 `;
     const output = runTransform(source);
@@ -10513,7 +10670,7 @@ export const App = () => (
     expect(output).not.toContain("className, children, style, sx");
   });
 
-  it("uses broad value wrappers for non-react-window elementType props", () => {
+  it("uses virtual-list value wrappers for elementType props by name", () => {
     const source = `
 import * as React from "react";
 import styled from "styled-components";
@@ -10536,11 +10693,11 @@ export const App = () => (
 `;
     const output = runTransform(source);
 
-    expect(output).toContain(
-      'function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles })',
-    );
-    expect(output).toMatch(/const \{\s*className,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/);
-    expect(output).toContain("{...mergedSx([styles.innerContainer, sx], className, style)}");
+    expect(output).toContain("style?: React.CSSProperties");
+    expect(output).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(output).not.toContain("className");
+    expect(output).not.toContain("sx?: stylex.StyleXStyles");
+    expect(output).toContain("{...mergedSx(styles.innerContainer, undefined, style)}");
   });
 });
 

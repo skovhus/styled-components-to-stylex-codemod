@@ -61,6 +61,11 @@ import {
   evaluateLocalCallValueTransform,
   evaluateObservedDynamicExpression,
 } from "./static-evaluator.js";
+import { formatObservedVariantCondition } from "../utilities/prop-usage.js";
+import {
+  emitObservedVariantBuckets,
+  resolveObservedVariantValues,
+} from "./observed-variant-buckets.js";
 
 type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
 
@@ -254,10 +259,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
   const getObservedStaticVariantValues = (jsxProp: string): Array<string | number> | null => {
     const usage = state.propUsageByComponent.get(decl.localName);
-    if (!usage) {
-      return null;
-    }
-    const propUsage = usage.props[jsxProp];
+    const propUsage = usage?.props[jsxProp];
     if (!propUsage || propUsage.values.length < 2) {
       return null;
     }
@@ -493,9 +495,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (value === skipValue) {
         continue;
       }
-      const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
-        { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
+        { when: formatObservedVariantCondition(jsxProp, value), propName: jsxProp },
         {
           [stylexProp]: emitStaticObservedValue(
             value,
@@ -554,10 +555,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     for (const { propValue, cssValue } of transformedValues) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
       applyVariant(
-        { when: `${jsxProp} === ${propValueExpr}`, propName: jsxProp },
+        { when: formatObservedVariantCondition(jsxProp, propValue), propName: jsxProp },
         {
           [stylexProp]: cssValue,
         },
@@ -649,9 +648,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     for (const { propValue, cssValue } of transformedValues) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-      const when = `${conditionWhen} && ${jsxProp} === ${propValueExpr}`;
+      const when = `${conditionWhen} && ${formatObservedVariantCondition(jsxProp, propValue)}`;
       applyVariant(
         { when, propName: jsxProp, allPropNames: [conditionProp, jsxProp] },
         {
@@ -662,6 +659,101 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     markStyleValueVariantProp(jsxProp);
     ensureObservedVariantPropDrop(jsxProp);
     return true;
+  };
+
+  const tryEmitObservedCssBlockVariantBuckets = (expr: unknown): boolean => {
+    if (
+      media ||
+      pseudos?.length ||
+      attrTarget ||
+      resolvedSelectorMedia ||
+      !expr ||
+      typeof expr !== "object" ||
+      ((expr as { type?: string }).type !== "ArrowFunctionExpression" &&
+        (expr as { type?: string }).type !== "FunctionExpression")
+    ) {
+      return false;
+    }
+    if (hasThemeAccessInArrowFn(expr)) {
+      return false;
+    }
+    const fnExpr = expr as Parameters<typeof getArrowFnSingleParamName>[0];
+    const paramName = getArrowFnSingleParamName(fnExpr);
+    const bodyExpr = getFunctionBodyExpr(fnExpr);
+    if (!paramName || !bodyExpr) {
+      return false;
+    }
+    const propsUsed = [
+      ...new Set([
+        ...collectPropsFromArrowFn(fnExpr),
+        ...collectPropsFromArrowFnDestructured(fnExpr),
+      ]),
+    ];
+    if (propsUsed.length !== 1) {
+      return false;
+    }
+    const jsxProp = propsUsed[0]!;
+    const componentUsage = state.propUsageByComponent.get(decl.localName);
+    const observedValues = resolveObservedVariantValues({
+      usage: componentUsage,
+      propName: jsxProp,
+      isOptional: isJsxPropOptional(jsxProp),
+      isExported: state.exportedComponentNames.has(decl.localName),
+      escapesAsValue: state.componentsUsedAsValue.has(decl.localName),
+      minValues: 2,
+    });
+    if (!observedValues) {
+      return false;
+    }
+
+    const bindings = getArrowFnParamBindings(fnExpr);
+    const guarded = extractGuardedDynamicBranch(j, bodyExpr);
+    const conditionWhen = guarded
+      ? printScalarizedExpression({
+          j,
+          expr: guarded.test,
+          paramName,
+          propNames: propsUsed,
+          ...(bindings ? { bindings } : {}),
+        })
+      : null;
+    if (guarded && !conditionWhen) {
+      return false;
+    }
+
+    return emitObservedVariantBuckets({
+      decl,
+      propName: jsxProp,
+      observedValues,
+      applyVariant,
+      ensurePropDrop: ensureObservedVariantPropDrop,
+      buildBucket: (propValue) => {
+        const evaluatedValue = evaluateObservedDynamicExpression({
+          j,
+          root: state.root,
+          expression: bodyExpr,
+          propName: jsxProp,
+          propValue,
+          paramName,
+        });
+        if (typeof evaluatedValue !== "string") {
+          return { kind: "bail" };
+        }
+        const cssText = evaluatedValue.trim();
+        if (!cssText) {
+          return { kind: "skip" };
+        }
+        const parsedStyle = parseCssDeclarationBlock(cssText);
+        if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
+          return { kind: "bail" };
+        }
+        return {
+          kind: "emit",
+          style: parsedStyle,
+          ...(conditionWhen ? { whenPrefix: conditionWhen } : {}),
+        };
+      },
+    });
   };
 
   const observedExpressionFallbackFnKey = (jsxProp: string, conditionWhen: string): string => {
@@ -1470,6 +1562,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
       if (slot) {
         const expr = decl.templateExpressions[slot.slotId] as any;
+        if (tryEmitObservedCssBlockVariantBuckets(expr)) {
+          continue;
+        }
         // Handle css helper identifier: ${primaryStyles}
         if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
           const helperDecl = declByLocalName.get(expr.name);

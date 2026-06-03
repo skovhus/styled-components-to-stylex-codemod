@@ -39,6 +39,7 @@ import {
   extractStyledDefBasesFromSource,
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
+import { resolveStaticMemberComponentNames } from "./internal/prepass/resolve-static-members.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "./internal/utilities/sx-surface.js";
 
@@ -563,15 +564,28 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
             resolvedPath;
           const definitionSourcePath = resolveExistingSourcePath(definitionPath);
 
+          const memberPath = ctx.memberPath ?? [];
           const autoInterfaceNames =
-            ctx.importedName === "default" ? [ctx.localName, ctx.importedName] : [ctx.importedName];
+            memberPath.length > 0
+              ? [ctx.localName, memberPath[memberPath.length - 1]!]
+              : ctx.importedName === "default"
+                ? [ctx.localName, ctx.importedName]
+                : [ctx.importedName];
           const styledDefinitionNames = getStyledDefinitionNames(definitionSourcePath);
-          const sourceComponentNames =
+          const rootSourceComponentNames =
             ctx.importedName === "default"
               ? [ctx.localName, getDefaultExportedName(definitionSourcePath)].filter(
                   (name): name is string => typeof name === "string",
                 )
               : [ctx.importedName];
+          const sourceComponentNames =
+            memberPath.length > 0
+              ? resolveStaticMemberComponentNames(
+                  cachedRead(definitionSourcePath),
+                  rootSourceComponentNames,
+                  memberPath,
+                )
+              : rootSourceComponentNames;
           const typedComponent = findTypedComponentMetadata(
             prepassResult.typeScriptMetadata,
             definitionSourcePath,
@@ -870,7 +884,9 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
 
 function orderFilesByLocalImportDependencies(
   filePaths: readonly string[],
-  resolver: { resolve(fromFile: string, specifier: string): string | undefined },
+  resolver: {
+    resolve(fromFile: string, specifier: string): string | undefined;
+  },
   normalizeFilePath: (filePath: string) => string,
 ): string[] {
   const filePathByNormalized = new Map<string, string>();

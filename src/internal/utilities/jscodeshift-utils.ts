@@ -269,6 +269,17 @@ export function isAstNode(v: unknown): v is { type: string } {
 }
 
 /**
+ * Generic type guard narrowing an unknown value to an AST node of a specific `type`.
+ * Returns false for arrays and non-objects.
+ */
+export function isNodeOfType<TType extends string>(
+  node: unknown,
+  type: TType,
+): node is { type: TType } & Record<string, unknown> {
+  return isAstNode(node) && node.type === type;
+}
+
+/**
  * Type guard for function-like nodes including class/object methods.
  */
 export function isFunctionNode(node: unknown): boolean {

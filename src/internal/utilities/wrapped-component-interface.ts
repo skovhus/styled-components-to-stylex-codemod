@@ -14,22 +14,28 @@ export function wrappedComponentInterfaceFor(
     return undefined;
   }
 
-  const importInfo = ctx.importMap?.get(componentLocalName);
+  const [rootLocalName, ...memberPath] = componentLocalName.split(".");
+  if (!rootLocalName) {
+    return undefined;
+  }
+
+  const importInfo = ctx.importMap?.get(rootLocalName);
   if (importInfo) {
+    const componentNames =
+      memberPath.length > 0
+        ? memberComponentNames(rootLocalName, importInfo.importedName, memberPath)
+        : importInfo.importedName === "default"
+          ? [rootLocalName, importInfo.importedName]
+          : [importInfo.importedName];
     const typedInterface =
       importInfo.source.kind === "absolutePath"
-        ? typedComponentInterfaceFor(
-            ctx,
-            importInfo.source.value,
-            importInfo.importedName === "default"
-              ? [componentLocalName, importInfo.importedName]
-              : [importInfo.importedName],
-          )
+        ? typedComponentInterfaceFor(ctx, importInfo.source.value, componentNames)
         : undefined;
     const adapterResult = ctx.adapter.wrappedComponentInterface?.({
       localName: componentLocalName,
       importSource: importInfo.source.value,
       importedName: importInfo.importedName,
+      ...(memberPath.length > 0 ? { memberPath } : {}),
       filePath: ctx.file.path,
     });
     if (adapterResult !== undefined) {
@@ -40,6 +46,21 @@ export function wrappedComponentInterfaceFor(
   }
 
   return typedComponentInterfaceFor(ctx, ctx.file.path, [componentLocalName]);
+}
+
+function memberComponentNames(
+  rootLocalName: string,
+  importedName: string,
+  memberPath: readonly string[],
+): string[] {
+  const memberName = memberPath[memberPath.length - 1];
+  const dottedImportedName =
+    importedName === "default"
+      ? [rootLocalName, ...memberPath].join(".")
+      : [importedName, ...memberPath].join(".");
+  return [
+    ...new Set([dottedImportedName, [rootLocalName, ...memberPath].join("."), memberName]),
+  ].filter((name): name is string => typeof name === "string" && name.length > 0);
 }
 
 export function mergeWrappedComponentInterface(
