@@ -1,16 +1,6 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const bounce = stylex.keyframes({
-  "0%,100%": {
-    transform: "translateY(0)",
-  },
-
-  "50%": {
-    transform: "translateY(-4px)",
-  },
-});
-
 function AnimatedPath(props: Omit<React.ComponentProps<"path">, "className" | "style" | "sx">) {
   return <path {...props} sx={styles.animatedPath} />;
 }
@@ -21,6 +11,16 @@ export const App = () => (
     <AnimatedPath d="M12 4l4 4H8z" />
   </svg>
 );
+
+const bounce = stylex.keyframes({
+  "0%,100%": {
+    transform: "translateY(0)",
+  },
+
+  "50%": {
+    transform: "translateY(-4px)",
+  },
+});
 
 const styles = stylex.create({
   animatedPath: {

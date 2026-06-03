@@ -1,6 +1,18 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div style={{ display: "flex", gap: 16, padding: 16 }}>
+    <div sx={styles.progressFill}>Progress</div>
+    <div sx={styles.pulser} style={pulserInlineStyle}>
+      Pulse
+    </div>
+    <div sx={styles.delayed} style={delayedInlineStyle}>
+      Delay
+    </div>
+  </div>
+);
+
 const shimmer = stylex.keyframes({
   "0%": {
     opacity: 0.4,
@@ -24,18 +36,6 @@ const pulse = stylex.keyframes({
     transform: "scale(1.1)",
   },
 });
-
-export const App = () => (
-  <div style={{ display: "flex", gap: 16, padding: 16 }}>
-    <div sx={styles.progressFill}>Progress</div>
-    <div sx={styles.pulser} style={pulserInlineStyle}>
-      Pulse
-    </div>
-    <div sx={styles.delayed} style={delayedInlineStyle}>
-      Delay
-    </div>
-  </div>
-);
 
 const pulserInlineStyle = {
   animationTimingFunction: "var(--easing, ease-in-out)",

@@ -608,6 +608,39 @@ export function collectIdentifiers(node: unknown, out: Set<string>): void {
 }
 
 /**
+ * Collects binding names introduced by an object/array destructuring pattern.
+ */
+export function collectPatternBindingNames(node: unknown, names: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectPatternBindingNames(child, names);
+    }
+    return;
+  }
+  const typed = node as { type?: string; name?: string };
+  if (typed.type === "Identifier" && typed.name) {
+    names.add(typed.name);
+    return;
+  }
+  if (
+    typed.type === "MemberExpression" ||
+    typed.type === "OptionalMemberExpression" ||
+    typed.type === "TSQualifiedName"
+  ) {
+    return;
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    collectPatternBindingNames((node as Record<string, unknown>)[key], names);
+  }
+}
+
+/**
  * Converts an AST literal node to its static JavaScript value.
  *
  * Supports:

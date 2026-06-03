@@ -12131,6 +12131,347 @@ export const App = () => <Icon />;
   });
 });
 
+describe("stylex.keyframes placement", () => {
+  it("places module-level stylex.keyframes immediately above stylex.create", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const rotate = keyframes\`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+\`;
+
+const Box = styled.div\`
+  animation: \${rotate} 2s linear infinite;
+  padding: 1rem;
+\`;
+
+export function Helper() {
+  return null;
+}
+
+export const App = () => <Box sx>spin</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(
+      /export function Helper[\s\S]*export const App[\s\S]*const rotate = stylex\.keyframes\([\s\S]*?\);\s*\nconst styles = stylex\.create\(/,
+    );
+    expect(code.indexOf("stylex.keyframes(")).toBeLessThan(code.indexOf("stylex.create("));
+  });
+
+  it("does not relocate stylex.keyframes past intervening top-level references", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const names = [fade];
+
+const rotate = keyframes\`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+\`;
+
+const Box = styled.div\`
+  animation: \${rotate} 2s linear infinite;
+  padding: 1rem;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-tdz.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const names = [fade]"),
+    );
+    expect(code).toMatch(
+      /const rotate = stylex\.keyframes\([\s\S]*?\);\s*\nconst styles = stylex\.create\(/,
+    );
+  });
+
+  it("does not relocate keyframes past surviving declarators in a shared const", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const Box = styled.div\`
+  animation: \${fade} 1s linear;
+\`, names = [fade];
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-shared-const.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("names = [fade]"),
+    );
+  });
+
+  it("does not relocate keyframes past indirect top-level reads through closures", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const readFade = () => fade;
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const cached = readFade();
+
+const Box = styled.div\`
+  padding: 1rem;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-indirect-read.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const cached = readFade()"),
+    );
+  });
+
+  it("does not relocate keyframes above bindings used in the keyframes initializer", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const OFFSET = 40;
+
+const sweep = keyframes\`
+  from {
+    transform: translateX(-\${OFFSET}px);
+  }
+  to {
+    transform: translateX(100%);
+  }
+\`;
+
+const Box = styled.div\`
+  animation: \${sweep} 1s linear;
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-init-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/const OFFSET = 40[\s\S]*const sweep = stylex\.keyframes/);
+  });
+
+  it("does not relocate keyframes above destructured bindings used in the initializer", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const tokens = { OFFSET: 40 };
+const { OFFSET } = tokens;
+
+const sweep = stylex.keyframes({
+  from: {
+    transform: \`translateX(-\${OFFSET}px)\`,
+  },
+  to: {
+    transform: "translateX(100%)",
+  },
+});
+
+const Box = styled.div\`
+  animation-name: \${sweep};
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-destructure-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/\{ OFFSET \} = tokens[\s\S]*const sweep = stylex\.keyframes/);
+  });
+
+  it("does not relocate keyframes downward across later initializer dependencies", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const sweep = stylex.keyframes({
+  from: {
+    transform: \`translateX(-\${OFFSET}px)\`,
+  },
+  to: {
+    transform: "translateX(100%)",
+  },
+});
+
+var OFFSET = 40;
+
+const Box = styled.div\`
+  animation-name: \${sweep};
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-downward-init-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const sweep = stylex.keyframes")).toBeLessThan(
+      code.indexOf("var OFFSET = 40"),
+    );
+  });
+
+  it("does not relocate keyframes past indirect reads via destructured closures", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const { readFade } = { readFade: () => fade };
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const cached = readFade();
+
+const Box = styled.div\`
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-destructure-closure.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const cached = readFade()"),
+    );
+  });
+
+  it("does not relocate keyframes past indirect reads via class static methods", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+class Reader {
+  static readFade() {
+    return fade;
+  }
+}
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const cached = Reader.readFade();
+
+const Box = styled.div\`
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-class-closure.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const cached = Reader.readFade()"),
+    );
+  });
+});
+
 describe("keyframes in css helper", () => {
   it("should bail on comma-separated multi-animation in css helper rather than misparse", () => {
     const source = `
