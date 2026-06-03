@@ -12181,6 +12181,36 @@ export const App = () => <Box />;
       /const rotate = stylex\.keyframes\([\s\S]*?\);\s*\nconst styles = stylex\.create\(/,
     );
   });
+
+  it("does not relocate keyframes past surviving declarators in a shared const", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const Box = styled.div\`
+  animation: \${fade} 1s linear;
+\`, names = [fade];
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-shared-const.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("names = [fade]"),
+    );
+  });
 });
 
 describe("keyframes in css helper", () => {

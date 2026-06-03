@@ -1312,18 +1312,40 @@ function statementReferencesAnyBinding(statement: unknown, bindingNames: Set<str
   return false;
 }
 
-function isRemovedStyledDeclaration(
+function declaratorReferencesAnyBinding(
+  declarator: { id?: { type?: string; name?: string }; init?: unknown },
+  bindingNames: Set<string>,
+): boolean {
+  const identifiers = new Set<string>();
+  collectIdentifiers(declarator.id, identifiers);
+  collectIdentifiers(declarator.init, identifiers);
+  for (const name of identifiers) {
+    if (bindingNames.has(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function statementReferencesKeyframesBindingFromSurvivingDeclarators(
   statement: unknown,
+  bindingNames: Set<string>,
   removedStyledDeclNames: Set<string>,
 ): boolean {
   const variableDecl = getVariableDeclarationFromStatement(statement);
-  if (!variableDecl?.declarations) {
+  if (variableDecl?.declarations) {
+    for (const declarator of variableDecl.declarations) {
+      const id = declarator.id;
+      if (id?.type === "Identifier" && id.name != null && removedStyledDeclNames.has(id.name)) {
+        continue;
+      }
+      if (declaratorReferencesAnyBinding(declarator, bindingNames)) {
+        return true;
+      }
+    }
     return false;
   }
-  return variableDecl.declarations.some((declarator) => {
-    const id = declarator.id;
-    return id?.type === "Identifier" && id.name != null && removedStyledDeclNames.has(id.name);
-  });
+  return statementReferencesAnyBinding(statement, bindingNames);
 }
 
 function interveningStatementUsesKeyframesBinding(
@@ -1331,10 +1353,11 @@ function interveningStatementUsesKeyframesBinding(
   bindingNames: Set<string>,
   removedStyledDeclNames: Set<string>,
 ): boolean {
-  if (isRemovedStyledDeclaration(statement, removedStyledDeclNames)) {
-    return false;
-  }
-  return statementReferencesAnyBinding(statement, bindingNames);
+  return statementReferencesKeyframesBindingFromSurvivingDeclarators(
+    statement,
+    bindingNames,
+    removedStyledDeclNames,
+  );
 }
 
 function canSafelyRelocateKeyframesStatement(
