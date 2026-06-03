@@ -39,6 +39,7 @@ import {
   extractStyledDefBasesFromSource,
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
+import { resolveStaticMemberComponentNames } from "./internal/prepass/resolve-static-members.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "./internal/utilities/sx-surface.js";
 
@@ -822,132 +823,6 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   };
 }
 
-function resolveStaticMemberComponentNames(
-  source: string,
-  rootNames: readonly string[],
-  memberPath: readonly string[],
-): string[] {
-  let owners = expandStaticComponentOwners(source, rootNames);
-  for (const memberName of memberPath) {
-    const nextOwners = new Set<string>();
-    for (const ownerName of owners) {
-      for (const target of findStaticMemberTargets(source, ownerName, memberName)) {
-        nextOwners.add(target);
-      }
-    }
-    owners = nextOwners;
-    if (owners.size === 0) {
-      break;
-    }
-  }
-  const fallbackMember = memberPath[memberPath.length - 1];
-  return [...new Set([...owners, ...(fallbackMember ? [fallbackMember] : [])])];
-}
-
-function expandStaticComponentOwners(source: string, rootNames: readonly string[]): Set<string> {
-  const owners = new Set(rootNames);
-  const visit = (name: string): void => {
-    const initializer = findConstInitializer(source, name);
-    if (!initializer) {
-      return;
-    }
-    for (const candidate of initializer.matchAll(/\b[A-Z][A-Za-z0-9_$]*\b/g)) {
-      const candidateName = candidate[0];
-      if (!owners.has(candidateName)) {
-        owners.add(candidateName);
-        visit(candidateName);
-      }
-    }
-  };
-  for (const name of rootNames) {
-    visit(name);
-  }
-  return owners;
-}
-
-function findStaticMemberTargets(source: string, ownerName: string, memberName: string): string[] {
-  const targets = new Set<string>();
-  const owner = escapeRegExp(ownerName);
-  const member = escapeRegExp(memberName);
-  const directAssignmentRe = new RegExp(
-    `\\b${owner}\\s*\\.\\s*${member}\\s*=\\s*([A-Z][A-Za-z0-9_$]*)`,
-    "g",
-  );
-  for (const match of source.matchAll(directAssignmentRe)) {
-    if (match[1]) {
-      targets.add(match[1]);
-    }
-  }
-
-  const assignArgs = findObjectAssignArgs(source, ownerName);
-  if (assignArgs) {
-    collectMemberTargetsFromObjectAssignArgs(source, assignArgs, memberName, targets);
-  }
-
-  return [...targets];
-}
-
-function collectMemberTargetsFromObjectAssignArgs(
-  source: string,
-  assignArgs: string,
-  memberName: string,
-  targets: Set<string>,
-): void {
-  collectMemberTargetsFromObjectLiteral(assignArgs, memberName, targets);
-  for (const identifier of assignArgs.matchAll(/\b[A-Za-z_$][A-Za-z0-9_$]*\b/g)) {
-    const objectLiteral = findConstObjectLiteral(source, identifier[0]);
-    if (objectLiteral) {
-      collectMemberTargetsFromObjectLiteral(objectLiteral, memberName, targets);
-    }
-  }
-}
-
-function collectMemberTargetsFromObjectLiteral(
-  objectLiteral: string,
-  memberName: string,
-  targets: Set<string>,
-): void {
-  const member = escapeRegExp(memberName);
-  const explicitRe = new RegExp(`(?:^|[{,])\\s*${member}\\s*:\\s*([A-Z][A-Za-z0-9_$]*)`, "g");
-  for (const match of objectLiteral.matchAll(explicitRe)) {
-    if (match[1]) {
-      targets.add(match[1]);
-    }
-  }
-  const shorthandRe = new RegExp(`(?:^|[{,])\\s*(${member})\\s*(?=[,}])`, "g");
-  for (const match of objectLiteral.matchAll(shorthandRe)) {
-    if (match[1] && /^[A-Z]/.test(match[1])) {
-      targets.add(match[1]);
-    }
-  }
-}
-
-function findConstInitializer(source: string, name: string): string | null {
-  const match = new RegExp(
-    `(?:export\\s+)?const\\s+${escapeRegExp(name)}\\b[^=]*=\\s*([\\s\\S]*?);`,
-    "m",
-  ).exec(source);
-  return match?.[1] ?? null;
-}
-
-function findConstObjectLiteral(source: string, name: string): string | null {
-  const initializer = findConstInitializer(source, name);
-  if (!initializer?.trim().startsWith("{")) {
-    return null;
-  }
-  return initializer;
-}
-
-function findObjectAssignArgs(source: string, name: string): string | null {
-  const initializer = findConstInitializer(source, name);
-  const match = initializer?.match(/\bObject\.assign\s*\(([\s\S]*)\)\s*$/);
-  return match?.[1] ?? null;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 // --- Non-exported helpers ---
 
 function createAutoPrepassFailureError(
@@ -1009,7 +884,9 @@ export function mergeSidecarContent(sidecarPath: string, newContent: string): st
 
 function orderFilesByLocalImportDependencies(
   filePaths: readonly string[],
-  resolver: { resolve(fromFile: string, specifier: string): string | undefined },
+  resolver: {
+    resolve(fromFile: string, specifier: string): string | undefined;
+  },
   normalizeFilePath: (filePath: string) => string,
 ): string[] {
   const filePathByNormalized = new Map<string, string>();

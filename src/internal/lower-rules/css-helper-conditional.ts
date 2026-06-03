@@ -41,10 +41,11 @@ import {
 } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
+import { formatObservedVariantCondition } from "../utilities/prop-usage.js";
 import {
-  formatObservedVariantCondition,
-  getExhaustiveObservedStaticValues,
-} from "../utilities/prop-usage.js";
+  emitObservedVariantBuckets,
+  resolveObservedVariantValues,
+} from "./observed-variant-buckets.js";
 import {
   resolveTemplateLiteralBranch,
   type ComponentInfo,
@@ -963,63 +964,45 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
     type DynamicPropEntry = { jsxProp: string; stylexProp: string; callArg?: ExpressionKind };
 
-    const hasObservedOmissions = (propName: string): boolean => {
-      const usage = ctx.propUsageByComponent?.get(decl.localName);
-      return (usage?.props[propName]?.omittedCount ?? 0) > 0;
-    };
-
-    // Bucket a single optional prop's dynamic style into static `prop === value` variants
-    // when consumer usage is exhaustively observed. `buildStyle` computes the evaluated style
-    // for one observed value, or returns null to bail the whole optimization (non-static value).
+    // Bucket a single optional prop's dynamic style into static `prop === value` variants when
+    // consumer usage is exhaustively observed. `buildStyle` computes the evaluated style for one
+    // observed value, or returns null to bail the whole optimization (non-static value). Only
+    // values for which `testInfo.when` holds get a bucket.
     const tryApplyObservedVariants = (
       testInfo: TestInfo,
       propName: string,
       buildStyle: (propValue: string | number) => Record<string, unknown> | null,
     ): boolean => {
-      if (!isJsxPropOptional(propName) || !hasObservedOmissions(propName)) {
-        return false;
-      }
-      const observedValues = getExhaustiveObservedStaticValues(
-        ctx.propUsageByComponent?.get(decl.localName),
+      const observedValues = resolveObservedVariantValues({
+        usage: ctx.propUsageByComponent?.get(decl.localName),
         propName,
-      );
+        isOptional: isJsxPropOptional(propName),
+      });
       const testExpr = parseExpr(testInfo.when);
-      if (!observedValues || observedValues.length > 20 || !testExpr) {
+      if (!observedValues || !testExpr) {
         return false;
       }
-      let applied = false;
-      for (const propValue of observedValues) {
-        const testValue = evaluateObservedDynamicExpression({
-          j,
-          root,
-          expression: testExpr,
-          propName,
-          propValue,
-        });
-        if (testValue !== true) {
-          continue;
-        }
-        const style = buildStyle(propValue);
-        if (style === null) {
-          return false;
-        }
-        if (Object.keys(style).length === 0) {
-          continue;
-        }
-        applyVariant(
-          { when: formatObservedVariantCondition(propName, propValue), propName },
-          style,
-        );
-        applied = true;
-      }
-      if (!applied) {
-        return false;
-      }
-      decl.variantLookupCastProps ??= new Set<string>();
-      decl.variantLookupCastProps.add(propName);
-      ensureShouldForwardPropDrop(decl, propName);
-      decl.needsWrapperComponent = true;
-      return true;
+      return emitObservedVariantBuckets({
+        decl,
+        propName,
+        observedValues,
+        applyVariant,
+        ensurePropDrop: (prop) => ensureShouldForwardPropDrop(decl, prop),
+        buildBucket: (propValue) => {
+          const testValue = evaluateObservedDynamicExpression({
+            j,
+            root,
+            expression: testExpr,
+            propName,
+            propValue,
+          });
+          if (testValue !== true) {
+            return { kind: "skip" };
+          }
+          const style = buildStyle(propValue);
+          return style === null ? { kind: "bail" } : { kind: "emit", style };
+        },
+      });
     };
 
     const tryApplyObservedDynamicPropVariants = (

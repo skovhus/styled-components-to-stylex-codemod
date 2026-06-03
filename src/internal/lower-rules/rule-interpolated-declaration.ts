@@ -61,10 +61,11 @@ import {
   evaluateLocalCallValueTransform,
   evaluateObservedDynamicExpression,
 } from "./static-evaluator.js";
+import { formatObservedVariantCondition } from "../utilities/prop-usage.js";
 import {
-  formatObservedVariantCondition,
-  getExhaustiveObservedStaticValues,
-} from "../utilities/prop-usage.js";
+  emitObservedVariantBuckets,
+  resolveObservedVariantValues,
+} from "./observed-variant-buckets.js";
 
 type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
 
@@ -693,12 +694,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
     const jsxProp = propsUsed[0]!;
     const componentUsage = state.propUsageByComponent.get(decl.localName);
-    const propUsage = componentUsage?.props[jsxProp];
-    if (!isJsxPropOptional(jsxProp) || (propUsage?.omittedCount ?? 0) === 0) {
-      return false;
-    }
-    const observedValues = getExhaustiveObservedStaticValues(componentUsage, jsxProp);
-    if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+    const observedValues = resolveObservedVariantValues({
+      usage: componentUsage,
+      propName: jsxProp,
+      isOptional: isJsxPropOptional(jsxProp),
+      minValues: 2,
+    });
+    if (!observedValues) {
       return false;
     }
 
@@ -717,46 +719,39 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return false;
     }
 
-    const variantEntries: Array<{
-      propValue: string | number;
-      styles: Record<string, unknown>;
-    }> = [];
-    for (const propValue of observedValues) {
-      const evaluatedValue = evaluateObservedDynamicExpression({
-        j,
-        root: state.root,
-        expression: bodyExpr,
-        propName: jsxProp,
-        propValue,
-        paramName,
-      });
-      if (typeof evaluatedValue !== "string") {
-        return false;
-      }
-      const cssText = evaluatedValue.trim();
-      if (!cssText) {
-        continue;
-      }
-      const parsedStyle = parseCssDeclarationBlock(cssText);
-      if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
-        return false;
-      }
-      variantEntries.push({ propValue, styles: parsedStyle });
-    }
-
-    if (variantEntries.length === 0) {
-      return false;
-    }
-    for (const { propValue, styles } of variantEntries) {
-      const condition = formatObservedVariantCondition(jsxProp, propValue);
-      const when = conditionWhen ? `${conditionWhen} && ${condition}` : condition;
-      applyVariant({ when, propName: jsxProp }, styles);
-    }
-    decl.variantLookupCastProps ??= new Set<string>();
-    decl.variantLookupCastProps.add(jsxProp);
-    ensureObservedVariantPropDrop(jsxProp);
-    decl.needsWrapperComponent = true;
-    return true;
+    return emitObservedVariantBuckets({
+      decl,
+      propName: jsxProp,
+      observedValues,
+      applyVariant,
+      ensurePropDrop: ensureObservedVariantPropDrop,
+      buildBucket: (propValue) => {
+        const evaluatedValue = evaluateObservedDynamicExpression({
+          j,
+          root: state.root,
+          expression: bodyExpr,
+          propName: jsxProp,
+          propValue,
+          paramName,
+        });
+        if (typeof evaluatedValue !== "string") {
+          return { kind: "bail" };
+        }
+        const cssText = evaluatedValue.trim();
+        if (!cssText) {
+          return { kind: "skip" };
+        }
+        const parsedStyle = parseCssDeclarationBlock(cssText);
+        if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
+          return { kind: "bail" };
+        }
+        return {
+          kind: "emit",
+          style: parsedStyle,
+          ...(conditionWhen ? { whenPrefix: conditionWhen } : {}),
+        };
+      },
+    });
   };
 
   const observedExpressionFallbackFnKey = (jsxProp: string, conditionWhen: string): string => {

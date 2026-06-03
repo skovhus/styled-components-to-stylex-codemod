@@ -32,6 +32,7 @@ import {
   isAstNode,
   isConditionalExpressionNode,
   isFunctionNode,
+  isNodeOfType,
   isPureIdempotentExpression,
   literalToStaticValue,
 } from "../utilities/jscodeshift-utils.js";
@@ -605,12 +606,6 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     return null;
   };
-
-  const isNodeOfType = <TType extends string>(
-    node: unknown,
-    type: TType,
-  ): node is { type: TType } & Record<string, unknown> =>
-    !!node && typeof node === "object" && (node as { type?: unknown }).type === type;
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
   // is statically enumerable, each usage site stays on the inline JSX rewrite path,
@@ -1225,6 +1220,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
   }
 
+  // A private `styled(Foo.Bar)` (member-expression base) rendered at a single JSX site can be
+  // inlined directly, dropping the wrapper entirely. That is only safe when the component exposes
+  // no external surface (preconditions below) and carries no prop-driven styling at all — both the
+  // cases the imported-component inline path rejects and the dynamic ones it would otherwise push
+  // into the JSX rewriter.
   function canInlinePrivateMemberBaseJsx(decl: StyledDecl): boolean {
     if (
       decl.base.kind !== "component" ||
@@ -1246,37 +1246,23 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     ) {
       return false;
     }
-    if (hasPropDrivenWrapperBehavior(decl)) {
+    if (!canInlineImportedComponentWrapper(decl) || hasDynamicPropStyling(decl)) {
       return false;
     }
-    return countLocalJsxUsages(decl.localName) === 1;
+    return getJsxUsageCount(decl.localName) === 1;
   }
 
-  function hasPropDrivenWrapperBehavior(decl: StyledDecl): boolean {
+  // Prop-driven styling that the imported-component inline path tolerates (it can defer dynamic
+  // work to the JSX rewriter) but full member-base inlining cannot, since there is no wrapper left
+  // to host it.
+  function hasDynamicPropStyling(decl: StyledDecl): boolean {
     return !!(
-      decl.enumVariant ||
-      decl.shouldForwardProp ||
-      (decl.inlineStyleProps?.length ?? 0) > 0 ||
       (decl.styleFnFromProps?.length ?? 0) > 0 ||
       (decl.variantDimensions?.length ?? 0) > 0 ||
       (decl.compoundVariants?.length ?? 0) > 0 ||
-      Object.keys(decl.variantStyleKeys ?? {}).length > 0 ||
       (decl.transientPropRenames?.size ?? 0) > 0 ||
       (decl.observedExpressionConditionDropProps?.size ?? 0) > 0 ||
       (decl.styleValueVariantProps?.size ?? 0) > 0
-    );
-  }
-
-  function countLocalJsxUsages(localName: string): number {
-    return (
-      root
-        .find(j.JSXElement, {
-          openingElement: { name: { type: "JSXIdentifier", name: localName } },
-        } as any)
-        .size() +
-      root
-        .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name: localName } } as any)
-        .size()
     );
   }
 
