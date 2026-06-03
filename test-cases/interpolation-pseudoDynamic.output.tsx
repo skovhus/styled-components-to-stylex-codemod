@@ -12,13 +12,13 @@ function Button(props: ButtonProps) {
   return (
     <button
       sx={[
-        styles.button,
         active
           ? highlightStyles({
               active: styles.buttonActivePseudoActive,
               hover: styles.buttonActivePseudoHover,
             })
           : undefined,
+        styles.button,
       ]}
     >
       {children}
@@ -39,12 +39,12 @@ function InvertedButton(props: InvertedButtonProps) {
   return (
     <button
       sx={[
-        styles.invertedButton,
         !$disabled &&
           highlightStyles({
             active: styles.invertedButtonNotDisabledPseudoActive,
             hover: styles.invertedButtonNotDisabledPseudoHover,
           }),
+        styles.invertedButton,
       ]}
     >
       {children}

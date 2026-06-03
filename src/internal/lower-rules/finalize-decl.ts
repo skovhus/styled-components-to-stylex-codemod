@@ -44,6 +44,7 @@ import {
 import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
+import { stylexVarMemberExpression } from "../transform-css-vars.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -153,13 +154,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       continue;
     }
     const localVar = state.getOrCreateLocalStylexVar(prop, defaultValue);
-    inlineStyleProp.keyExpr = state.j.memberExpression(
-      state.j.identifier(localVar.groupName),
-      localVar.keyName.startsWith("--")
-        ? state.j.literal(localVar.keyName)
-        : state.j.identifier(localVar.keyName),
-      localVar.keyName.startsWith("--"),
-    );
+    inlineStyleProp.keyExpr = stylexVarMemberExpression(state.j, localVar);
     if (expr && typeof expr === "object" && isAstNode(expr)) {
       rewriteCssVarsInAstNode(expr as { type: string }, localVarValues, varsToDrop);
     }
@@ -2724,8 +2719,10 @@ function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
         : { ...shorthandMap };
       endVal = hasEnd ? computeMergedLonghand(styleObj[end], shorthandMap) : { ...shorthandMap };
     } else {
-      startVal = hasStart ? styleObj[start] : shorthandVal;
-      endVal = hasEnd ? styleObj[end] : shorthandVal;
+      startVal = hasStart
+        ? mergeScalarDefaultIntoLonghand(styleObj[start], shorthandVal)
+        : shorthandVal;
+      endVal = hasEnd ? mergeScalarDefaultIntoLonghand(styleObj[end], shorthandVal) : shorthandVal;
     }
 
     // Rebuild the object in order: replace the shorthand position with start+end,
@@ -2773,6 +2770,17 @@ function computeMergedLonghand(
     if (key !== "default") {
       merged[key] = val;
     }
+  }
+  return merged;
+}
+
+function mergeScalarDefaultIntoLonghand(longhandVal: unknown, scalarDefault: unknown): unknown {
+  if (!isMediaOrPseudoMap(longhandVal)) {
+    return longhandVal;
+  }
+  const merged = { ...(longhandVal as Record<string, unknown>) };
+  if (merged.default === null || merged.default === undefined) {
+    merged.default = scalarDefault;
   }
   return merged;
 }

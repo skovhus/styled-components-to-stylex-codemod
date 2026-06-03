@@ -9,6 +9,8 @@ import { SOURCE_CSS_PROPERTIES_KEY, type ComputedKeyEntry } from "./transform/he
 import type { LocalStylexVarRef } from "./transform-types.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 
+export { stylexVarMemberExpression };
+
 export function rewriteCssVarsInStyleObject(
   args: CssVarRewriteContext & {
     obj: Record<string, unknown>;

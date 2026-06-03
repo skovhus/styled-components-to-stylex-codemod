@@ -138,7 +138,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     decl: StyledDecl,
     helperDecl: StyledDecl,
     cssHelperPropValues: Map<string, unknown>,
-    inlineStyleProps: Array<{ prop: string; expr: unknown }>,
+    inlineStyleProps: Array<{ prop: string; expr: unknown; keyExpr?: unknown }>,
   ): void => {
     addStyleKeyMixin(decl, helperDecl.styleKey, { afterBase: true });
     trackMixinPropertyValues(cssHelperValuesByKey.get(helperDecl.styleKey), cssHelperPropValues);
@@ -147,6 +147,7 @@ export function createLowerRulesState(ctx: TransformContext) {
         inlineStyleProps.push({
           prop: p.prop,
           expr: cloneAstNode(p.expr),
+          ...(p.keyExpr ? { keyExpr: cloneAstNode(p.keyExpr) } : {}),
         });
       }
     }

@@ -7,11 +7,11 @@ function Button({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        styles.button,
         highlightStyles({
           active: styles.buttonPseudoActive,
           hover: styles.buttonPseudoHover,
         }),
+        styles.button,
       ]}
     >
       {children}
@@ -23,11 +23,11 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   return (
     <button
       sx={[
-        styles.resetButton,
         highlightStyles({
           active: styles.resetButtonPseudoActive,
           hover: styles.resetButtonPseudoHover,
         }),
+        styles.resetButton,
       ]}
     >
       {children}
@@ -35,14 +35,26 @@ function ResetButton({ children }: { children?: React.ReactNode }) {
   );
 }
 
-type HighlightCardProps = React.PropsWithChildren<{
-  interactive?: boolean;
-}>;
+type HighlightCardProps = { interactive?: boolean } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
 
 function HighlightCard(props: HighlightCardProps) {
   const { children, interactive } = props;
   return (
-    <div sx={[styles.highlightCard, interactive && styles.highlightCardInteractive]}>
+    <div
+      sx={[
+        interactive
+          ? highlightStyles({
+              active: styles.highlightCardInteractivePseudoActive,
+              hover: styles.highlightCardInteractivePseudoHover,
+            })
+          : undefined,
+        styles.highlightCard,
+        interactive ? styles.highlightCardInteractiveRoot : undefined,
+      ]}
+    >
       {children}
     </div>
   );
@@ -125,12 +137,19 @@ const styles = stylex.create({
     borderRadius: 6,
     backgroundColor: "#f8fafc",
   },
-  highlightCardInteractive: {
-    cursor: "pointer",
+  highlightCardInteractivePseudoActive: {
     backgroundColor: {
       default: "#f8fafc",
       ":active": "#e0f2fe",
+    },
+  },
+  highlightCardInteractivePseudoHover: {
+    backgroundColor: {
+      default: "#f8fafc",
       ":hover": "#e0f2fe",
     },
+  },
+  highlightCardInteractiveRoot: {
+    cursor: "pointer",
   },
 });

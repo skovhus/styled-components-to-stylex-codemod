@@ -5117,6 +5117,32 @@ export const App = () => <Box $size="lg">Hello</Box>;
     expect(result.code).toContain("$size === ");
   });
 
+  it("should keep $-prefix when a token binding appears in static style objects", () => {
+    const source = `
+import styled from "styled-components";
+import { $colors as $glowShadow } from "./tokens.stylex";
+
+const Glow = styled.div<{ $glowShadow: string }>\`
+  border-color: \${$glowShadow.dark};
+  box-shadow: 0 0 \${({ $glowShadow }) => $glowShadow};
+\`;
+
+export const App = () => <Glow $glowShadow="rgba(0, 0, 0, 0.35)">Glow</Glow>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("borderColor: $colors.dark");
+    expect(result.code).not.toContain("borderColor: glowShadow.dark");
+    expect(result.code).toContain("$glowShadow: string");
+    expect(result.code).toContain('<Glow $glowShadow="rgba(0, 0, 0, 0.35)">');
+  });
+
   it("should Omit+remap $-prefixed props for non-exported styled(Component) wrappers", () => {
     const source = `
 import * as React from "react";

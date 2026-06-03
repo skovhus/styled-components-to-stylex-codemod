@@ -213,7 +213,7 @@ export function emitSimpleWithConfigWrappers(ctx: EmitIntrinsicContext): void {
       () => ctx.markNeedsUseThemeImport(),
     );
 
-    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier);
+    const pseudoGuardProps = appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier, undefined);
 
     const propsParamId = j.identifier("props");
     if (allowAsProp && emitTypes) {

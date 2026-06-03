@@ -4,6 +4,7 @@
  */
 import type { Identifier, JSCodeshift } from "jscodeshift";
 import type { StyleMergerConfig } from "../../adapter.js";
+import type { InlineStyleProp } from "./types.js";
 import type { WrapperEmitter } from "./wrapper-emitter.js";
 import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
 
@@ -12,7 +13,6 @@ import { mergeAdjacentComplementaryStyleExprs } from "./variant-condition.js";
  */
 type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 type StatementKind = Parameters<JSCodeshift["blockStatement"]>[0][number];
-type InlineStyleProp = { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind };
 
 export interface StyleMergingResult {
   /**
@@ -89,7 +89,7 @@ export function emitStyleMerging(args: {
   allowClassNameProp: boolean;
   allowStyleProp: boolean;
   allowSxProp?: boolean;
-  inlineStyleProps?: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
+  inlineStyleProps?: InlineStyleProp[];
   staticStyleExpr?: ExpressionKind;
   staticClassNameExpr?: ExpressionKind;
   /** Set to true when the rendered tag is an intrinsic HTML element (lowercase).
@@ -701,11 +701,12 @@ function isCustomPropertyKey(prop: string): boolean {
 
 function inlineStyleProperty(
   j: JSCodeshift,
-  prop: { prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind },
+  prop: InlineStyleProp,
 ): ReturnType<JSCodeshift["property"]> {
-  const property = j.property("init", prop.keyExpr ?? inlineStylePropKey(j, prop.prop), prop.expr);
+  const key = prop.keyExpr ?? inlineStylePropKey(j, prop.prop);
+  const property = j.property("init", key, prop.expr);
   if (prop.keyExpr) {
-    (property as { computed?: boolean }).computed = true;
+    property.computed = true;
   }
   return property;
 }

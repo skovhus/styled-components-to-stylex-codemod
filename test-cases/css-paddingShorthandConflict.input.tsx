@@ -18,9 +18,21 @@ const Header = styled.div`
   background-color: lightblue;
 `;
 
+// Pattern 3: pseudo longhand override must preserve the shorthand-derived default
+const Row = styled.div`
+  padding: 6px 12px;
+  background-color: lavender;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
     <ProgressBar>Progress Bar</ProgressBar>
     <Header>Header</Header>
+    <Row>Row one</Row>
+    <Row>Row two</Row>
   </div>
 );

@@ -24,18 +24,22 @@ function ComponentWrapper(props: ComponentWrapperProps) {
   );
 }
 
-type HighlightedAvatarProps = { highlightColor?: string } & Omit<
-  React.ComponentPropsWithRef<typeof UserAvatar>,
-  "className" | "style"
->;
+type DestructuredShadowProps = React.PropsWithChildren<{
+  blur: number;
+  glowShadow: string;
+}>;
 
-function HighlightedAvatar(props: HighlightedAvatarProps) {
-  const { highlightColor, ...rest } = props;
+function DestructuredShadow(props: DestructuredShadowProps) {
+  const { children, blur, glowShadow } = props;
   return (
-    <UserAvatar
-      {...rest}
-      {...stylex.props(styles.highlightedAvatar(`0 0 0 2px ${highlightColor ?? "transparent"}`))}
-    />
+    <div
+      sx={styles.destructuredShadowBoxShadow({
+        blur,
+        glowShadow,
+      })}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -81,7 +85,7 @@ function MotionIframeWrapper(props: MotionIframeWrapperProps) {
 }
 
 export const App = () => (
-  <div>
+  <div style={{ width: 512 }}>
     <ComponentWrapper
       isOpen={true}
       initial={{ height: 40 }}
@@ -109,8 +113,15 @@ export const App = () => (
       16:9 iframe
     </MotionIframeWrapper>
     <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
-    <HighlightedAvatar user="Alice" size="small" highlightColor="blue" />
-    <HighlightedAvatar user="Bob" size="tiny" />
+    <UserAvatar
+      user="Alice"
+      size="small"
+      {...stylex.props(styles.highlightedAvatar, styles.highlightedAvatarBackgroundColor("blue"))}
+    />
+    <UserAvatar user="Bob" size="tiny" {...stylex.props(styles.highlightedAvatar)} />
+    <DestructuredShadow blur={4} glowShadow="rgba(0, 0, 0, 0.35)">
+      Destructured shadow
+    </DestructuredShadow>
   </div>
 );
 
@@ -131,9 +142,17 @@ const styles = stylex.create({
   componentWrapperOpen: {
     borderRadius: "8px",
   },
-  highlightedAvatar: (boxShadow: string) => ({
-    borderRadius: "50%",
-    boxShadow,
+  highlightedAvatar: {
+    backgroundColor: "transparent",
+    color: "white",
+    paddingBlock: 2,
+    paddingInline: 4,
+  },
+  highlightedAvatarBackgroundColor: (backgroundColor: string) => ({
+    backgroundColor,
+  }),
+  destructuredShadowBoxShadow: (props) => ({
+    boxShadow: `0 0 ${props.blur}px ${props.glowShadow}`,
   }),
   zoomPreviewImage: {
     objectFit: "contain",

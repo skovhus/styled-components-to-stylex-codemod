@@ -1,6 +1,7 @@
 import React from "react";
 import styled from "styled-components";
 import { motion, type MotionValue } from "./lib/framer-motion";
+import { $colors as $glowShadow } from "./tokens.stylex";
 import { UserAvatar } from "./lib/user-avatar";
 
 const ComponentWrapper = styled(motion.div)<{ $isOpen: boolean }>`
@@ -10,8 +11,13 @@ const ComponentWrapper = styled(motion.div)<{ $isOpen: boolean }>`
 `;
 
 const HighlightedAvatar = styled(UserAvatar)<{ $highlightColor?: string }>`
-  box-shadow: 0 0 0 2px ${(props) => props.$highlightColor ?? "transparent"};
-  border-radius: 50%;
+  background-color: ${(props) => props.$highlightColor ?? "transparent"};
+  color: white;
+  padding: 2px 4px;
+`;
+
+const DestructuredShadow = styled.div<{ $blur: number; $glowShadow: string }>`
+  box-shadow: 0 0 ${({ $blur }) => $blur}px ${({ $glowShadow }) => $glowShadow};
 `;
 
 const ZoomPreviewImage = styled(motion.img)<{
@@ -33,7 +39,7 @@ const MotionIframeWrapper = styled(motion.div)<{
 `;
 
 export const App = () => (
-  <div>
+  <div style={{ width: 512 }}>
     <ComponentWrapper
       $isOpen={true}
       initial={{ height: 40 }}
@@ -63,6 +69,9 @@ export const App = () => (
     <MotionIframeWrapper>Default iframe</MotionIframeWrapper>
     <HighlightedAvatar user="Alice" size="small" $highlightColor="blue" />
     <HighlightedAvatar user="Bob" size="tiny" />
+    <DestructuredShadow $blur={4} $glowShadow="rgba(0, 0, 0, 0.35)">
+      Destructured shadow
+    </DestructuredShadow>
   </div>
 );
 

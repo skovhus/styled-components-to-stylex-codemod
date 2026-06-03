@@ -733,6 +733,15 @@ export function buildVariantDimensionLookups(
 /** Entry with a source-order tag for CSS cascade interleaving. */
 export type OrderedStyleEntry = { order: number; expr: ExpressionKind };
 
+export function hasStyleSourceOrder(
+  d: Pick<StyledDecl, "variantSourceOrder" | "styleFnFromProps" | "pseudoAliasSelectors">,
+): boolean {
+  return (
+    !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0) ||
+    (d.pseudoAliasSelectors ?? []).some((entry) => entry.sourceOrder !== undefined)
+  );
+}
+
 /**
  * Sort ordered entries by source order and append them to styleArgs.
  * Used to merge variant and styleFn entries while preserving CSS cascade order.
@@ -1223,11 +1232,14 @@ function appendPseudoAliasStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
+  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   if (!entries?.length) {
     return [];
   }
-  return appendGuardedStyleArgs(entries, styleArgs, j, (entry) => {
+  const guardProps: string[] = [];
+  const aliasExprs: ExpressionKind[] = [];
+  for (const entry of entries) {
     const properties = entry.pseudoNames.map((name, i) =>
       j.property(
         "init",
@@ -1235,10 +1247,41 @@ function appendPseudoAliasStyleArgs(
         styleRef(j, stylesIdentifier, entry.styleKeys[i]!),
       ),
     );
-    return j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
+    const expr = j.callExpression(cloneAstNode(entry.styleSelectorExpr) as ExpressionKind, [
       j.objectExpression(properties),
     ]) as ExpressionKind;
-  });
+
+    let finalExpr = expr;
+    if (entry.guard) {
+      const parsed = parseVariantWhenToAst(j, entry.guard.when);
+      for (const p of parsed.props) {
+        if (p && !guardProps.includes(p)) {
+          guardProps.push(p);
+        }
+      }
+      finalExpr = makeConditionalStyleExpr(j, {
+        cond: parsed.cond,
+        expr,
+        isBoolean: parsed.isBoolean,
+      });
+    }
+
+    if (orderedEntries && entry.sourceOrder !== undefined) {
+      orderedEntries.push({ order: entry.sourceOrder, expr: finalExpr });
+    } else {
+      aliasExprs.push(finalExpr);
+    }
+  }
+
+  if (aliasExprs.length > 0) {
+    // StyleX composition de-dupes by CSS property key. If a runtime-selected
+    // pseudo-alias style is placed after normal-state styles, it can replace
+    // those classes even when the selected style only contains pseudo branches.
+    // Prepending keeps normal-state declarations active while the pseudo
+    // selector specificity still wins for hover/active/focus states.
+    styleArgs.unshift(...aliasExprs);
+  }
+  return guardProps;
 }
 
 /**
@@ -1277,12 +1320,14 @@ export function appendAllPseudoStyleArgs(
   styleArgs: ExpressionKind[],
   j: JSCodeshift,
   stylesIdentifier: string,
+  orderedEntries?: OrderedStyleEntry[],
 ): string[] {
   const guardProps = appendPseudoAliasStyleArgs(
     d.pseudoAliasSelectors,
     styleArgs,
     j,
     stylesIdentifier,
+    orderedEntries,
   );
   for (const gp of appendPseudoExpandStyleArgs(
     d.pseudoExpandSelectors,
@@ -1337,7 +1382,7 @@ export function buildAllVariantAndStyleExprs(opts: {
 
   const booleanProps = collectBooleanPropNames(d);
   const knownProps = collectKnownConditionPropNames(emitter, d);
-  const hasSourceOrder = !!(d.variantSourceOrder && Object.keys(d.variantSourceOrder).length > 0);
+  const hasSourceOrder = hasStyleSourceOrder(d);
   const orderedEntries: OrderedStyleEntry[] = [];
 
   buildVariantStyleExprs({
@@ -1370,7 +1415,13 @@ export function buildAllVariantAndStyleExprs(opts: {
     buildCompoundVariantExpressions(d.compoundVariants, styleArgs, destructureProps);
   }
 
-  for (const gp of appendAllPseudoStyleArgs(d, styleArgs, j, stylesIdentifier)) {
+  for (const gp of appendAllPseudoStyleArgs(
+    d,
+    styleArgs,
+    j,
+    stylesIdentifier,
+    hasSourceOrder ? orderedEntries : undefined,
+  )) {
     if (!destructureProps.includes(gp)) {
       destructureProps.push(gp);
     }

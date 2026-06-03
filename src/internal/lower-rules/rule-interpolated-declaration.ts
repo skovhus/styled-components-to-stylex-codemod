@@ -13,7 +13,7 @@ import type {
   ResolveValueContext,
 } from "../../adapter.js";
 import type { CallValueTransform } from "../builtin-handlers/types.js";
-import type { StyledDecl } from "../transform-types.js";
+import type { LocalStylexVarRef, StyledDecl } from "../transform-types.js";
 import type { WarningType } from "../logger.js";
 import type { ExpressionKind } from "./decl-types.js";
 import type { DeclProcessingState } from "./decl-setup.js";
@@ -66,7 +66,10 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 
 import {
   buildTemplateWithStaticParts,
+  collectDollarParamBindingIdentifiers,
   collectPropsFromArrowFn,
+  collectPropsFromArrowFnDestructured,
+  getImportedStylexIdentifiers,
   hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
   hasThemeReferenceInExpression,
@@ -88,6 +91,7 @@ import {
 import { handleInlineStyleValueFromProps } from "./inline-style-props.js";
 import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
+import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
 import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
@@ -276,9 +280,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return false;
     }
     const cssProperty = d.property.trim();
-    if (cssProperty !== "background" && cssProperty !== "background-image") {
-      return false;
-    }
     if (media || attrTarget || pseudos?.length || pseudoElement || resolvedSelectorMedia) {
       return false;
     }
@@ -288,6 +289,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
     );
     if (slotParts.length < 2) {
+      return false;
+    }
+    if (
+      cssProperty !== "background" &&
+      cssProperty !== "background-image" &&
+      cssProperty !== "box-shadow" &&
+      cssProperty !== "transform"
+    ) {
+      return false;
+    }
+    const stylexDecls = cssDeclarationToStylexDeclarations(d);
+    if (stylexDecls.length !== 1 || !stylexDecls[0]?.prop) {
       return false;
     }
     if (cssProperty === "background" && isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")) {
@@ -346,7 +359,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
 
       if (rawExpr.type === "ArrowFunctionExpression") {
-        for (const propName of collectPropsFromArrowFn(rawExpr)) {
+        for (const propName of collectPropsFromArrowFnDestructured(rawExpr)) {
           if (propName !== "theme") {
             propsUsed.add(propName);
           }
@@ -361,16 +374,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
       currentStaticPart = "";
-      expressions.push(normalizeDollarProps(j, slotExpr));
+      const importedStylexIdentifiers = getImportedStylexIdentifiers(importMap, resolverImports);
+      const localDollarIdentifiers =
+        rawExpr.type === "ArrowFunctionExpression"
+          ? collectDollarParamBindingIdentifiers(rawExpr)
+          : undefined;
+      expressions.push(
+        normalizeDollarProps(j, slotExpr, {
+          skipIdentifiers: importedStylexIdentifiers,
+          localDollarIdentifiers,
+        }),
+      );
     }
 
     quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
 
     const valueExpr = j.templateLiteral(quasis, expressions) as ExpressionKind;
-    const stylexDecls = cssDeclarationToStylexDeclarations(d);
-    if (stylexDecls.length === 0) {
-      return false;
-    }
     const normalizedPropNames = [...propsUsed].map((propName) =>
       propName.startsWith("$") ? propName.slice(1) : propName,
     );
@@ -3490,14 +3509,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   d: CssDeclarationIR;
   decl: StyledDecl;
   expr: unknown;
-  getOrCreateLocalStylexVar: (
-    cssName: string,
-    defaultValue: string,
-  ) => {
-    cssName: string;
-    groupName: string;
-    keyName: string;
-  };
+  getOrCreateLocalStylexVar: (cssName: string, defaultValue: string) => LocalStylexVarRef;
   inlineStyleProps: Array<{ prop: string; expr: ExpressionKind; keyExpr?: ExpressionKind }>;
 }): boolean {
   const { j, d, decl, expr, getOrCreateLocalStylexVar, inlineStyleProps } = args;
@@ -3544,7 +3556,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   if (!defaultValue) {
     return false;
   }
-  const ref = getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
+  const localVar = getOrCreateLocalStylexVar(customValue.cssName, defaultValue);
   const propName = conditionProp.startsWith("$") ? conditionProp.slice(1) : conditionProp;
   const valueExpr = buildTemplateWithStaticParts(
     j,
@@ -3555,7 +3567,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   inlineStyleProps.push({
     prop: customValue.cssName,
     expr: j.conditionalExpression(j.identifier(propName), valueExpr, j.identifier("undefined")),
-    keyExpr: j.memberExpression(j.identifier(ref.groupName), j.literal(ref.keyName), true),
+    keyExpr: stylexVarMemberExpression(j, localVar),
   });
   if (conditionProp.startsWith("$")) {
     ensureShouldForwardPropDrop(decl, conditionProp);
