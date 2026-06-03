@@ -601,6 +601,69 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
     expect(result.warnings[0]?.type).toBe(WARNING_TYPE);
   });
 
+  it("reports every imported styled-components base conflict in the file before bailing", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { GroupHeader } from "./lib/styled-group-header";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+const CompactGroupHeader = styled(GroupHeader)\`
+  padding-block: 4px;
+\`;
+
+export const App = () => (
+  <>
+    <CustomGroupHeader label="test" id="a" />
+    <CompactGroupHeader label="test" id="b" />
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-multiple.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings.map((w) => w.type)).toEqual([WARNING_TYPE, WARNING_TYPE]);
+    expect(result.warnings.map((w) => w.context)).toEqual([
+      expect.objectContaining({ component: "CustomGroupHeader" }),
+      expect.objectContaining({ component: "CompactGroupHeader" }),
+    ]);
+  });
+
+  it("reports the original styled-components definition path when fallback scanning follows a barrel", () => {
+    const source = `
+import * as React from "react";
+import styled from "styled-components";
+import { GroupHeader } from "./lib/styled-group-header-barrel";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomGroupHeader label="test" id="t" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-barrel-definition.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]?.context).toEqual(
+      expect.objectContaining({
+        definitionPath: toRealPath(join(testCasesDir, "lib/styled-group-header.tsx")),
+      }),
+    );
+  });
+
   it("does not bail for unrelated styled-components files behind star barrels", () => {
     const source = `
 import styled from "styled-components";

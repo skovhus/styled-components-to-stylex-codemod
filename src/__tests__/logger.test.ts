@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.unmock("../internal/logger.js");
-import { Logger } from "../internal/logger.js";
+import { CASCADE_CONFLICT_WARNING, Logger } from "../internal/logger.js";
 
 describe("Logger", () => {
   let writeSpy: ReturnType<typeof vi.spyOn>;
@@ -117,6 +117,85 @@ describe("Logger", () => {
           /path/file02.tsx
 
           ... and 14 more file(s)
+        "
+      `);
+    });
+
+    it("shows top depended files for cascade conflict warnings", () => {
+      Logger.logWarnings(
+        [
+          {
+            severity: "warning",
+            type: CASCADE_CONFLICT_WARNING,
+            loc: null,
+            context: {
+              importedPath: "/src/components/base-a",
+              definitionPath: "/src/components/base-a.tsx",
+            },
+          },
+          {
+            severity: "warning",
+            type: CASCADE_CONFLICT_WARNING,
+            loc: null,
+            context: {
+              importedPath: "/src/components/base-a",
+              definitionPath: "/src/components/base-a.tsx",
+            },
+          },
+        ],
+        "/src/usage/first.tsx",
+      );
+      Logger.logWarnings(
+        [
+          {
+            severity: "warning",
+            type: CASCADE_CONFLICT_WARNING,
+            loc: null,
+            context: {
+              importedPath: "/src/components/base-a",
+              definitionPath: "/src/components/base-a.tsx",
+            },
+          },
+        ],
+        "/src/usage/second.tsx",
+      );
+      Logger.logWarnings(
+        [
+          {
+            severity: "warning",
+            type: CASCADE_CONFLICT_WARNING,
+            loc: null,
+            context: {
+              importedPath: "/src/components/base-b",
+              definitionPath: "/src/components/base-b.tsx",
+            },
+          },
+        ],
+        "/src/usage/third.tsx",
+      );
+
+      expect(Logger.createReport().toString()).toMatchInlineSnapshot(`
+        "
+        ────────────────────────────────────────────────────────────
+        Warning Summary: 4 warning(s) in 1 category(s)
+        ────────────────────────────────────────────────────────────
+
+        ▸ styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts (4)
+
+          Top depended files:
+
+          1. /src/components/base-a.tsx (2 usage files)
+             /src/usage/first.tsx
+             /src/usage/second.tsx
+
+          2. /src/components/base-b.tsx (1 usage file)
+             /src/usage/third.tsx
+
+          /src/usage/first.tsx
+
+          /src/usage/second.tsx
+
+          /src/usage/third.tsx
         "
       `);
     });

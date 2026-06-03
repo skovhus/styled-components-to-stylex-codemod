@@ -12,6 +12,7 @@ import {
   getReExportedSourceName,
   resolveBarrelReExportBinding,
 } from "../prepass/extract-external-interface.js";
+import { CASCADE_CONFLICT_WARNING } from "../logger.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
 
 type ModuleResolver = (fromFile: string, specifier: string) => string | undefined;
@@ -24,6 +25,10 @@ interface ImportDefinition {
 interface ReExportPath {
   path: string;
   importedName: string;
+}
+
+interface StyledDefinitionFile {
+  path: string;
 }
 
 export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
@@ -48,6 +53,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
 
   // Build lookup of locally defined styled-component names for exclusion
   const localStyledNames = new Set(styledDecls.map((d) => d.localName));
+  let foundCascadeConflict = false;
 
   for (const decl of styledDecls) {
     if (decl.skipTransform) {
@@ -107,11 +113,11 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // Check if the imported file contains styled-components.
     // Prefer prepass data when available, but fall back to direct file scan if the
     // prepass map misses the path (e.g., file outside the configured prepass set).
-    const styledNames =
+    const styledDefinitions =
       (styledDefFiles && resolveStyledDefFile(definition.path, styledDefFiles)) ||
       scanFileForStyledDefs(definition.path, definition.importedName, ctx.options.resolveModule);
 
-    if (!styledNames) {
+    if (!styledDefinitions) {
       continue;
     }
 
@@ -121,15 +127,19 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // to it once StyleX is placed in a CSS layer — bail.
     ctx.warnings.push({
       severity: "warning",
-      type: "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts",
+      type: CASCADE_CONFLICT_WARNING,
       loc: decl.loc,
       context: {
         component: decl.localName,
         base: baseIdent,
         importedPath,
-        definitionPath: definition.path,
+        definitionPath: styledDefinitions.path,
       },
     });
+    foundCascadeConflict = true;
+  }
+
+  if (foundCascadeConflict) {
     return returnResult({ code: null, warnings: ctx.warnings }, "bail");
   }
 
@@ -230,15 +240,16 @@ function defaultReExportLeafKeyExists(
 function resolveStyledDefFile(
   importedPath: string,
   styledDefFiles: Map<string, Set<string>>,
-): Set<string> | undefined {
+): StyledDefinitionFile | undefined {
   const exact = styledDefFiles.get(importedPath);
   if (exact) {
-    return exact;
+    return { path: importedPath };
   }
   for (const ext of EXTENSIONS) {
-    const withExt = styledDefFiles.get(importedPath + ext);
+    const pathWithExtension = importedPath + ext;
+    const withExt = styledDefFiles.get(pathWithExtension);
     if (withExt) {
-      return withExt;
+      return { path: pathWithExtension };
     }
   }
   return undefined;
@@ -267,7 +278,7 @@ function scanFileForStyledDefs(
   importedName?: string,
   resolveModule?: ModuleResolver,
   visited = new Set<string>(),
-): Set<string> | undefined {
+): StyledDefinitionFile | undefined {
   const file = tryReadFileWithPath(importedPath);
   if (!file || visited.has(file.path)) {
     return undefined;
@@ -286,7 +297,7 @@ function scanFileForStyledDefs(
   }
 
   if (names.size > 0) {
-    return names;
+    return { path: file.path };
   }
 
   if (!importedName) {
