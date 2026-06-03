@@ -22,14 +22,19 @@ const MAX_OBSERVED_VARIANT_VALUES = 20;
  * Validates that `propName` is an optional prop whose consumer usage is exhaustively observed
  * (it is sometimes omitted and every supplied value is a static string/number), returning the
  * observed values when bucketing is viable or `null` to bail.
+ *
+ * `isExported` is required: these buckets carry no runtime fallback, so they are only sound when
+ * every call site is observable. Exported components can be rendered by callers outside the analyzed
+ * set with unseen values, so bucketing must bail for them (callers fall back to dynamic styles).
  */
 export function resolveObservedVariantValues(args: {
   usage: ComponentPropUsageInfo | undefined;
   propName: string;
   isOptional: boolean;
+  isExported: boolean;
   minValues?: number;
 }): Array<string | number> | null {
-  if (!args.isOptional) {
+  if (args.isExported || !args.isOptional) {
     return null;
   }
   if ((args.usage?.props[args.propName]?.omittedCount ?? 0) === 0) {

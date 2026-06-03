@@ -447,6 +447,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     resolvedStyleObjects: state.resolvedStyleObjects,
     keyframesNames: state.keyframesNames,
     inlineKeyframeNameMap: state.inlineKeyframeNameMap,
+    exportedComponentNames: state.exportedComponentNames,
   });
 
   return {

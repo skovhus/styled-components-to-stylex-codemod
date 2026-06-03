@@ -92,6 +92,7 @@ type CssHelperConditionalContext = Pick<
   | "root"
   | "keyframesNames"
   | "inlineKeyframeNameMap"
+  | "exportedComponentNames"
 > & {
   propUsageByComponent?: LowerRulesState["propUsageByComponent"];
   decl: StyledDecl;
@@ -977,6 +978,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         usage: ctx.propUsageByComponent?.get(decl.localName),
         propName,
         isOptional: isJsxPropOptional(propName),
+        isExported: ctx.exportedComponentNames.has(decl.localName),
       });
       const testExpr = parseExpr(testInfo.when);
       if (!observedValues || !testExpr) {
