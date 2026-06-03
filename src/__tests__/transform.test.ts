@@ -1884,6 +1884,62 @@ export const App = () => <Card>card</Card>;
     expect(code).toMatch(/animationName:\s*fade/);
   });
 
+  it("keeps converted module keyframes before sibling declarator reads", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`, animation = \`\${fade} 1s linear\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>card</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code).toMatch(/const fade = stylex\.keyframes\(\{[\s\S]*?\}\),\s*animation =/);
+    expect(code.indexOf("animation =")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
+  it("keeps converted module keyframes before TypeScript-wrapped top-level reads", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+export const animation = fade as unknown;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>card</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThanOrEqual(0);
+    expect(code.indexOf("export const animation")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

@@ -124,9 +124,17 @@ function hasSurvivingTopLevelReadAfterDeclaration(
 ): boolean {
   const programBody = ctx.root.get().node.program.body as ASTNode[];
   const declarationStatement = findTopLevelStatementNode(declaratorPath);
-  const declarationIndex = declarationStatement ? programBody.indexOf(declarationStatement) : -1;
+  if (!declarationStatement) {
+    return false;
+  }
+  const declarationIndex = programBody.indexOf(declarationStatement);
   if (declarationIndex < 0) {
     return false;
+  }
+  if (
+    statementHasRuntimeReadAfterDeclarator(declarationStatement, declaratorPath.node, localName)
+  ) {
+    return true;
   }
 
   const removedStyledDeclNames = new Set(
@@ -142,6 +150,34 @@ function hasSurvivingTopLevelReadAfterDeclaration(
     }
     return nodeContainsRuntimeIdentifierRead(statement, localName);
   });
+}
+
+function statementHasRuntimeReadAfterDeclarator(
+  statement: ASTNode,
+  targetDeclarator: ASTNode,
+  localName: string,
+): boolean {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type !== "VariableDeclaration") {
+    return false;
+  }
+
+  let foundTarget = false;
+  for (const declarator of declaration.declarations) {
+    if (declarator === targetDeclarator) {
+      foundTarget = true;
+      continue;
+    }
+    if (
+      foundTarget &&
+      declarator.type === "VariableDeclarator" &&
+      nodeContainsRuntimeIdentifierRead(declarator.init, localName)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isRemovedStyledDeclarationStatement(
@@ -193,7 +229,7 @@ function nodeContainsRuntimeIdentifierRead(
   }
 
   for (const key of Object.keys(node as Record<string, unknown>)) {
-    if (key === "loc" || key === "comments" || key === "leadingComments") {
+    if (key === "loc" || key === "comments" || key === "leadingComments" || isTypeOnlyAstKey(key)) {
       continue;
     }
     if (
@@ -216,7 +252,21 @@ function shouldSkipRuntimeReadTraversal(node: { type?: string }): boolean {
     node.type === "ImportSpecifier" ||
     node.type === "ImportDefaultSpecifier" ||
     node.type === "ImportNamespaceSpecifier" ||
-    !!node.type?.startsWith("TS")
+    node.type === "TSTypeAliasDeclaration" ||
+    node.type === "TSInterfaceDeclaration" ||
+    node.type === "TSImportEqualsDeclaration"
+  );
+}
+
+function isTypeOnlyAstKey(key: string): boolean {
+  return (
+    key === "typeAnnotation" ||
+    key === "typeParameters" ||
+    key === "typeArguments" ||
+    key === "typeParameter" ||
+    key === "typeParameterInstantiation" ||
+    key === "returnType" ||
+    key === "implements"
   );
 }
 
