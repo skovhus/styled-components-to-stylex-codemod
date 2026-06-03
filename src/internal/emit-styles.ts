@@ -2,7 +2,12 @@
  * Emits StyleX style objects and required imports into the AST.
  * Core concepts: style object serialization and import management.
  */
-import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
+import type {
+  LocalStylexVarRef,
+  StylexKeyframesEmission,
+  StyledDecl,
+  VariantDimension,
+} from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
 import { isAstNode } from "./utilities/jscodeshift-utils.js";
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
@@ -605,19 +610,18 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     (stylesDecl as any).comments = deduped;
   }
 
-  // Emit inline @keyframes as `const <name> = stylex.keyframes({...})` before stylex.create.
-  const inlineKeyframeDecls: any[] = [];
+  // Emit all generated keyframes declarations immediately before the relevant stylex.create.
+  const emittedKeyframeDecls: any[] = (ctx.stylexKeyframes ?? []).map((keyframes) =>
+    buildStylexKeyframesDeclaration(j, keyframes),
+  );
   if (ctx.inlineKeyframes && ctx.inlineKeyframes.size > 0) {
     for (const [name, frames] of ctx.inlineKeyframes) {
-      const kfDecl = j.variableDeclaration("const", [
-        j.variableDeclarator(
-          j.identifier(name),
-          j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")), [
-            objectToAst(j, frames as Record<string, unknown>),
-          ]),
-        ),
-      ]);
-      inlineKeyframeDecls.push(kfDecl);
+      emittedKeyframeDecls.push(
+        buildStylexKeyframesDeclaration(j, {
+          localName: name,
+          frames,
+        }),
+      );
     }
   }
 
@@ -626,9 +630,19 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     ...styledDecls.flatMap((decl) => (decl.inlineStyleProps ?? []).map((prop) => prop.expr)),
   ]);
   const programBody = root.get().node.program.body as any[];
-  const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
+  const insertNodes = [...emittedKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
   if (insertNodes.length > 0) {
-    if (stylesInsertPosition === "afterImports") {
+    if (!stylesDecl && mergeTarget && emittedKeyframeDecls.length > 0) {
+      const stylexCreateIndex = findStylexCreateDeclarationIndex(
+        programBody,
+        mergeTarget.objectExpression,
+      );
+      if (stylexCreateIndex >= 0) {
+        programBody.splice(stylexCreateIndex, 0, ...emittedKeyframeDecls);
+      } else {
+        programBody.push(...emittedKeyframeDecls);
+      }
+    } else if (stylesInsertPosition === "afterImports") {
       const lastImportIdx = findLastImportIndex(programBody);
       const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
       programBody.splice(insertAt, 0, ...insertNodes);
@@ -706,7 +720,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     insertedStylexImport &&
     !hasActiveStyledDecl &&
     !stylesDecl &&
-    inlineKeyframeDecls.length === 0 &&
+    emittedKeyframeDecls.length === 0 &&
     emittedDimensions.size === 0 &&
     resolverImports.size === 0
   ) {
@@ -718,6 +732,43 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   return { emptyStyleKeys };
+}
+
+function buildStylexKeyframesDeclaration(j: any, keyframes: StylexKeyframesEmission): any {
+  const declaration = j.variableDeclaration("const", [
+    j.variableDeclarator(
+      j.identifier(keyframes.localName),
+      j.callExpression(j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")), [
+        objectToAst(j, keyframes.frames),
+      ]),
+    ),
+  ]);
+  if (keyframes.isGeneratedAlias) {
+    const provenanceComment = j.commentBlock(
+      " @styled-components-to-stylex generated keyframes alias ",
+    );
+    declaration.comments = [provenanceComment];
+    declaration.leadingComments = [provenanceComment];
+  }
+  return keyframes.isExported ? j.exportNamedDeclaration(declaration, []) : declaration;
+}
+
+function findStylexCreateDeclarationIndex(programBody: any[], objectExpression: unknown): number {
+  return programBody.findIndex((statement) =>
+    statementContainsStylexCreateObject(statement, objectExpression),
+  );
+}
+
+function statementContainsStylexCreateObject(statement: any, objectExpression: unknown): boolean {
+  const declaration =
+    statement?.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type !== "VariableDeclaration") {
+    return false;
+  }
+  return declaration.declarations.some((declarator: any) => {
+    const init = declarator?.init;
+    return init?.type === "CallExpression" && init.arguments?.[0] === objectExpression;
+  });
 }
 
 /**

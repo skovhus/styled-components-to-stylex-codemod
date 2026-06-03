@@ -85,6 +85,9 @@ export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
     preserveNames: preservedNames,
     duplicateNames,
   });
+  if (converted.stylexKeyframes.length > 0) {
+    ctx.stylexKeyframes = [...(ctx.stylexKeyframes ?? []), ...converted.stylexKeyframes];
+  }
   if (duplicateNames.size > 0) {
     ctx.keyframesAliases = new Map([...(ctx.keyframesAliases ?? new Map()), ...duplicateNames]);
   }

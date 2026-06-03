@@ -2,16 +2,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const fadeIn = stylex.keyframes({
-  from: {
-    opacity: 0,
-  },
-
-  to: {
-    opacity: 1,
-  },
-});
-
 type FadeInContainerProps = React.PropsWithChildren<{
   fadeInDuration?: number;
 }>;
@@ -39,6 +29,16 @@ export function App() {
     </div>
   );
 }
+
+const fadeIn = stylex.keyframes({
+  from: {
+    opacity: 0,
+  },
+
+  to: {
+    opacity: 1,
+  },
+});
 
 const styles = stylex.create({
   fadeInContainer: {

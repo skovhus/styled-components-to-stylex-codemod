@@ -2,16 +2,6 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-const pulse = stylex.keyframes({
-  "0%,40%,100%": {
-    opacity: 1,
-  },
-
-  "50%,90%": {
-    opacity: 0.2,
-  },
-});
-
 type LoaderCaretProps<C extends React.ElementType = "div"> = Omit<
   {
     delay?: number;
@@ -57,6 +47,16 @@ export const App = () => (
     </div>
   </div>
 );
+
+const pulse = stylex.keyframes({
+  "0%,40%,100%": {
+    opacity: 1,
+  },
+
+  "50%,90%": {
+    opacity: 0.2,
+  },
+});
 
 const styles = stylex.create({
   loaderCaret: (animationDelay: string) => ({

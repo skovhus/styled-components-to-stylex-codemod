@@ -1,5 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => (
+  <div>
+    <div sx={styles.fadeBox}>Fade in</div>
+    <div sx={styles.animatedCard}>Animated Card</div>
+    <div sx={styles.bounceIn}>Bounce In</div>
+    <div sx={styles.sequentialAnimation}>Sequential</div>
+    <div sx={styles.fullAnimation}>Full Animation</div>
+    <div sx={styles.mixedStates}>Mixed States</div>
+  </div>
+);
+
 const fadeIn = stylex.keyframes({
   from: {
     opacity: 0,
@@ -33,17 +44,6 @@ const scaleUp = stylex.keyframes({
     transform: "scale(1)",
   },
 });
-
-export const App = () => (
-  <div>
-    <div sx={styles.fadeBox}>Fade in</div>
-    <div sx={styles.animatedCard}>Animated Card</div>
-    <div sx={styles.bounceIn}>Bounce In</div>
-    <div sx={styles.sequentialAnimation}>Sequential</div>
-    <div sx={styles.fullAnimation}>Full Animation</div>
-    <div sx={styles.mixedStates}>Mixed States</div>
-  </div>
-);
 
 const styles = stylex.create({
   // Single animation

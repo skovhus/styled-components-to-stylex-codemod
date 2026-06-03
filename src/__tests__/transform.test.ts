@@ -1789,6 +1789,72 @@ export const App = () => (
     expect(keyframesMatches).toHaveLength(1);
   });
 
+  it("emits converted module keyframes immediately before generated stylex.create", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>card</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code).toMatch(
+      /const fade = stylex\.keyframes\(\{[\s\S]*?\}\);\n\nconst styles = stylex\.create/,
+    );
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThan(
+      code.indexOf("export const App"),
+    );
+  });
+
+  it("emits converted module keyframes immediately before merged stylex.create", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const styles = stylex.create({
+  existing: {
+    color: "red",
+  },
+});
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <div sx={styles.existing}>existing</div>
+    <Card>card</Card>
+  </>
+);
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code).toMatch(
+      /const fade = stylex\.keyframes\(\{[\s\S]*?\}\);\n\nconst styles = stylex\.create/,
+    );
+    expect(code).toMatch(/card:\s*\{/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

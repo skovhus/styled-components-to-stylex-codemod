@@ -8,6 +8,7 @@ import { compile } from "stylis";
 import type { CssRuleIR } from "./css-ir.js";
 import { cssDeclarationToStylexDeclarations } from "./css-prop-mapping.js";
 import { classifyAnimationTokens } from "./lower-rules/animation.js";
+import type { StylexKeyframesEmission } from "./transform-types.js";
 import { cloneAstNode, literalToStaticValue } from "./utilities/jscodeshift-utils.js";
 
 export function convertStyledKeyframes(args: {
@@ -18,7 +19,7 @@ export function convertStyledKeyframes(args: {
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
   preserveNames?: Set<string>;
   duplicateNames?: Map<string, string>;
-}): { keyframesNames: Set<string>; changed: boolean } {
+}): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
   return convertStyledKeyframesImpl(args);
 }
 
@@ -145,11 +146,12 @@ function convertStyledKeyframesImpl(args: {
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
   preserveNames?: Set<string>;
   duplicateNames?: Map<string, string>;
-}): { keyframesNames: Set<string>; changed: boolean } {
+}): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
   const { root, j, styledImports, keyframesLocal, objectToAst, preserveNames, duplicateNames } =
     args;
 
   const keyframesNames = new Set<string>();
+  const stylexKeyframes: StylexKeyframesEmission[] = [];
   let changed = false;
   let hasPreservedKeyframesDefinition = false;
 
@@ -157,16 +159,24 @@ function convertStyledKeyframesImpl(args: {
     if (preserveNames?.has(definition.localName)) {
       const duplicateName = duplicateNames?.get(definition.localName);
       if (duplicateName) {
-        insertStylexKeyframesDeclaration({
-          root,
-          j,
-          afterDeclaratorPath: definition.declaratorPath,
-          localName: duplicateName,
-          init: j.callExpression(
-            j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
-            [objectToAst(j, definition.frames)],
-          ),
-        });
+        if (isModuleLevelDeclarator(definition.declaratorPath)) {
+          stylexKeyframes.push({
+            localName: duplicateName,
+            frames: definition.frames,
+            isGeneratedAlias: true,
+          });
+        } else {
+          insertStylexKeyframesDeclaration({
+            root,
+            j,
+            afterDeclaratorPath: definition.declaratorPath,
+            localName: duplicateName,
+            init: j.callExpression(
+              j.memberExpression(j.identifier("stylex"), j.identifier("keyframes")),
+              [objectToAst(j, definition.frames)],
+            ),
+          });
+        }
         keyframesNames.add(duplicateName);
         changed = true;
       } else {
@@ -178,6 +188,18 @@ function convertStyledKeyframesImpl(args: {
 
     const declarator = definition.declaratorPath.node;
     if (declarator.type !== "VariableDeclarator") {
+      continue;
+    }
+
+    if (isModuleLevelDeclarator(definition.declaratorPath)) {
+      stylexKeyframes.push({
+        localName: definition.localName,
+        frames: definition.frames,
+        isExported: isExportedDeclarator(definition.declaratorPath),
+      });
+      removeDeclarator(definition.declaratorPath, j);
+      keyframesNames.add(definition.localName);
+      changed = true;
       continue;
     }
 
@@ -218,7 +240,7 @@ function convertStyledKeyframesImpl(args: {
     });
   }
 
-  return { keyframesNames, changed };
+  return { keyframesNames, changed, stylexKeyframes };
 }
 
 function hasStyledKeyframesTemplate(args: {
@@ -236,6 +258,65 @@ function hasStyledKeyframesTemplate(args: {
       hasTemplate = true;
     });
   return hasTemplate;
+}
+
+function isModuleLevelDeclarator(declaratorPath: ASTPath<ASTNode>): boolean {
+  const declarationPath = findVariableDeclarationPath(declaratorPath);
+  if (!declarationPath) {
+    return false;
+  }
+  const parentType = getOwningStatementNode(declarationPath)?.type;
+  return parentType === "Program" || parentType === "ExportNamedDeclaration";
+}
+
+function isExportedDeclarator(declaratorPath: ASTPath<ASTNode>): boolean {
+  const declarationPath = findVariableDeclarationPath(declaratorPath);
+  const owningStatementPath = findOwningStatementPath(declarationPath);
+  const ownerType = owningStatementPath?.value?.type ?? owningStatementPath?.node?.type;
+  return ownerType === "ExportNamedDeclaration";
+}
+
+function removeDeclarator(declaratorPath: ASTPath<ASTNode>, j: JSCodeshift): void {
+  const declarationPath = findVariableDeclarationPath(declaratorPath);
+  if (!declarationPath) {
+    return;
+  }
+  const declaration = declarationPath.value as Extract<ASTNode, { type: "VariableDeclaration" }>;
+  declaration.declarations = declaration.declarations.filter(
+    (candidate) => candidate !== declaratorPath.node,
+  );
+  if (declaration.declarations.length > 0) {
+    return;
+  }
+  const owningStatementPath = findOwningStatementPath(declarationPath);
+  if (owningStatementPath?.value?.type === "ExportNamedDeclaration") {
+    j(owningStatementPath).remove();
+    return;
+  }
+  j(declarationPath).remove();
+}
+
+function findVariableDeclarationPath(declaratorPath: ASTPath<ASTNode>): ASTPath<ASTNode> | null {
+  let current: any = declaratorPath.parentPath;
+  while (current) {
+    if (current.value?.type === "VariableDeclaration") {
+      return current as ASTPath<ASTNode>;
+    }
+    current = current.parentPath;
+  }
+  return null;
+}
+
+function findOwningStatementPath(path: ASTPath<ASTNode> | null): any {
+  let current: any = path?.parentPath;
+  while (current && Array.isArray(current.value)) {
+    current = current.parentPath;
+  }
+  return current ?? null;
+}
+
+function getOwningStatementNode(path: ASTPath<ASTNode> | null): { type?: string } | null {
+  return findOwningStatementPath(path)?.value ?? null;
 }
 
 function insertStylexKeyframesDeclaration(args: {

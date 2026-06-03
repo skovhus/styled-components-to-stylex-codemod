@@ -1,5 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
+export const App = () => <div sx={styles.rotate}>💅</div>;
+
 const rotate = stylex.keyframes({
   from: {
     transform: "rotate(0deg)",
@@ -9,8 +11,6 @@ const rotate = stylex.keyframes({
     transform: "rotate(360deg)",
   },
 });
-
-export const App = () => <div sx={styles.rotate}>💅</div>;
 
 const styles = stylex.create({
   rotate: {

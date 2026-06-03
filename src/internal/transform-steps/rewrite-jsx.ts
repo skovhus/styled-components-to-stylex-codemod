@@ -1669,7 +1669,8 @@ function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: Styl
   const existingNames = collectTopLevelBindingNames(root, j);
   const programBody = root.get().node.program.body as unknown[];
   const stylesIndex = programBody.findIndex(isStylexCreateStylesDeclaration);
-  const insertAt = stylesIndex >= 0 ? stylesIndex : programBody.length;
+  const insertAt =
+    stylesIndex >= 0 ? findStylexCreateBlockStart(programBody, stylesIndex) : programBody.length;
   const declarations: unknown[] = [];
 
   for (const decl of decls) {
@@ -2014,7 +2015,13 @@ function expressionReferencesLocal(expr: unknown, localName: string): boolean {
 }
 
 function isStylexCreateStylesDeclaration(node: unknown): boolean {
-  const declaration = node as {
+  const statement = node as {
+    type?: string;
+    declaration?: unknown;
+  };
+  const declaration = (
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : node
+  ) as {
     type?: string;
     declarations?: Array<{
       init?: {
@@ -2039,6 +2046,50 @@ function isStylexCreateStylesDeclaration(node: unknown): boolean {
       callee.object.name === "stylex" &&
       callee.property?.type === "Identifier" &&
       callee.property.name === "create"
+    );
+  });
+}
+
+function findStylexCreateBlockStart(programBody: unknown[], stylesIndex: number): number {
+  let insertAt = stylesIndex;
+  while (insertAt > 0 && isStylexKeyframesDeclaration(programBody[insertAt - 1])) {
+    insertAt -= 1;
+  }
+  return insertAt;
+}
+
+function isStylexKeyframesDeclaration(node: unknown): boolean {
+  const statement = node as {
+    type?: string;
+    declaration?: unknown;
+  };
+  const declaration = (
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : node
+  ) as {
+    type?: string;
+    declarations?: Array<{
+      init?: {
+        type?: string;
+        callee?: {
+          type?: string;
+          object?: { type?: string; name?: string };
+          property?: { type?: string; name?: string };
+        };
+      };
+    }>;
+  };
+  if (declaration.type !== "VariableDeclaration") {
+    return false;
+  }
+  return (declaration.declarations ?? []).some((decl) => {
+    const callee = decl.init?.callee;
+    return (
+      decl.init?.type === "CallExpression" &&
+      callee?.type === "MemberExpression" &&
+      callee.object?.type === "Identifier" &&
+      callee.object.name === "stylex" &&
+      callee.property?.type === "Identifier" &&
+      callee.property.name === "keyframes"
     );
   });
 }

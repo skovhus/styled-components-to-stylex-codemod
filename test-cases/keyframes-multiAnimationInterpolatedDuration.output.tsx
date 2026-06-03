@@ -2,26 +2,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const fadeIn = stylex.keyframes({
-  from: {
-    opacity: 0,
-  },
-
-  to: {
-    opacity: 1,
-  },
-});
-
-const slideIn = stylex.keyframes({
-  from: {
-    transform: "translateX(-100%)",
-  },
-
-  to: {
-    transform: "translateX(0)",
-  },
-});
-
 type AnimatedCardProps = React.PropsWithChildren<{
   duration?: number;
 }>;
@@ -50,6 +30,26 @@ export function App() {
     </div>
   );
 }
+
+const fadeIn = stylex.keyframes({
+  from: {
+    opacity: 0,
+  },
+
+  to: {
+    opacity: 1,
+  },
+});
+
+const slideIn = stylex.keyframes({
+  from: {
+    transform: "translateX(-100%)",
+  },
+
+  to: {
+    transform: "translateX(0)",
+  },
+});
 
 const styles = stylex.create({
   animatedCard: {

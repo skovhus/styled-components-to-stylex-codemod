@@ -28,6 +28,7 @@ import {
 import type {
   LocalElementOverrideCandidate,
   LocalStylexVarRef,
+  StylexKeyframesEmission,
   StyledDecl,
   TransformOptions,
 } from "./transform-types.js";
@@ -165,6 +166,8 @@ export class TransformContext {
   inlineKeyframes?: Map<string, Record<string, Record<string, unknown>>>;
   /** Maps CSS @keyframes names to sanitized JS identifier names (e.g. "fade-in" → "fadeIn") */
   inlineKeyframeNameMap?: Map<string, string>;
+  /** Module-level styled-components keyframes converted during finalize and emitted next to stylex.create. */
+  stylexKeyframes?: StylexKeyframesEmission[];
 
   constructor(file: FileInfo, api: API, options: TransformOptions) {
     const j = api.jscodeshift;

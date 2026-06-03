@@ -34,6 +34,13 @@ export interface LocalStylexVarsSidecarFile {
   importPath: string;
 }
 
+export interface StylexKeyframesEmission {
+  localName: string;
+  frames: Record<string, Record<string, unknown>>;
+  isExported?: boolean;
+  isGeneratedAlias?: boolean;
+}
+
 /**
  * Result of the transform including any log entries
  */
