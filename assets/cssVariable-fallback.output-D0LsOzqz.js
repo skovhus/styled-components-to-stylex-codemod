@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-D08GDPn7.js";t();var n=e();function r({children:e}){return(0,n.jsx)(`div`,{className:`xh8yej3 x1odjw0f`,style:a,children:e})}var i=()=>(0,n.jsx)(r,{children:(0,n.jsx)(`div`,{children:`Scrollable content`})}),a={paddingRight:`var(--scrollbar-width, 12px)`};export{i as App,r as ScrollableArea};
