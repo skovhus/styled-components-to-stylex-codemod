@@ -12245,6 +12245,44 @@ export const App = () => <Box />;
       code.indexOf("const cached = readFade()"),
     );
   });
+
+  it("does not relocate keyframes above bindings used in the keyframes initializer", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const OFFSET = 40;
+
+const sweep = keyframes\`
+  from {
+    transform: translateX(-\${OFFSET}px);
+  }
+  to {
+    transform: translateX(100%);
+  }
+\`;
+
+const Box = styled.div\`
+  animation: \${sweep} 1s linear;
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-init-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/const OFFSET = 40[\s\S]*const sweep = stylex\.keyframes/);
+  });
 });
 
 describe("keyframes in css helper", () => {

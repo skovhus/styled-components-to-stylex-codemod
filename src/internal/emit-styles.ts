@@ -1360,6 +1360,46 @@ function interveningStatementUsesKeyframesBinding(
   );
 }
 
+function getTopLevelDeclaredBindingNames(statement: unknown): Set<string> {
+  const names = new Set<string>();
+  const variableDecl = getVariableDeclarationFromStatement(statement);
+  if (variableDecl?.declarations) {
+    for (const declarator of variableDecl.declarations) {
+      const id = declarator.id;
+      if (id?.type === "Identifier" && id.name) {
+        names.add(id.name);
+      }
+    }
+    return names;
+  }
+  const typed = statement as { type?: string; id?: { type?: string; name?: string } };
+  if (typed.type === "FunctionDeclaration" && typed.id?.type === "Identifier" && typed.id.name) {
+    names.add(typed.id.name);
+  }
+  return names;
+}
+
+function keyframesInitReferencesBindingsDeclaredBetween(
+  variableDecl: VariableDeclarationLike,
+  programBody: unknown[],
+  rangeStart: number,
+  rangeEnd: number,
+): boolean {
+  const referencedInInit = new Set<string>();
+  for (const declarator of variableDecl.declarations ?? []) {
+    collectIdentifiers(declarator.init, referencedInInit);
+  }
+  for (let index = rangeStart; index < rangeEnd; index++) {
+    const declared = getTopLevelDeclaredBindingNames(programBody[index]);
+    for (const name of declared) {
+      if (referencedInInit.has(name)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function collectTopLevelBindingsCapturingKeyframes(
   programBody: unknown[],
   beforeIndex: number,
@@ -1410,6 +1450,17 @@ function canSafelyRelocateKeyframesStatement(
   const bindingNames = getStylexKeyframesBindingNames(variableDecl);
   const rangeStart = Math.min(statementIndex, anchorIndex);
   const rangeEnd = Math.max(statementIndex, anchorIndex);
+  if (
+    statementIndex > anchorIndex &&
+    keyframesInitReferencesBindingsDeclaredBetween(
+      variableDecl,
+      programBody,
+      anchorIndex,
+      statementIndex,
+    )
+  ) {
+    return false;
+  }
   const indirectCaptureNames =
     statementIndex < anchorIndex
       ? collectTopLevelBindingsCapturingKeyframes(
