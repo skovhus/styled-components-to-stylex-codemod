@@ -1940,6 +1940,37 @@ export const App = () => <Card>card</Card>;
     expect(code).toMatch(/animationName:\s*fade/);
   });
 
+  it("keeps converted module keyframes before class static field reads", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+class Preview {
+  static animation = fade;
+}
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>{Preview.animation}</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThanOrEqual(0);
+    expect(code.indexOf("class Preview")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

@@ -246,8 +246,10 @@ function shouldSkipRuntimeReadTraversal(node: { type?: string }): boolean {
     node.type === "FunctionDeclaration" ||
     node.type === "FunctionExpression" ||
     node.type === "ArrowFunctionExpression" ||
-    node.type === "ClassDeclaration" ||
-    node.type === "ClassExpression" ||
+    node.type === "ClassMethod" ||
+    node.type === "ClassPrivateMethod" ||
+    node.type === "MethodDefinition" ||
+    node.type === "ObjectMethod" ||
     node.type === "ImportDeclaration" ||
     node.type === "ImportSpecifier" ||
     node.type === "ImportDefaultSpecifier" ||
