@@ -1,20 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 
-const pulse = stylex.keyframes({
-  "0%": {
-    opacity: 1,
-  },
-
-  "50%": {
-    opacity: 0.55,
-  },
-
-  "100%": {
-    opacity: 1,
-  },
-});
-
 type BoxProps = React.PropsWithChildren<{
   isAnimating?: boolean;
 }>;
@@ -43,6 +29,20 @@ export const App = () => (
     <Dot />
   </div>
 );
+
+const pulse = stylex.keyframes({
+  "0%": {
+    opacity: 1,
+  },
+
+  "50%": {
+    opacity: 0.55,
+  },
+
+  "100%": {
+    opacity: 1,
+  },
+});
 
 const styles = stylex.create({
   box: {

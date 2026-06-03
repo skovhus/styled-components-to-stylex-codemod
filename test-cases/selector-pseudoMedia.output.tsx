@@ -1,17 +1,17 @@
 import * as stylex from "@stylexjs/stylex";
 
-const shimmer = stylex.keyframes({
-  "100%": {
-    transform: "translateX(100%)",
-  },
-});
-
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <div sx={styles.box}>Hover or focus me, and resize!</div>
     <div sx={styles.placeholder} />
   </div>
 );
+
+const shimmer = stylex.keyframes({
+  "100%": {
+    transform: "translateX(100%)",
+  },
+});
 
 const styles = stylex.create({
   box: {

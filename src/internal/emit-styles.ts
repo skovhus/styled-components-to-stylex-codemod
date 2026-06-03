@@ -631,15 +631,21 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     ),
   ]);
   const programBody = root.get().node.program.body as any[];
-  const insertNodes = [...inlineKeyframeDecls, ...(stylesDecl ? [stylesDecl as any] : [])];
+  const relocatedKeyframes = extractModuleLevelStylexKeyframesStatements(programBody);
+  const stylesAnchorIndex = resolveStylesAnchorIndex({
+    programBody,
+    stylesInsertPosition,
+    stylesIdentifier,
+    mergeTarget,
+    willInsertStylesDecl: stylesDecl != null,
+  });
+  const insertNodes = [
+    ...relocatedKeyframes,
+    ...inlineKeyframeDecls,
+    ...(stylesDecl ? [stylesDecl as any] : []),
+  ];
   if (insertNodes.length > 0) {
-    if (stylesInsertPosition === "afterImports") {
-      const lastImportIdx = findLastImportIndex(programBody);
-      const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
-      programBody.splice(insertAt, 0, ...insertNodes);
-    } else {
-      programBody.push(...insertNodes);
-    }
+    programBody.splice(stylesAnchorIndex, 0, ...insertNodes);
   }
 
   // Emit separate stylex.create declarations for variant dimensions
@@ -1191,4 +1197,138 @@ function groupLocalStylexVars(vars: LocalStylexVarRef[]): Map<string, LocalStyle
     groups.set(ref.groupName, refs);
   }
   return groups;
+}
+
+function isStylexKeyframesInit(init: unknown): boolean {
+  if (!init || typeof init !== "object" || !("type" in init)) {
+    return false;
+  }
+  const call = init as {
+    type?: string;
+    callee?: { type?: string; object?: { type?: string; name?: string }; property?: { type?: string; name?: string } };
+  };
+  return (
+    call.type === "CallExpression" &&
+    call.callee?.type === "MemberExpression" &&
+    call.callee.object?.type === "Identifier" &&
+    call.callee.object.name === "stylex" &&
+    call.callee.property?.type === "Identifier" &&
+    call.callee.property.name === "keyframes"
+  );
+}
+
+function isStylexCreateInit(init: unknown): boolean {
+  if (!init || typeof init !== "object" || !("type" in init)) {
+    return false;
+  }
+  const call = init as {
+    type?: string;
+    callee?: { type?: string; object?: { type?: string; name?: string }; property?: { type?: string; name?: string } };
+  };
+  return (
+    call.type === "CallExpression" &&
+    call.callee?.type === "MemberExpression" &&
+    call.callee.object?.type === "Identifier" &&
+    call.callee.object.name === "stylex" &&
+    call.callee.property?.type === "Identifier" &&
+    call.callee.property.name === "create"
+  );
+}
+
+function variableDeclarationHasOnlyStylexKeyframes(decl: {
+  type?: string;
+  declarations?: Array<{ init?: unknown }>;
+}): boolean {
+  if (decl.type !== "VariableDeclaration" || !decl.declarations?.length) {
+    return false;
+  }
+  return decl.declarations.every((d) => isStylexKeyframesInit(d.init));
+}
+
+function extractModuleLevelStylexKeyframesStatements(programBody: unknown[]): unknown[] {
+  const extracted: Array<{ index: number; statement: unknown }> = [];
+  for (let index = 0; index < programBody.length; index++) {
+    const statement = programBody[index];
+    if (!statement || typeof statement !== "object" || !("type" in statement)) {
+      continue;
+    }
+    const typed = statement as {
+      type?: string;
+      declaration?: { type?: string; declarations?: Array<{ init?: unknown }> };
+    };
+    const variableDecl =
+      typed.type === "VariableDeclaration"
+        ? typed
+        : typed.type === "ExportNamedDeclaration" && typed.declaration?.type === "VariableDeclaration"
+          ? typed.declaration
+          : null;
+    if (!variableDecl || !variableDeclarationHasOnlyStylexKeyframes(variableDecl)) {
+      continue;
+    }
+    extracted.push({ index, statement });
+  }
+  for (let i = extracted.length - 1; i >= 0; i--) {
+    programBody.splice(extracted[i]!.index, 1);
+  }
+  return extracted.map((entry) => entry.statement);
+}
+
+function findMainStylexCreateStatementIndex(programBody: unknown[], stylesIdentifier: string): number {
+  for (let index = 0; index < programBody.length; index++) {
+    const statement = programBody[index];
+    if (!statement || typeof statement !== "object" || !("type" in statement)) {
+      continue;
+    }
+    const typed = statement as {
+      type?: string;
+      declaration?: {
+        type?: string;
+        declarations?: Array<{ id?: { type?: string; name?: string }; init?: unknown }>;
+      };
+    };
+    const variableDecl =
+      typed.type === "VariableDeclaration"
+        ? typed
+        : typed.type === "ExportNamedDeclaration" && typed.declaration?.type === "VariableDeclaration"
+          ? typed.declaration
+          : null;
+    if (!variableDecl?.declarations) {
+      continue;
+    }
+    for (const declarator of variableDecl.declarations) {
+      if (
+        declarator.id?.type === "Identifier" &&
+        declarator.id.name === stylesIdentifier &&
+        isStylexCreateInit(declarator.init)
+      ) {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function resolveStylesAnchorIndex(args: {
+  programBody: unknown[];
+  stylesInsertPosition: "end" | "afterImports";
+  stylesIdentifier: string;
+  mergeTarget: TransformContext["existingStylexStylesTarget"];
+  willInsertStylesDecl: boolean;
+}): number {
+  const { programBody, stylesInsertPosition, stylesIdentifier, mergeTarget, willInsertStylesDecl } =
+    args;
+
+  if (mergeTarget || !willInsertStylesDecl) {
+    const existingIndex = findMainStylexCreateStatementIndex(programBody, stylesIdentifier);
+    if (existingIndex >= 0) {
+      return existingIndex;
+    }
+  }
+
+  if (stylesInsertPosition === "afterImports") {
+    const lastImportIdx = findLastImportIndex(programBody as any[]);
+    return lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+  }
+
+  return programBody.length;
 }

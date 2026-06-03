@@ -12105,6 +12105,43 @@ export const App = () => <Icon />;
   });
 });
 
+describe("stylex.keyframes placement", () => {
+  it("places module-level stylex.keyframes immediately above stylex.create", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const rotate = keyframes\`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+\`;
+
+const Box = styled.div\`
+  animation: \${rotate} 2s linear infinite;
+  padding: 1rem;
+\`;
+
+export function Helper() {
+  return null;
+}
+
+export const App = () => <Box sx>spin</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(
+      /export function Helper[\s\S]*export const App[\s\S]*const rotate = stylex\.keyframes\([\s\S]*?\);\s*\nconst styles = stylex\.create\(/,
+    );
+    expect(code.indexOf("stylex.keyframes(")).toBeLessThan(code.indexOf("stylex.create("));
+  });
+});
+
 describe("keyframes in css helper", () => {
   it("should bail on comma-separated multi-animation in css helper rather than misparse", () => {
     const source = `

@@ -15,30 +15,6 @@ const RUN_PERCENT = Math.min(
     100,
 );
 
-const sweep = stylex.keyframes({
-  from: {
-    transform: `translateX(-${OFFSET_PX}px)`,
-  },
-
-  to: {
-    transform: "translateX(100%)",
-  },
-});
-
-const chromaticSweep = stylex.keyframes({
-  "0%": {
-    backgroundPosition: `-${OFFSET_PX}px 50%,0 50%`,
-  },
-
-  "80%": {
-    backgroundPosition: `${OFFSET_PX}px 50%,0 50%`,
-  },
-
-  "100%": {
-    backgroundPosition: `${OFFSET_PX}px 50%,0 50%`,
-  },
-});
-
 type ShimmerTextProps = React.PropsWithChildren<{
   imageUrl: string;
 }>;
@@ -67,6 +43,30 @@ export const App = () => (
     <ShimmerText imageUrl="/shine.png">Layered shimmer</ShimmerText>
   </div>
 );
+
+const sweep = stylex.keyframes({
+  from: {
+    transform: `translateX(-${OFFSET_PX}px)`,
+  },
+
+  to: {
+    transform: "translateX(100%)",
+  },
+});
+
+const chromaticSweep = stylex.keyframes({
+  "0%": {
+    backgroundPosition: `-${OFFSET_PX}px 50%,0 50%`,
+  },
+
+  "80%": {
+    backgroundPosition: `${OFFSET_PX}px 50%,0 50%`,
+  },
+
+  "100%": {
+    backgroundPosition: `${OFFSET_PX}px 50%,0 50%`,
+  },
+});
 
 const styles = stylex.create({
   box: {
