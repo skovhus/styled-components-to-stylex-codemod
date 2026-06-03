@@ -12402,6 +12402,48 @@ export const App = (
       code.indexOf("const cached = readFade()"),
     );
   });
+
+  it("does not relocate keyframes past indirect reads via class static methods", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+class Reader {
+  static readFade() {
+    return fade;
+  }
+}
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const cached = Reader.readFade();
+
+const Box = styled.div\`
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-class-closure.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const cached = Reader.readFade()"),
+    );
+  });
 });
 
 describe("keyframes in css helper", () => {

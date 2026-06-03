@@ -1406,6 +1406,50 @@ function keyframesInitReferencesBindingsDeclaredBetween(
   return false;
 }
 
+function getClassDeclarationFromStatement(
+  statement: unknown,
+): { id?: { type?: string; name?: string }; body?: { body?: unknown[] } } | null {
+  if (!statement || typeof statement !== "object" || !("type" in statement)) {
+    return null;
+  }
+  const typed = statement as {
+    type?: string;
+    id?: { type?: string; name?: string };
+    body?: { body?: unknown[] };
+    declaration?: {
+      type?: string;
+      id?: { type?: string; name?: string };
+      body?: { body?: unknown[] };
+    };
+  };
+  if (typed.type === "ClassDeclaration") {
+    return typed;
+  }
+  if (typed.type === "ExportNamedDeclaration" && typed.declaration?.type === "ClassDeclaration") {
+    return typed.declaration;
+  }
+  return null;
+}
+
+function classDeclarationCapturesKeyframes(
+  classDecl: { id?: { type?: string; name?: string }; body?: { body?: unknown[] } },
+  bindingNames: Set<string>,
+): string | null {
+  if (classDecl.id?.type !== "Identifier" || !classDecl.id.name) {
+    return null;
+  }
+  const members = classDecl.body?.body;
+  if (!Array.isArray(members)) {
+    return null;
+  }
+  for (const member of members) {
+    if (statementReferencesAnyBinding(member, bindingNames)) {
+      return classDecl.id.name;
+    }
+  }
+  return null;
+}
+
 function collectTopLevelBindingsCapturingKeyframes(
   programBody: unknown[],
   beforeIndex: number,
@@ -1415,6 +1459,14 @@ function collectTopLevelBindingsCapturingKeyframes(
   const captures = new Set<string>();
   for (let index = 0; index < beforeIndex; index++) {
     const statement = programBody[index];
+    const classDecl = getClassDeclarationFromStatement(statement);
+    if (classDecl) {
+      const className = classDeclarationCapturesKeyframes(classDecl, bindingNames);
+      if (className) {
+        captures.add(className);
+      }
+      continue;
+    }
     const variableDecl = getVariableDeclarationFromStatement(statement);
     if (variableDecl?.declarations) {
       for (const declarator of variableDecl.declarations) {
