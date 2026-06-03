@@ -66,6 +66,15 @@ export function mergeComponentPropUsage(
   }
 }
 
+/**
+ * Formats a `prop === value` JS condition for an observed static variant bucket,
+ * quoting strings and emitting numbers bare. Shared by every observed-variant emitter.
+ */
+export function formatObservedVariantCondition(propName: string, value: string | number): string {
+  const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
+  return `${propName} === ${valueExpr}`;
+}
+
 export function getExhaustiveObservedStaticValues(
   info: ComponentPropUsageInfo | undefined,
   propName: string,

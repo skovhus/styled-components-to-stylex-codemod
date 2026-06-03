@@ -61,7 +61,10 @@ import {
   evaluateLocalCallValueTransform,
   evaluateObservedDynamicExpression,
 } from "./static-evaluator.js";
-import { getExhaustiveObservedStaticValues } from "../utilities/prop-usage.js";
+import {
+  formatObservedVariantCondition,
+  getExhaustiveObservedStaticValues,
+} from "../utilities/prop-usage.js";
 
 type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
 
@@ -255,10 +258,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
   const getObservedStaticVariantValues = (jsxProp: string): Array<string | number> | null => {
     const usage = state.propUsageByComponent.get(decl.localName);
-    if (!usage) {
-      return null;
-    }
-    const propUsage = usage.props[jsxProp];
+    const propUsage = usage?.props[jsxProp];
     if (!propUsage || propUsage.values.length < 2) {
       return null;
     }
@@ -494,9 +494,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       if (value === skipValue) {
         continue;
       }
-      const valueExpr = typeof value === "number" ? String(value) : JSON.stringify(value);
       applyVariant(
-        { when: `${jsxProp} === ${valueExpr}`, propName: jsxProp },
+        { when: formatObservedVariantCondition(jsxProp, value), propName: jsxProp },
         {
           [stylexProp]: emitStaticObservedValue(
             value,
@@ -555,10 +554,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     for (const { propValue, cssValue } of transformedValues) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
       applyVariant(
-        { when: `${jsxProp} === ${propValueExpr}`, propName: jsxProp },
+        { when: formatObservedVariantCondition(jsxProp, propValue), propName: jsxProp },
         {
           [stylexProp]: cssValue,
         },
@@ -650,9 +647,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     for (const { propValue, cssValue } of transformedValues) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-      const when = `${conditionWhen} && ${jsxProp} === ${propValueExpr}`;
+      const when = `${conditionWhen} && ${formatObservedVariantCondition(jsxProp, propValue)}`;
       applyVariant(
         { when, propName: jsxProp, allPropNames: [conditionProp, jsxProp] },
         {
@@ -753,11 +748,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       return false;
     }
     for (const { propValue, styles } of variantEntries) {
-      const propValueExpr =
-        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-      const when = conditionWhen
-        ? `${conditionWhen} && ${jsxProp} === ${propValueExpr}`
-        : `${jsxProp} === ${propValueExpr}`;
+      const condition = formatObservedVariantCondition(jsxProp, propValue);
+      const when = conditionWhen ? `${conditionWhen} && ${condition}` : condition;
       applyVariant({ when, propName: jsxProp }, styles);
     }
     decl.variantLookupCastProps ??= new Set<string>();

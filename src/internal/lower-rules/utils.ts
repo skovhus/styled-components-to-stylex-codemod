@@ -12,6 +12,9 @@ import type { Adapter, CallResolveContext, ImportSource, ImportSpec } from "../.
 import { callArgsFromNode, isAdapterResultCssValue } from "../builtin-handlers/resolver-utils.js";
 import { literalToStaticValue } from "./types.js";
 
+// Re-exported for backwards compatibility; the canonical home is utilities/ast-walk.
+export { walkAst } from "../utilities/ast-walk.js";
+
 type ImportMeta = { importedName: string; source: ImportSource };
 type ImportLookup = (localName: string, identNode?: unknown) => ImportMeta | null;
 type MediaSlotResolution =
@@ -522,28 +525,3 @@ export function mapAst(
  * Recursively walk an AST tree and call `visitor` on each node to collect data.
  * Skips `loc` and `comments` keys.
  */
-export function walkAst(root: unknown, visitor: (node: AnyNode) => void): void {
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        visit(child);
-      }
-      return;
-    }
-    const n = node as AnyNode;
-    visitor(n);
-    for (const key of Object.keys(n)) {
-      if (key === "loc" || key === "comments") {
-        continue;
-      }
-      const child = n[key];
-      if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(root);
-}

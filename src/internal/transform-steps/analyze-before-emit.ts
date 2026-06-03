@@ -557,12 +557,12 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     });
   const hasNonJsxComponentValueReference = (name: string): boolean =>
     nonJsxComponentValueReferences(name).size() > 0;
-  const hasOnlyVirtualListElementTypeValueReferences = (name: string): boolean => {
+  const hasOnlyElementTypePropValueReferences = (name: string): boolean => {
     const refs = nonJsxComponentValueReferences(name);
     if (refs.size() === 0) {
       return false;
     }
-    let onlyVirtualListElementType = true;
+    let onlyElementTypeProp = true;
     refs.forEach((p: any) => {
       const usage = findContainingJsxAttributeExpression(p);
       const expressionContainer = usage?.expressionContainer;
@@ -574,10 +574,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
         typeof attr.name.name !== "string" ||
         !ELEMENT_TYPE_PROP_NAMES.has(attr.name.name)
       ) {
-        onlyVirtualListElementType = false;
+        onlyElementTypeProp = false;
       }
     });
-    return onlyVirtualListElementType;
+    return onlyElementTypeProp;
   };
 
   const findContainingJsxAttributeExpression = (
@@ -1211,8 +1211,8 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
 
     if (usedAsValue) {
       decl.usedAsValue = true;
-      if (hasOnlyVirtualListElementTypeValueReferences(decl.localName)) {
-        decl.valueUsageKind = "virtualListElementType";
+      if (hasOnlyElementTypePropValueReferences(decl.localName)) {
+        decl.valueUsageKind = "elementTypeProp";
         if (!exportedComponents.has(decl.localName)) {
           decl.supportsExternalStyles = false;
           decl.consumerUsesClassName = false;

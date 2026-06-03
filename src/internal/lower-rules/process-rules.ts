@@ -105,6 +105,9 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     resolveThemeValueFromFn,
     resolveImportInScope,
   } = state;
+  // Canonical resolver for a conditional style's `default` entry: a css-helper-composed
+  // default if the prop has one, otherwise the wrapped base component's default, else null.
+  // All conditional-default sites below go through this so the precedence lives in one place.
   const getConditionDefaultValue = (propName: string): unknown =>
     cssHelperPropValues.has(propName)
       ? getComposedDefaultValue(propName)
@@ -1230,8 +1233,6 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       conditionKey: string,
       conditionValue: unknown,
     ): void => {
-      const conditionDefault = (current: unknown): unknown =>
-        current ?? ctx.getWrappedComponentBaseDefaultValue(prop) ?? null;
       const current = target[prop];
       if (
         current &&
@@ -1241,12 +1242,15 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       ) {
         const map = current as Record<string, unknown>;
         if (!("default" in map)) {
-          map.default = ctx.getWrappedComponentBaseDefaultValue(prop) ?? null;
+          map.default = getConditionDefaultValue(prop);
         }
         map[conditionKey] = conditionValue;
         return;
       }
-      target[prop] = { default: conditionDefault(current), [conditionKey]: conditionValue };
+      target[prop] = {
+        default: current ?? getConditionDefaultValue(prop),
+        [conditionKey]: conditionValue,
+      };
     };
 
     const patchStyleFnConditionValue = (
@@ -1362,13 +1366,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
             const existingVal = (styleObj as Record<string, unknown>)[prop];
-            if (existingVal !== undefined) {
-              existing.default = existingVal;
-            } else if (cssHelperPropValues.has(prop)) {
-              existing.default = getComposedDefaultValue(prop);
-            } else {
-              existing.default = getConditionDefaultValue(prop);
-            }
+            existing.default =
+              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
           }
           const current = existing[media];
           const mediaMap =
@@ -1385,13 +1384,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           noteSourceCssProperty(existing);
           if (!("default" in existing)) {
             const existingVal = (styleObj as Record<string, unknown>)[prop];
-            if (existingVal !== undefined) {
-              existing.default = existingVal;
-            } else if (cssHelperPropValues.has(prop)) {
-              existing.default = getComposedDefaultValue(prop);
-            } else {
-              existing.default = getConditionDefaultValue(prop);
-            }
+            existing.default =
+              existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
           }
           for (const ps of pseudos) {
             const current = existing[ps];
@@ -1464,7 +1458,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           const current = peTarget[prop];
           if (!current || typeof current !== "object" || isAstNode(current)) {
             peTarget[prop] = {
-              default: current ?? ctx.getWrappedComponentBaseDefaultValue(prop) ?? null,
+              default: current ?? getConditionDefaultValue(prop),
               [media]: value,
             };
           } else {
@@ -1498,13 +1492,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
           const existingVal = (styleObj as Record<string, unknown>)[prop];
-          if (existingVal !== undefined) {
-            existing.default = existingVal;
-          } else if (cssHelperPropValues.has(prop)) {
-            existing.default = getComposedDefaultValue(prop);
-          } else {
-            existing.default = getConditionDefaultValue(prop);
-          }
+          existing.default =
+            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
         }
         const currentMediaValue = existing[media];
         if (
@@ -1548,7 +1537,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           }
         } else {
           const pseudoMap: Record<string, unknown> = {
-            default: existingVal ?? ctx.getWrappedComponentBaseDefaultValue(prop) ?? null,
+            default: existingVal ?? getConditionDefaultValue(prop),
           };
           for (const ps of pseudos) {
             pseudoMap[ps] = value;
@@ -1564,13 +1553,8 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         noteSourceCssProperty(existing);
         if (!("default" in existing)) {
           const existingVal = (styleObj as Record<string, unknown>)[prop];
-          if (existingVal !== undefined) {
-            existing.default = existingVal;
-          } else if (cssHelperPropValues.has(prop)) {
-            existing.default = getComposedDefaultValue(prop);
-          } else {
-            existing.default = getConditionDefaultValue(prop);
-          }
+          existing.default =
+            existingVal !== undefined ? existingVal : getConditionDefaultValue(prop);
         }
         for (const ps of pseudos) {
           existing[ps] = value;

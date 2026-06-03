@@ -41,7 +41,10 @@ import {
 } from "../transform/helpers.js";
 import { createPropTestHelpers, invertWhen } from "./variant-utils.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
-import { getExhaustiveObservedStaticValues } from "../utilities/prop-usage.js";
+import {
+  formatObservedVariantCondition,
+  getExhaustiveObservedStaticValues,
+} from "../utilities/prop-usage.js";
 import {
   resolveTemplateLiteralBranch,
   type ComponentInfo,
@@ -965,88 +968,14 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return (usage?.props[propName]?.omittedCount ?? 0) > 0;
     };
 
-    const tryApplyObservedDynamicPropVariants = (
+    // Bucket a single optional prop's dynamic style into static `prop === value` variants
+    // when consumer usage is exhaustively observed. `buildStyle` computes the evaluated style
+    // for one observed value, or returns null to bail the whole optimization (non-static value).
+    const tryApplyObservedVariants = (
       testInfo: TestInfo,
-      dynamicProps: DynamicPropEntry[],
+      propName: string,
+      buildStyle: (propValue: string | number) => Record<string, unknown> | null,
     ): boolean => {
-      if (dynamicProps.length === 0) {
-        return false;
-      }
-      const testExpr = parseExpr(testInfo.when);
-      if (!testExpr) {
-        return false;
-      }
-      const propNames = [...new Set(dynamicProps.map((entry) => entry.jsxProp))];
-      if (propNames.length !== 1) {
-        return false;
-      }
-      const propName = propNames[0]!;
-      if (!isJsxPropOptional(propName) || !hasObservedOmissions(propName)) {
-        return false;
-      }
-      const observedValues = getExhaustiveObservedStaticValues(
-        ctx.propUsageByComponent?.get(decl.localName),
-        propName,
-      );
-      if (!observedValues || observedValues.length > 20) {
-        return false;
-      }
-      let applied = false;
-      for (const propValue of observedValues) {
-        const testValue = evaluateObservedDynamicExpression({
-          j,
-          root,
-          expression: testExpr,
-          propName,
-          propValue,
-        });
-        if (testValue !== true) {
-          continue;
-        }
-        const style: Record<string, unknown> = {};
-        for (const dyn of dynamicProps) {
-          if (!dyn.callArg) {
-            return false;
-          }
-          const cssValue = evaluateObservedDynamicExpression({
-            j,
-            root,
-            expression: dyn.callArg,
-            propName,
-            propValue,
-          });
-          if (typeof cssValue !== "string" && typeof cssValue !== "number") {
-            return false;
-          }
-          style[dyn.stylexProp] = cssValue;
-        }
-        if (Object.keys(style).length === 0) {
-          continue;
-        }
-        const propValueExpr =
-          typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-        applyVariant({ when: `${propName} === ${propValueExpr}`, propName }, style);
-        applied = true;
-      }
-      if (!applied) {
-        return false;
-      }
-      decl.variantLookupCastProps ??= new Set<string>();
-      decl.variantLookupCastProps.add(propName);
-      ensureShouldForwardPropDrop(decl, propName);
-      decl.needsWrapperComponent = true;
-      return true;
-    };
-
-    const tryApplyObservedRuntimeStyleVariants = (
-      testInfo: TestInfo,
-      style: Record<string, unknown>,
-      basePropNames: ReadonlySet<string>,
-    ): boolean => {
-      if (Object.keys(style).length === 0 || basePropNames.size !== 1) {
-        return false;
-      }
-      const propName = [...basePropNames][0]!;
       if (!isJsxPropOptional(propName) || !hasObservedOmissions(propName)) {
         return false;
       }
@@ -1070,6 +999,73 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         if (testValue !== true) {
           continue;
         }
+        const style = buildStyle(propValue);
+        if (style === null) {
+          return false;
+        }
+        if (Object.keys(style).length === 0) {
+          continue;
+        }
+        applyVariant(
+          { when: formatObservedVariantCondition(propName, propValue), propName },
+          style,
+        );
+        applied = true;
+      }
+      if (!applied) {
+        return false;
+      }
+      decl.variantLookupCastProps ??= new Set<string>();
+      decl.variantLookupCastProps.add(propName);
+      ensureShouldForwardPropDrop(decl, propName);
+      decl.needsWrapperComponent = true;
+      return true;
+    };
+
+    const tryApplyObservedDynamicPropVariants = (
+      testInfo: TestInfo,
+      dynamicProps: DynamicPropEntry[],
+    ): boolean => {
+      if (dynamicProps.length === 0) {
+        return false;
+      }
+      const propNames = [...new Set(dynamicProps.map((entry) => entry.jsxProp))];
+      if (propNames.length !== 1) {
+        return false;
+      }
+      const propName = propNames[0]!;
+      return tryApplyObservedVariants(testInfo, propName, (propValue) => {
+        const style: Record<string, unknown> = {};
+        for (const dyn of dynamicProps) {
+          if (!dyn.callArg) {
+            return null;
+          }
+          const cssValue = evaluateObservedDynamicExpression({
+            j,
+            root,
+            expression: dyn.callArg,
+            propName,
+            propValue,
+          });
+          if (typeof cssValue !== "string" && typeof cssValue !== "number") {
+            return null;
+          }
+          style[dyn.stylexProp] = cssValue;
+        }
+        return style;
+      });
+    };
+
+    const tryApplyObservedRuntimeStyleVariants = (
+      testInfo: TestInfo,
+      style: Record<string, unknown>,
+      basePropNames: ReadonlySet<string>,
+    ): boolean => {
+      if (Object.keys(style).length === 0 || basePropNames.size !== 1) {
+        return false;
+      }
+      const propName = [...basePropNames][0]!;
+      return tryApplyObservedVariants(testInfo, propName, (propValue) => {
         const evaluatedStyle: Record<string, unknown> = {};
         for (const [stylexProp, value] of Object.entries(style)) {
           if (!value || typeof value !== "object") {
@@ -1084,23 +1080,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             propValue,
           });
           if (typeof cssValue !== "string" && typeof cssValue !== "number") {
-            return false;
+            return null;
           }
           evaluatedStyle[stylexProp] = cssValue;
         }
-        const propValueExpr =
-          typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
-        applyVariant({ when: `${propName} === ${propValueExpr}`, propName }, evaluatedStyle);
-        applied = true;
-      }
-      if (!applied) {
-        return false;
-      }
-      decl.variantLookupCastProps ??= new Set<string>();
-      decl.variantLookupCastProps.add(propName);
-      ensureShouldForwardPropDrop(decl, propName);
-      decl.needsWrapperComponent = true;
-      return true;
+        return evaluatedStyle;
+      });
     };
 
     const tryApplyRuntimeStyleFunction = (
@@ -1761,10 +1746,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         return false;
       }
       for (const { propValue, style } of buckets) {
-        const propValueExpr =
-          typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
         applyVariant(
-          { when: `${args.propName} === ${propValueExpr}`, propName: args.propName },
+          {
+            when: formatObservedVariantCondition(args.propName, propValue),
+            propName: args.propName,
+          },
           style,
         );
       }

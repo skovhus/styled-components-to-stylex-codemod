@@ -16,6 +16,7 @@ import type {
 } from "../../adapter.js";
 import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
 import { Logger } from "../logger.js";
+import { walkAst } from "../utilities/ast-walk.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
 import {
@@ -1118,42 +1119,19 @@ function readConsumerOpeningUsage(
 
 function collectStaticIdentifierValues(program: AstNode): Map<string, StaticPropValue> {
   const values = new Map<string, StaticPropValue>();
-  const visit = (node: unknown): void => {
-    if (!node || typeof node !== "object") {
+  walkAst(program, (node) => {
+    if (node.type !== "VariableDeclaration" || node.kind !== "const") {
       return;
     }
-    const typed = node as {
-      type?: string;
-      kind?: string;
-      declarations?: Array<{ id?: AstNode; init?: AstNode }>;
-      [key: string]: unknown;
-    };
-    if (typed.type === "VariableDeclaration" && typed.kind === "const") {
-      for (const decl of typed.declarations ?? []) {
-        const name = decl.id?.type === "Identifier" ? (decl.id as { name?: string }).name : null;
-        const value = staticValueFromNode(decl.init);
-        if (name && value !== undefined) {
-          values.set(name, value);
-        }
+    const declarations = (node.declarations ?? []) as Array<{ id?: AstNode; init?: AstNode }>;
+    for (const decl of declarations) {
+      const name = decl.id?.type === "Identifier" ? (decl.id as { name?: string }).name : null;
+      const value = staticValueFromNode(decl.init);
+      if (name && value !== undefined) {
+        values.set(name, value);
       }
     }
-    for (const [key, child] of Object.entries(typed)) {
-      if (
-        key === "loc" ||
-        key === "comments" ||
-        key === "leadingComments" ||
-        key === "trailingComments"
-      ) {
-        continue;
-      }
-      if (Array.isArray(child)) {
-        child.forEach(visit);
-      } else if (child && typeof child === "object") {
-        visit(child);
-      }
-    }
-  };
-  visit(program);
+  });
   return values;
 }
 
@@ -1170,27 +1148,21 @@ function readStaticIdentifierJsxValue(
   return name ? staticIdentifierValues.get(name) : undefined;
 }
 
+const STATIC_LITERAL_NODE_TYPES = new Set([
+  "Literal",
+  "StringLiteral",
+  "NumericLiteral",
+  "BooleanLiteral",
+]);
+
 function staticValueFromNode(node: AstNode | undefined): StaticPropValue | undefined {
-  if (!node) {
+  if (!node || !STATIC_LITERAL_NODE_TYPES.has(node.type as string)) {
     return undefined;
   }
-  if (node.type === "Literal") {
-    const value = (node as { value?: unknown }).value;
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-      ? value
-      : undefined;
-  }
-  if (
-    node.type === "StringLiteral" ||
-    node.type === "NumericLiteral" ||
-    node.type === "BooleanLiteral"
-  ) {
-    const value = (node as { value?: unknown }).value;
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-      ? value
-      : undefined;
-  }
-  return undefined;
+  const value = (node as { value?: unknown }).value;
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? value
+    : undefined;
 }
 
 function isElementConsumerProp(propName: string): boolean {
