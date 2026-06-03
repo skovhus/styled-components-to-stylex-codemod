@@ -2427,6 +2427,70 @@ export const App = () => (
     expect(result).toContain("50: {");
   });
 
+  it("does not bucket a private component that escapes as a value", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+function List(props: { itemComponent: React.ElementType }) {
+  const Item = props.itemComponent;
+  return <Item />;
+}
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+    <List itemComponent={Spacer} />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-escapes.tsx");
+
+    // Passed to itemComponent: a host could render <Spacer width={42}>, which is unobserved.
+    expect(result).not.toContain("widthVariants[");
+    expect(result).toContain("getSize(width)");
+  });
+
+  it("keeps the wrapper for a member-base styled component that escapes as a value", () => {
+    const input = `
+import * as React from "react";
+import styled from "styled-components";
+import { animated } from "./lib/react-spring";
+
+const Box = styled(animated.div)\`
+  color: red;
+\`;
+
+function Picker(props: { optionComponent: React.ElementType }) {
+  const Option = props.optionComponent;
+  return <Option />;
+}
+
+export const App = () => (
+  <div>
+    <Box />
+    <Picker optionComponent={Box} />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "member-base-escapes.tsx");
+
+    // Box is rendered once in JSX but also passed as a value, so its wrapper must not be inlined
+    // away — otherwise optionComponent={Box} would dangle.
+    expect(result).toContain("optionComponent={Box}");
+    expect(result).toContain("<Box");
+  });
+
   it("adds a runtime fallback for observed expression variant buckets", () => {
     const input = `
 import styled from "styled-components";

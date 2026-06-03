@@ -14,10 +14,16 @@ function usageWith(values: Array<string | number>, omittedCount: number): Compon
 }
 
 describe("resolveObservedVariantValues", () => {
-  const base = { usage: usageWith(["red", "blue"], 1), propName: "tone", isOptional: true };
+  const base = {
+    usage: usageWith(["red", "blue"], 1),
+    propName: "tone",
+    isOptional: true,
+    isExported: false,
+    escapesAsValue: false,
+  };
 
   it("returns observed values for a private optional prop with omissions", () => {
-    expect(resolveObservedVariantValues({ ...base, isExported: false })).toEqual(["red", "blue"]);
+    expect(resolveObservedVariantValues(base)).toEqual(["red", "blue"]);
   });
 
   it("bails for exported components (unobserved call sites would lose styling)", () => {
@@ -26,17 +32,14 @@ describe("resolveObservedVariantValues", () => {
     expect(resolveObservedVariantValues({ ...base, isExported: true })).toBeNull();
   });
 
+  it("bails when the component escapes as a value (a host may render unobserved props)", () => {
+    expect(resolveObservedVariantValues({ ...base, escapesAsValue: true })).toBeNull();
+  });
+
   it("bails for required props and when the prop is never omitted", () => {
+    expect(resolveObservedVariantValues({ ...base, isOptional: false })).toBeNull();
     expect(
-      resolveObservedVariantValues({ ...base, isExported: false, isOptional: false }),
-    ).toBeNull();
-    expect(
-      resolveObservedVariantValues({
-        usage: usageWith(["red", "blue"], 0),
-        propName: "tone",
-        isOptional: true,
-        isExported: false,
-      }),
+      resolveObservedVariantValues({ ...base, usage: usageWith(["red", "blue"], 0) }),
     ).toBeNull();
   });
 });

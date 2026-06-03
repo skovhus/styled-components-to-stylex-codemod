@@ -699,6 +699,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       propName: jsxProp,
       isOptional: isJsxPropOptional(jsxProp),
       isExported: state.exportedComponentNames.has(decl.localName),
+      escapesAsValue: state.componentsUsedAsValue.has(decl.localName),
       minValues: 2,
     });
     if (!observedValues) {

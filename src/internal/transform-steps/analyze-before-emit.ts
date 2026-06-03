@@ -26,6 +26,7 @@ import {
 } from "../utilities/delegation-utils.js";
 import { bridgeClassVarName, generateBridgeClassName } from "../utilities/bridge-classname.js";
 import { isStyleOnlyElementTypeHost } from "../utilities/element-type-host.js";
+import { isNonJsxStyledValueReferencePath } from "../utilities/component-value-references.js";
 import {
   astNodesEqual,
   type ExpressionKind,
@@ -505,58 +506,9 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     );
   };
   const nonJsxComponentValueReferences = (name: string) =>
-    root.find(j.Identifier, { name }).filter((p) => {
-      // Skip the styled component declaration itself, but still count
-      // `const Alias = StyledComponent` as a value use.
-      if (p.parentPath?.node?.type === "VariableDeclarator" && p.parentPath.node.id === p.node) {
-        return false;
-      }
-      // Skip JSX element names (these are handled by inline substitution).
-      if (
-        p.parentPath?.node?.type === "JSXOpeningElement" ||
-        p.parentPath?.node?.type === "JSXClosingElement"
-      ) {
-        return false;
-      }
-      // Skip JSX member expressions like <Styled.Component />.
-      if (
-        p.parentPath?.node?.type === "JSXMemberExpression" &&
-        (p.parentPath.node as any).object === p.node
-      ) {
-        return false;
-      }
-      // Skip styled(Component) extensions.
-      if (p.parentPath?.node?.type === "CallExpression") {
-        const callExpr = p.parentPath.node as any;
-        const callee = callExpr.callee;
-        if (callee?.type === "Identifier" && callee.name === ctx.styledDefaultImport) {
-          return false;
-        }
-        if (
-          callee?.type === "MemberExpression" &&
-          callee.object?.type === "CallExpression" &&
-          callee.object.callee?.type === "Identifier" &&
-          callee.object.callee.name === ctx.styledDefaultImport
-        ) {
-          return false;
-        }
-      }
-      // Skip TaggedTemplateExpression tags and styled(Component)`...` calls.
-      if (p.parentPath?.node?.type === "TaggedTemplateExpression") {
-        return false;
-      }
-      if (
-        p.parentPath?.node?.type === "CallExpression" &&
-        p.parentPath.parentPath?.node?.type === "TaggedTemplateExpression"
-      ) {
-        return false;
-      }
-      // Skip template literal interpolations (e.g., ${Link}:hover &).
-      if (p.parentPath?.node?.type === "TemplateLiteral") {
-        return false;
-      }
-      return true;
-    });
+    root
+      .find(j.Identifier, { name })
+      .filter((p) => isNonJsxStyledValueReferencePath(p, ctx.styledDefaultImport));
   const hasNonJsxComponentValueReference = (name: string): boolean =>
     nonJsxComponentValueReferences(name).size() > 0;
   const hasOnlyElementTypePropValueReferences = (name: string): boolean => {
@@ -1278,7 +1230,10 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       exportedComponents.has(decl.localName) ||
       decl.propsType ||
       decl.attrsInfo ||
+      // `decl.usedAsValue` is computed later in this loop, so check value references directly here:
+      // a binding rendered once in JSX but also passed as a value must keep its wrapper.
       decl.usedAsValue ||
+      hasNonJsxComponentValueReference(decl.localName) ||
       decl.supportsExternalStyles ||
       decl.supportsAsProp ||
       decl.supportsRefProp ||

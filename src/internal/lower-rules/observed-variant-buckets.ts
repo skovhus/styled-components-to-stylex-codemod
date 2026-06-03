@@ -23,18 +23,22 @@ const MAX_OBSERVED_VARIANT_VALUES = 20;
  * (it is sometimes omitted and every supplied value is a static string/number), returning the
  * observed values when bucketing is viable or `null` to bail.
  *
- * `isExported` is required: these buckets carry no runtime fallback, so they are only sound when
- * every call site is observable. Exported components can be rendered by callers outside the analyzed
- * set with unseen values, so bucketing must bail for them (callers fall back to dynamic styles).
+ * These buckets carry no runtime fallback, so they are only sound when every call site is
+ * observable. Both flags are required and force a bail when set:
+ *  - `isExported`: callers outside the analyzed set can render the component with unseen values.
+ *  - `escapesAsValue`: the component is passed as a value (innerElementType/as/HOC/alias), so an
+ *    unobserved host may render it with unseen values.
+ * In both cases callers fall back to dynamic styles instead.
  */
 export function resolveObservedVariantValues(args: {
   usage: ComponentPropUsageInfo | undefined;
   propName: string;
   isOptional: boolean;
   isExported: boolean;
+  escapesAsValue: boolean;
   minValues?: number;
 }): Array<string | number> | null {
-  if (args.isExported || !args.isOptional) {
+  if (args.isExported || args.escapesAsValue || !args.isOptional) {
     return null;
   }
   if ((args.usage?.props[args.propName]?.omittedCount ?? 0) === 0) {
