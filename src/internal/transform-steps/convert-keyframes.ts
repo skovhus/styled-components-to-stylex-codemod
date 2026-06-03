@@ -183,6 +183,15 @@ function hasFrameDependencyAfterExistingStylexCreate(
   if (dependencyNames.size === 0) {
     return false;
   }
+  if (
+    statementDeclaresAnyNameBeforeDeclarator(
+      declarationStatement,
+      declaratorPath.node,
+      dependencyNames,
+    )
+  ) {
+    return true;
+  }
   return programBody.some(
     (statement, index) =>
       index > stylexCreateIndex &&
@@ -289,6 +298,29 @@ function statementDeclaresAnyName(statement: ASTNode, names: Set<string>): boole
   return [...declaredNames].some((name) => names.has(name));
 }
 
+function statementDeclaresAnyNameBeforeDeclarator(
+  statement: ASTNode,
+  targetDeclarator: ASTNode,
+  names: Set<string>,
+): boolean {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type !== "VariableDeclaration") {
+    return false;
+  }
+
+  const declaredNames = new Set<string>();
+  for (const declarator of declaration.declarations) {
+    if (declarator === targetDeclarator) {
+      break;
+    }
+    if (declarator.type === "VariableDeclarator") {
+      collectPatternBindingNames(declarator.id, declaredNames);
+    }
+  }
+  return [...declaredNames].some((name) => names.has(name));
+}
+
 function findTopLevelStatementNode(path: ASTPath<ASTNode>): ASTNode | null {
   let current: any = path;
   while (current?.parentPath) {
@@ -315,6 +347,9 @@ function nodeContainsRuntimeIdentifierRead(
   }
 
   const typed = node as { type?: string; name?: string };
+  if (isImmediatelyInvokedFunctionCall(typed)) {
+    return invokedFunctionContainsRuntimeIdentifierRead(typed, localName);
+  }
   if (shouldSkipRuntimeReadTraversal(typed)) {
     return false;
   }
@@ -333,6 +368,38 @@ function nodeContainsRuntimeIdentifierRead(
     }
   }
   return false;
+}
+
+function isImmediatelyInvokedFunctionCall(node: {
+  type?: string;
+  callee?: { type?: string };
+}): node is {
+  type: "CallExpression";
+  arguments?: unknown[];
+  callee: {
+    type: "FunctionExpression" | "ArrowFunctionExpression";
+    params?: unknown[];
+    body?: unknown;
+  };
+} {
+  return (
+    node.type === "CallExpression" &&
+    (node.callee?.type === "FunctionExpression" || node.callee?.type === "ArrowFunctionExpression")
+  );
+}
+
+function invokedFunctionContainsRuntimeIdentifierRead(
+  node: {
+    arguments?: unknown[];
+    callee: { params?: unknown[]; body?: unknown };
+  },
+  localName: string,
+): boolean {
+  return (
+    nodeContainsRuntimeIdentifierRead(node.callee.params, localName) ||
+    nodeContainsRuntimeIdentifierRead(node.callee.body, localName) ||
+    nodeContainsRuntimeIdentifierRead(node.arguments, localName)
+  );
 }
 
 function shouldSkipRuntimeReadTraversal(node: { type?: string }): boolean {
