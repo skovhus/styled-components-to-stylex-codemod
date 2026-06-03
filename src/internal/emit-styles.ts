@@ -9,7 +9,7 @@ import type {
   VariantDimension,
 } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
-import { isAstNode } from "./utilities/jscodeshift-utils.js";
+import { collectIdentifiers, isAstNode } from "./utilities/jscodeshift-utils.js";
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
@@ -611,19 +611,18 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
   }
 
   // Emit all generated keyframes declarations immediately before the relevant stylex.create.
-  const emittedKeyframeDecls: any[] = (ctx.stylexKeyframes ?? []).map((keyframes) =>
-    buildStylexKeyframesDeclaration(j, keyframes),
-  );
+  const emittedKeyframes: StylexKeyframesEmission[] = [...(ctx.stylexKeyframes ?? [])];
   if (ctx.inlineKeyframes && ctx.inlineKeyframes.size > 0) {
     for (const [name, frames] of ctx.inlineKeyframes) {
-      emittedKeyframeDecls.push(
-        buildStylexKeyframesDeclaration(j, {
-          localName: name,
-          frames,
-        }),
-      );
+      emittedKeyframes.push({
+        localName: name,
+        frames,
+      });
     }
   }
+  const emittedKeyframeDecls: any[] = emittedKeyframes.map((keyframes) =>
+    buildStylexKeyframesDeclaration(j, keyframes),
+  );
 
   emitLocalDefineVarsSidecars(ctx, [
     ...nonEmptyStyleEntries.map(([, value]) => value),
@@ -644,7 +643,10 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       }
     } else if (stylesInsertPosition === "afterImports") {
       const lastImportIdx = findLastImportIndex(programBody);
-      const insertAt = lastImportIdx >= 0 ? lastImportIdx + 1 : 0;
+      const insertAt = Math.max(
+        lastImportIdx >= 0 ? lastImportIdx + 1 : 0,
+        findKeyframeDependencyInsertIndex(programBody, emittedKeyframes),
+      );
       programBody.splice(insertAt, 0, ...insertNodes);
     } else {
       programBody.push(...insertNodes);
@@ -751,6 +753,71 @@ function buildStylexKeyframesDeclaration(j: any, keyframes: StylexKeyframesEmiss
     declaration.leadingComments = [provenanceComment];
   }
   return keyframes.isExported ? j.exportNamedDeclaration(declaration, []) : declaration;
+}
+
+function findKeyframeDependencyInsertIndex(
+  programBody: any[],
+  keyframes: StylexKeyframesEmission[],
+): number {
+  const dependencyNames = new Set<string>();
+  for (const keyframe of keyframes) {
+    collectIdentifiers(keyframe.frames, dependencyNames);
+  }
+  if (dependencyNames.size === 0) {
+    return 0;
+  }
+
+  let insertAt = 0;
+  for (let index = 0; index < programBody.length; index++) {
+    if (statementDeclaresAnyName(programBody[index], dependencyNames)) {
+      insertAt = index + 1;
+    }
+  }
+  return insertAt;
+}
+
+function statementDeclaresAnyName(statement: any, names: Set<string>): boolean {
+  const declaredNames = new Set<string>();
+  const declaration =
+    statement?.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type === "VariableDeclaration") {
+    for (const declarator of declaration.declarations ?? []) {
+      collectPatternBindingNames(declarator?.id, declaredNames);
+    }
+  } else if (statement?.type === "FunctionDeclaration" || statement?.type === "ClassDeclaration") {
+    collectPatternBindingNames(statement.id, declaredNames);
+  }
+  return [...declaredNames].some((name) => names.has(name));
+}
+
+function collectPatternBindingNames(node: unknown, names: Set<string>): void {
+  if (!node || typeof node !== "object") {
+    return;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectPatternBindingNames(child, names);
+    }
+    return;
+  }
+  const typed = node as { type?: string; name?: string };
+  if (typed.type === "Identifier" && typed.name) {
+    names.add(typed.name);
+    return;
+  }
+  if (
+    typed.type === "MemberExpression" ||
+    typed.type === "OptionalMemberExpression" ||
+    typed.type === "TSQualifiedName"
+  ) {
+    return;
+  }
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    collectPatternBindingNames((node as Record<string, unknown>)[key], names);
+  }
 }
 
 function findStylexCreateDeclarationIndex(programBody: any[], objectExpression: unknown): number {

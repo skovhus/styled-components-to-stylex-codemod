@@ -404,9 +404,6 @@ function invokedFunctionContainsRuntimeIdentifierRead(
 
 function shouldSkipRuntimeReadTraversal(node: { type?: string }): boolean {
   return (
-    node.type === "FunctionDeclaration" ||
-    node.type === "FunctionExpression" ||
-    node.type === "ArrowFunctionExpression" ||
     node.type === "ClassMethod" ||
     node.type === "ClassPrivateMethod" ||
     node.type === "MethodDefinition" ||

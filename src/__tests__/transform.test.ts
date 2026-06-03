@@ -2167,6 +2167,71 @@ export const App = () => (
     expect(code).toMatch(/animationName:\s*fadeStylex/);
   });
 
+  it("does not hoist generated keyframes before dependencies when styles insert after imports", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const start = 0;
+const fade = keyframes\`
+  from { opacity: \${start}; }
+  to { opacity: 1; }
+\`;
+
+const Box = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const preview = <Box />;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThan(
+      code.indexOf("const start = 0"),
+    );
+    expect(code.indexOf("const styles = stylex.create")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code.indexOf("export const preview")).toBeGreaterThan(
+      code.indexOf("const styles = stylex.create"),
+    );
+  });
+
+  it("keeps converted module keyframes before top-level helper calls that read them", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+function getFade() {
+  return fade;
+}
+
+const animation = getFade();
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>{animation}</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThanOrEqual(0);
+    expect(code.indexOf("const animation")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";
