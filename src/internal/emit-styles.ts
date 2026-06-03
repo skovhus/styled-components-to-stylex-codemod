@@ -4,7 +4,11 @@
  */
 import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
-import { collectIdentifiers, isAstNode } from "./utilities/jscodeshift-utils.js";
+import {
+  collectIdentifiers,
+  collectPatternBindingNames,
+  isAstNode,
+} from "./utilities/jscodeshift-utils.js";
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
@@ -1368,6 +1372,8 @@ function getTopLevelDeclaredBindingNames(statement: unknown): Set<string> {
       const id = declarator.id;
       if (id?.type === "Identifier" && id.name) {
         names.add(id.name);
+      } else if (id) {
+        collectPatternBindingNames(id, names);
       }
     }
     return names;

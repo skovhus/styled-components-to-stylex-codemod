@@ -12283,6 +12283,46 @@ export const App = (
     const code = result.code ?? "";
     expect(code).toMatch(/const OFFSET = 40[\s\S]*const sweep = stylex\.keyframes/);
   });
+
+  it("does not relocate keyframes above destructured bindings used in the initializer", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const tokens = { OFFSET: 40 };
+const { OFFSET } = tokens;
+
+const sweep = stylex.keyframes({
+  from: {
+    transform: \`translateX(-\${OFFSET}px)\`,
+  },
+  to: {
+    transform: "translateX(100%)",
+  },
+});
+
+const Box = styled.div\`
+  animation-name: \${sweep};
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-destructure-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code).toMatch(/\{ OFFSET \} = tokens[\s\S]*const sweep = stylex\.keyframes/);
+  });
 });
 
 describe("keyframes in css helper", () => {
