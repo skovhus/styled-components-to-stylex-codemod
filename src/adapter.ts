@@ -640,6 +640,8 @@ export interface WrappedComponentInterfaceContext {
   /**
    * Local binding name used in the file currently being transformed.
    * Example: `import { Button as UiButton } ...` -> localName: "UiButton"
+   * For static member components, this is the full member path from the local binding,
+   * e.g. `Select.Option`.
    */
   localName: string;
   /**
@@ -651,8 +653,14 @@ export interface WrappedComponentInterfaceContext {
   /**
    * Imported binding name for the wrapped base component.
    * Example: `import { Button as UiButton } ...` -> importedName: "Button"
+   * For static member components, this remains the root imported binding.
    */
   importedName: string;
+  /**
+   * Static member path after the root local binding.
+   * Example: `styled(Select.Option)` -> `["Option"]`.
+   */
+  memberPath?: string[];
   /**
    * Absolute path of the file currently being transformed.
    */

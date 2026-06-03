@@ -195,6 +195,41 @@ describe("runTransform (e2e)", () => {
     );
   });
 
+  it("uses sx for wrappers of static member components made sx-aware by the same run", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-static-member-sx-aware-",
+      componentLines: [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "type SelectProps = React.PropsWithChildren<{ value?: string }>;",
+        "type SelectOptionProps = React.PropsWithChildren<{",
+        "  value: string;",
+        "  sx?: stylex.StyleXStyles;",
+        "}>;",
+        "",
+        "const SelectBase = (props: SelectProps) => <div>{props.children}</div>;",
+        "const SelectOption = (props: SelectOptionProps) => <div sx={props.sx}>{props.children}</div>;",
+        "const MobileSelectOption = (props: SelectOptionProps) => <option>{props.children}</option>;",
+        "",
+        "const CustomSelect = SelectBase as typeof SelectBase & { Option: typeof SelectOption };",
+        "CustomSelect.Option = SelectOption;",
+        "const MobileSelect = SelectBase as typeof SelectBase & { Option: typeof MobileSelectOption };",
+        "MobileSelect.Option = MobileSelectOption;",
+        "",
+        "export const ContentViewContainer = true ? MobileSelect : CustomSelect;",
+      ],
+      wrappedName: "ContentViewContainer.Option",
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  color: red;"],
+      appReturn: '<Body value="home">Home</Body>',
+    });
+
+    expect(result.errors).toBe(0);
+    expect(consumer).toContain('<ContentViewContainer.Option value="home" sx={styles.body}>');
+    expect(consumer).not.toContain("stylex.props(styles.body)");
+  });
+
   it("expands sx-excluded logical properties for sx-aware wrappers", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sx-without-",

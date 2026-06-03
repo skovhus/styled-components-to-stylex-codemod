@@ -10359,6 +10359,36 @@ export const App = () => <Wrapper sx={1}>wrapped</Wrapper>;
     expect(output).not.toContain("<Box className={props.className} sx={props.sx}>");
   });
 
+  it("passes static member component paths to sx-aware wrapped component detection", () => {
+    const source = `
+import styled from "styled-components";
+import * as React from "react";
+import * as stylex from "@stylexjs/stylex";
+
+import { Select } from "./select";
+
+const StyledOption = styled(Select.Option)\`
+  color: red;
+\`;
+
+export const App = () => <StyledOption value="home">Home</StyledOption>;
+`;
+    const output = runTransform(source, {
+      adapter: {
+        ...fixtureAdapter,
+        wrappedComponentInterface(ctx) {
+          if (ctx.localName === "Select.Option" && ctx.memberPath?.join(".") === "Option") {
+            return { acceptsSx: true };
+          }
+          return fixtureAdapter.wrappedComponentInterface?.(ctx);
+        },
+      },
+    });
+
+    expect(output).toContain('<Select.Option value="home" sx={styles.option}>');
+    expect(output).not.toContain("stylex.props(styles.option)");
+  });
+
   it("does not treat component props aliases with non-StyleX sx overrides as sx-aware", () => {
     const source = `
 import styled from "styled-components";

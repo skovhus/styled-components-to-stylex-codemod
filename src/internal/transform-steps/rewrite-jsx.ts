@@ -100,7 +100,8 @@ function wrappedComponentAcceptsSxProp(
     return componentInterface.acceptsSx === true && componentInterface.sxTarget !== "inner";
   }
 
-  const importInfo = ctx.importMap?.get(componentLocalName);
+  const [rootLocalName] = componentLocalName.split(".");
+  const importInfo = rootLocalName ? ctx.importMap?.get(rootLocalName) : undefined;
   const typedComponent = (() => {
     if (importInfo?.source.kind === "absolutePath") {
       const names =
@@ -135,6 +136,7 @@ function wrappedComponentAcceptsSxProp(
   }
 
   const accepts =
+    rootLocalName === componentLocalName &&
     importInfo?.source.kind === "absolutePath" &&
     transformedComponentAcceptsSx({
       absolutePath: importInfo.source.value,
