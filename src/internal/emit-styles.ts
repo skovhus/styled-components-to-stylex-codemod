@@ -1360,6 +1360,46 @@ function interveningStatementUsesKeyframesBinding(
   );
 }
 
+function collectTopLevelBindingsCapturingKeyframes(
+  programBody: unknown[],
+  beforeIndex: number,
+  bindingNames: Set<string>,
+  removedStyledDeclNames: Set<string>,
+): Set<string> {
+  const captures = new Set<string>();
+  for (let index = 0; index < beforeIndex; index++) {
+    const statement = programBody[index];
+    const variableDecl = getVariableDeclarationFromStatement(statement);
+    if (variableDecl?.declarations) {
+      for (const declarator of variableDecl.declarations) {
+        const id = declarator.id;
+        if (id?.type === "Identifier" && id.name != null && removedStyledDeclNames.has(id.name)) {
+          continue;
+        }
+        if (
+          id?.type === "Identifier" &&
+          id.name &&
+          declaratorReferencesAnyBinding(declarator, bindingNames)
+        ) {
+          captures.add(id.name);
+        }
+      }
+      continue;
+    }
+    const typed = statement as {
+      type?: string;
+      id?: { type?: string; name?: string };
+      body?: unknown;
+    };
+    if (typed.type === "FunctionDeclaration" && typed.id?.type === "Identifier" && typed.id.name) {
+      if (statementReferencesAnyBinding(typed.body, bindingNames)) {
+        captures.add(typed.id.name);
+      }
+    }
+  }
+  return captures;
+}
+
 function canSafelyRelocateKeyframesStatement(
   statementIndex: number,
   anchorIndex: number,
@@ -1370,14 +1410,28 @@ function canSafelyRelocateKeyframesStatement(
   const bindingNames = getStylexKeyframesBindingNames(variableDecl);
   const rangeStart = Math.min(statementIndex, anchorIndex);
   const rangeEnd = Math.max(statementIndex, anchorIndex);
+  const indirectCaptureNames =
+    statementIndex < anchorIndex
+      ? collectTopLevelBindingsCapturingKeyframes(
+          programBody,
+          statementIndex,
+          bindingNames,
+          removedStyledDeclNames,
+        )
+      : new Set<string>();
   for (let index = rangeStart; index < rangeEnd; index++) {
     if (index === statementIndex) {
       continue;
     }
+    const statement = programBody[index];
+    if (interveningStatementUsesKeyframesBinding(statement, bindingNames, removedStyledDeclNames)) {
+      return false;
+    }
     if (
+      indirectCaptureNames.size > 0 &&
       interveningStatementUsesKeyframesBinding(
-        programBody[index],
-        bindingNames,
+        statement,
+        indirectCaptureNames,
         removedStyledDeclNames,
       )
     ) {
