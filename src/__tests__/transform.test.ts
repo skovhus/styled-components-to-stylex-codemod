@@ -12140,6 +12140,47 @@ export const App = () => <Box sx>spin</Box>;
     );
     expect(code.indexOf("stylex.keyframes(")).toBeLessThan(code.indexOf("stylex.create("));
   });
+
+  it("does not relocate stylex.keyframes past intervening top-level references", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const names = [fade];
+
+const rotate = keyframes\`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+\`;
+
+const Box = styled.div\`
+  animation: \${rotate} 2s linear infinite;
+  padding: 1rem;
+\`;
+
+export const App = () => <Box />;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-tdz.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const names = [fade]"),
+    );
+    expect(code).toMatch(
+      /const rotate = stylex\.keyframes\([\s\S]*?\);\s*\nconst styles = stylex\.create\(/,
+    );
+  });
 });
 
 describe("keyframes in css helper", () => {

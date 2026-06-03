@@ -4,7 +4,7 @@
  */
 import type { LocalStylexVarRef, StyledDecl, VariantDimension } from "./transform-types.js";
 import type { ImportSpec } from "../adapter.js";
-import { isAstNode } from "./utilities/jscodeshift-utils.js";
+import { collectIdentifiers, isAstNode } from "./utilities/jscodeshift-utils.js";
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
@@ -631,7 +631,6 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     ),
   ]);
   const programBody = root.get().node.program.body as any[];
-  const relocatedKeyframes = extractModuleLevelStylexKeyframesStatements(programBody);
   const stylesAnchorIndex = resolveStylesAnchorIndex({
     programBody,
     stylesInsertPosition,
@@ -639,13 +638,22 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
     mergeTarget,
     willInsertStylesDecl: stylesDecl != null,
   });
+  const removedStyledDeclNames = new Set(
+    styledDecls.filter((decl) => !decl.skipTransform).map((decl) => decl.localName),
+  );
+  const { statements: relocatedKeyframes, insertIndex: keyframesInsertIndex } =
+    extractModuleLevelStylexKeyframesStatements(
+      programBody,
+      stylesAnchorIndex,
+      removedStyledDeclNames,
+    );
   const insertNodes = [
     ...relocatedKeyframes,
     ...inlineKeyframeDecls,
     ...(stylesDecl ? [stylesDecl as any] : []),
   ];
   if (insertNodes.length > 0) {
-    programBody.splice(stylesAnchorIndex, 0, ...insertNodes);
+    programBody.splice(keyframesInsertIndex, 0, ...insertNodes);
   }
 
   // Emit separate stylex.create declarations for variant dimensions
@@ -1276,7 +1284,91 @@ function variableDeclarationHasOnlyStylexKeyframes(decl: VariableDeclarationLike
   return decl.declarations.every((d) => isStylexKeyframesInit(d.init));
 }
 
-function extractModuleLevelStylexKeyframesStatements(programBody: unknown[]): unknown[] {
+function getStylexKeyframesBindingNames(variableDecl: VariableDeclarationLike): Set<string> {
+  const names = new Set<string>();
+  for (const declarator of variableDecl.declarations ?? []) {
+    if (
+      declarator.id?.type === "Identifier" &&
+      declarator.id.name &&
+      isStylexKeyframesInit(declarator.init)
+    ) {
+      names.add(declarator.id.name);
+    }
+  }
+  return names;
+}
+
+function statementReferencesAnyBinding(statement: unknown, bindingNames: Set<string>): boolean {
+  if (bindingNames.size === 0) {
+    return false;
+  }
+  const identifiers = new Set<string>();
+  collectIdentifiers(statement, identifiers);
+  for (const name of identifiers) {
+    if (bindingNames.has(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isRemovedStyledDeclaration(
+  statement: unknown,
+  removedStyledDeclNames: Set<string>,
+): boolean {
+  const variableDecl = getVariableDeclarationFromStatement(statement);
+  if (!variableDecl?.declarations) {
+    return false;
+  }
+  return variableDecl.declarations.some((declarator) => {
+    const id = declarator.id;
+    return id?.type === "Identifier" && id.name != null && removedStyledDeclNames.has(id.name);
+  });
+}
+
+function interveningStatementUsesKeyframesBinding(
+  statement: unknown,
+  bindingNames: Set<string>,
+  removedStyledDeclNames: Set<string>,
+): boolean {
+  if (isRemovedStyledDeclaration(statement, removedStyledDeclNames)) {
+    return false;
+  }
+  return statementReferencesAnyBinding(statement, bindingNames);
+}
+
+function canSafelyRelocateKeyframesStatement(
+  statementIndex: number,
+  anchorIndex: number,
+  programBody: unknown[],
+  variableDecl: VariableDeclarationLike,
+  removedStyledDeclNames: Set<string>,
+): boolean {
+  const bindingNames = getStylexKeyframesBindingNames(variableDecl);
+  const rangeStart = Math.min(statementIndex, anchorIndex);
+  const rangeEnd = Math.max(statementIndex, anchorIndex);
+  for (let index = rangeStart; index < rangeEnd; index++) {
+    if (index === statementIndex) {
+      continue;
+    }
+    if (
+      interveningStatementUsesKeyframesBinding(
+        programBody[index],
+        bindingNames,
+        removedStyledDeclNames,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function extractModuleLevelStylexKeyframesStatements(
+  programBody: unknown[],
+  anchorIndex: number,
+  removedStyledDeclNames: Set<string>,
+): { statements: unknown[]; insertIndex: number } {
   const extracted: Array<{ index: number; statement: unknown }> = [];
   for (let index = 0; index < programBody.length; index++) {
     const statement = programBody[index];
@@ -1284,12 +1376,29 @@ function extractModuleLevelStylexKeyframesStatements(programBody: unknown[]): un
     if (!variableDecl || !variableDeclarationHasOnlyStylexKeyframes(variableDecl)) {
       continue;
     }
+    if (
+      !canSafelyRelocateKeyframesStatement(
+        index,
+        anchorIndex,
+        programBody,
+        variableDecl,
+        removedStyledDeclNames,
+      )
+    ) {
+      continue;
+    }
     extracted.push({ index, statement });
   }
+  extracted.sort((a, b) => a.index - b.index);
+  let insertIndex = anchorIndex;
   for (let i = extracted.length - 1; i >= 0; i--) {
-    programBody.splice(extracted[i]!.index, 1);
+    const { index } = extracted[i]!;
+    if (index < insertIndex) {
+      insertIndex--;
+    }
+    programBody.splice(index, 1);
   }
-  return extracted.map((entry) => entry.statement);
+  return { statements: extracted.map((entry) => entry.statement), insertIndex };
 }
 
 function findMainStylexCreateStatementIndex(
