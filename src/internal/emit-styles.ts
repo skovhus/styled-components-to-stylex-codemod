@@ -1205,7 +1205,11 @@ function isStylexKeyframesInit(init: unknown): boolean {
   }
   const call = init as {
     type?: string;
-    callee?: { type?: string; object?: { type?: string; name?: string }; property?: { type?: string; name?: string } };
+    callee?: {
+      type?: string;
+      object?: { type?: string; name?: string };
+      property?: { type?: string; name?: string };
+    };
   };
   return (
     call.type === "CallExpression" &&
@@ -1223,7 +1227,11 @@ function isStylexCreateInit(init: unknown): boolean {
   }
   const call = init as {
     type?: string;
-    callee?: { type?: string; object?: { type?: string; name?: string }; property?: { type?: string; name?: string } };
+    callee?: {
+      type?: string;
+      object?: { type?: string; name?: string };
+      property?: { type?: string; name?: string };
+    };
   };
   return (
     call.type === "CallExpression" &&
@@ -1235,10 +1243,33 @@ function isStylexCreateInit(init: unknown): boolean {
   );
 }
 
-function variableDeclarationHasOnlyStylexKeyframes(decl: {
+type VariableDeclarationLike = {
   type?: string;
-  declarations?: Array<{ init?: unknown }>;
-}): boolean {
+  declarations?: Array<{ id?: { type?: string; name?: string }; init?: unknown }>;
+};
+
+function getVariableDeclarationFromStatement(statement: unknown): VariableDeclarationLike | null {
+  if (!statement || typeof statement !== "object" || !("type" in statement)) {
+    return null;
+  }
+  const typed = statement as {
+    type?: string;
+    declarations?: VariableDeclarationLike["declarations"];
+    declaration?: VariableDeclarationLike;
+  };
+  if (typed.type === "VariableDeclaration") {
+    return typed;
+  }
+  if (
+    typed.type === "ExportNamedDeclaration" &&
+    typed.declaration?.type === "VariableDeclaration"
+  ) {
+    return typed.declaration;
+  }
+  return null;
+}
+
+function variableDeclarationHasOnlyStylexKeyframes(decl: VariableDeclarationLike): boolean {
   if (decl.type !== "VariableDeclaration" || !decl.declarations?.length) {
     return false;
   }
@@ -1249,19 +1280,7 @@ function extractModuleLevelStylexKeyframesStatements(programBody: unknown[]): un
   const extracted: Array<{ index: number; statement: unknown }> = [];
   for (let index = 0; index < programBody.length; index++) {
     const statement = programBody[index];
-    if (!statement || typeof statement !== "object" || !("type" in statement)) {
-      continue;
-    }
-    const typed = statement as {
-      type?: string;
-      declaration?: { type?: string; declarations?: Array<{ init?: unknown }> };
-    };
-    const variableDecl =
-      typed.type === "VariableDeclaration"
-        ? typed
-        : typed.type === "ExportNamedDeclaration" && typed.declaration?.type === "VariableDeclaration"
-          ? typed.declaration
-          : null;
+    const variableDecl = getVariableDeclarationFromStatement(statement);
     if (!variableDecl || !variableDeclarationHasOnlyStylexKeyframes(variableDecl)) {
       continue;
     }
@@ -1273,25 +1292,12 @@ function extractModuleLevelStylexKeyframesStatements(programBody: unknown[]): un
   return extracted.map((entry) => entry.statement);
 }
 
-function findMainStylexCreateStatementIndex(programBody: unknown[], stylesIdentifier: string): number {
+function findMainStylexCreateStatementIndex(
+  programBody: unknown[],
+  stylesIdentifier: string,
+): number {
   for (let index = 0; index < programBody.length; index++) {
-    const statement = programBody[index];
-    if (!statement || typeof statement !== "object" || !("type" in statement)) {
-      continue;
-    }
-    const typed = statement as {
-      type?: string;
-      declaration?: {
-        type?: string;
-        declarations?: Array<{ id?: { type?: string; name?: string }; init?: unknown }>;
-      };
-    };
-    const variableDecl =
-      typed.type === "VariableDeclaration"
-        ? typed
-        : typed.type === "ExportNamedDeclaration" && typed.declaration?.type === "VariableDeclaration"
-          ? typed.declaration
-          : null;
+    const variableDecl = getVariableDeclarationFromStatement(programBody[index]);
     if (!variableDecl?.declarations) {
       continue;
     }
