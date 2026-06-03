@@ -2371,6 +2371,62 @@ export const App = () => (
     expect(result).toContain("gap: toGap(size)");
   });
 
+  it("does not bucket an exported component's observed CSS block (would drop unobserved values)", () => {
+    const input = `
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+export const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-exported.tsx");
+
+    // Exported: an external <Spacer width={42}> is not observable, so static-only buckets would
+    // resolve to undefined and lose styling. Keep the dynamic style function instead.
+    expect(result).not.toContain("widthVariants[");
+    expect(result).toContain("getSize(width)");
+  });
+
+  it("buckets a private component's observed CSS block (all call sites observable)", () => {
+    const input = `
+import styled from "styled-components";
+
+const getSize = (size?: number | string) =>
+  !size || typeof size === "number" ? \`\${size}px\` : size;
+const showProperty = (size?: number | string) => !!size || size === 0;
+
+const Spacer = styled.div<{ width?: number | string }>\`
+  \${(props) => (showProperty(props.width) ? \`width: \${getSize(props.width)}\` : "")};
+\`;
+
+export const App = () => (
+  <div>
+    <Spacer width={100} />
+    <Spacer width={50} />
+    <Spacer />
+  </div>
+);
+`;
+    const result = runTransform(input, {}, "observed-css-block-private.tsx");
+
+    // Private: every call site is observable, so static buckets are safe.
+    expect(result).toContain("widthVariants[");
+    expect(result).toContain("100: {");
+    expect(result).toContain("50: {");
+  });
+
   it("adds a runtime fallback for observed expression variant buckets", () => {
     const input = `
 import styled from "styled-components";

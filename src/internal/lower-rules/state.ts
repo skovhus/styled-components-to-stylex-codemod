@@ -19,6 +19,7 @@ import {
   trackMixinPropertyValues,
 } from "./precompute.js";
 import { createImportResolver } from "./import-resolution.js";
+import { collectExportedComponents } from "../analyze-before-emit/exported-components.js";
 import { literalToStaticValue } from "./types.js";
 import { buildEnumValueMap, cloneAstNode } from "../utilities/jscodeshift-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
@@ -96,6 +97,12 @@ export function createLowerRulesState(ctx: TransformContext) {
 
   const resolvedStyleObjects = new Map<string, unknown>();
   const declByLocalName = new Map(styledDecls.map((d) => [d.localName, d]));
+  // Public export surface of this file. Components reachable from outside the analyzed set can be
+  // rendered by callers we never observe, so optimizations relying on exhaustive local observation
+  // (e.g. observed-variant bucketing without a runtime fallback) must bail for these.
+  const exportedComponentNames = new Set(
+    collectExportedComponents(root, j, declByLocalName).keys(),
+  );
   const relationOverrides: RelationOverride[] = [];
   const ancestorSelectorParents = new Set<string>();
   const siblingMarkerParents = new Set<string>();
@@ -306,6 +313,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     stringMappingFns,
     resolvedStyleObjects,
     declByLocalName,
+    exportedComponentNames,
     relationOverrides,
     ancestorSelectorParents,
     siblingMarkerParents,

@@ -662,6 +662,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   };
 
   const tryEmitObservedCssBlockVariantBuckets = (expr: unknown): boolean => {
+    // This path emits static variant buckets with NO runtime fallback, so it is only sound when
+    // every call site is observable. Exported components can be rendered by callers outside the
+    // analyzed set with values we never saw (which would resolve to `undefined` and lose styling),
+    // so bail and let the dynamic style-function path handle them.
+    if (state.exportedComponentNames.has(decl.localName)) {
+      return false;
+    }
     if (
       media ||
       pseudos?.length ||
