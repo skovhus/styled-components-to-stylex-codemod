@@ -61,6 +61,7 @@ import {
   evaluateLocalCallValueTransform,
   evaluateObservedDynamicExpression,
 } from "./static-evaluator.js";
+import { getExhaustiveObservedStaticValues } from "../utilities/prop-usage.js";
 
 type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0];
 
@@ -661,6 +662,108 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
     markStyleValueVariantProp(jsxProp);
     ensureObservedVariantPropDrop(jsxProp);
+    return true;
+  };
+
+  const tryEmitObservedCssBlockVariantBuckets = (expr: unknown): boolean => {
+    if (
+      media ||
+      pseudos?.length ||
+      attrTarget ||
+      resolvedSelectorMedia ||
+      !expr ||
+      typeof expr !== "object" ||
+      ((expr as { type?: string }).type !== "ArrowFunctionExpression" &&
+        (expr as { type?: string }).type !== "FunctionExpression")
+    ) {
+      return false;
+    }
+    if (hasThemeAccessInArrowFn(expr)) {
+      return false;
+    }
+    const fnExpr = expr as Parameters<typeof getArrowFnSingleParamName>[0];
+    const paramName = getArrowFnSingleParamName(fnExpr);
+    const bodyExpr = getFunctionBodyExpr(fnExpr);
+    if (!paramName || !bodyExpr) {
+      return false;
+    }
+    const propsUsed = [
+      ...new Set([
+        ...collectPropsFromArrowFn(fnExpr),
+        ...collectPropsFromArrowFnDestructured(fnExpr),
+      ]),
+    ];
+    if (propsUsed.length !== 1) {
+      return false;
+    }
+    const jsxProp = propsUsed[0]!;
+    const componentUsage = state.propUsageByComponent.get(decl.localName);
+    const propUsage = componentUsage?.props[jsxProp];
+    if (!isJsxPropOptional(jsxProp) || (propUsage?.omittedCount ?? 0) === 0) {
+      return false;
+    }
+    const observedValues = getExhaustiveObservedStaticValues(componentUsage, jsxProp);
+    if (!observedValues || observedValues.length < 2 || observedValues.length > 20) {
+      return false;
+    }
+
+    const bindings = getArrowFnParamBindings(fnExpr);
+    const guarded = extractGuardedDynamicBranch(j, bodyExpr);
+    const conditionWhen = guarded
+      ? printScalarizedExpression({
+          j,
+          expr: guarded.test,
+          paramName,
+          propNames: propsUsed,
+          ...(bindings ? { bindings } : {}),
+        })
+      : null;
+    if (guarded && !conditionWhen) {
+      return false;
+    }
+
+    const variantEntries: Array<{
+      propValue: string | number;
+      styles: Record<string, unknown>;
+    }> = [];
+    for (const propValue of observedValues) {
+      const evaluatedValue = evaluateObservedDynamicExpression({
+        j,
+        root: state.root,
+        expression: bodyExpr,
+        propName: jsxProp,
+        propValue,
+        paramName,
+      });
+      if (typeof evaluatedValue !== "string") {
+        return false;
+      }
+      const cssText = evaluatedValue.trim();
+      if (!cssText) {
+        continue;
+      }
+      const parsedStyle = parseCssDeclarationBlock(cssText);
+      if (!parsedStyle || Object.keys(parsedStyle).length === 0) {
+        return false;
+      }
+      variantEntries.push({ propValue, styles: parsedStyle });
+    }
+
+    if (variantEntries.length === 0) {
+      return false;
+    }
+    for (const { propValue, styles } of variantEntries) {
+      const propValueExpr =
+        typeof propValue === "number" ? String(propValue) : JSON.stringify(propValue);
+      const when = conditionWhen
+        ? `${conditionWhen} && ${jsxProp} === ${propValueExpr}`
+        : `${jsxProp} === ${propValueExpr}`;
+      applyVariant({ when, propName: jsxProp }, styles);
+    }
+    decl.variantLookupCastProps ??= new Set<string>();
+    decl.variantLookupCastProps.add(jsxProp);
+    ensureObservedVariantPropDrop(jsxProp);
+    decl.needsWrapperComponent = true;
     return true;
   };
 
@@ -1470,6 +1573,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
       if (slot) {
         const expr = decl.templateExpressions[slot.slotId] as any;
+        if (tryEmitObservedCssBlockVariantBuckets(expr)) {
+          continue;
+        }
         // Handle css helper identifier: ${primaryStyles}
         if (expr?.type === "Identifier" && cssHelperNames.has(expr.name)) {
           const helperDecl = declByLocalName.get(expr.name);

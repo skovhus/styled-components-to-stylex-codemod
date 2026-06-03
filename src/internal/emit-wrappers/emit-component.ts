@@ -1115,10 +1115,28 @@ export function emitComponentWrappers(emitter: WrapperEmitter): {
       jsxTagName = j.jsxIdentifier(renderedComponent);
     }
 
+    const ownBridgeClassVar = getBridgeClassVar(d);
+    const inheritedBridgeClassVar =
+      renderedComponent !== wrappedComponent && wrappedLocalDecl
+        ? getBridgeClassVar(wrappedLocalDecl)
+        : undefined;
+    const hasInheritedBridgeExtraClass =
+      !!inheritedBridgeClassVar &&
+      (d.extraClassNames ?? []).some(
+        (entry) => entry.expr.type === "Identifier" && entry.expr.name === inheritedBridgeClassVar,
+      );
+    const inheritedBridgeClassNames =
+      inheritedBridgeClassVar &&
+      inheritedBridgeClassVar !== ownBridgeClassVar &&
+      !hasInheritedBridgeExtraClass
+        ? [{ expr: j.identifier(inheritedBridgeClassVar) as ExpressionKind }]
+        : [];
     const { attrsInfo, staticClassNameExpr } = emitter.splitAttrsInfo(
       d.attrsInfo,
-      getBridgeClassVar(d),
-      d.extraClassNames,
+      ownBridgeClassVar,
+      inheritedBridgeClassNames.length > 0
+        ? [...inheritedBridgeClassNames, ...(d.extraClassNames ?? [])]
+        : d.extraClassNames,
     );
     const defaultAttrs = attrsInfo?.defaultAttrs ?? [];
     const dynamicAttrs = attrsInfo?.dynamicAttrs ?? [];

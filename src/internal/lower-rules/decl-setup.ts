@@ -167,6 +167,32 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const getComposedDefaultValue = (propName: string): unknown =>
     resolveComposedDefaultValue(cssHelperPropValues.get(propName), propName);
 
+  const getWrappedComponentBaseDefaultValue = (propName: string): unknown => {
+    if (decl.base.kind !== "component" || !state.resolveBaseComponent) {
+      return undefined;
+    }
+    const importInfo = importMap.get(decl.base.ident);
+    if (!importInfo) {
+      return undefined;
+    }
+    const staticProps: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(decl.attrsInfo?.staticAttrs ?? {})) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        staticProps[key] = value;
+      }
+    }
+    try {
+      return state.resolveBaseComponent({
+        importSource: importInfo.source.value,
+        importedName: importInfo.importedName,
+        staticProps,
+        filePath,
+      })?.sx?.[propName];
+    } catch {
+      return undefined;
+    }
+  };
+
   const {
     findJsxPropTsType,
     findJsxPropTsTypeForVariantExtraction,
@@ -445,6 +471,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     cssHelperPropValues,
     resolveComposedDefaultValue,
     getComposedDefaultValue,
+    getWrappedComponentBaseDefaultValue,
     findJsxPropTsType,
     findJsxPropTsTypeForVariantExtraction,
     annotateParamFromJsxProp,

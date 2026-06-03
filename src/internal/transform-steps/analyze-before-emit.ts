@@ -70,16 +70,7 @@ import { guardForwardedSxConditionalDefaults } from "../utilities/forwarded-sx-d
 import { guardGeneratedConditionalDefaults } from "../utilities/conditional-style-defaults.js";
 
 const INLINE_USAGE_THRESHOLD = 1;
-const REACT_WINDOW_SOURCE = "react-window";
-const REACT_WINDOW_ELEMENT_TYPE_PROPS = new Set(["innerElementType", "outerElementType"]);
-const REACT_WINDOW_COMPONENT_EXPORTS = new Set([
-  "FixedSizeGrid",
-  "FixedSizeList",
-  "Grid",
-  "List",
-  "VariableSizeGrid",
-  "VariableSizeList",
-]);
+const ELEMENT_TYPE_PROP_NAMES = new Set(["innerElementType", "outerElementType"]);
 
 /**
  * Analyzes declarations to determine wrappers, exports, usage patterns, and import aliasing before emit.
@@ -573,21 +564,53 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
     }
     let onlyVirtualListElementType = true;
     refs.forEach((p: any) => {
-      const expressionContainer = p.parentPath?.node;
-      const attr = p.parentPath?.parentPath?.node;
-      const attrName = attr?.name;
+      const usage = findContainingJsxAttributeExpression(p);
+      const expressionContainer = usage?.expressionContainer;
+      const attr = usage?.attr;
       if (
-        expressionContainer?.type !== "JSXExpressionContainer" ||
-        attr?.type !== "JSXAttribute" ||
-        attrName?.type !== "JSXIdentifier" ||
-        !REACT_WINDOW_ELEMENT_TYPE_PROPS.has(attrName.name) ||
-        !isKnownReactWindowElementTypeAttribute(p.parentPath?.parentPath, ctx.importMap)
+        !isNodeOfType(expressionContainer, "JSXExpressionContainer") ||
+        !isNodeOfType(attr, "JSXAttribute") ||
+        !isNodeOfType(attr.name, "JSXIdentifier") ||
+        typeof attr.name.name !== "string" ||
+        !ELEMENT_TYPE_PROP_NAMES.has(attr.name.name)
       ) {
         onlyVirtualListElementType = false;
       }
     });
     return onlyVirtualListElementType;
   };
+
+  const findContainingJsxAttributeExpression = (
+    path: any,
+  ): { expressionContainer: unknown; attr: unknown; attrPath: unknown } | null => {
+    let current = path.parentPath;
+    while (current) {
+      const node = current.node;
+      if (node?.type === "JSXExpressionContainer") {
+        const attrPath = current.parentPath;
+        return {
+          expressionContainer: node,
+          attr: attrPath?.node,
+          attrPath,
+        };
+      }
+      if (
+        node?.type === "JSXElement" ||
+        node?.type === "JSXOpeningElement" ||
+        node?.type === "Program"
+      ) {
+        return null;
+      }
+      current = current.parentPath;
+    }
+    return null;
+  };
+
+  const isNodeOfType = <TType extends string>(
+    node: unknown,
+    type: TType,
+  ): node is { type: TType } & Record<string, unknown> =>
+    !!node && typeof node === "object" && (node as { type?: unknown }).type === type;
 
   // Adjacent sibling (`& + &`) can only be preserved when every same-file JSX usage
   // is statically enumerable, each usage site stays on the inline JSX rewrite path,
@@ -1176,6 +1199,11 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // Early detection of components used as values (before emitStylesAndImports for merger import)
   // Components passed as props (e.g., <Component elementType={StyledDiv} />) need className/style merging
   for (const decl of styledDecls) {
+    if (canInlinePrivateMemberBaseJsx(decl)) {
+      decl.isDirectJsxResolution = true;
+      decl.needsWrapperComponent = false;
+      continue;
+    }
     if (decl.isDirectJsxResolution) {
       continue;
     }
@@ -1185,9 +1213,71 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
       decl.usedAsValue = true;
       if (hasOnlyVirtualListElementTypeValueReferences(decl.localName)) {
         decl.valueUsageKind = "virtualListElementType";
+        if (!exportedComponents.has(decl.localName)) {
+          decl.supportsExternalStyles = false;
+          decl.consumerUsesClassName = false;
+          decl.consumerUsesStyle = false;
+          decl.consumerUsesElementProps = false;
+          decl.consumerUsesSpread = false;
+        }
       }
       decl.needsWrapperComponent = true;
     }
+  }
+
+  function canInlinePrivateMemberBaseJsx(decl: StyledDecl): boolean {
+    if (
+      decl.base.kind !== "component" ||
+      !decl.base.ident.includes(".") ||
+      decl.isExported ||
+      exportedComponents.has(decl.localName) ||
+      decl.propsType ||
+      decl.attrsInfo ||
+      decl.usedAsValue ||
+      decl.supportsExternalStyles ||
+      decl.supportsAsProp ||
+      decl.supportsRefProp ||
+      decl.consumerUsesSpread ||
+      decl.consumerUsesClassName ||
+      decl.consumerUsesStyle ||
+      decl.consumerUsesElementProps ||
+      decl.isCssHelper ||
+      decl.rules.some((rule) => rule.selector.trim() !== "&")
+    ) {
+      return false;
+    }
+    if (hasPropDrivenWrapperBehavior(decl)) {
+      return false;
+    }
+    return countLocalJsxUsages(decl.localName) === 1;
+  }
+
+  function hasPropDrivenWrapperBehavior(decl: StyledDecl): boolean {
+    return !!(
+      decl.enumVariant ||
+      decl.shouldForwardProp ||
+      (decl.inlineStyleProps?.length ?? 0) > 0 ||
+      (decl.styleFnFromProps?.length ?? 0) > 0 ||
+      (decl.variantDimensions?.length ?? 0) > 0 ||
+      (decl.compoundVariants?.length ?? 0) > 0 ||
+      Object.keys(decl.variantStyleKeys ?? {}).length > 0 ||
+      (decl.transientPropRenames?.size ?? 0) > 0 ||
+      (decl.observedExpressionConditionDropProps?.size ?? 0) > 0 ||
+      (decl.styleValueVariantProps?.size ?? 0) > 0
+    );
+  }
+
+  function countLocalJsxUsages(localName: string): number {
+    return (
+      root
+        .find(j.JSXElement, {
+          openingElement: { name: { type: "JSXIdentifier", name: localName } },
+        } as any)
+        .size() +
+      root
+        .find(j.JSXSelfClosingElement, { name: { type: "JSXIdentifier", name: localName } } as any)
+        .size()
+    );
   }
 
   const jsxNamespaceRoots = new Set<string>();
@@ -5130,63 +5220,6 @@ function staticObjectPropertyName(prop: unknown): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
-}
-
-function isKnownReactWindowElementTypeAttribute(
-  attrPath:
-    | { parentPath?: { node?: { type?: string; name?: unknown } | null } | null }
-    | null
-    | undefined,
-  importMap: TransformContext["importMap"],
-): boolean {
-  const openingElement = attrPath?.parentPath?.node;
-  if (openingElement?.type !== "JSXOpeningElement") {
-    return false;
-  }
-  return jsxNameIsKnownReactWindowComponent(openingElement.name, importMap);
-}
-
-function jsxNameIsKnownReactWindowComponent(
-  jsxName: unknown,
-  importMap: TransformContext["importMap"],
-): boolean {
-  const name = jsxName as {
-    type?: string;
-    name?: string;
-    object?: unknown;
-    property?: unknown;
-  };
-  if (name.type === "JSXIdentifier") {
-    return localNameIsReactWindowComponent(name.name, importMap);
-  }
-  if (name.type !== "JSXMemberExpression") {
-    return false;
-  }
-  const namespace = name.object as { type?: string; name?: string } | undefined;
-  const member = name.property as { type?: string; name?: string } | undefined;
-  if (
-    namespace?.type !== "JSXIdentifier" ||
-    member?.type !== "JSXIdentifier" ||
-    !REACT_WINDOW_COMPONENT_EXPORTS.has(member.name ?? "")
-  ) {
-    return false;
-  }
-  const importInfo = namespace.name ? importMap?.get(namespace.name) : undefined;
-  return importInfo?.source.value === REACT_WINDOW_SOURCE && importInfo.importedName === "*";
-}
-
-function localNameIsReactWindowComponent(
-  localName: string | undefined,
-  importMap: TransformContext["importMap"],
-): boolean {
-  if (!localName) {
-    return false;
-  }
-  const importInfo = importMap?.get(localName);
-  return (
-    importInfo?.source.value === REACT_WINDOW_SOURCE &&
-    REACT_WINDOW_COMPONENT_EXPORTS.has(importInfo.importedName)
-  );
 }
 
 function isStylexConditionKey(key: string): boolean {

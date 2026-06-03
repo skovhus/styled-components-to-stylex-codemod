@@ -3,9 +3,14 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles }) {
-  const { className, style, sx, ...rest } = props;
-  return <div {...rest} {...mergedSx([styles.innerContainer, sx], className, style)} />;
+function InnerContainer(
+  props: React.PropsWithChildren<{
+    style?: React.CSSProperties;
+    ref?: React.Ref<HTMLDivElement>;
+  }>,
+) {
+  const { style, ...rest } = props;
+  return <div {...rest} {...mergedSx(styles.innerContainer, undefined, style)} />;
 }
 
 function FixedSizeList(props: { innerElementType?: React.ElementType; children: React.ReactNode }) {

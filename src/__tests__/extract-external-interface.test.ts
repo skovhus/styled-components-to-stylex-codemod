@@ -113,12 +113,13 @@ describe("runPrepass prop usage inventory", () => {
             "hasUnknownUsage": true,
             "props": {
               "height": {
-                "hasUnknown": true,
+                "hasUnknown": false,
                 "omittedCount": 1,
                 "usageCount": 3,
                 "values": [
                   40,
                   80,
+                  120,
                 ],
               },
               "tone": {

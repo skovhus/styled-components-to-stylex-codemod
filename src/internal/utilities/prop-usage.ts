@@ -65,3 +65,21 @@ export function mergeComponentPropUsage(
     }
   }
 }
+
+export function getExhaustiveObservedStaticValues(
+  info: ComponentPropUsageInfo | undefined,
+  propName: string,
+): Array<string | number> | null {
+  const propUsage = info?.props[propName];
+  if (!info || info.hasUnknownUsage || !propUsage || propUsage.hasUnknown) {
+    return null;
+  }
+  if (propUsage.values.length < 1) {
+    return null;
+  }
+  const values = propUsage.values.filter(
+    (value: StaticPropValue): value is string | number =>
+      typeof value === "string" || typeof value === "number",
+  );
+  return values.length === propUsage.values.length ? values : null;
+}

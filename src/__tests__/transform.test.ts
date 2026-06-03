@@ -10487,10 +10487,9 @@ export const App = () => <Parent />;
 });
 
 describe("component value usage", () => {
-  it("keeps react-window elementType props on the narrow style-only wrapper contract", () => {
+  it("keeps elementType props on the narrow style-only wrapper contract", () => {
     const source = `
 import * as React from "react";
-import { FixedSizeList as WindowList } from "react-window";
 import styled from "styled-components";
 
 const InnerContainer = styled.div\`
@@ -10498,10 +10497,18 @@ const InnerContainer = styled.div\`
   background-color: red;
 \`;
 
+function List(props: {
+  innerElementType: React.ComponentType<React.PropsWithChildren<{ style?: React.CSSProperties }>>;
+  children: () => React.ReactNode;
+}) {
+  const Inner = props.innerElementType;
+  return <Inner style={{ height: 20 }}>{props.children()}</Inner>;
+}
+
 export const App = () => (
-  <WindowList innerElementType={InnerContainer} height={100} itemCount={1} itemSize={20} width={100}>
+  <List innerElementType={InnerContainer}>
     {() => <div>Row</div>}
-  </WindowList>
+  </List>
 );
 `;
     const output = runTransform(source);
@@ -10513,7 +10520,7 @@ export const App = () => (
     expect(output).not.toContain("className, children, style, sx");
   });
 
-  it("uses broad value wrappers for non-react-window elementType props", () => {
+  it("uses virtual-list value wrappers for elementType props by name", () => {
     const source = `
 import * as React from "react";
 import styled from "styled-components";
@@ -10536,11 +10543,11 @@ export const App = () => (
 `;
     const output = runTransform(source);
 
-    expect(output).toContain(
-      'function InnerContainer(props: React.ComponentProps<"div"> & { sx?: stylex.StyleXStyles })',
-    );
-    expect(output).toMatch(/const \{\s*className,\s*style,\s*sx,\s*\.\.\.rest\s*\} = props;/);
-    expect(output).toContain("{...mergedSx([styles.innerContainer, sx], className, style)}");
+    expect(output).toContain("style?: React.CSSProperties");
+    expect(output).toContain("ref?: React.Ref<HTMLDivElement>");
+    expect(output).not.toContain("className");
+    expect(output).not.toContain("sx?: stylex.StyleXStyles");
+    expect(output).toContain("{...mergedSx(styles.innerContainer, undefined, style)}");
   });
 });
 

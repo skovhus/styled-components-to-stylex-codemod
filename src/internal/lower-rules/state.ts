@@ -294,6 +294,7 @@ export function createLowerRulesState(ctx: TransformContext) {
     resolveCall,
     resolveCallOptional,
     resolveThemeCall,
+    resolveBaseComponent: ctx.resolveBaseComponent,
     resolveSelector,
     localStylexVars,
     getOrCreateLocalStylexVar,

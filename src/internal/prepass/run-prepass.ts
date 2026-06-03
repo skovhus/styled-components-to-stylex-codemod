@@ -14,7 +14,7 @@ import type {
   ResolveBaseComponentContext,
   ResolveBaseComponentResult,
 } from "../../adapter.js";
-import type { ComponentPropUsageInfo } from "../transform-types.js";
+import type { ComponentPropUsageInfo, StaticPropValue } from "../transform-types.js";
 import { Logger } from "../logger.js";
 import { addToSetMap } from "../utilities/collection-utils.js";
 import { readStaticJsxLiteral } from "../utilities/jsx-static-literal.js";
@@ -984,8 +984,10 @@ function scanConsumerJsxUsages(
 
   const importNodes: AstNode[] = [];
   const jsxOpenings: AstNode[] = [];
-  walkForImportsAndJsxOpenings((ast.program ?? ast) as AstNode, importNodes, jsxOpenings);
+  const program = (ast.program ?? ast) as AstNode;
+  walkForImportsAndJsxOpenings(program, importNodes, jsxOpenings);
   const importMap = buildImportMapFromNodes(importNodes);
+  const staticIdentifierValues = collectStaticIdentifierValues(program);
 
   const resultMap = new Map<string, ConsumerPropResult>();
   const staticPropUsages: ConsumerStaticPropUsage[] = [];
@@ -1000,7 +1002,7 @@ function scanConsumerJsxUsages(
       continue;
     }
 
-    const openingUsage = readConsumerOpeningUsage(opening);
+    const openingUsage = readConsumerOpeningUsage(opening, staticIdentifierValues);
     const { externalProps } = openingUsage;
     if (
       externalProps.className ||
@@ -1066,7 +1068,10 @@ function resolveJsxOpeningComponent(
     : undefined;
 }
 
-function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
+function readConsumerOpeningUsage(
+  opening: AstNode,
+  staticIdentifierValues: ReadonlyMap<string, StaticPropValue>,
+): ConsumerOpeningUsage {
   const externalProps = {
     className: false,
     style: false,
@@ -1102,12 +1107,90 @@ function readConsumerOpeningUsage(opening: AstNode): ConsumerOpeningUsage {
     }
 
     if (!KNOWN_NON_ELEMENT_PROPS.has(propName)) {
-      const value = readStaticJsxLiteral(attr);
+      const value =
+        readStaticJsxLiteral(attr) ?? readStaticIdentifierJsxValue(attr, staticIdentifierValues);
       props[propName] = value === undefined ? { kind: "unknown" } : { kind: "static", value };
     }
   }
 
   return { externalProps, staticUsage: { props, hasSpread } };
+}
+
+function collectStaticIdentifierValues(program: AstNode): Map<string, StaticPropValue> {
+  const values = new Map<string, StaticPropValue>();
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+    const typed = node as {
+      type?: string;
+      kind?: string;
+      declarations?: Array<{ id?: AstNode; init?: AstNode }>;
+      [key: string]: unknown;
+    };
+    if (typed.type === "VariableDeclaration" && typed.kind === "const") {
+      for (const decl of typed.declarations ?? []) {
+        const name = decl.id?.type === "Identifier" ? (decl.id as { name?: string }).name : null;
+        const value = staticValueFromNode(decl.init);
+        if (name && value !== undefined) {
+          values.set(name, value);
+        }
+      }
+    }
+    for (const [key, child] of Object.entries(typed)) {
+      if (
+        key === "loc" ||
+        key === "comments" ||
+        key === "leadingComments" ||
+        key === "trailingComments"
+      ) {
+        continue;
+      }
+      if (Array.isArray(child)) {
+        child.forEach(visit);
+      } else if (child && typeof child === "object") {
+        visit(child);
+      }
+    }
+  };
+  visit(program);
+  return values;
+}
+
+function readStaticIdentifierJsxValue(
+  attr: AstNode,
+  staticIdentifierValues: ReadonlyMap<string, StaticPropValue>,
+): StaticPropValue | undefined {
+  const value = attr.value as AstNode | undefined;
+  const expr =
+    value?.type === "JSXExpressionContainer"
+      ? (value as { expression?: AstNode }).expression
+      : null;
+  const name = expr?.type === "Identifier" ? (expr as { name?: string }).name : null;
+  return name ? staticIdentifierValues.get(name) : undefined;
+}
+
+function staticValueFromNode(node: AstNode | undefined): StaticPropValue | undefined {
+  if (!node) {
+    return undefined;
+  }
+  if (node.type === "Literal") {
+    const value = (node as { value?: unknown }).value;
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      ? value
+      : undefined;
+  }
+  if (
+    node.type === "StringLiteral" ||
+    node.type === "NumericLiteral" ||
+    node.type === "BooleanLiteral"
+  ) {
+    const value = (node as { value?: unknown }).value;
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+      ? value
+      : undefined;
+  }
+  return undefined;
 }
 
 function isElementConsumerProp(propName: string): boolean {
