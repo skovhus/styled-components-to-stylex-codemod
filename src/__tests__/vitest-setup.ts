@@ -8,6 +8,8 @@
 import { vi } from "vitest";
 
 vi.mock("../internal/logger.js", () => ({
+  CASCADE_CONFLICT_WARNING:
+    "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts",
   UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING:
     "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)",
   Logger: {

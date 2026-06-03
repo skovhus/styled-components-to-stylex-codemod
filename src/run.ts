@@ -39,6 +39,10 @@ import {
   extractStyledDefBasesFromSource,
   type StyledDefBasesMap,
 } from "./internal/prepass/compute-leaf-set.js";
+import type {
+  CrossFileInfo,
+  CrossFileSelectorUsage,
+} from "./internal/prepass/scan-cross-file-selectors.js";
 import { resolveStaticMemberComponentNames } from "./internal/prepass/resolve-static-members.js";
 import { toRealPath } from "./internal/utilities/path-utils.js";
 import { transformedComponentAcceptsSx } from "./internal/utilities/sx-surface.js";
@@ -719,6 +723,26 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       },
       silent: true,
       isolateFiles: true,
+      createIsolatedOptions(filePath) {
+        const isolatedTransformedFiles = new Set<string>();
+        return {
+          ...runnerOptions,
+          dry: true,
+          print: false,
+          sidecarFiles: new Map(),
+          bridgeResults: new Map(),
+          transformedFiles: isolatedTransformedFiles,
+          transformedFileSources: new Map(),
+          transientPropRenames: new Map(),
+          crossFilePrepassResult: createStandalonePrepassResult(
+            crossFilePrepassResult,
+            filePath,
+            isolatedTransformedFiles,
+          ),
+          silent: true,
+          isolateFiles: true,
+        };
+      },
     });
     standaloneWarnings = Logger.createReport().getWarnings();
     Logger._clearCollected();
@@ -966,6 +990,11 @@ type TransformFunction = (
   options: import("./internal/transform-types.js").TransformOptions,
 ) => string | null | Promise<string | null>;
 
+type CrossFilePrepassResult = CrossFileInfo & {
+  transformedFiles?: Set<string>;
+  typeScriptMetadata?: TypeScriptPrepassMetadata;
+};
+
 type SequentialRunOptions = import("./internal/transform-types.js").TransformOptions & {
   parser: NonNullable<RunTransformOptions["parser"]>;
   dry: boolean;
@@ -973,8 +1002,9 @@ type SequentialRunOptions = import("./internal/transform-types.js").TransformOpt
   silent: boolean;
   transformedFiles: Set<string>;
   transformedFileSources: Map<string, string>;
-  crossFilePrepassResult?: { transformedFiles?: Set<string> };
+  crossFilePrepassResult?: CrossFilePrepassResult;
   isolateFiles?: boolean;
+  createIsolatedOptions?: (filePath: string) => SequentialRunOptions;
 };
 
 type SequentialRunResult = {
@@ -991,6 +1021,67 @@ export type TransformFileResult = {
   status: "error" | "skipped" | "unchanged" | "transformed";
 };
 
+function createStandalonePrepassResult(
+  prepass: CrossFilePrepassResult,
+  filePath: string,
+  transformedFiles: Set<string>,
+): CrossFilePrepassResult {
+  const standaloneFile = toRealPath(resolve(filePath));
+  const selectorUsages = new Map<string, CrossFileSelectorUsage[]>();
+  const componentsNeedingMarkerSidecar = new Map<string, Set<string>>();
+  const componentsNeedingGlobalSelectorBridge = new Map<string, Set<string>>();
+
+  for (const [consumerPath, usages] of prepass.selectorUsages) {
+    const consumerIsTransformed = toRealPath(consumerPath) === standaloneFile;
+    const isolatedUsages = usages.map((usage) => ({
+      ...usage,
+      consumerIsTransformed,
+    }));
+    selectorUsages.set(consumerPath, isolatedUsages);
+
+    for (const usage of isolatedUsages) {
+      if (usage.bridgeComponentName) {
+        continue;
+      }
+      if (consumerIsTransformed) {
+        addSetMapEntry(componentsNeedingMarkerSidecar, usage.resolvedPath, usage.importedName);
+      }
+      addSetMapEntry(componentsNeedingGlobalSelectorBridge, usage.resolvedPath, usage.importedName);
+    }
+  }
+
+  return {
+    ...prepass,
+    selectorUsages,
+    componentsNeedingMarkerSidecar,
+    componentsNeedingGlobalSelectorBridge,
+    globalLeafKeys: getStandaloneGlobalLeafKeys(prepass.globalLeafKeys, standaloneFile),
+    transformedFiles,
+  };
+}
+
+function getStandaloneGlobalLeafKeys(
+  globalLeafKeys: Set<string> | undefined,
+  standaloneFile: string,
+): Set<string> | undefined {
+  if (!globalLeafKeys) {
+    return undefined;
+  }
+
+  const filePrefix = `${standaloneFile}:`;
+  return new Set([...globalLeafKeys].filter((key) => key.startsWith(filePrefix)));
+}
+
+function addSetMapEntry(map: Map<string, Set<string>>, key: string, value: string): void {
+  const values = map.get(key);
+  if (values) {
+    values.add(value);
+    return;
+  }
+
+  map.set(key, new Set([value]));
+}
+
 async function runTransformSequentially(
   transformModule: TransformModuleSpecifier,
   filePaths: readonly string[],
@@ -1006,23 +1097,28 @@ async function runTransformSequentially(
     files: [],
   };
   const startedAt = performance.now();
-  const j = jscodeshift.withParser(options.parser);
-  const api: API = {
-    j,
-    jscodeshift: j,
-    stats: () => {},
-    report: (msg) => {
-      if (!options.silent) {
-        process.stdout.write(`${msg}\n`);
-      }
-    },
+  const createApi = (): API => {
+    const j = jscodeshift.withParser(options.parser);
+    return {
+      j,
+      jscodeshift: j,
+      stats: () => {},
+      report: (msg) => {
+        if (!options.silent) {
+          process.stdout.write(`${msg}\n`);
+        }
+      },
+    };
   };
+  const sharedApi = createApi();
 
   for (const filePath of filePaths) {
+    const fileOptions = options.createIsolatedOptions?.(filePath) ?? options;
+    const api = fileOptions.isolateFiles === true ? createApi() : sharedApi;
     if (options.isolateFiles === true) {
-      options.transformedFiles.clear();
-      options.transformedFileSources.clear();
-      options.crossFilePrepassResult?.transformedFiles?.clear();
+      fileOptions.transformedFiles.clear();
+      fileOptions.transformedFileSources.clear();
+      fileOptions.crossFilePrepassResult?.transformedFiles?.clear();
     }
 
     let source: string;
@@ -1036,9 +1132,9 @@ async function runTransformSequentially(
     }
 
     try {
-      const output = await transform({ path: filePath, source }, api, options);
+      const output = await transform({ path: filePath, source }, api, fileOptions);
       if (output !== null) {
-        options.transformedFileSources.set(toRealPath(filePath), output);
+        fileOptions.transformedFileSources.set(toRealPath(filePath), output);
       }
       if (output === null) {
         aggregate.skip += 1;
@@ -1050,10 +1146,10 @@ async function runTransformSequentially(
         aggregate.files.push({ filePath, status: "unchanged" });
         continue;
       }
-      if (options.print) {
+      if (fileOptions.print) {
         process.stdout.write(`${output}\n`);
       }
-      if (!options.dry) {
+      if (!fileOptions.dry) {
         await writeFile(filePath, output, "utf-8");
       }
       aggregate.ok += 1;

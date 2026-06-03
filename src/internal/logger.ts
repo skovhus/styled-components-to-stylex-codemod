@@ -133,6 +133,9 @@ export type WarningType =
   | "Shorthand property has an opaque value that StyleX will expand to longhands — use `directional` in resolveValue to return separate longhand tokens"
   | "animation shorthand contains a var() with no classifiable fallback — its longhand position cannot be determined statically; bind the variable to a specific longhand (e.g. animation-duration: var(--x)) instead";
 
+export const CASCADE_CONFLICT_WARNING =
+  "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts" satisfies WarningType;
+
 export const UNSUPPORTED_SHOULD_FORWARD_PROP_WARNING =
   "Unsupported shouldForwardProp pattern (only !prop.startsWith(), ![].includes(prop), and prop !== are supported)" satisfies WarningType;
 
@@ -343,6 +346,13 @@ interface WarningGroup {
   warnings: WarningWithSnippet[];
 }
 
+interface DependedFileGroup {
+  dependedFilePath: string;
+  usageFiles: string[];
+}
+
+const MAX_DEPENDED_FILE_GROUPS = 15;
+
 class LoggerReport {
   private readonly warnings: CollectedWarning[];
   private readonly fileCount: number | null;
@@ -383,6 +393,27 @@ class LoggerReport {
       lines.push("");
       lines.push(`▸ ${group.message} (${group.warnings.length})`);
       lines.push("");
+
+      const dependedFileGroups = this.groupDependedFiles(group);
+      if (dependedFileGroups.length > 0) {
+        lines.push("  Top depended files:");
+        lines.push("");
+        for (const [index, dependedFileGroup] of dependedFileGroups.entries()) {
+          const usageCount = dependedFileGroup.usageFiles.length;
+          const usageLabel = usageCount === 1 ? "usage file" : "usage files";
+          lines.push(
+            `  ${index + 1}. ${dependedFileGroup.dependedFilePath} (${usageCount} ${usageLabel})`,
+          );
+          for (const usageFile of dependedFileGroup.usageFiles.slice(0, MAX_EXAMPLES)) {
+            lines.push(`     ${usageFile}`);
+          }
+          const remainingUsageFiles = usageCount - MAX_EXAMPLES;
+          if (remainingUsageFiles > 0) {
+            lines.push(`     ... and ${remainingUsageFiles} more usage file(s)`);
+          }
+          lines.push("");
+        }
+      }
 
       // Deduplicate by file path - only show first occurrence per file
       const seenFiles = new Set<string>();
@@ -459,6 +490,31 @@ class LoggerReport {
     return Array.from(groupMap.values()).sort((a, b) => b.warnings.length - a.warnings.length);
   }
 
+  private groupDependedFiles(group: WarningGroup): DependedFileGroup[] {
+    if (group.message !== CASCADE_CONFLICT_WARNING) {
+      return [];
+    }
+
+    const groupMap = new Map<string, WarningWithSnippet[]>();
+    for (const warning of group.warnings) {
+      const dependedFilePath = getCascadeDependedFilePath(warning);
+      if (!dependedFilePath) {
+        continue;
+      }
+      const dependedFileWarnings = groupMap.get(dependedFilePath) ?? [];
+      dependedFileWarnings.push(warning);
+      groupMap.set(dependedFilePath, dependedFileWarnings);
+    }
+
+    return Array.from(groupMap.entries())
+      .map(([dependedFilePath, warnings]) => ({
+        dependedFilePath,
+        usageFiles: uniqueSorted(warnings.map((warning) => warning.filePath)),
+      }))
+      .sort((a, b) => b.usageFiles.length - a.usageFiles.length)
+      .slice(0, MAX_DEPENDED_FILE_GROUPS);
+  }
+
   private getSnippet(filePath: string, loc?: { line: number; column: number }): string | undefined {
     if (!loc) {
       return undefined;
@@ -499,6 +555,26 @@ class LoggerReport {
       return null;
     }
   }
+}
+
+function getCascadeDependedFilePath(warning: WarningWithSnippet): string | undefined {
+  const context = warning.context;
+  if (!context || typeof context !== "object") {
+    return undefined;
+  }
+
+  const record = context as Record<string, unknown>;
+  const definitionPath = record.definitionPath;
+  if (typeof definitionPath === "string") {
+    return definitionPath;
+  }
+
+  const importedPath = record.importedPath;
+  return typeof importedPath === "string" ? importedPath : undefined;
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b));
 }
 
 const WARN_BG_COLOR = "\u001b[43m";
