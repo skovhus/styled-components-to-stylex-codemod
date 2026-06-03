@@ -1971,6 +1971,75 @@ export const App = () => <Card>{Preview.animation}</Card>;
     expect(code).toMatch(/animationName:\s*fade/);
   });
 
+  it("keeps converted module keyframes before surviving declarators beside styled declarations", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`, animation = \`\${fade} 1s linear\`;
+
+export const App = () => <Card>{animation}</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThanOrEqual(0);
+    expect(code.indexOf("animation =")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
+  it("does not merge styles before interpolated keyframe dependencies", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const styles = stylex.create({
+  existing: {
+    color: "red",
+  },
+});
+
+const start = 0;
+const fade = keyframes\`
+  from { opacity: \${start}; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => (
+  <>
+    <div sx={styles.existing}>existing</div>
+    <Card>card</Card>
+  </>
+);
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code).toMatch(/const stylexStyles = stylex\.create/);
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThan(
+      code.indexOf("const start = 0"),
+    );
+    expect(code.indexOf("const stylexStyles = stylex.create")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

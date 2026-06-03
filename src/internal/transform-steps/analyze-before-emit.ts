@@ -1454,11 +1454,13 @@ export function analyzeBeforeEmitStep(ctx: TransformContext): StepResult {
   // (incl. staticBooleanVariants, callSiteCombinedStyles, promotedStyleProps) is
   // in `resolvedStyleObjects` when we check for collisions.
   const emitKeyNames = buildEmitKeyNames(ctx, styledDecls);
-  const existingStylexTarget = findExistingStylexStylesTarget({
-    ctx,
-    styledDeclNames,
-    emitKeyNames,
-  });
+  const existingStylexTarget = ctx.avoidExistingStylexStylesMerge
+    ? undefined
+    : findExistingStylexStylesTarget({
+        ctx,
+        styledDeclNames,
+        emitKeyNames,
+      });
   ctx.existingStylexStylesTarget = existingStylexTarget;
   const hasStylesVariable =
     !existingStylexTarget && fileHasLocalName(ctx, "styles", styledDeclNames);

@@ -120,6 +120,8 @@ export class TransformContext {
     /** Property keys already present in the existing object (used to detect collisions) */
     existingKeys: Set<string>;
   };
+  /** Skip merging into pre-existing stylex.create when generated keyframes must stay after dependencies. */
+  avoidExistingStylexStylesMerge?: boolean;
   declByLocal?: Map<string, StyledDecl>;
   extendedBy?: Map<string, string[]>;
   exportedComponents?: Map<string, ExportInfo>;

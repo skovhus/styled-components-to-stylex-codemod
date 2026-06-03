@@ -84,8 +84,12 @@ export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
     objectToAst,
     preserveNames: preservedNames,
     duplicateNames,
-    shouldKeepModuleKeyframesInPlace: ({ localName, declaratorPath }) =>
-      hasSurvivingTopLevelReadAfterDeclaration(ctx, localName, declaratorPath),
+    shouldKeepModuleKeyframesInPlace: ({ localName, frames, declaratorPath }) => {
+      if (hasFrameDependencyAfterExistingStylexCreate(ctx, frames, declaratorPath)) {
+        ctx.avoidExistingStylexStylesMerge = true;
+      }
+      return hasSurvivingTopLevelReadAfterDeclaration(ctx, localName, declaratorPath);
+    },
   });
   if (converted.stylexKeyframes.length > 0) {
     ctx.stylexKeyframes = [...(ctx.stylexKeyframes ?? []), ...converted.stylexKeyframes];
@@ -142,14 +146,49 @@ function hasSurvivingTopLevelReadAfterDeclaration(
   );
 
   return programBody.some((statement, index) => {
-    if (
-      index <= declarationIndex ||
-      isRemovedStyledDeclarationStatement(statement, removedStyledDeclNames)
-    ) {
+    if (index <= declarationIndex) {
       return false;
     }
-    return nodeContainsRuntimeIdentifierRead(statement, localName);
+    return statementContainsSurvivingRuntimeIdentifierRead(
+      statement,
+      localName,
+      removedStyledDeclNames,
+    );
   });
+}
+
+function hasFrameDependencyAfterExistingStylexCreate(
+  ctx: TransformContext,
+  frames: Record<string, Record<string, unknown>>,
+  declaratorPath: ASTPath<ASTNode>,
+): boolean {
+  const programBody = ctx.root.get().node.program.body as ASTNode[];
+  const declarationStatement = findTopLevelStatementNode(declaratorPath);
+  if (!declarationStatement) {
+    return false;
+  }
+  const declarationIndex = programBody.indexOf(declarationStatement);
+  if (declarationIndex < 0) {
+    return false;
+  }
+
+  const stylexCreateIndex = programBody.findIndex(
+    (statement, index) => index < declarationIndex && isStylexCreateDeclaration(statement),
+  );
+  if (stylexCreateIndex < 0) {
+    return false;
+  }
+
+  const dependencyNames = collectFrameDependencyNames(frames);
+  if (dependencyNames.size === 0) {
+    return false;
+  }
+  return programBody.some(
+    (statement, index) =>
+      index > stylexCreateIndex &&
+      index < declarationIndex &&
+      statementDeclaresAnyName(statement, dependencyNames),
+  );
 }
 
 function statementHasRuntimeReadAfterDeclarator(
@@ -180,19 +219,74 @@ function statementHasRuntimeReadAfterDeclarator(
   return false;
 }
 
-function isRemovedStyledDeclarationStatement(
+function statementContainsSurvivingRuntimeIdentifierRead(
   statement: ASTNode,
+  localName: string,
   styledDeclNames: Set<string>,
 ): boolean {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type !== "VariableDeclaration") {
+    return nodeContainsRuntimeIdentifierRead(statement, localName);
+  }
+  return declaration.declarations.some((declarator) => {
+    const id = declarator.type === "VariableDeclarator" ? declarator.id : null;
+    if (id?.type === "Identifier" && styledDeclNames.has(id.name)) {
+      return false;
+    }
+    return (
+      declarator.type === "VariableDeclarator" &&
+      nodeContainsRuntimeIdentifierRead(declarator.init, localName)
+    );
+  });
+}
+
+function collectFrameDependencyNames(frames: Record<string, Record<string, unknown>>): Set<string> {
+  const names = new Set<string>();
+  collectIdentifiers(frames, names);
+  return names;
+}
+
+function isStylexCreateDeclaration(statement: ASTNode): boolean {
   const declaration =
     statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
   if (declaration?.type !== "VariableDeclaration") {
     return false;
   }
   return declaration.declarations.some((declarator) => {
-    const id = declarator.type === "VariableDeclarator" ? declarator.id : null;
-    return id?.type === "Identifier" && styledDeclNames.has(id.name);
+    const init = declarator.type === "VariableDeclarator" ? declarator.init : null;
+    return (
+      init?.type === "CallExpression" &&
+      init.callee.type === "MemberExpression" &&
+      init.callee.object.type === "Identifier" &&
+      init.callee.object.name === "stylex" &&
+      init.callee.property.type === "Identifier" &&
+      init.callee.property.name === "create"
+    );
   });
+}
+
+function statementDeclaresAnyName(statement: ASTNode, names: Set<string>): boolean {
+  const declaredNames = new Set<string>();
+  if (statement.type === "VariableDeclaration") {
+    for (const declarator of statement.declarations) {
+      if (declarator.type === "VariableDeclarator") {
+        collectPatternBindingNames(declarator.id, declaredNames);
+      }
+    }
+  } else if (
+    statement.type === "ExportNamedDeclaration" &&
+    statement.declaration?.type === "VariableDeclaration"
+  ) {
+    for (const declarator of statement.declaration.declarations) {
+      if (declarator.type === "VariableDeclarator") {
+        collectPatternBindingNames(declarator.id, declaredNames);
+      }
+    }
+  } else if (statement.type === "FunctionDeclaration" || statement.type === "ClassDeclaration") {
+    collectPatternBindingNames(statement.id, declaredNames);
+  }
+  return [...declaredNames].some((name) => names.has(name));
 }
 
 function findTopLevelStatementNode(path: ASTPath<ASTNode>): ASTNode | null {

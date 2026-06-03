@@ -21,6 +21,7 @@ export function convertStyledKeyframes(args: {
   duplicateNames?: Map<string, string>;
   shouldKeepModuleKeyframesInPlace?: (args: {
     localName: string;
+    frames: Record<string, Record<string, unknown>>;
     declaratorPath: ASTPath<ASTNode>;
   }) => boolean;
 }): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
@@ -152,6 +153,7 @@ function convertStyledKeyframesImpl(args: {
   duplicateNames?: Map<string, string>;
   shouldKeepModuleKeyframesInPlace?: (args: {
     localName: string;
+    frames: Record<string, Record<string, unknown>>;
     declaratorPath: ASTPath<ASTNode>;
   }) => boolean;
 }): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
@@ -211,6 +213,7 @@ function convertStyledKeyframesImpl(args: {
       isModuleLevelDeclarator(definition.declaratorPath) &&
       !shouldKeepModuleKeyframesInPlace?.({
         localName: definition.localName,
+        frames: definition.frames,
         declaratorPath: definition.declaratorPath,
       })
     ) {
