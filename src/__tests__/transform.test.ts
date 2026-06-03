@@ -12323,6 +12323,85 @@ export const App = (
     const code = result.code ?? "";
     expect(code).toMatch(/\{ OFFSET \} = tokens[\s\S]*const sweep = stylex\.keyframes/);
   });
+
+  it("does not relocate keyframes downward across later initializer dependencies", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const sweep = stylex.keyframes({
+  from: {
+    transform: \`translateX(-\${OFFSET}px)\`,
+  },
+  to: {
+    transform: "translateX(100%)",
+  },
+});
+
+var OFFSET = 40;
+
+const Box = styled.div\`
+  animation-name: \${sweep};
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-downward-init-deps.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const sweep = stylex.keyframes")).toBeLessThan(
+      code.indexOf("var OFFSET = 40"),
+    );
+  });
+
+  it("does not relocate keyframes past indirect reads via destructured closures", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled from "styled-components";
+
+const { readFade } = { readFade: () => fade };
+
+const fade = stylex.keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+});
+
+const cached = readFade();
+
+const Box = styled.div\`
+  padding: 1rem;
+\`;
+
+export const App = (
+  <div>
+    <Box />
+  </div>
+);
+`;
+
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "keyframes-placement-destructure-closure.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    const code = result.code ?? "";
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeLessThan(
+      code.indexOf("const cached = readFade()"),
+    );
+  });
 });
 
 describe("keyframes in css helper", () => {

@@ -1422,12 +1422,13 @@ function collectTopLevelBindingsCapturingKeyframes(
         if (id?.type === "Identifier" && id.name != null && removedStyledDeclNames.has(id.name)) {
           continue;
         }
-        if (
-          id?.type === "Identifier" &&
-          id.name &&
-          declaratorReferencesAnyBinding(declarator, bindingNames)
-        ) {
+        if (!declaratorReferencesAnyBinding(declarator, bindingNames)) {
+          continue;
+        }
+        if (id?.type === "Identifier" && id.name) {
           captures.add(id.name);
+        } else if (id) {
+          collectPatternBindingNames(id, captures);
         }
       }
       continue;
@@ -1463,6 +1464,17 @@ function canSafelyRelocateKeyframesStatement(
       programBody,
       anchorIndex,
       statementIndex,
+    )
+  ) {
+    return false;
+  }
+  if (
+    statementIndex < anchorIndex &&
+    keyframesInitReferencesBindingsDeclaredBetween(
+      variableDecl,
+      programBody,
+      statementIndex + 1,
+      anchorIndex,
     )
   ) {
     return false;
