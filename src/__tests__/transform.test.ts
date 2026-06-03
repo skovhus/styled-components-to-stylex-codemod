@@ -2110,6 +2110,63 @@ export const App = () => <Card>{animation}</Card>;
     expect(code).toMatch(/animationName:\s*fade/);
   });
 
+  it("does not merge generated keyframes aliases before interpolated dependencies", () => {
+    const source = `
+import * as stylex from "@stylexjs/stylex";
+import styled, { keyframes } from "styled-components";
+
+const styles = stylex.create({
+  existing: {
+    color: "red",
+  },
+});
+
+const start = 0;
+const fade = keyframes\`
+  from { opacity: \${start}; }
+  to { opacity: 1; }
+\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+const Preserved = styled.span\`
+  animation: \${fade} 2s linear;
+
+  & a.active {
+    color: tomato;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <div sx={styles.existing}>existing</div>
+    <Card>card</Card>
+    <Preserved>
+      <a className="active">preserved</a>
+    </Preserved>
+  </>
+);
+`;
+
+    const filePath = pathResolve(join(__dirname, "virtual-keyframes-alias-dependency.tsx"));
+    const result = runTransformWithDiagnostics(source, { allowPartialMigration: true }, filePath);
+    const code = result.code ?? "";
+
+    expect(code).toMatch(/const fade = keyframes`/);
+    expect(code).toMatch(/const fadeStylex = stylex\.keyframes/);
+    expect(code).toMatch(/const stylexStyles = stylex\.create/);
+    expect(code.indexOf("const fadeStylex = stylex.keyframes")).toBeGreaterThan(
+      code.indexOf("const start = 0"),
+    );
+    expect(code.indexOf("const stylexStyles = stylex.create")).toBeGreaterThan(
+      code.indexOf("const fadeStylex = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fadeStylex/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

@@ -177,7 +177,13 @@ function convertStyledKeyframesImpl(args: {
     if (preserveNames?.has(definition.localName)) {
       const duplicateName = duplicateNames?.get(definition.localName);
       if (duplicateName) {
-        if (isModuleLevelDeclarator(definition.declaratorPath)) {
+        const shouldInsertAliasInPlace =
+          shouldKeepModuleKeyframesInPlace?.({
+            localName: duplicateName,
+            frames: definition.frames,
+            declaratorPath: definition.declaratorPath,
+          }) ?? false;
+        if (isModuleLevelDeclarator(definition.declaratorPath) && !shouldInsertAliasInPlace) {
           stylexKeyframes.push({
             localName: duplicateName,
             frames: definition.frames,
