@@ -1855,6 +1855,35 @@ export const App = () => (
     expect(code).toMatch(/card:\s*\{/);
   });
 
+  it("keeps converted module keyframes before surviving top-level reads", () => {
+    const source = `
+import styled, { keyframes } from "styled-components";
+
+const fade = keyframes\`
+  from { opacity: 0; }
+  to { opacity: 1; }
+\`;
+
+export const animation = \`\${fade} 1s linear\`;
+
+const Card = styled.div\`
+  animation: \${fade} 1s linear;
+  padding: 8px;
+\`;
+
+export const App = () => <Card>card</Card>;
+`;
+
+    const result = runTransformWithDiagnostics(source);
+    const code = result.code ?? "";
+
+    expect(code.indexOf("const fade = stylex.keyframes")).toBeGreaterThanOrEqual(0);
+    expect(code.indexOf("export const animation")).toBeGreaterThan(
+      code.indexOf("const fade = stylex.keyframes"),
+    );
+    expect(code).toMatch(/animationName:\s*fade/);
+  });
+
   it("emits generated keyframes aliases next to local keyframes declarations", () => {
     const source = `
 import styled, { keyframes } from "styled-components";

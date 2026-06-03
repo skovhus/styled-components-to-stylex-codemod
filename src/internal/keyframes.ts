@@ -19,6 +19,10 @@ export function convertStyledKeyframes(args: {
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
   preserveNames?: Set<string>;
   duplicateNames?: Map<string, string>;
+  shouldKeepModuleKeyframesInPlace?: (args: {
+    localName: string;
+    declaratorPath: ASTPath<ASTNode>;
+  }) => boolean;
 }): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
   return convertStyledKeyframesImpl(args);
 }
@@ -146,9 +150,21 @@ function convertStyledKeyframesImpl(args: {
   objectToAst: (j: JSCodeshift, value: Record<string, unknown>) => ExpressionKind;
   preserveNames?: Set<string>;
   duplicateNames?: Map<string, string>;
+  shouldKeepModuleKeyframesInPlace?: (args: {
+    localName: string;
+    declaratorPath: ASTPath<ASTNode>;
+  }) => boolean;
 }): { keyframesNames: Set<string>; changed: boolean; stylexKeyframes: StylexKeyframesEmission[] } {
-  const { root, j, styledImports, keyframesLocal, objectToAst, preserveNames, duplicateNames } =
-    args;
+  const {
+    root,
+    j,
+    styledImports,
+    keyframesLocal,
+    objectToAst,
+    preserveNames,
+    duplicateNames,
+    shouldKeepModuleKeyframesInPlace,
+  } = args;
 
   const keyframesNames = new Set<string>();
   const stylexKeyframes: StylexKeyframesEmission[] = [];
@@ -191,7 +207,13 @@ function convertStyledKeyframesImpl(args: {
       continue;
     }
 
-    if (isModuleLevelDeclarator(definition.declaratorPath)) {
+    if (
+      isModuleLevelDeclarator(definition.declaratorPath) &&
+      !shouldKeepModuleKeyframesInPlace?.({
+        localName: definition.localName,
+        declaratorPath: definition.declaratorPath,
+      })
+    ) {
       stylexKeyframes.push({
         localName: definition.localName,
         frames: definition.frames,

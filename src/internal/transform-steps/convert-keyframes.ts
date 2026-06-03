@@ -7,7 +7,7 @@ import {
   convertStyledKeyframes,
   GENERATED_STYLEX_KEYFRAMES_ALIAS_COMMENT,
 } from "../keyframes.js";
-import type { ASTNode } from "jscodeshift";
+import type { ASTNode, ASTPath } from "jscodeshift";
 import { CONTINUE, type StepResult } from "../transform-types.js";
 import { TransformContext } from "../transform-context.js";
 import { objectToAst } from "../transform/helpers.js";
@@ -84,6 +84,8 @@ export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
     objectToAst,
     preserveNames: preservedNames,
     duplicateNames,
+    shouldKeepModuleKeyframesInPlace: ({ localName, declaratorPath }) =>
+      hasSurvivingTopLevelReadAfterDeclaration(ctx, localName, declaratorPath),
   });
   if (converted.stylexKeyframes.length > 0) {
     ctx.stylexKeyframes = [...(ctx.stylexKeyframes ?? []), ...converted.stylexKeyframes];
@@ -113,6 +115,126 @@ export function finalizeKeyframesStep(ctx: TransformContext): StepResult {
 
 function collectKeyframesReferencedBySkippedDecls(ctx: TransformContext): Set<string> {
   return collectKeyframesReferencedByDecls(ctx, (decl) => !!decl.skipTransform);
+}
+
+function hasSurvivingTopLevelReadAfterDeclaration(
+  ctx: TransformContext,
+  localName: string,
+  declaratorPath: ASTPath<ASTNode>,
+): boolean {
+  const programBody = ctx.root.get().node.program.body as ASTNode[];
+  const declarationStatement = findTopLevelStatementNode(declaratorPath);
+  const declarationIndex = declarationStatement ? programBody.indexOf(declarationStatement) : -1;
+  if (declarationIndex < 0) {
+    return false;
+  }
+
+  const removedStyledDeclNames = new Set(
+    (ctx.styledDecls ?? []).filter((decl) => !decl.skipTransform).map((decl) => decl.localName),
+  );
+
+  return programBody.some((statement, index) => {
+    if (
+      index <= declarationIndex ||
+      isRemovedStyledDeclarationStatement(statement, removedStyledDeclNames)
+    ) {
+      return false;
+    }
+    return nodeContainsRuntimeIdentifierRead(statement, localName);
+  });
+}
+
+function isRemovedStyledDeclarationStatement(
+  statement: ASTNode,
+  styledDeclNames: Set<string>,
+): boolean {
+  const declaration =
+    statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+  if (declaration?.type !== "VariableDeclaration") {
+    return false;
+  }
+  return declaration.declarations.some((declarator) => {
+    const id = declarator.type === "VariableDeclarator" ? declarator.id : null;
+    return id?.type === "Identifier" && styledDeclNames.has(id.name);
+  });
+}
+
+function findTopLevelStatementNode(path: ASTPath<ASTNode>): ASTNode | null {
+  let current: any = path;
+  while (current?.parentPath) {
+    const parent = current.parentPath;
+    const grandparent = parent.parentPath;
+    if (Array.isArray(parent.value) && grandparent?.value?.type === "Program") {
+      return (current.value ?? current.node) as ASTNode;
+    }
+    current = parent;
+  }
+  return null;
+}
+
+function nodeContainsRuntimeIdentifierRead(
+  node: unknown,
+  localName: string,
+  parent?: { type?: string; key?: unknown; property?: unknown; computed?: boolean; id?: unknown },
+): boolean {
+  if (!node || typeof node !== "object") {
+    return false;
+  }
+  if (Array.isArray(node)) {
+    return node.some((child) => nodeContainsRuntimeIdentifierRead(child, localName, parent));
+  }
+
+  const typed = node as { type?: string; name?: string };
+  if (shouldSkipRuntimeReadTraversal(typed)) {
+    return false;
+  }
+  if (typed.type === "Identifier" && typed.name === localName) {
+    return !isNonRuntimeIdentifierRead(node, parent);
+  }
+
+  for (const key of Object.keys(node as Record<string, unknown>)) {
+    if (key === "loc" || key === "comments" || key === "leadingComments") {
+      continue;
+    }
+    if (
+      nodeContainsRuntimeIdentifierRead((node as Record<string, unknown>)[key], localName, typed)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function shouldSkipRuntimeReadTraversal(node: { type?: string }): boolean {
+  return (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression" ||
+    node.type === "ClassDeclaration" ||
+    node.type === "ClassExpression" ||
+    node.type === "ImportDeclaration" ||
+    node.type === "ImportSpecifier" ||
+    node.type === "ImportDefaultSpecifier" ||
+    node.type === "ImportNamespaceSpecifier" ||
+    !!node.type?.startsWith("TS")
+  );
+}
+
+function isNonRuntimeIdentifierRead(
+  node: unknown,
+  parent:
+    | { type?: string; key?: unknown; property?: unknown; computed?: boolean; id?: unknown }
+    | undefined,
+): boolean {
+  return (
+    (parent?.type === "VariableDeclarator" && parent.id === node) ||
+    ((parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+      parent.key === node &&
+      !parent.computed) ||
+    ((parent?.type === "MemberExpression" || parent?.type === "OptionalMemberExpression") &&
+      parent.property === node &&
+      !parent.computed)
+  );
 }
 
 function buildDuplicateKeyframesNames(
