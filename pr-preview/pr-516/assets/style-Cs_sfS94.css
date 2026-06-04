@@ -1376,6 +1376,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   margin-block: 16px;
 }
 
+.xg9jes1:not(#\#):not(#\#) {
+  margin-block: 4px;
+}
+
 .x1jp4ehj:not(#\#):not(#\#) {
   margin-block: 8px;
 }
