@@ -5467,6 +5467,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   min-height: 80px;
 }
 
+.xgt5374:not(#\#):not(#\#):not(#\#):not(#\#) {
+  min-height: 58px;
+}
+
 .xeuugli:not(#\#):not(#\#):not(#\#):not(#\#) {
   min-width: 0;
 }
