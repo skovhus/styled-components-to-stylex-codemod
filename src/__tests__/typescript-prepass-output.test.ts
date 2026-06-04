@@ -891,8 +891,8 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
-  it("bails when an sx-aware wrapped component only accepts a narrow property surface", () => {
-    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-allowlist-bail-"));
+  it("warns when an sx-aware wrapped component only accepts a narrow property surface", () => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "typescript-prepass-sx-allowlist-warn-"));
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
     const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
     const source = [
@@ -945,9 +945,10 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toBeNull();
+      expect(after.code).toContain("sx={styles.compactTrigger}");
       expect(after.warnings).toContainEqual(
         expect.objectContaining({
+          severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",
           context: expect.objectContaining({
             property: "borderWidth",
@@ -959,9 +960,9 @@ describe("TypeScript prepass output refinement", () => {
     }
   });
 
-  it("bails when TypeScript metadata resolves an empty sx allowlist", () => {
+  it("warns when TypeScript metadata resolves an empty sx allowlist", () => {
     const fixtureDir = mkdtempSync(
-      path.join(tmpdir(), "typescript-prepass-sx-empty-allowlist-bail-"),
+      path.join(tmpdir(), "typescript-prepass-sx-empty-allowlist-warn-"),
     );
     const sourcePath = path.join(fixtureDir, "Wrapper.tsx");
     const colorTriggerPath = path.join(fixtureDir, "ColorTrigger.tsx");
@@ -1007,9 +1008,10 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toBeNull();
+      expect(after.code).toContain("sx={styles.compactTrigger}");
       expect(after.warnings).toContainEqual(
         expect.objectContaining({
+          severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",
           context: expect.objectContaining({
             property: "backgroundColor",
@@ -1045,9 +1047,10 @@ describe("TypeScript prepass output refinement", () => {
       },
     });
 
-    expect(after.code).toBeNull();
+    expect(after.code).toContain("sx={styles.compactTrigger}");
     expect(after.warnings).toContainEqual(
       expect.objectContaining({
+        severity: "warning",
         type: "Wrapped component sx prop does not accept generated StyleX property",
         context: expect.objectContaining({
           property: "backgroundColor",
@@ -1112,9 +1115,10 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toBeNull();
+      expect(after.code).toContain("sx={styles.compactTrigger}");
       expect(after.warnings).toContainEqual(
         expect.objectContaining({
+          severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",
           context: expect.objectContaining({
             property: "backgroundColor",
