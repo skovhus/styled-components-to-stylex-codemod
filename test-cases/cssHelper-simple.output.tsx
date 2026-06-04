@@ -44,12 +44,26 @@ export function BranchedContainer(props: BranchedContainerProps) {
   );
 }
 
+function RuntimeOffset({ children }: { children?: React.ReactNode }) {
+  return (
+    <div
+      sx={[
+        styles.runtimeOffset,
+        Browser.isTouchDevice ? styles.runtimeOffsetBrowserIsTouchDevice : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div>
     <Container size={16} padding={4}>
       Hello World
     </Container>
     <BranchedContainer size={16}>Branched</BranchedContainer>
+    <RuntimeOffset>Runtime touch offset</RuntimeOffset>
   </div>
 );
 
@@ -73,4 +87,13 @@ const styles = stylex.create({
     fontSize: `${size - 3}px`,
     lineHeight: `${size}px`,
   }),
+  runtimeOffset: {
+    position: "relative",
+    top: "1px",
+    padding: 4,
+    backgroundColor: "peachpuff",
+  },
+  runtimeOffsetBrowserIsTouchDevice: {
+    top: "5px",
+  },
 });

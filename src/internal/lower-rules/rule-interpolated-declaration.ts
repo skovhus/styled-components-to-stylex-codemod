@@ -1538,6 +1538,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       continue;
     }
     if (
+      tryHandleRuntimeConditionalStaticBranches(ctx, {
+        d,
+        media,
+        pseudos,
+        pseudoElement,
+        attrTarget,
+        resolvedSelectorMedia,
+      })
+    ) {
+      continue;
+    }
+    if (
       tryHandleInterpolatedStringValue({
         j,
         decl,
@@ -3669,6 +3681,118 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   }
   decl.needsWrapperComponent = true;
   return true;
+}
+
+function tryHandleRuntimeConditionalStaticBranches(
+  ctx: Pick<
+    DeclProcessingState,
+    "decl" | "styleObj" | "variantBuckets" | "variantStyleKeys" | "state"
+  >,
+  args: {
+    d: CssDeclarationIR;
+    media: string | undefined;
+    pseudos: string[] | null;
+    pseudoElement: string | null;
+    attrTarget: Record<string, unknown> | null;
+    resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
+  },
+): boolean {
+  const { decl, styleObj, variantBuckets, variantStyleKeys, state } = ctx;
+  const { j } = state;
+  const { d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
+  if (
+    !d.property ||
+    d.value.kind !== "interpolated" ||
+    media ||
+    attrTarget ||
+    pseudos?.length ||
+    pseudoElement ||
+    resolvedSelectorMedia
+  ) {
+    return false;
+  }
+
+  const parts = d.value.parts ?? [];
+  const slotParts = parts.filter(
+    (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
+  );
+  if (slotParts.length !== 1) {
+    return false;
+  }
+
+  const expr = decl.templateExpressions[slotParts[0]!.slotId] as
+    | {
+        type?: string;
+        test?: ExpressionKind;
+        consequent?: ExpressionKind;
+        alternate?: ExpressionKind;
+      }
+    | undefined;
+  if (
+    !expr ||
+    expr.type !== "ConditionalExpression" ||
+    !expr.test ||
+    !expr.consequent ||
+    !expr.alternate ||
+    !isImportedMemberCondition(expr.test, state.importMap)
+  ) {
+    return false;
+  }
+
+  const consequentValue = literalToStaticValue(expr.consequent);
+  const alternateValue = literalToStaticValue(expr.alternate);
+  if (
+    consequentValue === null ||
+    alternateValue === null ||
+    typeof consequentValue === "boolean" ||
+    typeof alternateValue === "boolean"
+  ) {
+    return false;
+  }
+
+  const when = expressionToSource(j, expr.test);
+  if (!when) {
+    return false;
+  }
+
+  const buildBranchValue = (slotValue: string | number): string => {
+    let value = "";
+    for (const part of parts) {
+      value += part.kind === "slot" ? String(slotValue) : (part.value ?? "");
+    }
+    return d.important ? `${value} !important` : value;
+  };
+
+  const consequentCssValue = buildBranchValue(consequentValue);
+  const alternateCssValue = buildBranchValue(alternateValue);
+  for (const out of cssDeclarationToStylexDeclarations(d)) {
+    if (!out.prop) {
+      continue;
+    }
+    styleObj[out.prop] = alternateCssValue;
+    const bucket = { ...variantBuckets.get(when) };
+    bucket[out.prop] = consequentCssValue;
+    variantBuckets.set(when, bucket);
+    variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
+  }
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+function isImportedMemberCondition(
+  expr: ExpressionKind,
+  importMap: ReadonlyMap<string, unknown>,
+): boolean {
+  const info = extractRootAndPath(expr);
+  return !!info && info.path.length > 0 && importMap.has(info.rootName);
+}
+
+function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {
+  try {
+    return j(expr).toSource();
+  } catch {
+    return null;
+  }
 }
 
 function findLocalCustomPropertyFallback(cssName: string, decl: StyledDecl): string | null {
