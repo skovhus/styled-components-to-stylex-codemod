@@ -1559,6 +1559,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     ) {
       continue;
     }
+    if (isImportedShorthandUnitValue(d, decl, importMap)) {
+      bailUnsupportedLocal(decl, "Unsupported interpolation: call expression");
+      continue;
+    }
     if (
       tryHandleInterpolatedStringValue({
         j,
@@ -3849,7 +3853,7 @@ function hasLaterDeclarationOverlap(
     return false;
   }
   for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
-    if (!isEquivalentBaseRule(rule, laterRule)) {
+    if (rule.selector !== laterRule.selector) {
       continue;
     }
     if (declarationsOverlap(laterRule.declarations, stylexProps)) {
@@ -3874,14 +3878,6 @@ function declarationsOverlap(
     }
   }
   return false;
-}
-
-function isEquivalentBaseRule(left: CssRuleIR, right: CssRuleIR): boolean {
-  return (
-    left.selector === right.selector &&
-    left.atRuleStack.length === right.atRuleStack.length &&
-    left.atRuleStack.every((atRule, index) => atRule === right.atRuleStack[index])
-  );
 }
 
 function stylexPropsOverlap(left: string, right: string): boolean {
@@ -3951,6 +3947,28 @@ function isImportedRuntimeCondition(
     return isImportedRuntimeCondition(expr.argument as ExpressionKind, importMap);
   }
   return false;
+}
+
+function isImportedShorthandUnitValue(
+  d: CssDeclarationIR,
+  decl: StyledDecl,
+  importMap: ReadonlyMap<string, unknown>,
+): boolean {
+  if (!d.property || !isCssShorthandProperty(d.property)) {
+    return false;
+  }
+  const staticParts = getSingleSlotStaticParts(d, decl);
+  if (!staticParts || !/^[a-zA-Z%]/.test(staticParts.suffix)) {
+    return false;
+  }
+  const slotPart =
+    d.value.kind === "interpolated" ? d.value.parts.find((part) => part.kind === "slot") : null;
+  const expr =
+    slotPart && slotPart.kind === "slot"
+      ? (decl.templateExpressions[slotPart.slotId] as ExpressionKind | undefined)
+      : undefined;
+  const info = extractRootAndPath(expr);
+  return !!info && importMap.has(info.rootName);
 }
 
 function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {
