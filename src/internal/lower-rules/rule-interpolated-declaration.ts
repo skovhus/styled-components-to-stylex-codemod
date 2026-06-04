@@ -3713,6 +3713,7 @@ function tryHandleRuntimeConditionalStaticBranches(
   if (
     !d.property ||
     d.value.kind !== "interpolated" ||
+    rule.selector.trim() !== "&" ||
     media ||
     attrTarget ||
     pseudos?.length ||
