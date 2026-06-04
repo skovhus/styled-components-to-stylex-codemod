@@ -1544,6 +1544,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
     if (
       tryHandleRuntimeConditionalStaticBranches(ctx, {
+        rule,
         d,
         media,
         pseudos,
@@ -3691,6 +3692,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
 function tryHandleRuntimeConditionalStaticBranches(
   ctx: Pick<DeclProcessingState, "decl" | "state" | "applyVariant" | "getBaseStyleTarget">,
   args: {
+    rule: CssRuleIR;
     d: CssDeclarationIR;
     media: string | undefined;
     pseudos: string[] | null;
@@ -3701,7 +3703,7 @@ function tryHandleRuntimeConditionalStaticBranches(
 ): boolean {
   const { decl, state, applyVariant, getBaseStyleTarget } = ctx;
   const { j } = state;
-  const { d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
+  const { rule, d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
   if (
     !d.property ||
     d.value.kind !== "interpolated" ||
@@ -3762,13 +3764,17 @@ function tryHandleRuntimeConditionalStaticBranches(
     for (const part of parts) {
       value += part.kind === "slot" ? String(slotValue) : (part.value ?? "");
     }
-    return d.important ? `${value} !important` : value;
+    return value;
   };
 
   const consequentStyle = buildStaticBranchStyle(d, buildBranchValue(consequentValue));
   const alternateStyle = buildStaticBranchStyle(d, buildBranchValue(alternateValue));
   if (!consequentStyle || !alternateStyle) {
     return false;
+  }
+  if (hasLaterDeclarationOverlap(rule, d, new Set(Object.keys(consequentStyle)))) {
+    state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
   }
 
   const target = getBaseStyleTarget();
@@ -3805,6 +3811,25 @@ function buildStaticBranchStyle(
     style[out.prop] = value;
   }
   return Object.keys(style).length ? style : null;
+}
+
+function hasLaterDeclarationOverlap(
+  rule: CssRuleIR,
+  currentDecl: CssDeclarationIR,
+  stylexProps: ReadonlySet<string>,
+): boolean {
+  const currentIndex = rule.declarations.indexOf(currentDecl);
+  if (currentIndex === -1) {
+    return false;
+  }
+  for (const laterDecl of rule.declarations.slice(currentIndex + 1)) {
+    for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
+      if (stylexProps.has(out.prop)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function isImportedRuntimeCondition(
