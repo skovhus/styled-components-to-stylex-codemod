@@ -3934,7 +3934,12 @@ function isImportedRuntimeCondition(
   importMap: ReadonlyMap<string, unknown>,
 ): boolean {
   const info = extractRootAndPath(expr);
-  if (info && info.path.length > 0 && importMap.has(info.rootName)) {
+  if (
+    info &&
+    info.path.length > 0 &&
+    importMap.has(info.rootName) &&
+    isRuntimeConditionImportRoot(info.rootName)
+  ) {
     return true;
   }
   if (expr.type === "LogicalExpression" && expr.operator === "&&") {
@@ -3947,6 +3952,10 @@ function isImportedRuntimeCondition(
     return isImportedRuntimeCondition(expr.argument as ExpressionKind, importMap);
   }
   return false;
+}
+
+function isRuntimeConditionImportRoot(rootName: string): boolean {
+  return /^[A-Z]/.test(rootName);
 }
 
 function isImportedShorthandUnitValue(
