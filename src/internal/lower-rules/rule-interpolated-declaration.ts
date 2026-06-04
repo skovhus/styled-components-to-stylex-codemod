@@ -3866,7 +3866,20 @@ function relatedDirectionalProps(prop: string): Set<string> {
       }
     }
   }
+  addRelatedBorderLonghands(prop, related);
   return related;
+}
+
+function addRelatedBorderLonghands(prop: string, related: Set<string>): void {
+  const borderMatch = prop.match(/^border(?:(Top|Right|Bottom|Left))?(Width|Style|Color)$/);
+  const kind = borderMatch?.[2];
+  if (!kind) {
+    return;
+  }
+  related.add(`border${kind}`);
+  for (const side of ["Top", "Right", "Bottom", "Left"]) {
+    related.add(`border${side}${kind}`);
+  }
 }
 
 function isImportedRuntimeCondition(
