@@ -5028,7 +5028,7 @@ function validateSxRestrictedWrappedComponentStyles(
           continue;
         }
         ctx.warnings.push({
-          severity: "error",
+          severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",
           loc: decl.loc,
           context: {
@@ -5038,7 +5038,7 @@ function validateSxRestrictedWrappedComponentStyles(
             property: disallowedProperty,
           },
         });
-        return false;
+        continue;
       }
       ctx.warnings.push({
         severity: "error",
