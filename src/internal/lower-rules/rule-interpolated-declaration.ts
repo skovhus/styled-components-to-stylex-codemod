@@ -3734,7 +3734,7 @@ function tryHandleRuntimeConditionalStaticBranches(
     !expr.test ||
     !expr.consequent ||
     !expr.alternate ||
-    !isImportedMemberCondition(expr.test, state.importMap)
+    !isImportedRuntimeCondition(expr.test, state.importMap)
   ) {
     return false;
   }
@@ -3779,12 +3779,27 @@ function tryHandleRuntimeConditionalStaticBranches(
   return true;
 }
 
-function isImportedMemberCondition(
+function isImportedRuntimeCondition(
   expr: ExpressionKind,
   importMap: ReadonlyMap<string, unknown>,
 ): boolean {
   const info = extractRootAndPath(expr);
-  return !!info && info.path.length > 0 && importMap.has(info.rootName);
+  if (info && info.path.length > 0 && importMap.has(info.rootName)) {
+    return true;
+  }
+  if (expr.type === "LogicalExpression" && (expr.operator === "&&" || expr.operator === "||")) {
+    return (
+      isImportedRuntimeCondition(expr.left as ExpressionKind, importMap) &&
+      isImportedRuntimeCondition(expr.right as ExpressionKind, importMap)
+    );
+  }
+  if (expr.type === "UnaryExpression" && expr.operator === "!") {
+    return isImportedRuntimeCondition(expr.argument as ExpressionKind, importMap);
+  }
+  if (expr.type === "ParenthesizedExpression") {
+    return isImportedRuntimeCondition(expr.expression as ExpressionKind, importMap);
+  }
+  return false;
 }
 
 function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {

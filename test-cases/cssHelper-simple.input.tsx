@@ -34,6 +34,7 @@ export const BranchedContainer = styled.div<{ size: number }>`
 const RuntimeOffset = styled.div`
   position: relative;
   top: ${Browser.isTouchDevice ? 5 : 1}px;
+  left: ${Browser.isTouchDevice && !Browser.isSafari ? -5 : -40}px;
   padding: 4px;
   background-color: peachpuff;
 `;

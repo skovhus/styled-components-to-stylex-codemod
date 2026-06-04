@@ -50,6 +50,9 @@ function RuntimeOffset({ children }: { children?: React.ReactNode }) {
       sx={[
         styles.runtimeOffset,
         Browser.isTouchDevice ? styles.runtimeOffsetBrowserIsTouchDevice : undefined,
+        Browser.isTouchDevice && !Browser.isSafari
+          ? styles.runtimeOffsetBrowserIsTouchDeviceNotBrowserIsSafari
+          : undefined,
       ]}
     >
       {children}
@@ -90,10 +93,14 @@ const styles = stylex.create({
   runtimeOffset: {
     position: "relative",
     top: "1px",
+    left: "-40px",
     padding: 4,
     backgroundColor: "peachpuff",
   },
   runtimeOffsetBrowserIsTouchDevice: {
     top: "5px",
+  },
+  runtimeOffsetBrowserIsTouchDeviceNotBrowserIsSafari: {
+    left: "-5px",
   },
 });
