@@ -92,15 +92,19 @@ const styles = stylex.create({
   }),
   runtimeOffset: {
     position: "relative",
-    top: "1px",
-    left: "-40px",
+    top: 1,
+    left: -40,
+    marginBlock: 8,
+    marginInline: 12,
     padding: 4,
     backgroundColor: "peachpuff",
   },
   runtimeOffsetBrowserIsTouchDevice: {
-    top: "5px",
+    top: 5,
+    marginBlock: 4,
+    marginInline: 12,
   },
   runtimeOffsetBrowserIsTouchDeviceNotBrowserIsSafari: {
-    left: "-5px",
+    left: -5,
   },
 });

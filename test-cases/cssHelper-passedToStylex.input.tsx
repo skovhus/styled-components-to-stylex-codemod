@@ -1,6 +1,6 @@
 import * as React from "react";
 import styled from "styled-components";
-import { scrollFadeMaskStyles, flexCenter } from "./lib/helpers";
+import { Browser, scrollFadeMaskStyles, flexCenter } from "./lib/helpers";
 
 // Pattern 1: css helper used alongside regular CSS properties
 const Container = styled.div`
@@ -33,6 +33,15 @@ const OverrideDisplay = styled.div`
   display: block;
 `;
 
+// Pattern 5: Runtime unit branch after a resolved StyleX helper must stay after
+// the helper in sx ordering so the false branch preserves CSS cascade order.
+const RuntimeAfterHelper = styled.div`
+  position: relative;
+  ${flexCenter()}
+  top: ${Browser.isTouchDevice ? 5 : 1}px;
+  background-color: lavender;
+`;
+
 export const App = () => (
   <>
     <Container>
@@ -48,5 +57,8 @@ export const App = () => (
       <span style={{ background: "coral", padding: 4 }}>A</span>
       <span style={{ background: "gold", padding: 4 }}>B</span>
     </OverrideDisplay>
+    <RuntimeAfterHelper>
+      <span style={{ background: "white", padding: 4 }}>Runtime after helper</span>
+    </RuntimeAfterHelper>
   </>
 );

@@ -98,7 +98,12 @@ import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
-import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  normalizeCssContentValue,
+  toStyleKey,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { isMemberExpression, mapAst } from "./utils.js";
 import {
@@ -3684,7 +3689,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
 }
 
 function tryHandleRuntimeConditionalStaticBranches(
-  ctx: Pick<DeclProcessingState, "decl" | "styleObj" | "state" | "applyVariant">,
+  ctx: Pick<DeclProcessingState, "decl" | "state" | "applyVariant" | "getBaseStyleTarget">,
   args: {
     d: CssDeclarationIR;
     media: string | undefined;
@@ -3694,7 +3699,7 @@ function tryHandleRuntimeConditionalStaticBranches(
     resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
   },
 ): boolean {
-  const { decl, styleObj, state, applyVariant } = ctx;
+  const { decl, state, applyVariant, getBaseStyleTarget } = ctx;
   const { j } = state;
   const { d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
   if (
@@ -3760,17 +3765,46 @@ function tryHandleRuntimeConditionalStaticBranches(
     return d.important ? `${value} !important` : value;
   };
 
-  const consequentCssValue = buildBranchValue(consequentValue);
-  const alternateCssValue = buildBranchValue(alternateValue);
-  for (const out of cssDeclarationToStylexDeclarations(d)) {
-    if (!out.prop) {
-      continue;
-    }
-    styleObj[out.prop] = alternateCssValue;
-    applyVariant({ when }, { [out.prop]: consequentCssValue });
+  const consequentStyle = buildStaticBranchStyle(d, buildBranchValue(consequentValue));
+  const alternateStyle = buildStaticBranchStyle(d, buildBranchValue(alternateValue));
+  if (!consequentStyle || !alternateStyle) {
+    return false;
   }
+
+  const target = getBaseStyleTarget();
+  for (const [prop, value] of Object.entries(alternateStyle)) {
+    target[prop] = value;
+  }
+  applyVariant({ when }, consequentStyle);
   decl.needsWrapperComponent = true;
   return true;
+}
+
+function buildStaticBranchStyle(
+  d: CssDeclarationIR,
+  rawValue: string,
+): Record<string, unknown> | null {
+  if (d.property === "background" && isUnsupportedBackgroundShorthandValue(rawValue)) {
+    return null;
+  }
+
+  const staticDecl: CssDeclarationIR = {
+    ...d,
+    value: { kind: "static", value: rawValue },
+    valueRaw: rawValue,
+  };
+  const style: Record<string, unknown> = {};
+  for (const out of cssDeclarationToStylexDeclarations(staticDecl)) {
+    if (out.value.kind !== "static") {
+      return null;
+    }
+    let value = cssValueToJs(out.value, d.important, out.prop);
+    if (out.prop === "content" && typeof value === "string") {
+      value = normalizeCssContentValue(value);
+    }
+    style[out.prop] = value;
+  }
+  return Object.keys(style).length ? style : null;
 }
 
 function isImportedRuntimeCondition(

@@ -35,6 +35,7 @@ const RuntimeOffset = styled.div`
   position: relative;
   top: ${Browser.isTouchDevice ? 5 : 1}px;
   left: ${Browser.isTouchDevice && !Browser.isSafari ? -5 : -40}px;
+  margin: ${Browser.isTouchDevice ? 4 : 8}px 12px;
   padding: 4px;
   background-color: peachpuff;
 `;
