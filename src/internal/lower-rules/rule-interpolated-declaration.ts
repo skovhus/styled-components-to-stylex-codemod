@@ -3779,6 +3779,10 @@ function tryHandleRuntimeConditionalStaticBranches(
   if (!consequentStyle || !alternateStyle) {
     return false;
   }
+  if (!sameStyleProps(consequentStyle, alternateStyle)) {
+    state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
+  }
   if (hasLaterDeclarationOverlap(rule, allRules, d, new Set(Object.keys(consequentStyle)))) {
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
     return true;
@@ -3818,6 +3822,12 @@ function buildStaticBranchStyle(
     style[out.prop] = value;
   }
   return Object.keys(style).length ? style : null;
+}
+
+function sameStyleProps(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = new Set(Object.keys(right));
+  return leftKeys.length === rightKeys.size && leftKeys.every((key) => rightKeys.has(key));
 }
 
 function hasLaterDeclarationOverlap(
