@@ -1609,6 +1609,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
     processRuleDeclarations({
       ctx,
       rule,
+      allRules: decl.rules,
       media,
       pseudos,
       pseudoElement: pseudoElement ?? (pseudoElementsList ? (pseudoElementsList[0] ?? null) : null),

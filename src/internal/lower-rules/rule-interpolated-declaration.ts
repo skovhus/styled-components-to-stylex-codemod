@@ -123,6 +123,7 @@ type ResolveImportedValueExpr = (expr: any, allowCssCalc?: boolean) => ImportedV
 type InterpolatedDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
+  allRules: readonly CssRuleIR[];
   d: CssDeclarationIR;
   media: string | undefined;
   pseudos: string[] | null;
@@ -135,6 +136,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const {
     ctx,
     rule,
+    allRules,
     d,
     media,
     pseudos,
@@ -1546,6 +1548,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (
       tryHandleRuntimeConditionalStaticBranches(ctx, {
         rule,
+        allRules,
         d,
         media,
         pseudos,
@@ -3694,6 +3697,7 @@ function tryHandleRuntimeConditionalStaticBranches(
   ctx: Pick<DeclProcessingState, "decl" | "state" | "applyVariant" | "getBaseStyleTarget">,
   args: {
     rule: CssRuleIR;
+    allRules: readonly CssRuleIR[];
     d: CssDeclarationIR;
     media: string | undefined;
     pseudos: string[] | null;
@@ -3704,7 +3708,8 @@ function tryHandleRuntimeConditionalStaticBranches(
 ): boolean {
   const { decl, state, applyVariant, getBaseStyleTarget } = ctx;
   const { j } = state;
-  const { rule, d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
+  const { rule, allRules, d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } =
+    args;
   if (
     !d.property ||
     d.value.kind !== "interpolated" ||
@@ -3773,7 +3778,7 @@ function tryHandleRuntimeConditionalStaticBranches(
   if (!consequentStyle || !alternateStyle) {
     return false;
   }
-  if (hasLaterDeclarationOverlap(rule, d, new Set(Object.keys(consequentStyle)))) {
+  if (hasLaterDeclarationOverlap(rule, allRules, d, new Set(Object.keys(consequentStyle)))) {
     state.bailUnsupported(decl, "Unsupported interpolation: call expression");
     return true;
   }
@@ -3816,6 +3821,7 @@ function buildStaticBranchStyle(
 
 function hasLaterDeclarationOverlap(
   rule: CssRuleIR,
+  allRules: readonly CssRuleIR[],
   currentDecl: CssDeclarationIR,
   stylexProps: ReadonlySet<string>,
 ): boolean {
@@ -3823,7 +3829,30 @@ function hasLaterDeclarationOverlap(
   if (currentIndex === -1) {
     return false;
   }
-  for (const laterDecl of rule.declarations.slice(currentIndex + 1)) {
+  if (declarationsOverlap(rule.declarations.slice(currentIndex + 1), stylexProps)) {
+    return true;
+  }
+
+  const currentRuleIndex = allRules.indexOf(rule);
+  if (currentRuleIndex === -1) {
+    return false;
+  }
+  for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
+    if (!isEquivalentBaseRule(rule, laterRule)) {
+      continue;
+    }
+    if (declarationsOverlap(laterRule.declarations, stylexProps)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declarationsOverlap(
+  declarations: readonly CssDeclarationIR[],
+  stylexProps: ReadonlySet<string>,
+): boolean {
+  for (const laterDecl of declarations) {
     if (!laterDecl.property) {
       return true;
     }
@@ -3834,6 +3863,14 @@ function hasLaterDeclarationOverlap(
     }
   }
   return false;
+}
+
+function isEquivalentBaseRule(left: CssRuleIR, right: CssRuleIR): boolean {
+  return (
+    left.selector === right.selector &&
+    left.atRuleStack.length === right.atRuleStack.length &&
+    left.atRuleStack.every((atRule, index) => atRule === right.atRuleStack[index])
+  );
 }
 
 function stylexPropsOverlap(left: string, right: string): boolean {

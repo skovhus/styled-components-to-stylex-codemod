@@ -20,6 +20,7 @@ type CommentSource = { leading?: string; leadingLine?: string; trailingLine?: st
 type RuleDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
+  allRules: readonly CssRuleIR[];
   media: string | undefined;
   pseudos: string[] | null;
   pseudoElement: string | null;
@@ -37,6 +38,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
   const {
     ctx,
     rule,
+    allRules,
     media,
     pseudos,
     pseudoElement,
@@ -67,6 +69,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
       handleInterpolatedDeclaration({
         ctx,
         rule,
+        allRules,
         d,
         media,
         pseudos,
