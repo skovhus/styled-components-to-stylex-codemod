@@ -3824,6 +3824,9 @@ function hasLaterDeclarationOverlap(
     return false;
   }
   for (const laterDecl of rule.declarations.slice(currentIndex + 1)) {
+    if (!laterDecl.property) {
+      return true;
+    }
     for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
       if ([...stylexProps].some((prop) => stylexPropsOverlap(prop, out.prop))) {
         return true;
