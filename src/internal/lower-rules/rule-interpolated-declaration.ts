@@ -104,6 +104,7 @@ import {
   toStyleKey,
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
+import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { isMemberExpression, mapAst } from "./utils.js";
 import {
@@ -3824,12 +3825,48 @@ function hasLaterDeclarationOverlap(
   }
   for (const laterDecl of rule.declarations.slice(currentIndex + 1)) {
     for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
-      if (stylexProps.has(out.prop)) {
+      if ([...stylexProps].some((prop) => stylexPropsOverlap(prop, out.prop))) {
         return true;
       }
     }
   }
   return false;
+}
+
+function stylexPropsOverlap(left: string, right: string): boolean {
+  const leftRelated = relatedDirectionalProps(left);
+  const rightRelated = relatedDirectionalProps(right);
+  return [...leftRelated].some((prop) => rightRelated.has(prop));
+}
+
+function relatedDirectionalProps(prop: string): Set<string> {
+  const related = new Set([prop]);
+  const addDirectionalGroup = (shorthand: string): void => {
+    const group = SHORTHAND_LONGHANDS[shorthand];
+    if (!group) {
+      return;
+    }
+    related.add(shorthand);
+    for (const item of [...group.logical, ...group.physical]) {
+      related.add(item);
+    }
+  };
+
+  const directGroup = SHORTHAND_LONGHANDS[prop];
+  if (directGroup) {
+    addDirectionalGroup(prop);
+  }
+  for (const [logical, physical] of Object.entries(LOGICAL_TO_PHYSICAL)) {
+    if (prop === logical || physical.includes(prop)) {
+      const shorthand = Object.entries(SHORTHAND_LONGHANDS).find(([, group]) =>
+        group.logical.includes(logical),
+      )?.[0];
+      if (shorthand) {
+        addDirectionalGroup(shorthand);
+      }
+    }
+  }
+  return related;
 }
 
 function isImportedRuntimeCondition(
