@@ -1,4 +1,0 @@
-import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{l as t}from"./index-NN6dT_9q.js";import{t as n}from"./inline-base-flex-B62Qh_4I.js";var r=e(),i=t(n)`
-  padding: 8px;
-  background-color: #f0f5ff;
-`;function a(){return(0,r.jsxs)(`div`,{style:{display:`grid`,gap:8},children:[(0,r.jsxs)(i,{justify:`space-between`,children:[(0,r.jsx)(`span`,{children:`Left`}),(0,r.jsx)(`span`,{children:`Right`})]}),(0,r.jsx)(i,{justify:`flex-end`,children:(0,r.jsx)(`span`,{children:`End`})}),(0,r.jsx)(i,{align:`flex-start`,justify:`center`,children:(0,r.jsx)(`span`,{children:`Top center`})})]})}export{a as App,i as SpacedRow};
