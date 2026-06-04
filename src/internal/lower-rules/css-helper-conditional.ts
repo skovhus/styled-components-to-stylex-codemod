@@ -1113,8 +1113,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         for (const dyn of dynamicProps) {
           const fnKey = styleKeyWithSuffix(decl.styleKey, dyn.stylexProp);
           const isGuardedBySameProp =
+            !!testInfo.propName &&
             normalizeTransientPropName(dyn.jsxProp) ===
-            normalizeTransientPropName(testInfo.propName);
+              normalizeTransientPropName(testInfo.propName);
           const conditionWhen = isGuardedBySameProp ? undefined : testInfo.when;
           const condition = isGuardedBySameProp ? ("truthy" as const) : undefined;
           if (!styleFnDecls.has(fnKey)) {
@@ -1143,7 +1144,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           }
           ensureShouldForwardPropDrop(decl, dyn.jsxProp);
         }
-        for (const propName of testInfo.allPropNames ?? [testInfo.propName]) {
+        for (const propName of testInfo.allPropNames ??
+          (testInfo.propName ? [testInfo.propName] : [])) {
           if (propName) {
             ensureShouldForwardPropDrop(decl, propName);
           }
@@ -1166,7 +1168,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         importedStylexIdentifiers,
       );
 
-      for (const propName of testInfo.allPropNames ?? [testInfo.propName]) {
+      for (const propName of testInfo.allPropNames ??
+        (testInfo.propName ? [testInfo.propName] : [])) {
         if (propName) {
           propNames.add(normalizeTransientPropName(propName));
         }
@@ -1176,7 +1179,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         [styleFnDecls as Map<string, unknown>, extraStyleObjects, resolvedStyleObjects],
         styleKeyWithSuffix(
           decl.styleKey,
-          normalizeTransientPropName(testInfo.propName) || "dynamic",
+          testInfo.propName ? normalizeTransientPropName(testInfo.propName) : "dynamic",
         ),
       );
       const params = [j.identifier("props")];

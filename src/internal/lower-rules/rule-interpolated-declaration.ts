@@ -3684,10 +3684,7 @@ function tryHandleLocalCustomPropertyDefinition(args: {
 }
 
 function tryHandleRuntimeConditionalStaticBranches(
-  ctx: Pick<
-    DeclProcessingState,
-    "decl" | "styleObj" | "variantBuckets" | "variantStyleKeys" | "state"
-  >,
+  ctx: Pick<DeclProcessingState, "decl" | "styleObj" | "state" | "applyVariant">,
   args: {
     d: CssDeclarationIR;
     media: string | undefined;
@@ -3697,7 +3694,7 @@ function tryHandleRuntimeConditionalStaticBranches(
     resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
   },
 ): boolean {
-  const { decl, styleObj, variantBuckets, variantStyleKeys, state } = ctx;
+  const { decl, styleObj, state, applyVariant } = ctx;
   const { j } = state;
   const { d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } = args;
   if (
@@ -3770,10 +3767,7 @@ function tryHandleRuntimeConditionalStaticBranches(
       continue;
     }
     styleObj[out.prop] = alternateCssValue;
-    const bucket = { ...variantBuckets.get(when) };
-    bucket[out.prop] = consequentCssValue;
-    variantBuckets.set(when, bucket);
-    variantStyleKeys[when] ??= styleKeyWithSuffix(decl.styleKey, when);
+    applyVariant({ when }, { [out.prop]: consequentCssValue });
   }
   decl.needsWrapperComponent = true;
   return true;
@@ -3787,7 +3781,7 @@ function isImportedRuntimeCondition(
   if (info && info.path.length > 0 && importMap.has(info.rootName)) {
     return true;
   }
-  if (expr.type === "LogicalExpression" && (expr.operator === "&&" || expr.operator === "||")) {
+  if (expr.type === "LogicalExpression" && expr.operator === "&&") {
     return (
       isImportedRuntimeCondition(expr.left as ExpressionKind, importMap) &&
       isImportedRuntimeCondition(expr.right as ExpressionKind, importMap)
@@ -3795,9 +3789,6 @@ function isImportedRuntimeCondition(
   }
   if (expr.type === "UnaryExpression" && expr.operator === "!") {
     return isImportedRuntimeCondition(expr.argument as ExpressionKind, importMap);
-  }
-  if (expr.type === "ParenthesizedExpression") {
-    return isImportedRuntimeCondition(expr.expression as ExpressionKind, importMap);
   }
   return false;
 }

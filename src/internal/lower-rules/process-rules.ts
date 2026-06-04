@@ -2693,7 +2693,7 @@ function recoverStandaloneInterpolationsInPseudoBlock(
   }
 
   const testInfo = parseTestInfo(test as ExpressionKind);
-  if (!testInfo) {
+  if (!testInfo?.propName) {
     return null;
   }
 

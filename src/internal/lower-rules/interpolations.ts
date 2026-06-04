@@ -363,7 +363,7 @@ function buildInterpolatedTemplate(args: {
           }
           return resolved.resolved;
         }
-        if (hasAdjacentUnitInParts(parts, partIndex)) {
+        if (hasAdjacentUnitInParts(parts, partIndex) && !hasSingleSlotUnitSuffix(cssValue)) {
           return null;
         }
         if (
