@@ -3398,7 +3398,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           annotateScalarParams(params, scalarProps.paramNames);
         } else if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
           (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-            j.tsStringKeyword(),
+            omitsPxUnit
+              ? j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()])
+              : j.tsStringKeyword(),
           );
         }
         const valueExpr = scalarProps

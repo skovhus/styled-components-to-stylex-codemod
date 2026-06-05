@@ -799,7 +799,7 @@ const styles = stylex.create({
     },
     outlineWidth: {
       default: null,
-      ":focus-visible": 2,
+      ":focus-visible": "2px",
     },
     outlineStyle: {
       default: null,

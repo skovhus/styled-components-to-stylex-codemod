@@ -57,6 +57,7 @@ const STYLEX_STRING_ONLY_CSS_PROPS = new Set([
   "gridColumnStart",
   "gridColumnEnd",
   "outlineOffset",
+  "outlineWidth",
 ]);
 
 const GRID_LINE_STYLEX_PROPS = new Set(["gridArea", "gridColumn", "gridRow"]);

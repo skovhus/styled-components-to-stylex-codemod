@@ -115,7 +115,7 @@ const styles = stylex.create({
   containerHeight: (height: number) => ({
     height,
   }),
-  containerFontSize: (fontSize: string) => ({
+  containerFontSize: (fontSize: number | string) => ({
     fontSize: fontSize,
   }),
   containerLineHeight: (lineHeight: number) => ({
