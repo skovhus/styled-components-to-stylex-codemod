@@ -30,7 +30,7 @@ const styles = stylex.create({
     borderStyle: "none",
   },
   boxBorderBottom: {
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgSub,
   },

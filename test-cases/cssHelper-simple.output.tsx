@@ -72,7 +72,7 @@ export const App = () => (
 
 const styles = stylex.create({
   containerStyles: (props: { size: number; padding: number }) => ({
-    fontSize: `${props.size + props.padding}px`,
+    fontSize: props.size + props.padding,
     lineHeight: `${props.size}px`,
   }),
   container: {
@@ -83,11 +83,11 @@ const styles = stylex.create({
     display: "inline-flex",
   },
   branchedContainerBrowserIsSafari: (size: number) => ({
-    fontSize: `${size - 4}px`,
+    fontSize: size - 4,
     lineHeight: 1,
   }),
   branchedContainerDefault: (size: number) => ({
-    fontSize: `${size - 3}px`,
+    fontSize: size - 3,
     lineHeight: `${size}px`,
   }),
   runtimeOffset: {

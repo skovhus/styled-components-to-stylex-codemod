@@ -381,13 +381,13 @@ const styles = stylex.create({
     alignSelf,
   }),
   flexGap: (gap: number) => ({
-    gap: `${gap}px`,
+    gap: gap,
   }),
   flexColumnGap: (wrapGap: number) => ({
-    columnGap: `${wrapGap}px`,
+    columnGap: wrapGap,
   }),
   flexRowGap: (wrapGap: number) => ({
-    rowGap: `${wrapGap}px`,
+    rowGap: wrapGap,
   }),
   flexSpacer: {
     display: "flex",

@@ -49,7 +49,7 @@ const styles = stylex.create({
     flexShrink: 0,
   },
   colorBadgeHollow: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
   },
   colorBadgeBorderColor: (borderColor: string) => ({

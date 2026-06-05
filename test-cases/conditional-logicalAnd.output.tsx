@@ -142,7 +142,7 @@ const styles = stylex.create({
     padding: 16,
   },
   cardHighlighted: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.primaryColor,
     boxShadow: `0 0 8px ${$colors.bgSub}`,

@@ -9,7 +9,7 @@ export const App = () => (
 
 const styles = stylex.create({
   box: {
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgSub,
     paddingBlock: 8,

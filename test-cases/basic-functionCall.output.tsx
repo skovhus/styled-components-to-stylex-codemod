@@ -30,7 +30,7 @@ const styles = stylex.create({
     padding: 16,
     backgroundColor: "blue",
     color: "white",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.primaryColor,
   },

@@ -74,7 +74,7 @@ const styles = stylex.create({
   styledLoaderCaret: {
     position: "absolute",
     top: 11,
-    left: "10px",
+    left: 10,
   },
   styledLoaderCaretNoPadding: {
     left: "0",

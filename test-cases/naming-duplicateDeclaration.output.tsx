@@ -50,26 +50,26 @@ const styles = stylex.create({
     color: "white",
   },
   sizeBoxSize: (size: number) => ({
-    width: `${size}px`,
-    maxWidth: `${size}px`,
-    maxHeight: `${size}px`,
+    width: size,
+    maxWidth: size,
+    maxHeight: size,
   }),
 });
 
 const sizeVariants = stylex.create({
   60: {
-    width: "60px",
-    maxWidth: "60px",
-    maxHeight: "60px",
+    width: 60,
+    maxWidth: 60,
+    maxHeight: 60,
   },
   100: {
-    width: "100px",
-    maxWidth: "100px",
-    maxHeight: "100px",
+    width: 100,
+    maxWidth: 100,
+    maxHeight: 100,
   },
   140: {
-    width: "140px",
-    maxWidth: "140px",
-    maxHeight: "140px",
+    width: 140,
+    maxWidth: 140,
+    maxHeight: 140,
   },
 });

@@ -98,7 +98,7 @@ const styles = stylex.create({
     color: "white",
   },
   panelHeight: (height: number) => ({
-    height: `${height}px`,
+    height: height,
   }),
   transientPanel: {
     width: 120,
@@ -107,7 +107,7 @@ const styles = stylex.create({
     color: "white",
   },
   transientPanelHeight: (height: number) => ({
-    height: `${height}px`,
+    height: height,
   }),
   fader: {
     width: 120,
@@ -131,19 +131,19 @@ const styles = stylex.create({
 
 const panelHeightVariants = stylex.create({
   40: {
-    height: "40px",
+    height: 40,
   },
   80: {
-    height: "80px",
+    height: 80,
   },
 });
 
 const transientPanelHeightVariants = stylex.create({
   50: {
-    height: "50px",
+    height: 50,
   },
   90: {
-    height: "90px",
+    height: 90,
   },
 });
 

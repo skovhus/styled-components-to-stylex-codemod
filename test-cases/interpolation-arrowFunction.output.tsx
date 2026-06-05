@@ -79,19 +79,19 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   tabItemNotActive: {
-    borderBottomWidth: "2px",
+    borderBottomWidth: 2,
     borderBottomStyle: "solid",
     borderBottomColor: "transparent",
   },
   tabItemActive: {
-    borderBottomWidth: "2px",
+    borderBottomWidth: 2,
     borderBottomStyle: "solid",
     borderBottomColor: "#bf4f74",
   },
   blockBodyBox: {
     position: "absolute",
     left: 10,
-    bottom: "20px",
+    bottom: 20,
     paddingBlock: 12,
     paddingInline: 16,
     backgroundColor: "paleturquoise",
@@ -100,6 +100,6 @@ const styles = stylex.create({
     borderColor: "teal",
   },
   blockBodyBoxLarge: {
-    bottom: "80px",
+    bottom: 80,
   },
 });

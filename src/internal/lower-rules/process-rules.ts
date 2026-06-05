@@ -58,6 +58,7 @@ import {
   unwrapArrowFunctionToPropsExpr,
   hasThemeAccessInArrowFn,
   buildTemplateWithStaticParts,
+  maybeOmitPxUnitFromStylexValue,
   inlineArrowFunctionBody,
   collectPropsFromArrowFnDestructured,
 } from "./inline-styles.js";
@@ -1968,11 +1969,12 @@ function writeResolvedDeclaration(
       bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
     } else {
       const built = buildInterpolatedValue(j, { value: out.value }, resolveResult);
-      bucket[out.prop] = maybeApplyAuthoredMultilineToExpression(j, built, {
+      const formatted = maybeApplyAuthoredMultilineToExpression(j, built, {
         rawCss: decl.rawCss,
         property: (d.property ?? "").trim(),
         stylisValueRaw: d.valueRaw ?? "",
-      });
+      }) as ExpressionKind;
+      bucket[out.prop] = maybeOmitPxUnitFromStylexValue(j, formatted, out.prop, d.important);
     }
     writtenProps.add(out.prop);
   }

@@ -32,13 +32,13 @@ export const App = () => (
 
 const styles = stylex.create({
   container: {
-    borderTopWidth: "1px",
+    borderTopWidth: 1,
     borderTopStyle: "solid",
     borderTopColor: $colors.bgBorderFaint,
     padding: 8,
   },
   containerNotHideBottomBorder: {
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgBorderFaint,
   },

@@ -154,17 +154,17 @@ const styles = stylex.create({
   statusBadge: {
     display: "inline-flex",
     alignItems: "center",
-    paddingBlock: "4px",
-    paddingInline: "12px",
+    paddingBlock: 4,
+    paddingInline: 12,
     borderRadius: 12,
-    fontSize: "13px",
+    fontSize: 13,
     backgroundColor: "red",
     color: "white",
   },
   statusBadgeCompact: {
-    paddingBlock: "2px",
-    paddingInline: "6px",
-    fontSize: "11px",
+    paddingBlock: 2,
+    paddingInline: 6,
+    fontSize: 11,
   },
   privateLabel: {
     fontWeight: 400,
@@ -184,7 +184,7 @@ const styles = stylex.create({
     color,
   }),
   specifierTag: {
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "gray",
     paddingBlock: 4,

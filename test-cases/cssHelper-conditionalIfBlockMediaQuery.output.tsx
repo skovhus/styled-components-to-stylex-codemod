@@ -42,14 +42,14 @@ const styles = stylex.create({
     height: "auto",
   },
   emojiContainerSize: (size: number) => ({
-    width: `${size}px`,
-    maxWidth: `${size}px`,
-    maxHeight: `${size}px`,
+    width: size,
+    maxWidth: size,
+    maxHeight: size,
   }),
   emojiContainerBrowserIsSafari: (size: number) => ({
     fontSize: {
-      default: `${size - 4}px`,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 3}px`,
+      default: size - 4,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": size - 3,
     },
     lineHeight: {
       default: 1,
@@ -58,8 +58,8 @@ const styles = stylex.create({
   }),
   emojiContainerDefault: (size: number) => ({
     fontSize: {
-      default: `${size - 3}px`,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 1}px`,
+      default: size - 3,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": size - 1,
     },
     lineHeight: {
       default: `${size}px`,
@@ -70,18 +70,18 @@ const styles = stylex.create({
 
 const sizeVariants = stylex.create({
   16: {
-    width: "16px",
-    maxWidth: "16px",
-    maxHeight: "16px",
+    width: 16,
+    maxWidth: 16,
+    maxHeight: 16,
   },
   24: {
-    width: "24px",
-    maxWidth: "24px",
-    maxHeight: "24px",
+    width: 24,
+    maxWidth: 24,
+    maxHeight: 24,
   },
   32: {
-    width: "32px",
-    maxWidth: "32px",
-    maxHeight: "32px",
+    width: 32,
+    maxWidth: 32,
+    maxHeight: 32,
   },
 });

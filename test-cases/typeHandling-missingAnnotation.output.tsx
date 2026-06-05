@@ -54,7 +54,7 @@ const styles = stylex.create({
     borderStyle: "none",
   },
   boxBordered: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "gray",
   },

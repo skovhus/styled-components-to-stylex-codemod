@@ -70,6 +70,6 @@ const styles = stylex.create({
     alignItems: "center",
   },
   textDividerContainerNoMinWidth: {
-    minWidth: "0px",
+    minWidth: 0,
   },
 });

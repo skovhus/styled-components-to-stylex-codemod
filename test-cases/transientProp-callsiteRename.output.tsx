@@ -85,12 +85,12 @@ const styles = stylex.create({
   responsivePanel: {
     display: "grid",
     gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
-    top: "0px",
-    padding: "8px",
+    top: 0,
+    padding: 8,
     backgroundColor: "#eef2ff",
   },
   responsivePanelAsCard: {
-    padding: "16px",
+    padding: 16,
   },
   responsivePanelGridTemplateColumns: (gridTemplateColumns: string) => ({
     gridTemplateColumns,

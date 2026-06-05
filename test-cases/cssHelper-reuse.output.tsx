@@ -31,10 +31,10 @@ const styles = stylex.create({
     position: "sticky",
     // above regular rows
     zIndex: 3,
-    borderTopWidth: "1px",
+    borderTopWidth: 1,
     borderTopStyle: "solid",
     borderTopColor: $colors.bgBorderFaint,
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgBorderFaint,
   },

@@ -138,7 +138,7 @@ function StyleFnParentBox(props: StyleFnParentBoxProps) {
     <div
       sx={[
         styles.styleFnParentBox,
-        add && styles.styleFnParentBoxWidth(`${width}px`),
+        add && styles.styleFnParentBoxWidth(width),
         warn && styles.styleFnParentBoxWarn,
         add && hasSubtitle && styles.styleFnParentBoxAddHasSubtitle,
         add && !hasSubtitle && styles.styleFnParentBoxAddNotHasSubtitle,
@@ -294,8 +294,7 @@ function ConsolidatedKeyCollisionBox(props: ConsolidatedKeyCollisionBoxProps) {
       {...rest}
       sx={[
         styles.consolidatedKeyCollisionBox,
-        add != null && styles.consolidatedKeyCollisionBoxWidth(add),
-        add != null && styles.consolidatedKeyCollisionBoxHeight(add),
+        add != null && styles.consolidatedKeyCollisionBoxAdd(add),
         add && hasSubtitle ? styles.consolidatedKeyCollisionBoxAddHasSubtitle : undefined,
         add && !hasSubtitle ? styles.consolidatedKeyCollisionBoxAddNotHasSubtitle : undefined,
       ]}
@@ -430,7 +429,7 @@ const styles = stylex.create({
     paddingBottom: 40,
   },
   textAddBottomBorder: {
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgBorderSolid,
   },
@@ -505,7 +504,7 @@ const styles = stylex.create({
     color: "red",
     paddingBottom: 40,
   },
-  styleFnParentBoxWidth: (width: string) => ({
+  styleFnParentBoxWidth: (width: number) => ({
     width,
   }),
   inverseMergeBox: {
@@ -625,10 +624,8 @@ const styles = stylex.create({
     color: "red",
     paddingBottom: 40,
   },
-  consolidatedKeyCollisionBoxWidth: (width: number) => ({
-    width: `${width}px`,
-  }),
-  consolidatedKeyCollisionBoxHeight: (height: number) => ({
-    height: `${height}px`,
+  consolidatedKeyCollisionBoxAdd: (add: number) => ({
+    width: add,
+    height: add,
   }),
 });

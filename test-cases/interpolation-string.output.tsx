@@ -59,7 +59,7 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: dynamicColor,
-    padding: `${spacing}px`,
+    padding: spacing,
     borderRadius: borderRadius,
     color: "white",
     borderWidth: 0,
@@ -67,9 +67,9 @@ const styles = stylex.create({
     borderColor: "initial",
   },
   text: {
-    fontSize: `${fontSize}px`,
+    fontSize: fontSize,
     lineHeight: lineHeight,
-    marginBlock: `${spacing / 2}px`,
+    marginBlock: spacing / 2,
     marginInline: 0,
   },
   conditionalButton: {
@@ -84,7 +84,7 @@ const styles = stylex.create({
   },
   themedCard: {
     backgroundColor: `${theme.color.primary}`,
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: `${theme.color.secondary}`,
     padding: `${theme.spacing.md}`,

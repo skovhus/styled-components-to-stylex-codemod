@@ -27,11 +27,11 @@ const styles = stylex.create({
     display: "inline-flex",
   },
   containerBrowserIsSafari: (size: number) => ({
-    fontSize: `${size - 4}px`,
+    fontSize: size - 4,
     lineHeight: 1,
   }),
   containerDefault: (size: number) => ({
-    fontSize: `${size - 3}px`,
+    fontSize: size - 3,
     lineHeight: `${size}px`,
   }),
 });

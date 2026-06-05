@@ -88,8 +88,8 @@ const styles = stylex.create({
     height: `max(100px, ${height})`,
   }),
   negativeOffset: {
-    height: "44px",
-    marginBottom: "-44px",
+    height: 44,
+    marginBottom: -44,
     backgroundColor: "lavender",
   },
   negativeOffsetHeight: (height: string) => ({

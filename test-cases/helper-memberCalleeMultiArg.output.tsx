@@ -214,7 +214,7 @@ const styles = stylex.create({
     backgroundColor,
   }),
   boxMargin: (margin: number) => ({
-    margin: `${margin}px`,
+    margin,
   }),
   tintedLabel: (backgroundColor: string) => ({
     paddingBlock: 2,

@@ -24,7 +24,7 @@ const styles = stylex.create({
   // This uses styleFnFromProps pattern - prop value is directly used as style value
   external: {
     color: "gray",
-    padding: "10px",
+    padding: 10,
   },
   externalColor: (color: string) => ({
     color,

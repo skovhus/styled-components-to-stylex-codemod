@@ -77,12 +77,12 @@ const styles = stylex.create({
     backgroundColor: "white",
   },
   cardNotHighlighted: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "gray",
   },
   cardHighlighted: {
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "blue",
   },

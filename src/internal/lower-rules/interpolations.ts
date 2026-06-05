@@ -14,6 +14,7 @@ import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
 import { isDirectionalThemeResult } from "./theme.js";
+import { maybeOmitPxUnitFromStylexValue } from "./inline-styles.js";
 
 /**
  * Regex matching border-color properties where the border handler already extracted
@@ -165,7 +166,10 @@ export function tryHandleInterpolatedStringValue(args: {
       }
       for (const entry of entries) {
         const usesExpr = entry.value.includes(`__SC_EXPR_${slotId}__`);
-        setValue(entry.prop, usesExpr ? (tl as any) : 0);
+        setValue(
+          entry.prop,
+          usesExpr ? maybeOmitPxUnitFromStylexValue(j, tl as any, entry.prop, d.important) : 0,
+        );
       }
       return true;
     }
@@ -269,7 +273,7 @@ export function tryHandleInterpolatedStringValue(args: {
   const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
     const out = outputs[i]!;
-    setValue(out.prop, tl as any);
+    setValue(out.prop, maybeOmitPxUnitFromStylexValue(j, tl as any, out.prop, d.important));
     // Add leading comment if present (e.g., for inlined static member expressions)
     if (i === 0 && ((d as any).leadingComment || (d as any).leadingLineComment)) {
       addPropComments(styleObj, out.prop, {

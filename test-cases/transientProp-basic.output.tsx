@@ -200,7 +200,7 @@ const styles = stylex.create({
     width: 12,
     height: 8,
     backgroundColor: "white",
-    top: "10px",
+    top: 10,
   },
   collapseArrowIcon: {
     transform: "rotate(0deg)",

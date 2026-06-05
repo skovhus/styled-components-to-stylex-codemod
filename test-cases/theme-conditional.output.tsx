@@ -52,12 +52,12 @@ const styles = stylex.create({
   highlightBox: {
     padding: 12,
     backgroundColor: $colors.bgBase,
-    borderLeftWidth: "2px",
+    borderLeftWidth: 2,
     borderLeftStyle: "solid",
     borderLeftColor: "transparent",
   },
   highlightBoxHighlighted: {
-    borderLeftWidth: "2px",
+    borderLeftWidth: 2,
     borderLeftStyle: "solid",
     borderLeftColor: $colors.greenBase,
   },

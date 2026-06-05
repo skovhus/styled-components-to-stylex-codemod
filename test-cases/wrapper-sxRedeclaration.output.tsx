@@ -30,13 +30,13 @@ const callerStyles = stylex.create({
   },
   expandableButton: {
     minHeight: 32,
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
     backgroundColor: "#f8fafc",
   },
   expandableButtonExpanded: {
-    paddingBlock: "8px",
-    paddingInline: "12px",
+    paddingBlock: 8,
+    paddingInline: 12,
   },
 });
 

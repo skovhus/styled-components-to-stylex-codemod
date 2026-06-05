@@ -33,7 +33,12 @@ import {
 import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { parseCssTemplateToRules } from "./css-helper.js";
 import { extractStaticParts } from "./interpolations.js";
-import { buildTemplateWithStaticParts } from "./inline-styles.js";
+import {
+  buildStylexValueWithStaticParts,
+  buildTemplateWithStaticParts,
+  maybeOmitPxUnitFromStylexStyleValue,
+  maybeOmitPxUnitFromStylexValue,
+} from "./inline-styles.js";
 import { literalToStaticValue } from "./types.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import type { ExpressionKind } from "./decl-types.js";
@@ -174,6 +179,7 @@ export function resolveTemplateLiteralBranch(
 
     // Helper to set a value into the correct target (base style, media-scoped, or computed-key)
     const setStyleValue = (prop: string, value: unknown): void => {
+      const styleValue = maybeOmitPxUnitFromStylexStyleValue(j, value, prop);
       if (computedMediaKeyExpr) {
         const existing = style[prop];
         const nested: Record<string, unknown> =
@@ -184,16 +190,16 @@ export function resolveTemplateLiteralBranch(
           nested.default = null;
         }
         const prev = (nested.__computedKeys as Array<{ keyExpr: unknown; value: unknown }>) ?? [];
-        nested.__computedKeys = [...prev, { keyExpr: computedMediaKeyExpr, value }];
+        nested.__computedKeys = [...prev, { keyExpr: computedMediaKeyExpr, value: styleValue }];
         style[prop] = nested;
         return;
       }
       if (media) {
         const target = mediaStyles.get(media) ?? {};
         mediaStyles.set(media, target);
-        target[prop] = value;
+        target[prop] = styleValue;
       } else {
-        style[prop] = value;
+        style[prop] = styleValue;
       }
     };
 
@@ -391,7 +397,15 @@ export function resolveTemplateLiteralBranch(
           continue;
         }
         for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-          setStyleValue(mapped.prop, styleValue);
+          setStyleValue(
+            mapped.prop,
+            maybeOmitPxUnitFromStylexValue(
+              j,
+              styleValue as ExpressionKind,
+              mapped.prop,
+              d.important,
+            ),
+          );
         }
         continue;
       }
@@ -500,19 +514,22 @@ export function resolveTemplateLiteralBranch(
       // (backgroundColor) or a gradient/image (backgroundImage), so we preserve
       // the `background` shorthand as an inline style that the browser resolves.
       const isLonghandOnlyShorthand = isStylexLonghandOnlyShorthand(propName);
-      const callArg =
-        prefix || suffix
-          ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
-          : resolved.callArg;
       if (isLonghandOnlyShorthand) {
         inlineEntries.push({
           jsxProp: resolved.jsxProp,
           prop: cssPropertyToStylexProp(propName),
-          callArg,
+          callArg:
+            prefix || suffix
+              ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
+              : resolved.callArg,
         });
         continue;
       }
       for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+        const callArg =
+          prefix || suffix
+            ? buildStylexValueWithStaticParts(j, resolved.callArg, prefix, suffix, mapped.prop)
+            : resolved.callArg;
         dynamicEntries.push({
           jsxProp: resolved.jsxProp,
           stylexProp: mapped.prop,

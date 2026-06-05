@@ -75,7 +75,7 @@ const styles = stylex.create({
     color: "white",
   },
   buttonHollow: {
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: "#bf4f74",
   },
@@ -95,6 +95,6 @@ const styles = stylex.create({
     backgroundColor: "gray",
   },
   badgeSizeSmall: {
-    fontSize: "10px",
+    fontSize: 10,
   },
 });

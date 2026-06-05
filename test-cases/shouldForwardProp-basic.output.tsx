@@ -100,9 +100,9 @@ export const App = () => (
 const styles = stylex.create({
   button: {
     backgroundColor: "#BF4F74",
-    paddingBlock: "8px",
-    paddingInline: "16px",
-    fontSize: "14px",
+    paddingBlock: 8,
+    paddingInline: 16,
+    fontSize: 14,
     color: "white",
     borderWidth: 0,
     borderStyle: "none",
@@ -110,9 +110,9 @@ const styles = stylex.create({
     borderRadius: 4,
   },
   buttonSizeLarge: {
-    paddingBlock: "12px",
-    paddingInline: "24px",
-    fontSize: "18px",
+    paddingBlock: 12,
+    paddingInline: 24,
+    fontSize: 18,
   },
   buttonBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
@@ -131,7 +131,7 @@ const styles = stylex.create({
   },
   box: {
     backgroundColor: "white",
-    padding: "16px",
+    padding: 16,
     borderRadius: 8,
     boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
   },
@@ -151,13 +151,13 @@ const styles = stylex.create({
   }),
   card: (elevation: number | undefined) => ({
     backgroundColor: "#4F74BF",
-    borderRadius: "4px",
+    borderRadius: 4,
     padding: 16,
     color: "white",
     boxShadow: `0 ${(elevation || 1) * 2}px ${(elevation || 1) * 4}px rgba(0, 0, 0, 0.8)`,
   }),
   cardRounded: {
-    borderRadius: "16px",
+    borderRadius: 16,
   },
   cardVariantPrimary: {
     backgroundColor: "#BF4F74",

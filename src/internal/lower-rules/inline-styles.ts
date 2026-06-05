@@ -17,7 +17,19 @@ import {
   type AuthoredMultilineContext,
   maybeApplyAuthoredMultilineTemplateFormatting,
 } from "../utilities/css-authored-multiline.js";
+import {
+  buildStylexValueWithStaticParts as buildStylexValueWithStaticPartsBase,
+  canOmitPxUnitForStylexNumber,
+  maybeOmitPxUnitFromStylexStyleValue,
+  maybeOmitPxUnitFromStylexValue,
+} from "../utilities/stylex-numeric-values.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
+
+export {
+  canOmitPxUnitForStylexNumber,
+  maybeOmitPxUnitFromStylexStyleValue,
+  maybeOmitPxUnitFromStylexValue,
+};
 
 type StylexImportMapEntry = { source?: { value?: string } } | null | undefined;
 
@@ -76,6 +88,27 @@ export function buildTemplateWithStaticParts(
     templateLiteral,
     ...multilineContext,
   });
+}
+
+export function buildStylexValueWithStaticParts(
+  j: JSCodeshift,
+  expr: ExpressionKind,
+  prefix: string,
+  suffix: string,
+  stylexProp: string,
+  important = false,
+  multilineContext?: AuthoredMultilineContext,
+): ExpressionKind {
+  return buildStylexValueWithStaticPartsBase(
+    j,
+    expr,
+    prefix,
+    suffix,
+    stylexProp,
+    (innerExpr, innerPrefix, innerSuffix) =>
+      buildTemplateWithStaticParts(j, innerExpr, innerPrefix, innerSuffix, multilineContext),
+    important,
+  );
 }
 
 /**

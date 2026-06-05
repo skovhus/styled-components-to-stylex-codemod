@@ -20,9 +20,9 @@ const styles = stylex.create({
     paddingBlock: 5,
     paddingInline: 0,
     /* NOTE: Inlined Divider.HEIGHT as StyleX requires it to be statically evaluable */
-    height: "10px",
+    height: 10,
     /* NOTE: Inlined Divider.WIDTH as StyleX requires it to be statically evaluable */
-    width: "200px",
+    width: 200,
     /* NOTE: Inlined Divider.BG_COLOR as StyleX requires it to be statically evaluable */
     backgroundColor: "#e0e0e0",
   },

@@ -40,15 +40,15 @@ export const App = () => (
 const styles = stylex.create({
   staticBox: {
     backgroundColor: "#BF4F74",
-    height: "50px",
-    width: "50px",
-    borderRadius: "4px",
+    height: 50,
+    width: 50,
+    borderRadius: 4,
   },
   dynamicBox: {
     backgroundColor: "#BF4F74",
-    height: "50px",
-    width: "50px",
-    borderRadius: "4px",
+    height: 50,
+    width: 50,
+    borderRadius: 4,
   },
   dynamicBoxBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,

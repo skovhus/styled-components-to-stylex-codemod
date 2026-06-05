@@ -71,6 +71,8 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 
 import {
   buildTemplateWithStaticParts,
+  buildStylexValueWithStaticParts,
+  canOmitPxUnitForStylexNumber,
   collectDollarParamBindingIdentifiers,
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
@@ -81,6 +83,7 @@ import {
   hasUnsupportedConditionalTest,
   invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
+  maybeOmitPxUnitFromStylexValue,
   normalizeDollarProps,
   rewritePropsReferencesToPropsWithTheme,
   rewritePropsThemeToThemeVar,
@@ -630,6 +633,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           j,
           expression,
           jsxProp,
+          stylexProp,
           paramName,
           param,
           prefix,
@@ -1068,7 +1072,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       // within the pseudo-element's nested selector bucket.
       if (pseudoElement) {
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          applyResolvedPropValue(out.prop, finalValue, null);
+          applyResolvedPropValue(
+            out.prop,
+            maybeOmitPxUnitFromStylexValue(j, finalValue, out.prop, d.important),
+            null,
+          );
         }
         return true;
       }
@@ -1109,7 +1117,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
         }
         for (const ps of pseudos) {
-          existing[ps] = finalValue;
+          existing[ps] = maybeOmitPxUnitFromStylexValue(j, finalValue, out.prop, d.important);
         }
       }
       return true;
@@ -2522,20 +2530,32 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const { prefix, suffix } = extractStaticPartsForDecl(d);
         const cssValueStr = `${prefix}${staticValue}${suffix}`;
         for (const out of cssDeclarationToStylexDeclarations(d)) {
-          styleObj[out.prop] = cssValueStr;
+          styleObj[out.prop] = cssValueToJs(
+            { kind: "static", value: cssValueStr },
+            d.important,
+            out.prop,
+          );
         }
 
         // --- B. Dynamic branch → merge with existing variant or create new ---
         const conditionWhen = isStaticWhenFalse ? conditionProp : `!${conditionProp}`;
         const clonedDynamic = cloneAstNode(dynamicBranchExpr) as ExpressionKind;
+        const stylexDecls = cssDeclarationToStylexDeclarations(d);
+        const firstStylexProp = stylexDecls[0]?.prop;
         const dynamicValueExpr =
           prefix || suffix
-            ? buildTemplateWithStaticParts(j, clonedDynamic, prefix, suffix)
+            ? buildStylexValueWithStaticParts(
+                j,
+                clonedDynamic,
+                prefix,
+                suffix,
+                firstStylexProp ?? "",
+              )
             : clonedDynamic;
         const existingBucket = variantBuckets.get(conditionProp);
 
         if (!existingBucket && dynamicProps.length === 1) {
-          const out = cssDeclarationToStylexDeclarations(d)[0];
+          const out = stylexDecls[0];
           const dynamicProp = dynamicProps[0];
           if (
             out &&
@@ -2618,7 +2638,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
 
           // Add the new dynamic properties
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
+          for (const out of stylexDecls) {
             properties.push(
               j.property("init", makeCssPropKey(j, out.prop), dynamicStyleValueExpr as any),
             );
@@ -2662,7 +2682,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           );
         } else {
           // --- Standalone path: create new conditional style function ---
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
+          for (const out of stylexDecls) {
             const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
             if (!styleFnDecls.has(fnKey)) {
               const body = j.objectExpression([
@@ -2830,11 +2850,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             const valueExpr =
               fullTemplateValueExpr ??
               (prefix || suffix
-                ? buildTemplateWithStaticParts(
+                ? buildStylexValueWithStaticParts(
                     j,
                     scalarProps?.valueExpr ?? valueExprRaw,
                     prefix,
                     suffix,
+                    out.prop,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
             const guardedDynamic = extractGuardedDynamicBranch(j, bodyExpr);
@@ -3199,7 +3220,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                 }
               }
               quasis.push(j.templateElement({ raw: q, cooked: q }, true));
-              return j.templateLiteral(quasis, exprs);
+              return maybeOmitPxUnitFromStylexValue(
+                j,
+                j.templateLiteral(quasis, exprs) as ExpressionKind,
+                out.prop,
+                d.important,
+              );
             };
 
             const valueExpr = buildValueExpr();
@@ -3338,8 +3364,11 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
         const { prefix, suffix } = extractStaticPartsForDecl(d);
+        const omitsPxUnit = canOmitPxUnitForStylexNumber(out.prop, prefix, suffix);
         const expr =
-          prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
+          prefix || suffix
+            ? buildStylexValueWithStaticParts(j, baseExpr, prefix, suffix, out.prop)
+            : baseExpr;
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         const scalarProps =
           jsxProp === "__props" &&
@@ -3356,7 +3385,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         const shouldPassComputedCallArg =
           !scalarProps &&
           jsxProp !== "__props" &&
-          (Boolean(prefix || suffix) ||
+          ((Boolean(prefix || suffix) && !omitsPxUnit) ||
             baseExpr.type !== "Identifier" ||
             (baseExpr as { name?: string }).name !== jsxProp);
         const finalParam = shouldPassComputedCallArg
@@ -4317,6 +4346,9 @@ function emitStaticObservedValue(
   if (typeof value !== "number" || !isObservedNumeric) {
     return value;
   }
+  if (canOmitPxUnitForStylexNumber(stylexProp, staticParts.prefix, staticParts.suffix)) {
+    return staticParts.prefix === "-" ? -value : value;
+  }
   if (staticParts.prefix || staticParts.suffix) {
     return `${staticParts.prefix}${value}${staticParts.suffix}`;
   }
@@ -4329,12 +4361,15 @@ function buildRuntimeObservedValueExpr(
   valueExpr: ExpressionKind,
   staticParts: StaticParts,
 ): ExpressionKind {
-  if (
-    getNumericCssEmissionMode(stylexProp) === "stylexNumber" &&
-    !staticParts.prefix &&
-    !staticParts.suffix
-  ) {
-    return valueExpr;
+  if (canOmitPxUnitForStylexNumber(stylexProp, staticParts.prefix, staticParts.suffix)) {
+    return staticParts.prefix === "-"
+      ? (j.unaryExpression("-", valueExpr, true) as ExpressionKind)
+      : valueExpr;
+  }
+  if (!staticParts.prefix && !staticParts.suffix) {
+    if (getNumericCssEmissionMode(stylexProp) === "stylexNumber") {
+      return valueExpr;
+    }
   }
   return j.templateLiteral(
     [
@@ -4349,12 +4384,13 @@ function buildObservedExpressionFallbackValueExpr(args: {
   j: JSCodeshift;
   expression: ExpressionKind;
   jsxProp: string;
+  stylexProp: string;
   paramName: string;
   param: ExpressionKind;
   prefix: string;
   suffix: string;
 }): ExpressionKind | null {
-  const { j, expression, jsxProp, paramName, param, prefix, suffix } = args;
+  const { j, expression, jsxProp, stylexProp, paramName, param, prefix, suffix } = args;
   const propNames = new Set([jsxProp, jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp]);
   let replaced = false;
   const rewritten = mapAst(cloneAstNode(expression), (node) => {
@@ -4381,7 +4417,9 @@ function buildObservedExpressionFallbackValueExpr(args: {
   if (!replaced) {
     return null;
   }
-  return prefix || suffix ? buildTemplateWithStaticParts(j, rewritten, prefix, suffix) : rewritten;
+  return prefix || suffix
+    ? buildStylexValueWithStaticParts(j, rewritten, prefix, suffix, stylexProp)
+    : rewritten;
 }
 
 function isNumberLikeTsType(tsType: unknown): boolean {
@@ -4674,6 +4712,8 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
   let propsUsed: Set<string>;
   let jsxProp: string;
   let isSimpleIdentity: boolean;
+  const stylexDecls = cssDeclarationToStylexDeclarations(d);
+  const firstStylexProp = stylexDecls[0]?.prop ?? "";
 
   if (indexedTheme) {
     // Indexed theme: the value expression is the resolved indexed access (e.g., $colors[param]).
@@ -4692,17 +4732,12 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
     isSimpleIdentity =
       propsUsed.size === 1 &&
-      !prefix &&
-      !suffix &&
+      ((!prefix && !suffix) || canOmitPxUnitForStylexNumber(firstStylexProp, prefix, suffix)) &&
       inlineExpr.type === "Identifier" &&
       propsUsed.has((inlineExpr as { name: string }).name);
     jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
   }
 
-  const valueExpr: ExpressionKind =
-    prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
-
-  const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
   const bindings =
     expr.type === "ArrowFunctionExpression"
@@ -4717,6 +4752,10 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     const fnKey = styleKeyWithSuffix(styleKeyWithSuffix(decl.styleKey, pseudoLabel), out.prop);
     let helperCallArgs: DynamicHelperCallArgument[] = [];
     let needsOriginalParam = false;
+    const valueExpr: ExpressionKind =
+      prefix || suffix
+        ? buildStylexValueWithStaticParts(j, inlineExpr, prefix, suffix, out.prop)
+        : inlineExpr;
     if (!styleFnDecls.has(fnKey)) {
       const styleValueExpr = cloneAstNode(valueExpr) as ExpressionKind;
       if (!indexedTheme && bindings) {

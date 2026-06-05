@@ -26,7 +26,7 @@ const styles = stylex.create({
       ":hover": $colors.bgSub,
     },
     color: $colors.textPrimary,
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: $colors.bgSub,
     borderRadius: 4,
@@ -42,7 +42,7 @@ const styles = stylex.create({
   centeredContainer: {
     minHeight: 100,
     backgroundColor: $colors.bgBase,
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.bgSub,
   },
@@ -50,7 +50,7 @@ const styles = stylex.create({
   card: {
     padding: "1em",
     backgroundColor: $colors.bgBase,
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.bgSub,
     borderRadius: 8,

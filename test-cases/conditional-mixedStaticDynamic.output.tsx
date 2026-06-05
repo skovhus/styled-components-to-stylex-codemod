@@ -82,11 +82,11 @@ const styles = stylex.create({
   containerPositionFixed: {
     position: "absolute",
     bottom: 16,
-    left: `${MAIN_PAGE_MARGIN}px`,
-    right: `${MAIN_PAGE_MARGIN}px`,
+    left: MAIN_PAGE_MARGIN,
+    right: MAIN_PAGE_MARGIN,
   },
   containerPositionFixedSidebarCollapsed: {
-    left: "0px",
-    right: "0px",
+    left: 0,
+    right: 0,
   },
 });

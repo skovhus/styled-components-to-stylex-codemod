@@ -71,8 +71,8 @@ const styles = stylex.create({
     borderWidth: 0,
     color: "white",
     fontSize: "1rem",
-    paddingBlock: "4px",
-    paddingInline: "8px",
+    paddingBlock: 4,
+    paddingInline: 8,
   },
   link: {
     textDecoration: {

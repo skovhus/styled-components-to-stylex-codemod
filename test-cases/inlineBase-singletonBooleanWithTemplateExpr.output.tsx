@@ -41,11 +41,11 @@ const styles = stylex.create({
   container: {
     display: "flex",
     flexDirection: "row",
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f5ff",
   },
   containerCompact: {
-    padding: "4px",
+    padding: 4,
   },
   containerColumn: {
     flexDirection: "column",

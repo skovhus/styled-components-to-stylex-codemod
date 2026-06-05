@@ -17,7 +17,7 @@ const styles = stylex.create({
   conditionalContainerFontSize: (size: number) => ({
     fontSize: {
       default: null,
-      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": `${size - 5}px`,
+      "@media (-webkit-min-device-pixel-ratio: 2),(min-resolution: 192dpi)": size - 5,
     },
   }),
 });

@@ -45,11 +45,11 @@ const styles = stylex.create({
   header: {
     display: "flex",
     flexDirection: "row",
-    padding: "16px",
+    padding: 16,
     backgroundColor: "#f0f5ff",
   },
   headerCompact: {
-    padding: "4px",
+    padding: 4,
   },
   headerAlignCenter: {
     alignItems: "center",
