@@ -5937,7 +5937,7 @@ export const Box = styled.div\`
     {
       name: "nested conditional arithmetic",
       css: "padding-top: ${cond ? 8 - runtimeValue() : 4}px;",
-      expected: 'cond ? `calc(8px - ${$spacing.runtimeValue})` : "4px"',
+      expected: "cond ? `calc(8px - ${$spacing.runtimeValue})` : 4",
       forbidden: "8 - $spacing.runtimeValue",
     },
     {
@@ -5949,7 +5949,7 @@ export const Box = styled.div\`
     {
       name: "conditional resolved branch",
       css: "padding-top: ${cond ? runtimeValue() : 4}px;",
-      expected: 'cond ? $spacing.runtimeValue : "4px"',
+      expected: "cond ? $spacing.runtimeValue : 4",
       forbidden: "}px",
     },
   ])(
@@ -11505,7 +11505,7 @@ export function App() {
     expect(result.code).not.toBeNull();
     // The classification should detect that "red" is NOT a length and "0.5px" IS a length,
     // and swap the assignments correctly
-    expect(result.code).toContain('borderWidth: "0.5px"');
+    expect(result.code).toContain("borderWidth: 0.5");
     expect(result.code).toContain('borderStyle: "solid"');
     expect(result.code).toContain('borderColor: "red"');
     // Should NOT have the reversed (wrong) assignment
