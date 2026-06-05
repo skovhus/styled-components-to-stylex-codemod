@@ -138,7 +138,7 @@ function StyleFnParentBox(props: StyleFnParentBoxProps) {
     <div
       sx={[
         styles.styleFnParentBox,
-        add && styles.styleFnParentBoxWidth(`${width}px`),
+        add && styles.styleFnParentBoxWidth(width),
         warn && styles.styleFnParentBoxWarn,
         add && hasSubtitle && styles.styleFnParentBoxAddHasSubtitle,
         add && !hasSubtitle && styles.styleFnParentBoxAddNotHasSubtitle,
@@ -505,7 +505,7 @@ const styles = stylex.create({
     color: "red",
     paddingBottom: 40,
   },
-  styleFnParentBoxWidth: (width: string) => ({
+  styleFnParentBoxWidth: (width: number) => ({
     width,
   }),
   inverseMergeBox: {

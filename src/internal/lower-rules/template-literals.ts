@@ -500,19 +500,38 @@ export function resolveTemplateLiteralBranch(
       // (backgroundColor) or a gradient/image (backgroundImage), so we preserve
       // the `background` shorthand as an inline style that the browser resolves.
       const isLonghandOnlyShorthand = isStylexLonghandOnlyShorthand(propName);
-      const callArg =
-        prefix || suffix
-          ? buildTemplateWithStaticParts(j, resolved.callArg, prefix, suffix)
-          : resolved.callArg;
       if (isLonghandOnlyShorthand) {
+        const mappedProp = cssPropertyToStylexProp(propName);
+        const callArg =
+          prefix || suffix
+            ? buildTemplateWithStaticParts(
+                j,
+                resolved.callArg,
+                prefix,
+                suffix,
+                undefined,
+                mappedProp,
+              )
+            : resolved.callArg;
         inlineEntries.push({
           jsxProp: resolved.jsxProp,
-          prop: cssPropertyToStylexProp(propName),
+          prop: mappedProp,
           callArg,
         });
         continue;
       }
       for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+        const callArg =
+          prefix || suffix
+            ? buildTemplateWithStaticParts(
+                j,
+                resolved.callArg,
+                prefix,
+                suffix,
+                undefined,
+                mapped.prop,
+              )
+            : resolved.callArg;
         dynamicEntries.push({
           jsxProp: resolved.jsxProp,
           stylexProp: mapped.prop,

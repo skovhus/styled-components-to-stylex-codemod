@@ -51,7 +51,7 @@ const styles = stylex.create({
   containerEnabled: {
     left: {
       default: null,
-      ":hover": `${OFFSET}px`,
+      ":hover": OFFSET,
     },
     opacity: {
       default: 1,
@@ -61,7 +61,7 @@ const styles = stylex.create({
   containerEnabledCollapsed: {
     left: {
       default: null,
-      ":hover": "0px",
+      ":hover": 0,
     },
   },
 });

@@ -10,7 +10,11 @@ import {
   isStylexStringOnlyCssProp,
 } from "../css-prop-mapping.js";
 import { extractStaticPartsForDecl } from "./interpolations.js";
-import { buildTemplateWithStaticParts } from "./inline-styles.js";
+import {
+  buildTemplateWithStaticParts,
+  emitStaticPxFallbackValue,
+  inferPxStyleFnParamType,
+} from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
 import {
   getMemberPathFromIdentifier,
@@ -222,7 +226,9 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
     for (const out of cssDeclarationToStylexDeclarations(d)) {
       const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
       // Wrap fallback with static parts if present (e.g., 0 -> "0ms")
-      const baseValue = hasStaticParts ? `${prefix}${fallback}${suffix}` : fallback;
+      const baseValue = hasStaticParts
+        ? emitStaticPxFallbackValue(fallback, out.prop, prefix, suffix)
+        : fallback;
       styleObj[out.prop] = baseValue;
 
       if (hasStaticParts) {
@@ -234,7 +240,14 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
           propAccess,
           j.literal(fallback),
         );
-        const callArg = buildTemplateWithStaticParts(j, logicalExpr, prefix, suffix);
+        const callArg = buildTemplateWithStaticParts(
+          j,
+          logicalExpr,
+          prefix,
+          suffix,
+          undefined,
+          out.prop,
+        );
         styleFnFromProps.push({ fnKey, jsxProp, callArg, condition: "always" });
       } else {
         styleFnFromProps.push({ fnKey, jsxProp });
@@ -245,7 +258,10 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
         const param = j.identifier(paramName);
         // When there are static parts, the param type should be string (since we pass template literal)
         if (hasStaticParts) {
-          setIdentifierTypeAnnotation(param, j.tsTypeAnnotation(j.tsStringKeyword()));
+          setIdentifierTypeAnnotation(
+            param,
+            j.tsTypeAnnotation(inferPxStyleFnParamType(j, out.prop, prefix, suffix)),
+          );
         } else {
           annotateParamFromJsxProp(param, jsxProp);
         }

@@ -19,7 +19,7 @@ export const App = () => {
 };
 
 const styles = stylex.create({
-  runtimeThemeBox: (color: string | undefined) => ({
+  runtimeThemeBox: (color: number | string) => ({
     backgroundColor: "#f8fafc",
     padding: 8,
     color,

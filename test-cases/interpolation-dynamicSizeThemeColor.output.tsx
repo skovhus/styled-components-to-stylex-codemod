@@ -84,7 +84,7 @@ function Container(props: ContainerProps) {
           theme.isDark ? styles.containerDark : styles.containerLight,
           styles.containerWidth(size),
           styles.containerHeight(size),
-          styles.containerFontSize(`${Math.round(size * (2 / 3))}px`),
+          styles.containerFontSize(Math.round(size * (2 / 3))),
           styles.containerLineHeight(size),
           sx,
         ],
@@ -115,7 +115,7 @@ const styles = stylex.create({
   containerHeight: (height: number) => ({
     height: `${height}px`,
   }),
-  containerFontSize: (fontSize: string) => ({
+  containerFontSize: (fontSize: number) => ({
     fontSize: fontSize,
   }),
   containerLineHeight: (lineHeight: number) => ({

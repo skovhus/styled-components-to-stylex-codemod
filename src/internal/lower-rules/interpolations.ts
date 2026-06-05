@@ -13,6 +13,12 @@ import { normalizeWhitespace } from "../utilities/string-utils.js";
 import { getUseLogicalProperties } from "../css-prop-mapping.js";
 import { splitDirectionalProperty } from "../stylex-shorthands.js";
 import { addPropComments } from "./comments.js";
+import type { ExpressionKind } from "./decl-types.js";
+import {
+  canEmitBareStylexPxNumber,
+  emitStylexPxNumericValue,
+  isPxOnlyStaticParts,
+} from "./inline-styles.js";
 import { isDirectionalThemeResult } from "./theme.js";
 
 /**
@@ -81,9 +87,23 @@ export function extractStaticParts(
   return { prefix, suffix };
 }
 
-export function wrapExprWithStaticParts(expr: string, prefix: string, suffix: string): string {
+export function wrapExprWithStaticParts(
+  expr: string,
+  prefix: string,
+  suffix: string,
+  stylexProp?: string,
+): string {
   if (!prefix && !suffix) {
     return expr;
+  }
+
+  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)) {
+    const numericMatch = expr.match(/^-?\d*\.?\d+$/);
+    if (numericMatch) {
+      const num = Number(expr);
+      return String(prefix === "-" ? -num : num);
+    }
+    return prefix === "-" ? `-${expr}` : expr;
   }
 
   // Check if expr is a string literal (matches "..." or '...')
@@ -147,13 +167,16 @@ export function tryHandleInterpolatedStringValue(args: {
         return false;
       }
       const unit = m[2] ?? "";
-      const tl = j.templateLiteral(
-        [
-          j.templateElement({ raw: "", cooked: "" }, false),
-          j.templateElement({ raw: `${unit}`, cooked: `${unit}` }, true),
-        ],
-        [expr],
-      );
+      const tl =
+        unit === "px"
+          ? emitStylexPxNumericValue(j, expr, "")
+          : j.templateLiteral(
+              [
+                j.templateElement({ raw: "", cooked: "" }, false),
+                j.templateElement({ raw: `${unit}`, cooked: `${unit}` }, true),
+              ],
+              [expr],
+            );
       const entries = splitDirectionalProperty({
         prop: "margin",
         rawValue: d.valueRaw.trim(),
@@ -250,6 +273,7 @@ export function tryHandleInterpolatedStringValue(args: {
     return true;
   }
 
+  const outputs = cssDeclarationToStylexDeclarations(d);
   const tl = buildInterpolatedTemplate({
     j,
     decl,
@@ -257,6 +281,7 @@ export function tryHandleInterpolatedStringValue(args: {
     resolveCallExpr,
     resolveImportedValueExpr,
     addImport,
+    stylexProp: outputs[0]?.prop,
     multiline: {
       property: (d.property ?? "").trim(),
       stylisValueRaw: d.valueRaw ?? "",
@@ -266,7 +291,6 @@ export function tryHandleInterpolatedStringValue(args: {
     return false;
   }
 
-  const outputs = cssDeclarationToStylexDeclarations(d);
   for (let i = 0; i < outputs.length; i++) {
     const out = outputs[i]!;
     setValue(out.prop, tl as any);
@@ -290,10 +314,23 @@ function buildInterpolatedTemplate(args: {
     expr: any,
   ) => { resolved: any; imports?: any[]; skipStaticWrap?: boolean } | { bail: true } | null;
   addImport?: (imp: any) => void;
+  stylexProp?: string;
   multiline?: { property: string; stylisValueRaw: string };
 }): unknown {
-  const { j, decl, cssValue, resolveCallExpr, resolveImportedValueExpr, addImport, multiline } =
-    args;
+  const {
+    j,
+    decl,
+    cssValue,
+    resolveCallExpr,
+    resolveImportedValueExpr,
+    addImport,
+    stylexProp,
+    multiline,
+  } = args;
+  const staticParts = extractStaticParts(cssValue);
+  const canEmitBarePx =
+    isPxOnlyStaticParts(staticParts.prefix, staticParts.suffix) &&
+    canEmitBareStylexPxNumber(stylexProp);
   // Build a JS TemplateLiteral from CssValue parts when it's basically string interpolation,
   // e.g. `${spacing}px`, `${spacing / 2}px 0`, `1px solid ${theme.color.secondary}` (handled elsewhere).
   if (!cssValue || cssValue.kind !== "interpolated") {
@@ -408,7 +445,16 @@ function buildInterpolatedTemplate(args: {
   }
   // If all expressions were resolved to static strings, return a plain string instead of template literal
   if (allStatic) {
+    if (canEmitBarePx) {
+      const pxMatch = /^(-?)(\d*\.?\d+)px$/.exec(fullStaticValue);
+      if (pxMatch) {
+        return Number(`${pxMatch[1]}${pxMatch[2]}`);
+      }
+    }
     return fullStaticValue;
+  }
+  if (canEmitBarePx && exprs.length === 1) {
+    return emitStylexPxNumericValue(j, exprs[0] as ExpressionKind, staticParts.prefix);
   }
   quasis.push(j.templateElement({ raw: q, cooked: q }, true));
   const templateLiteral = j.templateLiteral(quasis, exprs);

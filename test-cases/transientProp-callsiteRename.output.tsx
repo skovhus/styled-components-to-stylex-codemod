@@ -36,7 +36,7 @@ function ResponsivePanel(props: ResponsivePanelProps) {
         [
           styles.responsivePanel,
           styles.responsivePanelGridTemplateColumns(`repeat(${columnCount ?? 1}, minmax(0, 1fr))`),
-          styles.responsivePanelTop(`${floatingOffset ?? 0}px`),
+          styles.responsivePanelTop(floatingOffset ?? 0),
           asCard && styles.responsivePanelAsCard,
           sx,
         ],
@@ -85,7 +85,7 @@ const styles = stylex.create({
   responsivePanel: {
     display: "grid",
     gridTemplateColumns: "repeat(1, minmax(0, 1fr))",
-    top: "0px",
+    top: 0,
     padding: "8px",
     backgroundColor: "#eef2ff",
   },
@@ -95,7 +95,7 @@ const styles = stylex.create({
   responsivePanelGridTemplateColumns: (gridTemplateColumns: string) => ({
     gridTemplateColumns,
   }),
-  responsivePanelTop: (top: string) => ({
+  responsivePanelTop: (top: number) => ({
     top,
   }),
   compactPanel: {

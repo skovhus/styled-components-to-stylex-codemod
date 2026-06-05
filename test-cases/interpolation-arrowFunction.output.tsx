@@ -91,7 +91,7 @@ const styles = stylex.create({
   blockBodyBox: {
     position: "absolute",
     left: 10,
-    bottom: "20px",
+    bottom: 20,
     paddingBlock: 12,
     paddingInline: 16,
     backgroundColor: "paleturquoise",
@@ -100,6 +100,6 @@ const styles = stylex.create({
     borderColor: "teal",
   },
   blockBodyBoxLarge: {
-    bottom: "80px",
+    bottom: 80,
   },
 });

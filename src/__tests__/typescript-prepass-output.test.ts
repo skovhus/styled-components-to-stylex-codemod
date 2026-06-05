@@ -1422,7 +1422,7 @@ describe("TypeScript prepass output refinement", () => {
       });
 
       expect(before.code).toContain("sx={styles.boxWidth(size)}");
-      expect(before.code).toContain("boxWidth: (size: string)");
+      expect(before.code).toContain("boxWidth: (size: number)");
       expect(after.code).toContain("sx={size != null && styles.boxWidth(size)}");
       expect(after.code).toContain("boxWidth: (size: number)");
     } finally {
@@ -1463,7 +1463,7 @@ describe("TypeScript prepass output refinement", () => {
         },
       });
 
-      expect(after.code).toContain("boxWidth: (width: string)");
+      expect(after.code).toContain("boxWidth: (width: number)");
       expect(after.code).not.toContain("(width: Width)");
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true });

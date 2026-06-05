@@ -17,9 +17,84 @@ import {
   type AuthoredMultilineContext,
   maybeApplyAuthoredMultilineTemplateFormatting,
 } from "../utilities/css-authored-multiline.js";
+import { isStylexStringOnlyCssProp } from "../css-prop-mapping.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
 
 type StylexImportMapEntry = { source?: { value?: string } } | null | undefined;
+
+/** True when static parts are exactly `expr` or `-${expr}` followed by `px`. */
+export function isPxOnlyStaticParts(prefix: string, suffix: string): boolean {
+  return suffix === "px" && (prefix === "" || prefix === "-");
+}
+
+/** Whether a StyleX property accepts bare numbers (StyleX appends `px` for lengths). */
+export function canEmitBareStylexPxNumber(stylexProp?: string): boolean {
+  if (!stylexProp) {
+    return false;
+  }
+  if (stylexProp.startsWith("--")) {
+    return false;
+  }
+  if (stylexProp === "lineHeight" || stylexProp === "flex") {
+    return false;
+  }
+  return !isStylexStringOnlyCssProp(stylexProp);
+}
+
+/** Infer a style-function parameter type from px-only static parts. */
+export function inferPxStyleFnParamType(
+  j: JSCodeshift,
+  stylexProp: string,
+  prefix: string,
+  suffix: string,
+): ReturnType<JSCodeshift["tsNumberKeyword"]> | ReturnType<JSCodeshift["tsStringKeyword"]> {
+  return isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)
+    ? j.tsNumberKeyword()
+    : j.tsStringKeyword();
+}
+
+/** Coerce a static fallback for px-only emission (e.g. `8` instead of `"8px"`). */
+export function emitStaticPxFallbackValue(
+  fallback: string | number,
+  stylexProp: string,
+  prefix: string,
+  suffix: string,
+): string | number {
+  if (
+    typeof fallback === "number" &&
+    isPxOnlyStaticParts(prefix, suffix) &&
+    canEmitBareStylexPxNumber(stylexProp)
+  ) {
+    return prefix === "-" ? -fallback : fallback;
+  }
+  return `${prefix}${fallback}${suffix}`;
+}
+
+/** Emit a bare StyleX number from a px-wrapped expression (`${expr}px` or `-${expr}px`). */
+export function emitStylexPxNumericValue(
+  j: JSCodeshift,
+  expr: ExpressionKind,
+  prefix: string,
+): ExpressionKind {
+  const staticValue = literalToStaticValue(expr);
+  if (staticValue !== null && typeof staticValue === "number") {
+    const value = prefix === "-" ? -staticValue : staticValue;
+    return j.numericLiteral(value);
+  }
+  if (
+    staticValue !== null &&
+    typeof staticValue === "string" &&
+    /^-?\d*\.?\d+$/.test(staticValue)
+  ) {
+    const num = Number(staticValue);
+    const value = prefix === "-" ? -num : num;
+    return j.numericLiteral(value);
+  }
+  if (prefix === "-") {
+    return j.unaryExpression("-", expr, true) as ExpressionKind;
+  }
+  return expr;
+}
 
 export function getImportedStylexIdentifiers(
   importMap: ReadonlyMap<string, StylexImportMapEntry>,
@@ -45,16 +120,20 @@ export function getImportedStylexIdentifiers(
 // Build a template literal with static prefix/suffix around a dynamic expression.
 // e.g., prefix="" suffix="ms" expr=<call> -> `${<call>}ms`
 // If the expression is a static literal, returns a simple string literal instead.
-// e.g., prefix="" suffix="px" expr=34 -> "34px" (not `${34}px`)
+// e.g., prefix="" suffix="px" expr=34 -> 34 (StyleX appends `px` to bare numbers)
 export function buildTemplateWithStaticParts(
   j: JSCodeshift,
   expr: ExpressionKind,
   prefix: string,
   suffix: string,
   multilineContext?: AuthoredMultilineContext,
+  stylexProp?: string,
 ): ExpressionKind {
   if (!prefix && !suffix) {
     return expr;
+  }
+  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)) {
+    return emitStylexPxNumericValue(j, expr, prefix);
   }
   // If the expression is a static literal, return a simple string literal
   const staticValue = literalToStaticValue(expr);

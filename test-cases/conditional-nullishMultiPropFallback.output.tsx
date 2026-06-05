@@ -26,8 +26,8 @@ export function GutterBox(
       {...rest}
       sx={[
         styles.gutterBox,
-        styles.gutterBoxHeight(`${$gutter ?? DEFAULT_GUTTER}px`),
-        styles.gutterBoxMarginBottom(`-${$gutter ?? DEFAULT_GUTTER}px`),
+        styles.gutterBoxHeight($gutter ?? DEFAULT_GUTTER),
+        styles.gutterBoxMarginBottom(-($gutter ?? DEFAULT_GUTTER)),
         styles.gutterBoxZIndex($zIndex ?? gutterTokens.sticky),
       ]}
     />
@@ -64,10 +64,10 @@ const styles = stylex.create({
     color: "black",
     padding: 8,
   },
-  gutterBoxHeight: (height: string) => ({
+  gutterBoxHeight: (height: number) => ({
     height,
   }),
-  gutterBoxMarginBottom: (marginBottom: string) => ({
+  gutterBoxMarginBottom: (marginBottom: number) => ({
     marginBottom,
   }),
   gutterBoxZIndex: (zIndex: number | string) => ({

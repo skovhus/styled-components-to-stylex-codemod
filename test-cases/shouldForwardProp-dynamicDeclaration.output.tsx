@@ -98,12 +98,12 @@ const styles = stylex.create({
     alignSelf,
   }),
   flexBoxGap: (gap: number) => ({
-    gap: `${gap}px`,
+    gap: gap,
   }),
   flexBoxColumnGap: (wrapGap: number) => ({
-    columnGap: `${wrapGap}px`,
+    columnGap: wrapGap,
   }),
   flexBoxRowGap: (wrapGap: number) => ({
-    rowGap: `${wrapGap}px`,
+    rowGap: wrapGap,
   }),
 });

@@ -9,11 +9,14 @@ import type { StyledDecl } from "../transform-types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   buildTemplateWithStaticParts,
+  canEmitBareStylexPxNumber,
   collectPropsFromArrowFn,
   countConditionalExpressions,
   hasThemeAccessInArrowFn,
   hasUnsupportedConditionalTest,
+  inferPxStyleFnParamType,
   inlineArrowFunctionBody,
+  isPxOnlyStaticParts,
   rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
@@ -136,8 +139,9 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           return null;
         }
         const { prefix, suffix } = extractStaticPartsForDecl(d);
+        const outs = cssDeclarationToStylexDeclarations(d);
         return prefix || suffix
-          ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix)
+          ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix, undefined, outs[0]?.prop)
           : inlineExpr;
       })();
       if (!valueExprRaw) {
@@ -201,9 +205,11 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     }
     // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
     const { prefix, suffix } = extractStaticPartsForDecl(d);
-    const valueExpr =
-      prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
     const outs = cssDeclarationToStylexDeclarations(d);
+    const valueExpr =
+      prefix || suffix
+        ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix, undefined, outs[0]?.prop)
+        : baseExpr;
     const allNonShorthand = outs.every((out) => out.prop && !isStylexShorthandCamelCase(out.prop));
 
     if (allNonShorthand) {
@@ -225,9 +231,11 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
           const paramName = cssPropertyToIdentifier(out.prop, ctx.avoidNames);
           const param = j.identifier(paramName);
           if (/\.(ts|tsx)$/.test(filePath)) {
-            (param as any).typeAnnotation = j.tsTypeAnnotation(
-              inferStyleFnParamType(j, out.prop, valueExpr),
-            );
+            const paramType =
+              isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(out.prop)
+                ? inferPxStyleFnParamType(j, out.prop, prefix, suffix)
+                : inferStyleFnParamType(j, out.prop, valueExpr);
+            (param as any).typeAnnotation = j.tsTypeAnnotation(paramType);
           }
           const propKey = makeCssPropKey(j, out.prop);
           const p = j.property("init", propKey, j.identifier(paramName)) as any;
@@ -279,8 +287,11 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
     if (pseudos?.length || media) {
       const baseExpr = buildRuntimeValueExpr(e as ExpressionKind);
       const { prefix, suffix } = extractStaticPartsForDecl(d);
+      const outs = cssDeclarationToStylexDeclarations(d);
       const valueExprRaw =
-        prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
+        prefix || suffix
+          ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix, undefined, outs[0]?.prop)
+          : baseExpr;
       const propsParam = j.identifier("props");
       emitPseudoMediaStyleFnFromProps({
         j,
@@ -304,10 +315,13 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
       ? cloneAstNode(e as ExpressionKind)
       : buildRuntimeValueExpr(e as ExpressionKind);
     const { prefix, suffix } = extractStaticPartsForDecl(d);
+    const outs = cssDeclarationToStylexDeclarations(d);
     const valueExpr =
-      prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
+      prefix || suffix
+        ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix, undefined, outs[0]?.prop)
+        : baseExpr;
     decl.needsWrapperComponent = true;
-    for (const out of cssDeclarationToStylexDeclarations(d)) {
+    for (const out of outs) {
       if (!out.prop) {
         continue;
       }
@@ -347,6 +361,19 @@ function inferStyleFnParamType(
   | ReturnType<JSCodeshift["tsStringKeyword"]>
   | ReturnType<JSCodeshift["tsNumberKeyword"]>
   | ReturnType<JSCodeshift["tsUnionType"]> {
+  if (
+    callArg.type !== "TemplateLiteral" &&
+    canEmitBareStylexPxNumber(stylexProp) &&
+    expressionHasNullishFallback(callArg)
+  ) {
+    const fallbackType = getNullishFallbackType(callArg);
+    if (fallbackType === "number") {
+      return j.tsNumberKeyword();
+    }
+    if (fallbackType === "string") {
+      return j.tsUnionType([j.tsNumberKeyword(), j.tsStringKeyword()]);
+    }
+  }
   if (callArg.type === "TemplateLiteral" && expressionHasNullishFallback(callArg)) {
     return j.tsStringKeyword();
   }

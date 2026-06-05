@@ -3273,7 +3273,9 @@ function tryDynamicRelationOverrideFallback(args: {
         value: out.value,
       });
       const valueExpr: ExpressionKind =
-        prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
+        prefix || suffix
+          ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix, undefined, out.prop)
+          : inlineExpr;
 
       // Determine if the expression is a simple identity prop reference
       const isSimpleIdentity =

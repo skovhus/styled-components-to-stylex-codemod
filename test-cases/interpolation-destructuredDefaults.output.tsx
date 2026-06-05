@@ -43,7 +43,7 @@ function Box(props: BoxProps) {
     <div
       {...props}
       style={{
-        margin: `${(props.margin ?? 10) || 5}px`,
+        margin: (props.margin ?? 10) || 5,
       }}
     />
   );

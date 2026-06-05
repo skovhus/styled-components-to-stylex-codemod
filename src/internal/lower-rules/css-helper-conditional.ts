@@ -907,11 +907,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
             resolvedExpr = parsed as ExpressionKind;
           }
           const { prefix, suffix } = extractStaticPartsForDecl(d);
-          const valueExpr =
-            prefix || suffix
-              ? buildTemplateWithStaticParts(j, resolvedExpr, prefix, suffix)
-              : resolvedExpr;
           for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+            const valueExpr =
+              prefix || suffix
+                ? buildTemplateWithStaticParts(
+                    j,
+                    resolvedExpr,
+                    prefix,
+                    suffix,
+                    undefined,
+                    mapped.prop,
+                  )
+                : resolvedExpr;
             if (
               !setValueForProp(mapped.prop, valueExpr, media, computedMediaKeyExpr, pseudoEntries)
             ) {

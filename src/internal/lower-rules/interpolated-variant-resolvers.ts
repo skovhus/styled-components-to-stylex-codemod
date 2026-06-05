@@ -100,6 +100,7 @@ export function handleSplitVariantsResolvedValue(ctx: SplitVariantsContext): boo
       imports,
       staticPrefix,
       staticSuffix,
+      stylexProp,
       parseExpr,
       decl,
       warnings,
@@ -516,6 +517,7 @@ export function handleSplitMultiPropVariantsResolvedValue(ctx: SplitVariantsCont
       imports,
       staticPrefix,
       staticSuffix,
+      stylexProp: stylexPropMulti,
       parseExpr,
       decl,
       warnings,
@@ -635,6 +637,7 @@ export function handleDualBranchCompoundVariantsResolvedValue(ctx: SplitVariants
       imports,
       staticPrefix,
       staticSuffix,
+      stylexProp,
       parseExpr,
       decl,
       warnings,
@@ -778,12 +781,13 @@ function parseResolvedAdapterExpr(args: {
   imports: any[];
   staticPrefix: string;
   staticSuffix: string;
+  stylexProp: string;
   parseExpr: (source: string) => unknown;
   decl: StyledDecl;
   warnings: WarningLog[];
 }): { exprAst: unknown; imports: any[] } | null {
-  const { expr, imports, staticPrefix, staticSuffix, parseExpr, decl, warnings } = args;
-  const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix);
+  const { expr, imports, staticPrefix, staticSuffix, stylexProp, parseExpr, decl, warnings } = args;
+  const wrappedExpr = wrapExprWithStaticParts(expr, staticPrefix, staticSuffix, stylexProp);
   const exprAst = parseExpr(wrappedExpr);
   if (!exprAst) {
     warnings.push({

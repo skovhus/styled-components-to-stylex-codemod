@@ -726,6 +726,7 @@ export function createCssHelperResolver(args: {
                   callResolved.exprString,
                   prefix,
                   suffix,
+                  mapped.prop,
                 );
                 const templateAst = parseExpr(wrappedExpr);
                 if (templateAst) {
@@ -776,6 +777,7 @@ export function createCssHelperResolver(args: {
                       branchResolved.exprString,
                       prefix,
                       suffix,
+                      mapped.prop,
                     );
                     const ast = parseExpr(wrappedExpr);
                     if (ast) {
@@ -845,24 +847,28 @@ export function createCssHelperResolver(args: {
               continue;
             }
             // Create a template literal string using the shared helper (same logic as top-level)
-            const wrappedExpr = wrapExprWithStaticParts(resolved.exprString, prefix, suffix);
-            const templateAst = parseExpr(wrappedExpr);
-            if (templateAst) {
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoContext(
-                  templateAst,
-                  mapped.prop,
-                  target as any,
-                ) as any;
+            for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+              const wrappedExpr = wrapExprWithStaticParts(
+                resolved.exprString,
+                prefix,
+                suffix,
+                mapped.prop,
+              );
+              const templateAst = parseExpr(wrappedExpr);
+              if (!templateAst) {
+                return bail(
+                  "Conditional `css` block: failed to parse expression",
+                  { property: d.property },
+                  exprLoc,
+                );
               }
-              continue;
+              (target as any)[mapped.prop] = mergeIntoContext(
+                templateAst,
+                mapped.prop,
+                target as any,
+              ) as any;
             }
-            // Fall through if parsing failed
-            return bail(
-              "Conditional `css` block: failed to parse expression",
-              { property: d.property },
-              exprLoc,
-            );
+            continue;
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
               (target as any)[mapped.prop] = mergeIntoContext(
@@ -896,9 +902,15 @@ export function createCssHelperResolver(args: {
               );
             }
             const { prefix, suffix } = extractPrefixSuffix(parts);
+            const stylexPropForWrap = cssDeclarationToStylexDeclarations(d)[0]?.prop;
 
             // Create AST for false branch (alternate) as base value
-            const altWrappedExpr = wrapExprWithStaticParts(altResolved.exprString, prefix, suffix);
+            const altWrappedExpr = wrapExprWithStaticParts(
+              altResolved.exprString,
+              prefix,
+              suffix,
+              stylexPropForWrap,
+            );
             const altAst = parseExpr(altWrappedExpr);
 
             // Create AST for true branch (consequent) as variant value
@@ -906,6 +918,7 @@ export function createCssHelperResolver(args: {
               consResolved.exprString,
               prefix,
               suffix,
+              stylexPropForWrap,
             );
             const consAst = parseExpr(consWrappedExpr);
 

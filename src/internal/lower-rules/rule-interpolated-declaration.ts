@@ -71,7 +71,11 @@ type ArrowFunctionParams = Parameters<JSCodeshift["arrowFunctionExpression"]>[0]
 
 import {
   buildTemplateWithStaticParts,
+  canEmitBareStylexPxNumber,
   collectDollarParamBindingIdentifiers,
+  emitStylexPxNumericValue,
+  inferPxStyleFnParamType,
+  isPxOnlyStaticParts,
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
   getImportedStylexIdentifiers,
@@ -634,6 +638,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           param,
           prefix,
           suffix,
+          stylexProp,
         }),
       fallbackFnKey,
     );
@@ -898,15 +903,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     // P1 fix: Wrap with static prefix/suffix and !important (same as static branch)
     const { prefix, suffix } = extractStaticPartsForDecl(d);
     const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
-    const runtimeCallArg =
-      prefix || effectiveSuffix
-        ? buildTemplateWithStaticParts(j, baseRuntimeExpr, prefix, effectiveSuffix)
-        : baseRuntimeExpr;
-
-    if (runtimeExprNeedsTheme) {
-      markDeclNeedsUseThemeHook(decl);
-    }
-
     const outs = cssDeclarationToStylexDeclarations(d);
     if (outs.length !== 1 || !outs[0]?.prop) {
       warnings.push({
@@ -919,13 +915,29 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     }
 
     const out = outs[0]!;
+    const runtimeCallArg =
+      prefix || effectiveSuffix
+        ? buildTemplateWithStaticParts(
+            j,
+            baseRuntimeExpr,
+            prefix,
+            effectiveSuffix,
+            undefined,
+            out.prop,
+          )
+        : baseRuntimeExpr;
+
+    if (runtimeExprNeedsTheme) {
+      markDeclNeedsUseThemeHook(decl);
+    }
+
     const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
     if (!styleFnDecls.has(fnKey)) {
       const outParamName = cssPropertyToIdentifier(out.prop, avoidNames);
       const param = j.identifier(outParamName);
       if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          j.tsStringKeyword(),
+          inferPxStyleFnParamType(j, out.prop, prefix, suffix),
         );
       }
       const body = j.objectExpression([makeCssProperty(j, out.prop, outParamName)]);
@@ -1052,6 +1064,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       }
       // Preserve static text surrounding the interpolation slot (e.g. "0 0 0 1px ${theme} , ...")
       const { prefix, suffix } = extractStaticPartsForDecl(d);
+      const stylexDecls = cssDeclarationToStylexDeclarations(d);
       const finalValue = buildTemplateWithStaticParts(
         j,
         resolved as ExpressionKind,
@@ -1062,12 +1075,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           property: (d.property ?? "").trim(),
           stylisValueRaw: d.valueRaw ?? "",
         },
+        stylexDecls[0]?.prop,
       );
       // When pseudoElement is also set (e.g., ::-webkit-slider-thumb:hover),
       // delegate to applyResolvedPropValue which correctly scopes the pseudo-class
       // within the pseudo-element's nested selector bucket.
       if (pseudoElement) {
-        for (const out of cssDeclarationToStylexDeclarations(d)) {
+        for (const out of stylexDecls) {
           applyResolvedPropValue(out.prop, finalValue, null);
         }
         return true;
@@ -1929,9 +1943,10 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
       // Extract and wrap static prefix/suffix (skip for border-color since expansion handled it)
       const { prefix, suffix } = extractStaticPartsForDecl(d);
+      const outs = cssDeclarationToStylexDeclarations(d);
       // Preserve !important by appending it to the suffix
       const effectiveSuffix = d.important ? `${suffix} !important` : suffix;
-      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix);
+      const wrappedExpr = wrapExprWithStaticParts(res.expr, prefix, effectiveSuffix, outs[0]?.prop);
 
       const exprAst = parseExpr(wrappedExpr);
       if (!exprAst) {
@@ -1953,7 +1968,6 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         bail = true;
         break;
       }
-      const outs = cssDeclarationToStylexDeclarations(d);
       for (let i = 0; i < outs.length; i++) {
         const out = outs[i]!;
         const commentSource =
@@ -2527,15 +2541,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
 
         // --- B. Dynamic branch → merge with existing variant or create new ---
         const conditionWhen = isStaticWhenFalse ? conditionProp : `!${conditionProp}`;
+        const stylexDeclsForDynamic = cssDeclarationToStylexDeclarations(d);
         const clonedDynamic = cloneAstNode(dynamicBranchExpr) as ExpressionKind;
         const dynamicValueExpr =
           prefix || suffix
-            ? buildTemplateWithStaticParts(j, clonedDynamic, prefix, suffix)
+            ? buildTemplateWithStaticParts(
+                j,
+                clonedDynamic,
+                prefix,
+                suffix,
+                undefined,
+                stylexDeclsForDynamic[0]?.prop,
+              )
             : clonedDynamic;
         const existingBucket = variantBuckets.get(conditionProp);
 
         if (!existingBucket && dynamicProps.length === 1) {
-          const out = cssDeclarationToStylexDeclarations(d)[0];
+          const out = stylexDeclsForDynamic[0];
           const dynamicProp = dynamicProps[0];
           if (
             out &&
@@ -2722,9 +2744,17 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           }
           const themeRewritten = rewritePropsThemeToThemeVar(inlinedExpr as ExpressionKind);
           const { prefix, suffix } = extractStaticPartsForDecl(d);
+          const themeInlineOuts = cssDeclarationToStylexDeclarations(d);
           const valueExpr =
             prefix || suffix
-              ? buildTemplateWithStaticParts(j, themeRewritten, prefix, suffix)
+              ? buildTemplateWithStaticParts(
+                  j,
+                  themeRewritten,
+                  prefix,
+                  suffix,
+                  undefined,
+                  themeInlineOuts[0]?.prop,
+                )
               : themeRewritten;
           markDeclNeedsUseThemeHook(decl);
           for (const propName of res.props ?? []) {
@@ -2733,7 +2763,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             }
             ensureShouldForwardPropDrop(decl, propName);
           }
-          for (const out of cssDeclarationToStylexDeclarations(d)) {
+          for (const out of themeInlineOuts) {
             if (!out.prop) {
               continue;
             }
@@ -2835,6 +2865,8 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     scalarProps?.valueExpr ?? valueExprRaw,
                     prefix,
                     suffix,
+                    undefined,
+                    out.prop,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
             const guardedDynamic = extractGuardedDynamicBranch(j, bodyExpr);
@@ -3108,7 +3140,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // Be permissive: callers might pass numbers (e.g. `${props => props.$width}px`)
             // or strings (e.g. `${props => props.$color}`).
             if (jsxProp !== "__props") {
-              annotateParamFromJsxProp(param, jsxProp);
+              const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
+              if (
+                /\.(ts|tsx)$/.test(filePath) &&
+                isPxOnlyStaticParts(staticPrefix, staticSuffix) &&
+                canEmitBareStylexPxNumber(out.prop)
+              ) {
+                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
+                  inferPxStyleFnParamType(j, out.prop, staticPrefix, staticSuffix),
+                );
+              } else {
+                annotateParamFromJsxProp(param, jsxProp);
+              }
             }
             if (resolvedCallArg && /\.(ts|tsx)$/.test(filePath)) {
               (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
@@ -3181,6 +3224,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                   );
                 }
                 return transformedValue;
+              }
+
+              const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
+              if (
+                isPxOnlyStaticParts(staticPrefix, staticSuffix) &&
+                canEmitBareStylexPxNumber(out.prop) &&
+                !shouldPreserveNumericCssTextForProp(jsxProp, out.prop)
+              ) {
+                return emitStylexPxNumericValue(j, transformed, staticPrefix);
               }
 
               const quasis: any[] = [];
@@ -3339,7 +3391,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
         const { prefix, suffix } = extractStaticPartsForDecl(d);
         const expr =
-          prefix || suffix ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix) : baseExpr;
+          prefix || suffix
+            ? buildTemplateWithStaticParts(j, baseExpr, prefix, suffix, undefined, out.prop)
+            : baseExpr;
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         const scalarProps =
           jsxProp === "__props" &&
@@ -3369,7 +3423,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           annotateScalarParams(params, scalarProps.paramNames);
         } else if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
           (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-            j.tsStringKeyword(),
+            inferPxStyleFnParamType(j, out.prop, prefix, suffix),
           );
         }
         const valueExpr = scalarProps
@@ -3684,6 +3738,8 @@ function tryHandleLocalCustomPropertyDefinition(args: {
     j.identifier(propName),
     customValue.prefix,
     customValue.suffix,
+    undefined,
+    customValue.cssName,
   );
   inlineStyleProps.push({
     prop: customValue.cssName,
@@ -4318,6 +4374,12 @@ function emitStaticObservedValue(
     return value;
   }
   if (staticParts.prefix || staticParts.suffix) {
+    if (
+      isPxOnlyStaticParts(staticParts.prefix, staticParts.suffix) &&
+      canEmitBareStylexPxNumber(stylexProp)
+    ) {
+      return staticParts.prefix === "-" ? -value : value;
+    }
     return `${staticParts.prefix}${value}${staticParts.suffix}`;
   }
   return getNumericCssEmissionMode(stylexProp) === "stylexNumber" ? value : String(value);
@@ -4329,6 +4391,12 @@ function buildRuntimeObservedValueExpr(
   valueExpr: ExpressionKind,
   staticParts: StaticParts,
 ): ExpressionKind {
+  if (
+    isPxOnlyStaticParts(staticParts.prefix, staticParts.suffix) &&
+    canEmitBareStylexPxNumber(stylexProp)
+  ) {
+    return emitStylexPxNumericValue(j, valueExpr, staticParts.prefix);
+  }
   if (
     getNumericCssEmissionMode(stylexProp) === "stylexNumber" &&
     !staticParts.prefix &&
@@ -4353,8 +4421,9 @@ function buildObservedExpressionFallbackValueExpr(args: {
   param: ExpressionKind;
   prefix: string;
   suffix: string;
+  stylexProp: string;
 }): ExpressionKind | null {
-  const { j, expression, jsxProp, paramName, param, prefix, suffix } = args;
+  const { j, expression, jsxProp, paramName, param, prefix, suffix, stylexProp } = args;
   const propNames = new Set([jsxProp, jsxProp.startsWith("$") ? jsxProp.slice(1) : jsxProp]);
   let replaced = false;
   const rewritten = mapAst(cloneAstNode(expression), (node) => {
@@ -4381,7 +4450,9 @@ function buildObservedExpressionFallbackValueExpr(args: {
   if (!replaced) {
     return null;
   }
-  return prefix || suffix ? buildTemplateWithStaticParts(j, rewritten, prefix, suffix) : rewritten;
+  return prefix || suffix
+    ? buildTemplateWithStaticParts(j, rewritten, prefix, suffix, undefined, stylexProp)
+    : rewritten;
 }
 
 function isNumberLikeTsType(tsType: unknown): boolean {
@@ -4699,10 +4770,12 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
   }
 
-  const valueExpr: ExpressionKind =
-    prefix || suffix ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix) : inlineExpr;
-
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
+  const valueExpr: ExpressionKind =
+    prefix || suffix
+      ? buildTemplateWithStaticParts(j, inlineExpr, prefix, suffix, undefined, stylexDecls[0]?.prop)
+      : inlineExpr;
+
   const pseudoLabel = pseudoElement.replace(/^:+/, "");
   const bindings =
     expr.type === "ArrowFunctionExpression"
@@ -4781,7 +4854,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
         ctx.annotateParamFromJsxProp(param, jsxProp);
       } else if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          j.tsStringKeyword(),
+          inferPxStyleFnParamType(j, out.prop, prefix, suffix),
         );
       }
 
@@ -5279,7 +5352,10 @@ function addUndefinedToParamType(j: JSCodeshift, param: unknown): void {
     return;
   }
   typedParam.typeAnnotation = j.tsTypeAnnotation(
-    j.tsUnionType([current as ReturnType<typeof j.tsStringKeyword>, j.tsUndefinedKeyword()]),
+    j.tsUnionType([
+      current as Parameters<JSCodeshift["tsUnionType"]>[0][number],
+      j.tsUndefinedKeyword(),
+    ]),
   );
 }
 

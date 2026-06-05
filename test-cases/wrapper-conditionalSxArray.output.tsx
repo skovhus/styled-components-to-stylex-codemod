@@ -15,7 +15,7 @@ function CompactButton(props: CompactButtonProps) {
     <SxAwareButton
       {...rest}
       sx={[
-        callerStyles.compactButton(`${width ?? 120}px`),
+        callerStyles.compactButton(width ?? 120),
         compact ? callerStyles.compactButtonCompact : null,
         sx,
       ]}
@@ -27,7 +27,7 @@ const callerStyles = stylex.create({
   caller: {
     textDecorationLine: "underline",
   },
-  compactButton: (width: string) => ({
+  compactButton: (width: number) => ({
     color: "#0f172a",
     width,
   }),

@@ -26,8 +26,8 @@ function NegativeOffset(props: NegativeOffsetProps) {
     <div
       sx={[
         styles.negativeOffset,
-        styles.negativeOffsetHeight(`${size ?? 44}px`),
-        styles.negativeOffsetMarginBottom(`-${size ?? 44}px`),
+        styles.negativeOffsetHeight(size ?? 44),
+        styles.negativeOffsetMarginBottom(-(size ?? 44)),
       ]}
     >
       {children}
@@ -88,14 +88,14 @@ const styles = stylex.create({
     height: `max(100px, ${height})`,
   }),
   negativeOffset: {
-    height: "44px",
-    marginBottom: "-44px",
+    height: 44,
+    marginBottom: -44,
     backgroundColor: "lavender",
   },
-  negativeOffsetHeight: (height: string) => ({
+  negativeOffsetHeight: (height: number) => ({
     height,
   }),
-  negativeOffsetMarginBottom: (marginBottom: string) => ({
+  negativeOffsetMarginBottom: (marginBottom: number) => ({
     marginBottom,
   }),
 });
