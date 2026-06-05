@@ -98,7 +98,13 @@ import { buildPseudoMediaPropValue } from "./variant-utils.js";
 import { findCssVarCallsInString } from "../css-vars.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
 import { extractUnionLiteralValues } from "./variants.js";
-import { toStyleKey, styleKeyWithSuffix } from "../transform/helpers.js";
+import {
+  cssValueToJs,
+  normalizeCssContentValue,
+  toStyleKey,
+  styleKeyWithSuffix,
+} from "../transform/helpers.js";
+import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
 import { isMemberExpression, mapAst } from "./utils.js";
 import {
@@ -117,6 +123,7 @@ type ResolveImportedValueExpr = (expr: any, allowCssCalc?: boolean) => ImportedV
 type InterpolatedDeclarationContext = {
   ctx: DeclProcessingState;
   rule: CssRuleIR;
+  allRules: readonly CssRuleIR[];
   d: CssDeclarationIR;
   media: string | undefined;
   pseudos: string[] | null;
@@ -129,6 +136,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
   const {
     ctx,
     rule,
+    allRules,
     d,
     media,
     pseudos,
@@ -1535,6 +1543,24 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         inlineStyleProps,
       })
     ) {
+      continue;
+    }
+    if (
+      tryHandleRuntimeConditionalStaticBranches(ctx, {
+        rule,
+        allRules,
+        d,
+        media,
+        pseudos,
+        pseudoElement,
+        attrTarget,
+        resolvedSelectorMedia,
+      })
+    ) {
+      continue;
+    }
+    if (isImportedShorthandUnitValue(d, decl, importMap)) {
+      bailUnsupportedLocal(decl, "Unsupported interpolation: call expression");
       continue;
     }
     if (
@@ -3669,6 +3695,297 @@ function tryHandleLocalCustomPropertyDefinition(args: {
   }
   decl.needsWrapperComponent = true;
   return true;
+}
+
+function tryHandleRuntimeConditionalStaticBranches(
+  ctx: Pick<DeclProcessingState, "decl" | "state" | "applyVariant" | "getBaseStyleTarget">,
+  args: {
+    rule: CssRuleIR;
+    allRules: readonly CssRuleIR[];
+    d: CssDeclarationIR;
+    media: string | undefined;
+    pseudos: string[] | null;
+    pseudoElement: string | null;
+    attrTarget: Record<string, unknown> | null;
+    resolvedSelectorMedia: { keyExpr: unknown; exprSource: string } | null;
+  },
+): boolean {
+  const { decl, state, applyVariant, getBaseStyleTarget } = ctx;
+  const { j } = state;
+  const { rule, allRules, d, media, pseudos, pseudoElement, attrTarget, resolvedSelectorMedia } =
+    args;
+  if (
+    !d.property ||
+    d.value.kind !== "interpolated" ||
+    rule.selector.trim() !== "&" ||
+    media ||
+    attrTarget ||
+    pseudos?.length ||
+    pseudoElement ||
+    resolvedSelectorMedia
+  ) {
+    return false;
+  }
+
+  const parts = d.value.parts ?? [];
+  const slotParts = parts.filter(
+    (part: { kind?: string }): part is { kind: "slot"; slotId: number } => part.kind === "slot",
+  );
+  if (slotParts.length !== 1) {
+    return false;
+  }
+
+  const expr = decl.templateExpressions[slotParts[0]!.slotId] as
+    | {
+        type?: string;
+        test?: ExpressionKind;
+        consequent?: ExpressionKind;
+        alternate?: ExpressionKind;
+      }
+    | undefined;
+  if (
+    !expr ||
+    expr.type !== "ConditionalExpression" ||
+    !expr.test ||
+    !expr.consequent ||
+    !expr.alternate ||
+    !isImportedRuntimeCondition(expr.test, state.importMap)
+  ) {
+    return false;
+  }
+
+  const consequentValue = literalToStaticValue(expr.consequent);
+  const alternateValue = literalToStaticValue(expr.alternate);
+  if (
+    consequentValue === null ||
+    alternateValue === null ||
+    typeof consequentValue === "boolean" ||
+    typeof alternateValue === "boolean"
+  ) {
+    return false;
+  }
+
+  const when = expressionToSource(j, expr.test);
+  if (!when) {
+    return false;
+  }
+
+  const buildBranchValue = (slotValue: string | number): string => {
+    let value = "";
+    for (const part of parts) {
+      value += part.kind === "slot" ? String(slotValue) : (part.value ?? "");
+    }
+    return value;
+  };
+
+  const consequentStyle = buildStaticBranchStyle(d, buildBranchValue(consequentValue));
+  const alternateStyle = buildStaticBranchStyle(d, buildBranchValue(alternateValue));
+  if (!consequentStyle || !alternateStyle) {
+    return false;
+  }
+  if (!sameStyleProps(consequentStyle, alternateStyle)) {
+    state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
+  }
+  if (hasLaterDeclarationOverlap(rule, allRules, d, new Set(Object.keys(consequentStyle)))) {
+    state.bailUnsupported(decl, "Unsupported interpolation: call expression");
+    return true;
+  }
+
+  const target = getBaseStyleTarget();
+  for (const [prop, value] of Object.entries(alternateStyle)) {
+    target[prop] = value;
+  }
+  applyVariant({ when }, consequentStyle);
+  decl.needsWrapperComponent = true;
+  return true;
+}
+
+function buildStaticBranchStyle(
+  d: CssDeclarationIR,
+  rawValue: string,
+): Record<string, unknown> | null {
+  if (d.property === "background" && isUnsupportedBackgroundShorthandValue(rawValue)) {
+    return null;
+  }
+
+  const staticDecl: CssDeclarationIR = {
+    ...d,
+    value: { kind: "static", value: rawValue },
+    valueRaw: rawValue,
+  };
+  const style: Record<string, unknown> = {};
+  for (const out of cssDeclarationToStylexDeclarations(staticDecl)) {
+    if (out.value.kind !== "static") {
+      return null;
+    }
+    let value = cssValueToJs(out.value, d.important, out.prop);
+    if (out.prop === "content" && typeof value === "string") {
+      value = normalizeCssContentValue(value);
+    }
+    style[out.prop] = value;
+  }
+  return Object.keys(style).length ? style : null;
+}
+
+function sameStyleProps(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = new Set(Object.keys(right));
+  return leftKeys.length === rightKeys.size && leftKeys.every((key) => rightKeys.has(key));
+}
+
+function hasLaterDeclarationOverlap(
+  rule: CssRuleIR,
+  allRules: readonly CssRuleIR[],
+  currentDecl: CssDeclarationIR,
+  stylexProps: ReadonlySet<string>,
+): boolean {
+  const currentIndex = rule.declarations.indexOf(currentDecl);
+  if (currentIndex === -1) {
+    return false;
+  }
+  if (declarationsOverlap(rule.declarations.slice(currentIndex + 1), stylexProps)) {
+    return true;
+  }
+
+  const currentRuleIndex = allRules.indexOf(rule);
+  if (currentRuleIndex === -1) {
+    return false;
+  }
+  for (const laterRule of allRules.slice(currentRuleIndex + 1)) {
+    if (rule.selector !== laterRule.selector) {
+      continue;
+    }
+    if (declarationsOverlap(laterRule.declarations, stylexProps)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function declarationsOverlap(
+  declarations: readonly CssDeclarationIR[],
+  stylexProps: ReadonlySet<string>,
+): boolean {
+  for (const laterDecl of declarations) {
+    if (!laterDecl.property) {
+      return true;
+    }
+    for (const out of cssDeclarationToStylexDeclarations(laterDecl)) {
+      if ([...stylexProps].some((prop) => stylexPropsOverlap(prop, out.prop))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function stylexPropsOverlap(left: string, right: string): boolean {
+  const leftRelated = relatedDirectionalProps(left);
+  const rightRelated = relatedDirectionalProps(right);
+  return [...leftRelated].some((prop) => rightRelated.has(prop));
+}
+
+function relatedDirectionalProps(prop: string): Set<string> {
+  const related = new Set([prop]);
+  const addDirectionalGroup = (shorthand: string): void => {
+    const group = SHORTHAND_LONGHANDS[shorthand];
+    if (!group) {
+      return;
+    }
+    related.add(shorthand);
+    for (const item of [...group.logical, ...group.physical]) {
+      related.add(item);
+    }
+  };
+
+  const directGroup = SHORTHAND_LONGHANDS[prop];
+  if (directGroup) {
+    addDirectionalGroup(prop);
+  }
+  for (const [logical, physical] of Object.entries(LOGICAL_TO_PHYSICAL)) {
+    if (prop === logical || physical.includes(prop)) {
+      const shorthand = Object.entries(SHORTHAND_LONGHANDS).find(([, group]) =>
+        group.logical.includes(logical),
+      )?.[0];
+      if (shorthand) {
+        addDirectionalGroup(shorthand);
+      }
+    }
+  }
+  addRelatedBorderLonghands(prop, related);
+  return related;
+}
+
+function addRelatedBorderLonghands(prop: string, related: Set<string>): void {
+  const borderMatch = prop.match(/^border(?:(Top|Right|Bottom|Left))?(Width|Style|Color)$/);
+  const kind = borderMatch?.[2];
+  if (!kind) {
+    return;
+  }
+  related.add(`border${kind}`);
+  for (const side of ["Top", "Right", "Bottom", "Left"]) {
+    related.add(`border${side}${kind}`);
+  }
+}
+
+function isImportedRuntimeCondition(
+  expr: ExpressionKind,
+  importMap: ReadonlyMap<string, unknown>,
+): boolean {
+  const info = extractRootAndPath(expr);
+  if (
+    info &&
+    info.path.length > 0 &&
+    importMap.has(info.rootName) &&
+    isRuntimeConditionImportRoot(info.rootName)
+  ) {
+    return true;
+  }
+  if (expr.type === "LogicalExpression" && expr.operator === "&&") {
+    return (
+      isImportedRuntimeCondition(expr.left as ExpressionKind, importMap) &&
+      isImportedRuntimeCondition(expr.right as ExpressionKind, importMap)
+    );
+  }
+  if (expr.type === "UnaryExpression" && expr.operator === "!") {
+    return isImportedRuntimeCondition(expr.argument as ExpressionKind, importMap);
+  }
+  return false;
+}
+
+function isRuntimeConditionImportRoot(rootName: string): boolean {
+  return /^[A-Z]/.test(rootName);
+}
+
+function isImportedShorthandUnitValue(
+  d: CssDeclarationIR,
+  decl: StyledDecl,
+  importMap: ReadonlyMap<string, unknown>,
+): boolean {
+  if (!d.property || !isCssShorthandProperty(d.property)) {
+    return false;
+  }
+  const staticParts = getSingleSlotStaticParts(d, decl);
+  if (!staticParts || !/^[a-zA-Z%]/.test(staticParts.suffix)) {
+    return false;
+  }
+  const slotPart =
+    d.value.kind === "interpolated" ? d.value.parts.find((part) => part.kind === "slot") : null;
+  const expr =
+    slotPart && slotPart.kind === "slot"
+      ? (decl.templateExpressions[slotPart.slotId] as ExpressionKind | undefined)
+      : undefined;
+  const info = extractRootAndPath(expr);
+  return !!info && importMap.has(info.rootName);
+}
+
+function expressionToSource(j: JSCodeshift, expr: ExpressionKind): string | null {
+  try {
+    return j(expr).toSource();
+  } catch {
+    return null;
+  }
 }
 
 function findLocalCustomPropertyFallback(cssName: string, decl: StyledDecl): string | null {

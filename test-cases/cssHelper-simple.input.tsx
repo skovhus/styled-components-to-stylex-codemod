@@ -31,11 +31,21 @@ export const BranchedContainer = styled.div<{ size: number }>`
   }}
 `;
 
+const RuntimeOffset = styled.div`
+  position: relative;
+  top: ${Browser.isTouchDevice ? 5 : 1}px;
+  left: ${Browser.isTouchDevice && !Browser.isSafari ? -5 : -40}px;
+  margin: ${Browser.isTouchDevice ? 4 : 8}px 12px;
+  padding: ${Browser.isTouchDevice ? 4 : 8}px !important;
+  background-color: peachpuff;
+`;
+
 export const App = () => (
   <div>
     <Container size={16} padding={4}>
       Hello World
     </Container>
     <BranchedContainer size={16}>Branched</BranchedContainer>
+    <RuntimeOffset>Runtime touch offset</RuntimeOffset>
   </div>
 );

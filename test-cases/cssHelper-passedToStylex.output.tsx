@@ -1,6 +1,24 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { scrollFadeMaskStyles, helpers } from "./lib/helpers.stylex";
+import { Browser } from "./lib/helpers";
+
+// Pattern 5: Runtime unit branch after a resolved StyleX helper must stay after
+// the helper in sx ordering so the false branch preserves CSS cascade order.
+function RuntimeAfterHelper({ children }: { children?: React.ReactNode }) {
+  return (
+    <div
+      sx={[
+        styles.runtimeAfterHelper,
+        helpers.flexCenter,
+        styles.runtimeAfterHelperAfter1,
+        Browser.isTouchDevice ? styles.runtimeAfterHelperBrowserIsTouchDevice : undefined,
+      ]}
+    >
+      {children}
+    </div>
+  );
+}
 
 export const App = () => (
   <>
@@ -24,6 +42,9 @@ export const App = () => (
       <span style={{ background: "coral", padding: 4 }}>A</span>
       <span style={{ background: "gold", padding: 4 }}>B</span>
     </div>
+    <RuntimeAfterHelper>
+      <span style={{ background: "white", padding: 4 }}>Runtime after helper</span>
+    </RuntimeAfterHelper>
   </>
 );
 
@@ -57,5 +78,18 @@ const styles = stylex.create({
 
   overrideDisplayAfter1: {
     display: "block",
+  },
+
+  runtimeAfterHelper: {
+    position: "relative",
+  },
+
+  runtimeAfterHelperAfter1: {
+    top: 1,
+    backgroundColor: "lavender",
+  },
+
+  runtimeAfterHelperBrowserIsTouchDevice: {
+    top: 5,
   },
 });

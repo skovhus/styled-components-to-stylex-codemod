@@ -1,6 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $zIndex } from "./tokens.stylex";
+import { PageSizeConstants } from "./lib/pageSizes.stylex";
 
 const PEEK_MAX_WIDTH = 380;
 
@@ -17,6 +18,7 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 6,
     maxWidth: `${PEEK_MAX_WIDTH}px`,
+    minHeight: `${PageSizeConstants.listInitiativeRowHeight}px`,
     position: "fixed",
     zIndex: $zIndex.modal,
   },

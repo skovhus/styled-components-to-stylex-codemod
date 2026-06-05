@@ -3,7 +3,7 @@
  * Core concepts: static prefix/suffix extraction and value wrapping.
  */
 import type { StyledDecl } from "../transform-types.js";
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import { cssDeclarationToStylexDeclarations, isCssShorthandProperty } from "../css-prop-mapping.js";
 import {
   getMemberPathFromIdentifier,
   literalToStaticValue,
@@ -357,13 +357,17 @@ function buildInterpolatedTemplate(args: {
           return null;
         }
         const resolved = importedResolved;
-        if (resolved.skipStaticWrap && hasSingleSlotUnitSuffix(cssValue)) {
+        if (
+          resolved.skipStaticWrap &&
+          hasSingleSlotUnitSuffix(cssValue) &&
+          !isCssShorthandProperty((multiline?.property ?? "").trim())
+        ) {
           for (const imp of resolved.imports ?? []) {
             addImport?.(imp);
           }
           return resolved.resolved;
         }
-        if (hasAdjacentUnitInParts(parts, partIndex)) {
+        if (hasAdjacentUnitInParts(parts, partIndex) && !hasSingleSlotUnitSuffix(cssValue)) {
           return null;
         }
         if (
