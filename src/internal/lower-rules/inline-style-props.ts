@@ -235,7 +235,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
             const paramType =
               isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(out.prop)
                 ? inferPxStyleFnParamType(j, out.prop, prefix, suffix)
-                : inferStyleFnParamType(j, out.prop, valueExpr);
+                : inferStyleFnParamType(j, out.prop, valueExpr, prefix, suffix);
             (param as any).typeAnnotation = j.tsTypeAnnotation(paramType);
           }
           const p = makePxAwareCssProperty(j, out.prop, paramName, prefix, suffix);
@@ -356,12 +356,15 @@ function inferStyleFnParamType(
   j: JSCodeshift,
   stylexProp: string,
   callArg: ExpressionKind,
+  prefix: string,
+  suffix: string,
 ):
   | ReturnType<JSCodeshift["tsStringKeyword"]>
   | ReturnType<JSCodeshift["tsNumberKeyword"]>
   | ReturnType<JSCodeshift["tsUnionType"]> {
   if (
     callArg.type !== "TemplateLiteral" &&
+    isPxOnlyStaticParts(prefix, suffix) &&
     canEmitBareStylexPxNumber(stylexProp) &&
     expressionHasNullishFallback(callArg)
   ) {
