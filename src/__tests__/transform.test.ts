@@ -5997,6 +5997,27 @@ export const Box = styled.div<{ $opacity: number; $z: number }>\`
     expect(result.code ?? "").toContain("zIndex: `${zIndex}px`");
   });
 
+  it("preserves observed fallback px templates when the prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ size: number | string }>\`
+  width: \${(props) => props.size}px;
+\`;
+
+export const App = () => <Box size={8}>Observed</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "observed-string-or-number-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${size}px`");
+  });
+
   it("preserves px templates in pseudo-elements when the interpolation prop can be a string", () => {
     const source = `
 import styled from "styled-components";

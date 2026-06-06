@@ -2452,6 +2452,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/variant-localObservedNumeric.input.tsx:FlexiblePanel": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/variant-localObservedNumeric.input.tsx:Panel": {
           "as": false,
           "className": false,

@@ -520,8 +520,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       );
     }
     if (observedValues) {
+      const numericIdentifiers = numericIdentifierSetForJsxProp(jsxProp, ctx.findJsxPropTsType);
       const fallbackFnKey = ensureObservedVariantFallbackFn(jsxProp, stylexProp, (param) =>
-        buildRuntimeObservedValueExpr(j, stylexProp, param, staticParts),
+        buildRuntimeObservedValueExpr(j, stylexProp, param, staticParts, numericIdentifiers),
       );
       if (fallbackFnKey) {
         observedVariantFallbackFns.set(jsxProp, fallbackFnKey);
@@ -4375,8 +4376,12 @@ function buildRuntimeObservedValueExpr(
   stylexProp: string,
   valueExpr: ExpressionKind,
   staticParts: StaticParts,
+  numericIdentifiers: ReadonlySet<string> = new Set(),
 ): ExpressionKind {
-  if (canOmitPxUnitForStylexNumber(stylexProp, staticParts.prefix, staticParts.suffix)) {
+  if (
+    canOmitPxUnitForStylexNumber(stylexProp, staticParts.prefix, staticParts.suffix) &&
+    isNumericStylexExpression(valueExpr, { numericIdentifiers })
+  ) {
     return staticParts.prefix === "-"
       ? (j.unaryExpression("-", valueExpr, true) as ExpressionKind)
       : valueExpr;
