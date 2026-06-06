@@ -4,6 +4,7 @@ import styled from "styled-components";
 // String interpolation for dynamic values
 const dynamicColor = "#BF4F74";
 const spacing = 16;
+const stringSpacing = "8";
 const borderRadius = "4px";
 
 const Button = styled.button`
@@ -22,6 +23,10 @@ const Text = styled.p`
   font-size: ${fontSize}px;
   line-height: ${lineHeight};
   margin: ${spacing / 2}px 0;
+`;
+
+const StringSpacingText = styled.p`
+  margin: ${stringSpacing}px 0;
 `;
 
 // Conditional string interpolation
@@ -67,6 +72,7 @@ export const App = () => (
   <div>
     <Button>Button</Button>
     <Text>Some text</Text>
+    <StringSpacingText>String spacing</StringSpacingText>
     <ConditionalButton>Conditional</ConditionalButton>
     <ThemedCard>Themed Card</ThemedCard>
     <DynamicBox $variant="primary">Primary</DynamicBox>

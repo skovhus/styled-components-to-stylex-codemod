@@ -6,6 +6,7 @@ import * as stylex from "@stylexjs/stylex";
 // String interpolation for dynamic values
 const dynamicColor = "#BF4F74";
 const spacing = 16;
+const stringSpacing = "8";
 const borderRadius = "4px";
 
 // Template literal with expressions
@@ -49,6 +50,7 @@ export const App = () => (
   <div>
     <button sx={styles.button}>Button</button>
     <p sx={styles.text}>Some text</p>
+    <p sx={styles.stringSpacingText}>String spacing</p>
     <button sx={styles.conditionalButton}>Conditional</button>
     <div sx={styles.themedCard}>Themed Card</div>
     <DynamicBox variant="primary">Primary</DynamicBox>
@@ -69,7 +71,11 @@ const styles = stylex.create({
   text: {
     fontSize: fontSize,
     lineHeight: lineHeight,
-    marginBlock: spacing / 2,
+    marginBlock: Number(spacing / 2),
+    marginInline: 0,
+  },
+  stringSpacingText: {
+    marginBlock: Number(stringSpacing),
     marginInline: 0,
   },
   conditionalButton: {

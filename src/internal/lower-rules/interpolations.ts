@@ -16,6 +16,7 @@ import { addPropComments } from "./comments.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
   canEmitBareStylexPxNumber,
+  coerceStylexPxExpression,
   emitStylexPxNumericValue,
   isPxOnlyStaticParts,
 } from "./inline-styles.js";
@@ -169,7 +170,7 @@ export function tryHandleInterpolatedStringValue(args: {
       const unit = m[2] ?? "";
       const tl =
         unit === "px"
-          ? emitStylexPxNumericValue(j, expr, "")
+          ? coerceStylexPxExpression(j, expr)
           : j.templateLiteral(
               [
                 j.templateElement({ raw: "", cooked: "" }, false),

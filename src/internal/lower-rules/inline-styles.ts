@@ -166,9 +166,16 @@ export function emitStylexPxNumericValue(
   return expr;
 }
 
+/** Coerce a px expression to a number so numeric strings still get px units. */
+export function coerceStylexPxExpression(j: JSCodeshift, expr: ExpressionKind): ExpressionKind {
+  return j.callExpression(j.identifier("Number"), [
+    emitStylexPxNumericValue(j, expr, ""),
+  ]) as ExpressionKind;
+}
+
 /** Coerce a style-function param to a number so numeric strings still get px units. */
 export function coerceStylexPxStyleFnParamValue(j: JSCodeshift, paramName: string): ExpressionKind {
-  return j.callExpression(j.identifier("Number"), [j.identifier(paramName)]) as ExpressionKind;
+  return coerceStylexPxExpression(j, j.identifier(paramName));
 }
 
 /** Style-function object property that coerces px params to numbers for StyleX. */

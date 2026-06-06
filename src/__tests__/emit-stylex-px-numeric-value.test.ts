@@ -1,6 +1,7 @@
 import jscodeshift from "jscodeshift";
 import { describe, expect, it } from "vitest";
 import {
+  coerceStylexPxExpression,
   coerceStylexPxStyleFnParamValue,
   emitStylexPxNumericValue,
   makePxAwareCssProperty,
@@ -44,6 +45,25 @@ describe("makePxAwareCssProperty", () => {
     }) as { value?: { type?: string; name?: string } };
     expect(prop.value?.type).toBe("Identifier");
     expect(prop.value?.name).toBe("width");
+  });
+});
+
+describe("coerceStylexPxExpression", () => {
+  it("wraps dynamic expressions with Number()", () => {
+    const ast = j(`const x = stringSpacing`);
+    const expr = ast.find(jscodeshift.VariableDeclarator).nodes()[0]?.init;
+    if (!expr) {
+      throw new Error("Failed to parse expression");
+    }
+    const result = coerceStylexPxExpression(j, expr);
+    const wrapper = j(`const x = 0;`);
+    wrapper.find(jscodeshift.VariableDeclarator).get().node.init = result;
+    expect(
+      wrapper
+        .toSource()
+        .replace(/^const x = /, "")
+        .replace(/;$/, ""),
+    ).toBe("Number(stringSpacing)");
   });
 });
 
