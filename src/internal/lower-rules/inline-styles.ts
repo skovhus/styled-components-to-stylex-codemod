@@ -178,8 +178,13 @@ export function makePxAwareCssProperty(
   paramName: string,
   prefix: string,
   suffix: string,
+  options?: { skipPxCoercion?: boolean },
 ): ReturnType<typeof j.property> {
-  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(cssProp)) {
+  if (
+    !options?.skipPxCoercion &&
+    isPxOnlyStaticParts(prefix, suffix) &&
+    canEmitBareStylexPxNumber(cssProp)
+  ) {
     const key = makeCssPropKey(j, cssProp);
     const value = coerceStylexPxStyleFnParamValue(j, paramName);
     return j.property("init", key, value);

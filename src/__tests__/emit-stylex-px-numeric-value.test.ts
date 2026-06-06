@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   coerceStylexPxStyleFnParamValue,
   emitStylexPxNumericValue,
+  makePxAwareCssProperty,
 } from "../internal/lower-rules/inline-styles";
 
 const j = jscodeshift.withParser("tsx");
@@ -33,6 +34,16 @@ describe("emitStylexPxNumericValue", () => {
     expect(emit("44")).toBe("44");
     expect(emit("44", "-")).toBe("-44");
     expect(emit('"8"')).toBe("8");
+  });
+});
+
+describe("makePxAwareCssProperty", () => {
+  it("skips Number() coercion when important px values include CSS text", () => {
+    const prop = makePxAwareCssProperty(j, "width", "width", "", "px", {
+      skipPxCoercion: true,
+    }) as { value?: { type?: string; name?: string } };
+    expect(prop.value?.type).toBe("Identifier");
+    expect(prop.value?.name).toBe("width");
   });
 });
 

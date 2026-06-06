@@ -925,7 +925,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             prefix,
             effectiveSuffix,
             undefined,
-            out.prop,
+            d.important ? undefined : out.prop,
           )
         : baseRuntimeExpr;
 
@@ -939,11 +939,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
       const param = j.identifier(outParamName);
       if (/\.(ts|tsx)$/.test(filePath)) {
         (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-          inferPxStyleFnParamType(j, out.prop, prefix, suffix),
+          d.important ? j.tsStringKeyword() : inferPxStyleFnParamType(j, out.prop, prefix, suffix),
         );
       }
       const body = j.objectExpression([
-        makePxAwareCssProperty(j, out.prop, outParamName, prefix, suffix),
+        makePxAwareCssProperty(j, out.prop, outParamName, prefix, suffix, {
+          skipPxCoercion: d.important,
+        }),
       ]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
