@@ -7,6 +7,10 @@ import { isStylexStringOnlyCssProp } from "../css-prop-mapping.js";
 
 export type ExpressionKind = Parameters<JSCodeshift["expressionStatement"]>[0];
 
+type NumericPxOptions = {
+  numericIdentifiers?: ReadonlySet<string>;
+};
+
 export function canOmitPxUnitForStylexNumber(
   stylexProp: string,
   prefix: string,
@@ -31,8 +35,12 @@ export function buildStylexValueWithStaticParts(
   stylexProp: string,
   buildTemplate: (expr: ExpressionKind, prefix: string, suffix: string) => ExpressionKind,
   important = false,
+  options: NumericPxOptions = {},
 ): ExpressionKind {
-  if (canOmitPxUnitForStylexNumber(stylexProp, prefix, suffix, important)) {
+  if (
+    canOmitPxUnitForStylexNumber(stylexProp, prefix, suffix, important) &&
+    isNumericStylexExpression(expr, options)
+  ) {
     return prefix === "-" ? (j.unaryExpression("-", expr, true) as ExpressionKind) : expr;
   }
   return buildTemplate(expr, prefix, suffix);
@@ -43,6 +51,7 @@ export function maybeOmitPxUnitFromStylexValue(
   value: ExpressionKind,
   stylexProp: string,
   important = false,
+  options: NumericPxOptions = {},
 ): ExpressionKind {
   if (value.type === "ConditionalExpression") {
     return {
@@ -52,12 +61,14 @@ export function maybeOmitPxUnitFromStylexValue(
         value.consequent as ExpressionKind,
         stylexProp,
         important,
+        options,
       ),
       alternate: maybeOmitPxUnitFromStylexValue(
         j,
         value.alternate as ExpressionKind,
         stylexProp,
         important,
+        options,
       ),
     } as ExpressionKind;
   }
@@ -69,6 +80,7 @@ export function maybeOmitPxUnitFromStylexValue(
         value.right as ExpressionKind,
         stylexProp,
         important,
+        options,
       ),
     } as ExpressionKind;
   }
@@ -85,7 +97,10 @@ export function maybeOmitPxUnitFromStylexValue(
   }
   const prefix = value.quasis[0]?.value.raw ?? "";
   const suffix = value.quasis[1]?.value.raw ?? "";
-  if (!canOmitPxUnitForStylexNumber(stylexProp, prefix, suffix, important)) {
+  if (
+    !canOmitPxUnitForStylexNumber(stylexProp, prefix, suffix, important) ||
+    !isNumericStylexExpression(value.expressions[0] as ExpressionKind, options)
+  ) {
     return value;
   }
   const expr = value.expressions[0] as ExpressionKind;
@@ -97,6 +112,7 @@ export function maybeOmitPxUnitFromStylexStyleValue(
   value: unknown,
   stylexProp: string,
   important = false,
+  options: NumericPxOptions = {},
 ): unknown {
   if (typeof value === "string") {
     const pxMatch = /^(-?\d*\.?\d+)px$/.exec(value);
@@ -105,7 +121,7 @@ export function maybeOmitPxUnitFromStylexStyleValue(
     }
   }
   if (isExpressionNode(value)) {
-    return maybeOmitPxUnitFromStylexValue(j, value, stylexProp, important);
+    return maybeOmitPxUnitFromStylexValue(j, value, stylexProp, important, options);
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value;
@@ -123,15 +139,69 @@ export function maybeOmitPxUnitFromStylexStyleValue(
                 (entry as { value?: unknown }).value,
                 stylexProp,
                 important,
+                options,
               ),
             }
           : entry,
       );
       continue;
     }
-    next[key] = maybeOmitPxUnitFromStylexStyleValue(j, entryValue, stylexProp, important);
+    next[key] = maybeOmitPxUnitFromStylexStyleValue(j, entryValue, stylexProp, important, options);
   }
   return next;
+}
+
+export function isNumericStylexExpression(
+  value: ExpressionKind | undefined,
+  options: NumericPxOptions = {},
+): boolean {
+  if (!value) {
+    return false;
+  }
+  if (
+    value.type === "NumericLiteral" ||
+    (value.type === "Literal" && typeof value.value === "number")
+  ) {
+    return true;
+  }
+  if (value.type === "Identifier") {
+    return options.numericIdentifiers?.has(value.name) ?? false;
+  }
+  if (value.type === "UnaryExpression") {
+    return (
+      (value.operator === "-" || value.operator === "+") &&
+      isNumericStylexExpression(value.argument as ExpressionKind, options)
+    );
+  }
+  if (value.type === "BinaryExpression") {
+    return (
+      ["+", "-", "*", "/", "%", "**"].includes(value.operator) &&
+      isNumericStylexExpression(value.left as ExpressionKind, options) &&
+      isNumericStylexExpression(value.right as ExpressionKind, options)
+    );
+  }
+  if (value.type === "LogicalExpression") {
+    return (
+      value.operator === "??" &&
+      isNumericStylexExpression(value.left as ExpressionKind, options) &&
+      isNumericStylexExpression(value.right as ExpressionKind, options)
+    );
+  }
+  if (value.type === "ConditionalExpression") {
+    return (
+      isNumericStylexExpression(value.consequent as ExpressionKind, options) &&
+      isNumericStylexExpression(value.alternate as ExpressionKind, options)
+    );
+  }
+  if (
+    value.type === "TSAsExpression" ||
+    value.type === "TSSatisfiesExpression" ||
+    value.type === "TSNonNullExpression" ||
+    value.type === "ParenthesizedExpression"
+  ) {
+    return isNumericStylexExpression(value.expression as ExpressionKind, options);
+  }
+  return false;
 }
 
 function isExpressionNode(value: unknown): value is ExpressionKind {

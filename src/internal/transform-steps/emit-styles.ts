@@ -110,31 +110,143 @@ function normalizeResolvedNumericPxValues(ctx: TransformContext): void {
   if (!ctx.resolvedStyleObjects) {
     return;
   }
+  const rootNumericIdentifiers = collectRootNumericConstantNames(ctx);
   for (const [key, value] of ctx.resolvedStyleObjects) {
-    ctx.resolvedStyleObjects.set(key, normalizeStylexNumericPxValue(ctx, value, undefined));
+    ctx.resolvedStyleObjects.set(
+      key,
+      normalizeStylexNumericPxValue(ctx, value, undefined, rootNumericIdentifiers),
+    );
   }
+}
+
+function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<string> {
+  const names = new Set<string>();
+  ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
+    const node = path.node as { id?: unknown; init?: unknown };
+    if (!node.id || !node.init) {
+      return;
+    }
+    if (!isNumericExpressionNode(node.init, names)) {
+      return;
+    }
+    collectIdentifierPatternNames(node.id, names);
+  });
+  return names;
+}
+
+function collectIdentifierPatternNames(pattern: unknown, names: Set<string>): void {
+  if (!pattern || typeof pattern !== "object" || Array.isArray(pattern)) {
+    return;
+  }
+  const node = pattern as {
+    type?: string;
+    name?: string;
+    elements?: unknown[];
+    properties?: unknown[];
+  };
+  if (node.type === "Identifier" && node.name) {
+    names.add(node.name);
+    return;
+  }
+  if (node.type === "ArrayPattern" && Array.isArray(node.elements)) {
+    for (const element of node.elements) {
+      collectIdentifierPatternNames(element, names);
+    }
+    return;
+  }
+  if (node.type === "ObjectPattern" && Array.isArray(node.properties)) {
+    for (const property of node.properties) {
+      if (!property || typeof property !== "object" || Array.isArray(property)) {
+        continue;
+      }
+      collectIdentifierPatternNames(
+        (property as { value?: unknown; argument?: unknown }).value,
+        names,
+      );
+      collectIdentifierPatternNames(
+        (property as { value?: unknown; argument?: unknown }).argument,
+        names,
+      );
+    }
+  }
+}
+
+function isNumericExpressionNode(value: unknown, numericIdentifiers: ReadonlySet<string>): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const node = value as {
+    type?: string;
+    value?: unknown;
+    name?: string;
+    operator?: string;
+    argument?: unknown;
+    left?: unknown;
+    right?: unknown;
+    expression?: unknown;
+  };
+  if (
+    node.type === "NumericLiteral" ||
+    (node.type === "Literal" && typeof node.value === "number")
+  ) {
+    return true;
+  }
+  if (node.type === "Identifier") {
+    return Boolean(node.name && numericIdentifiers.has(node.name));
+  }
+  if (node.type === "UnaryExpression") {
+    return (
+      (node.operator === "-" || node.operator === "+") &&
+      isNumericExpressionNode(node.argument, numericIdentifiers)
+    );
+  }
+  if (node.type === "BinaryExpression") {
+    return (
+      ["+", "-", "*", "/", "%", "**"].includes(node.operator ?? "") &&
+      isNumericExpressionNode(node.left, numericIdentifiers) &&
+      isNumericExpressionNode(node.right, numericIdentifiers)
+    );
+  }
+  if (node.type === "ParenthesizedExpression" || node.type === "TSAsExpression") {
+    return isNumericExpressionNode(node.expression, numericIdentifiers);
+  }
+  return false;
 }
 
 function normalizeStylexNumericPxValue(
   ctx: TransformContext,
   value: unknown,
   currentProp: string | undefined,
+  numericIdentifiers: ReadonlySet<string>,
 ): unknown {
   if (!value || typeof value !== "object") {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) => normalizeStylexNumericPxValue(ctx, entry, currentProp));
+    return value.map((entry) =>
+      normalizeStylexNumericPxValue(ctx, entry, currentProp, numericIdentifiers),
+    );
   }
   const astType = (value as { type?: unknown }).type;
   if (typeof astType === "string") {
     if (currentProp) {
-      const converted = maybeOmitPxUnitFromStylexValue(ctx.j, value as ExpressionKind, currentProp);
+      const converted = maybeOmitPxUnitFromStylexValue(
+        ctx.j,
+        value as ExpressionKind,
+        currentProp,
+        false,
+        { numericIdentifiers },
+      );
       if (converted !== value) {
         return converted;
       }
     }
-    normalizeStylexNumericPxAst(ctx, value as Record<string, unknown>, currentProp);
+    normalizeStylexNumericPxAst(
+      ctx,
+      value as Record<string, unknown>,
+      currentProp,
+      numericIdentifiers,
+    );
     return value;
   }
 
@@ -149,6 +261,7 @@ function normalizeStylexNumericPxValue(
                 ctx,
                 (entry as { value?: unknown }).value,
                 currentProp,
+                numericIdentifiers,
               ),
             }
           : entry,
@@ -157,8 +270,10 @@ function normalizeStylexNumericPxValue(
     }
     const nextProp = isStyleConditionKey(key) ? currentProp : key;
     record[key] = nextProp
-      ? maybeOmitPxUnitFromStylexStyleValue(ctx.j, entryValue, nextProp)
-      : normalizeStylexNumericPxValue(ctx, entryValue, nextProp);
+      ? maybeOmitPxUnitFromStylexStyleValue(ctx.j, entryValue, nextProp, false, {
+          numericIdentifiers,
+        })
+      : normalizeStylexNumericPxValue(ctx, entryValue, nextProp, numericIdentifiers);
   }
   return record;
 }
@@ -167,9 +282,15 @@ function normalizeStylexNumericPxAst(
   ctx: TransformContext,
   node: Record<string, unknown>,
   currentProp: string | undefined,
+  numericIdentifiers: ReadonlySet<string>,
 ): void {
   if (node.type === "ArrowFunctionExpression") {
-    node.body = normalizeStylexNumericPxValue(ctx, node.body, currentProp);
+    node.body = normalizeStylexNumericPxValue(
+      ctx,
+      node.body,
+      currentProp,
+      collectNumericParamNames(node, numericIdentifiers),
+    );
     return;
   }
   if (node.type !== "ObjectExpression" || !Array.isArray(node.properties)) {
@@ -182,8 +303,62 @@ function normalizeStylexNumericPxAst(
     const prop = property as { key?: unknown; value?: unknown; computed?: boolean };
     const key = prop.computed ? null : readPropertyKey(prop.key);
     const nextProp = key && !isStyleConditionKey(key) ? key : currentProp;
-    prop.value = normalizeStylexNumericPxValue(ctx, prop.value, nextProp);
+    prop.value = normalizeStylexNumericPxValue(ctx, prop.value, nextProp, numericIdentifiers);
   }
+}
+
+function collectNumericParamNames(
+  node: Record<string, unknown>,
+  inherited: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const params = Array.isArray(node.params) ? node.params : [];
+  const names = new Set(inherited);
+  for (const param of params) {
+    if (!param || typeof param !== "object" || Array.isArray(param)) {
+      continue;
+    }
+    const paramNode = param as { type?: string; name?: string; typeAnnotation?: unknown };
+    if (
+      paramNode.type === "Identifier" &&
+      paramNode.name &&
+      isNumericOrOptionalTsTypeAnnotation(paramNode.typeAnnotation)
+    ) {
+      names.add(paramNode.name);
+    }
+  }
+  return names;
+}
+
+function isNumericOrOptionalTsTypeAnnotation(typeAnnotation: unknown): boolean {
+  if (!typeAnnotation || typeof typeAnnotation !== "object") {
+    return false;
+  }
+  const node = typeAnnotation as { type?: string; typeAnnotation?: unknown };
+  return isNumericOrOptionalTsType(node.type === "TSTypeAnnotation" ? node.typeAnnotation : node);
+}
+
+function isNumericOrOptionalTsType(typeNode: unknown): boolean {
+  if (!typeNode || typeof typeNode !== "object") {
+    return false;
+  }
+  const node = typeNode as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (node.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (node.type === "TSLiteralType") {
+    return typeof node.literal?.value === "number";
+  }
+  if (node.type === "TSUnionType" && Array.isArray(node.types)) {
+    return node.types.every((member) => {
+      const memberType = (member as { type?: string } | null)?.type;
+      return (
+        memberType === "TSUndefinedKeyword" ||
+        memberType === "TSNullKeyword" ||
+        isNumericOrOptionalTsType(member)
+      );
+    });
+  }
+  return false;
 }
 
 function readPropertyKey(key: unknown): string | null {

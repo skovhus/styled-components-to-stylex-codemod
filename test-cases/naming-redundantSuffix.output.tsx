@@ -23,6 +23,6 @@ const styles = stylex.create({
   myBorder: (borderWidth: number) => ({
     borderStyle: "solid",
     borderColor: "black",
-    borderWidth,
+    borderWidth: borderWidth,
   }),
 });

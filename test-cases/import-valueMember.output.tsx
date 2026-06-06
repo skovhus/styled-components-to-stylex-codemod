@@ -18,7 +18,7 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 6,
     maxWidth: PEEK_MAX_WIDTH,
-    minHeight: PageSizeConstants.listInitiativeRowHeight,
+    minHeight: `${PageSizeConstants.listInitiativeRowHeight}px`,
     position: "fixed",
     zIndex: $zIndex.modal,
   },

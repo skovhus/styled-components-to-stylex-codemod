@@ -83,6 +83,7 @@ import {
   hasUnsupportedConditionalTest,
   invokeKnownCurriedHelperBranchesWithPropsTheme,
   inlineArrowFunctionBody,
+  isNumericStylexExpression,
   maybeOmitPxUnitFromStylexValue,
   normalizeDollarProps,
   rewritePropsReferencesToPropsWithTheme,
@@ -3364,10 +3365,22 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         }
         // Build template literal when there's static prefix/suffix (e.g., `${...}ms`)
         const { prefix, suffix } = extractStaticPartsForDecl(d);
-        const omitsPxUnit = canOmitPxUnitForStylexNumber(out.prop, prefix, suffix);
+        const numericIdentifiers = numericIdentifierSetForJsxProp(jsxProp, ctx.findJsxPropTsType);
+        const omitsPxUnit =
+          canOmitPxUnitForStylexNumber(out.prop, prefix, suffix) &&
+          isNumericStylexExpression(baseExpr, { numericIdentifiers });
         const expr =
           prefix || suffix
-            ? buildStylexValueWithStaticParts(j, baseExpr, prefix, suffix, out.prop)
+            ? buildStylexValueWithStaticParts(
+                j,
+                baseExpr,
+                prefix,
+                suffix,
+                out.prop,
+                false,
+                undefined,
+                numericIdentifiers,
+              )
             : baseExpr;
         const fnKey = styleKeyWithSuffix(decl.styleKey, out.prop);
         const scalarProps =
@@ -4437,6 +4450,44 @@ function isNumberLikeTsType(tsType: unknown): boolean {
   }
   if (type.type === "TSUnionType" && Array.isArray(type.types)) {
     return type.types.length > 0 && type.types.every(isNumberLikeTsType);
+  }
+  return false;
+}
+
+function numericIdentifierSetForJsxProp(
+  jsxProp: string,
+  findJsxPropTsType: (propName: string) => unknown,
+): ReadonlySet<string> {
+  if (jsxProp === "__props" || !isNumericOrOptionalTsType(findJsxPropTsType(jsxProp))) {
+    return new Set();
+  }
+  const names = new Set([jsxProp]);
+  if (jsxProp.startsWith("$")) {
+    names.add(jsxProp.slice(1));
+  }
+  return names;
+}
+
+function isNumericOrOptionalTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "number";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    return type.types.every((member) => {
+      const memberType = (member as { type?: string } | null)?.type;
+      return (
+        memberType === "TSUndefinedKeyword" ||
+        memberType === "TSNullKeyword" ||
+        isNumericOrOptionalTsType(member)
+      );
+    });
   }
   return false;
 }

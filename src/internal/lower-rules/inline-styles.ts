@@ -20,6 +20,7 @@ import {
 import {
   buildStylexValueWithStaticParts as buildStylexValueWithStaticPartsBase,
   canOmitPxUnitForStylexNumber,
+  isNumericStylexExpression,
   maybeOmitPxUnitFromStylexStyleValue,
   maybeOmitPxUnitFromStylexValue,
 } from "../utilities/stylex-numeric-values.js";
@@ -27,6 +28,7 @@ import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
 
 export {
   canOmitPxUnitForStylexNumber,
+  isNumericStylexExpression,
   maybeOmitPxUnitFromStylexStyleValue,
   maybeOmitPxUnitFromStylexValue,
 };
@@ -98,6 +100,7 @@ export function buildStylexValueWithStaticParts(
   stylexProp: string,
   important = false,
   multilineContext?: AuthoredMultilineContext,
+  numericIdentifiers?: ReadonlySet<string>,
 ): ExpressionKind {
   return buildStylexValueWithStaticPartsBase(
     j,
@@ -108,6 +111,7 @@ export function buildStylexValueWithStaticParts(
     (innerExpr, innerPrefix, innerSuffix) =>
       buildTemplateWithStaticParts(j, innerExpr, innerPrefix, innerSuffix, multilineContext),
     important,
+    { numericIdentifiers },
   );
 }
 

@@ -39,9 +39,9 @@ const styles = stylex.create({
     alignItems: "center",
   },
   avatarContainerWidth: (size: AvatarSize) => ({
-    width: size,
+    width: `${size}px`,
   }),
   avatarContainerHeight: (size: AvatarSize) => ({
-    height: size,
+    height: `${size}px`,
   }),
 });

@@ -72,7 +72,7 @@ export const App = () => (
 
 const styles = stylex.create({
   containerStyles: (props: { size: number; padding: number }) => ({
-    fontSize: props.size + props.padding,
+    fontSize: `${props.size + props.padding}px`,
     lineHeight: `${props.size}px`,
   }),
   container: {

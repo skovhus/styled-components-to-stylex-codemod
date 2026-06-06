@@ -5933,6 +5933,25 @@ export const Box = styled.div\`
     expect(result.code ?? "").not.toContain("calc(");
   });
 
+  it("preserves px templates when the interpolation prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $size: number | string }>\`
+  width: \${(props) => props.$size}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "string-or-number-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${width}px`");
+  });
+
   it.each([
     {
       name: "nested conditional arithmetic",
