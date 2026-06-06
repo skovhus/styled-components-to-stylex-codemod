@@ -127,6 +127,16 @@ function OptionalColorPanel(props: OptionalColorPanelProps) {
   );
 }
 
+type ImportantWidthPanelProps = React.PropsWithChildren<{
+  base: number;
+  extra: number;
+}>;
+
+function ImportantWidthPanel(props: ImportantWidthPanelProps) {
+  const { children, base, extra } = props;
+  return <div sx={styles.importantWidthPanel(base, extra)}>{children}</div>;
+}
+
 type LoadingPlaceholderWithSizeProps = React.PropsWithChildren<{
   highlightColor: ColorToken;
   size: number;
@@ -177,6 +187,12 @@ export const App = () => {
       <LoadingPlaceholderRepeat highlightColor="accent" />
       <OptionalColorPanel>Default faint panel</OptionalColorPanel>
       <OptionalColorPanel color="accent">Accent panel</OptionalColorPanel>
+      <ImportantWidthPanel base={50} extra={30}>
+        Important width panel
+      </ImportantWidthPanel>
+      <ImportantWidthPanel base={90} extra={30}>
+        Wider important width panel
+      </ImportantWidthPanel>
       <div sx={styles.staticColorPanel}>Static helper panel</div>
       <LoadingPlaceholderWithSize highlightColor="accent" size={12} />
       <div sx={styles.shadowPlaceholder("dark")} />
@@ -267,6 +283,13 @@ const styles = stylex.create({
   optionalColorPanelBackgroundColor: (resolvedColorColor: string) => ({
     "--optional-color-panel-background-color": resolvedColorColor,
     backgroundColor: "var(--optional-color-panel-background-color) !important",
+  }),
+  importantWidthPanel: (base: number, extra: number) => ({
+    minHeight: 40,
+    borderRadius: 6,
+    backgroundColor: "#e2e8f0",
+    "--important-width-panel-width": `${base + extra}px`,
+    width: "var(--important-width-panel-width) !important",
   }),
   staticColorPanel: {
     width: 160,

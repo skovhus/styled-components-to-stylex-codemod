@@ -2872,7 +2872,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     prefix,
                     suffix,
                     undefined,
-                    out.prop,
+                    d.important ? undefined : out.prop,
                   )
                 : (scalarProps?.valueExpr ?? valueExprRaw));
             const guardedDynamic = extractGuardedDynamicBranch(j, bodyExpr);

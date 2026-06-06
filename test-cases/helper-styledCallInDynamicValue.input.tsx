@@ -90,6 +90,13 @@ const OptionalColorPanel = styled.div<{ $color?: ColorToken }>`
   background-color: ${(p) => color(p.$color ?? "labelFaint")(p)} !important;
 `;
 
+const ImportantWidthPanel = styled.div<{ $base: number; $extra: number }>`
+  width: ${(p) => p.$base + p.$extra}px !important;
+  min-height: 40px;
+  border-radius: 6px;
+  background-color: #e2e8f0;
+`;
+
 const StaticColorPanel = styled.div`
   width: 160px;
   min-height: 40px;
@@ -139,6 +146,12 @@ export const App = () => {
       <LoadingPlaceholderRepeat $highlightColor="accent" />
       <OptionalColorPanel>Default faint panel</OptionalColorPanel>
       <OptionalColorPanel $color="accent">Accent panel</OptionalColorPanel>
+      <ImportantWidthPanel $base={50} $extra={30}>
+        Important width panel
+      </ImportantWidthPanel>
+      <ImportantWidthPanel $base={90} $extra={30}>
+        Wider important width panel
+      </ImportantWidthPanel>
       <StaticColorPanel>Static helper panel</StaticColorPanel>
       <LoadingPlaceholderWithSize $highlightColor="accent" $size={12} />
       <ShadowPlaceholder $shadow="dark" />
