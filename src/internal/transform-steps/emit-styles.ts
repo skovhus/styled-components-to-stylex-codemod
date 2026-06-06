@@ -122,6 +122,9 @@ function normalizeResolvedNumericPxValues(ctx: TransformContext): void {
 function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<string> {
   const names = new Set<string>();
   ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
+    if (!isTopLevelVariableDeclaratorPath(path)) {
+      return;
+    }
     const node = path.node as { id?: unknown; init?: unknown };
     if (!node.id || !node.init) {
       return;
@@ -132,6 +135,27 @@ function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<str
     collectIdentifierPatternNames(node.id, names);
   });
   return names;
+}
+
+function isTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
+  let current: unknown = path.parentPath;
+  while (current && typeof current === "object") {
+    const node = (current as { node?: { type?: string } }).node;
+    if (node?.type === "Program") {
+      return true;
+    }
+    if (
+      node?.type === "FunctionDeclaration" ||
+      node?.type === "FunctionExpression" ||
+      node?.type === "ArrowFunctionExpression" ||
+      node?.type === "ClassDeclaration" ||
+      node?.type === "ClassExpression"
+    ) {
+      return false;
+    }
+    current = (current as { parentPath?: unknown }).parentPath;
+  }
+  return false;
 }
 
 function collectIdentifierPatternNames(pattern: unknown, names: Set<string>): void {
@@ -318,6 +342,9 @@ function collectNumericParamNames(
       continue;
     }
     const paramNode = param as { type?: string; name?: string; typeAnnotation?: unknown };
+    if (paramNode.type === "Identifier" && paramNode.name) {
+      names.delete(paramNode.name);
+    }
     if (
       paramNode.type === "Identifier" &&
       paramNode.name &&
