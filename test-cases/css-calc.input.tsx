@@ -53,6 +53,11 @@ const NegativeOffset = styled.div<{ $size?: number }>`
   background-color: lavender;
 `;
 
+const StringNumericSize = styled.div<{ $size?: string }>`
+  width: ${(props) => props.$size ?? "44"}px;
+  background-color: peachpuff;
+`;
+
 export const App = () => (
   <Container>
     <Grid>
@@ -64,5 +69,6 @@ export const App = () => (
     <WithVariables>With variables</WithVariables>
     <WithCssFunctions $dynamicHeight="300px">CSS functions</WithCssFunctions>
     <NegativeOffset $size={32}>Negative offset</NegativeOffset>
+    <StringNumericSize $size="80">String numeric size</StringNumericSize>
   </Container>
 );

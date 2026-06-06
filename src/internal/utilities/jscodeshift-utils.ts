@@ -7,7 +7,6 @@ import type {
   ASTNode,
   Collection,
   Expression,
-  Identifier,
   JSCodeshift,
 } from "jscodeshift";
 
@@ -1081,24 +1080,6 @@ export function isConditionalExpressionNode(node: unknown): node is {
     typeof node === "object" &&
     (node as { type?: string }).type === "ConditionalExpression"
   );
-}
-
-/**
- * Sets the type annotation on an identifier node.
- * This encapsulates the pattern needed because jscodeshift's TypeScript types
- * don't include `typeAnnotation` on Identifier nodes in all contexts.
- *
- * @param identifier - The identifier node to annotate
- * @param typeAnnotation - The type annotation (typically from j.tsTypeAnnotation())
- */
-export function setIdentifierTypeAnnotation(
-  identifier: Identifier,
-  typeAnnotation: ReturnType<JSCodeshift["tsTypeAnnotation"]>,
-): void {
-  // Cast needed because jscodeshift's Identifier type doesn't include typeAnnotation
-  // in all contexts, but the runtime representation supports it.
-  (identifier as unknown as { typeAnnotation: typeof typeAnnotation }).typeAnnotation =
-    typeAnnotation;
 }
 
 /**

@@ -13,14 +13,14 @@ import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   buildTemplateWithStaticParts,
   emitStaticPxFallbackValue,
-  inferPxStyleFnParamType,
+  annotatePxStyleFnParam,
+  makePxAwareCssProperty,
 } from "./inline-styles.js";
 import { ensureShouldForwardPropDrop, literalToStaticValue } from "./types.js";
 import {
   getMemberPathFromIdentifier,
   getNodeLocStart,
   resolveStaticExpressionValue,
-  setIdentifierTypeAnnotation,
 } from "../utilities/jscodeshift-utils.js";
 import { isValidIdentifierName } from "../utilities/string-utils.js";
 import { buildSafeIndexedParamName } from "./import-resolution.js";
@@ -256,16 +256,21 @@ export const createValuePatternHandlers = (ctx: ValuePatternContext) => {
       if (!styleFnDecls.has(fnKey)) {
         const paramName = cssPropertyToIdentifier(out.prop, avoidNames);
         const param = j.identifier(paramName);
-        // When there are static parts, the param type should be string (since we pass template literal)
         if (hasStaticParts) {
-          setIdentifierTypeAnnotation(
+          annotatePxStyleFnParam(
+            j,
             param,
-            j.tsTypeAnnotation(inferPxStyleFnParamType(j, out.prop, prefix, suffix)),
+            jsxProp,
+            out.prop,
+            prefix,
+            suffix,
+            annotateParamFromJsxProp,
+            findJsxPropTsType,
           );
         } else {
           annotateParamFromJsxProp(param, jsxProp);
         }
-        const p = makeCssProperty(j, out.prop, paramName);
+        const p = makePxAwareCssProperty(j, out.prop, paramName, prefix, suffix);
         styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], j.objectExpression([p])));
       }
     }

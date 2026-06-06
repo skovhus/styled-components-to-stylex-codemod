@@ -74,8 +74,10 @@ import {
   canEmitBareStylexPxNumber,
   collectDollarParamBindingIdentifiers,
   emitStylexPxNumericValue,
+  annotatePxStyleFnParam,
   inferPxStyleFnParamType,
   isPxOnlyStaticParts,
+  makePxAwareCssProperty,
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
   getImportedStylexIdentifiers,
@@ -109,7 +111,7 @@ import {
   styleKeyWithSuffix,
 } from "../transform/helpers.js";
 import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
-import { cssPropertyToIdentifier, makeCssProperty, makeCssPropKey } from "./shared.js";
+import { cssPropertyToIdentifier, makeCssPropKey } from "./shared.js";
 import { isMemberExpression, mapAst } from "./utils.js";
 import {
   callArgsFromNode,
@@ -940,7 +942,9 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
           inferPxStyleFnParamType(j, out.prop, prefix, suffix),
         );
       }
-      const body = j.objectExpression([makeCssProperty(j, out.prop, outParamName)]);
+      const body = j.objectExpression([
+        makePxAwareCssProperty(j, out.prop, outParamName, prefix, suffix),
+      ]);
       styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
     }
 
@@ -3003,6 +3007,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
     if (res && res.type === "emitStyleFunctionWithDefault") {
       const jsxProp = res.call;
       const outs = cssDeclarationToStylexDeclarations(d);
+      const { prefix: defaultFnPrefix, suffix: defaultFnSuffix } = extractStaticPartsForDecl(d);
 
       // Extract the static default value
       const defaultStaticValue = literalToStaticValue(res.defaultValue);
@@ -3061,7 +3066,13 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ensureShouldForwardPropDrop(decl, jsxProp);
           }
 
-          const p = makeCssProperty(j, out.prop, outParamName);
+          const p = makePxAwareCssProperty(
+            j,
+            out.prop,
+            outParamName,
+            defaultFnPrefix,
+            defaultFnSuffix,
+          );
           const body = j.objectExpression([p]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
         }
@@ -3141,13 +3152,16 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             // or strings (e.g. `${props => props.$color}`).
             if (jsxProp !== "__props") {
               const { prefix: staticPrefix, suffix: staticSuffix } = extractStaticPartsForDecl(d);
-              if (
-                /\.(ts|tsx)$/.test(filePath) &&
-                isPxOnlyStaticParts(staticPrefix, staticSuffix) &&
-                canEmitBareStylexPxNumber(out.prop)
-              ) {
-                (param as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-                  inferPxStyleFnParamType(j, out.prop, staticPrefix, staticSuffix),
+              if (staticPrefix || staticSuffix) {
+                annotatePxStyleFnParam(
+                  j,
+                  param,
+                  jsxProp,
+                  out.prop,
+                  staticPrefix,
+                  staticSuffix,
+                  annotateParamFromJsxProp,
+                  findJsxPropTsType,
                 );
               } else {
                 annotateParamFromJsxProp(param, jsxProp);
@@ -3422,8 +3436,15 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         if (scalarProps && /\.(ts|tsx)$/.test(filePath)) {
           annotateScalarParams(params, scalarProps.paramNames);
         } else if (shouldPassComputedCallArg && /\.(ts|tsx)$/.test(filePath)) {
-          (finalParam as { typeAnnotation?: unknown }).typeAnnotation = j.tsTypeAnnotation(
-            inferPxStyleFnParamType(j, out.prop, prefix, suffix),
+          annotatePxStyleFnParam(
+            j,
+            finalParam,
+            jsxProp,
+            out.prop,
+            prefix,
+            suffix,
+            annotateParamFromJsxProp,
+            findJsxPropTsType,
           );
         }
         const valueExpr = scalarProps

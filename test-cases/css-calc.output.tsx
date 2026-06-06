@@ -35,6 +35,15 @@ function NegativeOffset(props: NegativeOffsetProps) {
   );
 }
 
+type StringNumericSizeProps = React.PropsWithChildren<{
+  size?: string;
+}>;
+
+function StringNumericSize(props: StringNumericSizeProps) {
+  const { children, size } = props;
+  return <div sx={styles.stringNumericSize(size ?? "44")}>{children}</div>;
+}
+
 export const App = () => (
   <div sx={styles.container}>
     <div sx={styles.grid}>
@@ -46,6 +55,7 @@ export const App = () => (
     <div sx={styles.withVariables}>With variables</div>
     <WithCssFunctions dynamicHeight="300px">CSS functions</WithCssFunctions>
     <NegativeOffset size={32}>Negative offset</NegativeOffset>
+    <StringNumericSize size="80">String numeric size</StringNumericSize>
   </div>
 );
 
@@ -93,9 +103,13 @@ const styles = stylex.create({
     backgroundColor: "lavender",
   },
   negativeOffsetHeight: (height: number) => ({
-    height,
+    height: Number(height),
   }),
   negativeOffsetMarginBottom: (marginBottom: number) => ({
-    marginBottom,
+    marginBottom: Number(marginBottom),
+  }),
+  stringNumericSize: (width: string) => ({
+    backgroundColor: "peachpuff",
+    width: Number(width),
   }),
 });

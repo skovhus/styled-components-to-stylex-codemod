@@ -65,10 +65,10 @@ const styles = stylex.create({
     padding: 8,
   },
   gutterBoxHeight: (height: number) => ({
-    height,
+    height: Number(height),
   }),
   gutterBoxMarginBottom: (marginBottom: number) => ({
-    marginBottom,
+    marginBottom: Number(marginBottom),
   }),
   gutterBoxZIndex: (zIndex: number | string) => ({
     zIndex,

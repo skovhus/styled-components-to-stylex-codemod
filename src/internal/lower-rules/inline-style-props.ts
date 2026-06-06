@@ -17,6 +17,7 @@ import {
   inferPxStyleFnParamType,
   inlineArrowFunctionBody,
   isPxOnlyStaticParts,
+  makePxAwareCssProperty,
   rewritePropsThemeToThemeVar,
   unwrapArrowFunctionToPropsExpr,
 } from "./inline-styles.js";
@@ -237,9 +238,7 @@ export function handleInlineStyleValueFromProps(ctx: InlineStyleFromPropsContext
                 : inferStyleFnParamType(j, out.prop, valueExpr);
             (param as any).typeAnnotation = j.tsTypeAnnotation(paramType);
           }
-          const propKey = makeCssPropKey(j, out.prop);
-          const p = j.property("init", propKey, j.identifier(paramName)) as any;
-          p.shorthand = propKey.type === "Identifier" && paramName === out.prop;
+          const p = makePxAwareCssProperty(j, out.prop, paramName, prefix, suffix);
           const body = j.objectExpression([p]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], body));
         }

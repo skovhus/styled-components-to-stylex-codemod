@@ -18,6 +18,7 @@ import {
   maybeApplyAuthoredMultilineTemplateFormatting,
 } from "../utilities/css-authored-multiline.js";
 import { isStylexStringOnlyCssProp } from "../css-prop-mapping.js";
+import { makeCssPropKey, makeCssProperty } from "./shared.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
 
 type StylexImportMapEntry = { source?: { value?: string } } | null | undefined;
@@ -35,10 +36,44 @@ export function canEmitBareStylexPxNumber(stylexProp?: string): boolean {
   if (stylexProp.startsWith("--")) {
     return false;
   }
-  if (stylexProp === "lineHeight" || stylexProp === "flex") {
+  if (stylexProp === "lineHeight" || stylexProp === "flex" || stylexProp === "transition") {
     return false;
   }
   return !isStylexStringOnlyCssProp(stylexProp);
+}
+
+function isNumberLikeTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSNumberKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "number";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    return type.types.length > 0 && type.types.every(isNumberLikeTsType);
+  }
+  return false;
+}
+
+function isStringLikeTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const type = tsType as { type?: string; types?: unknown[]; literal?: { value?: unknown } };
+  if (type.type === "TSStringKeyword") {
+    return true;
+  }
+  if (type.type === "TSLiteralType") {
+    return typeof type.literal?.value === "string";
+  }
+  if (type.type === "TSUnionType" && Array.isArray(type.types)) {
+    return type.types.length > 0 && type.types.every(isStringLikeTsType);
+  }
+  return false;
 }
 
 /** Infer a style-function parameter type from px-only static parts. */
@@ -51,6 +86,41 @@ export function inferPxStyleFnParamType(
   return isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)
     ? j.tsNumberKeyword()
     : j.tsStringKeyword();
+}
+
+/** Choose param annotation for px-aware style functions from JSX prop metadata. */
+export function annotatePxStyleFnParam(
+  j: JSCodeshift,
+  param: { typeAnnotation?: unknown },
+  jsxProp: string,
+  stylexProp: string,
+  prefix: string,
+  suffix: string,
+  annotateParamFromJsxProp: (paramId: unknown, propName: string) => void,
+  findJsxPropTsType?: (propName: string) => unknown,
+): void {
+  const propTsType = findJsxPropTsType?.(jsxProp);
+  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)) {
+    if (propTsType && isStringLikeTsType(propTsType) && !isNumberLikeTsType(propTsType)) {
+      annotateParamFromJsxProp(param, jsxProp);
+      return;
+    }
+    param.typeAnnotation = j.tsTypeAnnotation(
+      inferPxStyleFnParamType(j, stylexProp, prefix, suffix),
+    );
+    return;
+  }
+  if (prefix || suffix) {
+    if (!canEmitBareStylexPxNumber(stylexProp)) {
+      annotateParamFromJsxProp(param, jsxProp);
+      return;
+    }
+    param.typeAnnotation = j.tsTypeAnnotation(
+      inferPxStyleFnParamType(j, stylexProp, prefix, suffix),
+    );
+    return;
+  }
+  annotateParamFromJsxProp(param, jsxProp);
 }
 
 /** Coerce a static fallback for px-only emission (e.g. `8` instead of `"8px"`). */
@@ -94,6 +164,27 @@ export function emitStylexPxNumericValue(
     return j.unaryExpression("-", expr, true) as ExpressionKind;
   }
   return expr;
+}
+
+/** Coerce a style-function param to a number so numeric strings still get px units. */
+export function coerceStylexPxStyleFnParamValue(j: JSCodeshift, paramName: string): ExpressionKind {
+  return j.callExpression(j.identifier("Number"), [j.identifier(paramName)]) as ExpressionKind;
+}
+
+/** Style-function object property that coerces px params to numbers for StyleX. */
+export function makePxAwareCssProperty(
+  j: JSCodeshift,
+  cssProp: string,
+  paramName: string,
+  prefix: string,
+  suffix: string,
+): ReturnType<typeof j.property> {
+  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(cssProp)) {
+    const key = makeCssPropKey(j, cssProp);
+    const value = coerceStylexPxStyleFnParamValue(j, paramName);
+    return j.property("init", key, value);
+  }
+  return makeCssProperty(j, cssProp, paramName);
 }
 
 export function getImportedStylexIdentifiers(

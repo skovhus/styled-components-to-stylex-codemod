@@ -29,7 +29,7 @@ const callerStyles = stylex.create({
   },
   compactButton: (width: number) => ({
     color: "#0f172a",
-    width,
+    width: Number(width),
   }),
   compactButtonCompact: {
     fontWeight: "bold",

@@ -96,7 +96,7 @@ const styles = stylex.create({
     gridTemplateColumns,
   }),
   responsivePanelTop: (top: number) => ({
-    top,
+    top: Number(top),
   }),
   compactPanel: {
     borderRadius: 8,
