@@ -706,6 +706,96 @@ export const App = () => <CustomFactoryComponent>safe</CustomFactoryComponent>;
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
   });
 
+  it("does not treat a transformed dependency file as proof that every export converted", () => {
+    const boxPath = toRealPath(join(__dirname, "fixtures/leaves-only/cross/box.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./fixtures/leaves-only/cross/box";
+
+const CustomBox = styled(Box)\`
+  padding: 4px;
+\`;
+
+export const App = () => <CustomBox>unsafe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(__dirname, "cascade-partial-dependency.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[boxPath, new Set(["Box"])]]),
+          transformedFiles: new Set([boxPath]),
+          transformedComponents: new Map([[boxPath, new Set(["OtherBox"])]]),
+        },
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
+  it("allows same-run styled wrappers only when the imported component converted", () => {
+    const boxPath = toRealPath(join(__dirname, "fixtures/leaves-only/cross/box.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./fixtures/leaves-only/cross/box";
+
+const CustomBox = styled(Box)\`
+  padding: 4px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(__dirname, "cascade-converted-dependency.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[boxPath, new Set(["Box"])]]),
+          transformedFiles: new Set([boxPath]),
+          transformedComponents: new Map([[boxPath, new Set(["Box"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("still bails when a same-run plain component renders an unconverted styled definition", () => {
+    const groupHeaderPath = toRealPath(join(testCasesDir, "lib/styled-group-header.tsx"));
+    const source = `
+import styled from "styled-components";
+import { GroupHeader } from "./lib/styled-group-header";
+
+const CustomGroupHeader = styled(GroupHeader)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomGroupHeader label="test" id="t" />;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-same-run-plain-wrapper.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[groupHeaderPath, new Set(["StyledHeader"])]]),
+          transformedFiles: new Set([groupHeaderPath]),
+          transformedComponents: new Map([[groupHeaderPath, new Set(["OtherHeader"])]]),
+        },
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
   it("does not bail in partial migration when wrapping a styled-components imported root", () => {
     // In partial migration, `styled(ImportedComponent)` decls are left as
     // styled-components by `markPartialImportedComponentRoots` later in the pipeline.

@@ -47,6 +47,8 @@ export interface TransformResult {
   bridgeResults?: BridgeComponentResult[];
   /** Transient prop renames for exported components, keyed by export name. */
   transientPropRenames?: TransientPropRenameResult[];
+  /** Local styled component names that were actually converted in this file. */
+  transformedComponentNames?: string[];
   localStylexVarsSidecarFile?: LocalStylexVarsSidecarFile;
 }
 
@@ -162,6 +164,8 @@ export interface CrossFileInfo {
   globalLeafKeys?: Set<string>;
   /** Files successfully converted in the current transform run. Used to avoid bailing on same-run bases. */
   transformedFiles?: Set<string>;
+  /** File → local styled component names successfully converted in the current transform run. */
+  transformedComponents?: Map<string, Set<string>>;
   /** Opt-in TypeScript compiler metadata from the prepass. */
   typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
