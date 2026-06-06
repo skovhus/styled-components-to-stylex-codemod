@@ -133,7 +133,13 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     if (
       transformedComponents &&
       transformedComponentsHasPath(transformedComponents, styledDefinitions.path) &&
-      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName)
+      !bindingDependsOnStyledDefinitions(
+        {
+          ...styledDefinitions,
+          names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
+        },
+        definition.importedName,
+      )
     ) {
       continue;
     }
@@ -281,10 +287,7 @@ function transformedComponentsHasPath(
   transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
   filePath: string,
 ): boolean {
-  return pathCandidates(filePath).some(
-    (candidate) =>
-      transformedComponents.has(candidate) || transformedComponents.has(toRealPath(candidate)),
-  );
+  return transformedNamesForPath(transformedComponents, filePath) !== undefined;
 }
 
 function transformedComponentExists(
@@ -313,6 +316,28 @@ function transformedComponentExists(
     }
   }
   return false;
+}
+
+function unconvertedStyledDefinitionNames(
+  styledDefinitions: StyledDefinitionFile,
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+): Set<string> {
+  const transformedNames = transformedNamesForPath(transformedComponents, styledDefinitions.path);
+  return new Set([...styledDefinitions.names].filter((name) => !transformedNames?.has(name)));
+}
+
+function transformedNamesForPath(
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+  filePath: string,
+): ReadonlySet<string> | undefined {
+  for (const candidate of pathCandidates(filePath)) {
+    const transformedNames =
+      transformedComponents.get(candidate) ?? transformedComponents.get(toRealPath(candidate));
+    if (transformedNames) {
+      return transformedNames;
+    }
+  }
+  return undefined;
 }
 
 function bindingDependsOnStyledDefinitions(
