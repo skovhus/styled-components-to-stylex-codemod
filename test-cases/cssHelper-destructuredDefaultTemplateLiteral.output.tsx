@@ -32,6 +32,6 @@ export const App = () => (
 const styles = stylex.create({
   tile: (gap: number) => ({
     display: "inline-flex",
-    gap,
+    gap: Number(gap),
   }),
 });

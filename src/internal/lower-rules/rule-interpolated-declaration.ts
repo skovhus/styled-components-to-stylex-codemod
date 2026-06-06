@@ -3455,13 +3455,18 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
             ? j.identifier(finalParam.name)
             : expr;
         if (!styleFnDecls.has(fnKey)) {
-          const body = j.objectExpression([
-            j.property(
-              "init",
-              makeCssPropKey(j, out.prop),
-              buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
-            ),
-          ]);
+          const scalarParamName = scalarProps?.paramNames[0];
+          const bodyProperty =
+            scalarParamName &&
+            isPxOnlyStaticParts(prefix, suffix) &&
+            canEmitBareStylexPxNumber(out.prop)
+              ? makePxAwareCssProperty(j, out.prop, scalarParamName, prefix, suffix)
+              : j.property(
+                  "init",
+                  makeCssPropKey(j, out.prop),
+                  buildPseudoMediaPropValue({ j, valueExpr, pseudos, media }),
+                );
+          const body = j.objectExpression([bodyProperty]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression(params, body));
         }
         if (!styleFnFromProps.some((p) => p.fnKey === fnKey)) {

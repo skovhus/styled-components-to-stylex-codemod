@@ -506,7 +506,7 @@ const styles = stylex.create({
     paddingBottom: 40,
   },
   styleFnParentBoxWidth: (width: number) => ({
-    width,
+    width: Number(width),
   }),
   inverseMergeBox: {
     paddingTop: 8,

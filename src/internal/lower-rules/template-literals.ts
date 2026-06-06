@@ -73,6 +73,8 @@ type TemplateDynamicEntry = {
   stylexProp: string;
   callArg: ExpressionKind;
   condition?: "always";
+  staticPrefix?: string;
+  staticSuffix?: string;
 };
 
 type TemplateInlineEntry = {
@@ -491,6 +493,8 @@ export function resolveTemplateLiteralBranch(
           stylexProp: borderParts.colorProp,
           callArg: resolved.callArg,
           condition: resolved.condition,
+          staticPrefix: prefix,
+          staticSuffix: suffix,
         });
         continue;
       }
@@ -537,6 +541,8 @@ export function resolveTemplateLiteralBranch(
           stylexProp: mapped.prop,
           callArg,
           condition: resolved.condition,
+          staticPrefix: prefix,
+          staticSuffix: suffix,
         });
       }
     }

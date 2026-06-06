@@ -69,6 +69,6 @@ const styles = stylex.create({
     fontSize: 50,
   },
   titleMaxWidth: (maxWidth: number) => ({
-    maxWidth,
+    maxWidth: Number(maxWidth),
   }),
 });

@@ -15,9 +15,12 @@ import { parseCssTemplateToRules, type ConditionalVariant } from "./css-helper.j
 import { extractStaticPartsForDecl } from "./interpolations.js";
 import {
   buildTemplateWithStaticParts,
+  canEmitBareStylexPxNumber,
   collectPropsFromArrowFn,
   collectPropsFromExpressions,
   getImportedStylexIdentifiers,
+  isPxOnlyStaticParts,
+  makePxAwareCssProperty,
   normalizeDollarProps,
   rewritePropsThemeToThemeVar,
 } from "./inline-styles.js";
@@ -73,6 +76,19 @@ import {
   expandInterpolatedAnimationShorthand,
   expandStaticAnimationShorthand,
 } from "../keyframes.js";
+
+function styleFnPropertyForDynamicEntry(
+  j: JSCodeshift,
+  entry: { stylexProp: string; staticPrefix?: string; staticSuffix?: string },
+  entryParamName: string,
+) {
+  const prefix = entry.staticPrefix ?? "";
+  const suffix = entry.staticSuffix ?? "";
+  if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(entry.stylexProp)) {
+    return makePxAwareCssProperty(j, entry.stylexProp, entryParamName, prefix, suffix);
+  }
+  return makeCssProperty(j, entry.stylexProp, entryParamName);
+}
 
 type CssHelperConditionalContext = Pick<
   LowerRulesState,
@@ -1511,7 +1527,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
                 const entryParamName = cssPropertyToIdentifier(entry.stylexProp, avoidNames);
                 const param = j.identifier(entryParamName);
                 annotateParamFromJsxProp(param, entry.jsxProp);
-                const p = makeCssProperty(j, entry.stylexProp, entryParamName);
+                const p = styleFnPropertyForDynamicEntry(j, entry, entryParamName);
                 const bodyExpr = j.objectExpression([p]);
                 styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
               }
@@ -1574,6 +1590,8 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
         stylexProp: string;
         callArg: ExpressionKind;
         condition?: "always";
+        staticPrefix?: string;
+        staticSuffix?: string;
       }>,
       conditionWhen?: string,
     ): void => {
@@ -1615,7 +1633,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           } else {
             annotateParamFromJsxProp(param, entry.jsxProp);
           }
-          const p = makeCssProperty(j, entry.stylexProp, entryParamName);
+          const p = styleFnPropertyForDynamicEntry(j, entry, entryParamName);
           const bodyExpr = j.objectExpression([p]);
           styleFnDecls.set(fnKey, j.arrowFunctionExpression([param], bodyExpr));
         }
