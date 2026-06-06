@@ -77,7 +77,7 @@ export function looksLikeLength(token: string): boolean {
 }
 
 /**
- * Checks if a CSS value appears to be a background image (gradient or url).
+ * Checks if a CSS value appears to be a background image.
  * @example isBackgroundImageValue("linear-gradient(red, blue)") => true
  * @example isBackgroundImageValue("url(image.png)") => true
  * @example isBackgroundImageValue("#fff") => false
@@ -86,7 +86,9 @@ export function isBackgroundImageValue(value: string): boolean {
   return (
     /\b(linear|radial|conic|repeating-linear|repeating-radial|repeating-conic)-gradient\b/.test(
       value,
-    ) || /\burl\s*\(/.test(value)
+    ) ||
+    /\burl\s*\(/.test(value) ||
+    /\b(-webkit-)?(image|image-set|cross-fade|element|paint)\s*\(/.test(value)
   );
 }
 

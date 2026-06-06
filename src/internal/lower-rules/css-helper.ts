@@ -14,6 +14,7 @@ import type {
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "../css-ir.js";
 import {
   cssDeclarationToStylexDeclarations,
+  isUnsupportedBackgroundShorthandValue,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import {
@@ -31,6 +32,8 @@ import { normalizeSpecificityHacks, parseSelector } from "../selectors.js";
 import { addPropComments } from "./comments.js";
 import { buildSpecificityStrippedComment } from "./specificity-comments.js";
 import { wrapExprWithStaticParts } from "./interpolations.js";
+import type { ExpressionKind } from "./decl-types.js";
+import { isStylexShorthandCamelCase } from "../stylex-shorthands.js";
 import { cssValueToJs, normalizeCssContentValue } from "../transform/helpers.js";
 import {
   expandInterpolatedAnimationShorthand,
@@ -64,6 +67,8 @@ type CssHelperTemplateOptions = {
 };
 
 type ValuePart = { kind: string; value?: string; slotId?: number };
+type ValueSlotPart = ValuePart & { kind: "slot"; slotId: number };
+type StaticSlotResolution = { ast: ExpressionKind; exprString: string };
 
 /**
  * Parses a CSS template literal to IR rules and slot expression map.
@@ -221,6 +226,74 @@ export function createCssHelperResolver(args: {
       return false;
     }
     return findInAst(expr, (node) => node.type === "CallExpression");
+  };
+
+  const isExpressionKind = (node: unknown): node is ExpressionKind =>
+    !!node && typeof node === "object" && typeof (node as { type?: unknown }).type === "string";
+
+  const isSlotPart = (part: ValuePart): part is ValueSlotPart =>
+    part.kind === "slot" && typeof part.slotId === "number";
+
+  const resolveStaticSlot = (
+    expr: any,
+    property: string,
+    paramName: string | null,
+  ): StaticSlotResolution | null => {
+    const resolved = resolveHelperExprToAst(expr, paramName);
+    if (resolved) {
+      return resolved;
+    }
+
+    if (!hasCallExpressionInExpr(expr)) {
+      return null;
+    }
+
+    const callResolved =
+      adapterCallResolver && tryResolveAdapterCall(expr, property, adapterCallResolver);
+    if (!callResolved) {
+      return null;
+    }
+    if (!isExpressionKind(callResolved.ast)) {
+      return null;
+    }
+    return { ast: callResolved.ast, exprString: callResolved.exprString };
+  };
+
+  const buildStaticInterpolatedValue = (
+    parts: ValuePart[],
+    resolvedSlots: Map<number, StaticSlotResolution>,
+  ): ExpressionKind | null => {
+    const j = args.j;
+    if (!j) {
+      return null;
+    }
+    const quasis: Array<ReturnType<typeof j.templateElement>> = [];
+    const expressions: ExpressionKind[] = [];
+    let currentStaticPart = "";
+
+    for (const part of parts) {
+      if (part.kind === "static") {
+        currentStaticPart += part.value ?? "";
+        continue;
+      }
+      if (!isSlotPart(part)) {
+        return null;
+      }
+      quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, false));
+      currentStaticPart = "";
+      const resolved = resolvedSlots.get(part.slotId);
+      if (!resolved) {
+        return null;
+      }
+      expressions.push(resolved.ast);
+    }
+
+    quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
+    if (expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)) {
+      const onlyExpression = expressions[0];
+      return onlyExpression ?? null;
+    }
+    return j.templateLiteral(quasis, expressions);
   };
 
   /**
@@ -569,7 +642,57 @@ export function createCssHelperResolver(args: {
         const parts = d.value.parts ?? [];
 
         // Find slots in the value parts
-        const slotParts = parts.filter((p: { kind: string }) => p.kind === "slot");
+        const slotParts = parts.filter(isSlotPart);
+        if (slotParts.length > 1) {
+          if (
+            d.property === "background" &&
+            isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")
+          ) {
+            return bail(
+              "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+              { property: d.property },
+            );
+          }
+          const mappedDecls = cssDeclarationToStylexDeclarations(d);
+          if (mappedDecls.some((mapped) => isStylexShorthandCamelCase(mapped.prop))) {
+            return bail(
+              "Conditional `css` block: multiple interpolation slots in a single property value",
+              { property: d.property },
+            );
+          }
+          const resolvedSlots = new Map<number, StaticSlotResolution>();
+          for (const part of slotParts) {
+            const expr = slotExprById.get(part.slotId);
+            if (!expr) {
+              return bail("Conditional `css` block: missing interpolation expression", {
+                property: d.property,
+              });
+            }
+            const resolved = resolveStaticSlot(expr, d.property, paramName);
+            if (!resolved) {
+              return bail(
+                "Conditional `css` block: multiple interpolation slots in a single property value",
+                { property: d.property },
+              );
+            }
+            resolvedSlots.set(part.slotId, resolved);
+          }
+          const valueAst = buildStaticInterpolatedValue(parts, resolvedSlots);
+          if (!valueAst) {
+            return bail(
+              "Conditional `css` block: multiple interpolation slots in a single property value",
+              { property: d.property },
+            );
+          }
+          for (const mapped of mappedDecls) {
+            (target as any)[mapped.prop] = mergeIntoContext(
+              valueAst,
+              mapped.prop,
+              target as any,
+            ) as any;
+          }
+          continue;
+        }
         if (slotParts.length !== 1) {
           // Only support single-slot values
           return bail(

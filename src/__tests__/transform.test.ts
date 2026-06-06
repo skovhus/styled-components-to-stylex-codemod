@@ -3854,6 +3854,66 @@ export const App = () => <Box><span /></Box>;
     expect(warning?.loc?.line).toBe(8);
   });
 
+  it("should bail on multi-slot background shorthands inside conditional css blocks", () => {
+    const source = [
+      'import styled, { css } from "styled-components";',
+      'import { color } from "./lib/helpers";',
+      "",
+      "const Box = styled.div<{ $active?: boolean }>`",
+      "  ${(props) =>",
+      "    props.$active",
+      "      ? css`",
+      '          background: ${color("bgSub")} center / cover ${color("controlPrimary")};',
+      "        `",
+      "      : null}",
+      "`;",
+      "",
+      "export const App = () => <Box $active />;",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings).toEqual([
+      expect.objectContaining({
+        type: "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+      }),
+    ]);
+  });
+
+  it("should map multi-slot image-set backgrounds inside conditional css blocks", () => {
+    const source = [
+      'import styled, { css } from "styled-components";',
+      "",
+      "const Box = styled.div<{ $active?: boolean }>`",
+      "  ${(props) =>",
+      "    props.$active",
+      "      ? css`",
+      '          background: image-set(${"/one.png"} 1x, ${"/two.png"} 2x);',
+      "        `",
+      "      : null}",
+      "`;",
+      "",
+      "export const App = () => <Box $active />;",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("backgroundImage");
+    expect(result.code).not.toContain("backgroundColor");
+  });
+
   it("should bail when same-file descendant proof crosses a non-provable local wrapper component", () => {
     const source = `
 import * as React from "react";
