@@ -11,9 +11,11 @@ export function localNamesForExport(
   includeDefault: boolean,
 ): string[] {
   const parsed = parseProgram(source);
-  return parsed
-    ? [...collectExportTargets(parsed, exportedName, includeDefault).localNames]
-    : fallbackLocalNamesForExport(source, exportedName, includeDefault);
+  if (!parsed) {
+    return fallbackLocalNamesForExport(source, exportedName, includeDefault);
+  }
+  const targets = collectExportTargets(parsed, exportedName, includeDefault);
+  return [...expandIdentityAliasNames(parsed, targets.localNames)];
 }
 
 export function exportedBindingDependsOnLocalNames(args: {
@@ -178,6 +180,61 @@ function exportedNodeBody(node: AstNode): AstNode {
     return (node.body as AstNode | undefined) ?? node;
   }
   return node;
+}
+
+function expandIdentityAliasNames(
+  program: AstNode,
+  initialNames: ReadonlySet<string>,
+): Set<string> {
+  const aliases = collectIdentityAliases(program);
+  const expanded = new Set(initialNames);
+
+  const addAliasTargets = (name: string, visiting = new Set<string>()): void => {
+    if (visiting.has(name)) {
+      return;
+    }
+    visiting.add(name);
+    const target = aliases.get(name);
+    if (!target) {
+      return;
+    }
+    expanded.add(target);
+    addAliasTargets(target, visiting);
+  };
+
+  for (const name of initialNames) {
+    addAliasTargets(name);
+  }
+  return expanded;
+}
+
+function collectIdentityAliases(program: AstNode): Map<string, string> {
+  const aliases = new Map<string, string>();
+  for (const binding of localBindings(program)) {
+    const target = nodeName(unwrapTransparentExpression(binding.node));
+    if (target && target !== binding.name) {
+      aliases.set(binding.name, target);
+    }
+  }
+  return aliases;
+}
+
+function unwrapTransparentExpression(node: AstNode): AstNode {
+  let current = node;
+  while (
+    current.type === "ParenthesizedExpression" ||
+    current.type === "TSAsExpression" ||
+    current.type === "TSTypeAssertion" ||
+    current.type === "TSNonNullExpression" ||
+    current.type === "TypeCastExpression"
+  ) {
+    const expression = current.expression as AstNode | undefined;
+    if (!expression) {
+      return current;
+    }
+    current = expression;
+  }
+  return current;
 }
 
 function expandLocalDependencyNames(

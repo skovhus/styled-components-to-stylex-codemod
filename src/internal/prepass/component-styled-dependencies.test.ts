@@ -18,6 +18,20 @@ export { InternalBox as PublicBox };
     expect(localNamesForExport(source, "PublicBox", false)).toEqual(["InternalBox"]);
   });
 
+  it("resolves variable export aliases to their local targets", () => {
+    const source = `
+const InternalBox = styled.div\`
+  color: red;
+\`;
+
+export const PublicBox = InternalBox;
+`;
+
+    expect(new Set(localNamesForExport(source, "PublicBox", false))).toEqual(
+      new Set(["PublicBox", "InternalBox"]),
+    );
+  });
+
   it("does not treat TypeScript prop types as styled-component dependencies", () => {
     const source = `
 type Props = {
