@@ -5,6 +5,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   inherits: false
 }
 
+@property --x---important-width-panel-width {
+  syntax: "*";
+  inherits: false
+}
+
 @property --x---optional-color-panel-background-color {
   syntax: "*";
   inherits: false
@@ -704,6 +709,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xx0eprt {
   --highlighted-color: var(--xy9b778);
+}
+
+.xbvzt2c {
+  --important-width-panel-width: var(--x---important-width-panel-width);
 }
 
 .x4zm9pq {
@@ -5941,6 +5950,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
 
 .xnmgyfo:not(#\#):not(#\#):not(#\#):not(#\#) {
   width: var(--foo-bar);
+}
+
+.x1ofg8rv:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: var(--important-width-panel-width) !important;
 }
 
 .xns929y:not(#\#):not(#\#):not(#\#):not(#\#) {
