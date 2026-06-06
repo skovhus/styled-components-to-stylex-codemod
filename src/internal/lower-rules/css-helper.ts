@@ -14,6 +14,7 @@ import type {
 import { computeSelectorWarningLoc, normalizeStylisAstToIR } from "../css-ir.js";
 import {
   cssDeclarationToStylexDeclarations,
+  isUnsupportedBackgroundShorthandValue,
   parseInterpolatedBorderStaticParts,
 } from "../css-prop-mapping.js";
 import {
@@ -643,6 +644,15 @@ export function createCssHelperResolver(args: {
         // Find slots in the value parts
         const slotParts = parts.filter(isSlotPart);
         if (slotParts.length > 1) {
+          if (
+            d.property === "background" &&
+            isUnsupportedBackgroundShorthandValue(d.valueRaw ?? "")
+          ) {
+            return bail(
+              "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+              { property: d.property },
+            );
+          }
           const mappedDecls = cssDeclarationToStylexDeclarations(d);
           if (mappedDecls.some((mapped) => isStylexShorthandCamelCase(mapped.prop))) {
             return bail(
