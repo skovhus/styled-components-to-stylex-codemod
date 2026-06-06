@@ -60,6 +60,29 @@ export function GroupHeader() {
     ).toBe(true);
   });
 
+  it("detects exported components that render styled definitions through local aliases", () => {
+    const source = `
+const StyledHeader = styled.div\`
+  color: red;
+\`;
+
+const Header = StyledHeader;
+
+export function GroupHeader() {
+  return <Header />;
+}
+`;
+
+    expect(
+      exportedBindingDependsOnLocalNames({
+        source,
+        exportedName: "GroupHeader",
+        includeDefault: false,
+        localNames: new Set(["StyledHeader"]),
+      }),
+    ).toBe(true);
+  });
+
   it("detects anonymous default exports that render styled definitions", () => {
     const source = `
 const StyledHeader = styled.div\`

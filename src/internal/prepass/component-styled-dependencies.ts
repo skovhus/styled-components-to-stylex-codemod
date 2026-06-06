@@ -31,19 +31,20 @@ export function exportedBindingDependsOnLocalNames(args: {
   if (targets.localNames.size === 0 && targets.nodes.length === 0) {
     return true;
   }
+  const dependencyNames = expandLocalDependencyNames(parsed, args.localNames);
 
   for (const localName of targets.localNames) {
-    if (args.localNames.has(localName)) {
+    if (dependencyNames.has(localName)) {
       return true;
     }
     const node = findLocalBindingNode(parsed, localName);
-    if (!node || nodeReferencesLocalNames(node, args.localNames)) {
+    if (!node || nodeReferencesLocalNames(node, dependencyNames)) {
       return true;
     }
   }
 
   for (const node of targets.nodes) {
-    if (nodeReferencesLocalNames(exportedNodeBody(node), args.localNames)) {
+    if (nodeReferencesLocalNames(exportedNodeBody(node), dependencyNames)) {
       return true;
     }
   }
@@ -177,6 +178,60 @@ function exportedNodeBody(node: AstNode): AstNode {
     return (node.body as AstNode | undefined) ?? node;
   }
   return node;
+}
+
+function expandLocalDependencyNames(
+  program: AstNode,
+  initialNames: ReadonlySet<string>,
+): Set<string> {
+  const dependencyNames = new Set(initialNames);
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const binding of localBindings(program)) {
+      if (dependencyNames.has(binding.name)) {
+        continue;
+      }
+      if (nodeReferencesLocalNames(binding.node, dependencyNames)) {
+        dependencyNames.add(binding.name);
+        changed = true;
+      }
+    }
+  }
+
+  return dependencyNames;
+}
+
+function localBindings(program: AstNode): Array<{ name: string; node: AstNode }> {
+  const bindings: Array<{ name: string; node: AstNode }> = [];
+  for (const stmt of programBody(program)) {
+    const declaration =
+      stmt.type === "ExportNamedDeclaration" ? (stmt.declaration as AstNode | undefined) : stmt;
+    if (!declaration) {
+      continue;
+    }
+
+    if (declaration.type === "FunctionDeclaration") {
+      const name = nodeName(declaration.id as AstNode | undefined);
+      const body = declaration.body as AstNode | undefined;
+      if (name && body) {
+        bindings.push({ name, node: body });
+      }
+      continue;
+    }
+
+    if (declaration.type === "VariableDeclaration") {
+      for (const declarator of astArray(declaration.declarations)) {
+        const name = nodeName(declarator.id as AstNode | undefined);
+        const init = declarator.init as AstNode | undefined;
+        if (name && init) {
+          bindings.push({ name, node: init });
+        }
+      }
+    }
+  }
+  return bindings;
 }
 
 function nodeReferencesLocalNames(
