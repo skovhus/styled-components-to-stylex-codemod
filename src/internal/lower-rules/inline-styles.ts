@@ -59,6 +59,30 @@ function isNumberLikeTsType(tsType: unknown): boolean {
   return false;
 }
 
+function isMixedStringNumberTsType(tsType: unknown): boolean {
+  if (!tsType || typeof tsType !== "object") {
+    return false;
+  }
+  const type = tsType as { type?: string; types?: unknown[] };
+  if (type.type !== "TSUnionType" || !Array.isArray(type.types)) {
+    return false;
+  }
+  let hasString = false;
+  let hasNumber = false;
+  for (const member of type.types) {
+    if ((member as { type?: string }).type === "TSUndefinedKeyword") {
+      continue;
+    }
+    if (isStringLikeTsType(member)) {
+      hasString = true;
+    }
+    if (isNumberLikeTsType(member)) {
+      hasNumber = true;
+    }
+  }
+  return hasString && hasNumber;
+}
+
 function isStringLikeTsType(tsType: unknown): boolean {
   if (!tsType || typeof tsType !== "object") {
     return false;
@@ -101,7 +125,11 @@ export function annotatePxStyleFnParam(
 ): void {
   const propTsType = findJsxPropTsType?.(jsxProp);
   if (isPxOnlyStaticParts(prefix, suffix) && canEmitBareStylexPxNumber(stylexProp)) {
-    if (propTsType && isStringLikeTsType(propTsType) && !isNumberLikeTsType(propTsType)) {
+    if (
+      propTsType &&
+      (isMixedStringNumberTsType(propTsType) ||
+        (isStringLikeTsType(propTsType) && !isNumberLikeTsType(propTsType)))
+    ) {
       annotateParamFromJsxProp(param, jsxProp);
       return;
     }

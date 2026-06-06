@@ -44,6 +44,7 @@ export const App = () => (
     <Spacer width="2rem" style={{ background: "#d4edda", height: 20 }} />
     <Spacer height={0} style={{ background: "#fff3cd", width: 40 }} />
     <Spacer style={{ background: "#f8d7da", width: 20, height: 20 }} />
+    <div sx={[styles.directPxBox, styles.directPxBoxWidth(24)]} />
   </div>
 );
 
@@ -53,5 +54,12 @@ const styles = stylex.create({
   }),
   spacerWithHeight: (height: number | string | undefined) => ({
     height: getSize(height),
+  }),
+  directPxBox: {
+    backgroundColor: "#e2e3e5",
+    height: 20,
+  },
+  directPxBoxWidth: (size: number | string) => ({
+    width: size,
   }),
 });
