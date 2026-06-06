@@ -72,6 +72,15 @@ describe("isBackgroundImageValue", () => {
     expect(isBackgroundImageValue("url('image.png')")).toBe(true);
   });
 
+  it("detects CSS image functions", () => {
+    expect(isBackgroundImageValue('image("one.png")')).toBe(true);
+    expect(isBackgroundImageValue("image-set(url(one.png) 1x, url(two.png) 2x)")).toBe(true);
+    expect(isBackgroundImageValue('-webkit-image-set(url("one.png") 1x)')).toBe(true);
+    expect(isBackgroundImageValue("cross-fade(url(one.png), url(two.png), 50%)")).toBe(true);
+    expect(isBackgroundImageValue("element(#preview)")).toBe(true);
+    expect(isBackgroundImageValue("paint(checkerboard)")).toBe(true);
+  });
+
   it("rejects plain colors", () => {
     expect(isBackgroundImageValue("#fff")).toBe(false);
     expect(isBackgroundImageValue("red")).toBe(false);

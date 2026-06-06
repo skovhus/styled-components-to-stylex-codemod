@@ -3886,6 +3886,34 @@ export const App = () => <Box><span /></Box>;
     ]);
   });
 
+  it("should map multi-slot image-set backgrounds inside conditional css blocks", () => {
+    const source = [
+      'import styled, { css } from "styled-components";',
+      "",
+      "const Box = styled.div<{ $active?: boolean }>`",
+      "  ${(props) =>",
+      "    props.$active",
+      "      ? css`",
+      '          background: image-set(${"/one.png"} 1x, ${"/two.png"} 2x);',
+      "        `",
+      "      : null}",
+      "`;",
+      "",
+      "export const App = () => <Box $active />;",
+      "",
+    ].join("\n");
+
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("backgroundImage");
+    expect(result.code).not.toContain("backgroundColor");
+  });
+
   it("should bail when same-file descendant proof crosses a non-provable local wrapper component", () => {
     const source = `
 import * as React from "react";
