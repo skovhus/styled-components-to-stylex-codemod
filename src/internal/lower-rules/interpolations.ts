@@ -103,7 +103,7 @@ export function wrapExprWithStaticParts(
       const num = Number(expr);
       return String(prefix === "-" ? -num : num);
     }
-    return prefix === "-" ? `-${expr}` : expr;
+    return prefix === "-" ? `-(${expr})` : expr;
   }
 
   // Check if expr is a string literal (matches "..." or '...')
