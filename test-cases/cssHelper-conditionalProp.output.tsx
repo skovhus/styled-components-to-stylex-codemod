@@ -1,5 +1,6 @@
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { pixelVars, $colors } from "./tokens.stylex";
 
 interface FlexProps {
   gap?: number;
@@ -120,6 +121,24 @@ export function InvertedTernaryPureDynamicContainer(
   );
 }
 
+type HighlightedShadowContainerProps = { isHighlighted?: boolean } & Omit<
+  React.ComponentPropsWithRef<typeof Flex>,
+  "className" | "style" | "$isHighlighted"
+>;
+
+export function HighlightedShadowContainer(props: HighlightedShadowContainerProps) {
+  const { isHighlighted, ...rest } = props;
+  return (
+    <Flex
+      {...rest}
+      {...stylex.props(
+        styles.highlightedShadowContainer,
+        isHighlighted && styles.highlightedShadowContainerHighlighted,
+      )}
+    />
+  );
+}
+
 export const App = () => (
   <>
     <Container gap={4} color="rebeccapurple">
@@ -137,6 +156,9 @@ export const App = () => (
     <InvertedTernaryPureDynamicContainer gap={4} color="darkblue">
       Inverted ternary pure dynamic
     </InvertedTernaryPureDynamicContainer>
+    <HighlightedShadowContainer gap={4} isHighlighted>
+      Highlighted shadow
+    </HighlightedShadowContainer>
   </>
 );
 
@@ -163,23 +185,31 @@ const styles = stylex.create({
     paddingInline: 6,
     borderRadius: 3,
   },
-  pureDynamicContainerColor: (color: string) => ({
-    color,
+  pureDynamicContainerColor: (colorValue: string) => ({
+    color: colorValue,
   }),
   ternaryPureDynamicContainer: {
     paddingBlock: 2,
     paddingInline: 6,
     borderRadius: 3,
   },
-  ternaryPureDynamicContainerColor: (color: string) => ({
-    color,
+  ternaryPureDynamicContainerColor: (colorValue: string) => ({
+    color: colorValue,
   }),
   invertedTernaryPureDynamicContainer: {
     paddingBlock: 2,
     paddingInline: 6,
     borderRadius: 3,
   },
-  invertedTernaryPureDynamicContainerColor: (color: string) => ({
-    color,
+  invertedTernaryPureDynamicContainerColor: (colorValue: string) => ({
+    color: colorValue,
   }),
+  highlightedShadowContainer: {
+    paddingBlock: 2,
+    paddingInline: 6,
+    borderRadius: 3,
+  },
+  highlightedShadowContainerHighlighted: {
+    boxShadow: `inset 0 0 0 ${pixelVars.thin} ${$colors.controlPrimary}`,
+  },
 });

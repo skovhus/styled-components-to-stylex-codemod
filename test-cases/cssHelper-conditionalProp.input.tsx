@@ -1,4 +1,5 @@
 import styled, { css } from "styled-components";
+import { color, thinPixel } from "./lib/helpers";
 
 interface FlexProps {
   gap?: number;
@@ -79,6 +80,17 @@ export const InvertedTernaryPureDynamicContainer = styled(Flex)<{
   border-radius: 3px;
 `;
 
+export const HighlightedShadowContainer = styled(Flex)<{ $isHighlighted?: boolean }>`
+  ${(props) =>
+    props.$isHighlighted
+      ? css`
+          box-shadow: inset 0 0 0 ${thinPixel()} ${color("controlPrimary")};
+        `
+      : null}
+  padding: 2px 6px;
+  border-radius: 3px;
+`;
+
 export const App = () => (
   <>
     <Container gap={4} $color="rebeccapurple">
@@ -96,5 +108,8 @@ export const App = () => (
     <InvertedTernaryPureDynamicContainer gap={4} $color="darkblue">
       Inverted ternary pure dynamic
     </InvertedTernaryPureDynamicContainer>
+    <HighlightedShadowContainer gap={4} $isHighlighted>
+      Highlighted shadow
+    </HighlightedShadowContainer>
   </>
 );

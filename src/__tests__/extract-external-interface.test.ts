@@ -1786,6 +1786,15 @@ describe("runPrepass createExternalInterface snapshot on test-cases", () => {
           "style": false,
           "styles": false,
         },
+        "test-cases/cssHelper-conditionalProp.input.tsx:HighlightedShadowContainer": {
+          "as": false,
+          "className": false,
+          "elementProps": true,
+          "ref": false,
+          "spreadProps": false,
+          "style": false,
+          "styles": false,
+        },
         "test-cases/cssHelper-conditionalProp.input.tsx:InvertedTernaryPureDynamicContainer": {
           "as": false,
           "className": false,
