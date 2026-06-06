@@ -5976,6 +5976,27 @@ export const Box = styled.div<{ $size: number | string }>\`
     expect(result.code ?? "").toContain("width: `${width}px`");
   });
 
+  it("preserves px templates on unitless StyleX properties", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $opacity: number; $z: number }>\`
+  opacity: \${(props) => props.$opacity}px;
+  z-index: \${(props) => props.$z}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "unitless-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("opacity: `${opacity}px`");
+    expect(result.code ?? "").toContain("zIndex: `${zIndex}px`");
+  });
+
   it("preserves px templates in pseudo-elements when the interpolation prop can be a string", () => {
     const source = `
 import styled from "styled-components";

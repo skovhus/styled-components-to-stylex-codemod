@@ -43,6 +43,6 @@ const styles = stylex.create({
     transitionDuration: transitionSpeed.slow,
     stroke: "#bf4f74",
     fill: "none",
-    strokeWidth: strokeWidth,
+    strokeWidth: `${strokeWidth}px`,
   }),
 });
