@@ -6018,6 +6018,28 @@ export const App = () => <Box size={8}>Observed</Box>;
     expect(result.code ?? "").toContain("width: `${size}px`");
   });
 
+  it("does not omit px for mutable top-level numeric bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+let WIDTH = 12;
+WIDTH = Math.random() > 0.5 ? "12" : WIDTH;
+
+export const Box = styled.div\`
+  width: \${WIDTH}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "mutable-width-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${WIDTH}px`");
+  });
+
   it("preserves px templates in pseudo-elements when the interpolation prop can be a string", () => {
     const source = `
 import styled from "styled-components";

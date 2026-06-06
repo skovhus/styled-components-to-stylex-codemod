@@ -122,7 +122,7 @@ function normalizeResolvedNumericPxValues(ctx: TransformContext): void {
 function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<string> {
   const names = new Set<string>();
   ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
-    if (!isTopLevelVariableDeclaratorPath(path)) {
+    if (!isImmutableTopLevelVariableDeclaratorPath(path)) {
       return;
     }
     const node = path.node as { id?: unknown; init?: unknown };
@@ -137,7 +137,12 @@ function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<str
   return names;
 }
 
-function isTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
+function isImmutableTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
+  const declaration = (path.parentPath as { node?: { type?: string; kind?: string } } | undefined)
+    ?.node;
+  if (declaration?.type !== "VariableDeclaration" || declaration.kind !== "const") {
+    return false;
+  }
   let current: unknown = path.parentPath;
   while (current && typeof current === "object") {
     const node = (current as { node?: { type?: string } }).node;
