@@ -4765,6 +4765,7 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
   let propsUsed: Set<string>;
   let jsxProp: string;
   let isSimpleIdentity: boolean;
+  let numericIdentifiers: ReadonlySet<string> = new Set();
   const stylexDecls = cssDeclarationToStylexDeclarations(d);
   const firstStylexProp = stylexDecls[0]?.prop ?? "";
 
@@ -4781,11 +4782,17 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     }
     inlineExpr = unwrapped.expr;
     propsUsed = unwrapped.propsUsed;
+    const candidateJsxProp = propsUsed.size === 1 ? [...propsUsed][0]! : "";
+    numericIdentifiers = candidateJsxProp
+      ? numericIdentifierSetForJsxProp(candidateJsxProp, ctx.findJsxPropTsType)
+      : new Set();
     // Determine if the expression is a simple identity prop reference (e.g., just `badgeColor`)
     // vs a computed expression (e.g., `tipColor || "black"`, `size * 2`).
     isSimpleIdentity =
       propsUsed.size === 1 &&
-      ((!prefix && !suffix) || canOmitPxUnitForStylexNumber(firstStylexProp, prefix, suffix)) &&
+      ((!prefix && !suffix) ||
+        (canOmitPxUnitForStylexNumber(firstStylexProp, prefix, suffix) &&
+          isNumericStylexExpression(inlineExpr, { numericIdentifiers }))) &&
       inlineExpr.type === "Identifier" &&
       propsUsed.has((inlineExpr as { name: string }).name);
     jsxProp = isSimpleIdentity ? [...propsUsed][0]! : "__props";
@@ -4807,7 +4814,16 @@ function tryHandleDynamicPseudoElementStyleFunction(args: InterpolatedDeclaratio
     let needsOriginalParam = false;
     const valueExpr: ExpressionKind =
       prefix || suffix
-        ? buildStylexValueWithStaticParts(j, inlineExpr, prefix, suffix, out.prop)
+        ? buildStylexValueWithStaticParts(
+            j,
+            inlineExpr,
+            prefix,
+            suffix,
+            out.prop,
+            false,
+            undefined,
+            numericIdentifiers,
+          )
         : inlineExpr;
     if (!styleFnDecls.has(fnKey)) {
       const styleValueExpr = cloneAstNode(valueExpr) as ExpressionKind;

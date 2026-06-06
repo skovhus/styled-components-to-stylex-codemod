@@ -5952,6 +5952,28 @@ export const Box = styled.div<{ $size: number | string }>\`
     expect(result.code ?? "").toContain("width: `${width}px`");
   });
 
+  it("preserves px templates in pseudo-elements when the interpolation prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $size: number | string }>\`
+  &::before {
+    content: "";
+    width: \${(props) => props.$size}px;
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "string-or-number-pseudo-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${size}px`");
+  });
+
   it.each([
     {
       name: "nested conditional arithmetic",
