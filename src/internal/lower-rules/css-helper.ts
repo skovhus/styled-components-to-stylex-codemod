@@ -289,7 +289,8 @@ export function createCssHelperResolver(args: {
 
     quasis.push(j.templateElement({ raw: currentStaticPart, cooked: currentStaticPart }, true));
     if (expressions.length === 1 && quasis.every((q) => !q.value.raw && !q.value.cooked)) {
-      return expressions[0]!;
+      const onlyExpression = expressions[0];
+      return onlyExpression ?? null;
     }
     return j.templateLiteral(quasis, expressions);
   };
