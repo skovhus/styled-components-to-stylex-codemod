@@ -51,7 +51,7 @@ const styles = stylex.create({
     borderRadius: 6,
     opacity: 1,
     position: "relative",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.bgSub,
     outlineStyle: {

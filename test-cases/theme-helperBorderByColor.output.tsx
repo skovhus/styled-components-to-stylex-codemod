@@ -11,12 +11,12 @@ export const App = () => (
 const styles = stylex.create({
   box: {
     padding: 12,
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgSub,
   },
   separator: {
-    borderTopWidth: "1px",
+    borderTopWidth: 1,
     borderTopStyle: "solid",
     borderTopColor: $colors.bgBorderFaint,
     marginBlock: 8,

@@ -114,7 +114,7 @@ const styles = stylex.create({
     backgroundColor: "gray",
   },
   box: {
-    padding: "8px",
+    padding: 8,
     backgroundColor: "gray",
     color: "white",
   },
@@ -122,7 +122,7 @@ const styles = stylex.create({
     backgroundColor: "blue",
   },
   boxSizeLarge: {
-    padding: "16px",
+    padding: 16,
   },
   image: {
     opacity: 1,

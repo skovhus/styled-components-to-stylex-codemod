@@ -5933,11 +5933,140 @@ export const Box = styled.div\`
     expect(result.code ?? "").not.toContain("calc(");
   });
 
+  it("preserves px templates when the interpolation prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $size: number | string }>\`
+  width: \${(props) => props.$size}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "string-or-number-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${width}px`");
+  });
+
+  it("does not use unrelated numeric bindings for string-capable style function params", () => {
+    const source = `
+import styled from "styled-components";
+
+function helper() {
+  const width = 1;
+  return width;
+}
+
+export const Box = styled.div<{ $size: number | string }>\`
+  width: \${(props) => props.$size}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "string-or-number-shadowed-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${width}px`");
+  });
+
+  it("preserves px templates on unitless StyleX properties", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $opacity: number; $z: number }>\`
+  opacity: \${(props) => props.$opacity}px;
+  z-index: \${(props) => props.$z}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "unitless-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("opacity: `${opacity}px`");
+    expect(result.code ?? "").toContain("zIndex: `${zIndex}px`");
+  });
+
+  it("preserves observed fallback px templates when the prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ size: number | string }>\`
+  width: \${(props) => props.size}px;
+\`;
+
+export const App = () => <Box size={8}>Observed</Box>;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "observed-string-or-number-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${size}px`");
+  });
+
+  it("does not omit px for mutable top-level numeric bindings", () => {
+    const source = `
+import styled from "styled-components";
+
+let WIDTH = 12;
+WIDTH = Math.random() > 0.5 ? "12" : WIDTH;
+
+export const Box = styled.div\`
+  width: \${WIDTH}px;
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "mutable-width-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${WIDTH}px`");
+  });
+
+  it("preserves px templates in pseudo-elements when the interpolation prop can be a string", () => {
+    const source = `
+import styled from "styled-components";
+
+export const Box = styled.div<{ $size: number | string }>\`
+  &::before {
+    content: "";
+    width: \${(props) => props.$size}px;
+  }
+\`;
+`;
+
+    const result = transformWithWarnings(
+      { source, path: "string-or-number-pseudo-px.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.code ?? "").toContain("width: `${size}px`");
+  });
+
   it.each([
     {
       name: "nested conditional arithmetic",
       css: "padding-top: ${cond ? 8 - runtimeValue() : 4}px;",
-      expected: 'cond ? `calc(8px - ${$spacing.runtimeValue})` : "4px"',
+      expected: "cond ? `calc(8px - ${$spacing.runtimeValue})` : 4",
       forbidden: "8 - $spacing.runtimeValue",
     },
     {
@@ -5949,7 +6078,7 @@ export const Box = styled.div\`
     {
       name: "conditional resolved branch",
       css: "padding-top: ${cond ? runtimeValue() : 4}px;",
-      expected: 'cond ? $spacing.runtimeValue : "4px"',
+      expected: "cond ? $spacing.runtimeValue : 4",
       forbidden: "}px",
     },
   ])(
@@ -11505,7 +11634,7 @@ export function App() {
     expect(result.code).not.toBeNull();
     // The classification should detect that "red" is NOT a length and "0.5px" IS a length,
     // and swap the assignments correctly
-    expect(result.code).toContain('borderWidth: "0.5px"');
+    expect(result.code).toContain("borderWidth: 0.5");
     expect(result.code).toContain('borderStyle: "solid"');
     expect(result.code).toContain('borderColor: "red"');
     // Should NOT have the reversed (wrong) assignment

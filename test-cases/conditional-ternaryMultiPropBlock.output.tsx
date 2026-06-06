@@ -430,7 +430,7 @@ const styles = stylex.create({
     paddingBottom: 40,
   },
   textAddBottomBorder: {
-    borderBottomWidth: "1px",
+    borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: $colors.bgBorderSolid,
   },
@@ -626,9 +626,9 @@ const styles = stylex.create({
     paddingBottom: 40,
   },
   consolidatedKeyCollisionBoxWidth: (width: number) => ({
-    width: `${width}px`,
+    width: width,
   }),
   consolidatedKeyCollisionBoxHeight: (height: number) => ({
-    height: `${height}px`,
+    height: height,
   }),
 });

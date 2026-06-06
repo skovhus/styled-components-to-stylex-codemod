@@ -32,7 +32,7 @@ const styles = stylex.create({
     boxShadow: `0 2px 4px ${$colors.primaryColor}`,
     borderRadius: 8,
     display: "flex",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: $colors.bgSub,
     minWidth: 300,

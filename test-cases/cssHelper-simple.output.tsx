@@ -83,11 +83,11 @@ const styles = stylex.create({
     display: "inline-flex",
   },
   branchedContainerBrowserIsSafari: (size: number) => ({
-    fontSize: `${size - 4}px`,
+    fontSize: size - 4,
     lineHeight: 1,
   }),
   branchedContainerDefault: (size: number) => ({
-    fontSize: `${size - 3}px`,
+    fontSize: size - 3,
     lineHeight: `${size}px`,
   }),
   runtimeOffset: {

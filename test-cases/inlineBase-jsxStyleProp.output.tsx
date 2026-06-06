@@ -40,7 +40,7 @@ const styles = stylex.create({
     flexDirection: "row",
   },
   flexDirectionalShorthand: {
-    paddingBlock: "20px",
+    paddingBlock: 20,
     paddingInline: 0,
     alignItems: "flex-start",
     // min width keeps flex children from expanding the container
@@ -49,15 +49,15 @@ const styles = stylex.create({
   },
   flexBackgroundAndBorder: {
     backgroundColor: "#ffe0e0",
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "#b97",
   },
   flexMarginQuad: {
-    marginTop: "8px",
-    marginRight: "16px",
-    marginBottom: "4px",
-    marginLeft: "24px",
+    marginTop: 8,
+    marginRight: 16,
+    marginBottom: 4,
+    marginLeft: 24,
     paddingBlock: 4,
     paddingInline: 8,
   },

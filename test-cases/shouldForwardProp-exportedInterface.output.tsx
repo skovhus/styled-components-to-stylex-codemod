@@ -43,15 +43,15 @@ export const App = () => (
 const styles = stylex.create({
   transientButton: {
     backgroundColor: "#4F74BF",
-    paddingBlock: "8px",
-    paddingInline: "16px",
+    paddingBlock: 8,
+    paddingInline: 16,
     color: "white",
   },
   transientButtonVariantPrimary: {
     backgroundColor: "#BF4F74",
   },
   transientButtonSizeLarge: {
-    paddingBlock: "12px",
-    paddingInline: "24px",
+    paddingBlock: 12,
+    paddingInline: 24,
   },
 });

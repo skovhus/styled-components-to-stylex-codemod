@@ -39,6 +39,25 @@ export function TransientPanel(props: TransientPanelProps) {
   );
 }
 
+type FlexiblePanelProps = { height: number | string } & Omit<
+  React.ComponentProps<"div">,
+  "className" | "style" | "sx"
+>;
+
+export function FlexiblePanel(props: FlexiblePanelProps) {
+  const { height, ...rest } = props;
+  return (
+    <div
+      {...rest}
+      sx={[
+        styles.flexiblePanel,
+        flexiblePanelHeightVariants[height as keyof typeof flexiblePanelHeightVariants] ??
+          styles.flexiblePanelHeight(height),
+      ]}
+    />
+  );
+}
+
 type FaderProps = { opacity: number } & Omit<
   React.ComponentProps<"div">,
   "className" | "style" | "sx"
@@ -83,6 +102,8 @@ export const App = () => (
     <Panel height={80}>Regular 80</Panel>
     <TransientPanel height={50}>Transient 50</TransientPanel>
     <TransientPanel height={90}>Transient 90</TransientPanel>
+    <FlexiblePanel height={40}>Flexible 40</FlexiblePanel>
+    <FlexiblePanel height={80}>Flexible 80</FlexiblePanel>
     <Fader opacity={0.4}>Opacity 0.4</Fader>
     <Fader opacity={0.8}>Opacity 0.8</Fader>
     <TransientFader opacity={0.5}>Transient 0.5</TransientFader>
@@ -98,7 +119,7 @@ const styles = stylex.create({
     color: "white",
   },
   panelHeight: (height: number) => ({
-    height: `${height}px`,
+    height: height,
   }),
   transientPanel: {
     width: 120,
@@ -107,6 +128,15 @@ const styles = stylex.create({
     color: "white",
   },
   transientPanelHeight: (height: number) => ({
+    height: height,
+  }),
+  flexiblePanel: {
+    width: 120,
+    padding: 8,
+    backgroundColor: "goldenrod",
+    color: "white",
+  },
+  flexiblePanelHeight: (height: number | string) => ({
     height: `${height}px`,
   }),
   fader: {
@@ -131,19 +161,28 @@ const styles = stylex.create({
 
 const panelHeightVariants = stylex.create({
   40: {
-    height: "40px",
+    height: 40,
   },
   80: {
-    height: "80px",
+    height: 80,
   },
 });
 
 const transientPanelHeightVariants = stylex.create({
   50: {
-    height: "50px",
+    height: 50,
   },
   90: {
-    height: "90px",
+    height: 90,
+  },
+});
+
+const flexiblePanelHeightVariants = stylex.create({
+  40: {
+    height: 40,
+  },
+  80: {
+    height: 80,
   },
 });
 

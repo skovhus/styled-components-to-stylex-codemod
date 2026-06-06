@@ -136,11 +136,11 @@ function getAspectRatio(svgWidth?: number, svgHeight?: number): string {
 const styles = stylex.create({
   componentWrapper: {
     backgroundColor: "white",
-    borderRadius: "20px",
+    borderRadius: 20,
     overflow: "hidden",
   },
   componentWrapperOpen: {
-    borderRadius: "8px",
+    borderRadius: 8,
   },
   highlightedAvatar: {
     backgroundColor: "transparent",
@@ -173,7 +173,7 @@ const styles = stylex.create({
     borderColor: "purple",
   },
   motionIframeWrapperWidth: (svgWidth: number | undefined) => ({
-    width: svgWidth ? `${svgWidth}px` : "100%",
+    width: svgWidth ? svgWidth : "100%",
   }),
   motionIframeWrapperAspectRatio: (
     svgWidth: number | undefined,

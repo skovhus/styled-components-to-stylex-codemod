@@ -17,6 +17,14 @@ export const TransientPanel = styled.div<{ $height: number }>`
   color: white;
 `;
 
+export const FlexiblePanel = styled.div<{ height: number | string }>`
+  width: 120px;
+  height: ${({ height }) => height}px;
+  padding: 8px;
+  background-color: goldenrod;
+  color: white;
+`;
+
 export const Fader = styled.div<{ opacity: number }>`
   width: 120px;
   padding: 8px;
@@ -39,6 +47,8 @@ export const App = () => (
     <Panel height={80}>Regular 80</Panel>
     <TransientPanel $height={50}>Transient 50</TransientPanel>
     <TransientPanel $height={90}>Transient 90</TransientPanel>
+    <FlexiblePanel height={40}>Flexible 40</FlexiblePanel>
+    <FlexiblePanel height={80}>Flexible 80</FlexiblePanel>
     <Fader opacity={0.4}>Opacity 0.4</Fader>
     <Fader opacity={0.8}>Opacity 0.8</Fader>
     <TransientFader $opacity={0.5}>Transient 0.5</TransientFader>

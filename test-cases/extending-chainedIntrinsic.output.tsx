@@ -40,7 +40,7 @@ const styles = stylex.create({
     position: "absolute",
     pointerEvents: "none",
     display: "flex",
-    gap: `${GAP}px`,
+    gap: GAP,
     alignItems: "center",
   },
   fadeBase: {
@@ -49,11 +49,11 @@ const styles = stylex.create({
     bottom: 0,
   },
   fadeLeft: {
-    width: `${FADE_WIDTH}px`,
+    width: FADE_WIDTH,
     backgroundImage: "linear-gradient(to right, transparent, #f0f5ff)",
   },
   fadeRight: (left: number | string) => ({
-    width: `${FADE_WIDTH}px`,
+    width: FADE_WIDTH,
     backgroundImage: "linear-gradient(to left, transparent, #f0f5ff)",
     left,
   }),
@@ -63,7 +63,7 @@ const styles = stylex.create({
   },
   tick: (borderRightColor: string) => ({
     position: "absolute",
-    top: `-${OFFSET}px`,
+    top: -OFFSET,
     height: 6,
     borderRightWidth: 1,
     borderRightStyle: "solid",

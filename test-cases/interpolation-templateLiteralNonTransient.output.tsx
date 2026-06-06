@@ -58,10 +58,10 @@ const styles = stylex.create({
     margin: 8,
   },
   boxWidth: (size: number | undefined) => ({
-    width: `${size ?? 100}px`,
+    width: size ?? 100,
   }),
   boxHeight: (size: number | undefined) => ({
-    height: `${size ?? 100}px`,
+    height: size ?? 100,
   }),
   frame: {
     backgroundColor: "mistyrose",
@@ -73,7 +73,7 @@ const styles = stylex.create({
     justifyContent: "center",
   },
   frameWidth: (svgWidth: number | undefined) => ({
-    width: svgWidth ? `${svgWidth}px` : "100%",
+    width: svgWidth ? svgWidth : "100%",
   }),
   frameAspectRatio: (svgWidth: number | undefined, svgHeight: number | undefined) => ({
     aspectRatio: getAspectRatio(svgWidth, svgHeight),

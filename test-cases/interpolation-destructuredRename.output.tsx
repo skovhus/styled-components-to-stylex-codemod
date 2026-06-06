@@ -56,13 +56,13 @@ const styles = stylex.create({
     fontSize,
   }),
   card: {
-    padding: "16px",
+    padding: 16,
   },
   cardPadding: (padding: string) => ({
     padding,
   }),
   box: {
-    margin: "8px",
+    margin: 8,
   },
   boxMargin: (margin: string) => ({
     margin,

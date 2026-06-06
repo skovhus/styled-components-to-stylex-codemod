@@ -52,7 +52,7 @@ const styles = stylex.create({
   input: {
     paddingBlock: 8,
     paddingInline: 12,
-    borderWidth: "2px",
+    borderWidth: 2,
     borderStyle: "solid",
     borderColor: {
       default: "#ccc",

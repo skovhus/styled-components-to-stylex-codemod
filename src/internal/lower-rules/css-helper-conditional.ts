@@ -18,6 +18,7 @@ import {
   collectPropsFromArrowFn,
   collectPropsFromExpressions,
   getImportedStylexIdentifiers,
+  maybeOmitPxUnitFromStylexStyleValue,
   normalizeDollarProps,
   rewritePropsThemeToThemeVar,
 } from "./inline-styles.js";
@@ -2316,7 +2317,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
           const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
             const replacedExpr = replacePropsWithBareIdent(normalizeDollarProps(j, propExpr));
-            return j.property("init", makeCssPropKey(j, prop), replacedExpr);
+            return j.property(
+              "init",
+              makeCssPropKey(j, prop),
+              maybeOmitPxUnitFromStylexStyleValue(j, replacedExpr, prop) as ExpressionKind,
+            );
           });
           return j.arrowFunctionExpression([param], j.objectExpression(properties));
         }
@@ -2338,7 +2343,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
 
         const properties = Array.from(map.entries()).map(([prop, propExpr]) => {
           const replacedExpr = normalizeDollarProps(j, propExpr);
-          return j.property("init", makeCssPropKey(j, prop), replacedExpr);
+          return j.property(
+            "init",
+            makeCssPropKey(j, prop),
+            maybeOmitPxUnitFromStylexStyleValue(j, replacedExpr, prop) as ExpressionKind,
+          );
         });
         return j.arrowFunctionExpression([propsParam], j.objectExpression(properties));
       };

@@ -74,7 +74,7 @@ const styles = stylex.create({
   base: (gap: number | undefined) => ({
     display: "flex",
     flexDirection: "row",
-    gap: gap ? `${gap}px` : "0",
+    gap: gap ? gap : "0",
   }),
   baseColumn: {
     flexDirection: "column",
@@ -84,7 +84,7 @@ const styles = stylex.create({
   },
   button: (size: number | undefined) => ({
     backgroundColor: "gray",
-    fontSize: size ? `${size}px` : "14px",
+    fontSize: size ? size : 14,
   }),
   buttonVariantPrimary: {
     backgroundColor: "blue",

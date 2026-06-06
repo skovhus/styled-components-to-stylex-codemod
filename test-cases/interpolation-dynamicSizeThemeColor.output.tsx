@@ -110,10 +110,10 @@ const styles = stylex.create({
     color: $colors.bgBase,
   },
   containerWidth: (width: number) => ({
-    width: `${width}px`,
+    width: width,
   }),
   containerHeight: (height: number) => ({
-    height: `${height}px`,
+    height: height,
   }),
   containerFontSize: (fontSize: string) => ({
     fontSize: fontSize,

@@ -86,7 +86,7 @@ const styles = stylex.create({
     padding: 8,
     borderBottomWidth: {
       default: null,
-      ":not(:last-child)": "1px",
+      ":not(:last-child)": 1,
     },
     borderBottomStyle: {
       default: null,

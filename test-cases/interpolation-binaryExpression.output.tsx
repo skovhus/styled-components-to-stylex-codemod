@@ -24,6 +24,6 @@ const styles = stylex.create({
     backgroundColor: "red",
     padding: 8,
     color: "white",
-    paddingLeft: `${depth * 16 + 4}px`,
+    paddingLeft: depth * 16 + 4,
   }),
 });

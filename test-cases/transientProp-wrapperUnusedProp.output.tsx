@@ -70,7 +70,7 @@ const styles = stylex.create({
     borderStyle: "none",
   },
   scrollableDivApplyBackground: {
-    borderWidth: "1px",
+    borderWidth: 1,
     borderStyle: "solid",
     borderColor: "gray",
   },

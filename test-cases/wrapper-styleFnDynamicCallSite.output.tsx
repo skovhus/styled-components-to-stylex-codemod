@@ -17,6 +17,6 @@ export const App = (props: { windowHeight: number }) => (
 
 const styles = stylex.create({
   layoutMarginTop: (windowHeight: number) => ({
-    marginTop: `${(windowHeight - 400) / 2}px`,
+    marginTop: (windowHeight - 400) / 2,
   }),
 });

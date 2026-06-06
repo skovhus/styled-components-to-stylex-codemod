@@ -28,7 +28,7 @@ const styles = stylex.create({
     borderRadius: 0,
     backgroundColor: "unset",
     overflowY: compact && isExpanded ? "auto" : "hidden",
-    maxHeight: compact && isExpanded ? "200px" : "none",
+    maxHeight: compact && isExpanded ? 200 : "none",
   }),
   panelCompact: {
     backgroundColor: "transparent",

@@ -99,9 +99,9 @@ const styles = stylex.create({
     borderColor: $colors.bgBorderSolid,
   },
   highlightHighlightedThemeIsDark: {
-    borderWidth: "2px",
+    borderWidth: 2,
   },
   highlightHighlightedNotThemeIsDark: {
-    borderWidth: "1px",
+    borderWidth: 1,
   },
 });
