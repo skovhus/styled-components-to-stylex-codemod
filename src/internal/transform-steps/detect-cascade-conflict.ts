@@ -12,6 +12,10 @@ import {
   getReExportedSourceName,
   resolveBarrelReExportBinding,
 } from "../prepass/extract-external-interface.js";
+import {
+  exportedBindingDependsOnLocalNames,
+  localNamesForExport,
+} from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
 
@@ -129,12 +133,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     if (
       transformedComponents &&
       transformedComponentsHasPath(transformedComponents, styledDefinitions.path) &&
-      !bindingDependsOnStyledDefinitions(
-        styledDefinitions.path,
-        definition.importedName,
-        definition.importedName === "default",
-        styledDefinitions.names,
-      )
+      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName)
     ) {
       continue;
     }
@@ -307,11 +306,7 @@ function transformedComponentExists(
     if (!source) {
       continue;
     }
-    for (const localName of exportedLocalNameCandidates(
-      source,
-      bindingName,
-      allowDefaultFallback,
-    )) {
+    for (const localName of localNamesForExport(source, bindingName, allowDefaultFallback)) {
       if (transformedNames.has(localName)) {
         return true;
       }
@@ -320,143 +315,19 @@ function transformedComponentExists(
   return false;
 }
 
-function exportedLocalNameCandidates(
-  source: string,
-  exportedName: string,
-  includeDefault: boolean,
-): string[] {
-  const candidates = new Set<string>();
-  if (exportedName !== "default") {
-    candidates.add(exportedName);
-  }
-
-  const exportBlockRe = /export\s*\{([^}]+)\}/g;
-  for (const match of source.matchAll(exportBlockRe)) {
-    const localName = getReExportedSourceName(match[1] ?? "", exportedName);
-    if (localName) {
-      candidates.add(localName);
-    }
-  }
-
-  if (includeDefault) {
-    const defaultName = findDefaultExportedLocalName(source);
-    if (defaultName) {
-      candidates.add(defaultName);
-    }
-  }
-
-  return [...candidates];
-}
-
 function bindingDependsOnStyledDefinitions(
-  importedPath: string,
+  styledDefinitions: StyledDefinitionFile,
   bindingName: string,
-  allowDefaultFallback: boolean,
-  styledDefinitionNames: ReadonlySet<string>,
 ): boolean {
-  const source = tryReadFile(importedPath);
-  if (!source) {
-    return true;
-  }
-  const localNames = exportedLocalNameCandidates(source, bindingName, allowDefaultFallback);
-  if (localNames.length === 0) {
-    return true;
-  }
-  for (const localName of localNames) {
-    if (styledDefinitionNames.has(localName)) {
-      return true;
-    }
-    const body = readComponentBody(source, localName);
-    if (!body || referencesAnyName(body, styledDefinitionNames)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function readComponentBody(source: string, localName: string): string | undefined {
-  return readFunctionBody(source, localName) ?? readArrowFunctionBody(source, localName);
-}
-
-function readFunctionBody(source: string, localName: string): string | undefined {
-  const match = source.match(
-    new RegExp(`\\bfunction\\s+${escapeRegex(localName)}(?:\\s*<[^>]+>)?\\s*\\(`),
-  );
-  if (match?.index === undefined) {
-    return undefined;
-  }
-  const openParen = match.index + match[0].lastIndexOf("(");
-  const closeParen = readBalancedDelimiterEnd(source, openParen, "(", ")");
-  if (closeParen === undefined) {
-    return undefined;
-  }
-  const openBrace = source.indexOf("{", closeParen + 1);
-  return openBrace === -1 ? undefined : readBalancedBlock(source, openBrace);
-}
-
-function readArrowFunctionBody(source: string, localName: string): string | undefined {
-  const match = source.match(
-    new RegExp(`\\b(?:const|let|var)\\s+${escapeRegex(localName)}\\b[^=]*=\\s*`),
-  );
-  if (match?.index === undefined) {
-    return undefined;
-  }
-  const start = match.index + match[0].length;
-  const arrow = source.indexOf("=>", start);
-  if (arrow === -1) {
-    return undefined;
-  }
-  const bodyStart = skipWhitespace(source, arrow + 2);
-  if (source[bodyStart] === "{") {
-    return readBalancedBlock(source, bodyStart);
-  }
-  const semicolon = source.indexOf(";", bodyStart);
-  return semicolon === -1 ? source.slice(bodyStart) : source.slice(bodyStart, semicolon);
-}
-
-function readBalancedBlock(source: string, openBrace: number): string | undefined {
-  const closeBrace = readBalancedDelimiterEnd(source, openBrace, "{", "}");
-  return closeBrace === undefined ? undefined : source.slice(openBrace + 1, closeBrace);
-}
-
-function readBalancedDelimiterEnd(
-  source: string,
-  openIndex: number,
-  open: string,
-  close: string,
-): number | undefined {
-  let depth = 0;
-  for (let i = openIndex; i < source.length; i += 1) {
-    const ch = source[i];
-    if (ch === open) {
-      depth += 1;
-      continue;
-    }
-    if (ch !== close) {
-      continue;
-    }
-    depth -= 1;
-    if (depth === 0) {
-      return i;
-    }
-  }
-  return undefined;
-}
-
-function skipWhitespace(source: string, index: number): number {
-  let next = index;
-  while (next < source.length && /\s/.test(source[next] ?? "")) {
-    next += 1;
-  }
-  return next;
-}
-
-function referencesAnyName(source: string, names: ReadonlySet<string>): boolean {
-  return [...names].some((name) => new RegExp(`\\b${escapeRegex(name)}\\b`).test(source));
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const source = tryReadFile(styledDefinitions.path);
+  return source
+    ? exportedBindingDependsOnLocalNames({
+        source,
+        exportedName: bindingName,
+        includeDefault: bindingName === "default",
+        localNames: styledDefinitions.names,
+      })
+    : true;
 }
 
 /**
