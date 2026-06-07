@@ -95,9 +95,10 @@ function collectStylexDefaultExport(
     return;
   }
   const declaration = stmt.declaration as AstNode | undefined;
-  const localName = nodeName(declaration);
+  const localName = nodeName(declaration?.id as AstNode | undefined) ?? nodeName(declaration);
   const usesStylex = localName
-    ? localBindingUsesStylex(program, localName, stylexUsage)
+    ? localBindingUsesStylex(program, localName, stylexUsage) ||
+      nodeUsesStylex(declaration, stylexUsage)
     : nodeUsesStylex(declaration, stylexUsage) ||
       (declaration
         ? referencedLocalNames(program, declaration).some((referencedName) =>
