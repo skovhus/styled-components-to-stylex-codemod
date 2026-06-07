@@ -47,6 +47,8 @@ export interface CrossFileInfo {
   propUsageByFile?: Map<string, Map<string, ComponentPropUsageInfo>>;
   /** Files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
+  /** Files that export components already using StyleX → set of export names. */
+  stylexComponentFiles?: Map<string, Set<string>>;
   /**
    * Leaves-only mode: `${realpathOfDefiningFile}:${bindingName}` for styled components
    * classified as leaves (intrinsic base or transitive wrapper of another leaf in the run).

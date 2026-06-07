@@ -74,24 +74,8 @@ export function exportedBindingUsesStylex(args: {
     return false;
   }
 
-  const checkedNames = new Set<string>();
-  const bindingUsesStylex = (localName: string): boolean => {
-    if (checkedNames.has(localName)) {
-      return false;
-    }
-    checkedNames.add(localName);
-    const node = findLocalBindingNode(parsed, localName);
-    if (!node) {
-      return false;
-    }
-    if (nodeUsesStylex(node, stylexUsage)) {
-      return true;
-    }
-    return referencedLocalNames(parsed, node).some(bindingUsesStylex);
-  };
-
   for (const localName of targets.localNames) {
-    if (bindingUsesStylex(localName)) {
+    if (localBindingUsesStylex(parsed, localName, stylexUsage)) {
       return true;
     }
   }
@@ -103,6 +87,25 @@ export function exportedBindingUsesStylex(args: {
   }
 
   return false;
+}
+
+export function collectStylexExportNames(source: string): Set<string> {
+  const parsed = parseProgram(source);
+  if (!parsed) {
+    return new Set();
+  }
+
+  const stylexUsage = collectStylexUsage(parsed);
+  if (!stylexUsage.hasStylexSurface) {
+    return new Set();
+  }
+
+  const names = new Set<string>();
+  for (const stmt of programBody(parsed)) {
+    collectStylexNamedExports(parsed, stmt, stylexUsage, names);
+    collectStylexDefaultExport(parsed, stmt, stylexUsage, names);
+  }
+  return names;
 }
 
 type ExportTargets = {
@@ -184,6 +187,63 @@ function collectDefaultExportTargets(stmt: AstNode, targets: ExportTargets): voi
     return;
   }
   targets.nodes.push(declaration);
+}
+
+function collectStylexNamedExports(
+  program: AstNode,
+  stmt: AstNode,
+  stylexUsage: StylexUsage,
+  names: Set<string>,
+): void {
+  if (stmt.type !== "ExportNamedDeclaration") {
+    return;
+  }
+
+  const declaration = stmt.declaration as AstNode | undefined;
+  if (declaration?.type === "VariableDeclaration") {
+    for (const declarator of astArray(declaration.declarations)) {
+      const localName = nodeName(declarator.id as AstNode | undefined);
+      const init = declarator.init as AstNode | undefined;
+      if (localName && nodeUsesStylex(init, stylexUsage)) {
+        names.add(localName);
+      }
+    }
+  } else if (declaration) {
+    const localName = nodeName(declaration?.id as AstNode | undefined);
+    if (localName && nodeUsesStylex(exportedNodeBody(declaration), stylexUsage)) {
+      names.add(localName);
+    }
+  }
+
+  for (const specifier of astArray(stmt.specifiers)) {
+    if (specifier.type !== "ExportSpecifier") {
+      continue;
+    }
+    const exportedName = nodeName(specifier.exported as AstNode | undefined);
+    const localName = nodeName(specifier.local as AstNode | undefined);
+    if (exportedName && localName && localBindingUsesStylex(program, localName, stylexUsage)) {
+      names.add(exportedName);
+    }
+  }
+}
+
+function collectStylexDefaultExport(
+  program: AstNode,
+  stmt: AstNode,
+  stylexUsage: StylexUsage,
+  names: Set<string>,
+): void {
+  if (stmt.type !== "ExportDefaultDeclaration") {
+    return;
+  }
+  const declaration = stmt.declaration as AstNode | undefined;
+  const localName = nodeName(declaration);
+  const usesStylex = localName
+    ? localBindingUsesStylex(program, localName, stylexUsage)
+    : nodeUsesStylex(declaration, stylexUsage);
+  if (usesStylex) {
+    names.add("default");
+  }
 }
 
 function collectDeclarationTargets(
@@ -433,6 +493,28 @@ function referencedLocalNames(program: AstNode, node: AstNode): string[] {
     }
   });
   return [...referenced];
+}
+
+function localBindingUsesStylex(
+  program: AstNode,
+  localName: string,
+  stylexUsage: StylexUsage,
+  checkedNames = new Set<string>(),
+): boolean {
+  if (checkedNames.has(localName)) {
+    return false;
+  }
+  checkedNames.add(localName);
+  const node = findLocalBindingNode(program, localName);
+  if (!node) {
+    return false;
+  }
+  if (nodeUsesStylex(node, stylexUsage)) {
+    return true;
+  }
+  return referencedLocalNames(program, node).some((referencedName) =>
+    localBindingUsesStylex(program, referencedName, stylexUsage, checkedNames),
+  );
 }
 
 function nodeReferencesLocalNames(

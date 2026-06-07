@@ -34,6 +34,7 @@ import {
   resolveBarrelReExport,
   type Resolve,
 } from "./extract-external-interface.js";
+import { collectStylexExportNames } from "./component-styled-dependencies.js";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import {
@@ -194,6 +195,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const refUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
+  const stylexComponentFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, ConsumerUsageRef[]>();
   const classNameUsages = new Map<string, ConsumerUsageRef[]>();
   const styleUsages = new Map<string, ConsumerUsageRef[]>();
@@ -241,7 +243,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
     const hasRefProp = createExternalInterface && REF_PROP_RE.test(source);
 
-    if (!hasStyled && !hasAsProp && !hasRefProp) {
+    const hasStylex = source.includes("@stylexjs/stylex");
+
+    if (!hasStyled && !hasAsProp && !hasRefProp && !hasStylex) {
       continue;
     }
 
@@ -285,6 +289,13 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         if (m[1]) {
           addToSetMap(styledDefFiles, filePath, m[1]);
         }
+      }
+    }
+
+    if (hasStylex) {
+      const stylexExportNames = collectStylexExportNames(source);
+      if (stylexExportNames.size > 0) {
+        stylexComponentFiles.set(filePath, stylexExportNames);
       }
     }
 
@@ -651,6 +662,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     componentsNeedingGlobalSelectorBridge,
     propUsageByFile,
     styledDefFiles: createExternalInterface ? styledDefFiles : undefined,
+    stylexComponentFiles,
     globalLeafKeys,
   };
 

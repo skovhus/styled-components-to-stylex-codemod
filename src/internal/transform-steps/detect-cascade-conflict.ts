@@ -49,6 +49,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   }
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
+  const stylexComponentFiles = ctx.options.crossFileInfo?.stylexComponentFiles;
   const transformedComponents = ctx.options.crossFileInfo?.transformedComponents;
   // In partial-migration mode, `markPartialImportedComponentRoots` in lower-rules
   // marks every `styled(ImportedComponent)` decl as skipped before lowering. Honor
@@ -104,6 +105,13 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       continue;
     }
 
+    if (
+      stylexComponentFiles &&
+      componentExportExists(stylexComponentFiles, definition.path, definition.importedName)
+    ) {
+      continue;
+    }
+
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
     // Import paths omit extensions while prepass keys use resolved files — probe extensions.
@@ -145,7 +153,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    if (bindingIsClearlyStylexAndIndependent(styledDefinitions, definition.importedName)) {
+    if (bindingUsesStylex(styledDefinitions.path, definition.importedName)) {
       continue;
     }
 
@@ -295,6 +303,21 @@ function transformedComponentsHasPath(
   return transformedNamesForPath(transformedComponents, filePath) !== undefined;
 }
 
+function componentExportExists(
+  componentsByFile: ReadonlyMap<string, ReadonlySet<string>>,
+  importedPath: string,
+  bindingName: string,
+): boolean {
+  for (const candidate of pathCandidates(importedPath)) {
+    const componentNames =
+      componentsByFile.get(candidate) ?? componentsByFile.get(toRealPath(candidate));
+    if (componentNames?.has(bindingName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function transformedComponentExists(
   transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
   importedPath: string,
@@ -360,23 +383,14 @@ function bindingDependsOnStyledDefinitions(
     : true;
 }
 
-function bindingIsClearlyStylexAndIndependent(
-  styledDefinitions: StyledDefinitionFile,
-  bindingName: string,
-): boolean {
-  const source = tryReadFile(styledDefinitions.path);
+function bindingUsesStylex(filePath: string, bindingName: string): boolean {
+  const source = tryReadFile(filePath);
   return source
     ? exportedBindingUsesStylex({
         source,
         exportedName: bindingName,
         includeDefault: bindingName === "default",
-      }) &&
-        !exportedBindingDependsOnLocalNames({
-          source,
-          exportedName: bindingName,
-          includeDefault: bindingName === "default",
-          localNames: styledDefinitions.names,
-        })
+      })
     : false;
 }
 

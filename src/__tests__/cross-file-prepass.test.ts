@@ -1394,6 +1394,55 @@ export const App = () => (
   });
 });
 
+/* ── StyleX component export prepass ─────────────────────────────────── */
+
+describe("runPrepass StyleX component exports", () => {
+  const resolver = createModuleResolver();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "prepass-stylex-export-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("records exported components that already use StyleX in mixed files", async () => {
+    const mixedFile = join(tmpDir, "mixed.tsx");
+    writeFileSync(
+      mixedFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        'import styled from "styled-components";',
+        "",
+        "export function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const LegacyPanel = styled.section`",
+        "  color: rebeccapurple;",
+        "`;",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await runPrepass({
+      filesToTransform: [mixedFile],
+      consumerPaths: [],
+      resolver,
+      parserName: "tsx",
+      createExternalInterface: false,
+    });
+
+    expect(result.crossFileInfo.stylexComponentFiles?.get(mixedFile)).toEqual(new Set(["Box"]));
+  });
+});
+
 /* ── Static identifier resolution scope safety ───────────────────────── */
 
 describe("consumer static identifier resolution", () => {
