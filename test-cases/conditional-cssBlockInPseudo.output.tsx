@@ -188,10 +188,13 @@ type FiniteCssBlockProps = React.PropsWithChildren<{
   enabled?: boolean;
   visible?: boolean;
   wide?: boolean;
+  image?: boolean;
 }>;
 
 function FiniteCssBlock(props: FiniteCssBlockProps) {
-  const { children, visible, wide, enabled } = props;
+  const { children, visible, wide, image, enabled } = props;
+  const theme = useTheme();
+
   return (
     <span
       sx={[
@@ -199,6 +202,11 @@ function FiniteCssBlock(props: FiniteCssBlockProps) {
         enabled && styles.finiteCssBlockEnabled,
         enabled && visible && styles.finiteCssBlockEnabledVisible,
         enabled && wide && styles.finiteCssBlockEnabledWide,
+        enabled && !wide && styles.finiteCssBlockEnabledNotWide,
+        enabled && image && styles.finiteCssBlockEnabledImage,
+        enabled && !image && styles.finiteCssBlockEnabledNotImage,
+        enabled && theme.isDark ? styles.finiteCssBlockEnabledThemeIsDark : undefined,
+        enabled && !theme.isDark && styles.finiteCssBlockEnabledNotThemeIsDark,
       ]}
     >
       {children}
@@ -230,7 +238,7 @@ export const App = () => (
     <MultiPseudoIcon active tabIndex={0}>
       Multi pseudo
     </MultiPseudoIcon>
-    <FiniteCssBlock enabled visible wide>
+    <FiniteCssBlock enabled visible wide image>
       Visible finite block
     </FiniteCssBlock>
     <FiniteCssBlock enabled>Hidden finite block</FiniteCssBlock>
@@ -470,8 +478,6 @@ const styles = stylex.create({
   finiteCssBlockEnabled: {
     opacity: 0,
     pointerEvents: "none",
-    paddingBlock: 4,
-    paddingInline: 4,
   },
   finiteCssBlockEnabledVisible: {
     opacity: 1,
@@ -480,5 +486,23 @@ const styles = stylex.create({
   finiteCssBlockEnabledWide: {
     paddingBlock: 8,
     paddingInline: 16,
+  },
+  finiteCssBlockEnabledNotWide: {
+    paddingBlock: 4,
+    paddingInline: 4,
+  },
+  finiteCssBlockEnabledImage: {
+    backgroundImage: "url(/icon.png)",
+  },
+  finiteCssBlockEnabledNotImage: {
+    backgroundColor: "red",
+  },
+  finiteCssBlockEnabledThemeIsDark: {
+    marginBlock: 8,
+    marginInline: 16,
+  },
+  finiteCssBlockEnabledNotThemeIsDark: {
+    marginBlock: 4,
+    marginInline: 4,
   },
 });

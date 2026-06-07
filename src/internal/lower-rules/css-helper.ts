@@ -769,6 +769,55 @@ export function createCssHelperResolver(args: {
             : slotExprNode;
         const slotParamName = getFunctionParamName(slotExprNode) ?? paramName;
         const resolved = resolveHelperExprToAst(slotBodyExpr, slotParamName);
+        const branchStaticParts = hasStaticParts
+          ? extractPrefixSuffix(parts)
+          : { prefix: "", suffix: "" };
+        const buildResolvedBranchStyle = (
+          branchResolved: TernaryBranchResolution,
+        ): Record<string, unknown> | null => {
+          const branchStyle: Record<string, unknown> = {};
+          if (branchResolved.staticValue !== undefined) {
+            const rawValue = `${branchStaticParts.prefix}${branchResolved.staticValue}${branchStaticParts.suffix}`;
+            for (const mapped of cssDeclarationToStylexDeclarations({
+              ...d,
+              value: { kind: "static", value: rawValue },
+              valueRaw: rawValue,
+            })) {
+              branchStyle[mapped.prop] = mergeIntoContext(
+                cssValueToJs(mapped.value, d.important, mapped.prop),
+                mapped.prop,
+                target as any,
+              );
+            }
+            return branchStyle;
+          }
+
+          const wrappedExpr = wrapExprWithStaticParts(
+            branchResolved.exprString,
+            branchStaticParts.prefix,
+            branchStaticParts.suffix,
+          );
+          const ast = parseExpr(wrappedExpr);
+          if (!ast) {
+            return null;
+          }
+          const mappedDecls = cssDeclarationToStylexDeclarations(d);
+          if (mappedDecls.some((mapped) => isStylexShorthandCamelCase(mapped.prop))) {
+            return null;
+          }
+          for (const mapped of mappedDecls) {
+            branchStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
+          }
+          return branchStyle;
+        };
+        const haveSameStyleProps = (
+          left: Record<string, unknown>,
+          right: Record<string, unknown>,
+        ): boolean => {
+          const leftKeys = Object.keys(left);
+          const rightKeys = Object.keys(right);
+          return leftKeys.length === rightKeys.length && leftKeys.every((key) => key in right);
+        };
         // Handle ConditionalExpression with theme test: ${props.theme.isDark ? "a" : "b"}
         if (!resolved && (slotBodyExpr as any)?.type === "ConditionalExpression") {
           const ternaryExpr = slotBodyExpr as {
@@ -781,35 +830,14 @@ export function createCssHelperResolver(args: {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
             if (consResolved && altResolved) {
-              const buildVariantStyle = (branchResolved: {
-                ast: any;
-                exprString: string;
-              }): Record<string, unknown> => {
-                const variantStyle: Record<string, unknown> = {};
-                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                  if (hasStaticParts) {
-                    const { prefix, suffix } = extractPrefixSuffix(parts);
-                    const wrappedExpr = wrapExprWithStaticParts(
-                      branchResolved.exprString,
-                      prefix,
-                      suffix,
-                    );
-                    const ast = parseExpr(wrappedExpr);
-                    if (ast) {
-                      variantStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
-                    }
-                  } else {
-                    variantStyle[mapped.prop] = mergeIntoContext(
-                      branchResolved.ast,
-                      mapped.prop,
-                      target as any,
-                    );
-                  }
-                }
-                return variantStyle;
-              };
-              const consStyle = buildVariantStyle(consResolved);
-              const altStyle = buildVariantStyle(altResolved);
+              const consStyle = buildResolvedBranchStyle(consResolved);
+              const altStyle = buildResolvedBranchStyle(altResolved);
+              if (!consStyle || !altStyle) {
+                return bail(
+                  "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                  { property: d.property },
+                );
+              }
               conditionalVariants.push({
                 when: `theme.${themePath}`,
                 propName: "",
@@ -912,56 +940,30 @@ export function createCssHelperResolver(args: {
                 { property: d.property },
               );
             }
-            const { prefix, suffix } = hasStaticParts
-              ? extractPrefixSuffix(parts)
-              : { prefix: "", suffix: "" };
-
-            const buildBranchStyle = (
-              branchResolved: TernaryBranchResolution,
-            ): Record<string, unknown> | null => {
-              const branchStyle: Record<string, unknown> = {};
-              if (branchResolved.staticValue !== undefined) {
-                const rawValue = `${prefix}${branchResolved.staticValue}${suffix}`;
-                for (const mapped of cssDeclarationToStylexDeclarations({
-                  ...d,
-                  value: { kind: "static", value: rawValue },
-                  valueRaw: rawValue,
-                })) {
-                  branchStyle[mapped.prop] = mergeIntoContext(
-                    cssValueToJs(mapped.value, d.important, mapped.prop),
-                    mapped.prop,
-                    target as any,
-                  );
-                }
-                return branchStyle;
-              }
-
-              const wrappedExpr = wrapExprWithStaticParts(
-                branchResolved.exprString,
-                prefix,
-                suffix,
-              );
-              const ast = parseExpr(wrappedExpr);
-              if (!ast) {
-                return null;
-              }
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                branchStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
-              }
-              return branchStyle;
-            };
-
-            const altStyle = buildBranchStyle(altResolved);
-            const variantStyle = buildBranchStyle(consResolved);
+            const altStyle = buildResolvedBranchStyle(altResolved);
+            const variantStyle = buildResolvedBranchStyle(consResolved);
             if (altStyle && variantStyle) {
-              for (const [prop, value] of Object.entries(altStyle)) {
-                (target as any)[prop] = value;
+              if (haveSameStyleProps(altStyle, variantStyle)) {
+                for (const [prop, value] of Object.entries(altStyle)) {
+                  (target as any)[prop] = value;
+                }
+                conditionalVariants.push({
+                  when: propName,
+                  propName,
+                  style: variantStyle,
+                });
+              } else {
+                conditionalVariants.push({
+                  when: propName,
+                  propName,
+                  style: variantStyle,
+                });
+                conditionalVariants.push({
+                  when: `!${propName}`,
+                  propName,
+                  style: altStyle,
+                });
               }
-              conditionalVariants.push({
-                when: propName,
-                propName,
-                style: variantStyle,
-              });
 
               continue;
             }
