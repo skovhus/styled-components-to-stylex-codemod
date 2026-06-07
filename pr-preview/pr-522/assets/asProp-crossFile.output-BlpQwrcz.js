@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-B8sTdNyf.js";import{p as t}from"./index-Cfhwb6tZ.js";import{t as n}from"./text-xPD9ZW4q.js";t();var r=e();function i(e){let{as:t=n,...i}=e;return(0,r.jsx)(t,{...i,className:`x1pvqxga x1s688f`})}var a=()=>(0,r.jsx)(`div`,{children:(0,r.jsx)(i,{variant:`large`,children:`Default Title`})});export{a as App,i as HeaderTitle};
