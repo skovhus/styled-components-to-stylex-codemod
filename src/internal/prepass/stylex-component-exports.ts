@@ -114,16 +114,25 @@ function collectStylexUsage(program: AstNode): StylexUsage {
   const namespaceNames = new Set<string>();
   const createNames = new Set<string>();
   const propsNames = new Set<string>();
+  const styleObjectNames = new Set<string>();
   for (const stmt of programBody(program)) {
     if (stmt.type !== "ImportDeclaration") {
       continue;
     }
-    if ((stmt.source as { value?: unknown } | undefined)?.value !== "@stylexjs/stylex") {
+    const importSource = (stmt.source as { value?: unknown } | undefined)?.value;
+    if (typeof importSource !== "string") {
       continue;
     }
     for (const specifier of astArray(stmt.specifiers)) {
       const localName = nodeName(specifier.local as AstNode | undefined);
       if (!localName) {
+        continue;
+      }
+      if (importSource.includes(".stylex")) {
+        styleObjectNames.add(localName);
+        continue;
+      }
+      if (importSource !== "@stylexjs/stylex") {
         continue;
       }
       if (specifier.type === "ImportNamespaceSpecifier") {
@@ -141,7 +150,6 @@ function collectStylexUsage(program: AstNode): StylexUsage {
     }
   }
 
-  const styleObjectNames = new Set<string>();
   for (const binding of localBindings(program)) {
     if (nodeIsStylexCreateCall(binding.node, namespaceNames, createNames)) {
       styleObjectNames.add(binding.name);

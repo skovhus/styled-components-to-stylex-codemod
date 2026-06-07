@@ -243,7 +243,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
     const hasRefProp = createExternalInterface && REF_PROP_RE.test(source);
 
-    const hasStylex = source.includes("@stylexjs/stylex");
+    const hasStylex = source.includes("@stylexjs/stylex") || /\.stylex["']/.test(source);
 
     if (!hasStyled && !hasAsProp && !hasRefProp && !hasStylex) {
       continue;
@@ -1679,7 +1679,7 @@ function rgPreFilter(files: readonly string[]): Set<string> | undefined {
   }
 
   try {
-    const pattern = String.raw`(styled-components|@stylexjs/stylex|\bas[={]|\bref[={])`;
+    const pattern = String.raw`(styled-components|@stylexjs/stylex|\.stylex["']|\bas[={]|\bref[={])`;
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
