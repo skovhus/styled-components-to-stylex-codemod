@@ -12,6 +12,11 @@ import {
   getReExportedSourceName,
   resolveBarrelReExportBinding,
 } from "../prepass/extract-external-interface.js";
+import { createPrepassParser, type AstNode } from "../prepass/prepass-parser.js";
+import {
+  buildImportMapFromNodes,
+  walkForImportsAndTemplates,
+} from "../prepass/scan-cross-file-selectors.js";
 import {
   exportedBindingDependsOnLocalNames,
   localNamesForExport,
@@ -152,7 +157,13 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         styledDefinitions.path,
         definition.importedName,
       ) &&
-      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName)
+      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName) &&
+      !bindingDependsOnImportedStyledDefinitions({
+        bindingName: definition.importedName,
+        sourcePath: styledDefinitions.path,
+        styledDefFiles,
+        resolveModule: ctx.options.resolveModule,
+      })
     ) {
       continue;
     }
@@ -381,6 +392,83 @@ function bindingDependsOnStyledDefinitions(
         localNames: styledDefinitions.names,
       })
     : true;
+}
+
+function bindingDependsOnImportedStyledDefinitions(args: {
+  sourcePath: string;
+  bindingName: string;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+}): boolean {
+  const source = tryReadFile(args.sourcePath);
+  if (!source) {
+    return true;
+  }
+  const importedStyledNames = collectImportedStyledLocalNames(args);
+  if (!importedStyledNames) {
+    return true;
+  }
+  return (
+    importedStyledNames.size > 0 &&
+    exportedBindingDependsOnLocalNames({
+      source,
+      exportedName: args.bindingName,
+      includeDefault: args.bindingName === "default",
+      localNames: importedStyledNames,
+    })
+  );
+}
+
+function collectImportedStyledLocalNames(args: {
+  sourcePath: string;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+}): Set<string> | null {
+  const source = tryReadFile(args.sourcePath);
+  const program = source ? parseProgram(source) : null;
+  if (!program) {
+    return null;
+  }
+
+  const importNodes: AstNode[] = [];
+  walkForImportsAndTemplates(program, importNodes, []);
+  const importMap = buildImportMapFromNodes(importNodes);
+  const importedStyledNames = new Set<string>();
+
+  for (const [localName, importEntry] of importMap) {
+    if (!isRelativeSpecifier(importEntry.source)) {
+      continue;
+    }
+    if (!args.resolveModule) {
+      importedStyledNames.add(localName);
+      continue;
+    }
+    const resolvedPath = args.resolveModule(args.sourcePath, importEntry.source);
+    if (!resolvedPath) {
+      importedStyledNames.add(localName);
+      continue;
+    }
+    const styledDefinitions =
+      (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
+      scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
+    if (styledDefinitions) {
+      importedStyledNames.add(localName);
+    }
+  }
+
+  return importedStyledNames;
+}
+
+function parseProgram(source: string): AstNode | null {
+  for (const parserName of ["tsx", "babel"] as const) {
+    try {
+      const ast = createPrepassParser(parserName).parse(source) as AstNode;
+      return ((ast as { program?: AstNode }).program ?? ast) as AstNode;
+    } catch {
+      // Try the next parser before falling back to conservative behavior.
+    }
+  }
+  return null;
 }
 
 /**

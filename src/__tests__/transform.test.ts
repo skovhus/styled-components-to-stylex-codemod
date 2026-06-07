@@ -913,6 +913,43 @@ export const App = () => <CustomBox>safe</CustomBox>;
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
   });
 
+  it("still bails when a pre-converted StyleX export renders an imported styled-components root", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-imported-styled-root.tsx"));
+    const importedStyledPath = toRealPath(join(testCasesDir, "lib/styled-group-header.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-imported-styled-root";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>unsafe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-imported-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([
+            [mixedPath, new Set(["UnrelatedLocal"])],
+            [importedStyledPath, new Set(["StyledHeader"])],
+          ]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./styled-group-header"
+            ? join(dirname(fromFile), "styled-group-header.tsx")
+            : undefined,
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
   it("does not bail in partial migration when wrapping a styled-components imported root", () => {
     // In partial migration, `styled(ImportedComponent)` decls are left as
     // styled-components by `markPartialImportedComponentRoots` later in the pipeline.

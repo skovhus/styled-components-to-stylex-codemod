@@ -1412,6 +1412,7 @@ describe("runPrepass StyleX component exports", () => {
     const mixedFile = join(tmpDir, "mixed.tsx");
     const stylexOnlyFile = join(tmpDir, "stylex-only.tsx");
     const defaultWrapperFile = join(tmpDir, "default-wrapper.tsx");
+    const defaultFunctionFile = join(tmpDir, "default-function.tsx");
     writeFileSync(
       mixedFile,
       [
@@ -1470,9 +1471,24 @@ describe("runPrepass StyleX component exports", () => {
       ].join("\n"),
       "utf-8",
     );
+    writeFileSync(
+      defaultFunctionFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export default function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
 
     const result = await runPrepass({
-      filesToTransform: [mixedFile, stylexOnlyFile, defaultWrapperFile],
+      filesToTransform: [mixedFile, stylexOnlyFile, defaultWrapperFile, defaultFunctionFile],
       consumerPaths: [],
       resolver,
       parserName: "tsx",
@@ -1484,6 +1500,9 @@ describe("runPrepass StyleX component exports", () => {
       new Set(["Card"]),
     );
     expect(result.crossFileInfo.stylexComponentFiles?.get(defaultWrapperFile)).toEqual(
+      new Set(["default"]),
+    );
+    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultFunctionFile)).toEqual(
       new Set(["default"]),
     );
   });
