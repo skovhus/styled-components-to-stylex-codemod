@@ -54,9 +54,67 @@ export function exportedBindingDependsOnLocalNames(args: {
   return false;
 }
 
+export function exportedBindingUsesStylex(args: {
+  source: string;
+  exportedName: string;
+  includeDefault: boolean;
+}): boolean {
+  const parsed = parseProgram(args.source);
+  if (!parsed) {
+    return false;
+  }
+
+  const stylexUsage = collectStylexUsage(parsed);
+  if (!stylexUsage.hasStylexSurface) {
+    return false;
+  }
+
+  const targets = collectExportTargets(parsed, args.exportedName, args.includeDefault);
+  if (targets.localNames.size === 0 && targets.nodes.length === 0) {
+    return false;
+  }
+
+  const checkedNames = new Set<string>();
+  const bindingUsesStylex = (localName: string): boolean => {
+    if (checkedNames.has(localName)) {
+      return false;
+    }
+    checkedNames.add(localName);
+    const node = findLocalBindingNode(parsed, localName);
+    if (!node) {
+      return false;
+    }
+    if (nodeUsesStylex(node, stylexUsage)) {
+      return true;
+    }
+    return referencedLocalNames(parsed, node).some(bindingUsesStylex);
+  };
+
+  for (const localName of targets.localNames) {
+    if (bindingUsesStylex(localName)) {
+      return true;
+    }
+  }
+
+  for (const node of targets.nodes) {
+    if (nodeUsesStylex(exportedNodeBody(node), stylexUsage)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 type ExportTargets = {
   localNames: Set<string>;
   nodes: AstNode[];
+};
+
+type StylexUsage = {
+  namespaceNames: Set<string>;
+  propsNames: Set<string>;
+  styleObjectNames: Set<string>;
+  hasStylexSurface: boolean;
 };
 
 function parseProgram(source: string): AstNode | null {
@@ -291,6 +349,92 @@ function localBindings(program: AstNode): Array<{ name: string; node: AstNode }>
   return bindings;
 }
 
+function collectStylexUsage(program: AstNode): StylexUsage {
+  const namespaceNames = new Set<string>();
+  const createNames = new Set<string>();
+  const propsNames = new Set<string>();
+  for (const stmt of programBody(program)) {
+    if (stmt.type !== "ImportDeclaration") {
+      continue;
+    }
+    if ((stmt.source as { value?: unknown } | undefined)?.value !== "@stylexjs/stylex") {
+      continue;
+    }
+    for (const specifier of astArray(stmt.specifiers)) {
+      const localName = nodeName(specifier.local as AstNode | undefined);
+      if (!localName) {
+        continue;
+      }
+      if (specifier.type === "ImportNamespaceSpecifier") {
+        namespaceNames.add(localName);
+        continue;
+      }
+      if (specifier.type === "ImportSpecifier") {
+        const importedName = nodeName(specifier.imported as AstNode | undefined);
+        if (importedName === "create") {
+          createNames.add(localName);
+        } else if (importedName === "props") {
+          propsNames.add(localName);
+        }
+      }
+    }
+  }
+
+  const styleObjectNames = new Set<string>();
+  for (const binding of localBindings(program)) {
+    if (nodeIsStylexCreateCall(binding.node, namespaceNames, createNames)) {
+      styleObjectNames.add(binding.name);
+    }
+  }
+
+  return {
+    namespaceNames,
+    propsNames,
+    styleObjectNames,
+    hasStylexSurface:
+      namespaceNames.size > 0 ||
+      propsNames.size > 0 ||
+      createNames.size > 0 ||
+      styleObjectNames.size > 0,
+  };
+}
+
+function nodeUsesStylex(node: AstNode | undefined, stylexUsage: StylexUsage): boolean {
+  if (!node) {
+    return false;
+  }
+
+  let found = false;
+  walkValueAst(node, (candidate) => {
+    if (found) {
+      return;
+    }
+    if (nodeIsStylexPropsCall(candidate, stylexUsage.namespaceNames, stylexUsage.propsNames)) {
+      found = true;
+      return;
+    }
+    if (isStylexSxAttribute(candidate, stylexUsage.styleObjectNames)) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+function referencedLocalNames(program: AstNode, node: AstNode): string[] {
+  const localNameSet = new Set(localBindings(program).map((binding) => binding.name));
+  const referenced = new Set<string>();
+  walkValueAst(node, (candidate) => {
+    if (candidate.type !== "Identifier" && candidate.type !== "JSXIdentifier") {
+      return;
+    }
+    const name = candidate.name;
+    if (typeof name === "string" && localNameSet.has(name)) {
+      referenced.add(name);
+    }
+  });
+  return [...referenced];
+}
+
 function nodeReferencesLocalNames(
   node: AstNode | undefined,
   localNames: ReadonlySet<string>,
@@ -366,6 +510,67 @@ function isNamedReference(node: AstNode, localNames: ReadonlySet<string>): boole
   return false;
 }
 
+function nodeIsStylexCreateCall(
+  node: AstNode,
+  namespaceNames: ReadonlySet<string>,
+  createNames: ReadonlySet<string>,
+): boolean {
+  if (node.type !== "CallExpression") {
+    return false;
+  }
+  const callee = node.callee as AstNode | undefined;
+  if (callee?.type === "Identifier") {
+    return typeof callee.name === "string" && createNames.has(callee.name);
+  }
+  return isStylexMemberCall(callee, namespaceNames, "create");
+}
+
+function nodeIsStylexPropsCall(
+  node: AstNode,
+  namespaceNames: ReadonlySet<string>,
+  propsNames: ReadonlySet<string>,
+): boolean {
+  if (node.type !== "CallExpression") {
+    return false;
+  }
+  const callee = node.callee as AstNode | undefined;
+  if (callee?.type === "Identifier") {
+    return typeof callee.name === "string" && propsNames.has(callee.name);
+  }
+  return isStylexMemberCall(callee, namespaceNames, "props");
+}
+
+function isStylexMemberCall(
+  callee: AstNode | undefined,
+  namespaceNames: ReadonlySet<string>,
+  propertyName: string,
+): boolean {
+  if (callee?.type !== "MemberExpression") {
+    return false;
+  }
+  const objectName = nodeName(callee.object as AstNode | undefined);
+  const property = callee.property as AstNode | undefined;
+  const actualPropertyName =
+    (callee as { computed?: boolean }).computed === true ? undefined : nodeName(property);
+  return !!objectName && namespaceNames.has(objectName) && actualPropertyName === propertyName;
+}
+
+function isStylexSxAttribute(node: AstNode, styleObjectNames: ReadonlySet<string>): boolean {
+  if (styleObjectNames.size === 0 || node.type !== "JSXAttribute") {
+    return false;
+  }
+  if (nodeName(node.name as AstNode | undefined) !== "sx") {
+    return false;
+  }
+  const value = node.value as AstNode | undefined;
+  if (!value) {
+    return false;
+  }
+  const expression =
+    value.type === "JSXExpressionContainer" ? (value.expression as AstNode) : value;
+  return nodeReferencesLocalNames(expression, styleObjectNames);
+}
+
 function fallbackLocalNamesForExport(
   source: string,
   exportedName: string,
@@ -417,7 +622,11 @@ function nodeName(node: AstNode | undefined): string | undefined {
   if (!node) {
     return undefined;
   }
-  if (node.type === "Identifier" || node.type === "StringLiteral") {
+  if (
+    node.type === "Identifier" ||
+    node.type === "JSXIdentifier" ||
+    node.type === "StringLiteral"
+  ) {
     return typeof node.name === "string"
       ? node.name
       : typeof node.value === "string"

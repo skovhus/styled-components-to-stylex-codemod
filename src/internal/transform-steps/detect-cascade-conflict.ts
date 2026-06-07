@@ -14,6 +14,7 @@ import {
 } from "../prepass/extract-external-interface.js";
 import {
   exportedBindingDependsOnLocalNames,
+  exportedBindingUsesStylex,
   localNamesForExport,
 } from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
@@ -141,6 +142,10 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         definition.importedName,
       )
     ) {
+      continue;
+    }
+
+    if (bindingIsClearlyStylexAndIndependent(styledDefinitions, definition.importedName)) {
       continue;
     }
 
@@ -353,6 +358,26 @@ function bindingDependsOnStyledDefinitions(
         localNames: styledDefinitions.names,
       })
     : true;
+}
+
+function bindingIsClearlyStylexAndIndependent(
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  const source = tryReadFile(styledDefinitions.path);
+  return source
+    ? exportedBindingUsesStylex({
+        source,
+        exportedName: bindingName,
+        includeDefault: bindingName === "default",
+      }) &&
+        !exportedBindingDependsOnLocalNames({
+          source,
+          exportedName: bindingName,
+          includeDefault: bindingName === "default",
+          localNames: styledDefinitions.names,
+        })
+    : false;
 }
 
 /**
