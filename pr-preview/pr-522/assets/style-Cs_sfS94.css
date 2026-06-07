@@ -2877,6 +2877,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-image: url("/icon.png");
 }
 
+.xnssemq:not(#\#):not(#\#):not(#\#) {
+  background-image: url("/old.png");
+}
+
 .x1e87kdn:not(#\#):not(#\#):not(#\#) {
   background-image: var(--x-backgroundImage);
 }
