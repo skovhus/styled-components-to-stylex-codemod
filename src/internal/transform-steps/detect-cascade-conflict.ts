@@ -354,6 +354,7 @@ function bindingIsIndependentOfStyledDefinitions(
     bindingName,
     sourcePath: styledDefinitions.path,
     styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
+    stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
     resolveModule: ctx.options.resolveModule,
   });
 }
@@ -427,13 +428,21 @@ function bindingDependsOnImportedStyledDefinitions(args: {
   sourcePath: string;
   bindingName: string;
   styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  visited?: Set<string>;
 }): boolean {
+  const visitKey = `${args.sourcePath}:${args.bindingName}`;
+  if (args.visited?.has(visitKey)) {
+    return true;
+  }
+  const visited = new Set(args.visited);
+  visited.add(visitKey);
   const source = tryReadFile(args.sourcePath);
   if (!source) {
     return true;
   }
-  const importedStyledNames = collectImportedStyledLocalNames(args);
+  const importedStyledNames = collectImportedStyledLocalNames({ ...args, visited });
   if (!importedStyledNames) {
     return true;
   }
@@ -451,7 +460,9 @@ function bindingDependsOnImportedStyledDefinitions(args: {
 function collectImportedStyledLocalNames(args: {
   sourcePath: string;
   styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
 }): Set<string> | null {
   const source = tryReadFile(args.sourcePath);
   const program = source ? parseProgram(source) : null;
@@ -482,11 +493,49 @@ function collectImportedStyledLocalNames(args: {
       (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
       scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
     if (styledDefinitions) {
+      if (
+        importedBindingIsIndependentStylex({
+          bindingName: importEntry.importedName,
+          styledDefinitions,
+          styledDefFiles: args.styledDefFiles,
+          stylexComponentFiles: args.stylexComponentFiles,
+          resolveModule: args.resolveModule,
+          visited: args.visited,
+        })
+      ) {
+        continue;
+      }
       importedStyledNames.add(localName);
     }
   }
 
   return importedStyledNames;
+}
+
+function importedBindingIsIndependentStylex(args: {
+  bindingName: string;
+  styledDefinitions: StyledDefinitionFile;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
+}): boolean {
+  return (
+    componentExportExists(
+      args.stylexComponentFiles,
+      args.styledDefinitions.path,
+      args.bindingName,
+    ) &&
+    !bindingDependsOnStyledDefinitions(args.styledDefinitions, args.bindingName) &&
+    !bindingDependsOnImportedStyledDefinitions({
+      bindingName: args.bindingName,
+      sourcePath: args.styledDefinitions.path,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    })
+  );
 }
 
 function parseProgram(source: string): AstNode | null {
