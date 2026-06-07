@@ -34,7 +34,7 @@ import {
   resolveBarrelReExport,
   type Resolve,
 } from "./extract-external-interface.js";
-import { collectStylexExportNames } from "./component-styled-dependencies.js";
+import { collectStylexExportNames } from "./stylex-component-exports.js";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import {
@@ -1669,7 +1669,7 @@ function scanFileForSelectorsAst(
 /* ── ripgrep pre-filter ───────────────────────────────────────────────── */
 
 /**
- * Use ripgrep to quickly find files containing "styled-components" or `as[={]`.
+ * Use ripgrep to quickly find files containing styled-components, StyleX, or relevant JSX props.
  * Returns a Set of absolute file paths, or undefined if rg is not available.
  */
 function rgPreFilter(files: readonly string[]): Set<string> | undefined {
@@ -1679,7 +1679,7 @@ function rgPreFilter(files: readonly string[]): Set<string> | undefined {
   }
 
   try {
-    const pattern = String.raw`(styled-components|\bas[={]|\bref[={])`;
+    const pattern = String.raw`(styled-components|@stylexjs/stylex|\bas[={]|\bref[={])`;
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
