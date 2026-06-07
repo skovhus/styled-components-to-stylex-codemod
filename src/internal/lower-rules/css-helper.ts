@@ -790,16 +790,21 @@ export function createCssHelperResolver(args: {
                 target as any,
               );
             }
-            if (
-              d.property?.trim() === "background" &&
-              "backgroundImage" in branchStyle &&
-              !("backgroundColor" in branchStyle)
-            ) {
-              branchStyle.backgroundColor = mergeIntoContext(
-                "transparent",
-                "backgroundColor",
-                target as any,
-              );
+            if (d.property?.trim() === "background") {
+              if ("backgroundImage" in branchStyle && !("backgroundColor" in branchStyle)) {
+                branchStyle.backgroundColor = mergeIntoContext(
+                  "transparent",
+                  "backgroundColor",
+                  target as any,
+                );
+              }
+              if ("backgroundColor" in branchStyle && !("backgroundImage" in branchStyle)) {
+                branchStyle.backgroundImage = mergeIntoContext(
+                  "none",
+                  "backgroundImage",
+                  target as any,
+                );
+              }
             }
             return branchStyle;
           }

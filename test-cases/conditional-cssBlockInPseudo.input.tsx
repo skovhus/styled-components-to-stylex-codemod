@@ -178,6 +178,7 @@ const FiniteCssBlock = styled.span<{
   padding: 4px 8px;
   color: hotpink;
   background-color: blue;
+  background-image: url(/old.png);
 
   ${(props) =>
     props.$enabled &&

@@ -204,7 +204,6 @@ function FiniteCssBlock(props: FiniteCssBlockProps) {
         enabled && wide && styles.finiteCssBlockEnabledWide,
         enabled && !wide && styles.finiteCssBlockEnabledNotWide,
         enabled && image && styles.finiteCssBlockEnabledImage,
-        enabled && !image && styles.finiteCssBlockEnabledNotImage,
         enabled && theme.isDark ? styles.finiteCssBlockEnabledThemeIsDark : undefined,
         enabled && !theme.isDark && styles.finiteCssBlockEnabledNotThemeIsDark,
       ]}
@@ -475,10 +474,13 @@ const styles = stylex.create({
     paddingInline: 8,
     color: "hotpink",
     backgroundColor: "blue",
+    backgroundImage: "url(/old.png)",
   },
   finiteCssBlockEnabled: {
     opacity: 0,
     pointerEvents: "none",
+    backgroundColor: "red",
+    backgroundImage: "none",
   },
   finiteCssBlockEnabledVisible: {
     opacity: 1,
@@ -495,9 +497,6 @@ const styles = stylex.create({
   finiteCssBlockEnabledImage: {
     backgroundImage: "url(/icon.png)",
     backgroundColor: "transparent",
-  },
-  finiteCssBlockEnabledNotImage: {
-    backgroundColor: "red",
   },
   finiteCssBlockEnabledThemeIsDark: {
     marginBlock: 8,
