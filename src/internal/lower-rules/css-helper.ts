@@ -819,8 +819,17 @@ export function createCssHelperResolver(args: {
                 );
               }
               if ("backgroundColor" in branchStyle && !("backgroundImage" in branchStyle)) {
+                const imageResetValue = [
+                  "inherit",
+                  "initial",
+                  "unset",
+                  "revert",
+                  "revert-layer",
+                ].includes(rawValue.trim())
+                  ? rawValue.trim()
+                  : "none";
                 branchStyle.backgroundImage = mergeIntoContext(
-                  "none",
+                  imageResetValue,
                   "backgroundImage",
                   target as any,
                 );
@@ -1006,8 +1015,17 @@ export function createCssHelperResolver(args: {
                 "backgroundColor" in resolvedStaticStyle &&
                 !("backgroundImage" in resolvedStaticStyle)
               ) {
+                const imageResetValue = [
+                  "inherit",
+                  "initial",
+                  "unset",
+                  "revert",
+                  "revert-layer",
+                ].includes(rawValue.trim())
+                  ? rawValue.trim()
+                  : "none";
                 resolvedStaticStyle.backgroundImage = mergeIntoContext(
-                  "none",
+                  imageResetValue,
                   "backgroundImage",
                   target as any,
                 );
