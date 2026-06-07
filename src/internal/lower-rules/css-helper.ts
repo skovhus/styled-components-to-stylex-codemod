@@ -838,7 +838,7 @@ export function createCssHelperResolver(args: {
             return branchStyle;
           }
 
-          if (d.property?.trim() === "background") {
+          if (d.important || d.property?.trim() === "background") {
             return null;
           }
           const wrappedExpr = wrapExprWithStaticParts(
