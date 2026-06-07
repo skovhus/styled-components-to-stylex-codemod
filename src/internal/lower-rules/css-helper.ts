@@ -792,6 +792,12 @@ export function createCssHelperResolver(args: {
           const branchStyle: Record<string, unknown> = {};
           if (branchResolved.staticValue !== undefined) {
             const rawValue = `${branchStaticParts.prefix}${branchResolved.staticValue}${branchStaticParts.suffix}`;
+            if (
+              d.property?.trim() === "background" &&
+              isUnsupportedBackgroundShorthandValue(rawValue)
+            ) {
+              return null;
+            }
             for (const mapped of cssDeclarationToStylexDeclarations({
               ...d,
               value: { kind: "static", value: rawValue },
@@ -933,6 +939,15 @@ export function createCssHelperResolver(args: {
             const rawValue = hasStaticParts
               ? `${branchStaticParts.prefix}${resolved.staticValue}${branchStaticParts.suffix}`
               : String(resolved.staticValue);
+            if (
+              d.property?.trim() === "background" &&
+              isUnsupportedBackgroundShorthandValue(rawValue)
+            ) {
+              return bail(
+                "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+                { property: d.property },
+              );
+            }
             const resolvedStaticStyle: Record<string, unknown> = {};
             for (const mapped of cssDeclarationToStylexDeclarations({
               ...d,
