@@ -474,6 +474,7 @@ const styles = stylex.create({
     paddingBlock: 4,
     paddingInline: 8,
     color: "hotpink",
+    backgroundColor: "blue",
   },
   finiteCssBlockEnabled: {
     opacity: 0,
@@ -493,6 +494,7 @@ const styles = stylex.create({
   },
   finiteCssBlockEnabledImage: {
     backgroundImage: "url(/icon.png)",
+    backgroundColor: "transparent",
   },
   finiteCssBlockEnabledNotImage: {
     backgroundColor: "red",

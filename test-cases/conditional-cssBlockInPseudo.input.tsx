@@ -177,6 +177,7 @@ const FiniteCssBlock = styled.span<{
   display: inline-flex;
   padding: 4px 8px;
   color: hotpink;
+  background-color: blue;
 
   ${(props) =>
     props.$enabled &&
