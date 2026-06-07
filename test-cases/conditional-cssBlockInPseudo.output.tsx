@@ -187,16 +187,18 @@ function MultiPseudoIcon(props: MultiPseudoIconProps) {
 type FiniteCssBlockProps = React.PropsWithChildren<{
   enabled?: boolean;
   visible?: boolean;
+  wide?: boolean;
 }>;
 
 function FiniteCssBlock(props: FiniteCssBlockProps) {
-  const { children, visible, enabled } = props;
+  const { children, visible, wide, enabled } = props;
   return (
     <span
       sx={[
         styles.finiteCssBlock,
         enabled && styles.finiteCssBlockEnabled,
         enabled && visible && styles.finiteCssBlockEnabledVisible,
+        enabled && wide && styles.finiteCssBlockEnabledWide,
       ]}
     >
       {children}
@@ -228,7 +230,7 @@ export const App = () => (
     <MultiPseudoIcon active tabIndex={0}>
       Multi pseudo
     </MultiPseudoIcon>
-    <FiniteCssBlock enabled visible>
+    <FiniteCssBlock enabled visible wide>
       Visible finite block
     </FiniteCssBlock>
     <FiniteCssBlock enabled>Hidden finite block</FiniteCssBlock>
@@ -468,9 +470,15 @@ const styles = stylex.create({
   finiteCssBlockEnabled: {
     opacity: 0,
     pointerEvents: "none",
+    paddingBlock: 4,
+    paddingInline: 4,
   },
   finiteCssBlockEnabledVisible: {
     opacity: 1,
     pointerEvents: "auto",
+  },
+  finiteCssBlockEnabledWide: {
+    paddingBlock: 8,
+    paddingInline: 16,
   },
 });

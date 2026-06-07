@@ -70,6 +70,7 @@ type CssHelperTemplateOptions = {
 type ValuePart = { kind: string; value?: string; slotId?: number };
 type ValueSlotPart = ValuePart & { kind: "slot"; slotId: number };
 type StaticSlotResolution = { ast: ExpressionKind; exprString: string };
+type TernaryBranchResolution = StaticSlotResolution & { staticValue?: string | number };
 
 /**
  * Parses a CSS template literal to IR rules and slot expression map.
@@ -304,23 +305,23 @@ export function createCssHelperResolver(args: {
    * - String literals ("value")
    * - Identifiers (local constants or resolved imports)
    */
-  const resolveTernaryBranchToAst = (branch: any): { ast: any; exprString: string } | null => {
+  const resolveTernaryBranchToAst = (branch: any): TernaryBranchResolution | null => {
     if (!branch || typeof branch !== "object") {
       return null;
     }
     if (branch.type === "NumericLiteral") {
-      return { ast: branch, exprString: String(branch.value) };
+      return { ast: branch, exprString: String(branch.value), staticValue: branch.value };
     }
     if (branch.type === "StringLiteral") {
-      return { ast: branch, exprString: JSON.stringify(branch.value) };
+      return { ast: branch, exprString: JSON.stringify(branch.value), staticValue: branch.value };
     }
     if (branch.type === "Literal") {
       const v = branch.value;
       if (typeof v === "number") {
-        return { ast: branch, exprString: String(v) };
+        return { ast: branch, exprString: String(v), staticValue: v };
       }
       if (typeof v === "string") {
-        return { ast: branch, exprString: JSON.stringify(v) };
+        return { ast: branch, exprString: JSON.stringify(v), staticValue: v };
       }
     }
     // Handle identifiers and member expressions (local constants or imports)
@@ -915,35 +916,47 @@ export function createCssHelperResolver(args: {
               ? extractPrefixSuffix(parts)
               : { prefix: "", suffix: "" };
 
-            // Create AST for false branch (alternate) as base value
-            const altWrappedExpr = wrapExprWithStaticParts(altResolved.exprString, prefix, suffix);
-            const altAst = parseExpr(altWrappedExpr);
-
-            // Create AST for true branch (consequent) as variant value
-            const consWrappedExpr = wrapExprWithStaticParts(
-              consResolved.exprString,
-              prefix,
-              suffix,
-            );
-            const consAst = parseExpr(consWrappedExpr);
-
-            if (altAst && consAst) {
-              // Add false branch to base style (with pseudo/media wrapping)
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoContext(
-                  altAst,
-                  mapped.prop,
-                  target as any,
-                ) as any;
+            const buildBranchStyle = (
+              branchResolved: TernaryBranchResolution,
+            ): Record<string, unknown> | null => {
+              const branchStyle: Record<string, unknown> = {};
+              if (branchResolved.staticValue !== undefined) {
+                const rawValue = `${prefix}${branchResolved.staticValue}${suffix}`;
+                for (const mapped of cssDeclarationToStylexDeclarations({
+                  ...d,
+                  value: { kind: "static", value: rawValue },
+                  valueRaw: rawValue,
+                })) {
+                  branchStyle[mapped.prop] = mergeIntoContext(
+                    cssValueToJs(mapped.value, d.important, mapped.prop),
+                    mapped.prop,
+                    target as any,
+                  );
+                }
+                return branchStyle;
               }
 
-              // Build variant style for true branch (with pseudo/media wrapping)
-              const variantStyle: Record<string, unknown> = {};
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                variantStyle[mapped.prop] = mergeIntoContext(consAst, mapped.prop, target as any);
+              const wrappedExpr = wrapExprWithStaticParts(
+                branchResolved.exprString,
+                prefix,
+                suffix,
+              );
+              const ast = parseExpr(wrappedExpr);
+              if (!ast) {
+                return null;
               }
+              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
+                branchStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
+              }
+              return branchStyle;
+            };
 
-              // Add to conditional variants
+            const altStyle = buildBranchStyle(altResolved);
+            const variantStyle = buildBranchStyle(consResolved);
+            if (altStyle && variantStyle) {
+              for (const [prop, value] of Object.entries(altStyle)) {
+                (target as any)[prop] = value;
+              }
               conditionalVariants.push({
                 when: propName,
                 propName,
