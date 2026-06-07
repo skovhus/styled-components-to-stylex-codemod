@@ -338,7 +338,16 @@ function canSkipCascadeForStylexExport(
       ctx.options.crossFileInfo?.stylexComponentFiles,
       styledDefinitions.path,
       bindingName,
-    ) &&
+    ) && bindingIsIndependentOfStyledDefinitions(ctx, styledDefinitions, bindingName)
+  );
+}
+
+function bindingIsIndependentOfStyledDefinitions(
+  ctx: TransformContext,
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  return (
     !bindingDependsOnStyledDefinitions(styledDefinitions, bindingName) &&
     !bindingDependsOnImportedStyledDefinitions({
       bindingName,
