@@ -855,7 +855,7 @@ export const App = () => <CustomBox>safe</CustomBox>;
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
   });
 
-  it("does not bail when a pre-converted mixed dependency export uses StyleX and renders styled-components", () => {
+  it("still bails when a pre-converted mixed dependency export uses StyleX but renders styled-components", () => {
     const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-mixed-unsafe.tsx"));
     const source = `
 import styled from "styled-components";
@@ -880,8 +880,8 @@ export const App = () => <CustomBox>unsafe</CustomBox>;
       },
     );
 
-    expect(result.code).not.toBeNull();
-    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
   });
 
   it("does not bail in partial migration when wrapping a styled-components imported root", () => {

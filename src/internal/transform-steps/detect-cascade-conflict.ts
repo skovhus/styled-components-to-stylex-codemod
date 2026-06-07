@@ -104,13 +104,6 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    if (
-      stylexComponentFiles &&
-      componentExportExists(stylexComponentFiles, definition.path, definition.importedName)
-    ) {
-      continue;
-    }
-
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
     // Import paths omit extensions while prepass keys use resolved files — probe extensions.
@@ -148,6 +141,18 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         },
         definition.importedName,
       )
+    ) {
+      continue;
+    }
+
+    if (
+      stylexComponentFiles &&
+      componentExportExists(
+        stylexComponentFiles,
+        styledDefinitions.path,
+        definition.importedName,
+      ) &&
+      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName)
     ) {
       continue;
     }
