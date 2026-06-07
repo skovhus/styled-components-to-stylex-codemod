@@ -1411,6 +1411,7 @@ describe("runPrepass StyleX component exports", () => {
   it("records exported components that already use StyleX in mixed files", async () => {
     const mixedFile = join(tmpDir, "mixed.tsx");
     const stylexOnlyFile = join(tmpDir, "stylex-only.tsx");
+    const defaultWrapperFile = join(tmpDir, "default-wrapper.tsx");
     writeFileSync(
       mixedFile,
       [
@@ -1446,9 +1447,32 @@ describe("runPrepass StyleX component exports", () => {
       ].join("\n"),
       "utf-8",
     );
+    writeFileSync(
+      defaultWrapperFile,
+      [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        'import styled from "styled-components";',
+        "",
+        "function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const LegacyPanel = styled.section`",
+        "  color: rebeccapurple;",
+        "`;",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+        "",
+        "export default React.memo(Box);",
+      ].join("\n"),
+      "utf-8",
+    );
 
     const result = await runPrepass({
-      filesToTransform: [mixedFile, stylexOnlyFile],
+      filesToTransform: [mixedFile, stylexOnlyFile, defaultWrapperFile],
       consumerPaths: [],
       resolver,
       parserName: "tsx",
@@ -1458,6 +1482,9 @@ describe("runPrepass StyleX component exports", () => {
     expect(result.crossFileInfo.stylexComponentFiles?.get(mixedFile)).toEqual(new Set(["Box"]));
     expect(result.crossFileInfo.stylexComponentFiles?.get(stylexOnlyFile)).toEqual(
       new Set(["Card"]),
+    );
+    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultWrapperFile)).toEqual(
+      new Set(["default"]),
     );
   });
 });

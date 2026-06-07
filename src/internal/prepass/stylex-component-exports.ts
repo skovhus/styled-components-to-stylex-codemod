@@ -98,7 +98,12 @@ function collectStylexDefaultExport(
   const localName = nodeName(declaration);
   const usesStylex = localName
     ? localBindingUsesStylex(program, localName, stylexUsage)
-    : nodeUsesStylex(declaration, stylexUsage);
+    : nodeUsesStylex(declaration, stylexUsage) ||
+      (declaration
+        ? referencedLocalNames(program, declaration).some((referencedName) =>
+            localBindingUsesStylex(program, referencedName, stylexUsage),
+          )
+        : false);
   if (usesStylex) {
     names.add("default");
   }

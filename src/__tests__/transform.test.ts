@@ -884,6 +884,35 @@ export const App = () => <CustomBox>unsafe</CustomBox>;
     expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
   });
 
+  it("does not bail when a pre-converted default export wraps a StyleX component", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-default-wrapper.tsx"));
+    const source = `
+import styled from "styled-components";
+import DefaultBox from "./lib/preconverted-default-wrapper";
+
+const CustomBox = styled(DefaultBox)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-default-wrapper.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["default"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
   it("does not bail in partial migration when wrapping a styled-components imported root", () => {
     // In partial migration, `styled(ImportedComponent)` decls are left as
     // styled-components by `markPartialImportedComponentRoots` later in the pipeline.
