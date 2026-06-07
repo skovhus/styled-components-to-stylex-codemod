@@ -573,7 +573,8 @@ export function createCssHelperResolver(args: {
           ? new Set(Object.keys(pseudoElementTargets[0]!.obj))
           : null;
 
-      for (const d of rule.declarations) {
+      for (let declIndex = 0; declIndex < rule.declarations.length; declIndex++) {
+        const d = rule.declarations[declIndex]!;
         if (!d.property) {
           return bail("Conditional `css` block: missing CSS property name");
         }
@@ -829,6 +830,20 @@ export function createCssHelperResolver(args: {
           const rightKeys = Object.keys(right);
           return leftKeys.length === rightKeys.length && leftKeys.every((key) => key in right);
         };
+        const hasLaterStylexPropOverlap = (style: Record<string, unknown>): boolean => {
+          const props = new Set(Object.keys(style));
+          for (const laterDecl of rule.declarations.slice(declIndex + 1)) {
+            if (!laterDecl.property) {
+              continue;
+            }
+            for (const mapped of cssDeclarationToStylexDeclarations(laterDecl)) {
+              if (props.has(mapped.prop)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
         // Handle ConditionalExpression with theme test: ${props.theme.isDark ? "a" : "b"}
         if (!resolved && (slotBodyExpr as any)?.type === "ConditionalExpression") {
           const ternaryExpr = slotBodyExpr as {
@@ -846,6 +861,12 @@ export function createCssHelperResolver(args: {
               if (!consStyle || !altStyle) {
                 return bail(
                   "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                  { property: d.property },
+                );
+              }
+              if (hasLaterStylexPropOverlap(consStyle) || hasLaterStylexPropOverlap(altStyle)) {
+                return bail(
+                  "Conditional `css` block: finite ternary before a later overlapping declaration requires manual source-order handling",
                   { property: d.property },
                 );
               }
@@ -954,6 +975,12 @@ export function createCssHelperResolver(args: {
             const altStyle = buildResolvedBranchStyle(altResolved);
             const variantStyle = buildResolvedBranchStyle(consResolved);
             if (altStyle && variantStyle) {
+              if (hasLaterStylexPropOverlap(variantStyle) || hasLaterStylexPropOverlap(altStyle)) {
+                return bail(
+                  "Conditional `css` block: finite ternary before a later overlapping declaration requires manual source-order handling",
+                  { property: d.property },
+                );
+              }
               if (haveSameStyleProps(altStyle, variantStyle)) {
                 for (const [prop, value] of Object.entries(altStyle)) {
                   (target as any)[prop] = value;
