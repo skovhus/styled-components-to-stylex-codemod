@@ -838,11 +838,27 @@ export function createCssHelperResolver(args: {
           const rightKeys = Object.keys(right);
           return leftKeys.length === rightKeys.length && leftKeys.every((key) => key in right);
         };
+        const conflictsWithLaterCssProperty = (stylexProp: string, cssProp: string): boolean => {
+          const normalizedCssProp = cssProp.trim();
+          if (
+            (stylexProp.startsWith("padding") && normalizedCssProp.startsWith("padding")) ||
+            (stylexProp.startsWith("margin") && normalizedCssProp.startsWith("margin")) ||
+            (stylexProp.startsWith("background") && normalizedCssProp.startsWith("background"))
+          ) {
+            return true;
+          }
+          return false;
+        };
         const hasLaterStylexPropOverlap = (style: Record<string, unknown>): boolean => {
           const props = new Set(Object.keys(style));
           for (const laterDecl of rule.declarations.slice(declIndex + 1)) {
             if (!laterDecl.property) {
               continue;
+            }
+            for (const prop of props) {
+              if (conflictsWithLaterCssProperty(prop, laterDecl.property)) {
+                return true;
+              }
             }
             for (const mapped of cssDeclarationToStylexDeclarations(laterDecl)) {
               if (props.has(mapped.prop)) {
