@@ -221,21 +221,9 @@ function localBindings(program: AstNode): Array<{ name: string; node: AstNode }>
       continue;
     }
 
-    if (declaration.type === "FunctionDeclaration") {
-      const name = nodeName(declaration.id as AstNode | undefined);
-      const body = declaration.body as AstNode | undefined;
-      if (name && body) {
-        bindings.push({ name, node: body });
-      }
-      continue;
-    }
-
-    if (declaration.type === "ClassDeclaration") {
-      const name = nodeName(declaration.id as AstNode | undefined);
-      const body = declaration.body as AstNode | undefined;
-      if (name && body) {
-        bindings.push({ name, node: body });
-      }
+    const directBinding = localBindingFromDeclaration(declaration);
+    if (directBinding) {
+      bindings.push(directBinding);
       continue;
     }
 
@@ -250,6 +238,15 @@ function localBindings(program: AstNode): Array<{ name: string; node: AstNode }>
     }
   }
   return bindings;
+}
+
+function localBindingFromDeclaration(declaration: AstNode): { name: string; node: AstNode } | null {
+  if (declaration.type !== "FunctionDeclaration" && declaration.type !== "ClassDeclaration") {
+    return null;
+  }
+  const name = nodeName(declaration.id as AstNode | undefined);
+  const body = declaration.body as AstNode | undefined;
+  return name && body ? { name, node: body } : null;
 }
 
 function referencedLocalNames(program: AstNode, node: AstNode): string[] {
