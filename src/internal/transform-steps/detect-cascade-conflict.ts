@@ -492,24 +492,42 @@ function collectImportedStyledLocalNames(args: {
     const styledDefinitions =
       (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
       scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
-    if (styledDefinitions) {
-      if (
-        importedBindingIsIndependentStylex({
-          bindingName: importEntry.importedName,
-          styledDefinitions,
-          styledDefFiles: args.styledDefFiles,
-          stylexComponentFiles: args.stylexComponentFiles,
-          resolveModule: args.resolveModule,
-          visited: args.visited,
-        })
-      ) {
-        continue;
-      }
+    if (
+      importedBindingShouldCountAsStyled({
+        bindingName: importEntry.importedName,
+        styledDefinitions,
+        styledDefFiles: args.styledDefFiles,
+        stylexComponentFiles: args.stylexComponentFiles,
+        resolveModule: args.resolveModule,
+        visited: args.visited,
+      })
+    ) {
       importedStyledNames.add(localName);
     }
   }
 
   return importedStyledNames;
+}
+
+function importedBindingShouldCountAsStyled(args: {
+  bindingName: string;
+  styledDefinitions: StyledDefinitionFile | undefined;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
+}): boolean {
+  return (
+    !!args.styledDefinitions &&
+    !importedBindingIsIndependentStylex({
+      bindingName: args.bindingName,
+      styledDefinitions: args.styledDefinitions,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    })
+  );
 }
 
 function importedBindingIsIndependentStylex(args: {
