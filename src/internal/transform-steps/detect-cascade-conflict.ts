@@ -492,21 +492,34 @@ function collectImportedStyledLocalNames(args: {
     const styledDefinitions =
       (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
       scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
-    if (
-      importedBindingShouldCountAsStyled({
-        bindingName: importEntry.importedName,
-        styledDefinitions,
-        styledDefFiles: args.styledDefFiles,
-        stylexComponentFiles: args.stylexComponentFiles,
-        resolveModule: args.resolveModule,
-        visited: args.visited,
-      })
-    ) {
-      importedStyledNames.add(localName);
-    }
+    recordImportedStyledNameIfNeeded(importedStyledNames, localName, {
+      bindingName: importEntry.importedName,
+      styledDefinitions,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    });
   }
 
   return importedStyledNames;
+}
+
+function recordImportedStyledNameIfNeeded(
+  importedStyledNames: Set<string>,
+  localName: string,
+  args: {
+    bindingName: string;
+    styledDefinitions: StyledDefinitionFile | undefined;
+    styledDefFiles: Map<string, Set<string>> | undefined;
+    stylexComponentFiles: Map<string, Set<string>> | undefined;
+    resolveModule: ModuleResolver | undefined;
+    visited: Set<string>;
+  },
+): void {
+  if (importedBindingShouldCountAsStyled(args)) {
+    importedStyledNames.add(localName);
+  }
 }
 
 function importedBindingShouldCountAsStyled(args: {
