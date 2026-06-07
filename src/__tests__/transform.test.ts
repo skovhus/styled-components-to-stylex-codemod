@@ -826,6 +826,260 @@ export const App = () => <CustomGroupHeader label="test" id="t" />;
     expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
   });
 
+  it("does not bail when a pre-converted mixed dependency export is clearly StyleX", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-mixed.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-mixed";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-mixed.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("does not bail when a pre-converted mixed dependency was omitted from the StyleX prepass map", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-mixed.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-mixed";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-mixed-fallback.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("still bails when a pre-converted mixed dependency export uses StyleX but renders styled-components", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-mixed-unsafe.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-mixed-unsafe";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>unsafe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-mixed-unsafe.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
+  it("does not bail when a pre-converted default export wraps a StyleX component", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-default-wrapper.tsx"));
+    const source = `
+import styled from "styled-components";
+import DefaultBox from "./lib/preconverted-default-wrapper";
+
+const CustomBox = styled(DefaultBox)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-default-wrapper.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["default"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("does not bail when a pre-converted named class export is clearly StyleX", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-class.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-class";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-class.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([[mixedPath, new Set(["LegacyPanel"])]]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
+  it("still bails when a pre-converted StyleX export renders an imported styled-components root", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-imported-styled-root.tsx"));
+    const importedStyledPath = toRealPath(join(testCasesDir, "lib/styled-group-header.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-imported-styled-root";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>unsafe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-imported-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([
+            [mixedPath, new Set(["UnrelatedLocal"])],
+            [importedStyledPath, new Set(["StyledHeader"])],
+          ]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./styled-group-header"
+            ? join(dirname(fromFile), "styled-group-header.tsx")
+            : undefined,
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
+  it("still bails when a pre-converted StyleX export renders an alias-resolved styled-components root", () => {
+    const mixedPath = toRealPath(join(testCasesDir, "lib/preconverted-aliased-styled-root.tsx"));
+    const importedStyledPath = toRealPath(join(testCasesDir, "lib/styled-group-header.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./lib/preconverted-aliased-styled-root";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>unsafe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(testCasesDir, "cascade-preconverted-aliased-root.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([
+            [mixedPath, new Set(["UnrelatedLocal"])],
+            [importedStyledPath, new Set(["StyledHeader"])],
+          ]),
+          stylexComponentFiles: new Map([[mixedPath, new Set(["Box"])]]),
+        },
+        resolveModule: (_fromFile, specifier) =>
+          specifier === "@ui/styled-group-header" ? importedStyledPath : undefined,
+      },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.map((w) => w.type)).toContain(WARNING_TYPE);
+  });
+
+  it("does not bail when a pre-converted StyleX export renders an imported StyleX export from a mixed file", () => {
+    const mixedPath = toRealPath(join(__dirname, "fixtures/preconverted/imported-stylex-root.tsx"));
+    const basePath = toRealPath(join(__dirname, "fixtures/preconverted/base-mixed.tsx"));
+    const source = `
+import styled from "styled-components";
+import { Box } from "./fixtures/preconverted/imported-stylex-root";
+
+const CustomBox = styled(Box)\`
+  padding-inline: 14px;
+\`;
+
+export const App = () => <CustomBox>safe</CustomBox>;
+`;
+    const result = transformWithWarnings(
+      { source, path: join(__dirname, "cascade-preconverted-imported-stylex.input.tsx") },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      {
+        adapter: fixtureAdapter,
+        crossFileInfo: {
+          selectorUsages: [],
+          styledDefFiles: new Map([
+            [mixedPath, new Set(["_UnrelatedLocal"])],
+            [basePath, new Set(["_LegacyBase"])],
+          ]),
+          stylexComponentFiles: new Map([
+            [mixedPath, new Set(["Box"])],
+            [basePath, new Set(["Base"])],
+          ]),
+        },
+        resolveModule: (fromFile, specifier) =>
+          specifier === "./base-mixed" ? join(dirname(fromFile), "base-mixed.tsx") : undefined,
+      },
+    );
+
+    expect(result.code).not.toBeNull();
+    expect(result.warnings.map((w) => w.type)).not.toContain(WARNING_TYPE);
+  });
+
   it("does not bail in partial migration when wrapping a styled-components imported root", () => {
     // In partial migration, `styled(ImportedComponent)` decls are left as
     // styled-components by `markPartialImportedComponentRoots` later in the pipeline.

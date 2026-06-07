@@ -160,6 +160,8 @@ export interface CrossFileInfo {
   propUsageByComponent?: Map<string, ComponentPropUsageInfo>;
   /** Global map: files that define styled-components → set of local names. Used for cascade conflict detection. */
   styledDefFiles?: Map<string, Set<string>>;
+  /** Global map: files that export components already using StyleX → set of export names. */
+  stylexComponentFiles?: Map<string, Set<string>>;
   /** Global leaf keys from prepass when leaves-only mode is enabled. */
   globalLeafKeys?: Set<string>;
   /** Files successfully converted in the current transform run. Used to avoid bailing on same-run bases. */

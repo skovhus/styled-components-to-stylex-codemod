@@ -205,6 +205,7 @@ interface GlobalPrepassResult {
   componentsNeedingGlobalSelectorBridge: Map<string, Set<string>>;
   propUsageByFile?: Map<string, Map<string, ComponentPropUsageInfo>>;
   styledDefFiles?: Map<string, Set<string>>;
+  stylexComponentFiles?: Map<string, Set<string>>;
   globalLeafKeys?: Set<string>;
   transformedFiles?: Set<string>;
   transformedComponents?: Map<string, Set<string>>;
@@ -239,6 +240,8 @@ function extractCrossFileInfoForFile(
   const propUsageByComponent = prepass.propUsageByFile?.get(absPath);
 
   const hasStyledDefFiles = prepass.styledDefFiles && prepass.styledDefFiles.size > 0;
+  const hasStylexComponentFiles =
+    prepass.stylexComponentFiles && prepass.stylexComponentFiles.size > 0;
   const hasPropUsage = propUsageByComponent && propUsageByComponent.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
   const hasTransformedFiles = prepass.transformedFiles !== undefined;
@@ -251,6 +254,7 @@ function extractCrossFileInfoForFile(
     !bridgeComponentNames &&
     !hasPropUsage &&
     !hasStyledDefFiles &&
+    !hasStylexComponentFiles &&
     !hasGlobalLeafKeys &&
     !hasTransformedFiles &&
     !hasTransformedComponents &&
@@ -264,6 +268,7 @@ function extractCrossFileInfoForFile(
     bridgeComponentNames,
     propUsageByComponent,
     styledDefFiles: prepass.styledDefFiles,
+    stylexComponentFiles: prepass.stylexComponentFiles,
     globalLeafKeys: prepass.globalLeafKeys,
     transformedFiles: prepass.transformedFiles,
     transformedComponents: prepass.transformedComponents,

@@ -1394,6 +1394,181 @@ export const App = () => (
   });
 });
 
+/* ── StyleX component export prepass ─────────────────────────────────── */
+
+describe("runPrepass StyleX component exports", () => {
+  const resolver = createModuleResolver();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "prepass-stylex-export-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("records exported components that already use StyleX in mixed files", async () => {
+    const mixedFile = join(tmpDir, "mixed.tsx");
+    const stylexOnlyFile = join(tmpDir, "stylex-only.tsx");
+    const defaultWrapperFile = join(tmpDir, "default-wrapper.tsx");
+    const defaultFunctionFile = join(tmpDir, "default-function.tsx");
+    const classFile = join(tmpDir, "class-component.tsx");
+    const mergedSxFile = join(tmpDir, "merged-sx.tsx");
+    const importedStylexFile = join(tmpDir, "imported-stylex.tsx");
+    writeFileSync(
+      mixedFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        'import styled from "styled-components";',
+        "",
+        "export function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const LegacyPanel = styled.section`",
+        "  color: rebeccapurple;",
+        "`;",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      stylexOnlyFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export const Card = ({ children }: { children: React.ReactNode }) => (",
+        "  <article {...stylex.props(styles.card)}>{children}</article>",
+        ");",
+        "",
+        "const styles = stylex.create({",
+        "  card: { padding: 12 },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      defaultWrapperFile,
+      [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        'import styled from "styled-components";',
+        "",
+        "function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const LegacyPanel = styled.section`",
+        "  color: rebeccapurple;",
+        "`;",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+        "",
+        "export default React.memo(Box);",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      defaultFunctionFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export default function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div {...stylex.props(styles.box)}>{children}</div>;",
+        "}",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      classFile,
+      [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        "",
+        "export class Box extends React.Component<{ children: React.ReactNode }> {",
+        "  render() {",
+        "    return <div {...stylex.props(styles.box)}>{this.props.children}</div>;",
+        "  }",
+        "}",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      mergedSxFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        'import { mergedSx } from "./lib/mergedSx";',
+        "",
+        "export function Box({ children, className, style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {",
+        "  return <div {...mergedSx(styles.box, className, style)}>{children}</div>;",
+        "}",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
+    writeFileSync(
+      importedStylexFile,
+      [
+        'import { styles } from "./box.stylex";',
+        "",
+        "export function Box({ children }: { children: React.ReactNode }) {",
+        "  return <div sx={styles.root}>{children}</div>;",
+        "}",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await runPrepass({
+      filesToTransform: [
+        mixedFile,
+        stylexOnlyFile,
+        defaultWrapperFile,
+        defaultFunctionFile,
+        classFile,
+        mergedSxFile,
+        importedStylexFile,
+      ],
+      consumerPaths: [],
+      resolver,
+      parserName: "tsx",
+      createExternalInterface: false,
+    });
+
+    expect(result.crossFileInfo.stylexComponentFiles?.get(mixedFile)).toEqual(new Set(["Box"]));
+    expect(result.crossFileInfo.stylexComponentFiles?.get(stylexOnlyFile)).toEqual(
+      new Set(["Card"]),
+    );
+    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultWrapperFile)).toEqual(
+      new Set(["default"]),
+    );
+    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultFunctionFile)).toEqual(
+      new Set(["default"]),
+    );
+    expect(result.crossFileInfo.stylexComponentFiles?.get(classFile)).toEqual(new Set(["Box"]));
+    expect(result.crossFileInfo.stylexComponentFiles?.get(mergedSxFile)).toEqual(new Set(["Box"]));
+    expect(result.crossFileInfo.stylexComponentFiles?.get(importedStylexFile)).toEqual(
+      new Set(["Box"]),
+    );
+  });
+});
+
 /* ── Static identifier resolution scope safety ───────────────────────── */
 
 describe("consumer static identifier resolution", () => {

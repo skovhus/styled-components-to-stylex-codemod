@@ -12,6 +12,12 @@ import {
   getReExportedSourceName,
   resolveBarrelReExportBinding,
 } from "../prepass/extract-external-interface.js";
+import { createPrepassParser, type AstNode } from "../prepass/prepass-parser.js";
+import {
+  buildImportMapFromNodes,
+  walkForImportsAndTemplates,
+} from "../prepass/scan-cross-file-selectors.js";
+import { collectStylexExportNames } from "../prepass/stylex-component-exports.js";
 import {
   exportedBindingDependsOnLocalNames,
   localNamesForExport,
@@ -141,6 +147,10 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
         definition.importedName,
       )
     ) {
+      continue;
+    }
+
+    if (canSkipCascadeForStylexExport(ctx, styledDefinitions, definition.importedName)) {
       continue;
     }
 
@@ -290,6 +300,65 @@ function transformedComponentsHasPath(
   return transformedNamesForPath(transformedComponents, filePath) !== undefined;
 }
 
+function componentExportExists(
+  componentsByFile: ReadonlyMap<string, ReadonlySet<string>> | undefined,
+  importedPath: string,
+  bindingName: string,
+): boolean {
+  if (!componentsByFile) {
+    return componentExportExistsByDirectScan(importedPath, bindingName);
+  }
+  for (const candidate of pathCandidates(importedPath)) {
+    const componentNames =
+      componentsByFile.get(candidate) ?? componentsByFile.get(toRealPath(candidate));
+    if (componentNames?.has(bindingName)) {
+      return true;
+    }
+  }
+  return componentExportExistsByDirectScan(importedPath, bindingName);
+}
+
+function componentExportExistsByDirectScan(importedPath: string, bindingName: string): boolean {
+  for (const candidate of pathCandidates(importedPath)) {
+    const source = tryReadFile(candidate);
+    if (source && collectStylexExportNames(source).has(bindingName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function canSkipCascadeForStylexExport(
+  ctx: TransformContext,
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  return (
+    componentExportExists(
+      ctx.options.crossFileInfo?.stylexComponentFiles,
+      styledDefinitions.path,
+      bindingName,
+    ) && bindingIsIndependentOfStyledDefinitions(ctx, styledDefinitions, bindingName)
+  );
+}
+
+function bindingIsIndependentOfStyledDefinitions(
+  ctx: TransformContext,
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  if (bindingDependsOnStyledDefinitions(styledDefinitions, bindingName)) {
+    return false;
+  }
+  return !bindingDependsOnImportedStyledDefinitions({
+    bindingName,
+    sourcePath: styledDefinitions.path,
+    styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
+    stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
+    resolveModule: ctx.options.resolveModule,
+  });
+}
+
 function transformedComponentExists(
   transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
   importedPath: string,
@@ -353,6 +422,163 @@ function bindingDependsOnStyledDefinitions(
         localNames: styledDefinitions.names,
       })
     : true;
+}
+
+function bindingDependsOnImportedStyledDefinitions(args: {
+  sourcePath: string;
+  bindingName: string;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited?: Set<string>;
+}): boolean {
+  const visitKey = `${args.sourcePath}:${args.bindingName}`;
+  if (args.visited?.has(visitKey)) {
+    return true;
+  }
+  const visited = new Set(args.visited);
+  visited.add(visitKey);
+  const source = tryReadFile(args.sourcePath);
+  if (!source) {
+    return true;
+  }
+  const importedStyledNames = collectImportedStyledLocalNames({ ...args, visited });
+  if (!importedStyledNames) {
+    return true;
+  }
+  return (
+    importedStyledNames.size > 0 &&
+    exportedBindingDependsOnLocalNames({
+      source,
+      exportedName: args.bindingName,
+      includeDefault: args.bindingName === "default",
+      localNames: importedStyledNames,
+    })
+  );
+}
+
+function collectImportedStyledLocalNames(args: {
+  sourcePath: string;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
+}): Set<string> | null {
+  const source = tryReadFile(args.sourcePath);
+  const program = source ? parseProgram(source) : null;
+  if (!program) {
+    return null;
+  }
+
+  const importNodes: AstNode[] = [];
+  walkForImportsAndTemplates(program, importNodes, []);
+  const importMap = buildImportMapFromNodes(importNodes);
+  const importedStyledNames = new Set<string>();
+
+  for (const [localName, importEntry] of importMap) {
+    if (!args.resolveModule) {
+      if (isRelativeSpecifier(importEntry.source)) {
+        importedStyledNames.add(localName);
+      }
+      continue;
+    }
+    const resolvedPath = args.resolveModule(args.sourcePath, importEntry.source);
+    if (!resolvedPath) {
+      if (isRelativeSpecifier(importEntry.source)) {
+        importedStyledNames.add(localName);
+      }
+      continue;
+    }
+    const styledDefinitions =
+      (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
+      scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
+    recordImportedStyledNameIfNeeded(importedStyledNames, localName, {
+      bindingName: importEntry.importedName,
+      styledDefinitions,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    });
+  }
+
+  return importedStyledNames;
+}
+
+function recordImportedStyledNameIfNeeded(
+  importedStyledNames: Set<string>,
+  localName: string,
+  args: {
+    bindingName: string;
+    styledDefinitions: StyledDefinitionFile | undefined;
+    styledDefFiles: Map<string, Set<string>> | undefined;
+    stylexComponentFiles: Map<string, Set<string>> | undefined;
+    resolveModule: ModuleResolver | undefined;
+    visited: Set<string>;
+  },
+): void {
+  if (importedBindingShouldCountAsStyled(args)) {
+    importedStyledNames.add(localName);
+  }
+}
+
+function importedBindingShouldCountAsStyled(args: {
+  bindingName: string;
+  styledDefinitions: StyledDefinitionFile | undefined;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
+}): boolean {
+  return (
+    !!args.styledDefinitions &&
+    !importedBindingIsIndependentStylex({
+      bindingName: args.bindingName,
+      styledDefinitions: args.styledDefinitions,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    })
+  );
+}
+
+function importedBindingIsIndependentStylex(args: {
+  bindingName: string;
+  styledDefinitions: StyledDefinitionFile;
+  styledDefFiles: Map<string, Set<string>> | undefined;
+  stylexComponentFiles: Map<string, Set<string>> | undefined;
+  resolveModule: ModuleResolver | undefined;
+  visited: Set<string>;
+}): boolean {
+  return (
+    componentExportExists(
+      args.stylexComponentFiles,
+      args.styledDefinitions.path,
+      args.bindingName,
+    ) &&
+    !bindingDependsOnStyledDefinitions(args.styledDefinitions, args.bindingName) &&
+    !bindingDependsOnImportedStyledDefinitions({
+      bindingName: args.bindingName,
+      sourcePath: args.styledDefinitions.path,
+      styledDefFiles: args.styledDefFiles,
+      stylexComponentFiles: args.stylexComponentFiles,
+      resolveModule: args.resolveModule,
+      visited: args.visited,
+    })
+  );
+}
+
+function parseProgram(source: string): AstNode | null {
+  for (const parserName of ["tsx", "babel"] as const) {
+    try {
+      const ast = createPrepassParser(parserName).parse(source) as AstNode;
+      return ((ast as { program?: AstNode }).program ?? ast) as AstNode;
+    } catch {
+      // Try the next parser before falling back to conservative behavior.
+    }
+  }
+  return null;
 }
 
 /**

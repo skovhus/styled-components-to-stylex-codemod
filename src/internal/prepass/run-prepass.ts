@@ -34,6 +34,7 @@ import {
   resolveBarrelReExport,
   type Resolve,
 } from "./extract-external-interface.js";
+import { collectStylexExportNames } from "./stylex-component-exports.js";
 import { createPrepassParser, type AstNode, type PrepassParserName } from "./prepass-parser.js";
 import type { ModuleResolver } from "./resolve-imports.js";
 import {
@@ -194,6 +195,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
   const refUsages = new Map<string, Set<string>>();
   const styledCallUsages: { file: string; name: string }[] = [];
   const styledDefFiles = new Map<string, Set<string>>();
+  const stylexComponentFiles = new Map<string, Set<string>>();
   const classNameStyleUsages = new Map<string, ConsumerUsageRef[]>();
   const classNameUsages = new Map<string, ConsumerUsageRef[]>();
   const styleUsages = new Map<string, ConsumerUsageRef[]>();
@@ -241,7 +243,9 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     const hasAsProp = createExternalInterface && AS_PROP_RE.test(source);
     const hasRefProp = createExternalInterface && REF_PROP_RE.test(source);
 
-    if (!hasStyled && !hasAsProp && !hasRefProp) {
+    const hasStylex = source.includes("@stylexjs/stylex") || /\.stylex["']/.test(source);
+
+    if (!hasStyled && !hasAsProp && !hasRefProp && !hasStylex) {
       continue;
     }
 
@@ -285,6 +289,13 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
         if (m[1]) {
           addToSetMap(styledDefFiles, filePath, m[1]);
         }
+      }
+    }
+
+    if (hasStylex) {
+      const stylexExportNames = collectStylexExportNames(source);
+      if (stylexExportNames.size > 0) {
+        stylexComponentFiles.set(filePath, stylexExportNames);
       }
     }
 
@@ -651,6 +662,7 @@ export async function runPrepass(options: PrepassOptions): Promise<PrepassResult
     componentsNeedingGlobalSelectorBridge,
     propUsageByFile,
     styledDefFiles: createExternalInterface ? styledDefFiles : undefined,
+    stylexComponentFiles,
     globalLeafKeys,
   };
 
@@ -1657,7 +1669,7 @@ function scanFileForSelectorsAst(
 /* ── ripgrep pre-filter ───────────────────────────────────────────────── */
 
 /**
- * Use ripgrep to quickly find files containing "styled-components" or `as[={]`.
+ * Use ripgrep to quickly find files containing styled-components, StyleX, or relevant JSX props.
  * Returns a Set of absolute file paths, or undefined if rg is not available.
  */
 function rgPreFilter(files: readonly string[]): Set<string> | undefined {
@@ -1667,7 +1679,7 @@ function rgPreFilter(files: readonly string[]): Set<string> | undefined {
   }
 
   try {
-    const pattern = String.raw`(styled-components|\bas[={]|\bref[={])`;
+    const pattern = String.raw`(styled-components|@stylexjs/stylex|\.stylex["']|\bas[={]|\bref[={])`;
     const globArgs = ["*.tsx", "*.ts", "*.jsx", "*.js", "*.mts", "*.cts", "*.mjs", "*.cjs"]
       .map((glob) => `--glob ${shellQuote(glob)}`)
       .join(" ");
