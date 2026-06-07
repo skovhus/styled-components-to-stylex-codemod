@@ -866,7 +866,19 @@ export function createCssHelperResolver(args: {
           ) {
             return true;
           }
-          return false;
+          const borderCategory = stylexProp.match(
+            /^border(?:Top|Right|Bottom|Left)?(Width|Style|Color)$/,
+          )?.[1];
+          if (!borderCategory || !normalizedCssProp.startsWith("border")) {
+            return false;
+          }
+          if (
+            normalizedCssProp === "border" ||
+            /^border-(top|right|bottom|left)$/.test(normalizedCssProp)
+          ) {
+            return true;
+          }
+          return normalizedCssProp.endsWith(`-${borderCategory.toLowerCase()}`);
         };
         const hasLaterStylexPropOverlap = (style: Record<string, unknown>): boolean => {
           const props = new Set(Object.keys(style));
