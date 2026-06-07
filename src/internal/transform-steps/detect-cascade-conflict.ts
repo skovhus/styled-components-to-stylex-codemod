@@ -54,7 +54,6 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   }
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
-  const stylexComponentFiles = ctx.options.crossFileInfo?.stylexComponentFiles;
   const transformedComponents = ctx.options.crossFileInfo?.transformedComponents;
   // In partial-migration mode, `markPartialImportedComponentRoots` in lower-rules
   // marks every `styled(ImportedComponent)` decl as skipped before lowering. Honor
@@ -151,20 +150,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       continue;
     }
 
-    if (
-      componentExportExists(
-        stylexComponentFiles,
-        styledDefinitions.path,
-        definition.importedName,
-      ) &&
-      !bindingDependsOnStyledDefinitions(styledDefinitions, definition.importedName) &&
-      !bindingDependsOnImportedStyledDefinitions({
-        bindingName: definition.importedName,
-        sourcePath: styledDefinitions.path,
-        styledDefFiles,
-        resolveModule: ctx.options.resolveModule,
-      })
-    ) {
+    if (canSkipCascadeForStylexExport(ctx, styledDefinitions, definition.importedName)) {
       continue;
     }
 
@@ -340,6 +326,27 @@ function componentExportExistsByDirectScan(importedPath: string, bindingName: st
     }
   }
   return false;
+}
+
+function canSkipCascadeForStylexExport(
+  ctx: TransformContext,
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  return (
+    componentExportExists(
+      ctx.options.crossFileInfo?.stylexComponentFiles,
+      styledDefinitions.path,
+      bindingName,
+    ) &&
+    !bindingDependsOnStyledDefinitions(styledDefinitions, bindingName) &&
+    !bindingDependsOnImportedStyledDefinitions({
+      bindingName,
+      sourcePath: styledDefinitions.path,
+      styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
+      resolveModule: ctx.options.resolveModule,
+    })
+  );
 }
 
 function transformedComponentExists(

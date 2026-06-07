@@ -189,22 +189,17 @@ function nodeUsesStylex(node: AstNode | undefined, stylexUsage: StylexUsage): bo
 
   let found = false;
   walkValueAst(node, (candidate) => {
-    if (found) {
-      return;
-    }
-    if (nodeIsStylexPropsCall(candidate, stylexUsage.namespaceNames, stylexUsage.propsNames)) {
-      found = true;
-      return;
-    }
-    if (nodeIsMergedSxCall(candidate, stylexUsage.styleObjectNames)) {
-      found = true;
-      return;
-    }
-    if (isStylexSxAttribute(candidate, stylexUsage.styleObjectNames)) {
-      found = true;
-    }
+    found ||= candidateUsesStylex(candidate, stylexUsage);
   });
   return found;
+}
+
+function candidateUsesStylex(candidate: AstNode, stylexUsage: StylexUsage): boolean {
+  return (
+    nodeIsStylexPropsCall(candidate, stylexUsage.namespaceNames, stylexUsage.propsNames) ||
+    nodeIsMergedSxCall(candidate, stylexUsage.styleObjectNames) ||
+    isStylexSxAttribute(candidate, stylexUsage.styleObjectNames)
+  );
 }
 
 function findLocalBindingNode(program: AstNode, localName: string): AstNode | undefined {
