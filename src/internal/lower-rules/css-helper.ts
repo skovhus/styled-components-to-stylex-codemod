@@ -440,7 +440,8 @@ export function createCssHelperResolver(args: {
 
     const lookupImport = (localName: string) => importMap.get(localName) ?? null;
 
-    for (const rule of rules) {
+    for (let ruleIndex = 0; ruleIndex < rules.length; ruleIndex++) {
+      const rule = rules[ruleIndex]!;
       const rawMedia = findSupportedAtRule(rule.atRuleStack);
       // Support StyleX condition at-rules; bail on non-StyleX at-rules or unsafe mixed stacks.
       // Mixed stacks must also bail because preserving only one condition would be too broad.
@@ -882,9 +883,9 @@ export function createCssHelperResolver(args: {
         };
         const hasLaterStylexPropOverlap = (style: Record<string, unknown>): boolean => {
           const props = new Set(Object.keys(style));
-          for (const laterDecl of rule.declarations.slice(declIndex + 1)) {
+          const declarationOverlaps = (laterDecl: (typeof rule.declarations)[number]): boolean => {
             if (!laterDecl.property) {
-              continue;
+              return false;
             }
             for (const prop of props) {
               if (conflictsWithLaterCssProperty(prop, laterDecl.property)) {
@@ -895,6 +896,24 @@ export function createCssHelperResolver(args: {
               if (props.has(mapped.prop)) {
                 return true;
               }
+            }
+            return false;
+          };
+          for (const laterDecl of rule.declarations.slice(declIndex + 1)) {
+            if (declarationOverlaps(laterDecl)) {
+              return true;
+            }
+          }
+          const atRuleKey = (rule.atRuleStack ?? []).join("\n");
+          for (const laterRule of rules.slice(ruleIndex + 1)) {
+            if (
+              (laterRule.selector ?? "") !== (rule.selector ?? "") ||
+              (laterRule.atRuleStack ?? []).join("\n") !== atRuleKey
+            ) {
+              continue;
+            }
+            if (laterRule.declarations.some(declarationOverlaps)) {
+              return true;
             }
           }
           return false;
