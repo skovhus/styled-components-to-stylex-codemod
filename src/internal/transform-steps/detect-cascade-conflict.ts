@@ -347,15 +347,15 @@ function bindingIsIndependentOfStyledDefinitions(
   styledDefinitions: StyledDefinitionFile,
   bindingName: string,
 ): boolean {
-  return (
-    !bindingDependsOnStyledDefinitions(styledDefinitions, bindingName) &&
-    !bindingDependsOnImportedStyledDefinitions({
-      bindingName,
-      sourcePath: styledDefinitions.path,
-      styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
-      resolveModule: ctx.options.resolveModule,
-    })
-  );
+  if (bindingDependsOnStyledDefinitions(styledDefinitions, bindingName)) {
+    return false;
+  }
+  return !bindingDependsOnImportedStyledDefinitions({
+    bindingName,
+    sourcePath: styledDefinitions.path,
+    styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
+    resolveModule: ctx.options.resolveModule,
+  });
 }
 
 function transformedComponentExists(
