@@ -19,6 +19,7 @@ import {
 } from "../css-prop-mapping.js";
 import {
   extractRootAndPath,
+  getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isAstNode,
@@ -348,6 +349,14 @@ export function createCssHelperResolver(args: {
       }
     }
     return null;
+  };
+
+  const getFunctionParamName = (node: any): string | null => {
+    if (node?.type !== "ArrowFunctionExpression" && node?.type !== "FunctionExpression") {
+      return null;
+    }
+    const firstParam = node.params?.[0];
+    return firstParam?.type === "Identifier" ? firstParam.name : null;
   };
 
   /**
@@ -751,15 +760,22 @@ export function createCssHelperResolver(args: {
             exprLoc,
           );
         }
-        const resolved = resolveHelperExprToAst(expr as any, paramName);
+        const slotExprNode = expr as any;
+        const slotBodyExpr =
+          slotExprNode.type === "ArrowFunctionExpression" ||
+          slotExprNode.type === "FunctionExpression"
+            ? getFunctionBodyExpr(slotExprNode)
+            : slotExprNode;
+        const slotParamName = getFunctionParamName(slotExprNode) ?? paramName;
+        const resolved = resolveHelperExprToAst(slotBodyExpr, slotParamName);
         // Handle ConditionalExpression with theme test: ${props.theme.isDark ? "a" : "b"}
-        if (!resolved && (expr as any).type === "ConditionalExpression") {
-          const ternaryExpr = expr as {
+        if (!resolved && (slotBodyExpr as any)?.type === "ConditionalExpression") {
+          const ternaryExpr = slotBodyExpr as {
             test: any;
             consequent: any;
             alternate: any;
           };
-          const themePath = extractThemePathFromCondTest(ternaryExpr.test, paramName);
+          const themePath = extractThemePathFromCondTest(ternaryExpr.test, slotParamName);
           if (themePath) {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
@@ -807,7 +823,7 @@ export function createCssHelperResolver(args: {
             }
           }
         }
-        if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
+        if (!resolved && hasThemeAccessInExpr(slotBodyExpr, slotParamName)) {
           return bail(
             "Conditional `css` block: failed to parse expression",
             { property: d.property },
@@ -875,16 +891,16 @@ export function createCssHelperResolver(args: {
           }
         }
 
-        // Handle ConditionalExpression with static parts: ${prop ? val1 : val2}px
+        // Handle ConditionalExpression: ${prop ? val1 : val2} or ${prop ? val1 : val2}px
         // We can create variants for each branch, wrapping in pseudo context when needed
-        if (hasStaticParts && expr && (expr as any).type === "ConditionalExpression") {
-          const ternaryExpr = expr as {
+        if (slotBodyExpr && (slotBodyExpr as any).type === "ConditionalExpression") {
+          const ternaryExpr = slotBodyExpr as {
             type: "ConditionalExpression";
             test: any;
             consequent: any;
             alternate: any;
           };
-          const propName = parseTernaryTestPropName(ternaryExpr.test, paramName);
+          const propName = parseTernaryTestPropName(ternaryExpr.test, slotParamName);
           if (propName) {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
@@ -895,7 +911,9 @@ export function createCssHelperResolver(args: {
                 { property: d.property },
               );
             }
-            const { prefix, suffix } = extractPrefixSuffix(parts);
+            const { prefix, suffix } = hasStaticParts
+              ? extractPrefixSuffix(parts)
+              : { prefix: "", suffix: "" };
 
             // Create AST for false branch (alternate) as base value
             const altWrappedExpr = wrapExprWithStaticParts(altResolved.exprString, prefix, suffix);

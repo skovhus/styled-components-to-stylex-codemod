@@ -1076,6 +1076,139 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       });
     };
 
+    const sameVariantCondition = (left: string, right: string): boolean =>
+      normalizeTransientWhen(left) === normalizeTransientWhen(right);
+
+    const composeVariantTestInfo = (outer: TestInfo, inner: TestInfo): TestInfo => {
+      const outerProps = outer.allPropNames ?? (outer.propName ? [outer.propName] : []);
+      const innerProps = inner.allPropNames ?? (inner.propName ? [inner.propName] : []);
+      const allPropNames = [...new Set([...outerProps, ...innerProps])];
+      return {
+        when: `${outer.when} && ${inner.when}`,
+        propName: inner.propName ?? outer.propName,
+        ...(allPropNames.length > 0 ? { allPropNames } : {}),
+      };
+    };
+
+    const parseRuntimeConditionalTestInfo = (test: ExpressionKind): TestInfo | null => {
+      const parsed = parseChainedTestInfo(test);
+      if (parsed) {
+        return parsed;
+      }
+      if (test.type === "Identifier" && (test as { name?: string }).name?.startsWith("$")) {
+        const propName = (test as { name: string }).name;
+        return { when: propName, propName };
+      }
+      if (test.type === "UnaryExpression" && (test as { operator?: string }).operator === "!") {
+        const argument = (test as { argument?: ExpressionKind }).argument;
+        if (
+          argument?.type === "Identifier" &&
+          (argument as { name?: string }).name?.startsWith("$")
+        ) {
+          const propName = (argument as { name: string }).name;
+          return { when: `!${propName}`, propName };
+        }
+      }
+      return null;
+    };
+
+    const splitStaticConditionalExpression = (
+      value: unknown,
+    ): {
+      testInfo: TestInfo;
+      consequentValue: string | number;
+      alternateValue: string | number;
+    } | null => {
+      if (!value || typeof value !== "object") {
+        return null;
+      }
+      const node = value as ASTNodeRecord;
+      if (node.type !== "ConditionalExpression") {
+        return null;
+      }
+      const testInfo = parseRuntimeConditionalTestInfo(node.test as ExpressionKind);
+      if (!testInfo) {
+        return null;
+      }
+      const consequentValue = staticValueFromExpression(node.consequent);
+      const alternateValue = staticValueFromExpression(node.alternate);
+      if (
+        (typeof consequentValue !== "string" && typeof consequentValue !== "number") ||
+        (typeof alternateValue !== "string" && typeof alternateValue !== "number")
+      ) {
+        return null;
+      }
+      return { testInfo, consequentValue, alternateValue };
+    };
+
+    const referencesRuntimeStyleValue = (value: unknown): boolean =>
+      !!value &&
+      typeof value === "object" &&
+      referencesRuntimeValue(styleValueToExpression(j, value));
+
+    const splitStaticConditionalRuntimeStyle = (
+      testInfo: TestInfo,
+      style: Record<string, unknown>,
+    ): {
+      baseStyle: Record<string, unknown>;
+      remainingStyle: Record<string, unknown>;
+      variants: Array<{ testInfo: TestInfo; style: Record<string, unknown> }>;
+    } | null => {
+      const baseStyle: Record<string, unknown> = {};
+      const remainingStyle: Record<string, unknown> = {};
+      const variants: Array<{ testInfo: TestInfo; style: Record<string, unknown> }> = [];
+      let splitAny = false;
+
+      for (const [stylexProp, value] of Object.entries(style)) {
+        const split = splitStaticConditionalExpression(value);
+        if (!split) {
+          if (referencesRuntimeStyleValue(value)) {
+            remainingStyle[stylexProp] = value;
+          } else {
+            baseStyle[stylexProp] = value;
+          }
+          continue;
+        }
+
+        splitAny = true;
+        const innerWhen = split.testInfo.when;
+        const outerWhen = testInfo.when;
+        const invertedInnerWhen = invertWhen(innerWhen);
+        if (sameVariantCondition(innerWhen, outerWhen)) {
+          baseStyle[stylexProp] = split.consequentValue;
+        } else if (invertedInnerWhen && sameVariantCondition(invertedInnerWhen, outerWhen)) {
+          baseStyle[stylexProp] = split.alternateValue;
+        } else {
+          baseStyle[stylexProp] = split.alternateValue;
+          variants.push({
+            testInfo: composeVariantTestInfo(testInfo, split.testInfo),
+            style: { [stylexProp]: split.consequentValue },
+          });
+        }
+      }
+
+      return splitAny ? { baseStyle, remainingStyle, variants } : null;
+    };
+
+    const applyStaticConditionalRuntimeStyleVariants = (
+      testInfo: TestInfo,
+      style: Record<string, unknown>,
+    ): Record<string, unknown> | null => {
+      const split = splitStaticConditionalRuntimeStyle(testInfo, style);
+      if (!split) {
+        return null;
+      }
+
+      if (Object.keys(split.baseStyle).length > 0) {
+        applyVariant(testInfo, split.baseStyle);
+      }
+      for (const variant of split.variants) {
+        applyVariant(variant.testInfo, variant.style);
+      }
+      dropAllTestInfoProps(testInfo);
+      return split.remainingStyle;
+    };
+
     const tryApplyRuntimeStyleFunction = (
       testInfo: TestInfo,
       style: Record<string, unknown>,
@@ -1093,6 +1226,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       const dynamicProps = opts?.dynamicProps ?? [];
       if (basePropNames.size === 0 && dynamicProps.length === 0 && !referencesTheme) {
         return false;
+      }
+
+      if (!referencesTheme) {
+        const remainingStyle = applyStaticConditionalRuntimeStyleVariants(testInfo, style);
+        if (remainingStyle) {
+          if (Object.keys(remainingStyle).length === 0 && dynamicProps.length === 0) {
+            return true;
+          }
+          return tryApplyRuntimeStyleFunction(testInfo, remainingStyle, opts);
+        }
       }
 
       if (
