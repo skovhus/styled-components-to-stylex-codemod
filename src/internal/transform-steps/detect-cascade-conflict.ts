@@ -436,16 +436,17 @@ function collectImportedStyledLocalNames(args: {
   const importedStyledNames = new Set<string>();
 
   for (const [localName, importEntry] of importMap) {
-    if (!isRelativeSpecifier(importEntry.source)) {
-      continue;
-    }
     if (!args.resolveModule) {
-      importedStyledNames.add(localName);
+      if (isRelativeSpecifier(importEntry.source)) {
+        importedStyledNames.add(localName);
+      }
       continue;
     }
     const resolvedPath = args.resolveModule(args.sourcePath, importEntry.source);
     if (!resolvedPath) {
-      importedStyledNames.add(localName);
+      if (isRelativeSpecifier(importEntry.source)) {
+        importedStyledNames.add(localName);
+      }
       continue;
     }
     const styledDefinitions =

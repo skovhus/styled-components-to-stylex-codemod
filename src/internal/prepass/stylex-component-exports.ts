@@ -230,6 +230,15 @@ function localBindings(program: AstNode): Array<{ name: string; node: AstNode }>
       continue;
     }
 
+    if (declaration.type === "ClassDeclaration") {
+      const name = nodeName(declaration.id as AstNode | undefined);
+      const body = declaration.body as AstNode | undefined;
+      if (name && body) {
+        bindings.push({ name, node: body });
+      }
+      continue;
+    }
+
     if (declaration.type === "VariableDeclaration") {
       for (const declarator of astArray(declaration.declarations)) {
         const name = nodeName(declarator.id as AstNode | undefined);
