@@ -933,16 +933,42 @@ export function createCssHelperResolver(args: {
             const rawValue = hasStaticParts
               ? `${branchStaticParts.prefix}${resolved.staticValue}${branchStaticParts.suffix}`
               : String(resolved.staticValue);
+            const resolvedStaticStyle: Record<string, unknown> = {};
             for (const mapped of cssDeclarationToStylexDeclarations({
               ...d,
               value: { kind: "static", value: rawValue },
               valueRaw: rawValue,
             })) {
-              (target as any)[mapped.prop] = mergeIntoContext(
+              resolvedStaticStyle[mapped.prop] = mergeIntoContext(
                 cssValueToJs(mapped.value, d.important, mapped.prop),
                 mapped.prop,
                 target as any,
-              ) as any;
+              );
+            }
+            if (d.property?.trim() === "background") {
+              if (
+                "backgroundImage" in resolvedStaticStyle &&
+                !("backgroundColor" in resolvedStaticStyle)
+              ) {
+                resolvedStaticStyle.backgroundColor = mergeIntoContext(
+                  "transparent",
+                  "backgroundColor",
+                  target as any,
+                );
+              }
+              if (
+                "backgroundColor" in resolvedStaticStyle &&
+                !("backgroundImage" in resolvedStaticStyle)
+              ) {
+                resolvedStaticStyle.backgroundImage = mergeIntoContext(
+                  "none",
+                  "backgroundImage",
+                  target as any,
+                );
+              }
+            }
+            for (const [prop, value] of Object.entries(resolvedStaticStyle)) {
+              (target as any)[prop] = value;
             }
             continue;
           }
