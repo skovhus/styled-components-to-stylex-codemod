@@ -913,12 +913,8 @@ export function createCssHelperResolver(args: {
               return true;
             }
           }
-          const atRuleKey = (rule.atRuleStack ?? []).join("\n");
           for (const laterRule of rules.slice(ruleIndex + 1)) {
-            if (
-              (laterRule.selector ?? "") !== (rule.selector ?? "") ||
-              (laterRule.atRuleStack ?? []).join("\n") !== atRuleKey
-            ) {
+            if ((laterRule.selector ?? "") !== (rule.selector ?? "")) {
               continue;
             }
             if (laterRule.declarations.some(declarationOverlaps)) {
