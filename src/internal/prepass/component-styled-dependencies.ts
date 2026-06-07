@@ -164,6 +164,13 @@ function findLocalBindingNode(program: AstNode, localName: string): AstNode | un
       continue;
     }
 
+    if (declaration.type === "ClassDeclaration") {
+      if (nodeName(declaration.id as AstNode | undefined) === localName) {
+        return declaration.body as AstNode | undefined;
+      }
+      continue;
+    }
+
     if (declaration.type === "VariableDeclaration") {
       for (const declarator of astArray(declaration.declarations)) {
         if (nodeName(declarator.id as AstNode | undefined) === localName) {
@@ -270,6 +277,15 @@ function localBindings(program: AstNode): Array<{ name: string; node: AstNode }>
     }
 
     if (declaration.type === "FunctionDeclaration") {
+      const name = nodeName(declaration.id as AstNode | undefined);
+      const body = declaration.body as AstNode | undefined;
+      if (name && body) {
+        bindings.push({ name, node: body });
+      }
+      continue;
+    }
+
+    if (declaration.type === "ClassDeclaration") {
       const name = nodeName(declaration.id as AstNode | undefined);
       const body = declaration.body as AstNode | undefined;
       if (name && body) {
