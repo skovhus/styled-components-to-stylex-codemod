@@ -722,13 +722,16 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           if (staticType) {
             return `  ${k}?: ${staticType};`;
           }
+          const typeScriptPropType = d.typeScriptPropTypes?.get(k);
+          if (typeScriptPropType) {
+            return `  ${k}?: ${typeScriptPropType};`;
+          }
           const attrType = k.startsWith("data-") ? "boolean | string" : "any";
           return `  ${k}?: ${attrType};`;
         });
         return `{\n${lines.join("\n")}\n}`;
       })();
 
-      const sxTypeIntersection = allowSxProp ? `{ ${SX_PROP_TYPE_TEXT} }` : undefined;
       const explicitBaseText = explicit
         ? maybeOmitExternalStylePropsFromExplicitTypeText({
             ctx,
@@ -745,6 +748,10 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
           ctx,
           propsType: d.propsType,
         });
+      const sxTypeIntersectionFor = (...typeTexts: Array<string | undefined>) =>
+        allowSxProp && !typeTexts.some(typeTextIncludesSxProp)
+          ? `{ ${SX_PROP_TYPE_TEXT} }`
+          : undefined;
 
       const typeText = (() => {
         if (!explicit) {
@@ -755,7 +762,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             const combined = emitter.joinIntersection(
               customStyleDrivingPropsTypeText,
               baseTypeText,
-              sxTypeIntersection,
+              sxTypeIntersectionFor(customStyleDrivingPropsTypeText, baseTypeText),
             );
             return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
           }
@@ -765,13 +772,17 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             return emitter.joinIntersection(
               extendBaseTypeText,
               customStyleDrivingPropsTypeText,
-              sxTypeIntersection,
+              sxTypeIntersectionFor(extendBaseTypeText, customStyleDrivingPropsTypeText),
             );
           }
           // Even without rest-forwarding, include custom style-driving props
           // in the type so callers can pass them (e.g. variant/conditional props).
           return customStyleDrivingPropsTypeText !== "{}"
-            ? emitter.joinIntersection(baseTypeText, customStyleDrivingPropsTypeText)
+            ? emitter.joinIntersection(
+                baseTypeText,
+                customStyleDrivingPropsTypeText,
+                sxTypeIntersectionFor(baseTypeText, customStyleDrivingPropsTypeText),
+              )
             : baseTypeText;
         }
         if (useSlimType) {
@@ -783,7 +794,13 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             needsRestForType || explicitTypeIncludesIntrinsicProps
               ? extendBaseTypeText
               : baseTypeText,
-            sxTypeIntersection,
+            sxTypeIntersectionFor(
+              explicitBaseText,
+              customStyleDrivingPropsTypeText,
+              needsRestForType || explicitTypeIncludesIntrinsicProps
+                ? extendBaseTypeText
+                : baseTypeText,
+            ),
           );
           return VOID_TAGS.has(tagName) ? combined : emitter.withChildren(combined);
         }
@@ -792,7 +809,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             explicitBaseText,
             customStyleDrivingPropsTypeText,
             extendBaseTypeText,
-            sxTypeIntersection,
+            sxTypeIntersectionFor(
+              explicitBaseText,
+              customStyleDrivingPropsTypeText,
+              extendBaseTypeText,
+            ),
           );
         }
         if (needsRestForType) {
@@ -811,7 +832,11 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             explicitBaseText,
             customStyleDrivingPropsTypeText,
             extendBaseTypeText,
-            sxTypeIntersection,
+            sxTypeIntersectionFor(
+              explicitBaseText,
+              customStyleDrivingPropsTypeText,
+              extendBaseTypeText,
+            ),
           );
         }
         if (allowClassNameProp || allowStyleProp) {
@@ -917,7 +942,7 @@ export function emitSimpleExportedIntrinsicWrappers(ctx: EmitIntrinsicContext): 
             const inlineBase = emitter.joinIntersection(
               explicitBaseText,
               extendBaseTypeText,
-              sxTypeIntersection,
+              sxTypeIntersectionFor(explicitBaseText, extendBaseTypeText),
             );
             inlineTypeText = withForwardedAsType(
               withSimpleAsPropType(inlineBase, allowAsProp),
@@ -1388,6 +1413,10 @@ function maybeOmitExternalStylePropsFromExplicitTypeText(args: {
     omitted.push('"sx"');
   }
   return omitted.length > 0 ? `Omit<${args.typeText}, ${omitted.join(" | ")}>` : args.typeText;
+}
+
+function typeTextIncludesSxProp(typeText: string | undefined): boolean {
+  return typeText != null && /\bsx\??\s*:/.test(typeText);
 }
 
 function explicitTypeMayContainExternalStyleProps(args: {

@@ -4,9 +4,7 @@ import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { mergedSx } from "./lib/mergedSx";
 
-function OptionsList(
-  props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"ul"> & { sx?: stylex.StyleXStyles },
-) {
+function OptionsList(props: { sx?: stylex.StyleXStyles } & React.ComponentProps<"ul">) {
   const { className, style, sx, ...rest } = props;
   return <ul {...rest} {...mergedSx([styles.optionsList, sx], className, style)} />;
 }

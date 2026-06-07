@@ -1047,10 +1047,7 @@ export class WrapperEmitter {
         return narrowResult;
       }
       if (VOID_TAGS.has(tagName)) {
-        if (allowSxProp) {
-          return this.joinIntersection(intrinsicBaseMaybeOmitted, `{ ${SX_PROP_TYPE_TEXT} }`);
-        }
-        return intrinsicBaseMaybeOmitted;
+        return this.joinIntersection(literal, intrinsicBaseMaybeOmitted);
       }
       return narrowResult;
     }
