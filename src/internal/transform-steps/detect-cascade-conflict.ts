@@ -17,6 +17,7 @@ import {
   buildImportMapFromNodes,
   walkForImportsAndTemplates,
 } from "../prepass/scan-cross-file-selectors.js";
+import { collectStylexExportNames } from "../prepass/stylex-component-exports.js";
 import {
   exportedBindingDependsOnLocalNames,
   localNamesForExport,
@@ -151,7 +152,6 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     if (
-      stylexComponentFiles &&
       componentExportExists(
         stylexComponentFiles,
         styledDefinitions.path,
@@ -315,14 +315,27 @@ function transformedComponentsHasPath(
 }
 
 function componentExportExists(
-  componentsByFile: ReadonlyMap<string, ReadonlySet<string>>,
+  componentsByFile: ReadonlyMap<string, ReadonlySet<string>> | undefined,
   importedPath: string,
   bindingName: string,
 ): boolean {
+  if (!componentsByFile) {
+    return componentExportExistsByDirectScan(importedPath, bindingName);
+  }
   for (const candidate of pathCandidates(importedPath)) {
     const componentNames =
       componentsByFile.get(candidate) ?? componentsByFile.get(toRealPath(candidate));
     if (componentNames?.has(bindingName)) {
+      return true;
+    }
+  }
+  return componentExportExistsByDirectScan(importedPath, bindingName);
+}
+
+function componentExportExistsByDirectScan(importedPath: string, bindingName: string): boolean {
+  for (const candidate of pathCandidates(importedPath)) {
+    const source = tryReadFile(candidate);
+    if (source && collectStylexExportNames(source).has(bindingName)) {
       return true;
     }
   }

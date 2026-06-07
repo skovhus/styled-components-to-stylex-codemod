@@ -1414,6 +1414,7 @@ describe("runPrepass StyleX component exports", () => {
     const defaultWrapperFile = join(tmpDir, "default-wrapper.tsx");
     const defaultFunctionFile = join(tmpDir, "default-function.tsx");
     const classFile = join(tmpDir, "class-component.tsx");
+    const mergedSxFile = join(tmpDir, "merged-sx.tsx");
     writeFileSync(
       mixedFile,
       [
@@ -1505,6 +1506,22 @@ describe("runPrepass StyleX component exports", () => {
       ].join("\n"),
       "utf-8",
     );
+    writeFileSync(
+      mergedSxFile,
+      [
+        'import * as stylex from "@stylexjs/stylex";',
+        'import { mergedSx } from "./lib/mergedSx";',
+        "",
+        "export function Box({ children, className, style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {",
+        "  return <div {...mergedSx(styles.box, className, style)}>{children}</div>;",
+        "}",
+        "",
+        "const styles = stylex.create({",
+        "  box: { backgroundColor: 'papayawhip' },",
+        "});",
+      ].join("\n"),
+      "utf-8",
+    );
 
     const result = await runPrepass({
       filesToTransform: [
@@ -1513,6 +1530,7 @@ describe("runPrepass StyleX component exports", () => {
         defaultWrapperFile,
         defaultFunctionFile,
         classFile,
+        mergedSxFile,
       ],
       consumerPaths: [],
       resolver,
@@ -1531,6 +1549,7 @@ describe("runPrepass StyleX component exports", () => {
       new Set(["default"]),
     );
     expect(result.crossFileInfo.stylexComponentFiles?.get(classFile)).toEqual(new Set(["Box"]));
+    expect(result.crossFileInfo.stylexComponentFiles?.get(mergedSxFile)).toEqual(new Set(["Box"]));
   });
 });
 

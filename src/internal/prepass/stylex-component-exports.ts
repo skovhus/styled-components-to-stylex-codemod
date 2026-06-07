@@ -196,6 +196,10 @@ function nodeUsesStylex(node: AstNode | undefined, stylexUsage: StylexUsage): bo
       found = true;
       return;
     }
+    if (nodeIsMergedSxCall(candidate, stylexUsage.styleObjectNames)) {
+      found = true;
+      return;
+    }
     if (isStylexSxAttribute(candidate, stylexUsage.styleObjectNames)) {
       found = true;
     }
@@ -292,6 +296,17 @@ function nodeIsStylexPropsCall(
     return typeof callee.name === "string" && propsNames.has(callee.name);
   }
   return isStylexMemberCall(callee, namespaceNames, "props");
+}
+
+function nodeIsMergedSxCall(node: AstNode, styleObjectNames: ReadonlySet<string>): boolean {
+  if (styleObjectNames.size === 0 || node.type !== "CallExpression") {
+    return false;
+  }
+  const callee = node.callee as AstNode | undefined;
+  if (callee?.type !== "Identifier" || callee.name !== "mergedSx") {
+    return false;
+  }
+  return astArray(node.arguments).some((arg) => nodeReferencesLocalNames(arg, styleObjectNames));
 }
 
 function isStylexMemberCall(
