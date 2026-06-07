@@ -3452,8 +3452,11 @@ function isColorLikeStylexProp(stylexProp: string): boolean {
 
 function referencesRuntimeValue(value: ExpressionKind): boolean {
   return findInAst(value, (node) => {
-    if (node.type === "Identifier" && (node as { name?: string }).name === "theme") {
-      return true;
+    if (node.type === "Identifier") {
+      const name = (node as { name?: string }).name;
+      if (name === "theme" || name?.startsWith("$")) {
+        return true;
+      }
     }
     return (
       isMemberExpression(node) &&
