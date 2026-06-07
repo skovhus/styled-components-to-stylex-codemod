@@ -1079,7 +1079,16 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const sameVariantCondition = (left: string, right: string): boolean =>
       normalizeTransientWhen(left) === normalizeTransientWhen(right);
 
-    const composeVariantTestInfo = (outer: TestInfo, inner: TestInfo): TestInfo => {
+    const hasParenthesizedLogicalOperator = (when: string): boolean =>
+      /\([^)]*(?:&&|\|\|)[^)]*\)/.test(when);
+
+    const composeVariantTestInfo = (outer: TestInfo, inner: TestInfo): TestInfo | null => {
+      if (
+        hasParenthesizedLogicalOperator(outer.when) ||
+        hasParenthesizedLogicalOperator(inner.when)
+      ) {
+        return null;
+      }
       const outerProps = outer.allPropNames ?? (outer.propName ? [outer.propName] : []);
       const innerProps = inner.allPropNames ?? (inner.propName ? [inner.propName] : []);
       const allPropNames = [...new Set([...outerProps, ...innerProps])];
@@ -1180,8 +1189,12 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
           baseStyle[stylexProp] = split.alternateValue;
         } else {
           baseStyle[stylexProp] = split.alternateValue;
+          const composedTestInfo = composeVariantTestInfo(testInfo, split.testInfo);
+          if (!composedTestInfo) {
+            return null;
+          }
           variants.push({
-            testInfo: composeVariantTestInfo(testInfo, split.testInfo),
+            testInfo: composedTestInfo,
             style: { [stylexProp]: split.consequentValue },
           });
         }
