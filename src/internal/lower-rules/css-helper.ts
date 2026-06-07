@@ -813,7 +813,11 @@ export function createCssHelperResolver(args: {
             if (d.property?.trim() === "background") {
               if ("backgroundImage" in branchStyle && !("backgroundColor" in branchStyle)) {
                 branchStyle.backgroundColor = mergeIntoContext(
-                  "transparent",
+                  cssValueToJs(
+                    { kind: "static", value: "transparent" },
+                    d.important,
+                    "backgroundColor",
+                  ),
                   "backgroundColor",
                   target as any,
                 );
@@ -829,7 +833,11 @@ export function createCssHelperResolver(args: {
                   ? rawValue.trim()
                   : "none";
                 branchStyle.backgroundImage = mergeIntoContext(
-                  imageResetValue,
+                  cssValueToJs(
+                    { kind: "static", value: imageResetValue },
+                    d.important,
+                    "backgroundImage",
+                  ),
                   "backgroundImage",
                   target as any,
                 );
@@ -1002,7 +1010,11 @@ export function createCssHelperResolver(args: {
                 !("backgroundColor" in resolvedStaticStyle)
               ) {
                 resolvedStaticStyle.backgroundColor = mergeIntoContext(
-                  "transparent",
+                  cssValueToJs(
+                    { kind: "static", value: "transparent" },
+                    d.important,
+                    "backgroundColor",
+                  ),
                   "backgroundColor",
                   target as any,
                 );
@@ -1021,7 +1033,11 @@ export function createCssHelperResolver(args: {
                   ? rawValue.trim()
                   : "none";
                 resolvedStaticStyle.backgroundImage = mergeIntoContext(
-                  imageResetValue,
+                  cssValueToJs(
+                    { kind: "static", value: imageResetValue },
+                    d.important,
+                    "backgroundImage",
+                  ),
                   "backgroundImage",
                   target as any,
                 );
