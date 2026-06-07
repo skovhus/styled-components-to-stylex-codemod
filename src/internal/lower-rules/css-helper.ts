@@ -69,7 +69,11 @@ type CssHelperTemplateOptions = {
 
 type ValuePart = { kind: string; value?: string; slotId?: number };
 type ValueSlotPart = ValuePart & { kind: "slot"; slotId: number };
-type StaticSlotResolution = { ast: ExpressionKind; exprString: string };
+type StaticSlotResolution = {
+  ast: ExpressionKind;
+  exprString: string;
+  staticValue?: string | number;
+};
 type TernaryBranchResolution = StaticSlotResolution & { staticValue?: string | number };
 
 /**
@@ -174,16 +178,25 @@ export function createCssHelperResolver(args: {
   const resolveHelperExprToAst = (
     expr: any,
     paramName: string | null,
-  ): { ast: any; exprString: string } | null => {
+  ): StaticSlotResolution | null => {
     if (!expr || typeof expr !== "object") {
       return null;
     }
-    if (
-      expr.type === "StringLiteral" ||
-      expr.type === "NumericLiteral" ||
-      expr.type === "Literal"
-    ) {
-      return { ast: expr, exprString: JSON.stringify(expr.value) };
+    if (expr.type === "StringLiteral") {
+      return { ast: expr, exprString: JSON.stringify(expr.value), staticValue: expr.value };
+    }
+    if (expr.type === "NumericLiteral") {
+      return { ast: expr, exprString: String(expr.value), staticValue: expr.value };
+    }
+    if (expr.type === "Literal") {
+      const value = expr.value;
+      if (typeof value === "string") {
+        return { ast: expr, exprString: JSON.stringify(value), staticValue: value };
+      }
+      if (typeof value === "number") {
+        return { ast: expr, exprString: String(value), staticValue: value };
+      }
+      return { ast: expr, exprString: JSON.stringify(value) };
     }
     const path =
       paramName && isMemberExpression(expr)
@@ -916,6 +929,23 @@ export function createCssHelperResolver(args: {
           );
         }
         if (resolved) {
+          if (resolved.staticValue !== undefined) {
+            const rawValue = hasStaticParts
+              ? `${branchStaticParts.prefix}${resolved.staticValue}${branchStaticParts.suffix}`
+              : String(resolved.staticValue);
+            for (const mapped of cssDeclarationToStylexDeclarations({
+              ...d,
+              value: { kind: "static", value: rawValue },
+              valueRaw: rawValue,
+            })) {
+              (target as any)[mapped.prop] = mergeIntoContext(
+                cssValueToJs(mapped.value, d.important, mapped.prop),
+                mapped.prop,
+                target as any,
+              ) as any;
+            }
+            continue;
+          }
           if (hasStaticParts) {
             const { prefix, suffix } = extractPrefixSuffix(parts);
             const borderParts = parseInterpolatedBorderStaticParts({
