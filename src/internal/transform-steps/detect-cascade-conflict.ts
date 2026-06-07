@@ -12,6 +12,10 @@ import {
   getReExportedSourceName,
   resolveBarrelReExportBinding,
 } from "../prepass/extract-external-interface.js";
+import {
+  exportedBindingDependsOnLocalNames,
+  localNamesForExport,
+} from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
 
@@ -29,6 +33,7 @@ interface ReExportPath {
 
 interface StyledDefinitionFile {
   path: string;
+  names: Set<string>;
 }
 
 export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
@@ -43,7 +48,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
   }
 
   const styledDefFiles = ctx.options.crossFileInfo?.styledDefFiles;
-  const transformedFiles = ctx.options.crossFileInfo?.transformedFiles;
+  const transformedComponents = ctx.options.crossFileInfo?.transformedComponents;
   // In partial-migration mode, `markPartialImportedComponentRoots` in lower-rules
   // marks every `styled(ImportedComponent)` decl as skipped before lowering. Honor
   // the same policy here so the cascade-conflict check doesn't bail the whole file
@@ -87,9 +92,13 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     };
 
     if (
-      transformedFiles &&
-      (pathSetContainsWithExtensionFallback(importedPath, transformedFiles) ||
-        pathSetContainsWithExtensionFallback(definition.path, transformedFiles))
+      transformedComponents &&
+      transformedComponentExists(
+        transformedComponents,
+        definition.path,
+        definition.importedName,
+        definition.importedName === "default",
+      )
     ) {
       continue;
     }
@@ -118,6 +127,20 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       scanFileForStyledDefs(definition.path, definition.importedName, ctx.options.resolveModule);
 
     if (!styledDefinitions) {
+      continue;
+    }
+
+    if (
+      transformedComponents &&
+      transformedComponentsHasPath(transformedComponents, styledDefinitions.path) &&
+      !bindingDependsOnStyledDefinitions(
+        {
+          ...styledDefinitions,
+          names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
+        },
+        definition.importedName,
+      )
+    ) {
       continue;
     }
 
@@ -243,30 +266,93 @@ function resolveStyledDefFile(
 ): StyledDefinitionFile | undefined {
   const exact = styledDefFiles.get(importedPath);
   if (exact) {
-    return { path: importedPath };
+    return { path: importedPath, names: exact };
   }
   for (const ext of EXTENSIONS) {
     const pathWithExtension = importedPath + ext;
     const withExt = styledDefFiles.get(pathWithExtension);
     if (withExt) {
-      return { path: pathWithExtension };
+      return { path: pathWithExtension, names: withExt };
     }
   }
   return undefined;
 }
 
-function pathSetContainsWithExtensionFallback(filePath: string, paths: Set<string>): boolean {
-  for (const candidate of pathCandidates(filePath)) {
-    if (paths.has(candidate) || paths.has(toRealPath(candidate))) {
+function pathCandidates(filePath: string): string[] {
+  const resolved = pathResolve(filePath);
+  return [resolved, ...EXTENSIONS.map((ext) => resolved + ext)];
+}
+
+function transformedComponentsHasPath(
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+  filePath: string,
+): boolean {
+  return transformedNamesForPath(transformedComponents, filePath) !== undefined;
+}
+
+function transformedComponentExists(
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+  importedPath: string,
+  bindingName: string,
+  allowDefaultFallback: boolean,
+): boolean {
+  for (const candidate of pathCandidates(importedPath)) {
+    const transformedNames =
+      transformedComponents.get(candidate) ?? transformedComponents.get(toRealPath(candidate));
+    if (!transformedNames) {
+      continue;
+    }
+    if (transformedNames.has(bindingName)) {
       return true;
+    }
+    const source = tryReadFile(candidate);
+    if (!source) {
+      continue;
+    }
+    for (const localName of localNamesForExport(source, bindingName, allowDefaultFallback)) {
+      if (transformedNames.has(localName)) {
+        return true;
+      }
     }
   }
   return false;
 }
 
-function pathCandidates(filePath: string): string[] {
-  const resolved = pathResolve(filePath);
-  return [resolved, ...EXTENSIONS.map((ext) => resolved + ext)];
+function unconvertedStyledDefinitionNames(
+  styledDefinitions: StyledDefinitionFile,
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+): Set<string> {
+  const transformedNames = transformedNamesForPath(transformedComponents, styledDefinitions.path);
+  return new Set([...styledDefinitions.names].filter((name) => !transformedNames?.has(name)));
+}
+
+function transformedNamesForPath(
+  transformedComponents: ReadonlyMap<string, ReadonlySet<string>>,
+  filePath: string,
+): ReadonlySet<string> | undefined {
+  for (const candidate of pathCandidates(filePath)) {
+    const transformedNames =
+      transformedComponents.get(candidate) ?? transformedComponents.get(toRealPath(candidate));
+    if (transformedNames) {
+      return transformedNames;
+    }
+  }
+  return undefined;
+}
+
+function bindingDependsOnStyledDefinitions(
+  styledDefinitions: StyledDefinitionFile,
+  bindingName: string,
+): boolean {
+  const source = tryReadFile(styledDefinitions.path);
+  return source
+    ? exportedBindingDependsOnLocalNames({
+        source,
+        exportedName: bindingName,
+        includeDefault: bindingName === "default",
+        localNames: styledDefinitions.names,
+      })
+    : true;
 }
 
 /**
@@ -297,7 +383,7 @@ function scanFileForStyledDefs(
   }
 
   if (names.size > 0) {
-    return { path: file.path };
+    return { path: file.path, names };
   }
 
   if (!importedName) {

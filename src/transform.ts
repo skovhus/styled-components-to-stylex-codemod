@@ -121,6 +121,12 @@ export default function transform(file: FileInfo, api: API, options: Options): s
       if (transformedFiles) {
         transformedFiles.add(toRealPath(file.path));
       }
+      const transformedComponents = (options as Record<string, unknown>).transformedComponents as
+        | Map<string, Set<string>>
+        | undefined;
+      if (transformedComponents && result.transformedComponentNames) {
+        transformedComponents.set(toRealPath(file.path), new Set(result.transformedComponentNames));
+      }
     }
 
     return result.code;
@@ -201,6 +207,7 @@ interface GlobalPrepassResult {
   styledDefFiles?: Map<string, Set<string>>;
   globalLeafKeys?: Set<string>;
   transformedFiles?: Set<string>;
+  transformedComponents?: Map<string, Set<string>>;
   typeScriptMetadata?: TypeScriptPrepassMetadata;
 }
 
@@ -235,6 +242,7 @@ function extractCrossFileInfoForFile(
   const hasPropUsage = propUsageByComponent && propUsageByComponent.size > 0;
   const hasGlobalLeafKeys = prepass.globalLeafKeys && prepass.globalLeafKeys.size > 0;
   const hasTransformedFiles = prepass.transformedFiles !== undefined;
+  const hasTransformedComponents = prepass.transformedComponents !== undefined;
   const hasTypeScriptMetadata =
     prepass.typeScriptMetadata !== undefined && prepass.typeScriptMetadata.files.length > 0;
 
@@ -245,6 +253,7 @@ function extractCrossFileInfoForFile(
     !hasStyledDefFiles &&
     !hasGlobalLeafKeys &&
     !hasTransformedFiles &&
+    !hasTransformedComponents &&
     !hasTypeScriptMetadata
   ) {
     return options;
@@ -257,6 +266,7 @@ function extractCrossFileInfoForFile(
     styledDefFiles: prepass.styledDefFiles,
     globalLeafKeys: prepass.globalLeafKeys,
     transformedFiles: prepass.transformedFiles,
+    transformedComponents: prepass.transformedComponents,
     typeScriptMetadata: prepass.typeScriptMetadata,
   };
 

@@ -482,11 +482,13 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
   // Adapter hooks and cascade-conflict checks consult this live set so same-run
   // wrappers only assume a base accepts StyleX props after the base actually converted.
   const transformedFiles = new Set<string>();
+  const transformedComponents = new Map<string, Set<string>>();
   const transformedFileSources = new Map<string, string>();
 
   const crossFilePrepassResult = {
     ...prepassResult.crossFileInfo,
     transformedFiles,
+    transformedComponents,
     typeScriptMetadata: prepassResult.typeScriptMetadata,
   };
 
@@ -692,6 +694,7 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
     sidecarFiles,
     bridgeResults,
     transformedFiles,
+    transformedComponents,
     transformedFileSources,
     transientPropRenames,
     allowPartialMigration: options.allowPartialMigration ?? (leavesOnly ? true : false),
@@ -715,16 +718,19 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
       sidecarFiles: new Map(),
       bridgeResults: new Map(),
       transformedFiles: new Set(),
+      transformedComponents: new Map(),
       transformedFileSources: new Map(),
       transientPropRenames: new Map(),
       crossFilePrepassResult: {
         ...crossFilePrepassResult,
         transformedFiles: new Set(),
+        transformedComponents: new Map(),
       },
       silent: true,
       isolateFiles: true,
       createIsolatedOptions(filePath) {
         const isolatedTransformedFiles = new Set<string>();
+        const isolatedTransformedComponents = new Map<string, Set<string>>();
         return {
           ...runnerOptions,
           dry: true,
@@ -732,12 +738,14 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
           sidecarFiles: new Map(),
           bridgeResults: new Map(),
           transformedFiles: isolatedTransformedFiles,
+          transformedComponents: isolatedTransformedComponents,
           transformedFileSources: new Map(),
           transientPropRenames: new Map(),
           crossFilePrepassResult: createStandalonePrepassResult(
             crossFilePrepassResult,
             filePath,
             isolatedTransformedFiles,
+            isolatedTransformedComponents,
           ),
           silent: true,
           isolateFiles: true,
@@ -992,6 +1000,7 @@ type TransformFunction = (
 
 type CrossFilePrepassResult = CrossFileInfo & {
   transformedFiles?: Set<string>;
+  transformedComponents?: Map<string, Set<string>>;
   typeScriptMetadata?: TypeScriptPrepassMetadata;
 };
 
@@ -1001,6 +1010,7 @@ type SequentialRunOptions = import("./internal/transform-types.js").TransformOpt
   print: boolean;
   silent: boolean;
   transformedFiles: Set<string>;
+  transformedComponents: Map<string, Set<string>>;
   transformedFileSources: Map<string, string>;
   crossFilePrepassResult?: CrossFilePrepassResult;
   isolateFiles?: boolean;
@@ -1025,6 +1035,7 @@ function createStandalonePrepassResult(
   prepass: CrossFilePrepassResult,
   filePath: string,
   transformedFiles: Set<string>,
+  transformedComponents: Map<string, Set<string>>,
 ): CrossFilePrepassResult {
   const standaloneFile = toRealPath(resolve(filePath));
   const selectorUsages = new Map<string, CrossFileSelectorUsage[]>();
@@ -1057,6 +1068,7 @@ function createStandalonePrepassResult(
     componentsNeedingGlobalSelectorBridge,
     globalLeafKeys: getStandaloneGlobalLeafKeys(prepass.globalLeafKeys, standaloneFile),
     transformedFiles,
+    transformedComponents,
   };
 }
 
@@ -1117,8 +1129,10 @@ async function runTransformSequentially(
     const api = fileOptions.isolateFiles === true ? createApi() : sharedApi;
     if (options.isolateFiles === true) {
       fileOptions.transformedFiles.clear();
+      fileOptions.transformedComponents.clear();
       fileOptions.transformedFileSources.clear();
       fileOptions.crossFilePrepassResult?.transformedFiles?.clear();
+      fileOptions.crossFilePrepassResult?.transformedComponents?.clear();
     }
 
     let source: string;

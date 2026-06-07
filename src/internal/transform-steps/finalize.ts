@@ -54,5 +54,13 @@ export function finalize(ctx: TransformContext): TransformResult {
     sidecarFiles: ctx.sidecarFiles,
     bridgeResults: ctx.bridgeResults,
     transientPropRenames: ctx.transientPropRenames,
+    transformedComponentNames: getTransformedComponentNames(ctx),
   };
+}
+
+function getTransformedComponentNames(ctx: TransformContext): string[] | undefined {
+  const names = ctx.styledDecls
+    ?.filter((decl) => !decl.skipTransform && !decl.isCssHelper && !decl.isDirectJsxResolution)
+    .map((decl) => decl.localName);
+  return names && names.length > 0 ? names : undefined;
 }
