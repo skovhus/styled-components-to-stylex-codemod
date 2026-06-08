@@ -68,6 +68,7 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
   const resolveSelector = obj?.resolveSelector;
   const resolveBaseComponent = obj?.resolveBaseComponent;
   const externalInterface = obj?.externalInterface;
+  const usePhysicalProperties = obj?.usePhysicalProperties;
 
   if (!candidate || typeof candidate !== "object") {
     throw new Error(
@@ -177,6 +178,18 @@ function assertAdapterShape(candidate: unknown, where: string, allowAutoExtIf: b
       [
         `${where}: ${expected}`,
         `Received: externalInterface=${describeValue(externalInterface)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (typeof usePhysicalProperties !== "boolean") {
+    throw new Error(
+      [
+        `${where}: adapter.usePhysicalProperties must be explicitly set to true or false.`,
+        `Received: usePhysicalProperties=${describeValue(usePhysicalProperties)}`,
+        "",
+        "Set `usePhysicalProperties: true` to emit physical padding/margin longhands,",
+        "or `usePhysicalProperties: false` to emit logical block/inline properties.",
       ].join("\n"),
     );
   }

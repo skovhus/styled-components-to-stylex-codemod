@@ -213,6 +213,37 @@ function FiniteCssBlock(props: FiniteCssBlockProps) {
   );
 }
 
+type ConditionalLogicalPaddingProps = React.PropsWithChildren<{
+  active?: boolean;
+}>;
+
+function ConditionalLogicalPadding(props: ConditionalLogicalPaddingProps) {
+  const { children, active } = props;
+  return (
+    <span sx={[styles.conditionalLogicalPadding, active && styles.conditionalLogicalPaddingActive]}>
+      {children}
+    </span>
+  );
+}
+
+type ConditionalLogicalSidePaddingProps = React.PropsWithChildren<{
+  active?: boolean;
+}>;
+
+function ConditionalLogicalSidePadding(props: ConditionalLogicalSidePaddingProps) {
+  const { children, active } = props;
+  return (
+    <span
+      sx={[
+        styles.conditionalLogicalSidePadding,
+        active && styles.conditionalLogicalSidePaddingActive,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -241,6 +272,8 @@ export const App = () => (
       Visible finite block
     </FiniteCssBlock>
     <FiniteCssBlock enabled>Hidden finite block</FiniteCssBlock>
+    <ConditionalLogicalPadding active>Logical padding hover</ConditionalLogicalPadding>
+    <ConditionalLogicalSidePadding active>Logical side padding</ConditionalLogicalSidePadding>
   </div>
 );
 
@@ -505,5 +538,40 @@ const styles = stylex.create({
   finiteCssBlockEnabledNotThemeIsDark: {
     marginBlock: 4,
     marginInline: 4,
+  },
+  conditionalLogicalPadding: {
+    display: "inline-flex",
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingRight: 8,
+    paddingLeft: 8,
+    backgroundColor: "#ecfeff",
+  },
+  conditionalLogicalPaddingActive: {
+    paddingTop: {
+      default: 4,
+      ":hover": 4,
+    },
+    paddingBottom: {
+      default: 4,
+      ":hover": 4,
+    },
+    paddingRight: {
+      default: 8,
+      ":hover": 3,
+    },
+    paddingLeft: {
+      default: 8,
+      ":hover": 2,
+    },
+  },
+  conditionalLogicalSidePadding: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    backgroundColor: "#fdf2f8",
+  },
+  conditionalLogicalSidePaddingActive: {
+    paddingInlineStart: 2,
   },
 });

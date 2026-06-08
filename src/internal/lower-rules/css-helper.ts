@@ -47,6 +47,7 @@ import {
   isMemberExpression,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  setStyleObjectValue,
   tryResolveAdapterCall,
   type AdapterCallResolver,
   type ResolvedMedia,
@@ -611,7 +612,11 @@ export function createCssHelperResolver(args: {
               )
             ) {
               for (const [prop, value] of Object.entries(expanded)) {
-                (target as any)[prop] = mergeIntoContext(value, prop, target as any) as any;
+                setStyleObjectValue(
+                  target as Record<string, unknown>,
+                  prop,
+                  mergeIntoContext(value, prop, target as any),
+                );
               }
               continue;
             }
@@ -626,11 +631,11 @@ export function createCssHelperResolver(args: {
                 leadingLine: buildSpecificityStrippedComment(rawSelector, mapped.prop),
               });
             }
-            (target as any)[mapped.prop] = mergeIntoContext(
-              value,
+            setStyleObjectValue(
+              target as Record<string, unknown>,
               mapped.prop,
-              target as any,
-            ) as any;
+              mergeIntoContext(value, mapped.prop, target as any),
+            );
           }
           continue;
         }
@@ -658,7 +663,11 @@ export function createCssHelperResolver(args: {
           });
           if (expanded) {
             for (const [prop, value] of Object.entries(expanded)) {
-              (target as any)[prop] = mergeIntoContext(value, prop, target as any) as any;
+              setStyleObjectValue(
+                target as Record<string, unknown>,
+                prop,
+                mergeIntoContext(value, prop, target as any),
+              );
             }
             continue;
           }
@@ -710,11 +719,11 @@ export function createCssHelperResolver(args: {
             );
           }
           for (const mapped of mappedDecls) {
-            (target as any)[mapped.prop] = mergeIntoContext(
-              valueAst,
+            setStyleObjectValue(
+              target as Record<string, unknown>,
               mapped.prop,
-              target as any,
-            ) as any;
+              mergeIntoContext(valueAst, mapped.prop, target as any),
+            );
           }
           continue;
         }
@@ -754,18 +763,18 @@ export function createCssHelperResolver(args: {
                 );
                 const templateAst = parseExpr(wrappedExpr);
                 if (templateAst) {
-                  (target as any)[mapped.prop] = mergeIntoContext(
-                    templateAst,
+                  setStyleObjectValue(
+                    target as Record<string, unknown>,
                     mapped.prop,
-                    target as any,
-                  ) as any;
+                    mergeIntoContext(templateAst, mapped.prop, target as any),
+                  );
                 }
               } else {
-                (target as any)[mapped.prop] = mergeIntoContext(
-                  callResolved.ast,
+                setStyleObjectValue(
+                  target as Record<string, unknown>,
                   mapped.prop,
-                  target as any,
-                ) as any;
+                  mergeIntoContext(callResolved.ast, mapped.prop, target as any),
+                );
               }
             }
             continue;
@@ -804,10 +813,14 @@ export function createCssHelperResolver(args: {
               value: { kind: "static", value: rawValue },
               valueRaw: rawValue,
             })) {
-              branchStyle[mapped.prop] = mergeIntoContext(
-                cssValueToJs(mapped.value, d.important, mapped.prop),
+              setStyleObjectValue(
+                branchStyle,
                 mapped.prop,
-                target as any,
+                mergeIntoContext(
+                  cssValueToJs(mapped.value, d.important, mapped.prop),
+                  mapped.prop,
+                  target as any,
+                ),
               );
             }
             const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
@@ -876,7 +889,11 @@ export function createCssHelperResolver(args: {
             return null;
           }
           for (const mapped of mappedDecls) {
-            branchStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
+            setStyleObjectValue(
+              branchStyle,
+              mapped.prop,
+              mergeIntoContext(ast, mapped.prop, target as any),
+            );
           }
           return branchStyle;
         };
@@ -1011,10 +1028,14 @@ export function createCssHelperResolver(args: {
               value: { kind: "static", value: rawValue },
               valueRaw: rawValue,
             })) {
-              resolvedStaticStyle[mapped.prop] = mergeIntoContext(
-                cssValueToJs(mapped.value, d.important, mapped.prop),
+              setStyleObjectValue(
+                resolvedStaticStyle,
                 mapped.prop,
-                target as any,
+                mergeIntoContext(
+                  cssValueToJs(mapped.value, d.important, mapped.prop),
+                  mapped.prop,
+                  target as any,
+                ),
               );
             }
             const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
@@ -1073,7 +1094,7 @@ export function createCssHelperResolver(args: {
               }
             }
             for (const [prop, value] of Object.entries(resolvedStaticStyle)) {
-              (target as any)[prop] = value;
+              setStyleObjectValue(target as Record<string, unknown>, prop, value);
             }
             continue;
           }
@@ -1086,24 +1107,24 @@ export function createCssHelperResolver(args: {
             });
             if (borderParts) {
               if (borderParts.width) {
-                (target as any)[borderParts.widthProp] = mergeIntoContext(
-                  borderParts.width,
+                setStyleObjectValue(
+                  target as Record<string, unknown>,
                   borderParts.widthProp,
-                  target as any,
-                ) as any;
+                  mergeIntoContext(borderParts.width, borderParts.widthProp, target as any),
+                );
               }
               if (borderParts.style) {
-                (target as any)[borderParts.styleProp] = mergeIntoContext(
-                  borderParts.style,
+                setStyleObjectValue(
+                  target as Record<string, unknown>,
                   borderParts.styleProp,
-                  target as any,
-                ) as any;
+                  mergeIntoContext(borderParts.style, borderParts.styleProp, target as any),
+                );
               }
-              (target as any)[borderParts.colorProp] = mergeIntoContext(
-                resolved.ast,
+              setStyleObjectValue(
+                target as Record<string, unknown>,
                 borderParts.colorProp,
-                target as any,
-              ) as any;
+                mergeIntoContext(resolved.ast, borderParts.colorProp, target as any),
+              );
               continue;
             }
             // Create a template literal string using the shared helper (same logic as top-level)
@@ -1111,11 +1132,11 @@ export function createCssHelperResolver(args: {
             const templateAst = parseExpr(wrappedExpr);
             if (templateAst) {
               for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoContext(
-                  templateAst,
+                setStyleObjectValue(
+                  target as Record<string, unknown>,
                   mapped.prop,
-                  target as any,
-                ) as any;
+                  mergeIntoContext(templateAst, mapped.prop, target as any),
+                );
               }
               continue;
             }
@@ -1127,11 +1148,11 @@ export function createCssHelperResolver(args: {
             );
           } else {
             for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-              (target as any)[mapped.prop] = mergeIntoContext(
-                resolved.ast,
+              setStyleObjectValue(
+                target as Record<string, unknown>,
                 mapped.prop,
-                target as any,
-              ) as any;
+                mergeIntoContext(resolved.ast, mapped.prop, target as any),
+              );
             }
             continue;
           }
@@ -1168,7 +1189,7 @@ export function createCssHelperResolver(args: {
               }
               if (haveSameStyleProps(altStyle, variantStyle)) {
                 for (const [prop, value] of Object.entries(altStyle)) {
-                  (target as any)[prop] = value;
+                  setStyleObjectValue(target as Record<string, unknown>, prop, value);
                 }
                 conditionalVariants.push({
                   when: propName,

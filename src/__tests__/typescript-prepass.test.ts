@@ -748,6 +748,7 @@ describe("TypeScript compiler prepass", () => {
         externalInterface: () => ({ styles: false, as: false, ref: false }),
         styleMerger: null,
         useSxProp: false,
+        usePhysicalProperties: true,
       },
       dryRun: true,
       silent: true,

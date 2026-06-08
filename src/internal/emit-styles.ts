@@ -795,6 +795,91 @@ function isSimpleStyleValue(value: unknown): value is string | number {
   return typeof value === "string" || typeof value === "number";
 }
 
+function isExpandableLogicalValue(
+  value: unknown,
+): value is string | number | Record<string, unknown> {
+  return (
+    isSimpleStyleValue(value) ||
+    (!!value && typeof value === "object" && !Array.isArray(value) && !isAstNode(value))
+  );
+}
+
+function cloneStyleValue(value: unknown): unknown {
+  return isStyleValueMap(value) ? { ...value } : value;
+}
+
+function isStyleValueMap(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value) && !isAstNode(value);
+}
+
+function mergeStyleValuesBySourceOrder(earlierValue: unknown, laterValue: unknown): unknown {
+  if (isStyleValueMap(laterValue)) {
+    const merged: Record<string, unknown> = isStyleValueMap(earlierValue)
+      ? { ...earlierValue }
+      : { default: earlierValue };
+
+    for (const [key, value] of Object.entries(laterValue)) {
+      if (
+        key === "default" &&
+        (value === null || value === undefined) &&
+        merged.default !== null &&
+        merged.default !== undefined
+      ) {
+        continue;
+      }
+      merged[key] = value;
+    }
+    return merged;
+  }
+
+  if (isStyleValueMap(earlierValue)) {
+    return { ...earlierValue, default: laterValue };
+  }
+
+  return cloneStyleValue(laterValue);
+}
+
+function mergeLogicalPhysicalValues(args: {
+  logicalValue: unknown;
+  physicalValue: unknown;
+  logicalIndex: number;
+  physicalIndex: number;
+  basePhysicalValue: unknown;
+}): unknown {
+  const { logicalValue, physicalValue, logicalIndex, physicalIndex, basePhysicalValue } = args;
+  if (physicalIndex < 0) {
+    if (basePhysicalValue !== undefined) {
+      return mergeStyleValuesBySourceOrder(basePhysicalValue, logicalValue);
+    }
+    return cloneStyleValue(logicalValue);
+  }
+  if (logicalIndex > physicalIndex) {
+    return mergeStyleValuesBySourceOrder(physicalValue, logicalValue);
+  }
+  return mergeStyleValuesBySourceOrder(logicalValue, physicalValue);
+}
+
+function getBasePhysicalValue(
+  currentKey: string,
+  baseStyleKey: string,
+  prop: string,
+  resolvedStyleObjects: Map<string, unknown>,
+): unknown {
+  if (currentKey === baseStyleKey) {
+    return undefined;
+  }
+  const baseStyle = resolvedStyleObjects.get(baseStyleKey);
+  if (!isStyleValueMap(baseStyle)) {
+    return undefined;
+  }
+  const baseValue = baseStyle[prop];
+  if (!isStyleValueMap(baseValue)) {
+    return baseValue;
+  }
+  const defaultValue = baseValue.default;
+  return defaultValue === null || defaultValue === undefined ? undefined : defaultValue;
+}
+
 /**
  * Replace properties in a style object in-place, preserving property ordering.
  * Each key in `replacements` maps a property name to its replacement entries.
@@ -953,7 +1038,7 @@ function normalizeShorthandLonghandConflicts(
     // These generate independent atomic classes that don't reliably override each other.
     // Runs independently of phase 1 since CSS lowering may have already expanded shorthands.
     for (const longhands of Object.values(SHORTHAND_LONGHANDS)) {
-      normalizeLogicalPhysicalConflicts(longhands, propsByKey, resolvedStyleObjects);
+      normalizeLogicalPhysicalConflicts(longhands, propsByKey, resolvedStyleObjects, decl.styleKey);
     }
   }
 }
@@ -1004,12 +1089,14 @@ function normalizeLogicalPhysicalConflicts(
   longhands: { physical: string[]; logical: string[] },
   propsByKey: Map<string, Set<string>>,
   resolvedStyleObjects: Map<string, unknown>,
+  baseStyleKey: string,
 ): void {
+  const logicalProps = getLogicalPropsForPhysicalFamily(longhands.physical);
   const hasPhysical = [...propsByKey.values()].some((props) =>
     longhands.physical.some((l) => props.has(l)),
   );
   const logicalKeys = [...propsByKey.entries()]
-    .filter(([, props]) => longhands.logical.some((l) => props.has(l)))
+    .filter(([, props]) => logicalProps.some((l) => props.has(l)))
     .map(([key]) => key);
 
   if (!hasPhysical || logicalKeys.length === 0) {
@@ -1021,17 +1108,39 @@ function normalizeLogicalPhysicalConflicts(
     if (!style) {
       continue;
     }
+    const entries = Object.entries(style);
     const replacements = new Map<string, Array<{ prop: string; value: unknown }>>();
-    for (const logicalProp of longhands.logical) {
+    for (const logicalProp of logicalProps) {
       const value = style[logicalProp];
-      if (value == null || !isSimpleStyleValue(value)) {
+      if (value == null || !isExpandableLogicalValue(value)) {
         continue;
       }
+      const logicalIndex = entries.findIndex(([entryKey]) => entryKey === logicalProp);
       const physicalProps = LOGICAL_TO_PHYSICAL[logicalProp];
       if (physicalProps) {
         replacements.set(
           logicalProp,
-          physicalProps.map((p) => ({ prop: p, value })),
+          physicalProps.map((prop) => {
+            const physicalIndex = entries.findIndex(([entryKey]) => entryKey === prop);
+            if (physicalIndex >= 0) {
+              replacements.set(prop, []);
+            }
+            return {
+              prop,
+              value: mergeLogicalPhysicalValues({
+                logicalValue: value,
+                physicalValue: style[prop],
+                logicalIndex,
+                physicalIndex,
+                basePhysicalValue: getBasePhysicalValue(
+                  key,
+                  baseStyleKey,
+                  prop,
+                  resolvedStyleObjects,
+                ),
+              }),
+            };
+          }),
         );
       }
     }
@@ -1039,6 +1148,13 @@ function normalizeLogicalPhysicalConflicts(
       replacePropsInPlace(style, replacements);
     }
   }
+}
+
+function getLogicalPropsForPhysicalFamily(physicalProps: string[]): string[] {
+  const physicalSet = new Set(physicalProps);
+  return Object.entries(LOGICAL_TO_PHYSICAL)
+    .filter(([, mappedPhysicalProps]) => mappedPhysicalProps.some((prop) => physicalSet.has(prop)))
+    .map(([logicalProp]) => logicalProp);
 }
 
 /**

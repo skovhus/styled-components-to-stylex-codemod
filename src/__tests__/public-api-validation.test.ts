@@ -37,6 +37,7 @@ function makeMinimalAdapter() {
     resolveCall: () => null,
     resolveSelector: () => undefined,
     externalInterface: () => ({ allowClassNameProp: false, allowStyleProp: false }),
+    usePhysicalProperties: true,
   };
 }
 
@@ -74,6 +75,20 @@ describe("assertValidAdapter", () => {
     expect(() =>
       assertValidAdapter({ ...makeMinimalAdapter(), externalInterface: "auto" }, "test"),
     ).toThrow(/externalInterface must be a function/);
+  });
+
+  it("requires usePhysicalProperties to be explicit", () => {
+    const adapter: Record<string, unknown> = { ...makeMinimalAdapter() };
+    delete adapter.usePhysicalProperties;
+    expect(() => assertValidAdapter(adapter, "test")).toThrow(
+      /usePhysicalProperties must be explicitly set/,
+    );
+  });
+
+  it("rejects non-boolean usePhysicalProperties", () => {
+    expect(() =>
+      assertValidAdapter({ ...makeMinimalAdapter(), usePhysicalProperties: "true" }, "test"),
+    ).toThrow(/usePhysicalProperties must be explicitly set/);
   });
 
   it("validates styleMerger shape", () => {

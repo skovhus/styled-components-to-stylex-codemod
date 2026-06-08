@@ -80,6 +80,7 @@ async function runAutoSxWrapperFixture(args: {
 
   const adapter = defineAdapterFromIndex({
     useSxProp: args.useSxProp ?? true,
+    usePhysicalProperties: true,
     externalInterface: args.externalInterface ?? "auto",
     styleMerger: {
       functionName: "mergedSx",
@@ -500,6 +501,7 @@ describe("runTransform (e2e)", () => {
       consumerPaths: join(tmp, "src/**/*.tsx"),
       adapter: defineAdapterFromIndex({
         useSxProp: true,
+        usePhysicalProperties: true,
         externalInterface: "auto",
         styleMerger: {
           functionName: "mergedSx",
@@ -567,6 +569,7 @@ describe("runTransform (e2e)", () => {
       consumerPaths: join(tmp, "src/**/*.tsx"),
       adapter: defineAdapterFromIndex({
         useSxProp: true,
+        usePhysicalProperties: true,
         externalInterface: "auto",
         styleMerger: {
           functionName: "mergedSx",
@@ -656,6 +659,7 @@ describe("runTransform (e2e)", () => {
       consumerPaths: join(tmp, "src/**/*.tsx"),
       adapter: defineAdapterFromIndex({
         useSxProp: false,
+        usePhysicalProperties: true,
         externalInterface: () => ({ styles: false, as: false, ref: false }),
         styleMerger: null,
         resolveValue: () => undefined,
@@ -693,6 +697,7 @@ describe("runTransform (e2e)", () => {
         consumerPaths: null,
         adapter: defineAdapterFromIndex({
           useSxProp: false,
+          usePhysicalProperties: true,
           externalInterface: () => ({ styles: false, as: false, ref: false }),
           styleMerger: null,
           resolveValue: () => undefined,

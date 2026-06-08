@@ -76,6 +76,9 @@ const styles = stylex.create({
     },
   },
   fadingContentLoading: {
+    transition: "opacity 100ms 500ms ease-in",
+    willChange: "opacity",
+    backfaceVisibility: "hidden",
     opacity: {
       default: 0,
       "@media print": 1,
@@ -84,9 +87,6 @@ const styles = stylex.create({
       default: "none",
       "@media print": "auto",
     },
-    transition: "opacity 100ms 500ms ease-in",
-    willChange: "opacity",
-    backfaceVisibility: "hidden",
   },
   fadingContentOverflow: (overflow: "auto" | "hidden" | "visible") => ({
     overflow: {

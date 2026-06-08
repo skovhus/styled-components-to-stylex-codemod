@@ -37,11 +37,11 @@ const styles = stylex.create({
     display: "flex",
   },
   wrappingRowAfterHelperAfter1: {
+    gap: 8,
     flexWrap: {
       default: "nowrap",
       "@container sidebar (max-width: 240px)": "wrap",
     },
-    gap: 8,
   },
   // Container context
   container: {

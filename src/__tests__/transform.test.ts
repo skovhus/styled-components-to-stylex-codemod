@@ -5957,6 +5957,7 @@ export const App = () => <Box $on />;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6011,6 +6012,7 @@ export const App = () => (
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6057,6 +6059,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6171,6 +6174,7 @@ export const Box = styled.div<{ $size: number }>\`
         },
         styleMerger: null,
         useSxProp: false,
+        usePhysicalProperties: true,
       } satisfies Adapter;
 
       const result = transformWithWarnings(
@@ -6239,6 +6243,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6293,6 +6298,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6496,6 +6502,7 @@ export const Box = styled.div\`
         },
         styleMerger: null,
         useSxProp: false,
+        usePhysicalProperties: true,
       } satisfies Adapter;
 
       const result = transformWithWarnings(
@@ -6551,6 +6558,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6639,6 +6647,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6691,6 +6700,7 @@ export const Box = styled.div\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6770,6 +6780,7 @@ export const Box = styled.div<{ size: number }>\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6825,6 +6836,7 @@ export const Box = styled.div<{ tone: string }>\`
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6883,6 +6895,7 @@ export const App = () => <Box level="high">Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6943,6 +6956,7 @@ export const App = () => <Box tone="muted">Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -6992,6 +7006,7 @@ export const App = () => <Box tone="muted">Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -7035,6 +7050,7 @@ export const App = () => <Box>Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -7141,6 +7157,7 @@ export const App = () => <Toggle>Toggle</Toggle>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -7336,6 +7353,7 @@ describe("styleMerger configuration", () => {
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
     useSxProp: false,
+    usePhysicalProperties: true,
   };
   const noExternalMergerAdapter = {
     externalInterface() {
@@ -7355,6 +7373,7 @@ describe("styleMerger configuration", () => {
       importSource: { kind: "specifier" as const, value: "@company/ui-utils" },
     },
     useSxProp: false,
+    usePhysicalProperties: true,
   };
   const absolutePathMergerAdapter = {
     externalInterface() {
@@ -7377,6 +7396,7 @@ describe("styleMerger configuration", () => {
       },
     },
     useSxProp: false,
+    usePhysicalProperties: true,
   };
 
   it("should use merger function instead of verbose pattern when configured", async () => {
@@ -7732,6 +7752,7 @@ export const App = () => <Box $delay={100} />;
     const adapterWithoutMerger = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: true, as: false, ref: false } as const;
       },
@@ -7773,6 +7794,7 @@ export const App = () => <Box className="external" style={{ left: 1 }}>Click</Bo
     const adapterWithoutMerger = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: true, as: false, ref: false } as const;
       },
@@ -7820,6 +7842,7 @@ export const App = () => <Button>Click</Button>;
         importSource: { kind: "specifier" as const, value: "./lib/mergedSx" },
       },
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: true, as: true, ref: true } as const;
       },
@@ -7866,6 +7889,7 @@ export const App = () => <Box $color="red">Hello</Box>;
     const adapterWithRef = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -7902,6 +7926,7 @@ export const App = () => <Box>Hello</Box>;
     const adapterWithRef = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -7946,6 +7971,7 @@ export const App = () => {
     const adapterWithRef = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: false, as: false, ref: true } as const;
       },
@@ -7995,6 +8021,7 @@ export const App = () => {
     const adapterWithoutRef = {
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       externalInterface() {
         return { styles: false, as: false, ref: false } as const;
       },
@@ -8201,6 +8228,7 @@ export const App = () => <Button>Click me</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8248,6 +8276,7 @@ export const App = () => <Button>Click me</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8297,6 +8326,7 @@ export const App = () => <Button>Click me</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8348,6 +8378,7 @@ export const App = () => <Button>Click me</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8410,6 +8441,7 @@ export const App = () => <Button>Click me</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8576,6 +8608,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8682,6 +8715,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8734,6 +8768,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8792,6 +8827,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8856,6 +8892,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8914,6 +8951,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -8965,6 +9003,7 @@ export const App = () => <Text>Hello</Text>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -9463,6 +9502,7 @@ export const App = () => <Box className="caller">Box</Box>;
       ...fixtureAdapter,
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = runTransformWithDiagnostics(source, { adapter: adapterWithoutMerger });
@@ -10034,6 +10074,7 @@ export const App = () => <Box>Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       themeHook: {
         functionName: "useDesignTheme",
         importSource: {
@@ -10082,6 +10123,7 @@ export const App = () => <Box>Hello</Box>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       themeHook: {
         functionName: "useDesignTheme",
         importSource: {
@@ -10132,6 +10174,7 @@ export const App = () => {
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
       themeHook: {
         functionName: "useTheme",
         importSource: {
@@ -10654,7 +10697,7 @@ export const App = () => <Input readOnly value="test" />;
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // The base has logical longhands (from "8px 12px" → paddingBlock/paddingInline).
+    // The fixture adapter uses logical longhands for 2-value shorthands.
     // The readonly block has padding: 0 which should be expanded to match.
     expect(result.code).toContain("paddingBlock");
     expect(result.code).toContain("paddingInline");
@@ -10688,7 +10731,7 @@ export const App = () => <Box>test</Box>;
     const result = transformWithWarnings(
       { source, path: "test.tsx" },
       { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
+      { adapter: { ...fixtureAdapter, usePhysicalProperties: false } },
     );
     expect(result.code).not.toBeNull();
     // The base has marginBottom (physical). The conditional has margin: 8px 16px (2-value).
@@ -10703,10 +10746,9 @@ export const App = () => <Box>test</Box>;
     expect(result.code).not.toContain("marginInline");
   });
 
-  it("should split multi-value shorthands before logical block/inline assignment", () => {
-    // Regression: logical expansion path assigned the entire multi-value string to both
-    // Block and Inline, e.g., paddingBlock: "8px 12px", paddingInline: "8px 12px"
-    // instead of paddingBlock: "8px", paddingInline: "12px".
+  it("should split multi-value shorthands before directional assignment", () => {
+    // Regression: shorthand expansion must split values before assigning each
+    // direction, instead of copying the entire "8px 12px" value to every output.
     const source = `
 import styled from "styled-components";
 
@@ -10723,8 +10765,7 @@ export const App = () => <Input />;
       { adapter: fixtureAdapter },
     );
     expect(result.code).not.toBeNull();
-    // The base has paddingBlock (logical). The conditional has padding: 8px 12px.
-    // Both expand to logical longhands (default), so no conflict normalization needed.
+    // The base has padding-block. The conditional has padding: 8px 12px.
     expect(result.code).toContain("paddingBlock: 8");
     expect(result.code).toContain("paddingInline: 12");
     // Should NOT have the unsplit value
@@ -11379,7 +11420,7 @@ export const App = () => (
 });
 
 describe("usePhysicalProperties adapter option", () => {
-  it("should expand 2-value padding to logical properties by default", () => {
+  it("should require usePhysicalProperties to be explicit", () => {
     const source = `
 import styled from "styled-components";
 
@@ -11389,16 +11430,15 @@ const Box = styled.div\`
 
 export const App = () => <Box>test</Box>;
 `;
-    const result = transformWithWarnings(
-      { source, path: "test.tsx" },
-      { jscodeshift: j, j, stats: () => {}, report: () => {} },
-      { adapter: fixtureAdapter },
-    );
-    expect(result.code).not.toBeNull();
-    expect(result.code).toContain("paddingBlock");
-    expect(result.code).toContain("paddingInline");
-    expect(result.code).not.toContain("paddingTop");
-    expect(result.code).not.toContain("paddingRight");
+    const adapter: Record<string, unknown> = { ...fixtureAdapter };
+    delete adapter.usePhysicalProperties;
+    expect(() =>
+      transformWithWarnings(
+        { source, path: "test.tsx" },
+        { jscodeshift: j, j, stats: () => {}, report: () => {} },
+        { adapter: adapter as unknown as Adapter },
+      ),
+    ).toThrow(/usePhysicalProperties must be explicitly set/);
   });
 
   it("should expand 2-value padding to physical properties when usePhysicalProperties is true", () => {
@@ -11423,6 +11463,59 @@ export const App = () => <Box>test</Box>;
     expect(result.code).toContain("paddingLeft");
     expect(result.code).not.toContain("paddingBlock");
     expect(result.code).not.toContain("paddingInline");
+  });
+
+  it("should preserve same-branch physical defaults when expanding logical pseudo maps", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.span<{ $active?: boolean }>\`
+  padding: 4px 8px;
+
+  \${(props) =>
+    props.$active &&
+    css\`
+      &:hover {
+        padding-inline: 2px;
+      }
+
+      padding-right: 3px;
+    \`}
+\`;
+
+export const App = () => <Box $active>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: { ...fixtureAdapter, usePhysicalProperties: true } },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingRight: {");
+    expect(result.code).toContain("default: 3");
+    expect(result.code).toContain('":hover": 2');
+  });
+
+  it("should expand 2-value padding to logical properties when usePhysicalProperties is false", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px 8px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: { ...fixtureAdapter, usePhysicalProperties: false } },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingBlock");
+    expect(result.code).toContain("paddingInline");
+    expect(result.code).not.toContain("paddingTop");
+    expect(result.code).not.toContain("paddingRight");
   });
 });
 
@@ -12048,6 +12141,7 @@ export function App() {
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     };
 
     const result = transformWithWarnings(
@@ -12092,6 +12186,7 @@ export const App = () => (
     const adapter: Adapter = {
       ...fixtureAdapter,
       useSxProp: false,
+      usePhysicalProperties: true,
       resolveCall(ctx) {
         if (ctx.calleeImportedName === "borderStyles") {
           return {
@@ -13568,6 +13663,7 @@ export function App() {
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -13641,6 +13737,7 @@ export function App() {
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(
@@ -14101,6 +14198,7 @@ export const App = (props: { style?: React.CSSProperties }) => <Box {...props}>c
       ...fixtureAdapter,
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(

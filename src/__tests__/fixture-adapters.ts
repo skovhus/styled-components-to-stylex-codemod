@@ -34,6 +34,9 @@ export const fixtureAdapter = defineAdapter({
   // Emit sx={} JSX attributes instead of {...stylex.props()} spreads (StyleX ≥0.18)
   useSxProp: true,
 
+  // Keep fixture snapshots on logical shorthand expansion to avoid unrelated churn.
+  usePhysicalProperties: false,
+
   // Write all defineMarker() declarations to a single shared sidecar file
   markerFile: () => ({ kind: "specifier", value: "./markers.stylex" }),
 
@@ -903,6 +906,7 @@ function customResolveSelector(_ctx: SelectorResolveContext): SelectorResolveRes
 export const customAdapter = defineAdapter({
   styleMerger: null,
   useSxProp: false,
+  usePhysicalProperties: false,
   externalInterface() {
     return { styles: false, as: false, ref: false };
   },

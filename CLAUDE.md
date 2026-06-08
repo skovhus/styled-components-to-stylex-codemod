@@ -162,7 +162,7 @@ Only create a new test case when:
 
 - Import `* as stylex from "@stylexjs/stylex"` and `{ mergedSx } from "./lib/mergedSx"` when the component accepts external className/style
 - Theme colors become `$colors.<key>` from `"./tokens.stylex"`
-- CSS shorthand properties must be expanded (e.g., `padding: "4px 8px"` → `paddingBlock: "4px"`, `paddingInline: "8px"`)
+- CSS shorthand properties must be expanded (e.g., `padding: "4px 8px"` → `paddingTop: "4px"`, `paddingRight: "8px"`, `paddingBottom: "4px"`, `paddingLeft: "8px"`)
 - Unexported intrinsic-only styled components get inlined (no wrapper function), unless they are used more than once in JSX (then keep a wrapper for readability/reuse)
 - Exported or component-wrapping styled components become function components
 - Conditional styles use separate style objects: `styles.base`, `styles.baseActive`
