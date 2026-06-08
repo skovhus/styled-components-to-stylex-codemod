@@ -1076,8 +1076,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       });
     };
 
-    const sameVariantCondition = (left: string, right: string): boolean =>
-      normalizeTransientWhen(left) === normalizeTransientWhen(right);
+    const sameVariantCondition = (left: string, right: string): boolean => left === right;
 
     const hasParenthesizedLogicalOperator = (when: string): boolean =>
       /\([^)]*(?:&&|\|\|)[^)]*\)/.test(when);
