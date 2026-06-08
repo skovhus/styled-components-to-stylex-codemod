@@ -19,6 +19,7 @@ import {
 } from "../css-prop-mapping.js";
 import {
   extractRootAndPath,
+  getFunctionBodyExpr,
   getMemberPathFromIdentifier,
   getNodeLocStart,
   isAstNode,
@@ -68,7 +69,12 @@ type CssHelperTemplateOptions = {
 
 type ValuePart = { kind: string; value?: string; slotId?: number };
 type ValueSlotPart = ValuePart & { kind: "slot"; slotId: number };
-type StaticSlotResolution = { ast: ExpressionKind; exprString: string };
+type StaticSlotResolution = {
+  ast: ExpressionKind;
+  exprString: string;
+  staticValue?: string | number;
+};
+type TernaryBranchResolution = StaticSlotResolution & { staticValue?: string | number };
 
 /**
  * Parses a CSS template literal to IR rules and slot expression map.
@@ -172,16 +178,25 @@ export function createCssHelperResolver(args: {
   const resolveHelperExprToAst = (
     expr: any,
     paramName: string | null,
-  ): { ast: any; exprString: string } | null => {
+  ): StaticSlotResolution | null => {
     if (!expr || typeof expr !== "object") {
       return null;
     }
-    if (
-      expr.type === "StringLiteral" ||
-      expr.type === "NumericLiteral" ||
-      expr.type === "Literal"
-    ) {
-      return { ast: expr, exprString: JSON.stringify(expr.value) };
+    if (expr.type === "StringLiteral") {
+      return { ast: expr, exprString: JSON.stringify(expr.value), staticValue: expr.value };
+    }
+    if (expr.type === "NumericLiteral") {
+      return { ast: expr, exprString: String(expr.value), staticValue: expr.value };
+    }
+    if (expr.type === "Literal") {
+      const value = expr.value;
+      if (typeof value === "string") {
+        return { ast: expr, exprString: JSON.stringify(value), staticValue: value };
+      }
+      if (typeof value === "number") {
+        return { ast: expr, exprString: String(value), staticValue: value };
+      }
+      return { ast: expr, exprString: JSON.stringify(value) };
     }
     const path =
       paramName && isMemberExpression(expr)
@@ -303,23 +318,23 @@ export function createCssHelperResolver(args: {
    * - String literals ("value")
    * - Identifiers (local constants or resolved imports)
    */
-  const resolveTernaryBranchToAst = (branch: any): { ast: any; exprString: string } | null => {
+  const resolveTernaryBranchToAst = (branch: any): TernaryBranchResolution | null => {
     if (!branch || typeof branch !== "object") {
       return null;
     }
     if (branch.type === "NumericLiteral") {
-      return { ast: branch, exprString: String(branch.value) };
+      return { ast: branch, exprString: String(branch.value), staticValue: branch.value };
     }
     if (branch.type === "StringLiteral") {
-      return { ast: branch, exprString: JSON.stringify(branch.value) };
+      return { ast: branch, exprString: JSON.stringify(branch.value), staticValue: branch.value };
     }
     if (branch.type === "Literal") {
       const v = branch.value;
       if (typeof v === "number") {
-        return { ast: branch, exprString: String(v) };
+        return { ast: branch, exprString: String(v), staticValue: v };
       }
       if (typeof v === "string") {
-        return { ast: branch, exprString: JSON.stringify(v) };
+        return { ast: branch, exprString: JSON.stringify(v), staticValue: v };
       }
     }
     // Handle identifiers and member expressions (local constants or imports)
@@ -348,6 +363,14 @@ export function createCssHelperResolver(args: {
       }
     }
     return null;
+  };
+
+  const getFunctionParamName = (node: any): string | null => {
+    if (node?.type !== "ArrowFunctionExpression" && node?.type !== "FunctionExpression") {
+      return null;
+    }
+    const firstParam = node.params?.[0];
+    return firstParam?.type === "Identifier" ? firstParam.name : null;
   };
 
   /**
@@ -417,7 +440,8 @@ export function createCssHelperResolver(args: {
 
     const lookupImport = (localName: string) => importMap.get(localName) ?? null;
 
-    for (const rule of rules) {
+    for (let ruleIndex = 0; ruleIndex < rules.length; ruleIndex++) {
+      const rule = rules[ruleIndex]!;
       const rawMedia = findSupportedAtRule(rule.atRuleStack);
       // Support StyleX condition at-rules; bail on non-StyleX at-rules or unsafe mixed stacks.
       // Mixed stacks must also bail because preserving only one condition would be too broad.
@@ -563,7 +587,8 @@ export function createCssHelperResolver(args: {
           ? new Set(Object.keys(pseudoElementTargets[0]!.obj))
           : null;
 
-      for (const d of rule.declarations) {
+      for (let declIndex = 0; declIndex < rule.declarations.length; declIndex++) {
+        const d = rule.declarations[declIndex]!;
         if (!d.property) {
           return bail("Conditional `css` block: missing CSS property name");
         }
@@ -751,48 +776,200 @@ export function createCssHelperResolver(args: {
             exprLoc,
           );
         }
-        const resolved = resolveHelperExprToAst(expr as any, paramName);
+        const slotExprNode = expr as any;
+        const slotBodyExpr =
+          slotExprNode.type === "ArrowFunctionExpression" ||
+          slotExprNode.type === "FunctionExpression"
+            ? getFunctionBodyExpr(slotExprNode)
+            : slotExprNode;
+        const slotParamName = getFunctionParamName(slotExprNode) ?? paramName;
+        const resolved = resolveHelperExprToAst(slotBodyExpr, slotParamName);
+        const branchStaticParts = hasStaticParts
+          ? extractPrefixSuffix(parts)
+          : { prefix: "", suffix: "" };
+        const buildResolvedBranchStyle = (
+          branchResolved: TernaryBranchResolution,
+        ): Record<string, unknown> | null => {
+          const branchStyle: Record<string, unknown> = {};
+          if (branchResolved.staticValue !== undefined) {
+            const rawValue = `${branchStaticParts.prefix}${branchResolved.staticValue}${branchStaticParts.suffix}`;
+            if (
+              d.property?.trim() === "background" &&
+              isUnsupportedBackgroundShorthandValue(rawValue)
+            ) {
+              return null;
+            }
+            for (const mapped of cssDeclarationToStylexDeclarations({
+              ...d,
+              value: { kind: "static", value: rawValue },
+              valueRaw: rawValue,
+            })) {
+              branchStyle[mapped.prop] = mergeIntoContext(
+                cssValueToJs(mapped.value, d.important, mapped.prop),
+                mapped.prop,
+                target as any,
+              );
+            }
+            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
+            if (borderMatch) {
+              const direction = borderMatch[1]
+                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
+                : "";
+              if (
+                !(`border${direction}Width` in branchStyle) ||
+                !(`border${direction}Style` in branchStyle) ||
+                !(`border${direction}Color` in branchStyle)
+              ) {
+                return null;
+              }
+            }
+            if (d.property?.trim() === "background") {
+              if ("backgroundImage" in branchStyle && !("backgroundColor" in branchStyle)) {
+                branchStyle.backgroundColor = mergeIntoContext(
+                  cssValueToJs(
+                    { kind: "static", value: "transparent" },
+                    d.important,
+                    "backgroundColor",
+                  ),
+                  "backgroundColor",
+                  target as any,
+                );
+              }
+              if ("backgroundColor" in branchStyle && !("backgroundImage" in branchStyle)) {
+                const imageResetValue = [
+                  "inherit",
+                  "initial",
+                  "unset",
+                  "revert",
+                  "revert-layer",
+                ].includes(rawValue.trim())
+                  ? rawValue.trim()
+                  : "none";
+                branchStyle.backgroundImage = mergeIntoContext(
+                  cssValueToJs(
+                    { kind: "static", value: imageResetValue },
+                    d.important,
+                    "backgroundImage",
+                  ),
+                  "backgroundImage",
+                  target as any,
+                );
+              }
+            }
+            return branchStyle;
+          }
+
+          if (d.important || d.property?.trim() === "background") {
+            return null;
+          }
+          const wrappedExpr = wrapExprWithStaticParts(
+            branchResolved.exprString,
+            branchStaticParts.prefix,
+            branchStaticParts.suffix,
+          );
+          const ast = parseExpr(wrappedExpr);
+          if (!ast) {
+            return null;
+          }
+          const mappedDecls = cssDeclarationToStylexDeclarations(d);
+          if (mappedDecls.some((mapped) => isStylexShorthandCamelCase(mapped.prop))) {
+            return null;
+          }
+          for (const mapped of mappedDecls) {
+            branchStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
+          }
+          return branchStyle;
+        };
+        const haveSameStyleProps = (
+          left: Record<string, unknown>,
+          right: Record<string, unknown>,
+        ): boolean => {
+          const leftKeys = Object.keys(left);
+          const rightKeys = Object.keys(right);
+          return leftKeys.length === rightKeys.length && leftKeys.every((key) => key in right);
+        };
+        const conflictsWithLaterCssProperty = (stylexProp: string, cssProp: string): boolean => {
+          const normalizedCssProp = cssProp.trim();
+          if (
+            (stylexProp.startsWith("padding") && normalizedCssProp.startsWith("padding")) ||
+            (stylexProp.startsWith("margin") && normalizedCssProp.startsWith("margin")) ||
+            (stylexProp.startsWith("background") && normalizedCssProp.startsWith("background"))
+          ) {
+            return true;
+          }
+          const borderCategory = stylexProp.match(
+            /^border(?:Top|Right|Bottom|Left)?(Width|Style|Color)$/,
+          )?.[1];
+          if (!borderCategory || !normalizedCssProp.startsWith("border")) {
+            return false;
+          }
+          if (
+            normalizedCssProp === "border" ||
+            /^border-(top|right|bottom|left)$/.test(normalizedCssProp)
+          ) {
+            return true;
+          }
+          return normalizedCssProp.endsWith(`-${borderCategory.toLowerCase()}`);
+        };
+        const hasLaterStylexPropOverlap = (style: Record<string, unknown>): boolean => {
+          const props = new Set(Object.keys(style));
+          const declarationOverlaps = (laterDecl: (typeof rule.declarations)[number]): boolean => {
+            if (!laterDecl.property) {
+              return false;
+            }
+            for (const prop of props) {
+              if (conflictsWithLaterCssProperty(prop, laterDecl.property)) {
+                return true;
+              }
+            }
+            for (const mapped of cssDeclarationToStylexDeclarations(laterDecl)) {
+              if (props.has(mapped.prop)) {
+                return true;
+              }
+            }
+            return false;
+          };
+          for (const laterDecl of rule.declarations.slice(declIndex + 1)) {
+            if (declarationOverlaps(laterDecl)) {
+              return true;
+            }
+          }
+          for (const laterRule of rules.slice(ruleIndex + 1)) {
+            if ((laterRule.selector ?? "") !== (rule.selector ?? "")) {
+              continue;
+            }
+            if (laterRule.declarations.some(declarationOverlaps)) {
+              return true;
+            }
+          }
+          return false;
+        };
         // Handle ConditionalExpression with theme test: ${props.theme.isDark ? "a" : "b"}
-        if (!resolved && (expr as any).type === "ConditionalExpression") {
-          const ternaryExpr = expr as {
+        if (!resolved && (slotBodyExpr as any)?.type === "ConditionalExpression") {
+          const ternaryExpr = slotBodyExpr as {
             test: any;
             consequent: any;
             alternate: any;
           };
-          const themePath = extractThemePathFromCondTest(ternaryExpr.test, paramName);
+          const themePath = extractThemePathFromCondTest(ternaryExpr.test, slotParamName);
           if (themePath) {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
             if (consResolved && altResolved) {
-              const buildVariantStyle = (branchResolved: {
-                ast: any;
-                exprString: string;
-              }): Record<string, unknown> => {
-                const variantStyle: Record<string, unknown> = {};
-                for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                  if (hasStaticParts) {
-                    const { prefix, suffix } = extractPrefixSuffix(parts);
-                    const wrappedExpr = wrapExprWithStaticParts(
-                      branchResolved.exprString,
-                      prefix,
-                      suffix,
-                    );
-                    const ast = parseExpr(wrappedExpr);
-                    if (ast) {
-                      variantStyle[mapped.prop] = mergeIntoContext(ast, mapped.prop, target as any);
-                    }
-                  } else {
-                    variantStyle[mapped.prop] = mergeIntoContext(
-                      branchResolved.ast,
-                      mapped.prop,
-                      target as any,
-                    );
-                  }
-                }
-                return variantStyle;
-              };
-              const consStyle = buildVariantStyle(consResolved);
-              const altStyle = buildVariantStyle(altResolved);
+              const consStyle = buildResolvedBranchStyle(consResolved);
+              const altStyle = buildResolvedBranchStyle(altResolved);
+              if (!consStyle || !altStyle) {
+                return bail(
+                  "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                  { property: d.property },
+                );
+              }
+              if (hasLaterStylexPropOverlap(consStyle) || hasLaterStylexPropOverlap(altStyle)) {
+                return bail(
+                  "Conditional `css` block: finite ternary before a later overlapping declaration requires manual source-order handling",
+                  { property: d.property },
+                );
+              }
               conditionalVariants.push({
                 when: `theme.${themePath}`,
                 propName: "",
@@ -807,7 +984,7 @@ export function createCssHelperResolver(args: {
             }
           }
         }
-        if (!resolved && hasThemeAccessInExpr(expr, paramName)) {
+        if (!resolved && hasThemeAccessInExpr(slotBodyExpr, slotParamName)) {
           return bail(
             "Conditional `css` block: failed to parse expression",
             { property: d.property },
@@ -815,6 +992,91 @@ export function createCssHelperResolver(args: {
           );
         }
         if (resolved) {
+          if (resolved.staticValue !== undefined) {
+            const rawValue = hasStaticParts
+              ? `${branchStaticParts.prefix}${resolved.staticValue}${branchStaticParts.suffix}`
+              : String(resolved.staticValue);
+            if (
+              d.property?.trim() === "background" &&
+              isUnsupportedBackgroundShorthandValue(rawValue)
+            ) {
+              return bail(
+                "Unsupported background shorthand: multiple components cannot be mapped to a single StyleX longhand",
+                { property: d.property },
+              );
+            }
+            const resolvedStaticStyle: Record<string, unknown> = {};
+            for (const mapped of cssDeclarationToStylexDeclarations({
+              ...d,
+              value: { kind: "static", value: rawValue },
+              valueRaw: rawValue,
+            })) {
+              resolvedStaticStyle[mapped.prop] = mergeIntoContext(
+                cssValueToJs(mapped.value, d.important, mapped.prop),
+                mapped.prop,
+                target as any,
+              );
+            }
+            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
+            if (borderMatch) {
+              const direction = borderMatch[1]
+                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
+                : "";
+              if (
+                !(`border${direction}Width` in resolvedStaticStyle) ||
+                !(`border${direction}Style` in resolvedStaticStyle) ||
+                !(`border${direction}Color` in resolvedStaticStyle)
+              ) {
+                return bail(
+                  "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                  { property: d.property },
+                );
+              }
+            }
+            if (d.property?.trim() === "background") {
+              if (
+                "backgroundImage" in resolvedStaticStyle &&
+                !("backgroundColor" in resolvedStaticStyle)
+              ) {
+                resolvedStaticStyle.backgroundColor = mergeIntoContext(
+                  cssValueToJs(
+                    { kind: "static", value: "transparent" },
+                    d.important,
+                    "backgroundColor",
+                  ),
+                  "backgroundColor",
+                  target as any,
+                );
+              }
+              if (
+                "backgroundColor" in resolvedStaticStyle &&
+                !("backgroundImage" in resolvedStaticStyle)
+              ) {
+                const imageResetValue = [
+                  "inherit",
+                  "initial",
+                  "unset",
+                  "revert",
+                  "revert-layer",
+                ].includes(rawValue.trim())
+                  ? rawValue.trim()
+                  : "none";
+                resolvedStaticStyle.backgroundImage = mergeIntoContext(
+                  cssValueToJs(
+                    { kind: "static", value: imageResetValue },
+                    d.important,
+                    "backgroundImage",
+                  ),
+                  "backgroundImage",
+                  target as any,
+                );
+              }
+            }
+            for (const [prop, value] of Object.entries(resolvedStaticStyle)) {
+              (target as any)[prop] = value;
+            }
+            continue;
+          }
           if (hasStaticParts) {
             const { prefix, suffix } = extractPrefixSuffix(parts);
             const borderParts = parseInterpolatedBorderStaticParts({
@@ -875,16 +1137,16 @@ export function createCssHelperResolver(args: {
           }
         }
 
-        // Handle ConditionalExpression with static parts: ${prop ? val1 : val2}px
+        // Handle ConditionalExpression: ${prop ? val1 : val2} or ${prop ? val1 : val2}px
         // We can create variants for each branch, wrapping in pseudo context when needed
-        if (hasStaticParts && expr && (expr as any).type === "ConditionalExpression") {
-          const ternaryExpr = expr as {
+        if (slotBodyExpr && (slotBodyExpr as any).type === "ConditionalExpression") {
+          const ternaryExpr = slotBodyExpr as {
             type: "ConditionalExpression";
             test: any;
             consequent: any;
             alternate: any;
           };
-          const propName = parseTernaryTestPropName(ternaryExpr.test, paramName);
+          const propName = parseTernaryTestPropName(ternaryExpr.test, slotParamName);
           if (propName) {
             const consResolved = resolveTernaryBranchToAst(ternaryExpr.consequent);
             const altResolved = resolveTernaryBranchToAst(ternaryExpr.alternate);
@@ -895,42 +1157,36 @@ export function createCssHelperResolver(args: {
                 { property: d.property },
               );
             }
-            const { prefix, suffix } = extractPrefixSuffix(parts);
-
-            // Create AST for false branch (alternate) as base value
-            const altWrappedExpr = wrapExprWithStaticParts(altResolved.exprString, prefix, suffix);
-            const altAst = parseExpr(altWrappedExpr);
-
-            // Create AST for true branch (consequent) as variant value
-            const consWrappedExpr = wrapExprWithStaticParts(
-              consResolved.exprString,
-              prefix,
-              suffix,
-            );
-            const consAst = parseExpr(consWrappedExpr);
-
-            if (altAst && consAst) {
-              // Add false branch to base style (with pseudo/media wrapping)
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                (target as any)[mapped.prop] = mergeIntoContext(
-                  altAst,
-                  mapped.prop,
-                  target as any,
-                ) as any;
+            const altStyle = buildResolvedBranchStyle(altResolved);
+            const variantStyle = buildResolvedBranchStyle(consResolved);
+            if (altStyle && variantStyle) {
+              if (hasLaterStylexPropOverlap(variantStyle) || hasLaterStylexPropOverlap(altStyle)) {
+                return bail(
+                  "Conditional `css` block: finite ternary before a later overlapping declaration requires manual source-order handling",
+                  { property: d.property },
+                );
               }
-
-              // Build variant style for true branch (with pseudo/media wrapping)
-              const variantStyle: Record<string, unknown> = {};
-              for (const mapped of cssDeclarationToStylexDeclarations(d)) {
-                variantStyle[mapped.prop] = mergeIntoContext(consAst, mapped.prop, target as any);
+              if (haveSameStyleProps(altStyle, variantStyle)) {
+                for (const [prop, value] of Object.entries(altStyle)) {
+                  (target as any)[prop] = value;
+                }
+                conditionalVariants.push({
+                  when: propName,
+                  propName,
+                  style: variantStyle,
+                });
+              } else {
+                conditionalVariants.push({
+                  when: propName,
+                  propName,
+                  style: variantStyle,
+                });
+                conditionalVariants.push({
+                  when: `!${propName}`,
+                  propName,
+                  style: altStyle,
+                });
               }
-
-              // Add to conditional variants
-              conditionalVariants.push({
-                when: propName,
-                propName,
-                style: variantStyle,
-              });
 
               continue;
             }

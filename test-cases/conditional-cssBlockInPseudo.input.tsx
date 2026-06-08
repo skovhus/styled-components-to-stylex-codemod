@@ -168,6 +168,29 @@ const MultiPseudoIcon = styled.span<{ $active?: boolean }>`
     `}
 `;
 
+const FiniteCssBlock = styled.span<{
+  $enabled?: boolean;
+  $visible?: boolean;
+  $wide?: boolean;
+  $image?: boolean;
+}>`
+  display: inline-flex;
+  padding: 4px 8px;
+  color: hotpink;
+  background-color: blue;
+  background-image: url(/old.png);
+
+  ${(props) =>
+    props.$enabled &&
+    css`
+      opacity: ${(props: any) => (props.$visible ? 1 : 0)};
+      pointer-events: ${(props: any) => (props.$visible ? "auto" : "none")};
+      padding: ${(props: any) => (props.$wide ? "8px 16px" : "4px")};
+      background: ${(props: any) => (props.$image ? "url(/icon.png)" : "red")};
+      margin: ${(props: any) => (props.theme.isDark ? "8px 16px" : "4px")};
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -192,5 +215,9 @@ export const App = () => (
     <MultiPseudoIcon $active tabIndex={0}>
       Multi pseudo
     </MultiPseudoIcon>
+    <FiniteCssBlock $enabled $visible $wide $image>
+      Visible finite block
+    </FiniteCssBlock>
+    <FiniteCssBlock $enabled>Hidden finite block</FiniteCssBlock>
   </div>
 );

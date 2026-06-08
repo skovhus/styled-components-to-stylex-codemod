@@ -41,11 +41,7 @@ function IconWrapper(props: IconWrapperProps) {
           : undefined,
         styles.iconWrapper,
         background != null && styles.iconWrapperBackgroundColor(background),
-        background
-          ? styles.iconWrapperBackground({
-              background,
-            })
-          : undefined,
+        background ? styles.iconWrapperBackground : undefined,
       ]}
     >
       {children}
@@ -188,6 +184,35 @@ function MultiPseudoIcon(props: MultiPseudoIconProps) {
   return <span {...rest} sx={[styles.multiPseudoIcon, active && styles.multiPseudoIconActive]} />;
 }
 
+type FiniteCssBlockProps = React.PropsWithChildren<{
+  enabled?: boolean;
+  visible?: boolean;
+  wide?: boolean;
+  image?: boolean;
+}>;
+
+function FiniteCssBlock(props: FiniteCssBlockProps) {
+  const { children, visible, wide, image, enabled } = props;
+  const theme = useTheme();
+
+  return (
+    <span
+      sx={[
+        styles.finiteCssBlock,
+        enabled && styles.finiteCssBlockEnabled,
+        enabled && visible && styles.finiteCssBlockEnabledVisible,
+        enabled && wide && styles.finiteCssBlockEnabledWide,
+        enabled && !wide && styles.finiteCssBlockEnabledNotWide,
+        enabled && image && styles.finiteCssBlockEnabledImage,
+        enabled && theme.isDark ? styles.finiteCssBlockEnabledThemeIsDark : undefined,
+        enabled && !theme.isDark && styles.finiteCssBlockEnabledNotThemeIsDark,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -212,6 +237,10 @@ export const App = () => (
     <MultiPseudoIcon active tabIndex={0}>
       Multi pseudo
     </MultiPseudoIcon>
+    <FiniteCssBlock enabled visible wide image>
+      Visible finite block
+    </FiniteCssBlock>
+    <FiniteCssBlock enabled>Hidden finite block</FiniteCssBlock>
   </div>
 );
 
@@ -300,12 +329,12 @@ const styles = stylex.create({
       ":hover": transitionSpeedVars.fast,
     },
   },
+  iconWrapperBackground: {
+    borderRadius: 4,
+    opacity: 1,
+  },
   iconWrapperBackgroundColor: (backgroundColor: string) => ({
     backgroundColor,
-  }),
-  iconWrapperBackground: (props) => ({
-    borderRadius: 4,
-    opacity: props.background ? 1 : 0.8,
   }),
   falsyGuardIcon: {
     display: "inline-flex",
@@ -438,5 +467,43 @@ const styles = stylex.create({
       ":hover": "#dc2626",
       ":focus": "#2563eb",
     },
+  },
+  finiteCssBlock: {
+    display: "inline-flex",
+    paddingBlock: 4,
+    paddingInline: 8,
+    color: "hotpink",
+    backgroundColor: "blue",
+    backgroundImage: "url(/old.png)",
+  },
+  finiteCssBlockEnabled: {
+    opacity: 0,
+    pointerEvents: "none",
+    backgroundColor: "red",
+    backgroundImage: "none",
+  },
+  finiteCssBlockEnabledVisible: {
+    opacity: 1,
+    pointerEvents: "auto",
+  },
+  finiteCssBlockEnabledWide: {
+    paddingBlock: 8,
+    paddingInline: 16,
+  },
+  finiteCssBlockEnabledNotWide: {
+    paddingBlock: 4,
+    paddingInline: 4,
+  },
+  finiteCssBlockEnabledImage: {
+    backgroundImage: "url(/icon.png)",
+    backgroundColor: "transparent",
+  },
+  finiteCssBlockEnabledThemeIsDark: {
+    marginBlock: 8,
+    marginInline: 16,
+  },
+  finiteCssBlockEnabledNotThemeIsDark: {
+    marginBlock: 4,
+    marginInline: 4,
   },
 });

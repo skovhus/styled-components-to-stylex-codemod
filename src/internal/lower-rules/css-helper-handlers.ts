@@ -346,7 +346,11 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
           helperFn.loc ?? decl.loc,
           cssHelperTemplateOptions,
         );
-        if (!defaultResolved || defaultResolved.dynamicProps.length > 0) {
+        if (
+          !defaultResolved ||
+          defaultResolved.dynamicProps.length > 0 ||
+          defaultResolved.conditionalVariants.length > 0
+        ) {
           warnings.push({
             severity: "warning",
             type: "`css` helper function switch must return css templates in all branches",
@@ -365,7 +369,7 @@ export const createCssHelperHandlers = (ctx: CssHelperHandlersContext) => {
             helperFn.loc ?? decl.loc,
             cssHelperTemplateOptions,
           );
-          if (!res || res.dynamicProps.length > 0) {
+          if (!res || res.dynamicProps.length > 0 || res.conditionalVariants.length > 0) {
             warnings.push({
               severity: "warning",
               type: "`css` helper function switch must return css templates in all branches",
