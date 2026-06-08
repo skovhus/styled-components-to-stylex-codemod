@@ -810,6 +810,19 @@ export function createCssHelperResolver(args: {
                 target as any,
               );
             }
+            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
+            if (borderMatch) {
+              const direction = borderMatch[1]
+                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
+                : "";
+              if (
+                !(`border${direction}Width` in branchStyle) ||
+                !(`border${direction}Style` in branchStyle) ||
+                !(`border${direction}Color` in branchStyle)
+              ) {
+                return null;
+              }
+            }
             if (d.property?.trim() === "background") {
               if ("backgroundImage" in branchStyle && !("backgroundColor" in branchStyle)) {
                 branchStyle.backgroundColor = mergeIntoContext(
@@ -1003,6 +1016,22 @@ export function createCssHelperResolver(args: {
                 mapped.prop,
                 target as any,
               );
+            }
+            const borderMatch = d.property?.trim().match(/^border(?:-(top|right|bottom|left))?$/);
+            if (borderMatch) {
+              const direction = borderMatch[1]
+                ? borderMatch[1].charAt(0).toUpperCase() + borderMatch[1].slice(1)
+                : "";
+              if (
+                !(`border${direction}Width` in resolvedStaticStyle) ||
+                !(`border${direction}Style` in resolvedStaticStyle) ||
+                !(`border${direction}Color` in resolvedStaticStyle)
+              ) {
+                return bail(
+                  "Conditional `css` block: ternary branch value could not be resolved (imported values require adapter support)",
+                  { property: d.property },
+                );
+              }
             }
             if (d.property?.trim() === "background") {
               if (
