@@ -1150,14 +1150,18 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       return { testInfo, consequentValue, alternateValue };
     };
 
-    const referencesRuntimeStyleValue = (value: unknown): boolean =>
+    const referencesRuntimeStyleValue = (
+      value: unknown,
+      stylexTokenIdentifiers: ReadonlySet<string>,
+    ): boolean =>
       !!value &&
       typeof value === "object" &&
-      referencesRuntimeValue(styleValueToExpression(j, value));
+      referencesRuntimeValue(styleValueToExpression(j, value), stylexTokenIdentifiers);
 
     const splitStaticConditionalRuntimeStyle = (
       testInfo: TestInfo,
       style: Record<string, unknown>,
+      stylexTokenIdentifiers: ReadonlySet<string>,
     ): {
       baseStyle: Record<string, unknown>;
       remainingStyle: Record<string, unknown>;
@@ -1171,7 +1175,7 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       for (const [stylexProp, value] of Object.entries(style)) {
         const split = splitStaticConditionalExpression(value);
         if (!split) {
-          if (referencesRuntimeStyleValue(value)) {
+          if (referencesRuntimeStyleValue(value, stylexTokenIdentifiers)) {
             remainingStyle[stylexProp] = value;
           } else {
             baseStyle[stylexProp] = value;
@@ -1206,8 +1210,9 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
     const applyStaticConditionalRuntimeStyleVariants = (
       testInfo: TestInfo,
       style: Record<string, unknown>,
+      stylexTokenIdentifiers: ReadonlySet<string>,
     ): Record<string, unknown> | null => {
-      const split = splitStaticConditionalRuntimeStyle(testInfo, style);
+      const split = splitStaticConditionalRuntimeStyle(testInfo, style, stylexTokenIdentifiers);
       if (!split) {
         return null;
       }
@@ -1242,7 +1247,11 @@ export function createCssHelperConditionalHandler(ctx: CssHelperConditionalConte
       }
 
       if (!referencesTheme) {
-        const remainingStyle = applyStaticConditionalRuntimeStyleVariants(testInfo, style);
+        const remainingStyle = applyStaticConditionalRuntimeStyleVariants(
+          testInfo,
+          style,
+          importedStylexIdentifiers,
+        );
         if (remainingStyle) {
           if (Object.keys(remainingStyle).length === 0 && dynamicProps.length === 0) {
             return true;
@@ -3450,11 +3459,14 @@ function isColorLikeStylexProp(stylexProp: string): boolean {
   );
 }
 
-function referencesRuntimeValue(value: ExpressionKind): boolean {
+function referencesRuntimeValue(
+  value: ExpressionKind,
+  stylexTokenIdentifiers: ReadonlySet<string> = new Set(),
+): boolean {
   return findInAst(value, (node) => {
     if (node.type === "Identifier") {
       const name = (node as { name?: string }).name;
-      if (name === "theme" || name?.startsWith("$")) {
+      if (name === "theme" || (name?.startsWith("$") && !stylexTokenIdentifiers.has(name))) {
         return true;
       }
     }
