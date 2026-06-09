@@ -134,8 +134,10 @@ function patchConditionalDefaultsForSequence(args: {
       const clonedPatchSources = new Map<string, Record<string, unknown>>();
       for (const prop of propertiesWithFlatValue(source)) {
         const earlier = shapes.get(prop) ?? { kind: "absent" };
+        const clonedPatchSource = clonedPatchSources.get(entry.styleKey);
         const patchTarget =
-          needsSharedFlatEntryClone(entry, source, prop, earlier) && ctx.resolvedStyleObjects
+          clonedPatchSource ??
+          (needsSharedFlatEntryClone(entry, source, prop, earlier) && ctx.resolvedStyleObjects
             ? cloneSharedStyleEntryForPatch(
                 ctx.resolvedStyleObjects,
                 decl,
@@ -144,7 +146,7 @@ function patchConditionalDefaultsForSequence(args: {
                 clonedPatchSources,
                 styleKeyUseCounts,
               )
-            : source;
+            : source);
         contributionSource = patchTarget;
         if (
           patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier, entry.source) !==

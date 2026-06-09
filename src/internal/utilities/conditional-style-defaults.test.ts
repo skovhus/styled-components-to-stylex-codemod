@@ -454,6 +454,54 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
   });
 
+  it("keeps using cloned mixins for contribution inference after lifting one property", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted", opacity: 0.8 }],
+      ["buttonOverride", { color: "final" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor", "buttonOverride"],
+      extraStyleKeysAfterBase: ["sharedColor", "buttonOverride"],
+    } satisfies StyledDecl;
+    const otherDecl = {
+      localName: "OtherButton",
+      styleKey: "otherButton",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl, otherDecl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted", opacity: 0.8 });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+      opacity: 0.8,
+    });
+    expect(styles.get("buttonButtonOverride")).toEqual({
+      color: {
+        default: "final",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "buttonButtonOverride"]);
+    expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
+  });
+
   it("preserves shared flat mixins that are also referenced by css helper rewrites", () => {
     const styles = new Map<string, unknown>([
       ["button", { color: { default: "base", ":hover": "hover" } }],
