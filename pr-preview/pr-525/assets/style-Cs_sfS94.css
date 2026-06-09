@@ -2487,6 +2487,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #fef3c7;
 }
 
+.x1sbuxhi:not(#\#):not(#\#):not(#\#) {
+  background-color: #fefce8;
+}
+
 .xeqdrx4:not(#\#):not(#\#):not(#\#) {
   background-color: #ffe0e0;
 }
@@ -4851,12 +4855,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   .x17oyswf.x17oyswf:not(#\#):not(#\#):not(#\#) {
     outline-color: #4f46e5;
   }
+}
 
+@media (width >= 600px) and (width <= 900px) {
+  .x1rnfolt.x1rnfolt:not(#\#):not(#\#):not(#\#) {
+    outline-color: #4f46e5;
+  }
+}
+
+@media (hover: hover) {
   .x1foo60w.x1foo60w:not(#\#):not(#\#):not(#\#) {
     outline-style: solid;
   }
+}
 
+@media (width >= 600px) and (width <= 900px) {
+  .x1cy8m1c.x1cy8m1c:not(#\#):not(#\#):not(#\#) {
+    outline-style: solid;
+  }
+}
+
+@media (hover: hover) {
   .x1cvnlbb.x1cvnlbb:not(#\#):not(#\#):not(#\#) {
+    outline-width: 2px;
+  }
+}
+
+@media (width >= 600px) and (width <= 900px) {
+  .xqw9n2z.xqw9n2z:not(#\#):not(#\#):not(#\#) {
     outline-width: 2px;
   }
 }
