@@ -6,7 +6,11 @@ import type { WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
 import { isAstNode } from "./jscodeshift-utils.js";
-import { buildStyleKeySequence, type StyleSequenceEntry } from "./style-composition-plan.js";
+import {
+  buildStyleKeySequence,
+  type StyleContributionSource,
+  type StyleSequenceEntry,
+} from "./style-composition-plan.js";
 
 export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
@@ -142,7 +146,10 @@ function patchConditionalDefaultsForSequence(args: {
               )
             : source;
         contributionSource = patchTarget;
-        if (patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier) !== "bail") {
+        if (
+          patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier, entry.source) !==
+          "bail"
+        ) {
           continue;
         }
         ctx.warnings.push({
@@ -439,6 +446,7 @@ export function patchFlatValueAgainstPriorPropertyShape(
   styleObj: Record<string, unknown>,
   prop: string,
   earlier: PropertyShape,
+  laterSource: StyleContributionSource = "mixin",
 ): "patched" | "safe" | "bail" {
   if (earlier.kind !== "conditionalMap") {
     return "safe";
@@ -447,12 +455,16 @@ export function patchFlatValueAgainstPriorPropertyShape(
   if (current.kind !== "flat") {
     return "safe";
   }
-  if (!earlier.staticConditions) {
+  const preservedConditions = staticConditionsPreservedByLaterFlat(earlier, laterSource);
+  if (!preservedConditions) {
     return "bail";
+  }
+  if (Object.keys(preservedConditions).length === 0) {
+    return "safe";
   }
   styleObj[prop] = {
     default: current.value,
-    ...earlier.staticConditions,
+    ...preservedConditions,
   };
   return "patched";
 }
@@ -488,6 +500,59 @@ function readStaticConditionValues(
     conditions[key] = conditionValue;
   }
   return conditions;
+}
+
+function staticConditionsPreservedByLaterFlat(
+  earlier: Extract<PropertyShape, { kind: "conditionalMap" }>,
+  laterSource: StyleContributionSource,
+): Record<string, StaticStyleValue> | undefined {
+  const minSpecificity = conditionSpecificityNeededToOutrankFlatSource(laterSource);
+  const preservedKeys = earlier.conditionKeys.filter(
+    (key) => conditionSpecificity(key) > minSpecificity,
+  );
+  if (preservedKeys.length === 0) {
+    return {};
+  }
+  if (!earlier.staticConditions) {
+    return undefined;
+  }
+  const preserved: Record<string, StaticStyleValue> = {};
+  for (const key of preservedKeys) {
+    const value = earlier.staticConditions[key];
+    if (!isStaticStyleValue(value)) {
+      return undefined;
+    }
+    preserved[key] = value;
+  }
+  return preserved;
+}
+
+function conditionSpecificityNeededToOutrankFlatSource(source: StyleContributionSource): number {
+  return source === "attr" ? 1 : 0;
+}
+
+function conditionSpecificity(conditionKey: string): number {
+  if (conditionKey.startsWith("@")) {
+    return 0;
+  }
+  return attributeSelectorSpecificity(conditionKey) + pseudoClassSpecificity(conditionKey);
+}
+
+function attributeSelectorSpecificity(conditionKey: string): number {
+  return conditionKey.match(/\[[^\]]+\]/g)?.length ?? 0;
+}
+
+function pseudoClassSpecificity(conditionKey: string): number {
+  let count = 0;
+  const pseudoClassPattern = /(?<!:):(?!:)([A-Za-z-]+)/g;
+  for (const match of conditionKey.matchAll(pseudoClassPattern)) {
+    const pseudoName = match[1];
+    if (!pseudoName || ["has", "is", "not", "where"].includes(pseudoName)) {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
 }
 
 function isConditionalStyleMap(value: Record<string, unknown>): boolean {

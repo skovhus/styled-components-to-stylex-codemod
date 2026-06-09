@@ -489,6 +489,69 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
   });
 
+  it("does not lift same-specificity attribute states into later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      ["input", { backgroundColor: { default: null, ":disabled": "#f5f5f5" } }],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
+  });
+
+  it("lifts higher-specificity states into later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "input",
+        {
+          backgroundColor: {
+            default: null,
+            ":focus:disabled": "#f5f5f5",
+          },
+        },
+      ],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({
+      backgroundColor: {
+        default: "#fafafa",
+        ":focus:disabled": "#f5f5f5",
+      },
+    });
+  });
+
   it("bails when a later flat value would erase dynamic conditional map states", () => {
     const styles = new Map<string, unknown>([
       [
