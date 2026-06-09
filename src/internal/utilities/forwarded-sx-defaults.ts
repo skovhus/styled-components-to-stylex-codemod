@@ -181,7 +181,11 @@ type StyleEntry =
   | { kind: "object"; props: Map<string, PropValue> }
   | { kind: "function"; props: Set<string> };
 type PropValue = Exclude<PropertyShape, { kind: "absent" }>;
-type StyleMaps = Map<string, Map<string, StyleEntry>>;
+type StyleMap = {
+  entries: Map<string, StyleEntry>;
+  complete: boolean;
+};
+type StyleMaps = Map<string, StyleMap>;
 type PropertyInference =
   | PropertyShape
   | { kind: "absent" }
@@ -344,12 +348,14 @@ function collectStylexCreateMaps(ast: unknown): StyleMaps {
   return maps;
 }
 
-function readStyleEntries(stylexCreateArg: AstRecord): Map<string, StyleEntry> {
+function readStyleEntries(stylexCreateArg: AstRecord): StyleMap {
   const entries = new Map<string, StyleEntry>();
+  let complete = true;
   for (const property of getObjectProperties(stylexCreateArg)) {
     const key = readPropertyKey(property);
     const value = property.value;
     if (!key || !value) {
+      complete = false;
       continue;
     }
     if (isObjectExpression(value)) {
@@ -364,7 +370,7 @@ function readStyleEntries(stylexCreateArg: AstRecord): Map<string, StyleEntry> {
       });
     }
   }
-  return entries;
+  return { entries, complete };
 }
 
 function readStyleObjectProps(styleObject: AstRecord): Map<string, PropValue> {
@@ -874,7 +880,11 @@ function analyzeStyleReference(
   if (ref.kind === "computedMap") {
     return analyzeComputedStyleMapReference(ref, styleMaps, prop, called);
   }
-  const styleEntry = styleMaps.get(ref.objectName)?.get(ref.styleKey);
+  const styleMap = styleMaps.get(ref.objectName);
+  if (!styleMap?.complete) {
+    return { kind: "unknown" };
+  }
+  const styleEntry = styleMap.entries.get(ref.styleKey);
   return styleEntry ? analyzeStyleEntry(styleEntry, prop, called) : { kind: "unknown" };
 }
 
@@ -884,11 +894,13 @@ function analyzeComputedStyleMapReference(
   prop: string,
   called: boolean,
 ): PropertyInference {
-  const entries = styleMaps.get(ref.objectName);
-  if (!entries) {
+  const styleMap = styleMaps.get(ref.objectName);
+  if (!styleMap?.complete) {
     return { kind: "unknown" };
   }
-  const inferences = [...entries.values()].map((entry) => analyzeStyleEntry(entry, prop, called));
+  const inferences = [...styleMap.entries.values()].map((entry) =>
+    analyzeStyleEntry(entry, prop, called),
+  );
   const branches = ref.mayBeAbsent
     ? ([{ kind: "absent" }, ...inferences] satisfies PropertyInference[])
     : inferences;

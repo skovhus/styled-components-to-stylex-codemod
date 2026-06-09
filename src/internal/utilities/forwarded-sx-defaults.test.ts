@@ -104,6 +104,30 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("bails when computed maps include unread spread entries", () => {
+    const ctx = forwardedSxContext({
+      styleObj: backgroundHoverStyle(),
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        const sharedVariants = {
+          danger: { backgroundColor: "red" },
+        };
+        export function Base({ sx, tone, ...rest }) {
+          return <div {...rest} sx={[toneVariants[tone], sx]} />;
+        }
+        const toneVariants = stylex.create({
+          ...sharedVariants,
+          neutral: { color: "black" },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Forwarded sx conditional default would override an unproven wrapped component base style",
+    );
+  });
+
   it("patches variant dimension defaults forwarded through sx", () => {
     const basePath = "/tmp/base.tsx";
     const variantStyle = {
