@@ -184,6 +184,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       inlineStyleProps,
       staticInlineStyleProps,
       unsafeProps,
+      hasOpaqueExtraStylexPropsArgs: (decl.extraStylexPropsArgs?.length ?? 0) > 0,
       j: state.j,
     });
     moveUnsafeRawCssVarPropsToInlineStyles({
@@ -1560,12 +1561,21 @@ function moveCustomPropertyOnlyBaseToInlineStyles(args: {
   inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
   staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
   unsafeProps: ReadonlySet<string>;
+  hasOpaqueExtraStylexPropsArgs: boolean;
   j: Parameters<typeof literalToAst>[0];
 }): void {
-  const { styleObj, inlineStyleProps, staticInlineStyleProps, unsafeProps, j } = args;
+  const {
+    styleObj,
+    inlineStyleProps,
+    staticInlineStyleProps,
+    unsafeProps,
+    hasOpaqueExtraStylexPropsArgs,
+    j,
+  } = args;
   const entries = Object.entries(styleObj).filter(([prop]) => !prop.startsWith("__"));
   if (
     entries.length === 0 ||
+    hasOpaqueExtraStylexPropsArgs ||
     entries.some(([prop]) => !prop.startsWith("--")) ||
     entries.some(([prop]) => unsafeProps.has(prop)) ||
     entries.some(([, value]) => isConditionalCustomPropertyValue(value))

@@ -1,6 +1,7 @@
 import "./cssVariable-basic.css";
 import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
+import { helpers } from "./lib/helpers.stylex";
 import { vars } from "./css-variables.stylex";
 
 function Button({ children }: { children?: React.ReactNode }) {
@@ -78,6 +79,9 @@ export const App = () => (
     <VariantWidgetContainer wide>
       <Button>Variant wide button</Button>
     </VariantWidgetContainer>
+    <div sx={[styles.externalVarsWidgetContainer, helpers.focusOutline]}>
+      <Button>External vars wide button</Button>
+    </div>
   </div>
 );
 
@@ -134,5 +138,8 @@ const styles = stylex.create({
   },
   variantWidgetContainerWide: {
     "--agent-item-min-width": "75%",
+  },
+  externalVarsWidgetContainer: {
+    "--agent-item-min-width": "50%",
   },
 });

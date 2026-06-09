@@ -1,6 +1,7 @@
 import "./cssVariable-basic.css";
 import * as React from "react";
 import styled from "styled-components";
+import { focusOutline } from "./lib/helpers";
 
 const Button = styled.button`
   padding: var(--spacing-sm) var(--spacing-md);
@@ -61,6 +62,11 @@ const VariantWidgetContainer = styled.div<{ $wide?: boolean }>`
   ${(props) => props.$wide && "--agent-item-min-width: 75%;"}
 `;
 
+const ExternalVarsWidgetContainer = styled.div`
+  --agent-item-min-width: 50%;
+  ${focusOutline}
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
@@ -81,5 +87,8 @@ export const App = () => (
     <VariantWidgetContainer $wide>
       <Button>Variant wide button</Button>
     </VariantWidgetContainer>
+    <ExternalVarsWidgetContainer>
+      <Button>External vars wide button</Button>
+    </ExternalVarsWidgetContainer>
   </Card>
 );
