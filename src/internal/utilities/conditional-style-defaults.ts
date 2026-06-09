@@ -28,8 +28,65 @@ export type PropertyShape =
     }
   | { kind: "dynamic" };
 
+export const FLAT_ERASES_CONDITIONAL_WARNING =
+  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
+
 export function flatStylexValueErasureExample(prop: string): string {
   return `A flat StyleX value is \`${prop}: value\`; if an earlier style has \`${prop}: { default: baseValue, ":hover": hoverValue }\`, the flat value replaces the whole map and drops ":hover".`;
+}
+
+export function isStyleConditionKey(key: string): boolean {
+  return key.startsWith(":") || key.startsWith("@");
+}
+
+export function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
+  const props: string[] = [];
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop)) {
+      continue;
+    }
+    if (inferPropertyShapeFromValue(value).kind === "flat") {
+      props.push(prop);
+    }
+  }
+  return props;
+}
+
+export function defaultInferenceFromPropertyShape(shape: PropertyShape): DefaultInference {
+  if (shape.kind === "flat") {
+    return { kind: "static", value: shape.value };
+  }
+  if (shape.kind === "conditionalMap") {
+    return shape.defaultValue;
+  }
+  return shape;
+}
+
+export function patchFlatValueAgainstPriorPropertyShape(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  earlier: PropertyShape,
+  laterSource: StyleContributionSource = "mixin",
+): "patched" | "safe" | "bail" {
+  if (earlier.kind !== "conditionalMap") {
+    return "safe";
+  }
+  const current = inferPropertyShapeFromValue(styleObj[prop]);
+  if (current.kind !== "flat") {
+    return "safe";
+  }
+  const preservedConditions = staticConditionsPreservedByLaterFlat(earlier, laterSource);
+  if (!preservedConditions) {
+    return "bail";
+  }
+  if (Object.keys(preservedConditions).length === 0) {
+    return "safe";
+  }
+  styleObj[prop] = {
+    default: current.value,
+    ...preservedConditions,
+  };
+  return "patched";
 }
 
 export function guardGeneratedConditionalDefaults(
@@ -413,7 +470,7 @@ function inferDefaultFromValue(value: unknown): DefaultInference {
   return defaultInferenceFromPropertyShape(inferPropertyShapeFromValue(value));
 }
 
-export function inferPropertyShapeFromValue(value: unknown): PropertyShape {
+function inferPropertyShapeFromValue(value: unknown): PropertyShape {
   if (isStaticStyleValue(value)) {
     return value === null ? { kind: "absent" } : { kind: "flat", value };
   }
@@ -435,60 +492,8 @@ export function inferPropertyShapeFromValue(value: unknown): PropertyShape {
   return { kind: "dynamic" };
 }
 
-export function defaultInferenceFromPropertyShape(shape: PropertyShape): DefaultInference {
-  if (shape.kind === "flat") {
-    return { kind: "static", value: shape.value };
-  }
-  if (shape.kind === "conditionalMap") {
-    return shape.defaultValue;
-  }
-  return shape;
-}
-
-export function patchFlatValueAgainstPriorPropertyShape(
-  styleObj: Record<string, unknown>,
-  prop: string,
-  earlier: PropertyShape,
-  laterSource: StyleContributionSource = "mixin",
-): "patched" | "safe" | "bail" {
-  if (earlier.kind !== "conditionalMap") {
-    return "safe";
-  }
-  const current = inferPropertyShapeFromValue(styleObj[prop]);
-  if (current.kind !== "flat") {
-    return "safe";
-  }
-  const preservedConditions = staticConditionsPreservedByLaterFlat(earlier, laterSource);
-  if (!preservedConditions) {
-    return "bail";
-  }
-  if (Object.keys(preservedConditions).length === 0) {
-    return "safe";
-  }
-  styleObj[prop] = {
-    default: current.value,
-    ...preservedConditions,
-  };
-  return "patched";
-}
-
 const CONDITIONAL_DEFAULT_WARNING =
   "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
-const FLAT_ERASES_CONDITIONAL_WARNING =
-  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
-
-function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
-  const props: string[] = [];
-  for (const [prop, value] of Object.entries(styleObj)) {
-    if (isMetadataOrConditionKey(prop)) {
-      continue;
-    }
-    if (inferPropertyShapeFromValue(value).kind === "flat") {
-      props.push(prop);
-    }
-  }
-  return props;
-}
 
 function readStaticConditionValues(
   value: Record<string, unknown>,
@@ -803,10 +808,6 @@ function readStaticAstLiteral(value: unknown): string | number | boolean | null 
     return null;
   }
   return undefined;
-}
-
-function isStyleConditionKey(key: string): boolean {
-  return key.startsWith(":") || key.startsWith("@");
 }
 
 function isMetadataOrConditionKey(key: string): boolean {
