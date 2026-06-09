@@ -1561,7 +1561,11 @@ function moveCustomPropertyOnlyBaseToInlineStyles(args: {
 }): void {
   const { styleObj, inlineStyleProps, staticInlineStyleProps, j } = args;
   const entries = Object.entries(styleObj).filter(([prop]) => !prop.startsWith("__"));
-  if (entries.length === 0 || entries.some(([prop]) => !prop.startsWith("--"))) {
+  if (
+    entries.length === 0 ||
+    entries.some(([prop]) => !prop.startsWith("--")) ||
+    entries.some(([, value]) => isConditionalCustomPropertyValue(value))
+  ) {
     return;
   }
 
@@ -1579,6 +1583,10 @@ function moveCustomPropertyOnlyBaseToInlineStyles(args: {
       delete styleObj[prop];
     }
   }
+}
+
+function isConditionalCustomPropertyValue(value: unknown): boolean {
+  return !!value && typeof value === "object" && !isAstNode(value);
 }
 
 function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {

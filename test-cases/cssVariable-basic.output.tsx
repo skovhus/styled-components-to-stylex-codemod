@@ -59,6 +59,9 @@ export const App = () => (
     <div style={singleUseWidgetContainerInlineStyle}>
       <Button>Single-use wide button</Button>
     </div>
+    <div sx={styles.conditionalWidgetContainer}>
+      <Button>Conditional wide button</Button>
+    </div>
   </div>
 );
 
@@ -103,4 +106,11 @@ const styles = stylex.create({
   taggedSpanOutline: (props) => ({
     outline: `2px solid ${vars.colorSecondary}`,
   }),
+  conditionalWidgetContainer: {
+    "--agent-item-min-width": {
+      default: null,
+      ":hover": "80%",
+      "@media (min-width: 600px)": "75%",
+    },
+  },
 });

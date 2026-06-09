@@ -47,6 +47,15 @@ const SingleUseWidgetContainer = styled.div`
   --agent-item-min-width: 75%;
 `;
 
+const ConditionalWidgetContainer = styled.div`
+  @media (min-width: 600px) {
+    --agent-item-min-width: 75%;
+  }
+  &:hover {
+    --agent-item-min-width: 80%;
+  }
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
@@ -61,5 +70,8 @@ export const App = () => (
     <SingleUseWidgetContainer>
       <Button>Single-use wide button</Button>
     </SingleUseWidgetContainer>
+    <ConditionalWidgetContainer>
+      <Button>Conditional wide button</Button>
+    </ConditionalWidgetContainer>
   </Card>
 );
