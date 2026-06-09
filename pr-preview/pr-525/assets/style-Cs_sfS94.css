@@ -690,6 +690,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   --agent-item-min-width: 100%;
 }
 
+.x4bd2id {
+  --agent-item-min-width: 50%;
+}
+
 .x1gbohkg {
   --agent-item-min-width: 75%;
 }
