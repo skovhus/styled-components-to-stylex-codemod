@@ -303,8 +303,8 @@ function cloneSharedStyleEntryForPatch(
   const clonedStyleKey = uniqueStyleKey(styles, `${decl.styleKey}${capitalize(styleKey)}`);
   const clonedSource = { ...source };
   styles.set(clonedStyleKey, clonedSource);
-  replaceStyleKey(decl.extraStyleKeys, styleKey, clonedStyleKey);
-  replaceStyleKey(decl.extraStyleKeysAfterBase, styleKey, clonedStyleKey);
+  replaceFirstStyleKey(decl.extraStyleKeys, styleKey, clonedStyleKey);
+  replaceFirstStyleKey(decl.extraStyleKeysAfterBase, styleKey, clonedStyleKey);
   decrementStyleKeyUse(styles, styleKeyUseCounts, styleKey);
   styleKeyUseCounts.set(clonedStyleKey, 1);
   clonedPatchSources.set(styleKey, clonedSource);
@@ -335,7 +335,7 @@ function uniqueStyleKey(styles: ReadonlyMap<string, unknown>, baseKey: string): 
   return candidate;
 }
 
-function replaceStyleKey(
+function replaceFirstStyleKey(
   styleKeys: string[] | undefined,
   previousStyleKey: string,
   nextStyleKey: string,
@@ -346,6 +346,7 @@ function replaceStyleKey(
   for (let index = 0; index < styleKeys.length; index += 1) {
     if (styleKeys[index] === previousStyleKey) {
       styleKeys[index] = nextStyleKey;
+      return;
     }
   }
 }

@@ -502,6 +502,57 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
   });
 
+  it("clones only the current occurrence when the same mixin is used multiple times", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+      [
+        "focusColor",
+        {
+          color: {
+            default: null,
+            ":focus": "focus",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor", "focusColor", "sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor", "focusColor", "sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("sharedColor")).toBeUndefined();
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(styles.get("focusColor")).toEqual({
+      color: {
+        default: "muted",
+        ":focus": "focus",
+      },
+    });
+    expect(styles.get("buttonSharedColor2")).toEqual({
+      color: {
+        default: "muted",
+        ":focus": "focus",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "focusColor", "buttonSharedColor2"]);
+  });
+
   it("preserves shared flat mixins that are also referenced by css helper rewrites", () => {
     const styles = new Map<string, unknown>([
       ["button", { color: { default: "base", ":hover": "hover" } }],
