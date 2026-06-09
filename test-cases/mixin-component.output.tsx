@@ -4,7 +4,9 @@ export const App = () => (
   <div>
     <div sx={styles.hiddenOnMobileMixin}>Hidden on mobile (base)</div>
     <div sx={[styles.elementWithMixin, styles.hiddenOnMobileMixin]}>Red with mixin</div>
-    <div sx={[styles.elementWithMixinHover, styles.colorMixin]}>Red default, blue hover mixin</div>
+    <div sx={[styles.elementWithMixinHover, styles.elementWithMixinHoverColorMixin]}>
+      Red default, blue hover mixin
+    </div>
     <div sx={[styles.anotherMixedElement, styles.hiddenOnMobileMixin]}>Blue with mixin</div>
   </div>
 );
@@ -14,12 +16,6 @@ const styles = stylex.create({
     display: {
       default: null,
       "@media (max-width: 767px)": "none",
-    },
-  },
-  colorMixin: {
-    color: {
-      default: "red",
-      ":hover": "blue",
     },
   },
   // Using shared mixins within components
@@ -36,5 +32,11 @@ const styles = stylex.create({
   anotherMixedElement: {
     backgroundColor: "blue",
     fontWeight: "bold",
+  },
+  elementWithMixinHoverColorMixin: {
+    color: {
+      default: "red",
+      ":hover": "blue",
+    },
   },
 });

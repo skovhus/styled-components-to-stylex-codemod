@@ -402,12 +402,56 @@ describe("guardGeneratedConditionalDefaults", () => {
     } as unknown as TransformContext;
 
     expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
-    expect(styles.get("linkOverride")).toEqual({
+    expect(styles.get("linkOverride")).toBeUndefined();
+    expect(styles.get("linkLinkOverride")).toEqual({
       transitionDuration: {
         default: "120ms",
         ":highlightMixin": "80ms",
       },
     });
+    expect(decl.extraStyleKeys).toEqual(["linkLinkOverride"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["linkLinkOverride"]);
+  });
+
+  it("clones shared flat mixins before lifting caller-specific conditional states", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const otherDecl = {
+      localName: "OtherButton",
+      styleKey: "otherButton",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl, otherDecl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted" });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
+    expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
   });
 
   it("bails when a later flat value would erase dynamic conditional map states", () => {

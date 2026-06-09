@@ -35,6 +35,7 @@ export function guardGeneratedConditionalDefaults(
   if (!ctx.resolvedStyleObjects) {
     return "ok";
   }
+  const styleKeyUseCounts = countStyleKeyUses(ctx, styledDecls);
 
   for (const decl of styledDecls) {
     if (decl.skipTransform || decl.isCssHelper) {
@@ -44,6 +45,7 @@ export function guardGeneratedConditionalDefaults(
       ctx,
       decl,
       entries: buildStyleKeySequence(ctx, decl),
+      styleKeyUseCounts,
     });
     if (result === "bail") {
       return "bail";
@@ -115,17 +117,32 @@ function patchConditionalDefaultsForSequence(args: {
   ctx: TransformContext;
   decl: StyledDecl;
   entries: StyleSequenceEntry[];
+  styleKeyUseCounts: Map<string, number>;
 }): "ok" | "bail" {
-  const { ctx, decl, entries } = args;
+  const { ctx, decl, entries, styleKeyUseCounts } = args;
   const shapes = new Map<string, PropertyShape>();
   let hasDynamicUnknownContributor = false;
 
   for (const entry of entries) {
     const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
+    let contributionSource = source;
     if (entry.patchable && isPlainStyleObject(source)) {
+      const clonedPatchSources = new Map<string, Record<string, unknown>>();
       for (const prop of propertiesWithFlatValue(source)) {
         const earlier = shapes.get(prop) ?? { kind: "absent" };
-        if (patchFlatValueAgainstPriorPropertyShape(source, prop, earlier) !== "bail") {
+        const patchTarget =
+          needsSharedFlatEntryClone(entry, source, prop, earlier) && ctx.resolvedStyleObjects
+            ? cloneSharedStyleEntryForPatch(
+                ctx.resolvedStyleObjects,
+                decl,
+                entry.styleKey,
+                source,
+                clonedPatchSources,
+                styleKeyUseCounts,
+              )
+            : source;
+        contributionSource = patchTarget;
+        if (patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier) !== "bail") {
           continue;
         }
         ctx.warnings.push({
@@ -199,7 +216,7 @@ function patchConditionalDefaultsForSequence(args: {
     }
 
     if (entry.contributes !== false) {
-      for (const [prop, shape] of inferPropertyContributions(source)) {
+      for (const [prop, shape] of inferPropertyContributions(contributionSource)) {
         if (shape.kind === "absent") {
           shapes.delete(prop);
         } else {
@@ -210,6 +227,101 @@ function patchConditionalDefaultsForSequence(args: {
   }
 
   return "ok";
+}
+
+function countStyleKeyUses(
+  ctx: TransformContext,
+  styledDecls: readonly StyledDecl[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.isCssHelper) {
+      continue;
+    }
+    for (const entry of buildStyleKeySequence(ctx, decl)) {
+      counts.set(entry.styleKey, (counts.get(entry.styleKey) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function needsSharedFlatEntryClone(
+  entry: StyleSequenceEntry,
+  source: Record<string, unknown>,
+  prop: string,
+  earlier: PropertyShape,
+): boolean {
+  return (
+    entry.source === "mixin" &&
+    earlier.kind === "conditionalMap" &&
+    inferPropertyShapeFromValue(source[prop]).kind === "flat"
+  );
+}
+
+function cloneSharedStyleEntryForPatch(
+  styles: Map<string, unknown>,
+  decl: StyledDecl,
+  styleKey: string,
+  source: Record<string, unknown>,
+  clonedPatchSources: Map<string, Record<string, unknown>>,
+  styleKeyUseCounts: Map<string, number>,
+): Record<string, unknown> {
+  const existing = clonedPatchSources.get(styleKey);
+  if (existing) {
+    return existing;
+  }
+  const clonedStyleKey = uniqueStyleKey(styles, `${decl.styleKey}${capitalize(styleKey)}`);
+  const clonedSource = { ...source };
+  styles.set(clonedStyleKey, clonedSource);
+  replaceStyleKey(decl.extraStyleKeys, styleKey, clonedStyleKey);
+  replaceStyleKey(decl.extraStyleKeysAfterBase, styleKey, clonedStyleKey);
+  decrementStyleKeyUse(styles, styleKeyUseCounts, styleKey);
+  styleKeyUseCounts.set(clonedStyleKey, 1);
+  clonedPatchSources.set(styleKey, clonedSource);
+  return clonedSource;
+}
+
+function decrementStyleKeyUse(
+  styles: Map<string, unknown>,
+  styleKeyUseCounts: Map<string, number>,
+  styleKey: string,
+): void {
+  const nextCount = (styleKeyUseCounts.get(styleKey) ?? 0) - 1;
+  if (nextCount > 0) {
+    styleKeyUseCounts.set(styleKey, nextCount);
+    return;
+  }
+  styleKeyUseCounts.delete(styleKey);
+  styles.delete(styleKey);
+}
+
+function uniqueStyleKey(styles: ReadonlyMap<string, unknown>, baseKey: string): string {
+  let candidate = baseKey;
+  let index = 2;
+  while (styles.has(candidate)) {
+    candidate = `${baseKey}${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function replaceStyleKey(
+  styleKeys: string[] | undefined,
+  previousStyleKey: string,
+  nextStyleKey: string,
+): void {
+  if (!styleKeys) {
+    return;
+  }
+  for (let index = 0; index < styleKeys.length; index += 1) {
+    if (styleKeys[index] === previousStyleKey) {
+      styleKeys[index] = nextStyleKey;
+    }
+  }
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : `${value[0]?.toUpperCase()}${value.slice(1)}`;
 }
 
 function inferPropertyContributions(source: unknown): Map<string, PropertyShape> {
