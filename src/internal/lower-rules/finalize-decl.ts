@@ -344,7 +344,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         state.markBail();
         break;
       }
-      // Skip component identifiers (those are handled above)
+      // Skip component/imported identifiers (those are handled by the rule processor).
       if (!expr || expr.type === "Identifier") {
         continue;
       }

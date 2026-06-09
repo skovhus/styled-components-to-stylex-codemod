@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { zIndex } from "./lib/helpers";
+import { focusOutline, zIndex } from "./lib/helpers";
 
 const Thing = styled.div`
   border-right: 1px solid hotpink;
@@ -31,11 +31,35 @@ const FocusableCell = styled.div<{ $isAnimating?: boolean }>`
   }
 `;
 
+const LogoButton = styled.button`
+  border: 0;
+  background-color: transparent;
+  padding: 8px;
+
+  &:focus-visible {
+    ${focusOutline}
+  }
+`;
+
+const ResponsiveLogoButton = styled.button`
+  border: 0;
+  background-color: white;
+  padding: 8px;
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:focus-visible {
+      ${focusOutline}
+    }
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
     <FocusableCell $isAnimating>
       <button type="button">Focusable cell</button>
     </FocusableCell>
+    <LogoButton type="button">Logo button</LogoButton>
+    <ResponsiveLogoButton type="button">Responsive logo button</ResponsiveLogoButton>
   </div>
 );

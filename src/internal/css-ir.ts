@@ -362,6 +362,7 @@ export function normalizeStylisAstToIR(
   if (rawCss) {
     // Accept optional trailing semicolon since templates often include `${expr};`
     const placeholderLineRe = /^__SC_EXPR_(\d+)__\s*;?\s*$/;
+    const slotExpressionById = new Map(slots.map((slot) => [slot.index, slot.expression]));
     let depth = 0;
     let line = "";
     // Track selector and at-rule context for nested blocks (depth > 0)
@@ -419,11 +420,16 @@ export function normalizeStylisAstToIR(
         recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       } else if (selectorStack.length > 0) {
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
-        // Simple pseudo-class selectors without a user-authored semicolon are handled later
-        // from rawCss. With an explicit semicolon, Stylis drops the placeholder entirely,
-        // so recover it here.
+        // Simple pseudo-class selector helpers that are not identifiers are handled later
+        // from rawCss. Identifier mixins are recovered here so nested at-rules stay attached.
         const currentSelector = selectorStack[selectorStack.length - 1]!;
-        if (!/^&:[a-z]/i.test(currentSelector) || /;\s*$/.test(trimmed)) {
+        const placeholderMatch = trimmed.match(placeholderLineRe);
+        const slotId = placeholderMatch?.[1] ? Number(placeholderMatch[1]) : null;
+        if (
+          !/^&:[a-z]/i.test(currentSelector) ||
+          /;\s*$/.test(trimmed) ||
+          (slotId !== null && isIdentifierSlot(slotExpressionById.get(slotId)))
+        ) {
           recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
       }
@@ -500,6 +506,10 @@ export function normalizeStylisAstToIR(
   }
 
   return rules;
+}
+
+function isIdentifierSlot(expr: unknown): boolean {
+  return !!expr && typeof expr === "object" && (expr as { type?: string }).type === "Identifier";
 }
 
 function parseDeclarations(

@@ -21,6 +21,12 @@ export const App = () => (
     <FocusableCell isAnimating>
       <button type="button">Focusable cell</button>
     </FocusableCell>
+    <button type="button" sx={styles.logoButton}>
+      Logo button
+    </button>
+    <button type="button" sx={styles.responsiveLogoButton}>
+      Responsive logo button
+    </button>
   </div>
 );
 
@@ -53,5 +59,48 @@ const styles = stylex.create({
   },
   focusableCellAnimating: {
     zIndex: $zIndex.modal,
+  },
+  logoButton: {
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#4f46e5",
+    },
+  },
+  responsiveLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "white",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":focus-visible": {
+        default: null,
+        "@media (prefers-reduced-motion: no-preference)": "2px",
+      },
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": {
+        default: null,
+        "@media (prefers-reduced-motion: no-preference)": "solid",
+      },
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": {
+        default: null,
+        "@media (prefers-reduced-motion: no-preference)": "#4f46e5",
+      },
+    },
   },
 });

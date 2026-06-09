@@ -1660,10 +1660,23 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
                     }
                     continue;
                   }
+                  warnings.push({
+                    severity: "error",
+                    type: 'Adapter resolveValue cssText could not be parsed as CSS declarations — expected semicolon-separated property: value pairs (e.g. "white-space: nowrap; overflow: hidden;")',
+                    loc: getNodeLocStart(expr) ?? decl.loc,
+                    context: {
+                      selector: rule.selector,
+                      cssText: resolved.cssText,
+                      importedName: importEntry.importedName,
+                      source: importEntry.source.value,
+                    },
+                  });
+                  bail = true;
+                  break;
                 }
                 warnings.push({
                   severity: "warning",
-                  type: "Adapter resolved StyleX styles cannot be applied under nested selectors/at-rules",
+                  type: "Adapter resolved imported StyleX value under nested selectors/at-rules but did not provide cssText for property expansion — add cssText to resolveValue result to enable pseudo-wrapping",
                   loc: getNodeLocStart(expr) ?? decl.loc,
                   context: {
                     selector: rule.selector,
