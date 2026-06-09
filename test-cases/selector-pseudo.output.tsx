@@ -131,7 +131,10 @@ const styles = stylex.create({
   },
   compactLogoButton: {
     borderWidth: 0,
-    backgroundColor: "#f1f5f9",
+    backgroundColor: {
+      default: "#f1f5f9",
+      ":focus-visible": "#dcfce7",
+    },
     padding: 8,
     outlineWidth: {
       default: null,
@@ -150,6 +153,10 @@ const styles = stylex.create({
     borderWidth: 0,
     backgroundColor: "#e2e8f0",
     padding: 8,
+    color: {
+      default: null,
+      "@media (hover: hover)": "#1d4ed8",
+    },
     outlineWidth: {
       default: null,
       "@media (hover: hover)": "2px",

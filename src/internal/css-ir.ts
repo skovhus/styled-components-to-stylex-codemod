@@ -507,6 +507,9 @@ export function normalizeStylisAstToIR(
         continue;
       }
       line += ch;
+      if (ch === ";" && !inString && parenDepth === 0) {
+        flushLine();
+      }
     }
     // Flush final line (if file doesn't end with newline).
     flushLine();

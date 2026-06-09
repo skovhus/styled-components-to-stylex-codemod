@@ -67,14 +67,14 @@ const CompactLogoButton = styled.button`
   border: 0;
   background-color: #f1f5f9;
   padding: 8px;
-  &:focus-visible { ${focusOutline}; }
+  &:focus-visible { background-color: #dcfce7; ${focusOutline}; }
 `;
 
 const CompactMediaLogoButton = styled.button`
   border: 0;
   background-color: #e2e8f0;
   padding: 8px;
-  @media (hover: hover) { ${focusOutline}; }
+  @media (hover: hover) { color: #1d4ed8; ${focusOutline}; }
 `;
 
 export const App = () => (
