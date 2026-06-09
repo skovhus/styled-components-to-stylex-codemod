@@ -43,6 +43,10 @@ const WidgetContainer = styled.div`
   --agent-item-min-width: 100%;
 `;
 
+const SingleUseWidgetContainer = styled.div`
+  --agent-item-min-width: 75%;
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
@@ -54,5 +58,8 @@ export const App = () => (
     <WidgetContainer>
       <Button>Wide button</Button>
     </WidgetContainer>
+    <SingleUseWidgetContainer>
+      <Button>Single-use wide button</Button>
+    </SingleUseWidgetContainer>
   </Card>
 );

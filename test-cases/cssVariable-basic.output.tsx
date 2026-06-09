@@ -56,6 +56,9 @@ export const App = () => (
     <WidgetContainer>
       <Button>Wide button</Button>
     </WidgetContainer>
+    <div style={singleUseWidgetContainerInlineStyle}>
+      <Button>Single-use wide button</Button>
+    </div>
   </div>
 );
 
@@ -64,6 +67,10 @@ const textInlineStyle = {
   fontSize: "var(--font-size, 16px)",
   lineHeight: "var(--line-height, 1.5)",
 } satisfies React.CSSProperties;
+
+const singleUseWidgetContainerInlineStyle = {
+  "--agent-item-min-width": "75%",
+} as React.CSSProperties;
 
 const styles = stylex.create({
   button: {
