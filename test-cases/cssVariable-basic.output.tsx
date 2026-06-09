@@ -1,7 +1,11 @@
-import * as React from "react";
 import "./cssVariable-basic.css";
+import * as React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { vars } from "./css-variables.stylex";
+
+function Button({ children }: { children?: React.ReactNode }) {
+  return <button sx={styles.button}>{children}</button>;
+}
 
 type TaggedSpanProps = React.PropsWithChildren<{
   tone: string;
@@ -24,11 +28,34 @@ function TaggedSpan(props: TaggedSpanProps) {
   );
 }
 
+// Custom-property-only wrappers must remain real block elements. Replacing the
+// wrapper box with display: contents changes layout even if the CSS variable
+// still inherits to descendants.
+function WidgetContainer({ children }: { children?: React.ReactNode }) {
+  return (
+    <div
+      style={
+        {
+          "--agent-item-min-width": "100%",
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div sx={styles.card}>
     <p style={textInlineStyle}>Some text content</p>
-    <button sx={styles.button}>Click me</button>
+    <Button>Click me</Button>
     <TaggedSpan tone="papayawhip">Tagged</TaggedSpan>
+    <WidgetContainer>
+      <TaggedSpan tone="mistyrose">Wide tagged</TaggedSpan>
+    </WidgetContainer>
+    <WidgetContainer>
+      <Button>Wide button</Button>
+    </WidgetContainer>
   </div>
 );
 

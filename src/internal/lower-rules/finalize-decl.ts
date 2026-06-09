@@ -171,6 +171,12 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
   if (decl.base.kind !== "component") {
+    moveCustomPropertyOnlyBaseToInlineStyles({
+      styleObj,
+      inlineStyleProps,
+      staticInlineStyleProps,
+      j: state.j,
+    });
     moveUnsafeRawCssVarPropsToInlineStyles({
       styleObj,
       inlineStyleProps,
@@ -1544,6 +1550,34 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
     const expr = j.stringLiteral(value);
     inlineStyleProps.push({ prop, expr });
     staticInlineStyleProps.push({ prop, expr });
+  }
+}
+
+function moveCustomPropertyOnlyBaseToInlineStyles(args: {
+  styleObj: Record<string, unknown>;
+  inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
+  staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  j: Parameters<typeof literalToAst>[0];
+}): void {
+  const { styleObj, inlineStyleProps, staticInlineStyleProps, j } = args;
+  const entries = Object.entries(styleObj).filter(([prop]) => !prop.startsWith("__"));
+  if (entries.length === 0 || entries.some(([prop]) => !prop.startsWith("--"))) {
+    return;
+  }
+
+  for (const [prop, value] of entries) {
+    delete styleObj[prop];
+    const expr = isAstNode(value)
+      ? (cloneAstNode(value) as ExpressionKind)
+      : (literalToAst(j, value) as ExpressionKind);
+    inlineStyleProps.push({ prop, expr });
+    staticInlineStyleProps.push({ prop, expr });
+  }
+
+  for (const prop of Object.keys(styleObj)) {
+    if (prop.startsWith("__")) {
+      delete styleObj[prop];
+    }
   }
 }
 

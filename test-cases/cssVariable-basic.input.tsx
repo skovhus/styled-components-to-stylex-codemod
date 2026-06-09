@@ -1,4 +1,5 @@
 import "./cssVariable-basic.css";
+import * as React from "react";
 import styled from "styled-components";
 
 const Button = styled.button`
@@ -35,10 +36,23 @@ const TaggedSpan = styled.span<{ $tone: string }>`
   outline: 2px solid ${(props) => `var(--color-secondary)`};
 `;
 
+// Custom-property-only wrappers must remain real block elements. Replacing the
+// wrapper box with display: contents changes layout even if the CSS variable
+// still inherits to descendants.
+const WidgetContainer = styled.div`
+  --agent-item-min-width: 100%;
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
     <Button>Click me</Button>
     <TaggedSpan $tone="papayawhip">Tagged</TaggedSpan>
+    <WidgetContainer>
+      <TaggedSpan $tone="mistyrose">Wide tagged</TaggedSpan>
+    </WidgetContainer>
+    <WidgetContainer>
+      <Button>Wide button</Button>
+    </WidgetContainer>
   </Card>
 );
