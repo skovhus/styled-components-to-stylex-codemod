@@ -853,7 +853,9 @@ function analyzeStyleArg(
     if (test === true) {
       return right;
     }
-    return right.kind === "absent" ? right : { kind: "variable" };
+    return right.kind === "absent"
+      ? right
+      : variableInferenceFromBranches([{ kind: "absent" }, right]);
   }
   if (node.type === "ConditionalExpression") {
     const test = evaluateStaticBoolean(
@@ -1157,7 +1159,11 @@ function collectFunctionExpressionBindings(functionNode: AstRecord): ExpressionB
     return bindings;
   }
   for (const statement of body.body) {
-    if (!isRecord(statement) || statement.type !== "VariableDeclaration") {
+    if (
+      !isRecord(statement) ||
+      statement.type !== "VariableDeclaration" ||
+      statement.kind !== "const"
+    ) {
       continue;
     }
     for (const declaration of Array.isArray(statement.declarations) ? statement.declarations : []) {

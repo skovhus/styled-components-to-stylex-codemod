@@ -352,6 +352,38 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(ctx.warnings[0]?.context?.example).toContain("color: value");
   });
 
+  it("bails when a mutable local guard could hide conditional states", () => {
+    const ctx = forwardedSxContext({
+      styleObj: { color: "muted" },
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base(props) {
+          const { sx, ...rest } = props;
+          let active = false;
+          active = props.active;
+          return <div {...rest} sx={[active && styles.hover, sx]} />;
+        }
+        const styles = stylex.create({
+          hover: {
+            color: {
+              default: "base",
+              ":hover": "hover",
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.reason).toBe(
+      "wrapped component base property can be conditional for this prop before sx is applied",
+    );
+    expect(ctx.warnings[0]?.context?.droppedConditionKeys).toBe(":hover");
+  });
+
   it("preserves existing caller conditional color maps", () => {
     const styleObj = {
       color: {
