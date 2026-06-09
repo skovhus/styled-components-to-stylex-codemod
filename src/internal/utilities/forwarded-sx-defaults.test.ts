@@ -260,6 +260,79 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("bails when a later helper call spread can override a static variant", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+
+        export function Base(props) {
+          const { sx, ...rest } = props;
+          return <button {...rest} sx={[...getButtonMixinStyles({ variant: "borderless", ...props }), sx]} />;
+        }
+
+        export function getButtonMixinStyles({ variant }) {
+          return [buttonVariants[variant]];
+        }
+
+        const buttonVariants = stylex.create({
+          primary: { color: "control" },
+          borderless: {
+            color: {
+              default: "base",
+              ":highlightMixin": "title",
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(styleObj).toEqual({ color: "muted" });
+  });
+
+  it("uses static helper call values declared after object spreads", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+
+        export function Base(props) {
+          const { sx, ...rest } = props;
+          return <button {...rest} sx={[...getButtonMixinStyles({ ...props, variant: "borderless" }), sx]} />;
+        }
+
+        export function getButtonMixinStyles({ variant }) {
+          return [buttonVariants[variant]];
+        }
+
+        const buttonVariants = stylex.create({
+          primary: { color: "control" },
+          borderless: {
+            color: {
+              default: "base",
+              ":highlightMixin": "title",
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":highlightMixin": "title",
+      },
+    });
+  });
+
   it("does not bind static attrs through unrelated local object destructures", () => {
     const ctx = forwardedSxContext({
       styleObj: { color: "muted" },

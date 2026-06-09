@@ -1256,11 +1256,14 @@ function readObjectExpressionStaticBindings(
   for (const property of getObjectProperties(objectExpression)) {
     const key = readPropertyKey(property);
     if (!key || property.value == null) {
+      bindings.clear();
       continue;
     }
     const value = staticValueFromExpression(property.value, callerBindings);
     if (value !== undefined) {
       bindings.set(key, value);
+    } else {
+      bindings.delete(key);
     }
   }
   return bindings;
