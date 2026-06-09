@@ -219,6 +219,24 @@ const ConditionalLogicalSidePadding = styled.span<{ $active?: boolean }>`
     `}
 `;
 
+const ConditionalLogicalMediaPadding = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #d1fae5;
+
+  @media (min-width: 600px) {
+    padding-right: 20px;
+  }
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:hover {
+        padding-inline: 2px;
+      }
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -249,5 +267,6 @@ export const App = () => (
     <FiniteCssBlock $enabled>Hidden finite block</FiniteCssBlock>
     <ConditionalLogicalPadding $active>Logical padding hover</ConditionalLogicalPadding>
     <ConditionalLogicalSidePadding $active>Logical side padding</ConditionalLogicalSidePadding>
+    <ConditionalLogicalMediaPadding $active>Logical media padding</ConditionalLogicalMediaPadding>
   </div>
 );

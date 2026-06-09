@@ -873,11 +873,7 @@ function getBasePhysicalValue(
     return undefined;
   }
   const baseValue = baseStyle[prop];
-  if (!isStyleValueMap(baseValue)) {
-    return baseValue;
-  }
-  const defaultValue = baseValue.default;
-  return defaultValue === null || defaultValue === undefined ? undefined : defaultValue;
+  return baseValue;
 }
 
 /**

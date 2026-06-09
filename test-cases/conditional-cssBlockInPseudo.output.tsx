@@ -244,6 +244,24 @@ function ConditionalLogicalSidePadding(props: ConditionalLogicalSidePaddingProps
   );
 }
 
+type ConditionalLogicalMediaPaddingProps = React.PropsWithChildren<{
+  active?: boolean;
+}>;
+
+function ConditionalLogicalMediaPadding(props: ConditionalLogicalMediaPaddingProps) {
+  const { children, active } = props;
+  return (
+    <span
+      sx={[
+        styles.conditionalLogicalMediaPadding,
+        active && styles.conditionalLogicalMediaPaddingActive,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -274,6 +292,7 @@ export const App = () => (
     <FiniteCssBlock enabled>Hidden finite block</FiniteCssBlock>
     <ConditionalLogicalPadding active>Logical padding hover</ConditionalLogicalPadding>
     <ConditionalLogicalSidePadding active>Logical side padding</ConditionalLogicalSidePadding>
+    <ConditionalLogicalMediaPadding active>Logical media padding</ConditionalLogicalMediaPadding>
   </div>
 );
 
@@ -573,5 +592,27 @@ const styles = stylex.create({
   },
   conditionalLogicalSidePaddingActive: {
     paddingInlineStart: 2,
+  },
+  conditionalLogicalMediaPadding: {
+    display: "inline-flex",
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingLeft: 8,
+    paddingRight: {
+      default: 8,
+      "@media (min-width: 600px)": 20,
+    },
+    backgroundColor: "#d1fae5",
+  },
+  conditionalLogicalMediaPaddingActive: {
+    paddingRight: {
+      default: 8,
+      "@media (min-width: 600px)": 20,
+      ":hover": 2,
+    },
+    paddingLeft: {
+      default: 8,
+      ":hover": 2,
+    },
   },
 });
