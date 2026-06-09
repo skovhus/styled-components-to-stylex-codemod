@@ -30,6 +30,12 @@ export const App = () => (
     <button type="button" sx={styles.mediaLogoButton}>
       Media logo button
     </button>
+    <button type="button" sx={styles.compactLogoButton}>
+      Compact logo button
+    </button>
+    <button type="button" sx={styles.compactMediaLogoButton}>
+      Compact media logo button
+    </button>
   </div>
 );
 
@@ -109,6 +115,40 @@ const styles = stylex.create({
   mediaLogoButton: {
     borderWidth: 0,
     backgroundColor: "#f8fafc",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      "@media (hover: hover)": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      "@media (hover: hover)": "solid",
+    },
+    outlineColor: {
+      default: null,
+      "@media (hover: hover)": "#4f46e5",
+    },
+  },
+  compactLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#f1f5f9",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#4f46e5",
+    },
+  },
+  compactMediaLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#e2e8f0",
     padding: 8,
     outlineWidth: {
       default: null,

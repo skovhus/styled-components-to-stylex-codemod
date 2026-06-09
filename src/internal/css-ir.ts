@@ -488,7 +488,10 @@ export function normalizeStylisAstToIR(
           blockKindStack.push("selector");
         }
         depth++;
+        line = "";
+        continue;
       } else if (ch === "}") {
+        flushLine();
         depth = Math.max(0, depth - 1);
         const kind = blockKindStack.pop();
         if (kind === "at-rule") {
@@ -496,6 +499,8 @@ export function normalizeStylisAstToIR(
         } else if (selectorStack.length > 0) {
           selectorStack.pop();
         }
+        line = "";
+        continue;
       }
       if (ch === "\n") {
         flushLine();

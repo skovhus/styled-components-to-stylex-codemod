@@ -63,6 +63,20 @@ const MediaLogoButton = styled.button`
   }
 `;
 
+const CompactLogoButton = styled.button`
+  border: 0;
+  background-color: #f1f5f9;
+  padding: 8px;
+  &:focus-visible { ${focusOutline}; }
+`;
+
+const CompactMediaLogoButton = styled.button`
+  border: 0;
+  background-color: #e2e8f0;
+  padding: 8px;
+  @media (hover: hover) { ${focusOutline}; }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -72,5 +86,7 @@ export const App = () => (
     <LogoButton type="button">Logo button</LogoButton>
     <ResponsiveLogoButton type="button">Responsive logo button</ResponsiveLogoButton>
     <MediaLogoButton type="button">Media logo button</MediaLogoButton>
+    <CompactLogoButton type="button">Compact logo button</CompactLogoButton>
+    <CompactMediaLogoButton type="button">Compact media logo button</CompactMediaLogoButton>
   </div>
 );
