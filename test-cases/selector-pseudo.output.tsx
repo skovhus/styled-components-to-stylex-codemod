@@ -48,6 +48,9 @@ export const App = () => (
     <button type="button" sx={styles.functionalNestedLogoButton}>
       Functional nested logo button
     </button>
+    <button type="button" sx={styles.multilineBeforeLogoButton}>
+      Multiline before logo button
+    </button>
   </div>
 );
 
@@ -248,6 +251,23 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       ":is(:hover, :focus):active": "#4f46e5",
+    },
+  },
+  multilineBeforeLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#f0fdfa",
+    padding: 8,
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#4f46e5",
+    },
+    outlineWidth: {
+      default: null,
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
     },
   },
 });

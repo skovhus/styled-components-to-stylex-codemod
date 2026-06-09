@@ -119,6 +119,20 @@ const FunctionalNestedLogoButton = styled.button`
   }
 `;
 
+const MultilineBeforeLogoButton = styled.button`
+  border: 0;
+  background-color: #f0fdfa;
+  padding: 8px;
+  &:focus-visible {
+    outline-color: color-mix(
+      in srgb,
+      red 50%,
+      blue
+    );
+    ${focusOutline};
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -136,5 +150,8 @@ export const App = () => (
     <FunctionalNestedLogoButton type="button">
       Functional nested logo button
     </FunctionalNestedLogoButton>
+    <MultilineBeforeLogoButton type="button">
+      Multiline before logo button
+    </MultilineBeforeLogoButton>
   </div>
 );

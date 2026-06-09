@@ -452,7 +452,6 @@ export function normalizeStylisAstToIR(
       // Skip recovery when inside parenthesized CSS functions (min(), calc(), linear-gradient(), etc.)
       // — the placeholder is part of a CSS value, not a standalone mixin interpolation.
       if (parenDepth > 0) {
-        line = "";
         return;
       }
       if (depth === 0) {
