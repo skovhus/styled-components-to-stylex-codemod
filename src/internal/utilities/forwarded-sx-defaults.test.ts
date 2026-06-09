@@ -357,6 +357,36 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("bails instead of flattening nested wrapped conditional map states", () => {
+    const styleObj = { outlineWidth: 1 };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[styles.base, sx]} />;
+        }
+        const styles = stylex.create({
+          base: {
+            outlineWidth: {
+              default: null,
+              ":focus-visible": {
+                default: null,
+                "@media (forced-colors: active)": 2,
+              },
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(styleObj).toEqual({ outlineWidth: 1 });
+  });
+
   it("lifts transitionDuration over wrapped highlight duration states", () => {
     const styleObj = { transitionDuration: "120ms" };
     const ctx = forwardedSxContext({

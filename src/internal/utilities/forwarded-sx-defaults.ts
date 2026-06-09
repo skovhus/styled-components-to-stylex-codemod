@@ -448,7 +448,7 @@ function readAstPropertyShape(node: unknown): PropertyShape {
         continue;
       }
       conditionKeys.push(key);
-      const staticValue = readStaticStyleValue(property.value);
+      const staticValue = readDirectStaticStyleValue(property.value);
       if (staticValue.found) {
         staticConditions[key] = staticValue.value;
       } else {
@@ -502,6 +502,15 @@ function readStaticStyleValue(
     return defaultProp?.value ? readStaticStyleValue(defaultProp.value) : { found: false };
   }
   return { found: false };
+}
+
+function readDirectStaticStyleValue(
+  node: unknown,
+): { found: true; value: StaticStyleValue } | { found: false } {
+  if (!isRecord(node) || isObjectExpression(node)) {
+    return { found: false };
+  }
+  return readStaticStyleValue(node);
 }
 
 function readFunctionReturnedObject(node: unknown): AstRecord | null {
