@@ -394,9 +394,12 @@ function parseSource(jscodeshift: API["jscodeshift"], source: string): { ast: un
 }
 
 function collectModuleConstBindings(ast: unknown): ExpressionBindings {
+  return collectConstBindingsFromStatements(moduleStatements(ast));
+}
+
+function moduleStatements(ast: unknown): readonly unknown[] {
   const program = isRecord(ast) && isRecord(ast.program) ? ast.program : ast;
-  const statements = isRecord(program) && Array.isArray(program.body) ? program.body : [];
-  return collectConstBindingsFromStatements(statements);
+  return isRecord(program) && Array.isArray(program.body) ? program.body : [];
 }
 
 function collectConstBindingsFromStatements(statements: readonly unknown[]): ExpressionBindings {
@@ -441,21 +444,34 @@ function resolveConstReference(node: unknown, bindings: ExpressionBindings): Con
 
 function collectStylexCreateMaps(ast: unknown, moduleBindings: ExpressionBindings): StyleMaps {
   const maps: StyleMaps = new Map();
-  walk(ast, (node) => {
-    if (node.type !== "VariableDeclarator") {
-      return;
+  for (const statement of moduleStatements(ast)) {
+    const declaration =
+      isRecord(statement) && statement.type === "ExportNamedDeclaration"
+        ? statement.declaration
+        : statement;
+    if (
+      !isRecord(declaration) ||
+      declaration.type !== "VariableDeclaration" ||
+      declaration.kind !== "const"
+    ) {
+      continue;
     }
-    const id = node.id;
-    const init = node.init;
-    if (!isIdentifier(id) || !isRecord(init) || !isStylexCreateCall(init)) {
-      return;
+    for (const node of Array.isArray(declaration.declarations) ? declaration.declarations : []) {
+      if (!isRecord(node) || node.type !== "VariableDeclarator") {
+        continue;
+      }
+      const id = node.id;
+      const init = node.init;
+      if (!isIdentifier(id) || !isRecord(init) || !isStylexCreateCall(init)) {
+        continue;
+      }
+      const stylesArg = getCallArguments(init)[0];
+      if (!isObjectExpression(stylesArg)) {
+        continue;
+      }
+      maps.set(id.name, readStyleEntries(stylesArg, moduleBindings));
     }
-    const stylesArg = getCallArguments(init)[0];
-    if (!isObjectExpression(stylesArg)) {
-      return;
-    }
-    maps.set(id.name, readStyleEntries(stylesArg, moduleBindings));
-  });
+  }
   return maps;
 }
 
