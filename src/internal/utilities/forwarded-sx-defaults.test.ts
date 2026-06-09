@@ -189,6 +189,38 @@ describe("guardForwardedSxConditionalDefaults", () => {
     );
   });
 
+  it("does not reject exact style refs because sibling style entries are incomplete", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        const sharedVariant = { color: { default: "shared", ":hover": "sharedHover" } };
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[styles.base, sx]} />;
+        }
+        const styles = stylex.create({
+          base: {
+            color: {
+              default: "base",
+              ":hover": "hover",
+            },
+          },
+          unused: sharedVariant,
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+  });
+
   it("patches variant dimension defaults forwarded through sx", () => {
     const basePath = "/tmp/base.tsx";
     const variantStyle = {

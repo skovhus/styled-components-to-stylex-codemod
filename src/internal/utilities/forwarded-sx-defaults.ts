@@ -1100,11 +1100,16 @@ function analyzeStyleReference(
     return analyzeComputedStyleMapReference(ref, styleMaps, prop, called);
   }
   const styleMap = styleMaps.get(ref.objectName);
-  if (!styleMap?.complete) {
-    return { kind: "variableConditionalMap", conditionKeys: [] };
+  if (!styleMap) {
+    return { kind: "unknown" };
   }
   const styleEntry = styleMap.entries.get(ref.styleKey);
-  return styleEntry ? analyzeStyleEntry(styleEntry, prop, called) : { kind: "unknown" };
+  if (styleEntry) {
+    return analyzeStyleEntry(styleEntry, prop, called);
+  }
+  return styleMap.complete
+    ? { kind: "unknown" }
+    : { kind: "variableConditionalMap", conditionKeys: [] };
 }
 
 function analyzeComputedStyleMapReference(
