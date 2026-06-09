@@ -181,8 +181,8 @@ const FLAT_ERASES_CONDITIONAL_WARNING =
 
 type AstRecord = Record<string, unknown> & { type?: string };
 type StyleEntry =
-  | { kind: "object"; props: Map<string, PropValue> }
-  | { kind: "function"; props: Set<string> };
+  | { kind: "object"; props: Map<string, PropValue>; complete: boolean }
+  | { kind: "function"; props: Set<string>; complete: boolean };
 type PropValue = Exclude<PropertyShape, { kind: "absent" }>;
 type StyleMap = {
   entries: Map<string, StyleEntry>;
@@ -363,14 +363,16 @@ function readStyleEntries(stylexCreateArg: AstRecord): StyleMap {
       continue;
     }
     if (isObjectExpression(value)) {
-      entries.set(key, { kind: "object", props: readStyleObjectProps(value) });
+      entries.set(key, { kind: "object", ...readStyleObjectProps(value) });
       continue;
     }
     const returnedObject = readFunctionReturnedObject(value);
     if (returnedObject) {
+      const returnedProps = readStyleObjectProps(returnedObject);
       entries.set(key, {
         kind: "function",
-        props: new Set(readStyleObjectProps(returnedObject).keys()),
+        props: new Set(returnedProps.props.keys()),
+        complete: returnedProps.complete,
       });
       continue;
     }
@@ -379,11 +381,16 @@ function readStyleEntries(stylexCreateArg: AstRecord): StyleMap {
   return { entries, complete };
 }
 
-function readStyleObjectProps(styleObject: AstRecord): Map<string, PropValue> {
+function readStyleObjectProps(styleObject: AstRecord): {
+  props: Map<string, PropValue>;
+  complete: boolean;
+} {
   const props = new Map<string, PropValue>();
+  let complete = true;
   for (const property of getObjectProperties(styleObject)) {
     const key = readPropertyKey(property);
     if (!key || !property.value) {
+      complete = false;
       continue;
     }
     const value = readAstPropertyShape(property.value);
@@ -391,7 +398,7 @@ function readStyleObjectProps(styleObject: AstRecord): Map<string, PropValue> {
       props.set(key, value);
     }
   }
-  return props;
+  return { props, complete };
 }
 
 function collectArrayStyleHelpers(ast: unknown): ArrayStyleHelpers {
@@ -933,7 +940,13 @@ function analyzeStyleEntry(
   called: boolean,
 ): PropertyInference {
   if (styleEntry.kind === "function") {
+    if (!styleEntry.complete) {
+      return { kind: "variableConditionalMap", conditionKeys: [] };
+    }
     return styleEntry.props.has(prop) ? { kind: "variable" } : { kind: "absent" };
+  }
+  if (!styleEntry.complete) {
+    return { kind: "variableConditionalMap", conditionKeys: [] };
   }
   const value = styleEntry.props.get(prop);
   if (!value) {
