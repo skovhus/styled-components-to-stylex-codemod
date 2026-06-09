@@ -77,6 +77,26 @@ const CompactMediaLogoButton = styled.button`
   @media (hover: hover) { color: #1d4ed8; ${focusOutline}; }
 `;
 
+const OrderedLogoButton = styled.button`
+  border: 0;
+  background-color: #fff7ed;
+  padding: 8px;
+  &:focus-visible {
+    ${focusOutline};
+    outline-color: #dc2626;
+  }
+`;
+
+const OrderedMediaLogoButton = styled.button`
+  border: 0;
+  background-color: #ecfdf5;
+  padding: 8px;
+  @media (hover: hover) {
+    ${focusOutline};
+    outline-color: #047857;
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -88,5 +108,7 @@ export const App = () => (
     <MediaLogoButton type="button">Media logo button</MediaLogoButton>
     <CompactLogoButton type="button">Compact logo button</CompactLogoButton>
     <CompactMediaLogoButton type="button">Compact media logo button</CompactMediaLogoButton>
+    <OrderedLogoButton type="button">Ordered logo button</OrderedLogoButton>
+    <OrderedMediaLogoButton type="button">Ordered media logo button</OrderedMediaLogoButton>
   </div>
 );

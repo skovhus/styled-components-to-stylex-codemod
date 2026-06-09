@@ -36,6 +36,12 @@ export const App = () => (
     <button type="button" sx={styles.compactMediaLogoButton}>
       Compact media logo button
     </button>
+    <button type="button" sx={styles.orderedLogoButton}>
+      Ordered logo button
+    </button>
+    <button type="button" sx={styles.orderedMediaLogoButton}>
+      Ordered media logo button
+    </button>
   </div>
 );
 
@@ -168,6 +174,40 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       "@media (hover: hover)": "#4f46e5",
+    },
+  },
+  orderedLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#fff7ed",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":focus-visible": "#dc2626",
+    },
+  },
+  orderedMediaLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#ecfdf5",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      "@media (hover: hover)": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      "@media (hover: hover)": "solid",
+    },
+    outlineColor: {
+      default: null,
+      "@media (hover: hover)": "#047857",
     },
   },
 });

@@ -187,8 +187,11 @@ export function normalizeStylisAstToIR(
     pendingComment = body;
   };
 
+  const findRule = (selector: string, stack: string[]): CssRuleIR | undefined =>
+    rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, stack));
+
   const ensureRule = (selector: string, stack: string[]): CssRuleIR => {
-    const existing = rules.find((r) => r.selector === selector && sameArray(r.atRuleStack, stack));
+    const existing = findRule(selector, stack);
     if (existing) {
       return existing;
     }
@@ -368,18 +371,43 @@ export function normalizeStylisAstToIR(
     // Track selector and at-rule context for nested blocks (depth > 0)
     const selectorStack: string[] = [];
     const recoveryAtRuleStack: string[] = [];
+    const rawDeclarationCountByRule = new WeakMap<CssRuleIR, number>();
 
-    const recoverPlaceholder = (trimmed: string, selector: string, recoveryAtRules: string[]) => {
+    const recordRawDeclarations = (
+      trimmed: string,
+      selector: string,
+      recoveryAtRules: string[],
+    ): void => {
+      const decls = parseDeclarations(trimmed, slotByPlaceholder);
+      if (!decls.length) {
+        return;
+      }
+      const targetRule = findRule(selector, recoveryAtRules);
+      if (!targetRule) {
+        return;
+      }
+      rawDeclarationCountByRule.set(
+        targetRule,
+        (rawDeclarationCountByRule.get(targetRule) ?? 0) + decls.length,
+      );
+    };
+
+    const recoverPlaceholder = (
+      trimmed: string,
+      selector: string,
+      recoveryAtRules: string[],
+    ): boolean => {
       const m = trimmed.match(placeholderLineRe);
       if (!m) {
-        return;
+        return false;
       }
       const slotId = Number(m[1]);
       const placeholder = `__SC_EXPR_${slotId}__`;
       const mapped = slotByPlaceholder.get(placeholder);
       if (mapped === undefined) {
-        return;
+        return false;
       }
+      const shouldPreserveRawDeclarationPosition = isIdentifierSlot(slotExpressionById.get(slotId));
       // Check if this slot is already used in ANY declaration across all rules.
       // Stylis correctly places placeholders that are part of multi-value properties
       // (e.g. `background: linear-gradient(...), __SC_EXPR_1__`), so recovery would
@@ -395,7 +423,7 @@ export function normalizeStylisAstToIR(
         }),
       );
       if (alreadyUsed) {
-        return;
+        return false;
       }
       const targetRule = ensureRule(selector, recoveryAtRules);
       const decl: CssDeclarationIR = {
@@ -404,8 +432,19 @@ export function normalizeStylisAstToIR(
         important: false,
         valueRaw: placeholder,
       };
-      targetRule.declarations.push(decl);
+      if (shouldPreserveRawDeclarationPosition) {
+        const rawDeclarationCount = rawDeclarationCountByRule.get(targetRule) ?? 0;
+        targetRule.declarations.splice(
+          Math.min(rawDeclarationCount, targetRule.declarations.length),
+          0,
+          decl,
+        );
+        rawDeclarationCountByRule.set(targetRule, rawDeclarationCount + 1);
+      } else {
+        targetRule.declarations.push(decl);
+      }
       lastDecl = decl;
+      return true;
     };
 
     const flushLine = () => {
@@ -417,23 +456,35 @@ export function normalizeStylisAstToIR(
         return;
       }
       if (depth === 0) {
-        recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
+        if (placeholderLineRe.test(trimmed)) {
+          recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
+        } else {
+          recordRawDeclarations(trimmed, "&", recoveryAtRuleStack);
+        }
       } else if (selectorStack.length > 0) {
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
         // Simple pseudo-class selector helpers that are not identifiers are handled later
         // from rawCss. Identifier mixins are recovered here so nested at-rules stay attached.
         const currentSelector = selectorStack[selectorStack.length - 1]!;
         const placeholderMatch = trimmed.match(placeholderLineRe);
-        const slotId = placeholderMatch?.[1] ? Number(placeholderMatch[1]) : null;
-        if (
-          !/^&:[a-z]/i.test(currentSelector) ||
-          /;\s*$/.test(trimmed) ||
-          (slotId !== null && isIdentifierSlot(slotExpressionById.get(slotId)))
-        ) {
-          recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
+        if (placeholderMatch) {
+          const slotId = Number(placeholderMatch[1]);
+          if (
+            !/^&:[a-z]/i.test(currentSelector) ||
+            /;\s*$/.test(trimmed) ||
+            isIdentifierSlot(slotExpressionById.get(slotId))
+          ) {
+            recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
+          }
+        } else {
+          recordRawDeclarations(trimmed, currentSelector, recoveryAtRuleStack);
         }
       } else if (recoveryAtRuleStack.length > 0) {
-        recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
+        if (placeholderLineRe.test(trimmed)) {
+          recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
+        } else {
+          recordRawDeclarations(trimmed, "&", recoveryAtRuleStack);
+        }
       }
       line = "";
     };
