@@ -97,6 +97,17 @@ const OrderedMediaLogoButton = styled.button`
   }
 `;
 
+const NestedLogoButton = styled.button`
+  border: 0;
+  background-color: #f8fafc;
+  padding: 8px;
+  &:hover {
+    &:focus-visible {
+      ${focusOutline}
+    }
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -110,5 +121,6 @@ export const App = () => (
     <CompactMediaLogoButton type="button">Compact media logo button</CompactMediaLogoButton>
     <OrderedLogoButton type="button">Ordered logo button</OrderedLogoButton>
     <OrderedMediaLogoButton type="button">Ordered media logo button</OrderedMediaLogoButton>
+    <NestedLogoButton type="button">Nested logo button</NestedLogoButton>
   </div>
 );

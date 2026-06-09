@@ -42,6 +42,9 @@ export const App = () => (
     <button type="button" sx={styles.orderedMediaLogoButton}>
       Ordered media logo button
     </button>
+    <button type="button" sx={styles.nestedLogoButton}>
+      Nested logo button
+    </button>
   </div>
 );
 
@@ -208,6 +211,23 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       "@media (hover: hover)": "#047857",
+    },
+  },
+  nestedLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#f8fafc",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":hover:focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":hover:focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":hover:focus-visible": "#4f46e5",
     },
   },
 });

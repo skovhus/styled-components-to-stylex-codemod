@@ -465,7 +465,7 @@ export function normalizeStylisAstToIR(
         // Recover standalone placeholders inside nested selector blocks (e.g., &[data-state="active"] { __SC_EXPR_0__; }).
         // Simple pseudo-class selector helpers that are not identifiers are handled later
         // from rawCss. Identifier mixins are recovered here so nested at-rules stay attached.
-        const currentSelector = selectorStack[selectorStack.length - 1]!;
+        const currentSelector = resolveNestedSelectorStack(selectorStack);
         const placeholderMatch = trimmed.match(placeholderLineRe);
         if (placeholderMatch) {
           const slotId = Number(placeholderMatch[1]);
@@ -571,6 +571,27 @@ export function normalizeStylisAstToIR(
 
 function isIdentifierSlot(expr: unknown): boolean {
   return !!expr && typeof expr === "object" && (expr as { type?: string }).type === "Identifier";
+}
+
+function resolveNestedSelectorStack(selectors: string[]): string {
+  return selectors.reduce((resolved, selector) => {
+    const trimmed = selector.trim();
+    if (!trimmed) {
+      return resolved;
+    }
+    if (!resolved) {
+      return trimmed;
+    }
+    const parentParts = resolved.split(",").map((part) => part.trim());
+    const selectorParts = trimmed.split(",").map((part) => part.trim());
+    return parentParts
+      .flatMap((parent) =>
+        selectorParts.map((part) =>
+          part.includes("&") ? part.replaceAll("&", parent) : `${parent} ${part}`,
+        ),
+      )
+      .join(",");
+  }, "");
 }
 
 function parseDeclarations(
