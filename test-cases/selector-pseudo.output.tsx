@@ -27,6 +27,9 @@ export const App = () => (
     <button type="button" sx={styles.responsiveLogoButton}>
       Responsive logo button
     </button>
+    <button type="button" sx={styles.mediaLogoButton}>
+      Media logo button
+    </button>
   </div>
 );
 
@@ -101,6 +104,23 @@ const styles = stylex.create({
         default: null,
         "@media (prefers-reduced-motion: no-preference)": "#4f46e5",
       },
+    },
+  },
+  mediaLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#f8fafc",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      "@media (hover: hover)": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      "@media (hover: hover)": "solid",
+    },
+    outlineColor: {
+      default: null,
+      "@media (hover: hover)": "#4f46e5",
     },
   },
 });

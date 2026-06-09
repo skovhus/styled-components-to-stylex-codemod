@@ -432,6 +432,8 @@ export function normalizeStylisAstToIR(
         ) {
           recoverPlaceholder(trimmed, currentSelector, recoveryAtRuleStack);
         }
+      } else if (recoveryAtRuleStack.length > 0) {
+        recoverPlaceholder(trimmed, "&", recoveryAtRuleStack);
       }
       line = "";
     };

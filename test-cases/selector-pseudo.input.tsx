@@ -53,6 +53,16 @@ const ResponsiveLogoButton = styled.button`
   }
 `;
 
+const MediaLogoButton = styled.button`
+  border: 0;
+  background-color: #f8fafc;
+  padding: 8px;
+
+  @media (hover: hover) {
+    ${focusOutline}
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -61,5 +71,6 @@ export const App = () => (
     </FocusableCell>
     <LogoButton type="button">Logo button</LogoButton>
     <ResponsiveLogoButton type="button">Responsive logo button</ResponsiveLogoButton>
+    <MediaLogoButton type="button">Media logo button</MediaLogoButton>
   </div>
 );
