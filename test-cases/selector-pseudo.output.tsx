@@ -54,6 +54,9 @@ export const App = () => (
     <button type="button" sx={styles.multilineSelectorListLogoButton}>
       Multiline selector list logo button
     </button>
+    <button type="button" sx={styles.multilineMediaLogoButton}>
+      Multiline media logo button
+    </button>
   </div>
 );
 
@@ -291,6 +294,23 @@ const styles = stylex.create({
       default: null,
       ":hover": "#4f46e5",
       ":focus-visible": "#4f46e5",
+    },
+  },
+  multilineMediaLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#fefce8",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      "@media (min-width: 600px) and (max-width: 900px)": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      "@media (min-width: 600px) and (max-width: 900px)": "solid",
+    },
+    outlineColor: {
+      default: null,
+      "@media (min-width: 600px) and (max-width: 900px)": "#4f46e5",
     },
   },
 });

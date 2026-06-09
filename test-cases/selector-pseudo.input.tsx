@@ -143,6 +143,16 @@ const MultilineSelectorListLogoButton = styled.button`
   }
 `;
 
+const MultilineMediaLogoButton = styled.button`
+  border: 0;
+  background-color: #fefce8;
+  padding: 8px;
+  @media (min-width: 600px)
+    and (max-width: 900px) {
+    ${focusOutline}
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -166,5 +176,6 @@ export const App = () => (
     <MultilineSelectorListLogoButton type="button">
       Multiline selector list logo button
     </MultilineSelectorListLogoButton>
+    <MultilineMediaLogoButton type="button">Multiline media logo button</MultilineMediaLogoButton>
   </div>
 );

@@ -529,7 +529,7 @@ export function normalizeStylisAstToIR(
       if (ch === "{") {
         const blockHeader = line.trim();
         if (blockHeader.startsWith("@")) {
-          recoveryAtRuleStack.push(blockHeader);
+          recoveryAtRuleStack.push(blockHeader.replace(/\s+/g, " "));
           blockKindStack.push("at-rule");
         } else {
           if (blockHeader) {
@@ -553,7 +553,8 @@ export function normalizeStylisAstToIR(
         continue;
       }
       if (ch === "\n") {
-        if (line.trimEnd().endsWith(",")) {
+        const trimmedLine = line.trim();
+        if (line.trimEnd().endsWith(",") || (trimmedLine.startsWith("@") && !line.includes(";"))) {
           line += " ";
           continue;
         }
