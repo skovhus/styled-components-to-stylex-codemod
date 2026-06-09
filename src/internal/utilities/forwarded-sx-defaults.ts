@@ -595,36 +595,54 @@ function collectPatternBoundNames(node: unknown, out: Set<string>): void {
 
 function collectArrayStyleHelpers(ast: unknown): ArrayStyleHelpers {
   const helpers: ArrayStyleHelpers = new Map();
-  walk(ast, (node) => {
-    if (node.type === "FunctionDeclaration" && isIdentifier(node.id)) {
-      const returnedArray = readFunctionReturnedArray(node);
-      if (returnedArray) {
-        helpers.set(node.id.name, {
-          params: getFunctionParams(node),
-          returnedArray,
-          expressionBindings: collectFunctionExpressionBindings(node),
-        });
+  for (const statement of moduleStatements(ast)) {
+    const declaration =
+      isRecord(statement) && statement.type === "ExportNamedDeclaration"
+        ? statement.declaration
+        : statement;
+    if (isRecord(declaration) && declaration.type === "FunctionDeclaration") {
+      const node = declaration;
+      if (isIdentifier(node.id)) {
+        addArrayStyleHelper(helpers, node.id.name, node);
       }
-      return;
+      continue;
     }
     if (
-      node.type !== "VariableDeclarator" ||
-      !isIdentifier(node.id) ||
-      !isFunctionLike(node.init)
+      !isRecord(declaration) ||
+      declaration.type !== "VariableDeclaration" ||
+      declaration.kind !== "const"
     ) {
-      return;
+      continue;
     }
-    const returnedArray = readFunctionReturnedArray(node.init);
-    if (!returnedArray) {
-      return;
+    for (const node of Array.isArray(declaration.declarations) ? declaration.declarations : []) {
+      if (
+        !isRecord(node) ||
+        node.type !== "VariableDeclarator" ||
+        !isIdentifier(node.id) ||
+        !isFunctionLike(node.init)
+      ) {
+        continue;
+      }
+      addArrayStyleHelper(helpers, node.id.name, node.init);
     }
-    helpers.set(node.id.name, {
-      params: getFunctionParams(node.init),
-      returnedArray,
-      expressionBindings: collectFunctionExpressionBindings(node.init),
-    });
-  });
+  }
   return helpers;
+}
+
+function addArrayStyleHelper(
+  helpers: ArrayStyleHelpers,
+  helperName: string,
+  functionNode: AstRecord,
+): void {
+  const returnedArray = readFunctionReturnedArray(functionNode);
+  if (!returnedArray) {
+    return;
+  }
+  helpers.set(helperName, {
+    params: getFunctionParams(functionNode),
+    returnedArray,
+    expressionBindings: collectFunctionExpressionBindings(functionNode),
+  });
 }
 
 function readAstPropertyShape(node: unknown, moduleBindings: ExpressionBindings): PropertyShape {

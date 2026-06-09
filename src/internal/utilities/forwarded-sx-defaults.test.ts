@@ -259,6 +259,48 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("uses the module array-style helper binding instead of nested same-name helpers", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[...getStyles(), sx]} />;
+        }
+        function getStyles() {
+          return [styles.hover];
+        }
+        const styles = stylex.create({
+          hover: {
+            color: {
+              default: "base",
+              ":hover": "hover",
+            },
+          },
+          flat: {
+            color: "nested",
+          },
+        });
+        function unrelated() {
+          function getStyles() {
+            return [styles.flat];
+          }
+          return getStyles();
+        }
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+  });
+
   it("patches variant dimension defaults forwarded through sx", () => {
     const basePath = "/tmp/base.tsx";
     const variantStyle = {
