@@ -1006,7 +1006,7 @@ function analyzeStyleSequence(
     if (next.kind === "absent") {
       continue;
     }
-    if (next.kind === "unknown" || next.kind === "variable") {
+    if (next.kind === "unknown") {
       return next;
     }
     current = next;

@@ -692,6 +692,38 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(styleObj).toEqual({ color: "muted" });
   });
 
+  it("keeps scanning after flat-only variable styles before conditional maps", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, tone, ...rest }) {
+          return <div {...rest} sx={[tone ? styles.red : styles.green, styles.hover, sx]} />;
+        }
+        const styles = stylex.create({
+          red: { color: "red" },
+          green: { color: "green" },
+          hover: {
+            color: {
+              default: "base",
+              ":hover": "hover",
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+  });
+
   it("resolves module const property values into liftable conditional maps", () => {
     const styleObj = { color: "muted" };
     const ctx = forwardedSxContext({
