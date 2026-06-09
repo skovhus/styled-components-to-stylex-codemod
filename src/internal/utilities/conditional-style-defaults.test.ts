@@ -514,6 +514,40 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
   });
 
+  it("does not over-count functional pseudo specificity for later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "input",
+        {
+          backgroundColor: {
+            default: null,
+            ":where(:hover)": "#f5f5f5",
+            ":is(:hover, :focus)": "#eeeeee",
+          },
+        },
+      ],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
+  });
+
   it("lifts higher-specificity states into later attribute wrappers", () => {
     const styles = new Map<string, unknown>([
       [

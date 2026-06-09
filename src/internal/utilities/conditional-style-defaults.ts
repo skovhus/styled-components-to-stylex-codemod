@@ -535,24 +535,95 @@ function conditionSpecificity(conditionKey: string): number {
   if (conditionKey.startsWith("@")) {
     return 0;
   }
-  return attributeSelectorSpecificity(conditionKey) + pseudoClassSpecificity(conditionKey);
-}
-
-function attributeSelectorSpecificity(conditionKey: string): number {
-  return conditionKey.match(/\[[^\]]+\]/g)?.length ?? 0;
-}
-
-function pseudoClassSpecificity(conditionKey: string): number {
-  let count = 0;
-  const pseudoClassPattern = /(?<!:):(?!:)([A-Za-z-]+)/g;
-  for (const match of conditionKey.matchAll(pseudoClassPattern)) {
-    const pseudoName = match[1];
-    if (!pseudoName || ["has", "is", "not", "where"].includes(pseudoName)) {
+  let specificity = 0;
+  for (let index = 0; index < conditionKey.length; index += 1) {
+    const char = conditionKey[index];
+    if (char === "[") {
+      specificity += 1;
+      index = skipBalanced(conditionKey, index, "[", "]");
       continue;
     }
-    count += 1;
+    if (char !== ":") {
+      continue;
+    }
+    if (conditionKey[index + 1] === ":") {
+      index = readIdentifierEnd(conditionKey, index + 2);
+      continue;
+    }
+    const nameStart = index + 1;
+    const nameEnd = readIdentifierEnd(conditionKey, nameStart);
+    const pseudoName = conditionKey.slice(nameStart, nameEnd);
+    if (!pseudoName) {
+      continue;
+    }
+    if (conditionKey[nameEnd] !== "(") {
+      specificity += 1;
+      index = nameEnd - 1;
+      continue;
+    }
+    const argsEnd = skipBalanced(conditionKey, nameEnd, "(", ")");
+    const args = conditionKey.slice(nameEnd + 1, argsEnd);
+    if (pseudoName === "where") {
+      index = argsEnd;
+      continue;
+    }
+    if (pseudoName === "is" || pseudoName === "not" || pseudoName === "has") {
+      specificity += Math.max(0, ...splitSelectorList(args).map(conditionSpecificity));
+      index = argsEnd;
+      continue;
+    }
+    specificity += 1;
+    index = argsEnd;
   }
-  return count;
+  return specificity;
+}
+
+function readIdentifierEnd(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && /[A-Za-z0-9_-]/.test(value[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function skipBalanced(value: string, start: number, open: string, close: string): number {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return value.length - 1;
+}
+
+function splitSelectorList(value: string): string[] {
+  const selectors: string[] = [];
+  let start = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "," && parenDepth === 0 && bracketDepth === 0) {
+      selectors.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  selectors.push(value.slice(start).trim());
+  return selectors.filter(Boolean);
 }
 
 function isConditionalStyleMap(value: Record<string, unknown>): boolean {
