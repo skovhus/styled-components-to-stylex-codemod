@@ -454,6 +454,41 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
   });
 
+  it("preserves shared flat mixins that are also referenced by css helper rewrites", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      cssHelpers: {
+        cssHelperReplacements: [{ localName: "sharedColorCss", styleKey: "sharedColor" }],
+        cssHelperTemplateReplacements: [{ node: {}, styleKey: "sharedColor" }],
+      },
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted" });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
+  });
+
   it("bails when a later flat value would erase dynamic conditional map states", () => {
     const styles = new Map<string, unknown>([
       [

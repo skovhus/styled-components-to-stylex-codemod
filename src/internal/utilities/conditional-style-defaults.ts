@@ -242,7 +242,28 @@ function countStyleKeyUses(
       counts.set(entry.styleKey, (counts.get(entry.styleKey) ?? 0) + 1);
     }
   }
+  for (const styleKey of cssHelperReferencedStyleKeys(ctx)) {
+    counts.set(styleKey, (counts.get(styleKey) ?? 0) + 1);
+  }
   return counts;
+}
+
+type CssHelperStyleKeyReference = { styleKey?: unknown };
+
+function cssHelperReferencedStyleKeys(ctx: TransformContext): string[] {
+  const cssHelpers:
+    | {
+        cssHelperReplacements?: CssHelperStyleKeyReference[];
+        cssHelperTemplateReplacements?: CssHelperStyleKeyReference[];
+      }
+    | undefined = ctx.cssHelpers;
+  const references = [
+    ...(cssHelpers?.cssHelperReplacements ?? []),
+    ...(cssHelpers?.cssHelperTemplateReplacements ?? []),
+  ];
+  return references
+    .map((reference) => reference.styleKey)
+    .filter((styleKey): styleKey is string => typeof styleKey === "string");
 }
 
 function needsSharedFlatEntryClone(
