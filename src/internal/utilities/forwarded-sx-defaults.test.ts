@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve as pathResolve } from "node:path";
 import jscodeshift from "jscodeshift";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
@@ -102,6 +103,22 @@ describe("guardForwardedSxConditionalDefaults", () => {
       default: "white",
       ":hover": "rgb(1, 2, 3)",
     });
+  });
+
+  it("does not read unresolved bare specifiers as local files", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      importSource: { kind: "specifier", value: "Button" },
+      transformedFileSources: new Map([[pathResolve("Button"), buttonLikeBaseSource()]]),
+      baseSource: "",
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl({ variant: "borderless" })])).toBe(
+      "ok",
+    );
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({ color: "muted" });
   });
 
   it("bails when computed maps include unread spread entries", () => {
@@ -653,6 +670,7 @@ function forwardedSxContext(args: {
   styleObj: Record<string, unknown>;
   importSource?: { kind: "absolutePath" | "specifier"; value: string };
   resolveModule?: (fromFile: string, specifier: string) => string | undefined;
+  transformedFileSources?: Map<string, string>;
 }): TransformContext {
   const basePath = "/tmp/base.tsx";
   return {
@@ -672,7 +690,10 @@ function forwardedSxContext(args: {
       ],
     ]),
     options: {
-      transformedFileSources: new Map([[basePath, args.baseSource]]),
+      transformedFileSources: new Map([
+        [basePath, args.baseSource],
+        ...(args.transformedFileSources?.entries() ?? []),
+      ]),
       ...(args.resolveModule ? { resolveModule: args.resolveModule } : {}),
     },
     resolvedStyleObjects: new Map([["container", args.styleObj]]),

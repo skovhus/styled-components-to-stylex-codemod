@@ -5,6 +5,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import type { API } from "jscodeshift";
+import type { ImportSource } from "../../adapter.js";
 import type { WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
@@ -267,7 +268,7 @@ function readComponentSource(
   if (!importInfo) {
     return { source: ctx.file.source, componentNames: [componentLocalName] };
   }
-  const absolutePath = resolveReadableImportSource(ctx, importInfo.source.value);
+  const absolutePath = resolveReadableImportSource(ctx, importInfo.source);
   if (!absolutePath) {
     return null;
   }
@@ -282,14 +283,18 @@ function readComponentSource(
   return { source, componentNames };
 }
 
-function resolveReadableImportSource(ctx: TransformContext, source: string): string | null {
-  if (isRelativeSpecifier(source)) {
+function resolveReadableImportSource(ctx: TransformContext, source: ImportSource): string | null {
+  if (isRelativeSpecifier(source.value)) {
     return (
-      ctx.options.resolveModule?.(ctx.file.path, source) ??
-      pathResolve(dirname(ctx.file.path), source)
+      ctx.options.resolveModule?.(ctx.file.path, source.value) ??
+      pathResolve(dirname(ctx.file.path), source.value)
     );
   }
-  return ctx.options.resolveModule?.(ctx.file.path, source) ?? source;
+  const resolved = ctx.options.resolveModule?.(ctx.file.path, source.value);
+  if (resolved) {
+    return resolved;
+  }
+  return source.kind === "absolutePath" ? source.value : null;
 }
 
 function readSourceFile(ctx: TransformContext, absolutePath: string): string | null {

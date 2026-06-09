@@ -548,6 +548,64 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
   });
 
+  it("counts class selectors inside functional pseudo specificity", () => {
+    const styles = new Map<string, unknown>([
+      ["link", { color: { default: null, ":is(.active)": "active" } }],
+      ["linkOverride", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Link",
+      styleKey: "link",
+      base: { kind: "intrinsic", tagName: "a" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["linkOverride"],
+      extraStyleKeysAfterBase: ["linkOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("linkLinkOverride")).toEqual({
+      color: {
+        default: "muted",
+        ":is(.active)": "active",
+      },
+    });
+  });
+
+  it("counts id selectors inside functional pseudo specificity", () => {
+    const styles = new Map<string, unknown>([
+      ["input", { backgroundColor: { default: null, ":has(#selected)": "#f5f5f5" } }],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({
+      backgroundColor: {
+        default: "#fafafa",
+        ":has(#selected)": "#f5f5f5",
+      },
+    });
+  });
+
   it("lifts higher-specificity states into later attribute wrappers", () => {
     const styles = new Map<string, unknown>([
       [

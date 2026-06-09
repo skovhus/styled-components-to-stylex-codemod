@@ -543,6 +543,16 @@ function conditionSpecificity(conditionKey: string): number {
       index = skipBalanced(conditionKey, index, "[", "]");
       continue;
     }
+    if (char === ".") {
+      specificity += 1;
+      index = readIdentifierEnd(conditionKey, index + 1) - 1;
+      continue;
+    }
+    if (char === "#") {
+      specificity += 100;
+      index = readIdentifierEnd(conditionKey, index + 1) - 1;
+      continue;
+    }
     if (char !== ":") {
       continue;
     }
