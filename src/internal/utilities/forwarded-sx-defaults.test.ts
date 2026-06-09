@@ -464,6 +464,37 @@ describe("guardForwardedSxConditionalDefaults", () => {
     expect(styleObj).toEqual({ outlineWidth: 1 });
   });
 
+  it("bails when wrapped conditional maps include unread spreads", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        const hoverStates = { ":hover": "hover" };
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[styles.base, sx]} />;
+        }
+        const styles = stylex.create({
+          base: {
+            color: {
+              default: "base",
+              ...hoverStates,
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.reason).toBe(
+      "wrapped component base property can be conditional for this prop before sx is applied",
+    );
+    expect(styleObj).toEqual({ color: "muted" });
+  });
+
   it("lifts transitionDuration over wrapped highlight duration states", () => {
     const styleObj = { transitionDuration: "120ms" };
     const ctx = forwardedSxContext({

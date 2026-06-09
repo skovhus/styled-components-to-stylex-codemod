@@ -393,6 +393,9 @@ function readStyleObjectProps(styleObject: AstRecord): {
       complete = false;
       continue;
     }
+    if (isObjectExpression(property.value) && objectExpressionHasUnreadProperties(property.value)) {
+      complete = false;
+    }
     const value = readAstPropertyShape(property.value);
     if (value.kind !== "absent") {
       props.set(key, value);
@@ -444,7 +447,7 @@ function readAstPropertyShape(node: unknown): PropertyShape {
     for (const property of getObjectProperties(node)) {
       const key = readPropertyKey(property);
       if (!key) {
-        continue;
+        return { kind: "dynamic" };
       }
       if (key === "default") {
         const staticDefault = readStaticStyleValue(property.value);
@@ -479,6 +482,17 @@ function readAstPropertyShape(node: unknown): PropertyShape {
       ? { kind: "absent" }
       : { kind: "flat", value: value.value }
     : { kind: "dynamic" };
+}
+
+function objectExpressionHasUnreadProperties(node: AstRecord): boolean {
+  return getObjectProperties(node).some((property) => {
+    if (!readPropertyKey(property) || !property.value) {
+      return true;
+    }
+    return (
+      isObjectExpression(property.value) && objectExpressionHasUnreadProperties(property.value)
+    );
+  });
 }
 
 function readStaticStyleValue(
