@@ -71,6 +71,19 @@ const LogicalSideOverride = styled.div`
   background-color: lavenderblush;
 `;
 
+// Pattern 9: later logical pseudo map must override earlier physical pseudo map
+const LaterLogicalPseudoOverride = styled.div`
+  &:hover {
+    padding-right: 20px;
+  }
+
+  &:hover {
+    padding-inline: 12px;
+  }
+
+  background-color: lightcyan;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
     <ProgressBar>Progress Bar</ProgressBar>
@@ -82,5 +95,6 @@ export const App = () => (
     <LaterPhysicalOverride>Later physical override</LaterPhysicalOverride>
     <PseudoBeforeBase>Pseudo before base</PseudoBeforeBase>
     <LogicalSideOverride>Logical side override</LogicalSideOverride>
+    <LaterLogicalPseudoOverride>Later logical pseudo override</LaterLogicalPseudoOverride>
   </div>
 );

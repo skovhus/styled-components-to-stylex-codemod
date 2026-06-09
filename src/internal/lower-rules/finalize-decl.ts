@@ -2869,7 +2869,7 @@ function resolveDirectionalConflictValue(args: {
   }
   if (shorthandIndex > longhandIndex) {
     if (isMediaOrPseudoMap(shorthandVal) && hasNullishDefault(shorthandVal)) {
-      return computeMergedLonghand(longhandVal, shorthandVal);
+      return computeMergedLonghand(longhandVal, shorthandVal, { shorthandOverrides: true });
     }
     return cloneDirectionalValue(shorthandVal);
   }
@@ -2898,11 +2898,19 @@ function hasNullishDefault(value: unknown): boolean {
 function computeMergedLonghand(
   longhandVal: unknown,
   shorthandMap: Record<string, unknown>,
+  options?: { shorthandOverrides?: boolean },
 ): unknown {
   if (isMediaOrPseudoMap(longhandVal)) {
     const merged = { ...(longhandVal as Record<string, unknown>) };
     for (const [key, val] of Object.entries(shorthandMap)) {
-      if (!(key in merged)) {
+      if (
+        shouldUseShorthandMapEntry({
+          key,
+          longhandMap: merged,
+          shorthandMap,
+          shorthandOverrides: options?.shorthandOverrides === true,
+        })
+      ) {
         merged[key] = val;
       }
     }
@@ -2916,6 +2924,22 @@ function computeMergedLonghand(
     }
   }
   return merged;
+}
+
+function shouldUseShorthandMapEntry(args: {
+  key: string;
+  longhandMap: Record<string, unknown>;
+  shorthandMap: Record<string, unknown>;
+  shorthandOverrides: boolean;
+}): boolean {
+  const { key, longhandMap, shorthandMap, shorthandOverrides } = args;
+  if (!shorthandOverrides) {
+    return !(key in longhandMap);
+  }
+  if (key !== "default") {
+    return true;
+  }
+  return !hasNullishDefault(shorthandMap) || hasNullishDefault(longhandMap);
 }
 
 function mergeScalarDefaultIntoLonghand(longhandVal: unknown, scalarDefault: unknown): unknown {

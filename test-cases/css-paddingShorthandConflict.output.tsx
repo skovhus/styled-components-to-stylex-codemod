@@ -17,6 +17,7 @@ export const App = () => (
     <div sx={styles.laterPhysicalOverride}>Later physical override</div>
     <div sx={styles.pseudoBeforeBase}>Pseudo before base</div>
     <div sx={styles.logicalSideOverride}>Logical side override</div>
+    <div sx={styles.laterLogicalPseudoOverride}>Later logical pseudo override</div>
   </div>
 );
 
@@ -88,5 +89,17 @@ const styles = stylex.create({
     paddingInline: 8,
     paddingInlineStart: 2,
     backgroundColor: "lavenderblush",
+  },
+  // Pattern 9: later logical pseudo map must override earlier physical pseudo map
+  laterLogicalPseudoOverride: {
+    backgroundColor: "lightcyan",
+    paddingLeft: {
+      default: null,
+      ":hover": 12,
+    },
+    paddingRight: {
+      default: null,
+      ":hover": 12,
+    },
   },
 });
