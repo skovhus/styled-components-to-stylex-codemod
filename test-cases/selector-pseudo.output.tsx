@@ -51,6 +51,9 @@ export const App = () => (
     <button type="button" sx={styles.multilineBeforeLogoButton}>
       Multiline before logo button
     </button>
+    <button type="button" sx={styles.multilineSelectorListLogoButton}>
+      Multiline selector list logo button
+    </button>
   </div>
 );
 
@@ -268,6 +271,26 @@ const styles = stylex.create({
     outlineStyle: {
       default: null,
       ":focus-visible": "solid",
+    },
+  },
+  multilineSelectorListLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#faf5ff",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":hover": "2px",
+      ":focus-visible": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":hover": "solid",
+      ":focus-visible": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":hover": "#4f46e5",
+      ":focus-visible": "#4f46e5",
     },
   },
 });

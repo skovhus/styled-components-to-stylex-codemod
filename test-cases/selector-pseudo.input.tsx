@@ -133,6 +133,16 @@ const MultilineBeforeLogoButton = styled.button`
   }
 `;
 
+const MultilineSelectorListLogoButton = styled.button`
+  border: 0;
+  background-color: #faf5ff;
+  padding: 8px;
+  &:hover,
+  &:focus-visible {
+    ${focusOutline}
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -153,5 +163,8 @@ export const App = () => (
     <MultilineBeforeLogoButton type="button">
       Multiline before logo button
     </MultilineBeforeLogoButton>
+    <MultilineSelectorListLogoButton type="button">
+      Multiline selector list logo button
+    </MultilineSelectorListLogoButton>
   </div>
 );

@@ -553,6 +553,10 @@ export function normalizeStylisAstToIR(
         continue;
       }
       if (ch === "\n") {
+        if (line.trimEnd().endsWith(",")) {
+          line += " ";
+          continue;
+        }
         flushLine();
         continue;
       }
