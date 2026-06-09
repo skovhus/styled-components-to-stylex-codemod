@@ -142,6 +142,9 @@ type PropertyInference =
   | { kind: "absent" }
   | { kind: "variable" }
   | { kind: "unknown" };
+type StyleReference =
+  | { kind: "entry"; objectName: string; styleKey: string }
+  | { kind: "computedMap"; objectName: string; mayBeAbsent: boolean };
 
 function wrappedComponentForwardsSx(ctx: TransformContext, componentLocalName: string): boolean {
   return wrappedComponentInterfaceFor(ctx, componentLocalName)?.acceptsSx === true;
@@ -184,12 +187,7 @@ function readComponentSource(
   if (!importInfo) {
     return { source: ctx.file.source, componentNames: [componentLocalName] };
   }
-  const absolutePath =
-    importInfo.source.kind === "absolutePath"
-      ? importInfo.source.value
-      : isRelativeSpecifier(importInfo.source.value)
-        ? pathResolve(dirname(ctx.file.path), importInfo.source.value)
-        : null;
+  const absolutePath = resolveReadableImportSource(ctx, importInfo.source.value);
   if (!absolutePath) {
     return null;
   }
@@ -202,6 +200,16 @@ function readComponentSource(
       ? [componentLocalName, importInfo.importedName]
       : [importInfo.importedName];
   return { source, componentNames };
+}
+
+function resolveReadableImportSource(ctx: TransformContext, source: string): string | null {
+  if (isRelativeSpecifier(source)) {
+    return (
+      ctx.options.resolveModule?.(ctx.file.path, source) ??
+      pathResolve(dirname(ctx.file.path), source)
+    );
+  }
+  return ctx.options.resolveModule?.(ctx.file.path, source) ?? source;
 }
 
 function readSourceFile(ctx: TransformContext, absolutePath: string): string | null {
@@ -630,15 +638,39 @@ function analyzeStyleArg(arg: unknown, styleMaps: StyleMaps, prop: string): Prop
 }
 
 function analyzeStyleReference(
-  ref: { objectName: string; styleKey: string },
+  ref: StyleReference,
   styleMaps: StyleMaps,
   prop: string,
   called: boolean,
 ): PropertyInference {
+  if (ref.kind === "computedMap") {
+    return analyzeComputedStyleMapReference(ref, styleMaps, prop, called);
+  }
   const styleEntry = styleMaps.get(ref.objectName)?.get(ref.styleKey);
-  if (!styleEntry) {
+  return styleEntry ? analyzeStyleEntry(styleEntry, prop, called) : { kind: "unknown" };
+}
+
+function analyzeComputedStyleMapReference(
+  ref: Extract<StyleReference, { kind: "computedMap" }>,
+  styleMaps: StyleMaps,
+  prop: string,
+  called: boolean,
+): PropertyInference {
+  const entries = styleMaps.get(ref.objectName);
+  if (!entries) {
     return { kind: "unknown" };
   }
+  const inferences = [...entries.values()].map((entry) => analyzeStyleEntry(entry, prop, called));
+  return mergePropertyInferences(
+    ref.mayBeAbsent ? [{ kind: "absent" }, ...inferences] : inferences,
+  );
+}
+
+function analyzeStyleEntry(
+  styleEntry: StyleEntry,
+  prop: string,
+  called: boolean,
+): PropertyInference {
   if (styleEntry.kind === "function") {
     return styleEntry.props.has(prop) ? { kind: "variable" } : { kind: "absent" };
   }
@@ -711,19 +743,37 @@ function isMemberCall(node: unknown, objectName: string, propertyName: string): 
   );
 }
 
-function readStyleReference(node: unknown): { objectName: string; styleKey: string } | null {
+function readStyleReference(node: unknown): StyleReference | null {
   const unwrapped = unwrapExpression(node);
-  if (
-    !isRecord(unwrapped) ||
-    unwrapped.type !== "MemberExpression" ||
-    unwrapped.computed === true
-  ) {
+  if (!isRecord(unwrapped) || unwrapped.type !== "MemberExpression") {
     return null;
   }
-  if (!isIdentifier(unwrapped.object) || !isIdentifier(unwrapped.property)) {
+  if (!isIdentifier(unwrapped.object)) {
     return null;
   }
-  return { objectName: unwrapped.object.name, styleKey: unwrapped.property.name };
+  if (unwrapped.computed === true) {
+    const styleKey = readComputedMemberPropertyName(unwrapped.property);
+    return styleKey
+      ? { kind: "entry", objectName: unwrapped.object.name, styleKey }
+      : {
+          kind: "computedMap",
+          objectName: unwrapped.object.name,
+          mayBeAbsent: true,
+        };
+  }
+  return isIdentifier(unwrapped.property)
+    ? { kind: "entry", objectName: unwrapped.object.name, styleKey: unwrapped.property.name }
+    : null;
+}
+
+function readComputedMemberPropertyName(property: unknown): string | null {
+  if (!isRecord(property)) {
+    return null;
+  }
+  if (property.type === "StringLiteral" || property.type === "Literal") {
+    return typeof property.value === "string" ? property.value : null;
+  }
+  return null;
 }
 
 function isSxExpression(
