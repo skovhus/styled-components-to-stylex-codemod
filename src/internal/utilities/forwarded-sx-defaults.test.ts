@@ -216,6 +216,39 @@ describe("guardForwardedSxConditionalDefaults", () => {
     });
   });
 
+  it("does not bind static attrs through unrelated local object destructures", () => {
+    const ctx = forwardedSxContext({
+      styleObj: { color: "muted" },
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+
+        export function Base(props) {
+          const defaults = { variant: "primary" };
+          const { sx, ...rest } = props;
+          const { variant } = defaults;
+          return <button {...rest} sx={[buttonVariants[variant], sx]} />;
+        }
+
+        const buttonVariants = stylex.create({
+          primary: { color: "control" },
+          borderless: {
+            color: {
+              default: "base",
+              ":highlightMixin": "title",
+            },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl({ variant: "borderless" })])).toBe(
+      "bail",
+    );
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+  });
+
   it("bails when Button-like variant is dynamic and flat sx color could erase states", () => {
     const ctx = forwardedSxContext({
       styleObj: { color: "muted" },

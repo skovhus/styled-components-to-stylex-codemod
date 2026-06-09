@@ -244,7 +244,7 @@ function inferWrappedComponentSxProperty(
     {
       styleMaps,
       arrayStyleHelpers,
-      staticBindings: collectComponentStaticBindings(component, staticProps),
+      staticBindings: collectComponentStaticBindings(component, staticProps, sxBindings.propsNames),
       expressionBindings: collectFunctionExpressionBindings(component),
     },
     prop,
@@ -710,7 +710,7 @@ function collectSxBindings(component: AstRecord): {
 function collectObjectPatternBinding(pattern: AstRecord, propName: string, out: Set<string>): void {
   const properties = Array.isArray(pattern.properties) ? pattern.properties : [];
   for (const property of properties) {
-    if (!isRecord(property) || property.type !== "Property") {
+    if (!isObjectProperty(property)) {
       continue;
     }
     if (readPropertyKey(property) !== propName) {
@@ -1060,8 +1060,9 @@ function staticPropsForDecl(decl: StyledDecl): StaticBindings {
 function collectComponentStaticBindings(
   component: AstRecord,
   staticProps: StaticBindings,
+  propsNames: ReadonlySet<string>,
 ): StaticBindings {
-  const bindings: StaticBindings = new Map(staticProps);
+  const bindings: StaticBindings = new Map();
   for (const param of getFunctionParams(component)) {
     collectObjectPatternStaticBindings(param, staticProps, bindings);
   }
@@ -1069,7 +1070,8 @@ function collectComponentStaticBindings(
     if (
       node.type !== "VariableDeclarator" ||
       !isObjectPattern(node.id) ||
-      (!isIdentifier(node.init) && node.init !== undefined)
+      !isIdentifier(node.init) ||
+      !propsNames.has(node.init.name)
     ) {
       return;
     }
@@ -1442,11 +1444,7 @@ function getObjectProperties(node: AstRecord): AstRecord[] {
 }
 
 function getObjectPatternProperties(node: AstRecord): AstRecord[] {
-  return Array.isArray(node.properties)
-    ? node.properties.filter(
-        (property): property is AstRecord => isRecord(property) && property.type === "Property",
-      )
-    : [];
+  return Array.isArray(node.properties) ? node.properties.filter(isObjectProperty) : [];
 }
 
 function getFunctionParams(node: AstRecord): unknown[] {
@@ -1475,6 +1473,10 @@ function isStaticValue(value: unknown): value is StaticStyleValue {
     typeof value === "boolean" ||
     value === null
   );
+}
+
+function isObjectProperty(node: unknown): node is AstRecord {
+  return isRecord(node) && (node.type === "Property" || node.type === "ObjectProperty");
 }
 
 function getJsxAttributeName(node: AstRecord): string | null {
