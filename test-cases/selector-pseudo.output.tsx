@@ -57,6 +57,9 @@ export const App = () => (
     <button type="button" sx={styles.multilineMediaLogoButton}>
       Multiline media logo button
     </button>
+    <button type="button" data-label="&" sx={styles.attributeAmpLogoButton}>
+      Attribute amp logo button
+    </button>
   </div>
 );
 
@@ -311,6 +314,23 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       "@media (min-width: 600px) and (max-width: 900px)": "#4f46e5",
+    },
+  },
+  attributeAmpLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#fff1f2",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ':hover:is([data-label="&"])': "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ':hover:is([data-label="&"])': "solid",
+    },
+    outlineColor: {
+      default: null,
+      ':hover:is([data-label="&"])': "#4f46e5",
     },
   },
 });

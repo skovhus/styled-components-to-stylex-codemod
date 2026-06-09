@@ -153,6 +153,17 @@ const MultilineMediaLogoButton = styled.button`
   }
 `;
 
+const AttributeAmpLogoButton = styled.button`
+  border: 0;
+  background-color: #fff1f2;
+  padding: 8px;
+  &:hover {
+    &[data-label="&"] {
+      ${focusOutline}
+    }
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -177,5 +188,8 @@ export const App = () => (
       Multiline selector list logo button
     </MultilineSelectorListLogoButton>
     <MultilineMediaLogoButton type="button">Multiline media logo button</MultilineMediaLogoButton>
+    <AttributeAmpLogoButton type="button" data-label="&">
+      Attribute amp logo button
+    </AttributeAmpLogoButton>
   </div>
 );

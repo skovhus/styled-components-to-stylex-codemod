@@ -591,11 +591,40 @@ function resolveNestedSelectorStack(selectors: string[]): string {
     return parentParts
       .flatMap((parent) =>
         selectorParts.map((part) =>
-          part.includes("&") ? part.replaceAll("&", parent) : `${parent} ${part}`,
+          part.includes("&") ? replaceNestingAmpersands(part, parent) : `${parent} ${part}`,
         ),
       )
       .join(",");
   }, "");
+}
+
+function replaceNestingAmpersands(selector: string, parent: string): string {
+  let result = "";
+  let bracketDepth = 0;
+  let inString: false | '"' | "'" = false;
+
+  for (let i = 0; i < selector.length; i++) {
+    const ch = selector[i]!;
+    if ((ch === '"' || ch === "'") && selector[i - 1] !== "\\") {
+      if (!inString) {
+        inString = ch;
+      } else if (inString === ch) {
+        inString = false;
+      }
+      result += ch;
+      continue;
+    }
+    if (!inString) {
+      if (ch === "[") {
+        bracketDepth++;
+      } else if (ch === "]") {
+        bracketDepth = Math.max(0, bracketDepth - 1);
+      }
+    }
+    result += ch === "&" && !inString && bracketDepth === 0 ? parent : ch;
+  }
+
+  return result;
 }
 
 function splitTopLevelSelectorList(selector: string): string[] {
