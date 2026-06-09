@@ -2449,6 +2449,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   background-color: #fdf2f8;
 }
 
+.xv67wkk:not(#\#):not(#\#):not(#\#) {
+  background-color: #fdf4ff;
+}
+
 .x1ky2whv:not(#\#):not(#\#):not(#\#) {
   background-color: #fee2e2;
 }
@@ -4305,7 +4309,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   opacity: 1;
 }
 
-.xdtysx6:focus-visible:not(#\#):not(#\#):not(#\#) {
+.xdtysx6:focus-visible:not(#\#):not(#\#):not(#\#), .xidw2d9:is(:hover, :focus):active:not(#\#):not(#\#):not(#\#) {
   outline-color: #4f46e5;
 }
 
@@ -4321,11 +4325,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   outline-offset: 3px;
 }
 
-.x1w2k42w:focus-within:has(:focus-visible):not(#\#):not(#\#):not(#\#), .x9v5kkp:focus-visible:not(#\#):not(#\#):not(#\#) {
+.x1w2k42w:focus-within:has(:focus-visible):not(#\#):not(#\#):not(#\#), .x1xjhooj:is(:hover, :focus):active:not(#\#):not(#\#):not(#\#), .x9v5kkp:focus-visible:not(#\#):not(#\#):not(#\#) {
   outline-style: solid;
 }
 
-.x784prv:focus-visible:not(#\#):not(#\#):not(#\#) {
+.x1eq4mvs:is(:hover, :focus):active:not(#\#):not(#\#):not(#\#), .x784prv:focus-visible:not(#\#):not(#\#):not(#\#) {
   outline-width: 2px;
 }
 
