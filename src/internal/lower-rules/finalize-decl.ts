@@ -171,24 +171,26 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
   if (decl.base.kind !== "component") {
+    const unsafeProps = collectStyleOverrideProps({
+      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+      cssHelperPropValues,
+      extraStyleObjects,
+      resolvedStyleObjects,
+      variantBuckets,
+      styleFnDecls,
+    });
     moveCustomPropertyOnlyBaseToInlineStyles({
       styleObj,
       inlineStyleProps,
       staticInlineStyleProps,
+      unsafeProps,
       j: state.j,
     });
     moveUnsafeRawCssVarPropsToInlineStyles({
       styleObj,
       inlineStyleProps,
       staticInlineStyleProps,
-      unsafeProps: collectStyleOverrideProps({
-        afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
-        cssHelperPropValues,
-        extraStyleObjects,
-        resolvedStyleObjects,
-        variantBuckets,
-        styleFnDecls,
-      }),
+      unsafeProps,
       j: state.j,
     });
   }
@@ -1557,13 +1559,15 @@ function moveCustomPropertyOnlyBaseToInlineStyles(args: {
   styleObj: Record<string, unknown>;
   inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
   staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  unsafeProps: ReadonlySet<string>;
   j: Parameters<typeof literalToAst>[0];
 }): void {
-  const { styleObj, inlineStyleProps, staticInlineStyleProps, j } = args;
+  const { styleObj, inlineStyleProps, staticInlineStyleProps, unsafeProps, j } = args;
   const entries = Object.entries(styleObj).filter(([prop]) => !prop.startsWith("__"));
   if (
     entries.length === 0 ||
     entries.some(([prop]) => !prop.startsWith("--")) ||
+    entries.some(([prop]) => unsafeProps.has(prop)) ||
     entries.some(([, value]) => isConditionalCustomPropertyValue(value))
   ) {
     return;

@@ -56,6 +56,11 @@ const ConditionalWidgetContainer = styled.div`
   }
 `;
 
+const VariantWidgetContainer = styled.div<{ $wide?: boolean }>`
+  --agent-item-min-width: 100%;
+  ${(props) => props.$wide && "--agent-item-min-width: 75%;"}
+`;
+
 export const App = () => (
   <Card>
     <Text>Some text content</Text>
@@ -73,5 +78,8 @@ export const App = () => (
     <ConditionalWidgetContainer>
       <Button>Conditional wide button</Button>
     </ConditionalWidgetContainer>
+    <VariantWidgetContainer $wide>
+      <Button>Variant wide button</Button>
+    </VariantWidgetContainer>
   </Card>
 );

@@ -45,6 +45,19 @@ function WidgetContainer({ children }: { children?: React.ReactNode }) {
   );
 }
 
+type VariantWidgetContainerProps = React.PropsWithChildren<{
+  wide?: boolean;
+}>;
+
+function VariantWidgetContainer(props: VariantWidgetContainerProps) {
+  const { children, wide } = props;
+  return (
+    <div sx={[styles.variantWidgetContainer, wide && styles.variantWidgetContainerWide]}>
+      {children}
+    </div>
+  );
+}
+
 export const App = () => (
   <div sx={styles.card}>
     <p style={textInlineStyle}>Some text content</p>
@@ -62,6 +75,9 @@ export const App = () => (
     <div sx={styles.conditionalWidgetContainer}>
       <Button>Conditional wide button</Button>
     </div>
+    <VariantWidgetContainer wide>
+      <Button>Variant wide button</Button>
+    </VariantWidgetContainer>
   </div>
 );
 
@@ -112,5 +128,11 @@ const styles = stylex.create({
       ":hover": "80%",
       "@media (min-width: 600px)": "75%",
     },
+  },
+  variantWidgetContainer: {
+    "--agent-item-min-width": "100%",
+  },
+  variantWidgetContainerWide: {
+    "--agent-item-min-width": "75%",
   },
 });
