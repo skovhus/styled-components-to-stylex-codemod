@@ -368,7 +368,9 @@ function readStyleEntries(stylexCreateArg: AstRecord): StyleMap {
         kind: "function",
         props: new Set(readStyleObjectProps(returnedObject).keys()),
       });
+      continue;
     }
+    complete = false;
   }
   return { entries, complete };
 }
@@ -882,7 +884,7 @@ function analyzeStyleReference(
   }
   const styleMap = styleMaps.get(ref.objectName);
   if (!styleMap?.complete) {
-    return { kind: "unknown" };
+    return { kind: "variableConditionalMap", conditionKeys: [] };
   }
   const styleEntry = styleMap.entries.get(ref.styleKey);
   return styleEntry ? analyzeStyleEntry(styleEntry, prop, called) : { kind: "unknown" };
@@ -896,7 +898,7 @@ function analyzeComputedStyleMapReference(
 ): PropertyInference {
   const styleMap = styleMaps.get(ref.objectName);
   if (!styleMap?.complete) {
-    return { kind: "unknown" };
+    return { kind: "variableConditionalMap", conditionKeys: [] };
   }
   const inferences = [...styleMap.entries.values()].map((entry) =>
     analyzeStyleEntry(entry, prop, called),

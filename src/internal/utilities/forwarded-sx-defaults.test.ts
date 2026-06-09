@@ -128,6 +128,28 @@ describe("guardForwardedSxConditionalDefaults", () => {
     );
   });
 
+  it("bails when computed maps include unread entry values", () => {
+    const ctx = forwardedSxContext({
+      styleObj: backgroundHoverStyle(),
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        const dangerVariant = { backgroundColor: "red" };
+        export function Base({ sx, tone, ...rest }) {
+          return <div {...rest} sx={[toneVariants[tone], sx]} />;
+        }
+        const toneVariants = stylex.create({
+          danger: dangerVariant,
+          neutral: { color: "black" },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Forwarded sx conditional default would override an unproven wrapped component base style",
+    );
+  });
+
   it("patches variant dimension defaults forwarded through sx", () => {
     const basePath = "/tmp/base.tsx";
     const variantStyle = {
@@ -253,6 +275,29 @@ describe("guardForwardedSxConditionalDefaults", () => {
     const ctx = forwardedSxContext({
       styleObj: { color: "muted" },
       baseSource: buttonLikeBaseSource(),
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.property).toBe("color");
+  });
+
+  it("bails when flat sx overrides incomplete computed map entries", () => {
+    const ctx = forwardedSxContext({
+      styleObj: { color: "muted" },
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        const dangerVariant = { color: { default: "danger", ":hover": "dangerHover" } };
+        export function Base({ sx, tone, ...rest }) {
+          return <div {...rest} sx={[toneVariants[tone], sx]} />;
+        }
+        const toneVariants = stylex.create({
+          danger: dangerVariant,
+          neutral: { color: "base" },
+        });
+      `,
     });
 
     expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
