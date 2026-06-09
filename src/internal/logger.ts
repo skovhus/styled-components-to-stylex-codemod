@@ -127,6 +127,7 @@ export type WarningType =
   | "styled(ImportedComponent) wraps a component whose file uses styled-components — convert the base component's file first to avoid CSS cascade conflicts"
   | "Partial transform would have a StyleX leaf wrap a styled-components base — the extending component was transformed but its base was not, so the leaf's StyleX overrides cannot reliably beat the base's styled-components styles"
   | "Conditional StyleX default would override an unproven earlier style for the same property"
+  | "Flat StyleX value would erase earlier conditional property states"
   | "Forwarded sx conditional default would override an unproven wrapped component base style"
   | "Wrapped component does not accept className or sx for generated StyleX styles"
   | "Wrapped component sx prop targets an inner element for a root style property"

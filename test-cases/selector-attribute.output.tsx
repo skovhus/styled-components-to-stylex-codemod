@@ -98,7 +98,10 @@ const styles = stylex.create({
     borderRadius: "50%",
   },
   inputReadonly: {
-    backgroundColor: "#fafafa",
+    backgroundColor: {
+      default: "#fafafa",
+      ":disabled": "#f5f5f5",
+    },
     borderStyle: "dashed",
   },
   link: {

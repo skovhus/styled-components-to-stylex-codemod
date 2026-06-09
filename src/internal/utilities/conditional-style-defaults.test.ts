@@ -373,4 +373,73 @@ describe("guardGeneratedConditionalDefaults", () => {
       "Conditional StyleX default would override an unproven earlier style for the same property",
     );
   });
+
+  it("lifts a later flat value into an earlier conditional map when states are static", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "link",
+        {
+          transitionDuration: {
+            default: "120ms",
+            ":highlightMixin": "80ms",
+          },
+        },
+      ],
+      ["linkOverride", { transitionDuration: "120ms" }],
+    ]);
+    const decl = {
+      localName: "Link",
+      styleKey: "link",
+      base: { kind: "intrinsic", tagName: "a" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["linkOverride"],
+      extraStyleKeysAfterBase: ["linkOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("linkOverride")).toEqual({
+      transitionDuration: {
+        default: "120ms",
+        ":highlightMixin": "80ms",
+      },
+    });
+  });
+
+  it("bails when a later flat value would erase dynamic conditional map states", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "button",
+        {
+          opacity: {
+            default: 1,
+            ":hover": { type: "Identifier", name: "hoverOpacity" },
+          },
+        },
+      ],
+      ["buttonOverride", { opacity: 0.8 }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["buttonOverride"],
+      extraStyleKeysAfterBase: ["buttonOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+  });
 });

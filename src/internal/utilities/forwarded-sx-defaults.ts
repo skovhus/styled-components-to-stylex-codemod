@@ -13,7 +13,12 @@ import { isRelativeSpecifier, toRealPath } from "./path-utils.js";
 import {
   propertiesWithUnsafeNullConditionalDefault,
   patchNullConditionalDefaultsForProp,
+  patchFlatValueAgainstConditionalMap,
+  defaultInferenceFromPropertyShape,
+  inferPropertyShapeFromValue,
   type DefaultInference,
+  type PropertyShape,
+  type StaticStyleValue,
 } from "./conditional-style-defaults.js";
 import { buildStyleKeySequence } from "./style-composition-plan.js";
 
@@ -43,13 +48,21 @@ export function guardForwardedSxConditionalDefaults(
           ctx,
           decl,
           prop,
+          warningType: FORWARDED_SX_DEFAULT_WARNING,
           applyInference: (inferred) => {
-            if (inferred.kind === "static") {
+            if (inferred.kind === "flat") {
               setFunctionConditionalDefault(styleObj, prop, inferred.value);
               return "patched";
             }
             return inferred.kind === "absent" ? "safe" : "bail";
           },
+          warningContext: (inferred) => ({
+            reason:
+              inferred.kind === "variable" || inferred.kind === "variableConditionalMap"
+                ? "wrapped component base property can vary before sx is applied"
+                : "wrapped component base default could not be proven",
+            todo: `TODO: set an explicit default for ${prop} or avoid forwarding this conditional override through sx.`,
+          }),
         });
         if (result === "ok") {
           continue;
@@ -67,17 +80,55 @@ function guardForwardedSxStyleObject(
   decl: StyledDecl,
   styleObj: Record<string, unknown>,
 ): "ok" | "bail" {
+  for (const prop of propertiesWithFlatValue(styleObj)) {
+    const result = applyForwardedSxDefault({
+      ctx,
+      decl,
+      prop,
+      warningType: FLAT_ERASES_CONDITIONAL_WARNING,
+      applyInference: (inferred) => {
+        if (inferred.kind === "variableConditionalMap") {
+          return "bail";
+        }
+        return patchFlatValueAgainstConditionalMap(styleObj, prop, toPropertyShape(inferred));
+      },
+      warningContext: (inferred) => ({
+        reason:
+          inferred.kind === "variableConditionalMap"
+            ? "wrapped component base property can be conditional for this prop before sx is applied"
+            : "a forwarded flat sx value would replace wrapped component conditional property states",
+        droppedConditionKeys: conditionKeysForWarning(inferred).join(", "),
+        todo: `TODO: lift ${prop} into a conditional map on the forwarded sx style, or avoid overriding it with a flat value.`,
+      }),
+    });
+    if (result !== "ok") {
+      return "bail";
+    }
+  }
+
   for (const prop of propertiesWithUnsafeNullConditionalDefault(styleObj)) {
     const result = applyForwardedSxDefault({
       ctx,
       decl,
       prop,
+      warningType: FORWARDED_SX_DEFAULT_WARNING,
       applyInference: (inferred) => {
-        if (inferred.kind !== "static" && inferred.kind !== "absent") {
+        if (inferred.kind !== "flat" && inferred.kind !== "absent") {
           return "bail";
         }
-        return patchNullConditionalDefaultsForProp(styleObj, prop, toDefaultInference(inferred));
+        return patchNullConditionalDefaultsForProp(
+          styleObj,
+          prop,
+          defaultInferenceFromPropertyShape(toPropertyShape(inferred)),
+        );
       },
+      warningContext: (inferred) => ({
+        reason:
+          inferred.kind === "variable" || inferred.kind === "variableConditionalMap"
+            ? "wrapped component base property can vary before sx is applied"
+            : "wrapped component base default could not be proven",
+        todo: `TODO: set an explicit default for ${prop} or avoid forwarding this conditional override through sx.`,
+      }),
     });
     if (result !== "ok") {
       return "bail";
@@ -90,61 +141,70 @@ function applyForwardedSxDefault(args: {
   ctx: TransformContext;
   decl: StyledDecl;
   prop: string;
+  warningType: WarningType;
   applyInference: (value: PropertyInference) => "patched" | "safe" | "bail";
+  warningContext: (value: PropertyInference) => Record<string, unknown>;
 }): "ok" | "bail" {
-  const { ctx, decl, prop, applyInference } = args;
+  const { ctx, decl, prop, warningType, applyInference, warningContext } = args;
   const wrappedComponent = decl.base.kind === "component" ? decl.base.ident : "";
-  const inferred = inferWrappedComponentSxProperty(ctx, wrappedComponent, prop);
+  const inferred = inferWrappedComponentSxProperty(
+    ctx,
+    wrappedComponent,
+    prop,
+    staticPropsForDecl(decl),
+  );
   const applied = applyInference(inferred);
   if (applied === "patched" || applied === "safe") {
     return "ok";
   }
   ctx.warnings.push({
     severity: "warning",
-    type: FORWARDED_SX_DEFAULT_WARNING,
+    type: warningType,
     loc: decl.loc,
     context: {
       localName: decl.localName,
       wrappedComponent,
       property: prop,
-      reason:
-        inferred.kind === "variable"
-          ? "wrapped component base property can vary before sx is applied"
-          : "wrapped component base default could not be proven",
-      todo: `TODO: set an explicit default for ${prop} or avoid forwarding this conditional override through sx.`,
+      ...warningContext(inferred),
     },
   });
   return "bail";
 }
 
-function toDefaultInference(inferred: PropertyInference): DefaultInference {
-  if (inferred.kind === "static") {
-    return inferred;
-  }
-  if (inferred.kind === "absent") {
-    return inferred;
-  }
-  return { kind: "dynamic" };
-}
-
 const FORWARDED_SX_DEFAULT_WARNING =
   "Forwarded sx conditional default would override an unproven wrapped component base style" satisfies WarningType;
+const FLAT_ERASES_CONDITIONAL_WARNING =
+  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
 
 type AstRecord = Record<string, unknown> & { type?: string };
-type StaticStyleValue = string | number | boolean | null;
 type StyleEntry =
   | { kind: "object"; props: Map<string, PropValue> }
   | { kind: "function"; props: Set<string> };
-type PropValue = { kind: "static"; value: StaticStyleValue } | { kind: "dynamic" };
+type PropValue = Exclude<PropertyShape, { kind: "absent" }>;
 type StyleMaps = Map<string, Map<string, StyleEntry>>;
 type PropertyInference =
-  | { kind: "static"; value: StaticStyleValue }
+  | PropertyShape
   | { kind: "absent" }
   | { kind: "variable" }
+  | { kind: "variableConditionalMap"; conditionKeys: string[] }
   | { kind: "unknown" };
 type StyleReference =
   | { kind: "entry"; objectName: string; styleKey: string }
   | { kind: "computedMap"; objectName: string; mayBeAbsent: boolean };
+type StaticBindings = Map<string, StaticStyleValue>;
+type ExpressionBindings = Map<string, unknown>;
+type ArrayStyleHelper = {
+  params: unknown[];
+  returnedArray: AstRecord;
+  expressionBindings: ExpressionBindings;
+};
+type ArrayStyleHelpers = Map<string, ArrayStyleHelper>;
+type AnalysisContext = {
+  styleMaps: StyleMaps;
+  arrayStyleHelpers: ArrayStyleHelpers;
+  staticBindings: StaticBindings;
+  expressionBindings: ExpressionBindings;
+};
 
 function wrappedComponentForwardsSx(ctx: TransformContext, componentLocalName: string): boolean {
   return wrappedComponentInterfaceFor(ctx, componentLocalName)?.acceptsSx === true;
@@ -154,6 +214,7 @@ function inferWrappedComponentSxProperty(
   ctx: TransformContext,
   componentLocalName: string,
   prop: string,
+  staticProps: StaticBindings,
 ): PropertyInference {
   const source = readComponentSource(ctx, componentLocalName);
   if (!source) {
@@ -166,13 +227,24 @@ function inferWrappedComponentSxProperty(
   }
 
   const styleMaps = collectStylexCreateMaps(root.ast);
+  const arrayStyleHelpers = collectArrayStyleHelpers(root.ast);
   const component = findComponentFunction(root.ast, source.componentNames);
   if (!component) {
     return { kind: "unknown" };
   }
 
   const sxBindings = collectSxBindings(component);
-  const observations = collectSxCompositionObservations(component, sxBindings, styleMaps, prop);
+  const observations = collectSxCompositionObservations(
+    component,
+    sxBindings,
+    {
+      styleMaps,
+      arrayStyleHelpers,
+      staticBindings: collectComponentStaticBindings(component, staticProps),
+      expressionBindings: collectFunctionExpressionBindings(component),
+    },
+    prop,
+  );
   if (observations.length === 0) {
     return { kind: "unknown" };
   }
@@ -302,10 +374,92 @@ function readStyleObjectProps(styleObject: AstRecord): Map<string, PropValue> {
     if (!key || !property.value) {
       continue;
     }
-    const value = readStaticStyleValue(property.value);
-    props.set(key, value.found ? { kind: "static", value: value.value } : { kind: "dynamic" });
+    const value = readAstPropertyShape(property.value);
+    if (value.kind !== "absent") {
+      props.set(key, value);
+    }
   }
   return props;
+}
+
+function collectArrayStyleHelpers(ast: unknown): ArrayStyleHelpers {
+  const helpers: ArrayStyleHelpers = new Map();
+  walk(ast, (node) => {
+    if (node.type === "FunctionDeclaration" && isIdentifier(node.id)) {
+      const returnedArray = readFunctionReturnedArray(node);
+      if (returnedArray) {
+        helpers.set(node.id.name, {
+          params: getFunctionParams(node),
+          returnedArray,
+          expressionBindings: collectFunctionExpressionBindings(node),
+        });
+      }
+      return;
+    }
+    if (
+      node.type !== "VariableDeclarator" ||
+      !isIdentifier(node.id) ||
+      !isFunctionLike(node.init)
+    ) {
+      return;
+    }
+    const returnedArray = readFunctionReturnedArray(node.init);
+    if (!returnedArray) {
+      return;
+    }
+    helpers.set(node.id.name, {
+      params: getFunctionParams(node.init),
+      returnedArray,
+      expressionBindings: collectFunctionExpressionBindings(node.init),
+    });
+  });
+  return helpers;
+}
+
+function readAstPropertyShape(node: unknown): PropertyShape {
+  if (isObjectExpression(node) && astObjectExpressionIsConditionalMap(node)) {
+    const conditionKeys: string[] = [];
+    const staticConditions: Record<string, StaticStyleValue> = {};
+    let canCopyConditions = true;
+    let defaultValue: DefaultInference = { kind: "dynamic" };
+    for (const property of getObjectProperties(node)) {
+      const key = readPropertyKey(property);
+      if (!key) {
+        continue;
+      }
+      if (key === "default") {
+        const staticDefault = readStaticStyleValue(property.value);
+        defaultValue = staticDefault.found
+          ? staticDefault.value === null
+            ? { kind: "absent" }
+            : { kind: "static", value: staticDefault.value }
+          : { kind: "dynamic" };
+        continue;
+      }
+      if (!isStyleConditionKey(key)) {
+        continue;
+      }
+      conditionKeys.push(key);
+      const staticValue = readStaticStyleValue(property.value);
+      if (staticValue.found) {
+        staticConditions[key] = staticValue.value;
+      } else {
+        canCopyConditions = false;
+      }
+    }
+    return {
+      kind: "conditionalMap",
+      defaultValue,
+      conditionKeys,
+      ...(canCopyConditions ? { staticConditions } : {}),
+    };
+  }
+  const value = readStaticStyleValue(node);
+  return value.found
+    ? value.value === null
+      ? { kind: "absent" }
+      : { kind: "flat", value: value.value }
+    : { kind: "dynamic" };
 }
 
 function readStaticStyleValue(
@@ -373,6 +527,37 @@ function readFunctionReturnedObject(node: unknown): AstRecord | null {
   return null;
 }
 
+function readFunctionReturnedArray(node: unknown): AstRecord | null {
+  if (!isRecord(node)) {
+    return null;
+  }
+  if (
+    node.type !== "ArrowFunctionExpression" &&
+    node.type !== "FunctionExpression" &&
+    node.type !== "FunctionDeclaration"
+  ) {
+    return null;
+  }
+  const body = node.body;
+  if (isArrayExpression(body)) {
+    return body;
+  }
+  if (!isRecord(body) || body.type !== "BlockStatement") {
+    return null;
+  }
+  const statements = Array.isArray(body.body) ? body.body : [];
+  for (const statement of statements) {
+    if (
+      isRecord(statement) &&
+      statement.type === "ReturnStatement" &&
+      isArrayExpression(statement.argument)
+    ) {
+      return statement.argument;
+    }
+  }
+  return null;
+}
+
 function functionPropertiesWithNullConditionalDefault(node: unknown): string[] {
   const returnedObject = readFunctionReturnedObject(node);
   if (!returnedObject) {
@@ -414,6 +599,13 @@ function objectExpressionHasNullDefault(node: AstRecord): boolean {
       return false;
     }
     return isNullLiteral(property.value);
+  });
+}
+
+function astObjectExpressionIsConditionalMap(node: AstRecord): boolean {
+  return getObjectProperties(node).some((property) => {
+    const key = readPropertyKey(property);
+    return key === "default" || (key != null && isStyleConditionKey(key));
   });
 }
 
@@ -528,7 +720,7 @@ function collectObjectPatternBinding(pattern: AstRecord, propName: string, out: 
 function collectSxCompositionObservations(
   component: AstRecord,
   sxBindings: { localNames: Set<string>; propsNames: Set<string> },
-  styleMaps: StyleMaps,
+  analysisCtx: AnalysisContext,
   prop: string,
 ): PropertyInference[] {
   const observations: PropertyInference[] = [];
@@ -536,7 +728,7 @@ function collectSxCompositionObservations(
     if (node.type === "CallExpression" && isStylexPropsCall(node)) {
       const beforeSx = argsBeforeSx(getCallArguments(node), sxBindings);
       if (beforeSx) {
-        observations.push(analyzeStyleSequence(beforeSx, styleMaps, prop));
+        observations.push(analyzeStyleSequence(beforeSx, analysisCtx, prop));
       }
       return;
     }
@@ -545,7 +737,7 @@ function collectSxCompositionObservations(
       const elements = isArrayExpression(firstArg) ? getArrayElements(firstArg) : [];
       const beforeSx = argsBeforeSx(elements, sxBindings);
       if (beforeSx) {
-        observations.push(analyzeStyleSequence(beforeSx, styleMaps, prop));
+        observations.push(analyzeStyleSequence(beforeSx, analysisCtx, prop));
       }
       return;
     }
@@ -554,7 +746,7 @@ function collectSxCompositionObservations(
       const elements = isArrayExpression(expression) ? getArrayElements(expression) : [expression];
       const beforeSx = argsBeforeSx(elements, sxBindings);
       if (beforeSx) {
-        observations.push(analyzeStyleSequence(beforeSx, styleMaps, prop));
+        observations.push(analyzeStyleSequence(beforeSx, analysisCtx, prop));
       }
     }
   });
@@ -581,12 +773,12 @@ function argsBeforeSx(
 
 function analyzeStyleSequence(
   styleArgs: readonly unknown[],
-  styleMaps: StyleMaps,
+  analysisCtx: AnalysisContext,
   prop: string,
 ): PropertyInference {
   let current: PropertyInference = { kind: "absent" };
   for (const arg of styleArgs) {
-    const next = analyzeStyleArg(arg, styleMaps, prop);
+    const next = analyzeStyleArg(arg, analysisCtx, prop);
     if (next.kind === "absent") {
       continue;
     }
@@ -598,40 +790,76 @@ function analyzeStyleSequence(
   return current;
 }
 
-function analyzeStyleArg(arg: unknown, styleMaps: StyleMaps, prop: string): PropertyInference {
+function analyzeStyleArg(
+  arg: unknown,
+  analysisCtx: AnalysisContext,
+  prop: string,
+): PropertyInference {
   const node = unwrapExpression(arg);
   if (!isRecord(node)) {
     return { kind: "absent" };
   }
+  if (node.type === "SpreadElement") {
+    return analyzeStyleArg(node.argument, analysisCtx, prop);
+  }
   if (isNullishOrBooleanFalse(node)) {
     return { kind: "absent" };
   }
-  const styleRef = readStyleReference(node);
+  if (isIdentifier(node) && analysisCtx.expressionBindings.has(node.name)) {
+    return analyzeStyleArg(analysisCtx.expressionBindings.get(node.name), analysisCtx, prop);
+  }
+  const styleRef = readStyleReference(node, analysisCtx.staticBindings);
   if (styleRef) {
-    return analyzeStyleReference(styleRef, styleMaps, prop, false);
+    return analyzeStyleReference(styleRef, analysisCtx.styleMaps, prop, false);
   }
   if (node.type === "LogicalExpression" && node.operator === "&&") {
-    const right = analyzeStyleArg(node.right, styleMaps, prop);
+    const test = evaluateStaticBoolean(
+      node.left,
+      analysisCtx.staticBindings,
+      analysisCtx.expressionBindings,
+    );
+    if (test === false) {
+      return { kind: "absent" };
+    }
+    const right = analyzeStyleArg(node.right, analysisCtx, prop);
+    if (test === true) {
+      return right;
+    }
     return right.kind === "absent" ? right : { kind: "variable" };
   }
   if (node.type === "ConditionalExpression") {
-    const consequent = analyzeStyleArg(node.consequent, styleMaps, prop);
-    const alternate = analyzeStyleArg(node.alternate, styleMaps, prop);
+    const test = evaluateStaticBoolean(
+      node.test,
+      analysisCtx.staticBindings,
+      analysisCtx.expressionBindings,
+    );
+    if (test === true) {
+      return analyzeStyleArg(node.consequent, analysisCtx, prop);
+    }
+    if (test === false) {
+      return analyzeStyleArg(node.alternate, analysisCtx, prop);
+    }
+    const consequent = analyzeStyleArg(node.consequent, analysisCtx, prop);
+    const alternate = analyzeStyleArg(node.alternate, analysisCtx, prop);
     return consequent.kind === "absent" && alternate.kind === "absent"
       ? { kind: "absent" }
-      : { kind: "variable" };
+      : variableInferenceFromBranches([consequent, alternate]);
   }
   if (isArrayExpression(node)) {
-    return analyzeStyleSequence(getArrayElements(node), styleMaps, prop);
+    return analyzeStyleSequence(getArrayElements(node), analysisCtx, prop);
   }
   if ((node as AstRecord).type === "CallExpression") {
     const callNode = node as AstRecord;
-    const calleeRef = readStyleReference(callNode.callee);
+    const calleeRef = readStyleReference(callNode.callee, analysisCtx.staticBindings);
     if (calleeRef) {
-      return analyzeStyleReference(calleeRef, styleMaps, prop, true);
+      return analyzeStyleReference(calleeRef, analysisCtx.styleMaps, prop, true);
     }
     if (isStylexDefaultMarkerCall(callNode)) {
       return { kind: "absent" };
+    }
+    const helperResult = analyzeArrayStyleHelperCall(callNode, analysisCtx, prop);
+    if (helperResult) {
+      return helperResult;
     }
   }
   return { kind: "unknown" };
@@ -661,9 +889,15 @@ function analyzeComputedStyleMapReference(
     return { kind: "unknown" };
   }
   const inferences = [...entries.values()].map((entry) => analyzeStyleEntry(entry, prop, called));
-  return mergePropertyInferences(
-    ref.mayBeAbsent ? [{ kind: "absent" }, ...inferences] : inferences,
-  );
+  const branches = ref.mayBeAbsent
+    ? ([{ kind: "absent" }, ...inferences] satisfies PropertyInference[])
+    : inferences;
+  const merged = mergePropertyInferences(branches);
+  if (merged.kind === "variable") {
+    const conditionKeys = uniqueStrings(branches.flatMap(conditionKeysForWarning));
+    return conditionKeys.length > 0 ? { kind: "variableConditionalMap", conditionKeys } : merged;
+  }
+  return merged;
 }
 
 function analyzeStyleEntry(
@@ -681,19 +915,23 @@ function analyzeStyleEntry(
   if (called || value.kind === "dynamic") {
     return { kind: "variable" };
   }
-  return { kind: "static", value: value.value };
+  return value;
 }
 
 function mergePropertyInferences(inferences: readonly PropertyInference[]): PropertyInference {
   let merged: PropertyInference = { kind: "absent" };
   let sawAbsent = false;
-  let sawStatic = false;
+  let sawContributor = false;
   for (const inference of inferences) {
-    if (inference.kind === "unknown" || inference.kind === "variable") {
+    if (
+      inference.kind === "unknown" ||
+      inference.kind === "variable" ||
+      inference.kind === "variableConditionalMap"
+    ) {
       return inference;
     }
     if (inference.kind === "absent") {
-      if (sawStatic) {
+      if (sawContributor) {
         return { kind: "variable" };
       }
       sawAbsent = true;
@@ -702,13 +940,329 @@ function mergePropertyInferences(inferences: readonly PropertyInference[]): Prop
     if (sawAbsent) {
       return { kind: "variable" };
     }
-    if (merged.kind === "static" && merged.value !== inference.value) {
-      return { kind: "variable" };
+    if (!sawContributor) {
+      sawContributor = true;
+      merged = inference;
+      continue;
     }
-    sawStatic = true;
+    if (!propertyInferencesEqual(merged, inference)) {
+      return variableInferenceFromBranches([merged, inference]);
+    }
+    sawContributor = true;
     merged = inference;
   }
   return merged;
+}
+
+function propertyInferencesEqual(left: PropertyInference, right: PropertyInference): boolean {
+  if (left.kind === "absent") {
+    return right.kind === "absent";
+  }
+  if (right.kind === "absent") {
+    return false;
+  }
+  if (left.kind === "flat" && right.kind === "flat") {
+    return left.value === right.value;
+  }
+  if (left.kind === "conditionalMap" && right.kind === "conditionalMap") {
+    return (
+      defaultInferencesEqual(left.defaultValue, right.defaultValue) &&
+      left.conditionKeys.length === right.conditionKeys.length &&
+      left.conditionKeys.every((key) => right.conditionKeys.includes(key)) &&
+      staticConditionsEqual(left.staticConditions, right.staticConditions)
+    );
+  }
+  return left.kind === right.kind && left.kind === "dynamic";
+}
+
+function defaultInferencesEqual(left: DefaultInference, right: DefaultInference): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  return left.kind === "static" && right.kind === "static" ? left.value === right.value : true;
+}
+
+function staticConditionsEqual(
+  left: Record<string, StaticStyleValue> | undefined,
+  right: Record<string, StaticStyleValue> | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  const leftEntries = Object.entries(left);
+  return (
+    leftEntries.length === Object.keys(right).length &&
+    leftEntries.every(([key, value]) => right[key] === value)
+  );
+}
+
+function variableInferenceFromBranches(branches: readonly PropertyInference[]): PropertyInference {
+  const conditionKeys = uniqueStrings(branches.flatMap(conditionKeysForWarning));
+  return conditionKeys.length > 0
+    ? { kind: "variableConditionalMap", conditionKeys }
+    : { kind: "variable" };
+}
+
+function conditionKeysForWarning(inferred: PropertyInference): string[] {
+  if (inferred.kind === "conditionalMap" || inferred.kind === "variableConditionalMap") {
+    return inferred.conditionKeys;
+  }
+  return [];
+}
+
+function toPropertyShape(inferred: PropertyInference): PropertyShape {
+  if (
+    inferred.kind === "flat" ||
+    inferred.kind === "conditionalMap" ||
+    inferred.kind === "absent" ||
+    inferred.kind === "dynamic"
+  ) {
+    return inferred;
+  }
+  return { kind: "dynamic" };
+}
+
+function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
+  const props: string[] = [];
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (prop.startsWith("__") || isStyleConditionKey(prop)) {
+      continue;
+    }
+    if (inferPropertyShapeFromValue(value).kind === "flat") {
+      props.push(prop);
+    }
+  }
+  return props;
+}
+
+function staticPropsForDecl(decl: StyledDecl): StaticBindings {
+  const bindings: StaticBindings = new Map();
+  for (const [key, value] of Object.entries(decl.attrsInfo?.staticAttrs ?? {})) {
+    if (isStaticValue(value)) {
+      bindings.set(key, value);
+    }
+  }
+  return bindings;
+}
+
+function collectComponentStaticBindings(
+  component: AstRecord,
+  staticProps: StaticBindings,
+): StaticBindings {
+  const bindings: StaticBindings = new Map(staticProps);
+  for (const param of getFunctionParams(component)) {
+    collectObjectPatternStaticBindings(param, staticProps, bindings);
+  }
+  walkTopLevelComponentBody(component.body, (node) => {
+    if (
+      node.type !== "VariableDeclarator" ||
+      !isObjectPattern(node.id) ||
+      (!isIdentifier(node.init) && node.init !== undefined)
+    ) {
+      return;
+    }
+    collectObjectPatternStaticBindings(node.id, staticProps, bindings);
+  });
+  return bindings;
+}
+
+function collectObjectPatternStaticBindings(
+  pattern: unknown,
+  staticProps: StaticBindings,
+  bindings: StaticBindings,
+): void {
+  if (!isObjectPattern(pattern)) {
+    return;
+  }
+  for (const property of getObjectPatternProperties(pattern)) {
+    const key = readPropertyKey(property);
+    if (!key) {
+      continue;
+    }
+    const local = unwrapAssignmentPattern(property.value);
+    if (!isIdentifier(local)) {
+      continue;
+    }
+    const staticProp = staticProps.get(key);
+    if (staticProp !== undefined) {
+      bindings.set(local.name, staticProp);
+    }
+  }
+}
+
+function collectFunctionExpressionBindings(functionNode: AstRecord): ExpressionBindings {
+  const bindings: ExpressionBindings = new Map();
+  const body = functionNode.body;
+  if (!isRecord(body) || body.type !== "BlockStatement" || !Array.isArray(body.body)) {
+    return bindings;
+  }
+  for (const statement of body.body) {
+    if (!isRecord(statement) || statement.type !== "VariableDeclaration") {
+      continue;
+    }
+    for (const declaration of Array.isArray(statement.declarations) ? statement.declarations : []) {
+      if (!isRecord(declaration) || !isIdentifier(declaration.id) || declaration.init == null) {
+        continue;
+      }
+      bindings.set(declaration.id.name, declaration.init);
+    }
+  }
+  return bindings;
+}
+
+function analyzeArrayStyleHelperCall(
+  callNode: AstRecord,
+  analysisCtx: AnalysisContext,
+  prop: string,
+): PropertyInference | null {
+  if (!isIdentifier(callNode.callee)) {
+    return null;
+  }
+  const helper = analysisCtx.arrayStyleHelpers.get(callNode.callee.name);
+  if (!helper) {
+    return null;
+  }
+  return analyzeStyleSequence(
+    getArrayElements(helper.returnedArray),
+    {
+      ...analysisCtx,
+      staticBindings: mergeStaticBindings(
+        analysisCtx.staticBindings,
+        staticBindingsForHelperCall(helper, getCallArguments(callNode), analysisCtx.staticBindings),
+      ),
+      expressionBindings: new Map([
+        ...analysisCtx.expressionBindings,
+        ...helper.expressionBindings,
+      ]),
+    },
+    prop,
+  );
+}
+
+function staticBindingsForHelperCall(
+  helper: ArrayStyleHelper,
+  args: readonly unknown[],
+  callerBindings: StaticBindings,
+): StaticBindings {
+  const bindings: StaticBindings = new Map();
+  const firstParam = helper.params[0];
+  const firstArg = args[0];
+  if (!isObjectPattern(firstParam) || !isObjectExpression(firstArg)) {
+    return bindings;
+  }
+  const argValues = readObjectExpressionStaticBindings(firstArg, callerBindings);
+  for (const property of getObjectPatternProperties(firstParam)) {
+    const key = readPropertyKey(property);
+    if (!key) {
+      continue;
+    }
+    const local = unwrapAssignmentPattern(property.value);
+    if (!isIdentifier(local)) {
+      continue;
+    }
+    const value = argValues.get(key);
+    if (value !== undefined) {
+      bindings.set(local.name, value);
+    }
+  }
+  return bindings;
+}
+
+function readObjectExpressionStaticBindings(
+  objectExpression: AstRecord,
+  callerBindings: StaticBindings,
+): StaticBindings {
+  const bindings: StaticBindings = new Map();
+  for (const property of getObjectProperties(objectExpression)) {
+    const key = readPropertyKey(property);
+    if (!key || property.value == null) {
+      continue;
+    }
+    const value = staticValueFromExpression(property.value, callerBindings);
+    if (value !== undefined) {
+      bindings.set(key, value);
+    }
+  }
+  return bindings;
+}
+
+function staticValueFromExpression(
+  expression: unknown,
+  bindings: StaticBindings,
+): StaticStyleValue | undefined {
+  const unwrapped = unwrapExpression(expression);
+  if (isIdentifier(unwrapped)) {
+    return bindings.get(unwrapped.name);
+  }
+  const staticValue = readStaticStyleValue(unwrapped);
+  return staticValue.found ? staticValue.value : undefined;
+}
+
+function mergeStaticBindings(first: StaticBindings, second: StaticBindings): StaticBindings {
+  return new Map([...first, ...second]);
+}
+
+function evaluateStaticBoolean(
+  expression: unknown,
+  staticBindings: StaticBindings,
+  expressionBindings: ExpressionBindings,
+): boolean | undefined {
+  const node = unwrapExpression(expression);
+  if (!isRecord(node)) {
+    return undefined;
+  }
+  if (
+    node.type === "BooleanLiteral" ||
+    (node.type === "Literal" && typeof node.value === "boolean")
+  ) {
+    return Boolean(node.value);
+  }
+  if (isIdentifier(node)) {
+    if (expressionBindings.has(node.name)) {
+      return evaluateStaticBoolean(
+        expressionBindings.get(node.name),
+        staticBindings,
+        expressionBindings,
+      );
+    }
+    const value = staticBindings.get(node.name);
+    return typeof value === "boolean" ? value : undefined;
+  }
+  if (node.type === "UnaryExpression" && node.operator === "!") {
+    const value = evaluateStaticBoolean(node.argument, staticBindings, expressionBindings);
+    return value === undefined ? undefined : !value;
+  }
+  if (node.type === "LogicalExpression") {
+    const left = evaluateStaticBoolean(node.left, staticBindings, expressionBindings);
+    const right = evaluateStaticBoolean(node.right, staticBindings, expressionBindings);
+    if (node.operator === "&&") {
+      return left === false || right === false
+        ? false
+        : left === true && right === true
+          ? true
+          : undefined;
+    }
+    if (node.operator === "||") {
+      return left === true || right === true
+        ? true
+        : left === false && right === false
+          ? false
+          : undefined;
+    }
+  }
+  if (node.type === "BinaryExpression" && (node.operator === "===" || node.operator === "!==")) {
+    const left = staticValueFromExpression(node.left, staticBindings);
+    const right = staticValueFromExpression(node.right, staticBindings);
+    if (left === undefined || right === undefined) {
+      return undefined;
+    }
+    return node.operator === "===" ? left === right : left !== right;
+  }
+  return undefined;
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 function isStylexCreateCall(node: unknown): boolean {
@@ -743,7 +1297,7 @@ function isMemberCall(node: unknown, objectName: string, propertyName: string): 
   );
 }
 
-function readStyleReference(node: unknown): StyleReference | null {
+function readStyleReference(node: unknown, staticBindings: StaticBindings): StyleReference | null {
   const unwrapped = unwrapExpression(node);
   if (!isRecord(unwrapped) || unwrapped.type !== "MemberExpression") {
     return null;
@@ -752,7 +1306,7 @@ function readStyleReference(node: unknown): StyleReference | null {
     return null;
   }
   if (unwrapped.computed === true) {
-    const styleKey = readComputedMemberPropertyName(unwrapped.property);
+    const styleKey = readComputedMemberPropertyName(unwrapped.property, staticBindings);
     return styleKey
       ? { kind: "entry", objectName: unwrapped.object.name, styleKey }
       : {
@@ -766,12 +1320,19 @@ function readStyleReference(node: unknown): StyleReference | null {
     : null;
 }
 
-function readComputedMemberPropertyName(property: unknown): string | null {
+function readComputedMemberPropertyName(
+  property: unknown,
+  staticBindings: StaticBindings,
+): string | null {
   if (!isRecord(property)) {
     return null;
   }
   if (property.type === "StringLiteral" || property.type === "Literal") {
     return typeof property.value === "string" ? property.value : null;
+  }
+  if (isIdentifier(property)) {
+    const boundValue = staticBindings.get(property.name);
+    return typeof boundValue === "string" ? boundValue : null;
   }
   return null;
 }
@@ -868,6 +1429,14 @@ function getObjectProperties(node: AstRecord): AstRecord[] {
   return Array.isArray(node.properties) ? node.properties.filter(isRecord) : [];
 }
 
+function getObjectPatternProperties(node: AstRecord): AstRecord[] {
+  return Array.isArray(node.properties)
+    ? node.properties.filter(
+        (property): property is AstRecord => isRecord(property) && property.type === "Property",
+      )
+    : [];
+}
+
 function getFunctionParams(node: AstRecord): unknown[] {
   return Array.isArray(node.params) ? node.params : [];
 }
@@ -881,6 +1450,19 @@ function readPropertyKey(property: AstRecord): string | null {
     return typeof key.value === "string" ? key.value : null;
   }
   return null;
+}
+
+function isStyleConditionKey(key: string): boolean {
+  return key.startsWith(":") || key.startsWith("@");
+}
+
+function isStaticValue(value: unknown): value is StaticStyleValue {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    value === null
+  );
 }
 
 function getJsxAttributeName(node: AstRecord): string | null {

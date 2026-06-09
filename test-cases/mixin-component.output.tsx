@@ -17,7 +17,10 @@ const styles = stylex.create({
     },
   },
   colorMixin: {
-    color: "red",
+    color: {
+      default: "red",
+      ":hover": "blue",
+    },
   },
   // Using shared mixins within components
   elementWithMixin: {

@@ -10,10 +10,23 @@ import { buildStyleKeySequence, type StyleSequenceEntry } from "./style-composit
 
 const CONDITIONAL_DEFAULT_WARNING =
   "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
+const FLAT_ERASES_CONDITIONAL_WARNING =
+  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
 
 export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
   | { kind: "absent" }
+  | { kind: "dynamic" };
+export type StaticStyleValue = string | number | boolean | null;
+export type PropertyShape =
+  | { kind: "absent" }
+  | { kind: "flat"; value: StaticStyleValue }
+  | {
+      kind: "conditionalMap";
+      defaultValue: DefaultInference;
+      conditionKeys: string[];
+      staticConditions?: Record<string, StaticStyleValue>;
+    }
   | { kind: "dynamic" };
 
 export function guardGeneratedConditionalDefaults(
@@ -105,16 +118,39 @@ function patchConditionalDefaultsForSequence(args: {
   entries: StyleSequenceEntry[];
 }): "ok" | "bail" {
   const { ctx, decl, entries } = args;
-  const defaults = new Map<string, DefaultInference>();
+  const shapes = new Map<string, PropertyShape>();
   let hasDynamicUnknownContributor = false;
 
   for (const entry of entries) {
     const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
     if (entry.patchable && isPlainStyleObject(source)) {
+      for (const prop of propertiesWithFlatValue(source)) {
+        const earlier = shapes.get(prop) ?? { kind: "absent" };
+        if (patchFlatValueAgainstConditionalMap(source, prop, earlier) !== "bail") {
+          continue;
+        }
+        ctx.warnings.push({
+          severity: "warning",
+          type: FLAT_ERASES_CONDITIONAL_WARNING,
+          loc: decl.loc,
+          context: {
+            component: decl.localName,
+            styleKey: entry.styleKey,
+            property: prop,
+            source: entry.source,
+            droppedConditionKeys:
+              earlier.kind === "conditionalMap" ? earlier.conditionKeys.join(", ") : undefined,
+            reason: "a later flat StyleX value would replace an earlier conditional property map",
+            todo: `TODO: lift ${prop} into a conditional map that preserves the earlier condition slots.`,
+          },
+        });
+        return "bail";
+      }
+
       for (const prop of propertiesWithUnsafeNullConditionalDefault(source)) {
         const earlier = hasDynamicUnknownContributor
           ? ({ kind: "dynamic" } satisfies DefaultInference)
-          : (defaults.get(prop) ?? { kind: "absent" });
+          : defaultInferenceFromPropertyShape(shapes.get(prop) ?? { kind: "absent" });
         const patchResult = patchNullConditionalDefaultsForProp(source, prop, earlier);
         if (patchResult === "patched" || patchResult === "safe") {
           continue;
@@ -136,7 +172,7 @@ function patchConditionalDefaultsForSequence(args: {
       }
     } else if (entry.patchable) {
       for (const prop of functionPropertiesWithNullConditionalDefault(source)) {
-        const earlier = defaults.get(prop) ?? { kind: "absent" };
+        const earlier = defaultInferenceFromPropertyShape(shapes.get(prop) ?? { kind: "absent" });
         if (earlier.kind === "absent") {
           continue;
         }
@@ -163,11 +199,11 @@ function patchConditionalDefaultsForSequence(args: {
     }
 
     if (entry.contributes !== false) {
-      for (const [prop, inference] of inferDefaultContributions(source)) {
-        if (inference.kind === "absent") {
-          defaults.delete(prop);
+      for (const [prop, shape] of inferPropertyContributions(source)) {
+        if (shape.kind === "absent") {
+          shapes.delete(prop);
         } else {
-          defaults.set(prop, inference);
+          shapes.set(prop, shape);
         }
       }
     }
@@ -176,7 +212,7 @@ function patchConditionalDefaultsForSequence(args: {
   return "ok";
 }
 
-function inferDefaultContributions(source: unknown): Map<string, DefaultInference> {
+function inferPropertyContributions(source: unknown): Map<string, PropertyShape> {
   if (isPlainStyleObject(source)) {
     return inferStyleObjectContributions(source);
   }
@@ -185,20 +221,20 @@ function inferDefaultContributions(source: unknown): Map<string, DefaultInferenc
 
 function inferStyleObjectContributions(
   styleObj: Record<string, unknown>,
-): Map<string, DefaultInference> {
-  const contributions = new Map<string, DefaultInference>();
+): Map<string, PropertyShape> {
+  const contributions = new Map<string, PropertyShape>();
   for (const [prop, value] of Object.entries(styleObj)) {
     if (isMetadataOrConditionKey(prop)) {
       continue;
     }
-    contributions.set(prop, inferDefaultFromValue(value));
+    contributions.set(prop, inferPropertyShapeFromValue(value));
   }
   return contributions;
 }
 
-function inferStyleFunctionContributions(source: unknown): Map<string, DefaultInference> {
+function inferStyleFunctionContributions(source: unknown): Map<string, PropertyShape> {
   const returnedObject = readFunctionReturnedObject(source);
-  const contributions = new Map<string, DefaultInference>();
+  const contributions = new Map<string, PropertyShape>();
   if (!returnedObject) {
     return contributions;
   }
@@ -231,18 +267,89 @@ function functionPropertiesWithNullConditionalDefault(source: unknown): string[]
 }
 
 function inferDefaultFromValue(value: unknown): DefaultInference {
+  return defaultInferenceFromPropertyShape(inferPropertyShapeFromValue(value));
+}
+
+export function inferPropertyShapeFromValue(value: unknown): PropertyShape {
   if (isStaticStyleValue(value)) {
-    return value === null ? { kind: "absent" } : { kind: "static", value };
+    return value === null ? { kind: "absent" } : { kind: "flat", value };
   }
   if (isPlainStyleObject(value) && isConditionalStyleMap(value)) {
     const defaultValue = value.default;
-    return isStaticStyleValue(defaultValue)
-      ? defaultValue === null
-        ? { kind: "absent" }
-        : { kind: "static", value: defaultValue }
-      : { kind: "dynamic" };
+    const conditionKeys = Object.keys(value).filter(isStyleConditionKey);
+    const staticConditions = readStaticConditionValues(value, conditionKeys);
+    return {
+      kind: "conditionalMap",
+      defaultValue: isStaticStyleValue(defaultValue)
+        ? defaultValue === null
+          ? { kind: "absent" }
+          : { kind: "static", value: defaultValue }
+        : { kind: "dynamic" },
+      conditionKeys,
+      ...(staticConditions ? { staticConditions } : {}),
+    };
   }
   return { kind: "dynamic" };
+}
+
+export function defaultInferenceFromPropertyShape(shape: PropertyShape): DefaultInference {
+  if (shape.kind === "flat") {
+    return { kind: "static", value: shape.value };
+  }
+  if (shape.kind === "conditionalMap") {
+    return shape.defaultValue;
+  }
+  return shape;
+}
+
+export function patchFlatValueAgainstConditionalMap(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  earlier: PropertyShape,
+): "patched" | "safe" | "bail" {
+  if (earlier.kind !== "conditionalMap") {
+    return "safe";
+  }
+  const current = inferPropertyShapeFromValue(styleObj[prop]);
+  if (current.kind !== "flat") {
+    return "safe";
+  }
+  if (!earlier.staticConditions) {
+    return "bail";
+  }
+  styleObj[prop] = {
+    default: current.value,
+    ...earlier.staticConditions,
+  };
+  return "patched";
+}
+
+function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
+  const props: string[] = [];
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop)) {
+      continue;
+    }
+    if (inferPropertyShapeFromValue(value).kind === "flat") {
+      props.push(prop);
+    }
+  }
+  return props;
+}
+
+function readStaticConditionValues(
+  value: Record<string, unknown>,
+  conditionKeys: readonly string[],
+): Record<string, StaticStyleValue> | undefined {
+  const conditions: Record<string, StaticStyleValue> = {};
+  for (const key of conditionKeys) {
+    const conditionValue = value[key];
+    if (!isStaticStyleValue(conditionValue)) {
+      return undefined;
+    }
+    conditions[key] = conditionValue;
+  }
+  return conditions;
 }
 
 function isConditionalStyleMap(value: Record<string, unknown>): boolean {

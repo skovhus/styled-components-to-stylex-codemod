@@ -172,6 +172,115 @@ describe("guardForwardedSxConditionalDefaults", () => {
       },
     });
   });
+
+  it("lifts flat sx color for a static Button-like borderless variant", () => {
+    const styleObj = { color: "muted" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: buttonLikeBaseSource(),
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl({ variant: "borderless" })])).toBe(
+      "ok",
+    );
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":highlightMixin": "title",
+      },
+    });
+  });
+
+  it("bails when Button-like variant is dynamic and flat sx color could erase states", () => {
+    const ctx = forwardedSxContext({
+      styleObj: { color: "muted" },
+      baseSource: buttonLikeBaseSource(),
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.property).toBe("color");
+  });
+
+  it("preserves existing caller conditional color maps", () => {
+    const styleObj = {
+      color: {
+        default: "muted",
+        ":highlightMixin": "title",
+      },
+    };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: buttonLikeBaseSource(),
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl({ variant: "borderless" })])).toBe(
+      "ok",
+    );
+    expect(ctx.warnings).toEqual([]);
+    expect(styleObj).toEqual({
+      color: {
+        default: "muted",
+        ":highlightMixin": "title",
+      },
+    });
+  });
+
+  it("lifts generic non-color flat sx values over wrapped conditional maps", () => {
+    const styleObj = { opacity: 0.8 };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[styles.base, sx]} />;
+        }
+        const styles = stylex.create({
+          base: {
+            opacity: { default: 1, ":hover": 0.5 },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(styleObj).toEqual({
+      opacity: {
+        default: 0.8,
+        ":hover": 0.5,
+      },
+    });
+  });
+
+  it("lifts transitionDuration over wrapped highlight duration states", () => {
+    const styleObj = { transitionDuration: "120ms" };
+    const ctx = forwardedSxContext({
+      styleObj,
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, ...rest }) {
+          return <div {...rest} sx={[styles.base, sx]} />;
+        }
+        const styles = stylex.create({
+          base: {
+            transitionProperty: "color",
+            transitionDuration: { default: "120ms", ":highlightMixin": "80ms" },
+          },
+        });
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("ok");
+    expect(styleObj).toEqual({
+      transitionDuration: {
+        default: "120ms",
+        ":highlightMixin": "80ms",
+      },
+    });
+  });
 });
 
 function backgroundHoverStyle(): Record<string, unknown> {
@@ -183,14 +292,47 @@ function backgroundHoverStyle(): Record<string, unknown> {
   };
 }
 
-function styledDecl(): StyledDecl {
+function styledDecl(staticAttrs?: Record<string, unknown>): StyledDecl {
   return {
     localName: "Container",
     styleKey: "container",
     base: { kind: "component", ident: "Base" },
     rules: [],
     templateExpressions: [],
+    ...(staticAttrs
+      ? {
+          attrsInfo: {
+            staticAttrs,
+            conditionalAttrs: [],
+          },
+        }
+      : {}),
   } satisfies StyledDecl;
+}
+
+function buttonLikeBaseSource(): string {
+  return `
+    import * as stylex from "@stylexjs/stylex";
+
+    export function Base(props) {
+      const { sx, variant = "primary", ...rest } = props;
+      return <button {...rest} sx={[...getButtonMixinStyles({ variant }), sx]} />;
+    }
+
+    export function getButtonMixinStyles({ variant }) {
+      return [buttonVariants[variant]];
+    }
+
+    const buttonVariants = stylex.create({
+      primary: { color: "control" },
+      borderless: {
+        color: {
+          default: "base",
+          ":highlightMixin": "title",
+        },
+      },
+    });
+  `;
 }
 
 function forwardedSxContext(args: {
