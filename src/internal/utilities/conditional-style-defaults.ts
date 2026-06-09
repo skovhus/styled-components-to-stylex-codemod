@@ -8,11 +8,6 @@ import type { TransformContext } from "../transform-context.js";
 import { isAstNode } from "./jscodeshift-utils.js";
 import { buildStyleKeySequence, type StyleSequenceEntry } from "./style-composition-plan.js";
 
-const CONDITIONAL_DEFAULT_WARNING =
-  "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
-const FLAT_ERASES_CONDITIONAL_WARNING =
-  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
-
 export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
   | { kind: "absent" }
@@ -28,6 +23,10 @@ export type PropertyShape =
       staticConditions?: Record<string, StaticStyleValue>;
     }
   | { kind: "dynamic" };
+
+export function flatStylexValueErasureExample(prop: string): string {
+  return `A flat StyleX value is \`${prop}: value\`; if an earlier style has \`${prop}: { default: baseValue, ":hover": hoverValue }\`, the flat value replaces the whole map and drops ":hover".`;
+}
 
 export function guardGeneratedConditionalDefaults(
   ctx: TransformContext,
@@ -126,7 +125,7 @@ function patchConditionalDefaultsForSequence(args: {
     if (entry.patchable && isPlainStyleObject(source)) {
       for (const prop of propertiesWithFlatValue(source)) {
         const earlier = shapes.get(prop) ?? { kind: "absent" };
-        if (patchFlatValueAgainstConditionalMap(source, prop, earlier) !== "bail") {
+        if (patchFlatValueAgainstPriorPropertyShape(source, prop, earlier) !== "bail") {
           continue;
         }
         ctx.warnings.push({
@@ -141,6 +140,7 @@ function patchConditionalDefaultsForSequence(args: {
             droppedConditionKeys:
               earlier.kind === "conditionalMap" ? earlier.conditionKeys.join(", ") : undefined,
             reason: "a later flat StyleX value would replace an earlier conditional property map",
+            example: flatStylexValueErasureExample(prop),
             todo: `TODO: lift ${prop} into a conditional map that preserves the earlier condition slots.`,
           },
         });
@@ -302,7 +302,7 @@ export function defaultInferenceFromPropertyShape(shape: PropertyShape): Default
   return shape;
 }
 
-export function patchFlatValueAgainstConditionalMap(
+export function patchFlatValueAgainstPriorPropertyShape(
   styleObj: Record<string, unknown>,
   prop: string,
   earlier: PropertyShape,
@@ -323,6 +323,11 @@ export function patchFlatValueAgainstConditionalMap(
   };
   return "patched";
 }
+
+const CONDITIONAL_DEFAULT_WARNING =
+  "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
+const FLAT_ERASES_CONDITIONAL_WARNING =
+  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
 
 function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
   const props: string[] = [];

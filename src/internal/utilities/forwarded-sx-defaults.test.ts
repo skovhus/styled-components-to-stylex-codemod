@@ -282,6 +282,8 @@ describe("guardForwardedSxConditionalDefaults", () => {
       "Flat StyleX value would erase earlier conditional property states",
     );
     expect(ctx.warnings[0]?.context?.property).toBe("color");
+    expect(ctx.warnings[0]?.context?.example).toContain("color: value");
+    expect(ctx.warnings[0]?.context?.example).toContain('":hover"');
   });
 
   it("bails when flat sx overrides incomplete computed map entries", () => {
@@ -305,6 +307,27 @@ describe("guardForwardedSxConditionalDefaults", () => {
       "Flat StyleX value would erase earlier conditional property states",
     );
     expect(ctx.warnings[0]?.context?.property).toBe("color");
+  });
+
+  it("bails when an unknown style before sx could hide conditional states", () => {
+    const ctx = forwardedSxContext({
+      styleObj: { color: "muted" },
+      baseSource: `
+        import * as stylex from "@stylexjs/stylex";
+        export function Base({ sx, externalStyles, ...rest }) {
+          return <div {...rest} sx={[externalStyles, sx]} />;
+        }
+      `,
+    });
+
+    expect(guardForwardedSxConditionalDefaults(ctx, [styledDecl()])).toBe("bail");
+    expect(ctx.warnings[0]?.type).toBe(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.reason).toBe(
+      "wrapped component base property could not be proven before sx is applied",
+    );
+    expect(ctx.warnings[0]?.context?.example).toContain("color: value");
   });
 
   it("preserves existing caller conditional color maps", () => {

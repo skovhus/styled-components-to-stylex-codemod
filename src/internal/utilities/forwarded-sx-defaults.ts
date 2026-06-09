@@ -13,9 +13,10 @@ import { isRelativeSpecifier, toRealPath } from "./path-utils.js";
 import {
   propertiesWithUnsafeNullConditionalDefault,
   patchNullConditionalDefaultsForProp,
-  patchFlatValueAgainstConditionalMap,
+  patchFlatValueAgainstPriorPropertyShape,
   defaultInferenceFromPropertyShape,
   inferPropertyShapeFromValue,
+  flatStylexValueErasureExample,
   type DefaultInference,
   type PropertyShape,
   type StaticStyleValue,
@@ -87,17 +88,19 @@ function guardForwardedSxStyleObject(
       prop,
       warningType: FLAT_ERASES_CONDITIONAL_WARNING,
       applyInference: (inferred) => {
-        if (inferred.kind === "variableConditionalMap") {
-          return "bail";
-        }
-        return patchFlatValueAgainstConditionalMap(styleObj, prop, toPropertyShape(inferred));
+        return patchFlatValueAgainstPropertyInference(styleObj, prop, inferred);
       },
       warningContext: (inferred) => ({
         reason:
           inferred.kind === "variableConditionalMap"
             ? "wrapped component base property can be conditional for this prop before sx is applied"
-            : "a forwarded flat sx value would replace wrapped component conditional property states",
+            : inferred.kind === "unknown" ||
+                inferred.kind === "variable" ||
+                inferred.kind === "dynamic"
+              ? "wrapped component base property could not be proven before sx is applied"
+              : "a forwarded flat sx value would replace wrapped component conditional property states",
         droppedConditionKeys: conditionKeysForWarning(inferred).join(", "),
+        example: flatStylexValueErasureExample(prop),
         todo: `TODO: lift ${prop} into a conditional map on the forwarded sx style, or avoid overriding it with a flat value.`,
       }),
     });
@@ -191,7 +194,8 @@ type PropertyInference =
   | { kind: "absent" }
   | { kind: "variable" }
   | { kind: "variableConditionalMap"; conditionKeys: string[] }
-  | { kind: "unknown" };
+  | { kind: "unknown" }
+  | { kind: "unavailable" };
 type StyleReference =
   | { kind: "entry"; objectName: string; styleKey: string }
   | { kind: "computedMap"; objectName: string; mayBeAbsent: boolean };
@@ -222,19 +226,19 @@ function inferWrappedComponentSxProperty(
 ): PropertyInference {
   const source = readComponentSource(ctx, componentLocalName);
   if (!source) {
-    return { kind: "unknown" };
+    return { kind: "unavailable" };
   }
 
   const root = parseSource(ctx.api.jscodeshift, source.source);
   if (!root) {
-    return { kind: "unknown" };
+    return { kind: "unavailable" };
   }
 
   const styleMaps = collectStylexCreateMaps(root.ast);
   const arrayStyleHelpers = collectArrayStyleHelpers(root.ast);
   const component = findComponentFunction(root.ast, source.componentNames);
   if (!component) {
-    return { kind: "unknown" };
+    return { kind: "unavailable" };
   }
 
   const sxBindings = collectSxBindings(component);
@@ -250,7 +254,7 @@ function inferWrappedComponentSxProperty(
     prop,
   );
   if (observations.length === 0) {
-    return { kind: "unknown" };
+    return { kind: "unavailable" };
   }
   return mergePropertyInferences(observations);
 }
@@ -948,6 +952,7 @@ function mergePropertyInferences(inferences: readonly PropertyInference[]): Prop
   for (const inference of inferences) {
     if (
       inference.kind === "unknown" ||
+      inference.kind === "unavailable" ||
       inference.kind === "variable" ||
       inference.kind === "variableConditionalMap"
     ) {
@@ -1031,6 +1036,23 @@ function conditionKeysForWarning(inferred: PropertyInference): string[] {
     return inferred.conditionKeys;
   }
   return [];
+}
+
+function patchFlatValueAgainstPropertyInference(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  inferred: PropertyInference,
+): "patched" | "safe" | "bail" {
+  if (inferred.kind === "unavailable" || inferred.kind === "absent" || inferred.kind === "flat") {
+    return "safe";
+  }
+  if (inferred.kind === "variable") {
+    return "safe";
+  }
+  if (inferred.kind === "conditionalMap") {
+    return patchFlatValueAgainstPriorPropertyShape(styleObj, prop, inferred);
+  }
+  return "bail";
 }
 
 function toPropertyShape(inferred: PropertyInference): PropertyShape {

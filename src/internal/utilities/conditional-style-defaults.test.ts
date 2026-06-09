@@ -441,5 +441,7 @@ describe("guardGeneratedConditionalDefaults", () => {
     expect(ctx.warnings.map((warning) => warning.type)).toContain(
       "Flat StyleX value would erase earlier conditional property states",
     );
+    expect(ctx.warnings[0]?.context?.example).toContain("opacity: value");
+    expect(ctx.warnings[0]?.context?.example).toContain('":hover"');
   });
 });
