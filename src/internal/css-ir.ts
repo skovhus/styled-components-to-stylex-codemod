@@ -582,8 +582,8 @@ function resolveNestedSelectorStack(selectors: string[]): string {
     if (!resolved) {
       return trimmed;
     }
-    const parentParts = resolved.split(",").map((part) => part.trim());
-    const selectorParts = trimmed.split(",").map((part) => part.trim());
+    const parentParts = splitTopLevelSelectorList(resolved);
+    const selectorParts = splitTopLevelSelectorList(trimmed);
     return parentParts
       .flatMap((parent) =>
         selectorParts.map((part) =>
@@ -592,6 +592,54 @@ function resolveNestedSelectorStack(selectors: string[]): string {
       )
       .join(",");
   }, "");
+}
+
+function splitTopLevelSelectorList(selector: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let inString: false | '"' | "'" = false;
+
+  for (let i = 0; i < selector.length; i++) {
+    const ch = selector[i]!;
+    current += ch;
+
+    if ((ch === '"' || ch === "'") && selector[i - 1] !== "\\") {
+      if (!inString) {
+        inString = ch;
+      } else if (inString === ch) {
+        inString = false;
+      }
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (ch === "(") {
+      parenDepth++;
+      continue;
+    }
+    if (ch === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+      continue;
+    }
+    if (ch === "[") {
+      bracketDepth++;
+      continue;
+    }
+    if (ch === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+      continue;
+    }
+    if (ch === "," && parenDepth === 0 && bracketDepth === 0) {
+      parts.push(current.slice(0, -1).trim());
+      current = "";
+    }
+  }
+
+  parts.push(current.trim());
+  return parts.filter(Boolean);
 }
 
 function parseDeclarations(

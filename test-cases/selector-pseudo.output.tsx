@@ -45,6 +45,9 @@ export const App = () => (
     <button type="button" sx={styles.nestedLogoButton}>
       Nested logo button
     </button>
+    <button type="button" sx={styles.functionalNestedLogoButton}>
+      Functional nested logo button
+    </button>
   </div>
 );
 
@@ -228,6 +231,23 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       ":hover:focus-visible": "#4f46e5",
+    },
+  },
+  functionalNestedLogoButton: {
+    borderWidth: 0,
+    backgroundColor: "#fdf4ff",
+    padding: 8,
+    outlineWidth: {
+      default: null,
+      ":is(:hover, :focus):active": "2px",
+    },
+    outlineStyle: {
+      default: null,
+      ":is(:hover, :focus):active": "solid",
+    },
+    outlineColor: {
+      default: null,
+      ":is(:hover, :focus):active": "#4f46e5",
     },
   },
 });

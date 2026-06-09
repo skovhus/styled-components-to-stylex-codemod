@@ -108,6 +108,17 @@ const NestedLogoButton = styled.button`
   }
 `;
 
+const FunctionalNestedLogoButton = styled.button`
+  border: 0;
+  background-color: #fdf4ff;
+  padding: 8px;
+  &:is(:hover, :focus) {
+    &:active {
+      ${focusOutline}
+    }
+  }
+`;
+
 export const App = () => (
   <div style={{ display: "grid", gap: 12 }}>
     <Thing data-label=" after">Hover me!</Thing>
@@ -122,5 +133,8 @@ export const App = () => (
     <OrderedLogoButton type="button">Ordered logo button</OrderedLogoButton>
     <OrderedMediaLogoButton type="button">Ordered media logo button</OrderedMediaLogoButton>
     <NestedLogoButton type="button">Nested logo button</NestedLogoButton>
+    <FunctionalNestedLogoButton type="button">
+      Functional nested logo button
+    </FunctionalNestedLogoButton>
   </div>
 );
