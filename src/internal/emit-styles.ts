@@ -848,7 +848,7 @@ function mergeLogicalPhysicalValues(args: {
 }): unknown {
   const { logicalValue, physicalValue, logicalIndex, physicalIndex, basePhysicalValue } = args;
   if (physicalIndex < 0) {
-    if (basePhysicalValue !== undefined) {
+    if (basePhysicalValue !== undefined && shouldSeedFromBasePhysicalValue(logicalValue)) {
       return mergeStyleValuesBySourceOrder(basePhysicalValue, logicalValue);
     }
     return cloneStyleValue(logicalValue);
@@ -857,6 +857,13 @@ function mergeLogicalPhysicalValues(args: {
     return mergeStyleValuesBySourceOrder(physicalValue, logicalValue);
   }
   return mergeStyleValuesBySourceOrder(logicalValue, physicalValue);
+}
+
+function shouldSeedFromBasePhysicalValue(logicalValue: unknown): boolean {
+  if (!isStyleValueMap(logicalValue)) {
+    return false;
+  }
+  return logicalValue.default === null || logicalValue.default === undefined;
 }
 
 function getBasePhysicalValue(

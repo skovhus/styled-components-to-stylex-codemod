@@ -262,6 +262,24 @@ function ConditionalLogicalMediaPadding(props: ConditionalLogicalMediaPaddingPro
   );
 }
 
+type ConditionalLogicalScalarMediaPaddingProps = React.PropsWithChildren<{
+  active?: boolean;
+}>;
+
+function ConditionalLogicalScalarMediaPadding(props: ConditionalLogicalScalarMediaPaddingProps) {
+  const { children, active } = props;
+  return (
+    <span
+      sx={[
+        styles.conditionalLogicalScalarMediaPadding,
+        active && styles.conditionalLogicalScalarMediaPaddingActive,
+      ]}
+    >
+      {children}
+    </span>
+  );
+}
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -293,6 +311,9 @@ export const App = () => (
     <ConditionalLogicalPadding active>Logical padding hover</ConditionalLogicalPadding>
     <ConditionalLogicalSidePadding active>Logical side padding</ConditionalLogicalSidePadding>
     <ConditionalLogicalMediaPadding active>Logical media padding</ConditionalLogicalMediaPadding>
+    <ConditionalLogicalScalarMediaPadding active>
+      Logical scalar media padding
+    </ConditionalLogicalScalarMediaPadding>
   </div>
 );
 
@@ -614,5 +635,20 @@ const styles = stylex.create({
       default: 8,
       ":hover": 2,
     },
+  },
+  conditionalLogicalScalarMediaPadding: {
+    display: "inline-flex",
+    paddingTop: 4,
+    paddingBottom: 4,
+    paddingLeft: 8,
+    paddingRight: {
+      default: 8,
+      "@media (min-width: 600px)": 20,
+    },
+    backgroundColor: "#fef3c7",
+  },
+  conditionalLogicalScalarMediaPaddingActive: {
+    paddingRight: 2,
+    paddingLeft: 2,
   },
 });
