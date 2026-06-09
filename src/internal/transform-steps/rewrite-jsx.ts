@@ -1683,14 +1683,20 @@ function emitStaticInlineStyleConstants(ctx: TransformContext, styledDecls: Styl
     const objectExpression = j.objectExpression(
       (decl.staticInlineStyleProps ?? []).map((prop) => staticInlineStylePropToProperty(j, prop)),
     );
+    const hasCustomProperties = (decl.staticInlineStyleProps ?? []).some((prop) =>
+      prop.prop.startsWith("--"),
+    );
+    const reactCssPropertiesType = j.tsTypeReference(
+      j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties")),
+    );
     const initializer = shouldEmitTypes(ctx.file.path)
-      ? ({
-          type: "TSSatisfiesExpression",
-          expression: objectExpression,
-          typeAnnotation: j.tsTypeReference(
-            j.tsQualifiedName(j.identifier("React"), j.identifier("CSSProperties")),
-          ),
-        } as unknown as ExpressionKind)
+      ? hasCustomProperties
+        ? (j.tsAsExpression(objectExpression, reactCssPropertiesType) as unknown as ExpressionKind)
+        : ({
+            type: "TSSatisfiesExpression",
+            expression: objectExpression,
+            typeAnnotation: reactCssPropertiesType,
+          } as unknown as ExpressionKind)
       : objectExpression;
 
     declarations.push(
@@ -1716,12 +1722,18 @@ function staticInlineStylePropToProperty(
 ): ReturnType<TransformContext["j"]["jscodeshift"]["property"]> {
   const key = prop.prop.includes(".")
     ? parseStyleKeyExpression(j, prop.prop)
-    : j.identifier(prop.prop);
+    : isValidStaticInlineStyleIdentifier(prop.prop)
+      ? j.identifier(prop.prop)
+      : j.literal(prop.prop);
   const property = j.property("init", key, prop.expr);
   if (prop.prop.includes(".")) {
     (property as { computed?: boolean }).computed = true;
   }
   return property;
+}
+
+function isValidStaticInlineStyleIdentifier(prop: string): boolean {
+  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(prop);
 }
 
 function parseStyleKeyExpression(

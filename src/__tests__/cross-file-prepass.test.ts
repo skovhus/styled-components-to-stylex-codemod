@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { join, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import jscodeshift from "jscodeshift";
 import { createModuleResolver } from "../internal/prepass/resolve-imports.js";
@@ -1551,21 +1551,19 @@ describe("runPrepass StyleX component exports", () => {
       createExternalInterface: false,
     });
 
-    expect(result.crossFileInfo.stylexComponentFiles?.get(mixedFile)).toEqual(new Set(["Box"]));
-    expect(result.crossFileInfo.stylexComponentFiles?.get(stylexOnlyFile)).toEqual(
-      new Set(["Card"]),
-    );
-    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultWrapperFile)).toEqual(
-      new Set(["default"]),
-    );
-    expect(result.crossFileInfo.stylexComponentFiles?.get(defaultFunctionFile)).toEqual(
-      new Set(["default"]),
-    );
-    expect(result.crossFileInfo.stylexComponentFiles?.get(classFile)).toEqual(new Set(["Box"]));
-    expect(result.crossFileInfo.stylexComponentFiles?.get(mergedSxFile)).toEqual(new Set(["Box"]));
-    expect(result.crossFileInfo.stylexComponentFiles?.get(importedStylexFile)).toEqual(
-      new Set(["Box"]),
-    );
+    const expectStylexExports = (filePath: string, names: string[]) => {
+      expect(result.crossFileInfo.stylexComponentFiles?.get(realpathSync(filePath))).toEqual(
+        new Set(names),
+      );
+    };
+
+    expectStylexExports(mixedFile, ["Box"]);
+    expectStylexExports(stylexOnlyFile, ["Card"]);
+    expectStylexExports(defaultWrapperFile, ["default"]);
+    expectStylexExports(defaultFunctionFile, ["default"]);
+    expectStylexExports(classFile, ["Box"]);
+    expectStylexExports(mergedSxFile, ["Box"]);
+    expectStylexExports(importedStylexFile, ["Box"]);
   });
 });
 

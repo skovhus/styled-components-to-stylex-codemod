@@ -171,18 +171,27 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     }
   }
   if (decl.base.kind !== "component") {
+    const unsafeProps = collectStyleOverrideProps({
+      afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
+      cssHelperPropValues,
+      extraStyleObjects,
+      resolvedStyleObjects,
+      variantBuckets,
+      styleFnDecls,
+    });
+    moveCustomPropertyOnlyBaseToInlineStyles({
+      styleObj,
+      inlineStyleProps,
+      staticInlineStyleProps,
+      unsafeProps,
+      hasOpaqueExtraStylexPropsArgs: (decl.extraStylexPropsArgs?.length ?? 0) > 0,
+      j: state.j,
+    });
     moveUnsafeRawCssVarPropsToInlineStyles({
       styleObj,
       inlineStyleProps,
       staticInlineStyleProps,
-      unsafeProps: collectStyleOverrideProps({
-        afterBaseStyleKeys: decl.extraStyleKeysAfterBase ?? [],
-        cssHelperPropValues,
-        extraStyleObjects,
-        resolvedStyleObjects,
-        variantBuckets,
-        styleFnDecls,
-      }),
+      unsafeProps,
       j: state.j,
     });
   }
@@ -344,7 +353,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
         state.markBail();
         break;
       }
-      // Skip component identifiers (those are handled above)
+      // Skip component/imported identifiers (those are handled by the rule processor).
       if (!expr || expr.type === "Identifier") {
         continue;
       }
@@ -1545,6 +1554,53 @@ function moveUnsafeRawCssVarPropsToInlineStyles(args: {
     inlineStyleProps.push({ prop, expr });
     staticInlineStyleProps.push({ prop, expr });
   }
+}
+
+function moveCustomPropertyOnlyBaseToInlineStyles(args: {
+  styleObj: Record<string, unknown>;
+  inlineStyleProps: NonNullable<StyledDecl["inlineStyleProps"]>;
+  staticInlineStyleProps: NonNullable<StyledDecl["staticInlineStyleProps"]>;
+  unsafeProps: ReadonlySet<string>;
+  hasOpaqueExtraStylexPropsArgs: boolean;
+  j: Parameters<typeof literalToAst>[0];
+}): void {
+  const {
+    styleObj,
+    inlineStyleProps,
+    staticInlineStyleProps,
+    unsafeProps,
+    hasOpaqueExtraStylexPropsArgs,
+    j,
+  } = args;
+  const entries = Object.entries(styleObj).filter(([prop]) => !prop.startsWith("__"));
+  if (
+    entries.length === 0 ||
+    hasOpaqueExtraStylexPropsArgs ||
+    entries.some(([prop]) => !prop.startsWith("--")) ||
+    entries.some(([prop]) => unsafeProps.has(prop)) ||
+    entries.some(([, value]) => isConditionalCustomPropertyValue(value))
+  ) {
+    return;
+  }
+
+  for (const [prop, value] of entries) {
+    delete styleObj[prop];
+    const expr = isAstNode(value)
+      ? (cloneAstNode(value) as ExpressionKind)
+      : (literalToAst(j, value) as ExpressionKind);
+    inlineStyleProps.push({ prop, expr });
+    staticInlineStyleProps.push({ prop, expr });
+  }
+
+  for (const prop of Object.keys(styleObj)) {
+    if (prop.startsWith("__")) {
+      delete styleObj[prop];
+    }
+  }
+}
+
+function isConditionalCustomPropertyValue(value: unknown): boolean {
+  return !!value && typeof value === "object" && !isAstNode(value);
 }
 
 function moveUnsafeRawCssVarStyleFnsToInlineStyles(args: {

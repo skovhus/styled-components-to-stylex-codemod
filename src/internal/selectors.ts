@@ -278,16 +278,7 @@ function parseSingleSelector(selector: selectorParser.Selector): ParsedSelector 
  * Handles chained pseudos like :focus:not(:disabled).
  */
 function buildPseudoString(pseudos: selectorParser.Pseudo[]): string {
-  return pseudos
-    .map((p) => {
-      if (p.nodes && p.nodes.length > 0) {
-        // Has arguments like :not(:disabled) or :nth-child(2)
-        const inner = p.nodes.map((n) => n.toString()).join("");
-        return `${p.value}(${inner})`;
-      }
-      return p.value;
-    })
-    .join("");
+  return pseudos.map((p) => p.toString()).join("");
 }
 
 /**

@@ -793,10 +793,6 @@ const styles = stylex.create({
     position: "absolute",
     minHeight: 1,
     backgroundColor: "#eef2ff",
-    outlineOffset: {
-      default: null,
-      ":focus-visible": "3px",
-    },
     outlineWidth: {
       default: null,
       ":focus-visible": "2px",
@@ -808,6 +804,10 @@ const styles = stylex.create({
     outlineColor: {
       default: null,
       ":focus-visible": "#4f46e5",
+    },
+    outlineOffset: {
+      default: null,
+      ":focus-visible": "3px",
     },
     height,
   }),

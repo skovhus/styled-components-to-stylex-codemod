@@ -35,6 +35,7 @@ pnpm check       # Run full validation (lint, typecheck, tests, knip, Storybook 
 - run `pnpm check` to validate changes. It covers the same validation categories as `pnpm run ci`, so do not run both unless explicitly requested.
 - when fixing bugs or addressing review comments, add test coverage to document the regression and prevent future breakage. **Prefer extending an existing test case** over creating a new one — only create a new test case when no existing case covers the same category/feature area
 - when addressing PR review comments, resolve the addressed review threads after pushing the fix, then re-fetch thread state to verify they are resolved. Leave only unaddressed, ambiguous, or reviewer-confirmation-needed threads open.
+- after creating a PR, make it ready for review (not draft), address actionable review comments, then poll for new PR review comments about every 90 seconds for up to 10 minutes. If new actionable comments appear, address them, push, resolve addressed threads, and repeat the same polling loop until no new review comments appear during a full polling window.
 - before making any changes, explore the codebase to find ALL files that contain the pattern I'm about to describe. List every file, show the relevant code, and confirm you understand the full scope. Then propose a complete change plan covering every file.
 - when `adapter.externalInterface` is `"auto"`, treat prepass as required: if prepass fails, throw (do not silently fall back); only function-based `externalInterface` may continue on prepass failure with a warning
 
@@ -240,6 +241,8 @@ These files are repository documentation, not Claude-only metadata. Codex-compat
 ## Pull Request Descriptions
 
 Keep PR descriptions **very short** — 1-3 sentences max. Just say what changed and why. Do not add sections like "Summary", "Test case", "Test plan", "Changes", or checklists. Do not enumerate files changed or repeat what's obvious from the diff. Less is more.
+
+After opening a PR, keep it ready for review rather than draft. Address actionable review comments, push fixes, resolve the addressed threads, and poll for new review comments about every 90 seconds for up to 10 minutes. If new actionable comments appear during that window, address them and restart the same push/resolve/poll loop.
 
 ## Post-Implementation Workflow
 

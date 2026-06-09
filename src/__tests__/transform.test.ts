@@ -8594,6 +8594,57 @@ export const App = () => <Text>Hello</Text>;
     });
   });
 
+  it("should warn with cssText hint when imported StyleX value inside pseudo omits cssText", () => {
+    const source = `
+import styled from "styled-components";
+import { focusOutline } from "./lib/helpers";
+
+const Button = styled.button\`
+  &:focus-visible {
+    \${focusOutline}
+  }
+\`;
+
+export const App = () => <Button>Hello</Button>;
+`;
+
+    const adapterWithoutCssText = {
+      externalInterface() {
+        return { styles: false, as: false, ref: false };
+      },
+      resolveValue() {
+        return {
+          usage: "props" as const,
+          expr: "helpers.focusOutline",
+          imports: [],
+        };
+      },
+      resolveCall() {
+        return undefined;
+      },
+      resolveSelector() {
+        return undefined;
+      },
+      styleMerger: null,
+      useSxProp: false,
+    } satisfies Adapter;
+
+    const result = transformWithWarnings(
+      { source, path: "test-imported-value-no-csstext.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: adapterWithoutCssText },
+    );
+
+    expect(result.code).toBeNull();
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings[0]!.type).toBe(
+      "Adapter resolved imported StyleX value under nested selectors/at-rules but did not provide cssText for property expansion — add cssText to resolveValue result to enable pseudo-wrapping",
+    );
+    expect(result.warnings[0]!.context).toMatchObject({
+      selector: "&:focus-visible",
+    });
+  });
+
   it("should use generic warning when expression is not a conditional helper call", () => {
     // When the interpolation inside a pseudo selector is NOT a conditional helper call
     // (e.g., it's a direct call without a conditional, or a logical expression),
