@@ -382,7 +382,7 @@ export function normalizeStylisAstToIR(
       if (!decls.length) {
         return;
       }
-      const targetRule = findRule(selector, recoveryAtRules);
+      const targetRule = findRule(normalizeRecoveredSelector(selector), recoveryAtRules);
       if (!targetRule) {
         return;
       }
@@ -425,7 +425,7 @@ export function normalizeStylisAstToIR(
       if (alreadyUsed) {
         return false;
       }
-      const targetRule = ensureRule(selector, recoveryAtRules);
+      const targetRule = ensureRule(normalizeRecoveredSelector(selector), recoveryAtRules);
       const decl: CssDeclarationIR = {
         property: "",
         value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
@@ -584,7 +584,7 @@ function resolveNestedSelectorStack(selectors: string[]): string {
       return resolved;
     }
     if (!resolved) {
-      return trimmed;
+      return normalizeRecoveredSelector(trimmed);
     }
     const parentParts = splitTopLevelSelectorList(resolved);
     const selectorParts = splitTopLevelSelectorList(trimmed);
@@ -596,6 +596,10 @@ function resolveNestedSelectorStack(selectors: string[]): string {
       )
       .join(",");
   }, "");
+}
+
+function normalizeRecoveredSelector(selector: string): string {
+  return splitTopLevelSelectorList(selector).join(",");
 }
 
 function replaceNestingAmpersands(selector: string, parent: string): string {

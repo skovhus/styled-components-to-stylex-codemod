@@ -242,6 +242,16 @@ function makeSlot(index: number): StyledInterpolationSlot {
   };
 }
 
+function makeIdentifierSlot(index: number): StyledInterpolationSlot {
+  return {
+    ...makeSlot(index),
+    expression: {
+      type: "Identifier",
+      name: "focusOutline",
+    } as StyledInterpolationSlot["expression"],
+  };
+}
+
 describe("normalizeStylisAstToIR – placeholders inside CSS functions are not recovered as standalone", () => {
   it("placeholder inside min() is not recovered as a property-less declaration", () => {
     // Simulates: max-width: min(calc(50cqw - __SC_EXPR_0__), __SC_EXPR_1__);
@@ -397,6 +407,27 @@ describe("normalizeStylisAstToIR – line comment placement", () => {
 });
 
 describe("normalizeStylisAstToIR – recovered placeholders preserve @media scope", () => {
+  it("preserves recovered placeholder order in multiline selector lists", () => {
+    const rawCss = `& {
+  &:hover,
+  &:focus {
+    outline-color: red;
+    __SC_EXPR_0__;
+    outline-color: green;
+  }
+}`;
+    const slots = [makeIdentifierSlot(0)];
+    const rules = normalizeStylisAstToIR(compile(rawCss), slots, { rawCss });
+    const rule = rules.find((r) => r.selector === "&:hover,&:focus");
+
+    expect(rule).toBeDefined();
+    expect(rule!.declarations.map((d) => d.property)).toEqual([
+      "outline-color",
+      "",
+      "outline-color",
+    ]);
+  });
+
   it("placeholder inside @media + selector gets the @media at-rule", () => {
     const rawCss = `& {
 @media (min-width: 600px) {
