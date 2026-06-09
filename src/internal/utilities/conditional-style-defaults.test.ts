@@ -403,14 +403,9 @@ describe("guardGeneratedConditionalDefaults", () => {
 
     expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
     expect(styles.get("linkOverride")).toBeUndefined();
-    expect(styles.get("linkLinkOverride")).toEqual({
-      transitionDuration: {
-        default: "120ms",
-        ":highlightMixin": "80ms",
-      },
-    });
-    expect(decl.extraStyleKeys).toEqual(["linkLinkOverride"]);
-    expect(decl.extraStyleKeysAfterBase).toEqual(["linkLinkOverride"]);
+    expect(styles.get("linkLinkOverride")).toBeUndefined();
+    expect(decl.extraStyleKeys).toEqual([]);
+    expect(decl.extraStyleKeysAfterBase).toEqual([]);
   });
 
   it("clones shared flat mixins before lifting caller-specific conditional states", () => {
@@ -544,13 +539,8 @@ describe("guardGeneratedConditionalDefaults", () => {
         ":focus": "focus",
       },
     });
-    expect(styles.get("buttonSharedColor2")).toEqual({
-      color: {
-        default: "muted",
-        ":focus": "focus",
-      },
-    });
-    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "focusColor", "buttonSharedColor2"]);
+    expect(styles.get("buttonSharedColor2")).toBeUndefined();
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "focusColor"]);
   });
 
   it("preserves shared flat mixins that are also referenced by css helper rewrites", () => {

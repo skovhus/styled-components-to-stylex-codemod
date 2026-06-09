@@ -188,12 +188,12 @@ function patchConditionalDefaultsForSequence(args: {
     const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
     let contributionSource = source;
     if (entry.patchable && isPlainStyleObject(source)) {
-      const clonedPatchSources = new Map<string, Record<string, unknown>>();
+      const clonedPatchSources = new Map<string, ClonedPatchSource>();
       for (const prop of propertiesWithFlatValue(source)) {
         const earlier = shapes.get(prop) ?? { kind: "absent" };
         const clonedPatchSource = clonedPatchSources.get(entry.styleKey);
         const patchTarget =
-          clonedPatchSource ??
+          clonedPatchSource?.source ??
           (needsSharedFlatEntryClone(entry, source, prop, earlier) && ctx.resolvedStyleObjects
             ? cloneSharedStyleEntryForPatch(
                 ctx.resolvedStyleObjects,
@@ -253,6 +253,21 @@ function patchConditionalDefaultsForSequence(args: {
         });
         return "bail";
       }
+
+      const clonedPatchSource = clonedPatchSources.get(entry.styleKey);
+      if (
+        clonedPatchSource &&
+        ctx.resolvedStyleObjects &&
+        isStyleObjectRedundantWithPriorShapes(clonedPatchSource.source, shapes)
+      ) {
+        removeClonedStyleEntry(
+          ctx.resolvedStyleObjects,
+          decl,
+          clonedPatchSource.styleKey,
+          styleKeyUseCounts,
+        );
+        contributionSource = undefined;
+      }
     } else if (entry.patchable) {
       for (const prop of functionPropertiesWithNullConditionalDefault(source)) {
         const earlier = defaultInferenceFromPropertyShape(shapes.get(prop) ?? { kind: "absent" });
@@ -281,7 +296,7 @@ function patchConditionalDefaultsForSequence(args: {
       continue;
     }
 
-    if (entry.contributes !== false) {
+    if (entry.contributes !== false && contributionSource !== undefined) {
       for (const [prop, shape] of inferPropertyContributions(contributionSource)) {
         if (shape.kind === "absent") {
           shapes.delete(prop);
@@ -315,6 +330,7 @@ function countStyleKeyUses(
 }
 
 type CssHelperStyleKeyReference = { styleKey?: unknown };
+type ClonedPatchSource = { styleKey: string; source: Record<string, unknown> };
 
 function cssHelperReferencedStyleKeys(ctx: TransformContext): string[] {
   const cssHelpers:
@@ -350,12 +366,12 @@ function cloneSharedStyleEntryForPatch(
   decl: StyledDecl,
   styleKey: string,
   source: Record<string, unknown>,
-  clonedPatchSources: Map<string, Record<string, unknown>>,
+  clonedPatchSources: Map<string, ClonedPatchSource>,
   styleKeyUseCounts: Map<string, number>,
 ): Record<string, unknown> {
   const existing = clonedPatchSources.get(styleKey);
   if (existing) {
-    return existing;
+    return existing.source;
   }
   const clonedStyleKey = uniqueStyleKey(styles, `${decl.styleKey}${capitalize(styleKey)}`);
   const clonedSource = { ...source };
@@ -364,8 +380,20 @@ function cloneSharedStyleEntryForPatch(
   replaceFirstStyleKey(decl.extraStyleKeysAfterBase, styleKey, clonedStyleKey);
   decrementStyleKeyUse(styles, styleKeyUseCounts, styleKey);
   styleKeyUseCounts.set(clonedStyleKey, 1);
-  clonedPatchSources.set(styleKey, clonedSource);
+  clonedPatchSources.set(styleKey, { styleKey: clonedStyleKey, source: clonedSource });
   return clonedSource;
+}
+
+function removeClonedStyleEntry(
+  styles: Map<string, unknown>,
+  decl: StyledDecl,
+  styleKey: string,
+  styleKeyUseCounts: Map<string, number>,
+): void {
+  removeFirstStyleKey(decl.extraStyleKeys, styleKey);
+  removeFirstStyleKey(decl.extraStyleKeysAfterBase, styleKey);
+  styleKeyUseCounts.delete(styleKey);
+  styles.delete(styleKey);
 }
 
 function decrementStyleKeyUse(
@@ -408,8 +436,90 @@ function replaceFirstStyleKey(
   }
 }
 
+function removeFirstStyleKey(styleKeys: string[] | undefined, styleKey: string): void {
+  if (!styleKeys) {
+    return;
+  }
+  const index = styleKeys.indexOf(styleKey);
+  if (index !== -1) {
+    styleKeys.splice(index, 1);
+  }
+}
+
 function capitalize(value: string): string {
   return value.length === 0 ? value : `${value[0]?.toUpperCase()}${value.slice(1)}`;
+}
+
+function isStyleObjectRedundantWithPriorShapes(
+  styleObj: Record<string, unknown>,
+  priorShapes: ReadonlyMap<string, PropertyShape>,
+): boolean {
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop)) {
+      continue;
+    }
+    const shape = inferPropertyShapeFromValue(value);
+    if (shape.kind !== "absent" && !propertyShapesEqual(priorShapes.get(prop), shape)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function propertyShapesEqual(left: PropertyShape | undefined, right: PropertyShape): boolean {
+  if (!left) {
+    return right.kind === "absent";
+  }
+  switch (left.kind) {
+    case "absent":
+      return right.kind === "absent";
+    case "flat":
+      return right.kind === "flat" && Object.is(left.value, right.value);
+    case "conditionalMap":
+      return right.kind === "conditionalMap" && conditionalMapShapesEqual(left, right);
+    case "dynamic":
+      return false;
+  }
+}
+
+function conditionalMapShapesEqual(
+  left: Extract<PropertyShape, { kind: "conditionalMap" }>,
+  right: Extract<PropertyShape, { kind: "conditionalMap" }>,
+): boolean {
+  return (
+    defaultInferencesEqual(left.defaultValue, right.defaultValue) &&
+    stringArraysEqual(left.conditionKeys, right.conditionKeys) &&
+    staticConditionMapsEqual(left.staticConditions, right.staticConditions)
+  );
+}
+
+function defaultInferencesEqual(left: DefaultInference, right: DefaultInference): boolean {
+  switch (left.kind) {
+    case "absent":
+      return right.kind === "absent";
+    case "dynamic":
+      return false;
+    case "static":
+      return right.kind === "static" && Object.is(left.value, right.value);
+  }
+}
+
+function staticConditionMapsEqual(
+  left: Record<string, StaticStyleValue> | undefined,
+  right: Record<string, StaticStyleValue> | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  const leftKeys = Object.keys(left);
+  return (
+    stringArraysEqual(leftKeys, Object.keys(right)) &&
+    leftKeys.every((key) => Object.is(left[key], right[key]))
+  );
+}
+
+function stringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function inferPropertyContributions(source: unknown): Map<string, PropertyShape> {
