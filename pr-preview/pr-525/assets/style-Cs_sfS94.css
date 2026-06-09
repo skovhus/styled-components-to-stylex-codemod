@@ -750,6 +750,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   --settings-list-view-border-color: #bf4f74;
 }
 
+.x32p44x:hover {
+  --agent-item-min-width: 80%;
+}
+
+@media (width >= 600px) {
+  .x71qvp6.x71qvp6 {
+    --agent-item-min-width: 75%;
+  }
+}
+
 .xmj0n4i:not(#\#) {
   grid-area: br;
 }
