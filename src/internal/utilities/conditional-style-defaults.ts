@@ -6,15 +6,88 @@ import type { WarningType } from "../logger.js";
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
 import { isAstNode } from "./jscodeshift-utils.js";
-import { buildStyleKeySequence, type StyleSequenceEntry } from "./style-composition-plan.js";
-
-const CONDITIONAL_DEFAULT_WARNING =
-  "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
+import {
+  buildStyleKeySequence,
+  type StyleContributionSource,
+  type StyleSequenceEntry,
+} from "./style-composition-plan.js";
 
 export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
   | { kind: "absent" }
   | { kind: "dynamic" };
+export type StaticStyleValue = string | number | boolean | null;
+export type PropertyShape =
+  | { kind: "absent" }
+  | { kind: "flat"; value: StaticStyleValue }
+  | {
+      kind: "conditionalMap";
+      defaultValue: DefaultInference;
+      conditionKeys: string[];
+      staticConditions?: Record<string, StaticStyleValue>;
+    }
+  | { kind: "dynamic" };
+
+export const FLAT_ERASES_CONDITIONAL_WARNING =
+  "Flat StyleX value would erase earlier conditional property states" satisfies WarningType;
+
+export function flatStylexValueErasureExample(prop: string): string {
+  return `A flat StyleX value is \`${prop}: value\`; if an earlier style has \`${prop}: { default: baseValue, ":hover": hoverValue }\`, the flat value replaces the whole map and drops ":hover".`;
+}
+
+export function isStyleConditionKey(key: string): boolean {
+  return key.startsWith(":") || key.startsWith("@");
+}
+
+export function propertiesWithFlatValue(styleObj: Record<string, unknown>): string[] {
+  const props: string[] = [];
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop)) {
+      continue;
+    }
+    if (inferPropertyShapeFromValue(value).kind === "flat") {
+      props.push(prop);
+    }
+  }
+  return props;
+}
+
+export function defaultInferenceFromPropertyShape(shape: PropertyShape): DefaultInference {
+  if (shape.kind === "flat") {
+    return { kind: "static", value: shape.value };
+  }
+  if (shape.kind === "conditionalMap") {
+    return shape.defaultValue;
+  }
+  return shape;
+}
+
+export function patchFlatValueAgainstPriorPropertyShape(
+  styleObj: Record<string, unknown>,
+  prop: string,
+  earlier: PropertyShape,
+  laterSource: StyleContributionSource = "mixin",
+): "patched" | "safe" | "bail" {
+  if (earlier.kind !== "conditionalMap") {
+    return "safe";
+  }
+  const current = inferPropertyShapeFromValue(styleObj[prop]);
+  if (current.kind !== "flat") {
+    return "safe";
+  }
+  const preservedConditions = staticConditionsPreservedByLaterFlat(earlier, laterSource);
+  if (!preservedConditions) {
+    return "bail";
+  }
+  if (Object.keys(preservedConditions).length === 0) {
+    return "safe";
+  }
+  styleObj[prop] = {
+    default: current.value,
+    ...preservedConditions,
+  };
+  return "patched";
+}
 
 export function guardGeneratedConditionalDefaults(
   ctx: TransformContext,
@@ -23,6 +96,7 @@ export function guardGeneratedConditionalDefaults(
   if (!ctx.resolvedStyleObjects) {
     return "ok";
   }
+  const styleKeyUseCounts = countStyleKeyUses(ctx, styledDecls);
 
   for (const decl of styledDecls) {
     if (decl.skipTransform || decl.isCssHelper) {
@@ -32,6 +106,7 @@ export function guardGeneratedConditionalDefaults(
       ctx,
       decl,
       entries: buildStyleKeySequence(ctx, decl),
+      styleKeyUseCounts,
     });
     if (result === "bail") {
       return "bail";
@@ -103,18 +178,62 @@ function patchConditionalDefaultsForSequence(args: {
   ctx: TransformContext;
   decl: StyledDecl;
   entries: StyleSequenceEntry[];
+  styleKeyUseCounts: Map<string, number>;
 }): "ok" | "bail" {
-  const { ctx, decl, entries } = args;
-  const defaults = new Map<string, DefaultInference>();
+  const { ctx, decl, entries, styleKeyUseCounts } = args;
+  const shapes = new Map<string, PropertyShape>();
   let hasDynamicUnknownContributor = false;
 
   for (const entry of entries) {
     const source = entry.styleObj ?? ctx.resolvedStyleObjects?.get(entry.styleKey);
+    let contributionSource = source;
     if (entry.patchable && isPlainStyleObject(source)) {
+      const clonedPatchSources = new Map<string, ClonedPatchSource>();
+      for (const prop of propertiesWithFlatValue(source)) {
+        const earlier = shapes.get(prop) ?? { kind: "absent" };
+        const clonedPatchSource = clonedPatchSources.get(entry.styleKey);
+        const patchTarget =
+          clonedPatchSource?.source ??
+          (needsSharedFlatEntryClone(entry, source, prop, earlier) && ctx.resolvedStyleObjects
+            ? cloneSharedStyleEntryForPatch(
+                ctx.resolvedStyleObjects,
+                decl,
+                entry.styleKey,
+                source,
+                clonedPatchSources,
+                styleKeyUseCounts,
+              )
+            : source);
+        contributionSource = patchTarget;
+        if (
+          patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier, entry.source) !==
+          "bail"
+        ) {
+          continue;
+        }
+        ctx.warnings.push({
+          severity: "warning",
+          type: FLAT_ERASES_CONDITIONAL_WARNING,
+          loc: decl.loc,
+          context: {
+            component: decl.localName,
+            styleKey: entry.styleKey,
+            property: prop,
+            source: entry.source,
+            droppedConditionKeys:
+              earlier.kind === "conditionalMap" ? earlier.conditionKeys.join(", ") : undefined,
+            reason: "a later flat StyleX value would replace an earlier conditional property map",
+            example: flatStylexValueErasureExample(prop),
+            todo: `TODO: lift ${prop} into a conditional map that preserves the earlier condition slots.`,
+          },
+        });
+        return "bail";
+      }
+
       for (const prop of propertiesWithUnsafeNullConditionalDefault(source)) {
         const earlier = hasDynamicUnknownContributor
           ? ({ kind: "dynamic" } satisfies DefaultInference)
-          : (defaults.get(prop) ?? { kind: "absent" });
+          : defaultInferenceFromPropertyShape(shapes.get(prop) ?? { kind: "absent" });
         const patchResult = patchNullConditionalDefaultsForProp(source, prop, earlier);
         if (patchResult === "patched" || patchResult === "safe") {
           continue;
@@ -134,9 +253,24 @@ function patchConditionalDefaultsForSequence(args: {
         });
         return "bail";
       }
+
+      const clonedPatchSource = clonedPatchSources.get(entry.styleKey);
+      if (
+        clonedPatchSource &&
+        ctx.resolvedStyleObjects &&
+        isStyleObjectRedundantWithPriorShapes(clonedPatchSource.source, shapes)
+      ) {
+        removeClonedStyleEntry(
+          ctx.resolvedStyleObjects,
+          decl,
+          clonedPatchSource.styleKey,
+          styleKeyUseCounts,
+        );
+        contributionSource = undefined;
+      }
     } else if (entry.patchable) {
       for (const prop of functionPropertiesWithNullConditionalDefault(source)) {
-        const earlier = defaults.get(prop) ?? { kind: "absent" };
+        const earlier = defaultInferenceFromPropertyShape(shapes.get(prop) ?? { kind: "absent" });
         if (earlier.kind === "absent") {
           continue;
         }
@@ -162,12 +296,12 @@ function patchConditionalDefaultsForSequence(args: {
       continue;
     }
 
-    if (entry.contributes !== false) {
-      for (const [prop, inference] of inferDefaultContributions(source)) {
-        if (inference.kind === "absent") {
-          defaults.delete(prop);
+    if (entry.contributes !== false && contributionSource !== undefined) {
+      for (const [prop, shape] of inferPropertyContributions(contributionSource)) {
+        if (shape.kind === "absent") {
+          shapes.delete(prop);
         } else {
-          defaults.set(prop, inference);
+          shapes.set(prop, shape);
         }
       }
     }
@@ -176,7 +310,230 @@ function patchConditionalDefaultsForSequence(args: {
   return "ok";
 }
 
-function inferDefaultContributions(source: unknown): Map<string, DefaultInference> {
+function countStyleKeyUses(
+  ctx: TransformContext,
+  styledDecls: readonly StyledDecl[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const decl of styledDecls) {
+    if (decl.skipTransform || decl.isCssHelper) {
+      continue;
+    }
+    for (const entry of buildStyleKeySequence(ctx, decl)) {
+      counts.set(entry.styleKey, (counts.get(entry.styleKey) ?? 0) + 1);
+    }
+  }
+  for (const styleKey of cssHelperReferencedStyleKeys(ctx)) {
+    counts.set(styleKey, (counts.get(styleKey) ?? 0) + 1);
+  }
+  return counts;
+}
+
+type CssHelperStyleKeyReference = { styleKey?: unknown };
+type ClonedPatchSource = { styleKey: string; source: Record<string, unknown> };
+
+function cssHelperReferencedStyleKeys(ctx: TransformContext): string[] {
+  const cssHelpers:
+    | {
+        cssHelperReplacements?: CssHelperStyleKeyReference[];
+        cssHelperTemplateReplacements?: CssHelperStyleKeyReference[];
+      }
+    | undefined = ctx.cssHelpers;
+  const references = [
+    ...(cssHelpers?.cssHelperReplacements ?? []),
+    ...(cssHelpers?.cssHelperTemplateReplacements ?? []),
+  ];
+  return references
+    .map((reference) => reference.styleKey)
+    .filter((styleKey): styleKey is string => typeof styleKey === "string");
+}
+
+function needsSharedFlatEntryClone(
+  entry: StyleSequenceEntry,
+  source: Record<string, unknown>,
+  prop: string,
+  earlier: PropertyShape,
+): boolean {
+  return (
+    entry.source === "mixin" &&
+    earlier.kind === "conditionalMap" &&
+    inferPropertyShapeFromValue(source[prop]).kind === "flat"
+  );
+}
+
+function cloneSharedStyleEntryForPatch(
+  styles: Map<string, unknown>,
+  decl: StyledDecl,
+  styleKey: string,
+  source: Record<string, unknown>,
+  clonedPatchSources: Map<string, ClonedPatchSource>,
+  styleKeyUseCounts: Map<string, number>,
+): Record<string, unknown> {
+  const existing = clonedPatchSources.get(styleKey);
+  if (existing) {
+    return existing.source;
+  }
+  const clonedStyleKey = uniqueStyleKey(styles, `${decl.styleKey}${capitalize(styleKey)}`);
+  const clonedSource = { ...source };
+  styles.set(clonedStyleKey, clonedSource);
+  replaceFirstStyleKey(decl.extraStyleKeys, styleKey, clonedStyleKey);
+  replaceFirstStyleKey(decl.extraStyleKeysAfterBase, styleKey, clonedStyleKey);
+  decrementStyleKeyUse(styles, styleKeyUseCounts, styleKey);
+  styleKeyUseCounts.set(clonedStyleKey, 1);
+  clonedPatchSources.set(styleKey, { styleKey: clonedStyleKey, source: clonedSource });
+  return clonedSource;
+}
+
+function removeClonedStyleEntry(
+  styles: Map<string, unknown>,
+  decl: StyledDecl,
+  styleKey: string,
+  styleKeyUseCounts: Map<string, number>,
+): void {
+  removeFirstStyleKey(decl.extraStyleKeys, styleKey);
+  removeFirstStyleKey(decl.extraStyleKeysAfterBase, styleKey);
+  styleKeyUseCounts.delete(styleKey);
+  styles.delete(styleKey);
+}
+
+function decrementStyleKeyUse(
+  styles: Map<string, unknown>,
+  styleKeyUseCounts: Map<string, number>,
+  styleKey: string,
+): void {
+  const nextCount = (styleKeyUseCounts.get(styleKey) ?? 0) - 1;
+  if (nextCount > 0) {
+    styleKeyUseCounts.set(styleKey, nextCount);
+    return;
+  }
+  styleKeyUseCounts.delete(styleKey);
+  styles.delete(styleKey);
+}
+
+function uniqueStyleKey(styles: ReadonlyMap<string, unknown>, baseKey: string): string {
+  let candidate = baseKey;
+  let index = 2;
+  while (styles.has(candidate)) {
+    candidate = `${baseKey}${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function replaceFirstStyleKey(
+  styleKeys: string[] | undefined,
+  previousStyleKey: string,
+  nextStyleKey: string,
+): void {
+  if (!styleKeys) {
+    return;
+  }
+  for (let index = 0; index < styleKeys.length; index += 1) {
+    if (styleKeys[index] === previousStyleKey) {
+      styleKeys[index] = nextStyleKey;
+      return;
+    }
+  }
+}
+
+function removeFirstStyleKey(styleKeys: string[] | undefined, styleKey: string): void {
+  if (!styleKeys) {
+    return;
+  }
+  const index = styleKeys.indexOf(styleKey);
+  if (index !== -1) {
+    styleKeys.splice(index, 1);
+  }
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : `${value[0]?.toUpperCase()}${value.slice(1)}`;
+}
+
+function isStyleObjectRedundantWithPriorShapes(
+  styleObj: Record<string, unknown>,
+  priorShapes: ReadonlyMap<string, PropertyShape>,
+): boolean {
+  if (hasEmittingStyleMetadata(styleObj)) {
+    return false;
+  }
+  for (const [prop, value] of Object.entries(styleObj)) {
+    if (isMetadataOrConditionKey(prop)) {
+      continue;
+    }
+    const shape = inferPropertyShapeFromValue(value);
+    if (shape.kind !== "absent" && !propertyShapesEqual(priorShapes.get(prop), shape)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hasEmittingStyleMetadata(styleObj: Record<string, unknown>): boolean {
+  return hasMetadataEntries(styleObj.__spreads) || hasMetadataEntries(styleObj.__computedKeys);
+}
+
+function hasMetadataEntries(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function propertyShapesEqual(left: PropertyShape | undefined, right: PropertyShape): boolean {
+  if (!left) {
+    return right.kind === "absent";
+  }
+  switch (left.kind) {
+    case "absent":
+      return right.kind === "absent";
+    case "flat":
+      return right.kind === "flat" && Object.is(left.value, right.value);
+    case "conditionalMap":
+      return right.kind === "conditionalMap" && conditionalMapShapesEqual(left, right);
+    case "dynamic":
+      return false;
+  }
+}
+
+function conditionalMapShapesEqual(
+  left: Extract<PropertyShape, { kind: "conditionalMap" }>,
+  right: Extract<PropertyShape, { kind: "conditionalMap" }>,
+): boolean {
+  return (
+    defaultInferencesEqual(left.defaultValue, right.defaultValue) &&
+    stringArraysEqual(left.conditionKeys, right.conditionKeys) &&
+    staticConditionMapsEqual(left.staticConditions, right.staticConditions)
+  );
+}
+
+function defaultInferencesEqual(left: DefaultInference, right: DefaultInference): boolean {
+  switch (left.kind) {
+    case "absent":
+      return right.kind === "absent";
+    case "dynamic":
+      return false;
+    case "static":
+      return right.kind === "static" && Object.is(left.value, right.value);
+  }
+}
+
+function staticConditionMapsEqual(
+  left: Record<string, StaticStyleValue> | undefined,
+  right: Record<string, StaticStyleValue> | undefined,
+): boolean {
+  if (!left || !right) {
+    return left === right;
+  }
+  const leftKeys = Object.keys(left);
+  return (
+    stringArraysEqual(leftKeys, Object.keys(right)) &&
+    leftKeys.every((key) => Object.is(left[key], right[key]))
+  );
+}
+
+function stringArraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function inferPropertyContributions(source: unknown): Map<string, PropertyShape> {
   if (isPlainStyleObject(source)) {
     return inferStyleObjectContributions(source);
   }
@@ -185,20 +542,20 @@ function inferDefaultContributions(source: unknown): Map<string, DefaultInferenc
 
 function inferStyleObjectContributions(
   styleObj: Record<string, unknown>,
-): Map<string, DefaultInference> {
-  const contributions = new Map<string, DefaultInference>();
+): Map<string, PropertyShape> {
+  const contributions = new Map<string, PropertyShape>();
   for (const [prop, value] of Object.entries(styleObj)) {
     if (isMetadataOrConditionKey(prop)) {
       continue;
     }
-    contributions.set(prop, inferDefaultFromValue(value));
+    contributions.set(prop, inferPropertyShapeFromValue(value));
   }
   return contributions;
 }
 
-function inferStyleFunctionContributions(source: unknown): Map<string, DefaultInference> {
+function inferStyleFunctionContributions(source: unknown): Map<string, PropertyShape> {
   const returnedObject = readFunctionReturnedObject(source);
-  const contributions = new Map<string, DefaultInference>();
+  const contributions = new Map<string, PropertyShape>();
   if (!returnedObject) {
     return contributions;
   }
@@ -231,18 +588,181 @@ function functionPropertiesWithNullConditionalDefault(source: unknown): string[]
 }
 
 function inferDefaultFromValue(value: unknown): DefaultInference {
+  return defaultInferenceFromPropertyShape(inferPropertyShapeFromValue(value));
+}
+
+function inferPropertyShapeFromValue(value: unknown): PropertyShape {
   if (isStaticStyleValue(value)) {
-    return value === null ? { kind: "absent" } : { kind: "static", value };
+    return value === null ? { kind: "absent" } : { kind: "flat", value };
   }
   if (isPlainStyleObject(value) && isConditionalStyleMap(value)) {
     const defaultValue = value.default;
-    return isStaticStyleValue(defaultValue)
-      ? defaultValue === null
-        ? { kind: "absent" }
-        : { kind: "static", value: defaultValue }
-      : { kind: "dynamic" };
+    const conditionKeys = Object.keys(value).filter(isStyleConditionKey);
+    const staticConditions = readStaticConditionValues(value, conditionKeys);
+    return {
+      kind: "conditionalMap",
+      defaultValue: isStaticStyleValue(defaultValue)
+        ? defaultValue === null
+          ? { kind: "absent" }
+          : { kind: "static", value: defaultValue }
+        : { kind: "dynamic" },
+      conditionKeys,
+      ...(staticConditions ? { staticConditions } : {}),
+    };
   }
   return { kind: "dynamic" };
+}
+
+const CONDITIONAL_DEFAULT_WARNING =
+  "Conditional StyleX default would override an unproven earlier style for the same property" satisfies WarningType;
+
+function readStaticConditionValues(
+  value: Record<string, unknown>,
+  conditionKeys: readonly string[],
+): Record<string, StaticStyleValue> | undefined {
+  const conditions: Record<string, StaticStyleValue> = {};
+  for (const key of conditionKeys) {
+    const conditionValue = value[key];
+    if (!isStaticStyleValue(conditionValue)) {
+      return undefined;
+    }
+    conditions[key] = conditionValue;
+  }
+  return conditions;
+}
+
+function staticConditionsPreservedByLaterFlat(
+  earlier: Extract<PropertyShape, { kind: "conditionalMap" }>,
+  laterSource: StyleContributionSource,
+): Record<string, StaticStyleValue> | undefined {
+  const minSpecificity = conditionSpecificityNeededToOutrankFlatSource(laterSource);
+  const preservedKeys = earlier.conditionKeys.filter(
+    (key) => conditionSpecificity(key) > minSpecificity,
+  );
+  if (preservedKeys.length === 0) {
+    return {};
+  }
+  if (!earlier.staticConditions) {
+    return undefined;
+  }
+  const preserved: Record<string, StaticStyleValue> = {};
+  for (const key of preservedKeys) {
+    const value = earlier.staticConditions[key];
+    if (!isStaticStyleValue(value)) {
+      return undefined;
+    }
+    preserved[key] = value;
+  }
+  return preserved;
+}
+
+function conditionSpecificityNeededToOutrankFlatSource(source: StyleContributionSource): number {
+  return source === "attr" ? 1 : 0;
+}
+
+function conditionSpecificity(conditionKey: string): number {
+  if (conditionKey.startsWith("@")) {
+    return 0;
+  }
+  let specificity = 0;
+  for (let index = 0; index < conditionKey.length; index += 1) {
+    const char = conditionKey[index];
+    if (char === "[") {
+      specificity += 1;
+      index = skipBalanced(conditionKey, index, "[", "]");
+      continue;
+    }
+    if (char === ".") {
+      specificity += 1;
+      index = readIdentifierEnd(conditionKey, index + 1) - 1;
+      continue;
+    }
+    if (char === "#") {
+      specificity += 100;
+      index = readIdentifierEnd(conditionKey, index + 1) - 1;
+      continue;
+    }
+    if (char !== ":") {
+      continue;
+    }
+    if (conditionKey[index + 1] === ":") {
+      index = readIdentifierEnd(conditionKey, index + 2);
+      continue;
+    }
+    const nameStart = index + 1;
+    const nameEnd = readIdentifierEnd(conditionKey, nameStart);
+    const pseudoName = conditionKey.slice(nameStart, nameEnd);
+    if (!pseudoName) {
+      continue;
+    }
+    if (conditionKey[nameEnd] !== "(") {
+      specificity += 1;
+      index = nameEnd - 1;
+      continue;
+    }
+    const argsEnd = skipBalanced(conditionKey, nameEnd, "(", ")");
+    const args = conditionKey.slice(nameEnd + 1, argsEnd);
+    if (pseudoName === "where") {
+      index = argsEnd;
+      continue;
+    }
+    if (pseudoName === "is" || pseudoName === "not" || pseudoName === "has") {
+      specificity += Math.max(0, ...splitSelectorList(args).map(conditionSpecificity));
+      index = argsEnd;
+      continue;
+    }
+    specificity += 1;
+    index = argsEnd;
+  }
+  return specificity;
+}
+
+function readIdentifierEnd(value: string, start: number): number {
+  let index = start;
+  while (index < value.length && /[A-Za-z0-9_-]/.test(value[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function skipBalanced(value: string, start: number, open: string, close: string): number {
+  let depth = 0;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === open) {
+      depth += 1;
+    } else if (char === close) {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return value.length - 1;
+}
+
+function splitSelectorList(value: string): string[] {
+  const selectors: string[] = [];
+  let start = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === "(") {
+      parenDepth += 1;
+    } else if (char === ")") {
+      parenDepth = Math.max(0, parenDepth - 1);
+    } else if (char === "[") {
+      bracketDepth += 1;
+    } else if (char === "]") {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    } else if (char === "," && parenDepth === 0 && bracketDepth === 0) {
+      selectors.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  selectors.push(value.slice(start).trim());
+  return selectors.filter(Boolean);
 }
 
 function isConditionalStyleMap(value: Record<string, unknown>): boolean {
@@ -409,10 +929,6 @@ function readStaticAstLiteral(value: unknown): string | number | boolean | null 
     return null;
   }
   return undefined;
-}
-
-function isStyleConditionKey(key: string): boolean {
-  return key.startsWith(":") || key.startsWith("@");
 }
 
 function isMetadataOrConditionKey(key: string): boolean {

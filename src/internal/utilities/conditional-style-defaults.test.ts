@@ -373,4 +373,438 @@ describe("guardGeneratedConditionalDefaults", () => {
       "Conditional StyleX default would override an unproven earlier style for the same property",
     );
   });
+
+  it("lifts a later flat value into an earlier conditional map when states are static", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "link",
+        {
+          transitionDuration: {
+            default: "120ms",
+            ":highlightMixin": "80ms",
+          },
+        },
+      ],
+      ["linkOverride", { transitionDuration: "120ms" }],
+    ]);
+    const decl = {
+      localName: "Link",
+      styleKey: "link",
+      base: { kind: "intrinsic", tagName: "a" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["linkOverride"],
+      extraStyleKeysAfterBase: ["linkOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("linkOverride")).toBeUndefined();
+    expect(styles.get("linkLinkOverride")).toBeUndefined();
+    expect(decl.extraStyleKeys).toEqual([]);
+    expect(decl.extraStyleKeysAfterBase).toEqual([]);
+  });
+
+  it("keeps redundant cloned mixins when they carry emitted metadata", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "muted", ":hover": "hover" } }],
+      [
+        "sharedColor",
+        {
+          __spreads: ["externalStyles"],
+          __computedKeys: [{ key: "computedKey", value: { opacity: 0.8 } }],
+          color: "muted",
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("sharedColor")).toBeUndefined();
+    expect(styles.get("buttonSharedColor")).toEqual({
+      __spreads: ["externalStyles"],
+      __computedKeys: [{ key: "computedKey", value: { opacity: 0.8 } }],
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
+  });
+
+  it("clones shared flat mixins before lifting caller-specific conditional states", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const otherDecl = {
+      localName: "OtherButton",
+      styleKey: "otherButton",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl, otherDecl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted" });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
+    expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
+  });
+
+  it("keeps using cloned mixins for contribution inference after lifting one property", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted", opacity: 0.8 }],
+      ["buttonOverride", { color: "final" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor", "buttonOverride"],
+      extraStyleKeysAfterBase: ["sharedColor", "buttonOverride"],
+    } satisfies StyledDecl;
+    const otherDecl = {
+      localName: "OtherButton",
+      styleKey: "otherButton",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl, otherDecl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted", opacity: 0.8 });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+      opacity: 0.8,
+    });
+    expect(styles.get("buttonButtonOverride")).toEqual({
+      color: {
+        default: "final",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "buttonButtonOverride"]);
+    expect(otherDecl.extraStyleKeys).toEqual(["sharedColor"]);
+  });
+
+  it("clones only the current occurrence when the same mixin is used multiple times", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+      [
+        "focusColor",
+        {
+          color: {
+            default: null,
+            ":focus": "focus",
+          },
+        },
+      ],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor", "focusColor", "sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor", "focusColor", "sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("sharedColor")).toBeUndefined();
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(styles.get("focusColor")).toEqual({
+      color: {
+        default: "muted",
+        ":focus": "focus",
+      },
+    });
+    expect(styles.get("buttonSharedColor2")).toBeUndefined();
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor", "focusColor"]);
+  });
+
+  it("preserves shared flat mixins that are also referenced by css helper rewrites", () => {
+    const styles = new Map<string, unknown>([
+      ["button", { color: { default: "base", ":hover": "hover" } }],
+      ["sharedColor", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["sharedColor"],
+      extraStyleKeysAfterBase: ["sharedColor"],
+    } satisfies StyledDecl;
+    const ctx = {
+      cssHelpers: {
+        cssHelperReplacements: [{ localName: "sharedColorCss", styleKey: "sharedColor" }],
+        cssHelperTemplateReplacements: [{ node: {}, styleKey: "sharedColor" }],
+      },
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("sharedColor")).toEqual({ color: "muted" });
+    expect(styles.get("buttonSharedColor")).toEqual({
+      color: {
+        default: "muted",
+        ":hover": "hover",
+      },
+    });
+    expect(decl.extraStyleKeys).toEqual(["buttonSharedColor"]);
+    expect(decl.extraStyleKeysAfterBase).toEqual(["buttonSharedColor"]);
+  });
+
+  it("does not lift same-specificity attribute states into later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      ["input", { backgroundColor: { default: null, ":disabled": "#f5f5f5" } }],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
+  });
+
+  it("does not over-count functional pseudo specificity for later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "input",
+        {
+          backgroundColor: {
+            default: null,
+            ":where(:hover)": "#f5f5f5",
+            ":is(:hover, :focus)": "#eeeeee",
+          },
+        },
+      ],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({ backgroundColor: "#fafafa" });
+  });
+
+  it("counts class selectors inside functional pseudo specificity", () => {
+    const styles = new Map<string, unknown>([
+      ["link", { color: { default: null, ":is(.active)": "active" } }],
+      ["linkOverride", { color: "muted" }],
+    ]);
+    const decl = {
+      localName: "Link",
+      styleKey: "link",
+      base: { kind: "intrinsic", tagName: "a" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["linkOverride"],
+      extraStyleKeysAfterBase: ["linkOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("linkLinkOverride")).toEqual({
+      color: {
+        default: "muted",
+        ":is(.active)": "active",
+      },
+    });
+  });
+
+  it("counts id selectors inside functional pseudo specificity", () => {
+    const styles = new Map<string, unknown>([
+      ["input", { backgroundColor: { default: null, ":has(#selected)": "#f5f5f5" } }],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({
+      backgroundColor: {
+        default: "#fafafa",
+        ":has(#selected)": "#f5f5f5",
+      },
+    });
+  });
+
+  it("lifts higher-specificity states into later attribute wrappers", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "input",
+        {
+          backgroundColor: {
+            default: null,
+            ":focus:disabled": "#f5f5f5",
+          },
+        },
+      ],
+      ["inputReadonly", { backgroundColor: "#fafafa" }],
+    ]);
+    const decl = {
+      localName: "Input",
+      styleKey: "input",
+      base: { kind: "intrinsic", tagName: "input" },
+      rules: [],
+      templateExpressions: [],
+      attrWrapper: {
+        kind: "input",
+        readonlyKey: "inputReadonly",
+      },
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("ok");
+    expect(styles.get("inputReadonly")).toEqual({
+      backgroundColor: {
+        default: "#fafafa",
+        ":focus:disabled": "#f5f5f5",
+      },
+    });
+  });
+
+  it("bails when a later flat value would erase dynamic conditional map states", () => {
+    const styles = new Map<string, unknown>([
+      [
+        "button",
+        {
+          opacity: {
+            default: 1,
+            ":hover": { type: "Identifier", name: "hoverOpacity" },
+          },
+        },
+      ],
+      ["buttonOverride", { opacity: 0.8 }],
+    ]);
+    const decl = {
+      localName: "Button",
+      styleKey: "button",
+      base: { kind: "intrinsic", tagName: "button" },
+      rules: [],
+      templateExpressions: [],
+      extraStyleKeys: ["buttonOverride"],
+      extraStyleKeysAfterBase: ["buttonOverride"],
+    } satisfies StyledDecl;
+    const ctx = {
+      resolvedStyleObjects: styles,
+      warnings: [],
+    } as unknown as TransformContext;
+
+    expect(guardGeneratedConditionalDefaults(ctx, [decl])).toBe("bail");
+    expect(ctx.warnings.map((warning) => warning.type)).toContain(
+      "Flat StyleX value would erase earlier conditional property states",
+    );
+    expect(ctx.warnings[0]?.context?.example).toContain("opacity: value");
+    expect(ctx.warnings[0]?.context?.example).toContain('":hover"');
+  });
 });
