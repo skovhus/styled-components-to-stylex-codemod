@@ -59,6 +59,10 @@ export const LOGICAL_TO_PHYSICAL: Record<string, string[]> = Object.fromEntries(
   Object.values(SHORTHAND_LONGHANDS).flatMap(({ physical, logical }) => [
     [logical[0]!, [physical[0]!, physical[2]!]],
     [logical[1]!, [physical[1]!, physical[3]!]],
+    [`${logical[0]!}Start`, [physical[0]!]],
+    [`${logical[0]!}End`, [physical[2]!]],
+    [`${logical[1]!}End`, [physical[1]!]],
+    [`${logical[1]!}Start`, [physical[3]!]],
   ]),
 );
 
@@ -154,7 +158,7 @@ export function splitDirectionalProperty(args: {
     important = false,
     preferInline = false,
     alwaysExpand = false,
-    useLogical = true,
+    useLogical = false,
   } = args;
   const values = splitDirectionalShorthands(rawValue, false);
   const top = values[0] ?? "";

@@ -292,6 +292,17 @@ export function mergeStyleObjects(
   }
 }
 
+export function setStyleObjectValue(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  if (Object.prototype.hasOwnProperty.call(target, key)) {
+    delete target[key];
+  }
+  target[key] = value;
+}
+
 // ---------------------------------------------------------------------------
 // Non-exported helpers
 // ---------------------------------------------------------------------------

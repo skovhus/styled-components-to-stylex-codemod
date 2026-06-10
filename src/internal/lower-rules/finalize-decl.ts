@@ -2606,6 +2606,9 @@ function mergeConditionBucket(
     ) {
       mergeStyleObjects(existing as Record<string, unknown>, map);
     } else {
+      if (existing !== undefined && (map.default === null || map.default === undefined)) {
+        map.default = existing;
+      }
       styleObj[prop] = map;
     }
   }
@@ -2724,6 +2727,20 @@ const AXIS_PAIRS: Array<{
   { shorthand: "marginInline", start: "marginLeft", end: "marginRight" },
 ];
 
+const LOGICAL_SIDE_PAIRS: Array<{
+  logical: string;
+  physical: string;
+}> = [
+  { logical: "paddingBlockStart", physical: "paddingTop" },
+  { logical: "paddingBlockEnd", physical: "paddingBottom" },
+  { logical: "paddingInlineStart", physical: "paddingLeft" },
+  { logical: "paddingInlineEnd", physical: "paddingRight" },
+  { logical: "marginBlockStart", physical: "marginTop" },
+  { logical: "marginBlockEnd", physical: "marginBottom" },
+  { logical: "marginInlineStart", physical: "marginLeft" },
+  { logical: "marginInlineEnd", physical: "marginRight" },
+];
+
 /**
  * Checks whether a value is a media/pseudo map (object with `default` or `@`/`:` keys).
  */
@@ -2764,26 +2781,27 @@ function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
       continue;
     }
 
-    // Compute replacement values for start/end longhands.
-    let startVal: unknown;
-    let endVal: unknown;
-
-    if (isMediaOrPseudoMap(shorthandVal)) {
-      const shorthandMap = shorthandVal as Record<string, unknown>;
-      startVal = hasStart
-        ? computeMergedLonghand(styleObj[start], shorthandMap)
-        : { ...shorthandMap };
-      endVal = hasEnd ? computeMergedLonghand(styleObj[end], shorthandMap) : { ...shorthandMap };
-    } else {
-      startVal = hasStart
-        ? mergeScalarDefaultIntoLonghand(styleObj[start], shorthandVal)
-        : shorthandVal;
-      endVal = hasEnd ? mergeScalarDefaultIntoLonghand(styleObj[end], shorthandVal) : shorthandVal;
-    }
-
     // Rebuild the object in order: replace the shorthand position with start+end,
     // and remove any existing start/end entries from their old positions.
     const entries = Object.entries(styleObj);
+    const shorthandIndex = entries.findIndex(([key]) => key === shorthand);
+
+    // Compute replacement values for start/end longhands.
+    const startVal = resolveDirectionalConflictValue({
+      shorthandVal,
+      longhandVal: styleObj[start],
+      hasLonghand: hasStart,
+      shorthandIndex,
+      longhandIndex: entries.findIndex(([key]) => key === start),
+    });
+    const endVal = resolveDirectionalConflictValue({
+      shorthandVal,
+      longhandVal: styleObj[end],
+      hasLonghand: hasEnd,
+      shorthandIndex,
+      longhandIndex: entries.findIndex(([key]) => key === end),
+    });
+
     // Clear all keys
     for (const key of Object.keys(styleObj)) {
       delete styleObj[key];
@@ -2801,6 +2819,81 @@ function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
       }
     }
   }
+  resolveLogicalSideConflicts(styleObj);
+}
+
+function resolveLogicalSideConflicts(styleObj: Record<string, unknown>): void {
+  for (const { logical, physical } of LOGICAL_SIDE_PAIRS) {
+    const logicalVal = styleObj[logical];
+    if (logicalVal === undefined || !(physical in styleObj)) {
+      continue;
+    }
+
+    const entries = Object.entries(styleObj);
+    const logicalIndex = entries.findIndex(([key]) => key === logical);
+    const physicalIndex = entries.findIndex(([key]) => key === physical);
+    const resolvedVal = resolveDirectionalConflictValue({
+      shorthandVal: logicalVal,
+      longhandVal: styleObj[physical],
+      hasLonghand: true,
+      shorthandIndex: logicalIndex,
+      longhandIndex: physicalIndex,
+    });
+    const replacementKey = logicalIndex > physicalIndex ? logical : physical;
+
+    for (const key of Object.keys(styleObj)) {
+      delete styleObj[key];
+    }
+    for (const [key, val] of entries) {
+      if (key === replacementKey) {
+        styleObj[physical] = resolvedVal;
+      } else if (key === logical || key === physical) {
+        continue;
+      } else {
+        styleObj[key] = val;
+      }
+    }
+  }
+}
+
+function resolveDirectionalConflictValue(args: {
+  shorthandVal: unknown;
+  longhandVal: unknown;
+  hasLonghand: boolean;
+  shorthandIndex: number;
+  longhandIndex: number;
+}): unknown {
+  const { shorthandVal, longhandVal, hasLonghand, shorthandIndex, longhandIndex } = args;
+  if (!hasLonghand || longhandIndex < 0) {
+    return cloneDirectionalValue(shorthandVal);
+  }
+  if (shorthandIndex > longhandIndex) {
+    if (isMediaOrPseudoMap(shorthandVal) && hasNullishDefault(shorthandVal)) {
+      return computeMergedLonghand(longhandVal, shorthandVal, { shorthandOverrides: true });
+    }
+    if (!isMediaOrPseudoMap(shorthandVal) && isMediaOrPseudoMap(longhandVal)) {
+      return mergeScalarDefaultIntoLonghand(longhandVal, shorthandVal, {
+        overwriteDefault: true,
+      });
+    }
+    return cloneDirectionalValue(shorthandVal);
+  }
+  if (isMediaOrPseudoMap(shorthandVal)) {
+    return computeMergedLonghand(longhandVal, shorthandVal);
+  }
+  return mergeScalarDefaultIntoLonghand(longhandVal, shorthandVal);
+}
+
+function cloneDirectionalValue(value: unknown): unknown {
+  return isMediaOrPseudoMap(value) ? { ...value } : value;
+}
+
+function hasNullishDefault(value: unknown): boolean {
+  if (!isMediaOrPseudoMap(value)) {
+    return false;
+  }
+  const map = value as Record<string, unknown>;
+  return map.default === null || map.default === undefined;
 }
 
 /**
@@ -2810,11 +2903,19 @@ function resolveDirectionalConflicts(styleObj: Record<string, unknown>): void {
 function computeMergedLonghand(
   longhandVal: unknown,
   shorthandMap: Record<string, unknown>,
+  options?: { shorthandOverrides?: boolean },
 ): unknown {
   if (isMediaOrPseudoMap(longhandVal)) {
     const merged = { ...(longhandVal as Record<string, unknown>) };
     for (const [key, val] of Object.entries(shorthandMap)) {
-      if (!(key in merged)) {
+      if (
+        shouldUseShorthandMapEntry({
+          key,
+          longhandMap: merged,
+          shorthandMap,
+          shorthandOverrides: options?.shorthandOverrides === true,
+        })
+      ) {
         merged[key] = val;
       }
     }
@@ -2830,12 +2931,36 @@ function computeMergedLonghand(
   return merged;
 }
 
-function mergeScalarDefaultIntoLonghand(longhandVal: unknown, scalarDefault: unknown): unknown {
+function shouldUseShorthandMapEntry(args: {
+  key: string;
+  longhandMap: Record<string, unknown>;
+  shorthandMap: Record<string, unknown>;
+  shorthandOverrides: boolean;
+}): boolean {
+  const { key, longhandMap, shorthandMap, shorthandOverrides } = args;
+  if (!shorthandOverrides) {
+    return !(key in longhandMap);
+  }
+  if (key !== "default") {
+    return true;
+  }
+  return !hasNullishDefault(shorthandMap) || hasNullishDefault(longhandMap);
+}
+
+function mergeScalarDefaultIntoLonghand(
+  longhandVal: unknown,
+  scalarDefault: unknown,
+  options?: { overwriteDefault?: boolean },
+): unknown {
   if (!isMediaOrPseudoMap(longhandVal)) {
     return longhandVal;
   }
   const merged = { ...(longhandVal as Record<string, unknown>) };
-  if (merged.default === null || merged.default === undefined) {
+  if (
+    options?.overwriteDefault === true ||
+    merged.default === null ||
+    merged.default === undefined
+  ) {
     merged.default = scalarDefault;
   }
   return merged;

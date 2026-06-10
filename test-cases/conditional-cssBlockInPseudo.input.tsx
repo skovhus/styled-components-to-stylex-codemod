@@ -191,6 +191,68 @@ const FiniteCssBlock = styled.span<{
     `}
 `;
 
+const ConditionalLogicalPadding = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #ecfeff;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:hover {
+        padding: 4px 8px;
+        padding-inline: 2px;
+        padding-right: 3px;
+      }
+    `}
+`;
+
+const ConditionalLogicalSidePadding = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #fdf2f8;
+
+  ${(props) =>
+    props.$active &&
+    css`
+      padding-inline-start: 2px;
+    `}
+`;
+
+const ConditionalLogicalMediaPadding = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #d1fae5;
+
+  @media (min-width: 600px) {
+    padding-right: 20px;
+  }
+
+  ${(props) =>
+    props.$active &&
+    css`
+      &:hover {
+        padding-inline: 2px;
+      }
+    `}
+`;
+
+const ConditionalLogicalScalarMediaPadding = styled.span<{ $active?: boolean }>`
+  display: inline-flex;
+  padding: 4px 8px;
+  background-color: #fef3c7;
+
+  @media (min-width: 600px) {
+    padding-right: 20px;
+  }
+
+  ${(props) =>
+    props.$active &&
+    css`
+      padding-inline: 2px;
+    `}
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: 16, width: 718 }}>
     <Tab data-state="active">Active</Tab>
@@ -219,5 +281,11 @@ export const App = () => (
       Visible finite block
     </FiniteCssBlock>
     <FiniteCssBlock $enabled>Hidden finite block</FiniteCssBlock>
+    <ConditionalLogicalPadding $active>Logical padding hover</ConditionalLogicalPadding>
+    <ConditionalLogicalSidePadding $active>Logical side padding</ConditionalLogicalSidePadding>
+    <ConditionalLogicalMediaPadding $active>Logical media padding</ConditionalLogicalMediaPadding>
+    <ConditionalLogicalScalarMediaPadding $active>
+      Logical scalar media padding
+    </ConditionalLogicalScalarMediaPadding>
   </div>
 );

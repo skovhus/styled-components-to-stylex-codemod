@@ -2114,7 +2114,7 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         ? j.conditionalExpression(themeCondition, inlineExpr, undefinedExpr)
         : j.conditionalExpression(themeCondition, undefinedExpr, inlineExpr);
 
-      // Expand shorthand CSS properties (e.g., padding → paddingBlock/paddingInline)
+      // Expand shorthand CSS properties (e.g., padding → paddingTop/Right/Bottom/Left)
       // using the CSS declaration IR, consistent with other handlers.
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         if (!out.prop) {

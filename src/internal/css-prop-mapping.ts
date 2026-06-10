@@ -22,7 +22,7 @@ export {
 type StylexPropDecl = { prop: string; value: CssValue };
 
 /** Module-level flag controlling whether 2-value shorthand expansion uses logical properties. */
-let useLogicalProperties = true;
+let useLogicalProperties = false;
 
 function setUseLogicalProperties(value: boolean): void {
   useLogicalProperties = value;

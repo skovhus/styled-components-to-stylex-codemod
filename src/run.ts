@@ -191,12 +191,24 @@ const __dirname = dirname(__filename);
  * import { defineAdapter } from 'styled-components-to-stylex-codemod';
  *
  * const adapter = defineAdapter({
+ *   styleMerger: null,
+ *   useSxProp: false,
+ *   usePhysicalProperties: true,
+ *   externalInterface() {
+ *     return { styles: false, as: false, ref: false };
+ *   },
  *   resolveValue(ctx) {
  *     if (ctx.kind !== "theme") return null;
  *     return {
  *       expr: `themeVars.${ctx.path.replace(/\\./g, "_")}`,
  *       imports: [{ from: { kind: "specifier", value: "./theme.stylex" }, names: [{ imported: "themeVars" }] }],
  *     };
+ *   },
+ *   resolveCall() {
+ *     return null;
+ *   },
+ *   resolveSelector() {
+ *     return undefined;
  *   },
  * });
  *
@@ -218,7 +230,15 @@ export async function runTransform(options: RunTransformOptions): Promise<RunTra
         "",
         "Example (plain JS):",
         '  import { runTransform, defineAdapter } from "styled-components-to-stylex-codemod";',
-        "  const adapter = defineAdapter({ resolveValue() { return null; } });",
+        "  const adapter = defineAdapter({",
+        "    styleMerger: null,",
+        "    useSxProp: false,",
+        "    usePhysicalProperties: true,",
+        "    externalInterface() { return { styles: false, as: false, ref: false }; },",
+        "    resolveValue() { return null; },",
+        "    resolveCall() { return null; },",
+        "    resolveSelector() { return undefined; },",
+        "  });",
         '  await runTransform({ files: "src/**/*.tsx", consumerPaths: null, adapter });',
       ].join("\n"),
     );

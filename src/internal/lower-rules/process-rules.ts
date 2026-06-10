@@ -71,6 +71,7 @@ import {
   isSupportedAtRule,
   registerImports,
   resolveMediaAtRulePlaceholders,
+  setStyleObjectValue,
   tryResolveAdapterCall,
   type AdapterCallResolver,
 } from "./utils.js";
@@ -1248,10 +1249,10 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         map[conditionKey] = conditionValue;
         return;
       }
-      target[prop] = {
+      setStyleObjectValue(target, prop, {
         default: current ?? getConditionDefaultValue(prop),
         [conditionKey]: conditionValue,
-      };
+      });
     };
 
     const patchStyleFnConditionValue = (
@@ -1596,7 +1597,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
       // Use getBaseStyleTarget() to respect after-base segments created by
       // resolvedStyles helpers, preserving CSS cascade order.
       const target = ctx.getBaseStyleTarget();
-      target[prop] = value;
+      setStyleObjectValue(target, prop, value);
       noteSourceCssProperty(target);
       if (commentSource) {
         addPropComments(target, prop, {
@@ -1668,7 +1669,7 @@ function copyWrittenPropsToRemainingAncestorPseudoBuckets(args: {
       childExtraStyleKeys,
     );
     for (const key of writtenProps) {
-      bucket[key] = sourceBucket[key];
+      setStyleObjectValue(bucket, key, sourceBucket[key]);
     }
   }
 }
@@ -1835,9 +1836,9 @@ function tryForwardCssVarBridge(
     // (e.g., `box-shadow: 0 4px 8px ${color}` → `"0 4px 8px var(--name)"`).
     for (const out of cssDeclarationToStylexDeclarations(d)) {
       if (out.value.kind === "static") {
-        bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+        setStyleObjectValue(bucket, out.prop, cssValueToJs(out.value, d.important, out.prop));
       } else {
-        bucket[out.prop] = composeVarReference(out.value.parts, varName);
+        setStyleObjectValue(bucket, out.prop, composeVarReference(out.value.parts, varName));
       }
       writtenProps.add(out.prop);
     }
@@ -1943,7 +1944,7 @@ function writeResolvedDeclaration(
       if (out.value.kind !== "static") {
         continue;
       }
-      bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+      setStyleObjectValue(bucket, out.prop, cssValueToJs(out.value, d.important, out.prop));
       writtenProps.add(out.prop);
     }
     return "written";
@@ -1966,7 +1967,7 @@ function writeResolvedDeclaration(
 
   for (const out of cssDeclarationToStylexDeclarations(d)) {
     if (out.value.kind === "static") {
-      bucket[out.prop] = cssValueToJs(out.value, d.important, out.prop);
+      setStyleObjectValue(bucket, out.prop, cssValueToJs(out.value, d.important, out.prop));
     } else {
       const built = buildInterpolatedValue(j, { value: out.value }, resolveResult);
       const formatted = maybeApplyAuthoredMultilineToExpression(j, built, {
@@ -1974,7 +1975,11 @@ function writeResolvedDeclaration(
         property: (d.property ?? "").trim(),
         stylisValueRaw: d.valueRaw ?? "",
       }) as ExpressionKind;
-      bucket[out.prop] = maybeOmitPxUnitFromStylexValue(j, formatted, out.prop, d.important);
+      setStyleObjectValue(
+        bucket,
+        out.prop,
+        maybeOmitPxUnitFromStylexValue(j, formatted, out.prop, d.important),
+      );
     }
     writtenProps.add(out.prop);
   }
@@ -3160,14 +3165,17 @@ function handleAdjacentSiblingSelector(
   if (media) {
     for (const [prop, value] of Object.entries(ruleBucket)) {
       const existing = bucket[prop];
-      bucket[prop] =
+      setStyleObjectValue(
+        bucket,
+        prop,
         existing === undefined
           ? { default: null, [media]: value }
-          : { default: existing, [media]: value };
+          : { default: existing, [media]: value },
+      );
     }
   } else {
     for (const [prop, value] of Object.entries(ruleBucket)) {
-      bucket[prop] = value;
+      setStyleObjectValue(bucket, prop, value);
     }
   }
 
@@ -3212,7 +3220,11 @@ function tryDynamicRelationOverrideFallback(args: {
       for (const out of cssDeclarationToStylexDeclarations(d)) {
         if (out.value.kind === "static" && out.prop) {
           const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
-          styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+          setStyleObjectValue(
+            styleObj,
+            out.prop,
+            buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName),
+          );
         }
       }
       continue;
@@ -3264,7 +3276,11 @@ function tryDynamicRelationOverrideFallback(args: {
       // ancestor-pseudo-wrapped AST nodes in the component's style object.
       if (out.value.kind === "static") {
         const staticVal = literalToAst(j, cssValueToJs(out.value, d.important, out.prop));
-        styleObj[out.prop] = buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName);
+        setStyleObjectValue(
+          styleObj,
+          out.prop,
+          buildAncestorPseudoMap(j, staticVal, ancestorPseudos, markerVarName),
+        );
         continue;
       }
 
@@ -3420,7 +3436,7 @@ function mergeAttrsStyles(ctx: DeclProcessingState): void {
   // Merge static style properties into the style object
   if (attrsInfo.attrsStaticStyles) {
     for (const [prop, value] of Object.entries(attrsInfo.attrsStaticStyles)) {
-      styleObj[prop] = value;
+      setStyleObjectValue(styleObj, prop, value);
     }
   }
 

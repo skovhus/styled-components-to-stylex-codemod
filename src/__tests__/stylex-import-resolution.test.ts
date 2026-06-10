@@ -11,6 +11,7 @@ function stubAdapter(overrides?: Partial<Adapter>): Adapter {
     externalInterface: vi.fn(() => ({ styles: false, as: false, ref: false })),
     styleMerger: null,
     useSxProp: false,
+    usePhysicalProperties: true,
     ...overrides,
   };
 }
