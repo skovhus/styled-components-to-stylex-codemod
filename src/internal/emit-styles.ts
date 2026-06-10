@@ -22,6 +22,10 @@ import {
   insertImportDeclarationNearStylex,
 } from "./utilities/import-insertion.js";
 import { LOGICAL_TO_PHYSICAL, SHORTHAND_LONGHANDS } from "./stylex-shorthands.js";
+import {
+  buildStyleKeySequence,
+  type StyleSequenceEntry,
+} from "./utilities/style-composition-plan.js";
 
 /**
  * CSS shorthands that must NEVER appear as property names in stylex.create() output.
@@ -844,12 +848,12 @@ function mergeLogicalPhysicalValues(args: {
   physicalValue: unknown;
   logicalIndex: number;
   physicalIndex: number;
-  basePhysicalValue: unknown;
+  priorPhysicalValue: unknown;
 }): unknown {
-  const { logicalValue, physicalValue, logicalIndex, physicalIndex, basePhysicalValue } = args;
+  const { logicalValue, physicalValue, logicalIndex, physicalIndex, priorPhysicalValue } = args;
   if (physicalIndex < 0) {
-    if (basePhysicalValue !== undefined && shouldSeedFromBasePhysicalValue(logicalValue)) {
-      return mergeStyleValuesBySourceOrder(basePhysicalValue, logicalValue);
+    if (priorPhysicalValue !== undefined && shouldSeedFromPriorPhysicalValue(logicalValue)) {
+      return mergeStyleValuesBySourceOrder(priorPhysicalValue, logicalValue);
     }
     return cloneStyleValue(logicalValue);
   }
@@ -859,28 +863,31 @@ function mergeLogicalPhysicalValues(args: {
   return mergeStyleValuesBySourceOrder(logicalValue, physicalValue);
 }
 
-function shouldSeedFromBasePhysicalValue(logicalValue: unknown): boolean {
+function shouldSeedFromPriorPhysicalValue(logicalValue: unknown): boolean {
   if (!isStyleValueMap(logicalValue)) {
     return false;
   }
   return logicalValue.default === null || logicalValue.default === undefined;
 }
 
-function getBasePhysicalValue(
+function getPriorPhysicalValue(
   currentKey: string,
-  baseStyleKey: string,
   prop: string,
+  componentStyleEntries: readonly StyleSequenceEntry[],
   resolvedStyleObjects: Map<string, unknown>,
 ): unknown {
-  if (currentKey === baseStyleKey) {
-    return undefined;
+  let priorValue: unknown;
+  for (const entry of componentStyleEntries) {
+    if (entry.styleKey === currentKey) {
+      return priorValue;
+    }
+    const style = styleObjectForSequenceEntry(entry, resolvedStyleObjects);
+    if (!style || !(prop in style)) {
+      continue;
+    }
+    priorValue = style[prop];
   }
-  const baseStyle = resolvedStyleObjects.get(baseStyleKey);
-  if (!isStyleValueMap(baseStyle)) {
-    return undefined;
-  }
-  const baseValue = baseStyle[prop];
-  return baseValue;
+  return undefined;
 }
 
 /**
@@ -978,19 +985,22 @@ function normalizeShorthandLonghandConflicts(
     if (decl.skipTransform) {
       continue;
     }
-    const componentStyleKeys = collectComponentStyleKeys(decl);
-    if (componentStyleKeys.length < 2) {
+    const componentStyleEntries = buildStyleKeySequence(
+      { resolvedStyleObjects } as TransformContext,
+      decl,
+    );
+    if (componentStyleEntries.length < 2) {
       continue;
     }
 
     // Collect all property names across all style objects
     const propsByKey = new Map<string, Set<string>>();
-    for (const key of componentStyleKeys) {
-      const style = resolvedStyleObjects.get(key);
-      if (!style || typeof style !== "object" || isAstNode(style)) {
+    for (const entry of componentStyleEntries) {
+      const style = styleObjectForSequenceEntry(entry, resolvedStyleObjects);
+      if (!style) {
         continue;
       }
-      propsByKey.set(key, new Set(Object.keys(style as Record<string, unknown>)));
+      propsByKey.set(entry.styleKey, new Set(Object.keys(style)));
     }
 
     for (const [shorthand, longhands] of Object.entries(SHORTHAND_LONGHANDS)) {
@@ -1041,45 +1051,22 @@ function normalizeShorthandLonghandConflicts(
     // These generate independent atomic classes that don't reliably override each other.
     // Runs independently of phase 1 since CSS lowering may have already expanded shorthands.
     for (const longhands of Object.values(SHORTHAND_LONGHANDS)) {
-      normalizeLogicalPhysicalConflicts(longhands, propsByKey, resolvedStyleObjects, decl.styleKey);
+      normalizeLogicalPhysicalConflicts(
+        longhands,
+        propsByKey,
+        resolvedStyleObjects,
+        componentStyleEntries,
+      );
     }
   }
 }
 
-/** Collect all style keys belonging to a single component declaration */
-function collectComponentStyleKeys(decl: StyledDecl): string[] {
-  const keys: string[] = [decl.styleKey];
-  if (decl.variantStyleKeys) {
-    keys.push(...Object.values(decl.variantStyleKeys));
-  }
-  if (decl.extraStyleKeys) {
-    keys.push(...decl.extraStyleKeys);
-  }
-  if (decl.extraStyleKeysAfterBase) {
-    keys.push(...decl.extraStyleKeysAfterBase);
-  }
-  if (decl.enumVariant) {
-    keys.push(decl.enumVariant.baseKey);
-    for (const c of decl.enumVariant.cases) {
-      keys.push(c.styleKey);
-    }
-  }
-  if (decl.attrWrapper) {
-    const aw = decl.attrWrapper;
-    for (const k of [
-      aw.checkboxKey,
-      aw.radioKey,
-      aw.readonlyKey,
-      aw.externalKey,
-      aw.httpsKey,
-      aw.pdfKey,
-    ]) {
-      if (k) {
-        keys.push(k);
-      }
-    }
-  }
-  return keys;
+function styleObjectForSequenceEntry(
+  entry: StyleSequenceEntry,
+  resolvedStyleObjects: Map<string, unknown>,
+): Record<string, unknown> | undefined {
+  const style = entry.styleObj ?? resolvedStyleObjects.get(entry.styleKey);
+  return isStyleValueMap(style) ? style : undefined;
 }
 
 /**
@@ -1092,7 +1079,7 @@ function normalizeLogicalPhysicalConflicts(
   longhands: { physical: string[]; logical: string[] },
   propsByKey: Map<string, Set<string>>,
   resolvedStyleObjects: Map<string, unknown>,
-  baseStyleKey: string,
+  componentStyleEntries: readonly StyleSequenceEntry[],
 ): void {
   const logicalProps = getLogicalPropsForPhysicalFamily(longhands.physical);
   const hasPhysical = [...propsByKey.values()].some((props) =>
@@ -1107,7 +1094,10 @@ function normalizeLogicalPhysicalConflicts(
   }
 
   for (const key of logicalKeys) {
-    const style = resolvedStyleObjects.get(key) as Record<string, unknown>;
+    const currentEntry = componentStyleEntries.find((entry) => entry.styleKey === key);
+    const style = currentEntry
+      ? styleObjectForSequenceEntry(currentEntry, resolvedStyleObjects)
+      : undefined;
     if (!style) {
       continue;
     }
@@ -1135,10 +1125,10 @@ function normalizeLogicalPhysicalConflicts(
                 physicalValue: style[prop],
                 logicalIndex,
                 physicalIndex,
-                basePhysicalValue: getBasePhysicalValue(
+                priorPhysicalValue: getPriorPhysicalValue(
                   key,
-                  baseStyleKey,
                   prop,
+                  componentStyleEntries,
                   resolvedStyleObjects,
                 ),
               }),

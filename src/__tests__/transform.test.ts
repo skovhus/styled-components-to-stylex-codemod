@@ -11497,6 +11497,39 @@ export const App = () => <Box $active>test</Box>;
     expect(result.code).toContain('":hover": 2');
   });
 
+  it("should seed logical pseudo maps from earlier conditional physical styles", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.span<{ $a?: boolean; $b?: boolean }>\`
+  \${(props) =>
+    props.$a &&
+    css\`
+      padding-right: 8px;
+    \`}
+
+  \${(props) =>
+    props.$b &&
+    css\`
+      &:hover {
+        padding-inline: 2px;
+      }
+    \`}
+\`;
+
+export const App = () => <Box $a $b>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: { ...fixtureAdapter, usePhysicalProperties: true } },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingRight: {");
+    expect(result.code).toContain("default: 8");
+    expect(result.code).toContain('":hover": 2');
+  });
+
   it("should expand 2-value padding to logical properties when usePhysicalProperties is false", () => {
     const source = `
 import styled from "styled-components";
