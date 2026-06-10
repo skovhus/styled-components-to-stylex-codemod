@@ -454,6 +454,9 @@ function isStyleObjectRedundantWithPriorShapes(
   styleObj: Record<string, unknown>,
   priorShapes: ReadonlyMap<string, PropertyShape>,
 ): boolean {
+  if (hasEmittingStyleMetadata(styleObj)) {
+    return false;
+  }
   for (const [prop, value] of Object.entries(styleObj)) {
     if (isMetadataOrConditionKey(prop)) {
       continue;
@@ -464,6 +467,14 @@ function isStyleObjectRedundantWithPriorShapes(
     }
   }
   return true;
+}
+
+function hasEmittingStyleMetadata(styleObj: Record<string, unknown>): boolean {
+  return hasMetadataEntries(styleObj.__spreads) || hasMetadataEntries(styleObj.__computedKeys);
+}
+
+function hasMetadataEntries(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0;
 }
 
 function propertyShapesEqual(left: PropertyShape | undefined, right: PropertyShape): boolean {
