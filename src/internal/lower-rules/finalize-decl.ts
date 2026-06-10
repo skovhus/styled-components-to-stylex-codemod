@@ -2871,6 +2871,11 @@ function resolveDirectionalConflictValue(args: {
     if (isMediaOrPseudoMap(shorthandVal) && hasNullishDefault(shorthandVal)) {
       return computeMergedLonghand(longhandVal, shorthandVal, { shorthandOverrides: true });
     }
+    if (!isMediaOrPseudoMap(shorthandVal) && isMediaOrPseudoMap(longhandVal)) {
+      return mergeScalarDefaultIntoLonghand(longhandVal, shorthandVal, {
+        overwriteDefault: true,
+      });
+    }
     return cloneDirectionalValue(shorthandVal);
   }
   if (isMediaOrPseudoMap(shorthandVal)) {
@@ -2942,12 +2947,20 @@ function shouldUseShorthandMapEntry(args: {
   return !hasNullishDefault(shorthandMap) || hasNullishDefault(longhandMap);
 }
 
-function mergeScalarDefaultIntoLonghand(longhandVal: unknown, scalarDefault: unknown): unknown {
+function mergeScalarDefaultIntoLonghand(
+  longhandVal: unknown,
+  scalarDefault: unknown,
+  options?: { overwriteDefault?: boolean },
+): unknown {
   if (!isMediaOrPseudoMap(longhandVal)) {
     return longhandVal;
   }
   const merged = { ...(longhandVal as Record<string, unknown>) };
-  if (merged.default === null || merged.default === undefined) {
+  if (
+    options?.overwriteDefault === true ||
+    merged.default === null ||
+    merged.default === undefined
+  ) {
     merged.default = scalarDefault;
   }
   return merged;

@@ -18,6 +18,9 @@ export const App = () => (
     <div sx={styles.pseudoBeforeBase}>Pseudo before base</div>
     <div sx={styles.logicalSideOverride}>Logical side override</div>
     <div sx={styles.laterLogicalPseudoOverride}>Later logical pseudo override</div>
+    <div sx={styles.laterLogicalScalarPreservesPhysicalPseudo}>
+      Later logical scalar preserves physical pseudo
+    </div>
   </div>
 );
 
@@ -101,5 +104,14 @@ const styles = stylex.create({
       default: null,
       ":hover": 12,
     },
+  },
+  // Pattern 10: later logical scalar must preserve earlier nested physical side states
+  laterLogicalScalarPreservesPhysicalPseudo: {
+    paddingLeft: 2,
+    paddingRight: {
+      default: 2,
+      ":hover": 4,
+    },
+    backgroundColor: "lightgoldenrodyellow",
   },
 });

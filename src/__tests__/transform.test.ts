@@ -8660,6 +8660,7 @@ export const App = () => <Button>Hello</Button>;
       },
       styleMerger: null,
       useSxProp: false,
+      usePhysicalProperties: true,
     } satisfies Adapter;
 
     const result = transformWithWarnings(

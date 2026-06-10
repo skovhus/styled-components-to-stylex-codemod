@@ -84,6 +84,18 @@ const LaterLogicalPseudoOverride = styled.div`
   background-color: lightcyan;
 `;
 
+// Pattern 10: later logical scalar must preserve earlier nested physical side states
+const LaterLogicalScalarPreservesPhysicalPseudo = styled.div`
+  padding-right: 3px;
+  padding-inline: 2px;
+
+  &:hover {
+    padding-right: 4px;
+  }
+
+  background-color: lightgoldenrodyellow;
+`;
+
 export const App = () => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 16 }}>
     <ProgressBar>Progress Bar</ProgressBar>
@@ -96,5 +108,8 @@ export const App = () => (
     <PseudoBeforeBase>Pseudo before base</PseudoBeforeBase>
     <LogicalSideOverride>Logical side override</LogicalSideOverride>
     <LaterLogicalPseudoOverride>Later logical pseudo override</LaterLogicalPseudoOverride>
+    <LaterLogicalScalarPreservesPhysicalPseudo>
+      Later logical scalar preserves physical pseudo
+    </LaterLogicalScalarPreservesPhysicalPseudo>
   </div>
 );
