@@ -6179,6 +6179,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue
   width: var(--x-width);
 }
 
+.x16fv7ge:not(#\#):not(#\#):not(#\#):not(#\#) {
+  width: 10px;
+}
+
 @supports (interpolate-size: allow-keywords) and (height: calc-size(auto, size)) {
   .x8j7t73.x8j7t73:not(#\#):not(#\#):not(#\#):not(#\#) {
     height: calc-size(auto,size * 0);
