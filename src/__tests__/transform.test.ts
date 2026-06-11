@@ -11011,6 +11011,46 @@ export const App = () => (
     expect(boxActive).toMatch(/paddingRight: 8/);
   });
 
+  it("should merge overlapping later conditional base sides into variant shorthand expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  &:hover {
+    padding-top: 10px;
+  }
+  @media (max-width: 600px) {
+    padding-block: 12px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 12/);
+    expect(boxActive).toMatch(/paddingBottom: \{/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+  });
+
   it("should merge media-only base corners into variant border-radius expansion", () => {
     const source = `
 import styled, { css } from "styled-components";

@@ -3244,10 +3244,23 @@ function conditionalBaseSidesAfterSnapshot(
       continue;
     }
     for (const side of sides) {
-      conditionMaps.set(side, changedConditions);
+      mergeConditionMapForSide(conditionMaps, side, changedConditions);
     }
   }
   return conditionMaps;
+}
+
+function mergeConditionMapForSide(
+  conditionMaps: Map<string, Record<string, unknown>>,
+  side: string,
+  changedConditions: Record<string, unknown>,
+): void {
+  const existing = conditionMaps.get(side);
+  if (existing) {
+    mergeStyleObjects(existing, changedConditions);
+    return;
+  }
+  conditionMaps.set(side, { ...changedConditions });
 }
 
 function changedConditionEntriesAfterSnapshot(
