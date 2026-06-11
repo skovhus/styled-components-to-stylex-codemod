@@ -10,6 +10,7 @@ type BorderRadiusLonghands<T = string> = {
 export function expandBorderRadiusInStyleObject(
   styleObj: Record<string, unknown>,
   expanded: BorderRadiusLonghands<unknown>,
+  options?: { omitCorners?: ReadonlySet<string> },
 ): Record<string, unknown> {
   const entries = Object.entries(styleObj);
   const shorthandIndex = entries.findIndex(([key]) => key === "borderRadius");
@@ -17,7 +18,9 @@ export function expandBorderRadiusInStyleObject(
     return styleObj;
   }
 
-  const replacements = borderRadiusReplacementEntries(entries, shorthandIndex, expanded);
+  const replacements = borderRadiusReplacementEntries(entries, shorthandIndex, expanded).filter(
+    ([prop]) => !options?.omitCorners?.has(prop),
+  );
   const next: Record<string, unknown> = {};
 
   for (const [key, value] of entries) {

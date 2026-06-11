@@ -265,17 +265,21 @@ export const createPropTestHelpers = (
 };
 
 /**
- * Per-decl snapshot of the base style object's keys at the moment each variant
- * (`when`) first received styles. Captures the source position of conditional
- * blocks relative to base declarations: keys missing from a variant's snapshot
- * were declared after that variant in the original CSS.
+ * Per-decl snapshot of the base style object's entries at the moment each
+ * variant (`when`) first received styles. Captures the source position of
+ * conditional blocks relative to base declarations: keys missing from a
+ * variant's snapshot — or whose value changed since — were (re)declared after
+ * that variant in the original CSS.
  */
-const variantBaseKeySnapshots = new WeakMap<StyledDecl, Map<string, ReadonlySet<string>>>();
+const variantBaseKeySnapshots = new WeakMap<
+  StyledDecl,
+  Map<string, ReadonlyMap<string, unknown>>
+>();
 
 export function getVariantBaseKeySnapshot(
   decl: StyledDecl,
   when: string,
-): ReadonlySet<string> | undefined {
+): ReadonlyMap<string, unknown> | undefined {
   return variantBaseKeySnapshots.get(decl)?.get(when);
 }
 
@@ -298,9 +302,10 @@ export const createVariantApplier = (args: {
   return (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
     const when = testInfo.when;
     if (baseStyleObj) {
-      const snapshots = variantBaseKeySnapshots.get(decl) ?? new Map<string, ReadonlySet<string>>();
+      const snapshots =
+        variantBaseKeySnapshots.get(decl) ?? new Map<string, ReadonlyMap<string, unknown>>();
       if (!snapshots.has(when)) {
-        snapshots.set(when, new Set(Object.keys(baseStyleObj)));
+        snapshots.set(when, new Map(Object.entries(baseStyleObj)));
         variantBaseKeySnapshots.set(decl, snapshots);
       }
     }

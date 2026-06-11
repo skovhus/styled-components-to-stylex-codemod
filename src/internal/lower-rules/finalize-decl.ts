@@ -3073,11 +3073,14 @@ type HarmonizeShorthandOptions = {
   /** Base style entries captured before shorthand/longhand resolution mutated them. */
   baseRawEntries?: ReadonlyArray<readonly [string, unknown]>;
   /**
-   * Base keys present when a variant bucket first received styles. Keys missing
-   * from the snapshot were declared after the variant block in source, so they
-   * keep winning over the variant's expanded shorthand.
+   * Base entries present when a variant bucket first received styles. Keys
+   * missing from the snapshot — or whose value changed since — were
+   * (re)declared after the variant block in source, so they keep winning over
+   * the variant's expanded shorthand.
    */
-  bucketBaseKeySnapshot?: (styleObj: Record<string, unknown>) => ReadonlySet<string> | undefined;
+  bucketBaseKeySnapshot?: (
+    styleObj: Record<string, unknown>,
+  ) => ReadonlyMap<string, unknown> | undefined;
 };
 
 function harmonizeShorthandExpansion(
@@ -3085,14 +3088,14 @@ function harmonizeShorthandExpansion(
   options?: HarmonizeShorthandOptions,
 ): void {
   harmonizeBoxShorthandExpansion(styleObjs, options);
-  harmonizeBorderRadiusExpansion(styleObjs);
+  harmonizeBorderRadiusExpansion(styleObjs, options);
 }
 
 /** Resolve a bucket object back to its `when` snapshot recorded during decl processing. */
 function bucketSnapshotLookup(
   decl: StyledDecl,
   buckets: ReadonlyMap<string, Record<string, unknown>>,
-): (styleObj: Record<string, unknown>) => ReadonlySet<string> | undefined {
+): (styleObj: Record<string, unknown>) => ReadonlyMap<string, unknown> | undefined {
   const whenByObject = new Map<Record<string, unknown>, string>();
   for (const [when, obj] of buckets.entries()) {
     whenByObject.set(obj, when);
@@ -3166,7 +3169,7 @@ function recordLateSideOverrides(
  */
 function baseSidesDeclaredAfterSnapshot(
   baseRawEntries: ReadonlyArray<readonly [string, unknown]>,
-  snapshot: ReadonlySet<string>,
+  snapshot: ReadonlyMap<string, unknown>,
   config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
 ): ReadonlySet<string> {
   const lateSides = new Set<string>();
@@ -3180,7 +3183,7 @@ function baseSidesDeclaredAfterSnapshot(
   ]);
   for (const [key, value] of baseRawEntries) {
     const sides = sidesByKey.get(key);
-    if (!sides || snapshot.has(key)) {
+    if (!sides || !declaredAfterSnapshot(snapshot, key, value)) {
       continue;
     }
     if (isMediaOrPseudoMap(value) && hasNullishDefault(value)) {
@@ -3191,6 +3194,19 @@ function baseSidesDeclaredAfterSnapshot(
     }
   }
   return lateSides;
+}
+
+/**
+ * A base entry was (re)declared after the variant's snapshot when its key was
+ * absent at snapshot time, or its value changed since — a redeclaration after
+ * the variant block replaces the value in the base style object.
+ */
+function declaredAfterSnapshot(
+  snapshot: ReadonlyMap<string, unknown>,
+  key: string,
+  value: unknown,
+): boolean {
+  return !snapshot.has(key) || !Object.is(snapshot.get(key), value);
 }
 
 function harmonizeBoxShorthandExpansion(
@@ -3500,7 +3516,10 @@ function cloneBoxValue(value: unknown): unknown {
  * carries corner longhands, expand sibling single-value `borderRadius`
  * shorthands too so cascade overrides keep working.
  */
-function harmonizeBorderRadiusExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
+function harmonizeBorderRadiusExpansion(
+  styleObjs: ReadonlyArray<Record<string, unknown>>,
+  options?: HarmonizeShorthandOptions,
+): void {
   const hasCornerLonghand = styleObjs.some((obj) =>
     BORDER_RADIUS_CORNER_PROPS.some((prop) => prop in obj),
   );
@@ -3508,13 +3527,48 @@ function harmonizeBorderRadiusExpansion(styleObjs: ReadonlyArray<Record<string, 
     return;
   }
   for (const obj of styleObjs) {
-    expandMultiValueBorderRadius(obj, { includeSingleValue: true });
+    expandMultiValueBorderRadius(obj, {
+      includeSingleValue: true,
+      omitCorners: lateBaseCornersFor(obj, options),
+    });
   }
+}
+
+/**
+ * Corners whose base longhand was (re)declared after the variant block in
+ * source order — those keep winning over the variant's expanded borderRadius,
+ * so the variant must not emit them.
+ */
+function lateBaseCornersFor(
+  styleObj: Record<string, unknown>,
+  options?: HarmonizeShorthandOptions,
+): ReadonlySet<string> | undefined {
+  if (!options?.inheritBaseLateSides?.has(styleObj) || !options.baseRawEntries) {
+    return undefined;
+  }
+  const snapshot = options.bucketBaseKeySnapshot?.(styleObj);
+  if (!snapshot) {
+    return undefined;
+  }
+  const lateCorners = new Set<string>();
+  for (const [key, value] of options.baseRawEntries) {
+    if (!(BORDER_RADIUS_CORNER_PROPS as readonly string[]).includes(key)) {
+      continue;
+    }
+    if (!declaredAfterSnapshot(snapshot, key, value)) {
+      continue;
+    }
+    if (isMediaOrPseudoMap(value) && hasNullishDefault(value)) {
+      continue;
+    }
+    lateCorners.add(key);
+  }
+  return lateCorners;
 }
 
 function expandMultiValueBorderRadius(
   styleObj: Record<string, unknown>,
-  options?: { includeSingleValue?: boolean },
+  options?: { includeSingleValue?: boolean; omitCorners?: ReadonlySet<string> },
 ): void {
   const value = styleObj.borderRadius;
   if (value === undefined) {
@@ -3524,7 +3578,9 @@ function expandMultiValueBorderRadius(
   if (!expanded) {
     return;
   }
-  const next = expandBorderRadiusInStyleObject(styleObj, expanded);
+  const next = expandBorderRadiusInStyleObject(styleObj, expanded, {
+    omitCorners: options?.omitCorners,
+  });
   for (const key of Object.keys(styleObj)) {
     delete styleObj[key];
   }
