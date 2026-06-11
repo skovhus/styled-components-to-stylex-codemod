@@ -34,6 +34,8 @@ export type CssDeclarationIR = {
    * This is preserved as a JS line comment on the corresponding StyleX object property.
    */
   trailingLineComment?: string;
+  /** Raw declaration/interpolation order from the original template, when recoverable. */
+  sourceOrder?: number;
 };
 
 export type CssRuleIR = {
@@ -372,6 +374,7 @@ export function normalizeStylisAstToIR(
     const selectorStack: string[] = [];
     const recoveryAtRuleStack: string[] = [];
     const rawDeclarationCountByRule = new WeakMap<CssRuleIR, number>();
+    let rawSourceOrder = 0;
 
     const recordRawDeclarations = (
       trimmed: string,
@@ -386,10 +389,15 @@ export function normalizeStylisAstToIR(
       if (!targetRule) {
         return;
       }
-      rawDeclarationCountByRule.set(
-        targetRule,
-        (rawDeclarationCountByRule.get(targetRule) ?? 0) + decls.length,
-      );
+      const rawDeclarationCount = rawDeclarationCountByRule.get(targetRule) ?? 0;
+      for (let i = 0; i < decls.length; i++) {
+        const targetDecl = targetRule.declarations[rawDeclarationCount + i];
+        if (targetDecl) {
+          targetDecl.sourceOrder ??= rawSourceOrder;
+        }
+        rawSourceOrder++;
+      }
+      rawDeclarationCountByRule.set(targetRule, rawDeclarationCount + decls.length);
     };
 
     const recoverPlaceholder = (
@@ -431,6 +439,7 @@ export function normalizeStylisAstToIR(
         value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
         important: false,
         valueRaw: placeholder,
+        sourceOrder: rawSourceOrder++,
       };
       if (shouldPreserveRawDeclarationPosition) {
         const rawDeclarationCount = rawDeclarationCountByRule.get(targetRule) ?? 0;

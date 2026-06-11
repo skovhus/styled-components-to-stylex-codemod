@@ -52,6 +52,7 @@ import { createPropTestHelpers } from "./variant-utils.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { SHORTHAND_LONGHANDS } from "../stylex-shorthands.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
+import { setConditionSourceOrder } from "./condition-source-order.js";
 import { ensureShouldForwardPropDrop, resolveTypeNodeFromTsType } from "./types.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -1329,6 +1330,12 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           sourceProperties[prop] = sourceCssProperty;
         }
       };
+      const noteConditionSourceOrder = (
+        target: Record<string, unknown>,
+        condition: string,
+      ): void => {
+        setConditionSourceOrder(target, condition, ctx.getCurrentDeclarationSourceOrder());
+      };
       if (attrTarget) {
         if (attrPseudoElement) {
           const nested = (attrTarget[attrPseudoElement] as any) ?? {};
@@ -1378,6 +1385,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               : { default: current ?? getConditionDefaultValue(prop) };
           for (const ps of pseudos) {
             mediaMap[ps] = value;
+            noteConditionSourceOrder(mediaMap, ps);
           }
           existing[media] = mediaMap;
         } else {
@@ -1399,6 +1407,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
               (current as Record<string, unknown>).default = getConditionDefaultValue(prop);
             }
             (existing[ps] as Record<string, unknown>)[media] = value;
+            noteConditionSourceOrder(existing[ps] as Record<string, unknown>, media);
           }
         }
         return;
@@ -1508,6 +1517,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         } else {
           existing[media] = value;
         }
+        noteConditionSourceOrder(existing, media);
         patchEarlierDynamicConditionValues(prop, media, value);
         return;
       }
@@ -1536,6 +1546,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         ) {
           for (const ps of pseudos) {
             (existingVal as Record<string, unknown>)[ps] = value;
+            noteConditionSourceOrder(existingVal as Record<string, unknown>, ps);
           }
         } else {
           const pseudoMap: Record<string, unknown> = {
@@ -1543,6 +1554,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
           };
           for (const ps of pseudos) {
             pseudoMap[ps] = value;
+            noteConditionSourceOrder(pseudoMap, ps);
           }
           peTarget[prop] = pseudoMap;
         }
@@ -1560,6 +1572,7 @@ export function processDeclRules(ctx: DeclProcessingState): void {
         }
         for (const ps of pseudos) {
           existing[ps] = value;
+          noteConditionSourceOrder(existing, ps);
         }
         return;
       }

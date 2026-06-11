@@ -34,7 +34,8 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
-import { getVariantBaseKeySnapshot } from "./variant-utils.js";
+import { getVariantBaseKeySnapshot, getVariantSourceOrder } from "./variant-utils.js";
+import { copyConditionSourceOrders, getConditionSourceOrder } from "./condition-source-order.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -147,6 +148,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     inheritBaseLateSides: new Set(variantBucketObjects),
     baseRawEntries,
     bucketBaseKeySnapshot: bucketSnapshotLookup(decl, variantBuckets),
+    bucketSourceOrder: bucketSourceOrderLookup(decl, variantBuckets),
   });
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
@@ -638,6 +640,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
       inheritBaseLateSides: new Set(remainingBucketObjects),
       baseRawEntries,
       bucketBaseKeySnapshot: bucketSnapshotLookup(decl, remainingBuckets),
+      bucketSourceOrder: bucketSourceOrderLookup(decl, remainingBuckets),
     },
   );
 
@@ -2647,6 +2650,7 @@ function mergeConditionBucket(
       !Array.isArray(existing)
     ) {
       mergeStyleObjects(existing as Record<string, unknown>, map);
+      copyConditionSourceOrders(existing as Record<string, unknown>, map);
     } else {
       if (existing !== undefined && (map.default === null || map.default === undefined)) {
         map.default = existing;
@@ -3081,6 +3085,7 @@ type HarmonizeShorthandOptions = {
   bucketBaseKeySnapshot?: (
     styleObj: Record<string, unknown>,
   ) => ReadonlyMap<string, unknown> | undefined;
+  bucketSourceOrder?: (styleObj: Record<string, unknown>) => number | undefined;
 };
 
 function harmonizeShorthandExpansion(
@@ -3103,6 +3108,20 @@ function bucketSnapshotLookup(
   return (styleObj) => {
     const when = whenByObject.get(styleObj);
     return when === undefined ? undefined : getVariantBaseKeySnapshot(decl, when);
+  };
+}
+
+function bucketSourceOrderLookup(
+  decl: StyledDecl,
+  buckets: ReadonlyMap<string, Record<string, unknown>>,
+): (styleObj: Record<string, unknown>) => number | undefined {
+  const whenByObject = new Map<Record<string, unknown>, string>();
+  for (const [when, obj] of buckets.entries()) {
+    whenByObject.set(obj, when);
+  }
+  return (styleObj) => {
+    const when = whenByObject.get(styleObj);
+    return when === undefined ? undefined : getVariantSourceOrder(decl, when);
   };
 }
 
@@ -3201,27 +3220,72 @@ function boxSidesByKey(config: (typeof BOX_SHORTHAND_CONFLICTS)[number]): Map<st
 }
 
 /**
- * Base side/axis values that exist only under conditions (nullish default).
- * A variant's expanded shorthand side must keep these entries: pseudo/media
- * condition classes target the same property, and a flat variant value would
- * replace the base map entirely in `stylex.props()`.
+ * Base side/axis condition entries that were added after the variant snapshot.
+ * Later pseudo/media condition classes target the same property, and a flat
+ * variant value would replace the base map entirely in `stylex.props()`.
  */
-function conditionalBaseSides(
+function conditionalBaseSidesAfterSnapshot(
   baseRawEntries: ReadonlyArray<readonly [string, unknown]>,
+  snapshot: ReadonlyMap<string, unknown> | undefined,
+  variantSourceOrder: number | undefined,
   config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
 ): ReadonlyMap<string, Record<string, unknown>> {
   const conditionMaps = new Map<string, Record<string, unknown>>();
   const sidesByKey = boxSidesByKey(config);
   for (const [key, value] of baseRawEntries) {
     const sides = sidesByKey.get(key);
-    if (!sides || !isMediaOrPseudoMap(value) || !hasNullishDefault(value)) {
+    const changedConditions = changedConditionEntriesAfterSnapshot(
+      snapshot,
+      variantSourceOrder,
+      key,
+      value,
+    );
+    if (!sides || !changedConditions) {
       continue;
     }
     for (const side of sides) {
-      conditionMaps.set(side, value);
+      conditionMaps.set(side, changedConditions);
     }
   }
   return conditionMaps;
+}
+
+function changedConditionEntriesAfterSnapshot(
+  snapshot: ReadonlyMap<string, unknown> | undefined,
+  variantSourceOrder: number | undefined,
+  key: string,
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!isMediaOrPseudoMap(value) || !hasNullishDefault(value)) {
+    return null;
+  }
+  const snapshotHasKey = snapshot?.has(key) ?? false;
+  const snapshotValue = snapshotHasKey ? snapshot?.get(key) : undefined;
+  const snapshotMap = isMediaOrPseudoMap(snapshotValue) ? snapshotValue : null;
+  const changed: Record<string, unknown> = {};
+  for (const [condition, conditionValue] of Object.entries(value)) {
+    if (condition === "default" || conditionValue == null) {
+      continue;
+    }
+    const conditionSourceOrder = getConditionSourceOrder(value, condition);
+    if (variantSourceOrder !== undefined && conditionSourceOrder !== undefined) {
+      if (conditionSourceOrder <= variantSourceOrder) {
+        continue;
+      }
+      changed[condition] = conditionValue;
+      continue;
+    }
+    if (
+      snapshotHasKey &&
+      snapshotMap &&
+      condition in snapshotMap &&
+      styleValuesEquivalent(snapshotMap[condition], conditionValue)
+    ) {
+      continue;
+    }
+    changed[condition] = conditionValue;
+  }
+  return Object.keys(changed).length ? changed : null;
 }
 
 /**
@@ -3312,13 +3376,19 @@ function harmonizeBoxShorthandExpansion(
     const baseLateSides = options?.baseStyleObj
       ? lateSideOverrides.get(options.baseStyleObj)?.get(config.shorthand)
       : undefined;
-    const baseConditionalSides = options?.baseRawEntries
-      ? conditionalBaseSides(options.baseRawEntries, config)
-      : undefined;
     const conditionalSidesFor = (
       styleObj: Record<string, unknown>,
-    ): ReadonlyMap<string, Record<string, unknown>> | undefined =>
-      options?.inheritBaseLateSides?.has(styleObj) ? baseConditionalSides : undefined;
+    ): ReadonlyMap<string, Record<string, unknown>> | undefined => {
+      if (!options?.inheritBaseLateSides?.has(styleObj) || !options.baseRawEntries) {
+        return undefined;
+      }
+      return conditionalBaseSidesAfterSnapshot(
+        options.baseRawEntries,
+        options.bucketBaseKeySnapshot?.(styleObj),
+        options.bucketSourceOrder?.(styleObj),
+        config,
+      );
+    };
     const lateSidesFor = (styleObj: Record<string, unknown>): ReadonlySet<string> => {
       const localLateSides = lateSideOverrides.get(styleObj)?.get(config.shorthand);
       if (!options?.inheritBaseLateSides?.has(styleObj)) {
@@ -3660,7 +3730,7 @@ function lateBaseCornersFor(
   return lateCorners;
 }
 
-/** Conditional-only base corner maps a variant's expanded borderRadius must preserve. */
+/** Conditional-only base corner entries a variant's expanded borderRadius must preserve. */
 function conditionalBaseCornersFor(
   styleObj: Record<string, unknown>,
   options?: HarmonizeShorthandOptions,
@@ -3668,15 +3738,23 @@ function conditionalBaseCornersFor(
   if (!options?.inheritBaseLateSides?.has(styleObj) || !options.baseRawEntries) {
     return undefined;
   }
+  const snapshot = options.bucketBaseKeySnapshot?.(styleObj);
+  const variantSourceOrder = options.bucketSourceOrder?.(styleObj);
   const conditionMaps = new Map<string, Record<string, unknown>>();
   for (const [key, value] of options.baseRawEntries) {
     if (!(BORDER_RADIUS_CORNER_PROPS as readonly string[]).includes(key)) {
       continue;
     }
-    if (!isMediaOrPseudoMap(value) || !hasNullishDefault(value)) {
+    const changedConditions = changedConditionEntriesAfterSnapshot(
+      snapshot,
+      variantSourceOrder,
+      key,
+      value,
+    );
+    if (!changedConditions) {
       continue;
     }
-    conditionMaps.set(key, value);
+    conditionMaps.set(key, changedConditions);
   }
   return conditionMaps;
 }

@@ -63,6 +63,7 @@ import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection
 import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "../lower-rules/shared.js";
+import { renameVariantSourceOrderConditions } from "../lower-rules/variant-utils.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import {
   propCommentMetadataToAstComments,
@@ -2519,6 +2520,7 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
     }
     decl.variantSourceOrder = updated;
   }
+  renameVariantSourceOrderConditions(decl, (when) => renamePropsInWhenString(when, renames));
 
   if (decl.styleFnFromProps) {
     for (const sf of decl.styleFnFromProps) {

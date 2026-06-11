@@ -10891,12 +10891,10 @@ export const App = () => (
     expect(boxActive).toMatch(/borderBottomLeftRadius: 8/);
   });
 
-  it("should merge base pseudo longhands into variant shorthand expansion", () => {
-    // Base padding-top exists only under pseudo-classes (no default), with the
-    // :hover entry merged into the same condition map after the variant block.
-    // The variant's expanded paddingTop must carry its own default while
-    // preserving the base pseudo entries — pseudo selectors out-rank the
-    // variant class, and a flat paddingTop would drop them in stylex.props().
+  it("should merge only later base pseudo longhands into variant shorthand expansion", () => {
+    // The :active entry appears before the variant block, so the variant's
+    // shorthand resets it. The :hover entry is added after the variant block,
+    // so the variant's expanded paddingTop must preserve it.
     const source = `
 import styled, { css } from "styled-components";
 
@@ -10930,11 +10928,45 @@ export const App = () => (
     expect(boxActive).toBeTruthy();
     expect(boxActive).toMatch(/paddingTop: \{/);
     expect(boxActive).toMatch(/default: 8/);
-    expect(boxActive).toMatch(/":active": 5/);
+    expect(boxActive).not.toMatch(/":active": 5/);
     expect(boxActive).toMatch(/":hover": 10/);
     expect(boxActive).toMatch(/paddingRight: 8/);
     expect(boxActive).toMatch(/paddingBottom: 8/);
     expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should not merge earlier base pseudo longhands into variant shorthand expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  &:hover {
+    padding-top: 10px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: 8/);
+    expect(boxActive).not.toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
   });
 
   it("should merge media-only base longhands into variant shorthand expansion", () => {
@@ -11012,6 +11044,41 @@ export const App = () => (
     expect(boxActive).toMatch(/borderTopLeftRadius: \{/);
     expect(boxActive).toMatch(/default: 8/);
     expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/borderTopRightRadius: 8/);
+  });
+
+  it("should not merge earlier media-only base corners into variant border-radius expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  border-radius: 4px;
+  @media (max-width: 600px) {
+    border-top-left-radius: 10px;
+  }
+  \${(p) => p.$active && css\`border-radius: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/borderTopLeftRadius: 8/);
+    expect(boxActive).not.toMatch(/"@media \(max-width: 600px\)": 10/);
     expect(boxActive).toMatch(/borderTopRightRadius: 8/);
   });
 

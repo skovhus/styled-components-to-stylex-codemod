@@ -275,6 +275,7 @@ const variantBaseKeySnapshots = new WeakMap<
   StyledDecl,
   Map<string, ReadonlyMap<string, unknown>>
 >();
+const variantSourceOrders = new WeakMap<StyledDecl, Map<string, number>>();
 
 export function getVariantBaseKeySnapshot(
   decl: StyledDecl,
@@ -283,13 +284,44 @@ export function getVariantBaseKeySnapshot(
   return variantBaseKeySnapshots.get(decl)?.get(when);
 }
 
+export function getVariantSourceOrder(decl: StyledDecl, when: string): number | undefined {
+  return variantSourceOrders.get(decl)?.get(when);
+}
+
+export function renameVariantSourceOrderConditions(
+  decl: StyledDecl,
+  renameWhen: (when: string) => string,
+): void {
+  const sourceOrders = variantSourceOrders.get(decl);
+  if (!sourceOrders) {
+    return;
+  }
+  const renamed = new Map<string, number>();
+  for (const [when, sourceOrder] of sourceOrders) {
+    const renamedWhen = renameWhen(when);
+    if (!renamed.has(renamedWhen)) {
+      renamed.set(renamedWhen, sourceOrder);
+    }
+  }
+  variantSourceOrders.set(decl, renamed);
+}
+
 export const createVariantApplier = (args: {
   decl: StyledDecl;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
   baseStyleObj?: Record<string, unknown>;
+  conditionStyleObjs?: ReadonlyArray<Record<string, Record<string, unknown>>>;
+  getCurrentSourceOrder?: () => number | undefined;
 }) => {
-  const { decl, variantBuckets, variantStyleKeys, baseStyleObj } = args;
+  const {
+    decl,
+    variantBuckets,
+    variantStyleKeys,
+    baseStyleObj,
+    conditionStyleObjs,
+    getCurrentSourceOrder,
+  } = args;
   const dropAllTestInfoProps = (testInfo: TestInfo): void => {
     const propsToCheck = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
     for (const prop of propsToCheck) {
@@ -305,13 +337,14 @@ export const createVariantApplier = (args: {
       const snapshots =
         variantBaseKeySnapshots.get(decl) ?? new Map<string, ReadonlyMap<string, unknown>>();
       if (!snapshots.has(when)) {
-        snapshots.set(
-          when,
-          new Map(
-            Object.entries(baseStyleObj).map(([key, value]) => [key, cloneSnapshotValue(value)]),
-          ),
-        );
+        snapshots.set(when, createBaseKeySnapshot(baseStyleObj, conditionStyleObjs));
         variantBaseKeySnapshots.set(decl, snapshots);
+        const sourceOrder = getCurrentSourceOrder?.();
+        if (sourceOrder !== undefined) {
+          const sourceOrders = variantSourceOrders.get(decl) ?? new Map<string, number>();
+          sourceOrders.set(when, sourceOrder);
+          variantSourceOrders.set(decl, sourceOrders);
+        }
       }
     }
     const existingBucket = variantBuckets.get(when);
@@ -326,16 +359,49 @@ export const createVariantApplier = (args: {
 
 // --- Non-exported helpers ---
 
+function createBaseKeySnapshot(
+  baseStyleObj: Record<string, unknown>,
+  conditionStyleObjs: ReadonlyArray<Record<string, Record<string, unknown>>> | undefined,
+): ReadonlyMap<string, unknown> {
+  const snapshot = new Map(
+    Object.entries(baseStyleObj).map(([key, value]) => [key, cloneSnapshotValue(value)]),
+  );
+  for (const conditionStyleObj of conditionStyleObjs ?? []) {
+    for (const [key, value] of Object.entries(conditionStyleObj)) {
+      mergeSnapshotConditionMap(snapshot, key, value);
+    }
+  }
+  return snapshot;
+}
+
+function mergeSnapshotConditionMap(
+  snapshot: Map<string, unknown>,
+  key: string,
+  value: Record<string, unknown>,
+): void {
+  const existing = snapshot.get(key);
+  const next = cloneSnapshotValue(value);
+  if (!isSnapshotPlainMap(next)) {
+    snapshot.set(key, next);
+    return;
+  }
+  if (isSnapshotPlainMap(existing)) {
+    mergeStyleObjects(existing, next);
+    return;
+  }
+  if (existing !== undefined && (next.default === null || next.default === undefined)) {
+    next.default = cloneSnapshotValue(existing);
+  }
+  snapshot.set(key, next);
+}
+
 /**
  * Clones plain condition-map values for snapshots so later in-place merges
  * into the base style object cannot retroactively alter what the snapshot
  * recorded. AST nodes are kept by reference — redeclarations replace them.
  */
 function cloneSnapshotValue(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return value;
-  }
-  if (typeof (value as { type?: unknown }).type === "string") {
+  if (!isSnapshotPlainMap(value)) {
     return value;
   }
   const cloned: Record<string, unknown> = {};
@@ -343,6 +409,15 @@ function cloneSnapshotValue(value: unknown): unknown {
     cloned[key] = cloneSnapshotValue(entryValue);
   }
   return cloned;
+}
+
+function isSnapshotPlainMap(value: unknown): value is Record<string, unknown> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type !== "string"
+  );
 }
 
 /**

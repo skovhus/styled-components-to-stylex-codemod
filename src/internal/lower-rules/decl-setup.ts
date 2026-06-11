@@ -103,6 +103,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
   const styleFnDecls = new Map<string, any>();
   const attrBuckets = new Map<string, Record<string, unknown>>();
   const observedVariantFallbackFns = new Map<string, string>();
+  let currentDeclarationSourceOrder: number | undefined;
   const inlineStyleProps: Array<{
     prop: string;
     expr: ExpressionKind;
@@ -209,6 +210,8 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     variantBuckets,
     variantStyleKeys,
     baseStyleObj: styleObj,
+    conditionStyleObjs: [perPropPseudo, perPropMedia],
+    getCurrentSourceOrder: () => currentDeclarationSourceOrder,
   });
 
   const dropAllTestInfoProps = (testInfo: TestInfo): void => {
@@ -469,6 +472,10 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     styleFnDecls,
     attrBuckets,
     observedVariantFallbackFns,
+    getCurrentDeclarationSourceOrder: () => currentDeclarationSourceOrder,
+    setCurrentDeclarationSourceOrder: (sourceOrder: number | undefined): void => {
+      currentDeclarationSourceOrder = sourceOrder;
+    },
     inlineStyleProps,
     localVarValues,
     cssHelperPropValues,
