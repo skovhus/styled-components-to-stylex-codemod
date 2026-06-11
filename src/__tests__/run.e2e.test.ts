@@ -231,6 +231,49 @@ describe("runTransform (e2e)", () => {
     expect(consumer).not.toContain("stylex.props(styles.body)");
   });
 
+  it("bails on sx-aware static member wrappers that still depend on styled-components", async () => {
+    const { result, consumer } = await runAutoSxWrapperFixture({
+      tmpPrefix: "styledx-run-static-member-styled-dependency-",
+      componentLines: [
+        'import * as React from "react";',
+        'import * as stylex from "@stylexjs/stylex";',
+        'import styled from "styled-components";',
+        "",
+        "type SelectProps = React.PropsWithChildren<Record<string, never>>;",
+        "type SelectOptionProps = React.PropsWithChildren<{",
+        "  value: string;",
+        "  sx?: stylex.StyleXStyles;",
+        "}>;",
+        "",
+        "const SelectBase = (props: SelectProps) => <div>{props.children}</div>;",
+        "const StyledOptionRoot = styled.div`",
+        "  max-width: 300px;",
+        "",
+        "  span {",
+        "    color: red;",
+        "  }",
+        "`;",
+        "const SelectOption = (props: SelectOptionProps) => (",
+        "  <StyledOptionRoot sx={props.sx}>{props.children}</StyledOptionRoot>",
+        ");",
+        "",
+        "const CustomSelect = SelectBase as typeof SelectBase & { Option: typeof SelectOption };",
+        "CustomSelect.Option = SelectOption;",
+        "",
+        "export const ContentViewContainer = CustomSelect;",
+      ],
+      wrappedName: "ContentViewContainer.Option",
+      importLine: 'import { ContentViewContainer } from "../../components/ContentViewContainer";',
+      bodyRuleLines: ["  max-width: 100%;"],
+      appReturn: '<Body value="home">Home</Body>',
+    });
+
+    expect(result.errors).toBe(0);
+    expect(result.skipped).toBe(2);
+    expect(consumer).toContain("const Body = styled(ContentViewContainer.Option)`");
+    expect(consumer).not.toContain("sx={styles.body}");
+  });
+
   it("expands sx-excluded logical properties for sx-aware wrappers", async () => {
     const { result, consumer } = await runAutoSxWrapperFixture({
       tmpPrefix: "styledx-run-sx-without-",

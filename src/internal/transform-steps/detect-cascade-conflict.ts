@@ -75,14 +75,15 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     }
 
     const baseIdent = decl.base.ident;
+    const baseImportLocalName = rootLocalName(baseIdent);
 
     // Skip if the base is a locally defined styled-component (delegation handles it)
-    if (localStyledNames.has(baseIdent)) {
+    if (localStyledNames.has(baseIdent) || localStyledNames.has(baseImportLocalName)) {
       continue;
     }
 
     // Check if the base is an imported component
-    const importEntry = importMap.get(baseIdent);
+    const importEntry = importMap.get(baseImportLocalName);
     if (!importEntry || importEntry.source.kind !== "absolutePath") {
       continue;
     }
@@ -96,18 +97,6 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
       path: importedPath,
       importedName: importEntry.importedName,
     };
-
-    if (
-      transformedComponents &&
-      transformedComponentExists(
-        transformedComponents,
-        definition.path,
-        definition.importedName,
-        definition.importedName === "default",
-      )
-    ) {
-      continue;
-    }
 
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
@@ -131,6 +120,26 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     const styledDefinitions =
       (styledDefFiles && resolveStyledDefFile(definition.path, styledDefFiles)) ||
       scanFileForStyledDefs(definition.path, definition.importedName, ctx.options.resolveModule);
+
+    if (
+      transformedComponents &&
+      transformedComponentExists(
+        transformedComponents,
+        definition.path,
+        definition.importedName,
+        definition.importedName === "default",
+      ) &&
+      (!styledDefinitions ||
+        !bindingDependsOnStyledDefinitions(
+          {
+            ...styledDefinitions,
+            names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
+          },
+          definition.importedName,
+        ))
+    ) {
+      continue;
+    }
 
     if (!styledDefinitions) {
       continue;
@@ -197,6 +206,10 @@ function resolveImportedDefinition(
     readResolvedFile,
   );
   return resolved ? { path: resolved.filePath, importedName: resolved.exportedName } : null;
+}
+
+function rootLocalName(componentName: string): string {
+  return componentName.split(".")[0] ?? componentName;
 }
 
 /** Common TypeScript/JavaScript file extensions to try when matching import paths to styledDefFiles keys. */
@@ -413,6 +426,9 @@ function bindingDependsOnStyledDefinitions(
   styledDefinitions: StyledDefinitionFile,
   bindingName: string,
 ): boolean {
+  if (styledDefinitions.names.size === 0) {
+    return false;
+  }
   const source = tryReadFile(styledDefinitions.path);
   return source
     ? exportedBindingDependsOnLocalNames({
