@@ -90,7 +90,10 @@ function latestBorderRadiusCornerValue(
     }
     const [key, value] = entry;
     if (key === prop) {
-      latest = { index, value };
+      latest = {
+        index,
+        value: mergeConditionMapDefault(value, latest.value),
+      };
     }
   }
   return latest.value;
@@ -98,4 +101,27 @@ function latestBorderRadiusCornerValue(
 
 function isBorderRadiusLonghandProp(prop: string): boolean {
   return BORDER_RADIUS_LONGHAND_ENTRIES.some(([longhand]) => prop === longhand);
+}
+
+function mergeConditionMapDefault(value: unknown, defaultValue: unknown): unknown {
+  if (!isConditionMap(value)) {
+    return value;
+  }
+  const merged = { ...value };
+  if (merged.default === null || merged.default === undefined) {
+    merged.default = conditionMapDefault(defaultValue);
+  }
+  return merged;
+}
+
+function conditionMapDefault(value: unknown): unknown {
+  return isConditionMap(value) ? value.default : value;
+}
+
+function isConditionMap(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const keys = Object.keys(value);
+  return keys.includes("default") || keys.some((key) => key.startsWith(":") || key.startsWith("@"));
 }

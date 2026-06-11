@@ -10777,6 +10777,41 @@ export const App = () => (
     expect(boxRounded).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
   });
 
+  it("should expand multi-value border-radius inside media query maps", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px;
+  @media (max-width: 600px) {
+    border-radius: 4px 0;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    // The media override expands to corner longhands; the base single value
+    // must expand too so it stays overridable (corner longhands always beat
+    // the borderRadius shorthand in StyleX, regardless of application order),
+    // and the base value must fill each corner map's default slot.
+    expect(result.code).not.toMatch(/borderRadius:/);
+    expect(result.code).toMatch(/borderTopLeftRadius: \{/);
+    expect(result.code).toMatch(/borderTopRightRadius: \{/);
+    expect(result.code).toMatch(/default: (?:"8px"|8)/);
+    expect(result.code).not.toMatch(/default: null/);
+    expect(result.code).toMatch(/"@media \(max-width: 600px\)": (?:"4px"|4)/);
+    expect(result.code).toMatch(/"@media \(max-width: 600px\)": (?:"0"|0)/);
+  });
+
   it("should preserve border radius shorthand and corner source order", () => {
     const source = `
 import styled from "styled-components";
@@ -10816,6 +10851,64 @@ export const App = () => (
     expect(laterCorner).toMatch(/borderBottomRightRadius: (?:"8px"|8)/);
     expect(laterCorner).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
     expect(laterShorthand).toMatch(/borderTopLeftRadius: (?:"8px"|8)/);
+  });
+
+  it("should preserve shorthand defaults for conditional side overrides", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px;
+  &:hover {
+    padding-top: 8px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/paddingTop: \{/);
+    expect(box).toMatch(/default: 4/);
+    expect(box).toMatch(/":hover": 8/);
+  });
+
+  it("should preserve radius defaults for conditional corner overrides", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px 4px;
+  &:hover {
+    border-top-left-radius: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/borderTopLeftRadius: \{/);
+    expect(box).toMatch(/default: (?:"8px"|8)/);
+    expect(box).toMatch(/":hover": (?:"2px"|2)/);
   });
 
   it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {

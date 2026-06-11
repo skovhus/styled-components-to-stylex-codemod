@@ -2901,6 +2901,9 @@ function resolveBoxSideConflictValue(args: {
     if (!base || shorthandIndex > base.index) {
       return shorthandVal;
     }
+    if (isMediaOrPseudoMap(base.value)) {
+      return mergeScalarDefaultIntoLonghand(base.value, shorthandVal);
+    }
     return base.value;
   }
   const defaultValue =
