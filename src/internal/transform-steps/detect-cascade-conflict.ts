@@ -24,6 +24,7 @@ import {
 } from "../prepass/component-styled-dependencies.js";
 import { CASCADE_CONFLICT_WARNING } from "../logger.js";
 import { isRelativeSpecifier, toRealPath } from "../utilities/path-utils.js";
+import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 
 type ModuleResolver = (fromFile: string, specifier: string) => string | undefined;
 
@@ -232,6 +233,19 @@ function resolveImportedDefinition(
   return resolved ? { path: resolved.filePath, importedName: resolved.exportedName } : null;
 }
 
+/**
+ * Import sources the codemod itself emits into transformed files (the adapter's
+ * style-merger helper). These never carry styled-component exports.
+ */
+function generatedImportSources(ctx: TransformContext): ReadonlySet<string> {
+  const sources = new Set<string>();
+  const mergerSource = ctx.adapter.styleMerger?.importSource?.value;
+  if (typeof mergerSource === "string" && mergerSource.length > 0) {
+    sources.add(mergerSource);
+  }
+  return sources;
+}
+
 function rootLocalName(componentName: string): string {
   return componentName.split(".")[0] ?? componentName;
 }
@@ -396,6 +410,7 @@ function bindingIsIndependentOfStyledDefinitions(
     styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
     stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
     resolveModule: ctx.options.resolveModule,
+    ignoredImportSources: generatedImportSources(ctx),
   });
 }
 
@@ -497,6 +512,7 @@ function bindingIsIndependentOfRemainingStyledDefinitions(
     styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
     stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
     resolveModule: ctx.options.resolveModule,
+    ignoredImportSources: generatedImportSources(ctx),
   });
 }
 
@@ -507,6 +523,7 @@ function bindingDependsOnImportedStyledDefinitions(args: {
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  ignoredImportSources?: ReadonlySet<string>;
   visited?: Set<string>;
 }): boolean {
   const visitKey = `${args.sourcePath}:${args.bindingName}`;
@@ -540,6 +557,7 @@ function collectImportedStyledLocalNames(args: {
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  ignoredImportSources?: ReadonlySet<string>;
   visited: Set<string>;
 }): Set<string> | null {
   const source = tryReadFile(args.sourcePath);
@@ -554,6 +572,15 @@ function collectImportedStyledLocalNames(args: {
   const importedStyledNames = new Set<string>();
 
   for (const [localName, importEntry] of importMap) {
+    // Codemod-generated imports (style merger helper) and StyleX token modules
+    // never carry styled-component exports — skipping them keeps the
+    // unresolvable-relative-import fallback below from flagging them.
+    if (
+      args.ignoredImportSources?.has(importEntry.source) ||
+      isStylexImportSource(importEntry.source)
+    ) {
+      continue;
+    }
     if (!args.resolveModule) {
       if (isRelativeSpecifier(importEntry.source)) {
         importedStyledNames.add(localName);
@@ -576,6 +603,7 @@ function collectImportedStyledLocalNames(args: {
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
       resolveModule: args.resolveModule,
+      ignoredImportSources: args.ignoredImportSources,
       visited: args.visited,
     });
   }
@@ -592,6 +620,7 @@ function recordImportedStyledNameIfNeeded(
     styledDefFiles: Map<string, Set<string>> | undefined;
     stylexComponentFiles: Map<string, Set<string>> | undefined;
     resolveModule: ModuleResolver | undefined;
+    ignoredImportSources?: ReadonlySet<string>;
     visited: Set<string>;
   },
 ): void {
@@ -606,6 +635,7 @@ function importedBindingShouldCountAsStyled(args: {
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  ignoredImportSources?: ReadonlySet<string>;
   visited: Set<string>;
 }): boolean {
   return (
@@ -616,6 +646,7 @@ function importedBindingShouldCountAsStyled(args: {
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
       resolveModule: args.resolveModule,
+      ignoredImportSources: args.ignoredImportSources,
       visited: args.visited,
     })
   );
@@ -627,6 +658,7 @@ function importedBindingIsIndependentStylex(args: {
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
+  ignoredImportSources?: ReadonlySet<string>;
   visited: Set<string>;
 }): boolean {
   return (
@@ -642,6 +674,7 @@ function importedBindingIsIndependentStylex(args: {
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
       resolveModule: args.resolveModule,
+      ignoredImportSources: args.ignoredImportSources,
       visited: args.visited,
     })
   );

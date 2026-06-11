@@ -30,6 +30,7 @@ import {
 import { expandBorderRadiusShorthandValue } from "../css-border-radius.js";
 import { buildThemeStyleKeys } from "../utilities/style-key-naming.js";
 import { camelToKebabCase } from "../utilities/string-utils.js";
+import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import {
   cloneAstNode,
   type ArrowFnParamBindings,
@@ -6372,10 +6373,6 @@ function tryHandleMultiSlotTernary(ctx: DeclProcessingState, d: CssDeclarationIR
 
 function hasRuntimeImport(imports: readonly ImportSpec[] | undefined): boolean {
   return (imports ?? []).some((imp) => !isStylexImportSource(imp.from.value));
-}
-
-function isStylexImportSource(source: string): boolean {
-  return /\.stylex(?:\.[cm]?[jt]sx?)?$/u.test(source);
 }
 
 /**

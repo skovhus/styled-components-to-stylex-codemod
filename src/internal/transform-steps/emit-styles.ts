@@ -11,6 +11,7 @@ import {
   maybeOmitPxUnitFromStylexStyleValue,
   maybeOmitPxUnitFromStylexValue,
 } from "../utilities/stylex-numeric-values.js";
+import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import {
   importSourceToAbsolutePath,
   importSourceToModuleSpecifier,
@@ -123,7 +124,7 @@ function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<str
   const names = new Set<string>();
   ctx.root.find(ctx.j.ImportDeclaration).forEach((path) => {
     const sourceValue = (path.node.source as { value?: unknown }).value;
-    if (typeof sourceValue !== "string" || !/\.stylex(?:\.[cm]?[jt]sx?)?$/u.test(sourceValue)) {
+    if (typeof sourceValue !== "string" || !isStylexImportSource(sourceValue)) {
       return;
     }
     for (const specifier of path.node.specifiers ?? []) {
