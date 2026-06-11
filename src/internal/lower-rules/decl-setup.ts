@@ -208,6 +208,7 @@ export function createDeclProcessingState(state: LowerRulesState, decl: StyledDe
     decl,
     variantBuckets,
     variantStyleKeys,
+    baseStyleObj: styleObj,
   });
 
   const dropAllTestInfoProps = (testInfo: TestInfo): void => {

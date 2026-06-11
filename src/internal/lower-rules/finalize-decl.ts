@@ -34,6 +34,7 @@ import { resolveDynamicNode } from "../builtin-handlers.js";
 import { parseCssDeclarationBlock } from "../builtin-handlers/css-parsing.js";
 import { PLACEHOLDER_RE } from "../styled-css.js";
 import { ensureShouldForwardPropDrop } from "./types.js";
+import { getVariantBaseKeySnapshot } from "./variant-utils.js";
 import type { DeclProcessingState } from "./decl-setup.js";
 import type { ExpressionKind } from "./decl-types.js";
 import {
@@ -129,6 +130,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     styleObj[sel] = obj;
   }
 
+  const baseRawEntries = Object.entries(styleObj);
   resolveBoxShorthandConflicts(styleObj);
   resolveDirectionalConflicts(styleObj);
   expandMultiValueBorderRadius(styleObj);
@@ -143,6 +145,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
   harmonizeShorthandExpansion([styleObj, ...variantBucketObjects, ...extraStyleObjects.values()], {
     baseStyleObj: styleObj,
     inheritBaseLateSides: new Set(variantBucketObjects),
+    baseRawEntries,
+    bucketBaseKeySnapshot: bucketSnapshotLookup(decl, variantBuckets),
   });
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
@@ -632,6 +636,8 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     {
       baseStyleObj: styleObj,
       inheritBaseLateSides: new Set(remainingBucketObjects),
+      baseRawEntries,
+      bucketBaseKeySnapshot: bucketSnapshotLookup(decl, remainingBuckets),
     },
   );
 
@@ -3061,15 +3067,40 @@ const BORDER_RADIUS_CORNER_PROPS = [
   "borderBottomLeftRadius",
 ] as const;
 
+type HarmonizeShorthandOptions = {
+  baseStyleObj?: Record<string, unknown>;
+  inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
+  /** Base style entries captured before shorthand/longhand resolution mutated them. */
+  baseRawEntries?: ReadonlyArray<readonly [string, unknown]>;
+  /**
+   * Base keys present when a variant bucket first received styles. Keys missing
+   * from the snapshot were declared after the variant block in source, so they
+   * keep winning over the variant's expanded shorthand.
+   */
+  bucketBaseKeySnapshot?: (styleObj: Record<string, unknown>) => ReadonlySet<string> | undefined;
+};
+
 function harmonizeShorthandExpansion(
   styleObjs: ReadonlyArray<Record<string, unknown>>,
-  options?: {
-    baseStyleObj?: Record<string, unknown>;
-    inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
-  },
+  options?: HarmonizeShorthandOptions,
 ): void {
   harmonizeBoxShorthandExpansion(styleObjs, options);
   harmonizeBorderRadiusExpansion(styleObjs);
+}
+
+/** Resolve a bucket object back to its `when` snapshot recorded during decl processing. */
+function bucketSnapshotLookup(
+  decl: StyledDecl,
+  buckets: ReadonlyMap<string, Record<string, unknown>>,
+): (styleObj: Record<string, unknown>) => ReadonlySet<string> | undefined {
+  const whenByObject = new Map<Record<string, unknown>, string>();
+  for (const [when, obj] of buckets.entries()) {
+    whenByObject.set(obj, when);
+  }
+  return (styleObj) => {
+    const when = whenByObject.get(styleObj);
+    return when === undefined ? undefined : getVariantBaseKeySnapshot(decl, when);
+  };
 }
 
 /**
@@ -3126,12 +3157,45 @@ function recordLateSideOverrides(
   lateSideOverrides.set(styleObj, byShorthand);
 }
 
+/**
+ * Sides of `config` whose base longhand/axis declaration is absent from the
+ * variant's base-key snapshot — i.e. it was declared after the variant block
+ * in source order and must keep winning over the variant's shorthand.
+ * Conditional-only values (nullish default) never suppress: their default
+ * still falls back to the variant's shorthand.
+ */
+function baseSidesDeclaredAfterSnapshot(
+  baseRawEntries: ReadonlyArray<readonly [string, unknown]>,
+  snapshot: ReadonlySet<string>,
+  config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
+): ReadonlySet<string> {
+  const lateSides = new Set<string>();
+  const sidesByKey = new Map<string, string[]>([
+    [config.top, [config.top]],
+    [config.right, [config.right]],
+    [config.bottom, [config.bottom]],
+    [config.left, [config.left]],
+    [config.block, [config.top, config.bottom]],
+    [config.inline, [config.left, config.right]],
+  ]);
+  for (const [key, value] of baseRawEntries) {
+    const sides = sidesByKey.get(key);
+    if (!sides || snapshot.has(key)) {
+      continue;
+    }
+    if (isMediaOrPseudoMap(value) && hasNullishDefault(value)) {
+      continue;
+    }
+    for (const side of sides) {
+      lateSides.add(side);
+    }
+  }
+  return lateSides;
+}
+
 function harmonizeBoxShorthandExpansion(
   styleObjs: ReadonlyArray<Record<string, unknown>>,
-  options?: {
-    baseStyleObj?: Record<string, unknown>;
-    inheritBaseLateSides?: ReadonlySet<Record<string, unknown>>;
-  },
+  options?: HarmonizeShorthandOptions,
 ): void {
   for (const config of BOX_SHORTHAND_CONFLICTS) {
     const levels = new Set<string>();
@@ -3154,13 +3218,23 @@ function harmonizeBoxShorthandExpansion(
       : undefined;
     const lateSidesFor = (styleObj: Record<string, unknown>): ReadonlySet<string> => {
       const localLateSides = lateSideOverrides.get(styleObj)?.get(config.shorthand);
-      if (!options?.inheritBaseLateSides?.has(styleObj) || !baseLateSides?.size) {
+      if (!options?.inheritBaseLateSides?.has(styleObj)) {
+        return localLateSides ?? new Set();
+      }
+      // Source-order aware path: suppress only sides whose base longhand was
+      // declared after this variant first received styles.
+      const snapshot = options.bucketBaseKeySnapshot?.(styleObj);
+      const inheritedLateSides =
+        snapshot && options.baseRawEntries
+          ? baseSidesDeclaredAfterSnapshot(options.baseRawEntries, snapshot, config)
+          : (baseLateSides ?? new Set<string>());
+      if (!inheritedLateSides.size) {
         return localLateSides ?? new Set();
       }
       if (!localLateSides?.size) {
-        return baseLateSides;
+        return inheritedLateSides;
       }
-      return new Set([...baseLateSides, ...localLateSides]);
+      return new Set([...inheritedLateSides, ...localLateSides]);
     };
     // Expand lower levels up to the highest level present — never past it,
     // or a base expansion would out-prioritize a variant's higher-level keys.

@@ -264,12 +264,28 @@ export const createPropTestHelpers = (
   return { parseTestInfo, parseChainedTestInfo };
 };
 
+/**
+ * Per-decl snapshot of the base style object's keys at the moment each variant
+ * (`when`) first received styles. Captures the source position of conditional
+ * blocks relative to base declarations: keys missing from a variant's snapshot
+ * were declared after that variant in the original CSS.
+ */
+const variantBaseKeySnapshots = new WeakMap<StyledDecl, Map<string, ReadonlySet<string>>>();
+
+export function getVariantBaseKeySnapshot(
+  decl: StyledDecl,
+  when: string,
+): ReadonlySet<string> | undefined {
+  return variantBaseKeySnapshots.get(decl)?.get(when);
+}
+
 export const createVariantApplier = (args: {
   decl: StyledDecl;
   variantBuckets: Map<string, Record<string, unknown>>;
   variantStyleKeys: Record<string, string>;
+  baseStyleObj?: Record<string, unknown>;
 }) => {
-  const { decl, variantBuckets, variantStyleKeys } = args;
+  const { decl, variantBuckets, variantStyleKeys, baseStyleObj } = args;
   const dropAllTestInfoProps = (testInfo: TestInfo): void => {
     const propsToCheck = testInfo.allPropNames ?? (testInfo.propName ? [testInfo.propName] : []);
     for (const prop of propsToCheck) {
@@ -281,6 +297,13 @@ export const createVariantApplier = (args: {
   // Shared helper to apply a style variant for a given test condition
   return (testInfo: TestInfo, consStyle: Record<string, unknown>): void => {
     const when = testInfo.when;
+    if (baseStyleObj) {
+      const snapshots = variantBaseKeySnapshots.get(decl) ?? new Map<string, ReadonlySet<string>>();
+      if (!snapshots.has(when)) {
+        snapshots.set(when, new Set(Object.keys(baseStyleObj)));
+        variantBaseKeySnapshots.set(decl, snapshots);
+      }
+    }
     const existingBucket = variantBuckets.get(when);
     const nextBucket = existingBucket ? { ...existingBucket } : {};
     mergeStyleObjects(nextBucket, expandStyleObjectShorthands(consStyle));

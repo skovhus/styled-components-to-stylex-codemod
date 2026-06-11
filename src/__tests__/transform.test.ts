@@ -10777,6 +10777,80 @@ export const App = () => (
     expect(boxRounded).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
   });
 
+  it("should let later conditional css shorthands reset earlier base longhands", () => {
+    // The conditional block appears after `padding-top: 10px` in source, so an
+    // active element's `padding: 8px` resets the top to 8px. The variant
+    // expansion must include paddingTop here — the base late-side suppression
+    // only applies to variants whose shorthand precedes the base longhand.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  padding: 4px;
+  padding-top: 10px;
+  \${(p) => p.$active && css\`padding: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: 8/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should keep later base longhands winning over earlier conditional css shorthands", () => {
+    // Here `padding-top: 10px` appears after the conditional block, so it wins
+    // for the top side even when $active — the variant must not emit paddingTop.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  padding: 4px;
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  padding-top: 10px;
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).not.toMatch(/paddingTop/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
   it("should expand variant padding shorthands when the base carries side longhands", () => {
     // StyleX side longhands (4000) always beat the padding shorthand (1000),
     // so a variant keeping `padding` could never override base side longhands.
