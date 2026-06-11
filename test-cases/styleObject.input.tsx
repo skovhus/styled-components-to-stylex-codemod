@@ -4,7 +4,8 @@ const StaticBox = styled.div({
   background: "#BF4F74",
   height: "50px",
   width: "50px",
-  borderRadius: "4px",
+  borderRadius: "8px 4px",
+  borderTopLeftRadius: "2px",
 });
 
 const DynamicBox = styled.div<{ $background?: string; $size?: string }>((props) => ({

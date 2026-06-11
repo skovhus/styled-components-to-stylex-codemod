@@ -45,7 +45,11 @@ import type { VariantDimension } from "../transform-types.js";
 import type { WarningLog } from "../logger.js";
 import { isStyleConditionKey, mapAst, mergeStyleObjects, walkAst } from "./utils.js";
 import { stylexVarMemberExpression } from "../transform-css-vars.js";
-import { expandBorderRadiusShorthandValue } from "../css-border-radius.js";
+import {
+  expandBorderRadiusInStyleObject,
+  expandBorderRadiusShorthandValue,
+} from "../css-border-radius.js";
+import { staticStringValue } from "./style-object-normalization.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -131,6 +135,11 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     expandMultiValueBorderRadius(bucket);
     warnOpaqueShorthands(bucket, decl, warnings);
   }
+  harmonizeBorderRadiusExpansion([
+    styleObj,
+    ...variantBuckets.values(),
+    ...extraStyleObjects.values(),
+  ]);
 
   registerLocalStylexVarFallbacks(state, decl, styleObj);
 
@@ -612,6 +621,13 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     extraStyleObjects,
     attrBuckets,
   });
+
+  harmonizeBorderRadiusExpansion([
+    styleObj,
+    ...remainingBuckets.values(),
+    ...extraStyleObjects.values(),
+    ...attrBuckets.values(),
+  ]);
 
   // Add remaining (compound/boolean) variants to resolvedStyleObjects
   for (const [when, obj] of remainingBuckets.entries()) {
@@ -3025,30 +3041,65 @@ function resolveLogicalSideConflicts(styleObj: Record<string, unknown>): void {
   }
 }
 
-function expandMultiValueBorderRadius(styleObj: Record<string, unknown>): void {
+const BORDER_RADIUS_CORNER_PROPS = [
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+] as const;
+
+/**
+ * StyleX gives longhand properties priority over shorthands regardless of
+ * application order, so a `borderRadius` shorthand in one style object can
+ * never override corner longhands applied from another (e.g. a variant's
+ * `borderRadius: 4px` losing to base corner longhands expanded from
+ * `border-radius: 16px 0`). When any style object in the declaration family
+ * carries corner longhands, expand sibling single-value `borderRadius`
+ * shorthands too so cascade overrides keep working.
+ */
+function harmonizeBorderRadiusExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
+  const hasCornerLonghand = styleObjs.some((obj) =>
+    BORDER_RADIUS_CORNER_PROPS.some((prop) => prop in obj),
+  );
+  if (!hasCornerLonghand) {
+    return;
+  }
+  for (const obj of styleObjs) {
+    expandMultiValueBorderRadius(obj, { includeSingleValue: true });
+  }
+}
+
+function expandMultiValueBorderRadius(
+  styleObj: Record<string, unknown>,
+  options?: { includeSingleValue?: boolean },
+): void {
   const value = styleObj.borderRadius;
   if (value === undefined) {
     return;
   }
-  const expanded = expandBorderRadiusValue(value);
+  const expanded = expandBorderRadiusValue(value, options);
   if (!expanded) {
     return;
   }
-  delete styleObj.borderRadius;
-  styleObj.borderTopLeftRadius = expanded.topLeft;
-  styleObj.borderTopRightRadius = expanded.topRight;
-  styleObj.borderBottomRightRadius = expanded.bottomRight;
-  styleObj.borderBottomLeftRadius = expanded.bottomLeft;
+  const next = expandBorderRadiusInStyleObject(styleObj, expanded);
+  for (const key of Object.keys(styleObj)) {
+    delete styleObj[key];
+  }
+  Object.assign(styleObj, next);
 }
 
-function expandBorderRadiusValue(value: unknown): {
+function expandBorderRadiusValue(
+  value: unknown,
+  options?: { includeSingleValue?: boolean },
+): {
   topLeft: unknown;
   topRight: unknown;
   bottomRight: unknown;
   bottomLeft: unknown;
 } | null {
-  if (typeof value === "string") {
-    return expandBorderRadiusShorthandValue(value);
+  const staticExpanded = expandStaticBorderRadiusValue(value, options);
+  if (staticExpanded) {
+    return staticExpanded;
   }
   if (!isMediaOrPseudoMap(value)) {
     return null;
@@ -3066,10 +3117,7 @@ function expandBorderRadiusValue(value: unknown): {
       bottomLeft[condition] = conditionValue;
       continue;
     }
-    if (typeof conditionValue !== "string") {
-      return null;
-    }
-    const expanded = expandBorderRadiusShorthandValue(conditionValue);
+    const expanded = expandStaticBorderRadiusValue(conditionValue, options);
     if (!expanded) {
       return null;
     }
@@ -3079,7 +3127,30 @@ function expandBorderRadiusValue(value: unknown): {
     bottomRight[condition] = expanded.bottomRight;
     bottomLeft[condition] = expanded.bottomLeft;
   }
-  return changed ? { topLeft, topRight, bottomRight, bottomLeft } : null;
+  return changed || options?.includeSingleValue === true
+    ? { topLeft, topRight, bottomRight, bottomLeft }
+    : null;
+}
+
+function expandStaticBorderRadiusValue(
+  value: unknown,
+  options?: { includeSingleValue?: boolean },
+): {
+  topLeft: unknown;
+  topRight: unknown;
+  bottomRight: unknown;
+  bottomLeft: unknown;
+} | null {
+  if (typeof value === "number") {
+    return options?.includeSingleValue === true
+      ? { topLeft: value, topRight: value, bottomRight: value, bottomLeft: value }
+      : null;
+  }
+  const staticString = typeof value === "string" ? value : staticStringValue(value);
+  if (staticString === null) {
+    return null;
+  }
+  return expandBorderRadiusShorthandValue(staticString, options);
 }
 
 function resolveDirectionalConflictValue(args: {

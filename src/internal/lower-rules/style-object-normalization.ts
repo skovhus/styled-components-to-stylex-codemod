@@ -1,4 +1,7 @@
-import { expandBorderRadiusShorthandValue } from "../css-border-radius.js";
+import {
+  expandBorderRadiusInStyleObject,
+  expandBorderRadiusShorthandValue,
+} from "../css-border-radius.js";
 
 export function expandStyleObjectShorthands(
   styleObj: Record<string, unknown>,
@@ -11,16 +14,14 @@ export function expandStyleObjectShorthands(
   if (!expanded) {
     return styleObj;
   }
-  const next = { ...styleObj };
-  delete next.borderRadius;
-  next.borderTopLeftRadius = expanded.topLeft;
-  next.borderTopRightRadius = expanded.topRight;
-  next.borderBottomRightRadius = expanded.bottomRight;
-  next.borderBottomLeftRadius = expanded.bottomLeft;
-  return next;
+  return expandBorderRadiusInStyleObject(styleObj, expanded);
 }
 
-function staticStringValue(value: unknown): string | null {
+/**
+ * Resolves a style value to a static string when possible: plain strings,
+ * string-literal AST nodes, and expression-free template literals.
+ */
+export function staticStringValue(value: unknown): string | null {
   if (typeof value === "string") {
     return value;
   }

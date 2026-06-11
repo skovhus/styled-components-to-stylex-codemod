@@ -42,7 +42,10 @@ const styles = stylex.create({
     backgroundColor: "#BF4F74",
     height: 50,
     width: 50,
-    borderRadius: 4,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: "4px",
+    borderBottomRightRadius: "8px",
+    borderBottomLeftRadius: "4px",
   },
   dynamicBox: {
     backgroundColor: "#BF4F74",

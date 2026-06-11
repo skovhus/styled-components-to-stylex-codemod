@@ -10738,6 +10738,86 @@ export const App = () => <Box>test</Box>;
     expect(result.code).toContain("paddingLeft: 4");
   });
 
+  it("should expand variant borderRadius when the base expands to corner longhands", () => {
+    // StyleX gives corner longhands (priority 4000) precedence over the
+    // borderRadius shorthand (priority 2000) regardless of application order.
+    // When the base styles expand a multi-value border-radius into corner
+    // longhands, a variant's single-value borderRadius must be expanded too,
+    // or the variant could never override the base.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ rounded?: boolean }>\`
+  border-radius: \${(props) => (props.rounded ? "4px" : "16px 0")};
+  color: red;
+\`;
+
+export const App = () => (
+  <>
+    <Box rounded>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxRounded = result.code.match(/boxRounded:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxRounded).toBeTruthy();
+    expect(boxRounded).not.toMatch(/borderRadius:/);
+    expect(boxRounded).toMatch(/borderTopLeftRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderTopRightRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderBottomRightRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
+  });
+
+  it("should preserve border radius shorthand and corner source order", () => {
+    const source = `
+import styled from "styled-components";
+
+const LaterCorner = styled.div\`
+  border-radius: 8px 4px;
+  border-top-left-radius: 2px;
+\`;
+
+const LaterShorthand = styled.div\`
+  border-top-left-radius: 2px;
+  border-radius: 8px 4px;
+\`;
+
+export const App = () => (
+  <>
+    <LaterCorner>corner</LaterCorner>
+    <LaterShorthand>shorthand</LaterShorthand>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const laterCorner = result.code.match(/laterCorner:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    const laterShorthand = result.code.match(/laterShorthand:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(laterCorner).toBeTruthy();
+    expect(laterShorthand).toBeTruthy();
+    expect(laterCorner).toMatch(/borderTopLeftRadius: 2/);
+    expect(laterCorner).toMatch(/borderTopRightRadius: (?:"4px"|4)/);
+    expect(laterCorner).toMatch(/borderBottomRightRadius: (?:"8px"|8)/);
+    expect(laterCorner).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
+    expect(laterShorthand).toMatch(/borderTopLeftRadius: (?:"8px"|8)/);
+  });
+
   it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
     // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
     // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
