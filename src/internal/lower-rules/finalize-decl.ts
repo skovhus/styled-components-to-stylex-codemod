@@ -2,7 +2,10 @@
  * Finalizes per-declaration style objects after rule processing.
  * Core concepts: merge pseudo/media buckets, rewrite CSS vars, and emit variants.
  */
-import { cssDeclarationToStylexDeclarations } from "../css-prop-mapping.js";
+import {
+  cssDeclarationToStylexDeclarations,
+  getUseLogicalProperties,
+} from "../css-prop-mapping.js";
 import {
   cssValueToJs,
   literalToAst,
@@ -50,6 +53,7 @@ import {
   expandBorderRadiusShorthandValue,
 } from "../css-border-radius.js";
 import { staticStringValue } from "./style-object-normalization.js";
+import { splitCssValueWhitespace } from "../css-value-split.js";
 
 export { extractSingleRawCssVarStyleFnProperty, replaceIdentifierInAst };
 
@@ -135,7 +139,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     expandMultiValueBorderRadius(bucket);
     warnOpaqueShorthands(bucket, decl, warnings);
   }
-  harmonizeBorderRadiusExpansion([
+  harmonizeShorthandExpansion([
     styleObj,
     ...variantBuckets.values(),
     ...extraStyleObjects.values(),
@@ -622,7 +626,7 @@ export function finalizeDeclProcessing(ctx: DeclProcessingState): void {
     attrBuckets,
   });
 
-  harmonizeBorderRadiusExpansion([
+  harmonizeShorthandExpansion([
     styleObj,
     ...remainingBuckets.values(),
     ...extraStyleObjects.values(),
@@ -2831,6 +2835,7 @@ function resolveBoxShorthandConflicts(styleObj: Record<string, unknown>): void {
 
     const entries = Object.entries(styleObj);
     const shorthandIndex = entries.findIndex(([key]) => key === config.shorthand);
+    recordLateSideOverrides(styleObj, config, entries, shorthandIndex);
     const replacements: Record<string, unknown> = {
       [config.top]: resolveBoxSideConflictValue({
         shorthandVal,
@@ -3053,6 +3058,351 @@ const BORDER_RADIUS_CORNER_PROPS = [
   "borderBottomRightRadius",
   "borderBottomLeftRadius",
 ] as const;
+
+function harmonizeShorthandExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
+  harmonizeBoxShorthandExpansion(styleObjs);
+  harmonizeBorderRadiusExpansion(styleObjs);
+}
+
+/**
+ * StyleX priorities put side longhands (`paddingTop`) above axis shorthands
+ * (`paddingBlock`) above box shorthands (`padding`) regardless of application
+ * order. When the declaration family mixes these levels across style objects
+ * (e.g. the base expanded `padding: 4px; padding-top: 2px` into side longhands
+ * while a variant kept `padding: 8px`), a later-applied lower-level value can
+ * never override an earlier higher-level one. Expand statically expandable
+ * shorthand/axis values to side longhands in every object so overrides resolve
+ * through plain per-property merging.
+ */
+/**
+ * Side props whose longhand was declared after the box shorthand (per style
+ * object). A variant carrying the same shorthand must not override these sides
+ * when it gets expanded to longhands — the later longhand wins over the
+ * variant's shorthand in the original CSS cascade too.
+ */
+const lateSideOverrides = new WeakMap<Record<string, unknown>, Map<string, Set<string>>>();
+
+function recordLateSideOverrides(
+  styleObj: Record<string, unknown>,
+  config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
+  entries: Array<[string, unknown]>,
+  shorthandIndex: number,
+): void {
+  const lateSides = new Set<string>();
+  const markIfLate = (prop: string, ...sides: string[]): void => {
+    const index = entries.findIndex(([key]) => key === prop);
+    if (index <= shorthandIndex) {
+      return;
+    }
+    const value = entries[index]?.[1];
+    // Conditional-only overrides (nullish default) leave the default to the
+    // shorthand, so a variant shorthand may still control these sides.
+    if (isMediaOrPseudoMap(value) && hasNullishDefault(value)) {
+      return;
+    }
+    for (const side of sides) {
+      lateSides.add(side);
+    }
+  };
+  markIfLate(config.top, config.top);
+  markIfLate(config.right, config.right);
+  markIfLate(config.bottom, config.bottom);
+  markIfLate(config.left, config.left);
+  markIfLate(config.block, config.top, config.bottom);
+  markIfLate(config.inline, config.left, config.right);
+  if (lateSides.size === 0) {
+    return;
+  }
+  const byShorthand = lateSideOverrides.get(styleObj) ?? new Map<string, Set<string>>();
+  byShorthand.set(config.shorthand, lateSides);
+  lateSideOverrides.set(styleObj, byShorthand);
+}
+
+function collectLateSideOverrides(
+  styleObjs: ReadonlyArray<Record<string, unknown>>,
+  shorthand: string,
+): ReadonlySet<string> {
+  const lateSides = new Set<string>();
+  for (const obj of styleObjs) {
+    for (const side of lateSideOverrides.get(obj)?.get(shorthand) ?? []) {
+      lateSides.add(side);
+    }
+  }
+  return lateSides;
+}
+
+function harmonizeBoxShorthandExpansion(styleObjs: ReadonlyArray<Record<string, unknown>>): void {
+  for (const config of BOX_SHORTHAND_CONFLICTS) {
+    const levels = new Set<string>();
+    for (const obj of styleObjs) {
+      if (config.shorthand in obj) {
+        levels.add("shorthand");
+      }
+      if (config.block in obj || config.inline in obj) {
+        levels.add("axis");
+      }
+      if (boxSideProps(config).some((prop) => prop in obj)) {
+        levels.add("side");
+      }
+    }
+    if (levels.size < 2) {
+      continue;
+    }
+    const lateSides = collectLateSideOverrides(styleObjs, config.shorthand);
+    // Expand lower levels up to the highest level present — never past it,
+    // or a base expansion would out-prioritize a variant's higher-level keys.
+    const targetLevel = levels.has("side") ? "side" : "axis";
+    for (const obj of styleObjs) {
+      if (targetLevel === "side") {
+        expandBoxLevelsToSides(obj, config, lateSides);
+      } else {
+        expandBoxShorthandToAxis(obj, config, lateSides);
+      }
+    }
+  }
+}
+
+function boxSideProps(config: (typeof BOX_SHORTHAND_CONFLICTS)[number]): string[] {
+  return [config.top, config.right, config.bottom, config.left];
+}
+
+/**
+ * Expands a pure shorthand-level or axis-level style object to side longhands
+ * in place. Mixed-level objects were already reconciled per-object by
+ * resolveBoxShorthandConflicts / resolveDirectionalConflicts and are left
+ * untouched, as are values that cannot be expanded statically.
+ */
+function expandBoxLevelsToSides(
+  styleObj: Record<string, unknown>,
+  config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
+  lateSides: ReadonlySet<string>,
+): void {
+  const hasSide = boxSideProps(config).some((prop) => prop in styleObj);
+  const shorthandVal = styleObj[config.shorthand];
+  const withoutLateSides = (
+    replacements: ReadonlyArray<readonly [string, unknown]>,
+  ): Array<readonly [string, unknown]> =>
+    replacements.filter(([sideProp]) => !lateSides.has(sideProp));
+  if (shorthandVal !== undefined) {
+    if (hasSide || config.block in styleObj || config.inline in styleObj) {
+      return;
+    }
+    const expanded = expandBoxShorthandValueToSides(shorthandVal);
+    if (!expanded) {
+      return;
+    }
+    replaceStyleKeyInPlace(
+      styleObj,
+      config.shorthand,
+      withoutLateSides([
+        [config.top, expanded.top],
+        [config.right, expanded.right],
+        [config.bottom, expanded.bottom],
+        [config.left, expanded.left],
+      ]),
+    );
+    return;
+  }
+  if (hasSide) {
+    return;
+  }
+  // Axis properties are RTL-aware (paddingInline flips, paddingLeft does not),
+  // so rewriting them to physical sides is only safe when the adapter opted
+  // into physical properties.
+  if (getUseLogicalProperties()) {
+    return;
+  }
+  if (config.block in styleObj) {
+    const blockVal = styleObj[config.block];
+    replaceStyleKeyInPlace(
+      styleObj,
+      config.block,
+      withoutLateSides([
+        [config.top, blockVal],
+        [config.bottom, cloneBoxValue(blockVal)],
+      ]),
+    );
+  }
+  if (config.inline in styleObj) {
+    const inlineVal = styleObj[config.inline];
+    replaceStyleKeyInPlace(
+      styleObj,
+      config.inline,
+      withoutLateSides([
+        [config.left, inlineVal],
+        [config.right, cloneBoxValue(inlineVal)],
+      ]),
+    );
+  }
+}
+
+/**
+ * Expands a box shorthand to the axis pair (`paddingBlock`/`paddingInline`)
+ * when the family's highest conflicting level is the axis level. Values with
+ * 3-4 parts cannot be represented per-axis and are left untouched.
+ */
+function expandBoxShorthandToAxis(
+  styleObj: Record<string, unknown>,
+  config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
+  lateSides: ReadonlySet<string>,
+): void {
+  const shorthandVal = styleObj[config.shorthand];
+  if (
+    shorthandVal === undefined ||
+    config.block in styleObj ||
+    config.inline in styleObj ||
+    boxSideProps(config).some((prop) => prop in styleObj)
+  ) {
+    return;
+  }
+  const expanded = expandBoxShorthandValueToAxis(shorthandVal);
+  if (!expanded) {
+    return;
+  }
+  const replacements: Array<readonly [string, unknown]> = [];
+  if (!lateSides.has(config.top) && !lateSides.has(config.bottom)) {
+    replacements.push([config.block, expanded.block]);
+  }
+  if (!lateSides.has(config.left) && !lateSides.has(config.right)) {
+    replacements.push([config.inline, expanded.inline]);
+  }
+  replaceStyleKeyInPlace(styleObj, config.shorthand, replacements);
+}
+
+function expandBoxShorthandValueToAxis(value: unknown): {
+  block: unknown;
+  inline: unknown;
+} | null {
+  if (typeof value === "number") {
+    return { block: value, inline: value };
+  }
+  const staticString = typeof value === "string" ? value : staticStringValue(value);
+  if (staticString !== null) {
+    const parts = splitCssValueWhitespace(staticString.trim());
+    const block = parts[0];
+    if (block === undefined || parts.length > 2) {
+      return null;
+    }
+    return { block, inline: parts[1] ?? block };
+  }
+  if (!isMediaOrPseudoMap(value)) {
+    return null;
+  }
+  const block: Record<string, unknown> = {};
+  const inline: Record<string, unknown> = {};
+  for (const [condition, conditionValue] of Object.entries(value)) {
+    if (conditionValue == null) {
+      block[condition] = conditionValue;
+      inline[condition] = conditionValue;
+      continue;
+    }
+    if (isMediaOrPseudoMap(conditionValue)) {
+      return null;
+    }
+    const expanded = expandBoxShorthandValueToAxis(conditionValue);
+    if (!expanded) {
+      return null;
+    }
+    block[condition] = expanded.block;
+    inline[condition] = expanded.inline;
+  }
+  return { block, inline };
+}
+
+function expandBoxShorthandValueToSides(value: unknown): {
+  top: unknown;
+  right: unknown;
+  bottom: unknown;
+  left: unknown;
+} | null {
+  if (typeof value === "number") {
+    return { top: value, right: value, bottom: value, left: value };
+  }
+  const staticString = typeof value === "string" ? value : staticStringValue(value);
+  if (staticString !== null) {
+    return expandBoxShorthandStringToSides(staticString);
+  }
+  if (!isMediaOrPseudoMap(value)) {
+    return null;
+  }
+  const top: Record<string, unknown> = {};
+  const right: Record<string, unknown> = {};
+  const bottom: Record<string, unknown> = {};
+  const left: Record<string, unknown> = {};
+  for (const [condition, conditionValue] of Object.entries(value)) {
+    if (conditionValue == null) {
+      top[condition] = conditionValue;
+      right[condition] = conditionValue;
+      bottom[condition] = conditionValue;
+      left[condition] = conditionValue;
+      continue;
+    }
+    if (isMediaOrPseudoMap(conditionValue)) {
+      return null;
+    }
+    const expanded = expandBoxShorthandValueToSides(conditionValue);
+    if (!expanded) {
+      return null;
+    }
+    top[condition] = expanded.top;
+    right[condition] = expanded.right;
+    bottom[condition] = expanded.bottom;
+    left[condition] = expanded.left;
+  }
+  return { top, right, bottom, left };
+}
+
+/** CSS box expansion: 1-4 whitespace-separated values to top/right/bottom/left. */
+function expandBoxShorthandStringToSides(raw: string): {
+  top: string;
+  right: string;
+  bottom: string;
+  left: string;
+} | null {
+  const parts = splitCssValueWhitespace(raw.trim());
+  const top = parts[0];
+  if (top === undefined || parts.length > 4) {
+    return null;
+  }
+  const right = parts[1] ?? top;
+  const bottom = parts[2] ?? top;
+  const left = parts[3] ?? right;
+  return { top, right, bottom, left };
+}
+
+function replaceStyleKeyInPlace(
+  styleObj: Record<string, unknown>,
+  key: string,
+  replacements: ReadonlyArray<readonly [string, unknown]>,
+): void {
+  const entries = Object.entries(styleObj);
+  for (const existingKey of Object.keys(styleObj)) {
+    delete styleObj[existingKey];
+  }
+  for (const [entryKey, entryValue] of entries) {
+    if (entryKey === key) {
+      for (const [replacementKey, replacementValue] of replacements) {
+        styleObj[replacementKey] = replacementValue;
+      }
+    } else {
+      styleObj[entryKey] = entryValue;
+    }
+  }
+}
+
+function cloneBoxValue(value: unknown): unknown {
+  if (isAstNode(value)) {
+    return cloneAstNode(value as Parameters<typeof cloneAstNode>[0]);
+  }
+  if (isMediaOrPseudoMap(value)) {
+    const cloned: Record<string, unknown> = {};
+    for (const [condition, conditionValue] of Object.entries(value)) {
+      cloned[condition] = cloneBoxValue(conditionValue);
+    }
+    return cloned;
+  }
+  return value;
+}
 
 /**
  * StyleX gives longhand properties priority over shorthands regardless of

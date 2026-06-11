@@ -10777,6 +10777,80 @@ export const App = () => (
     expect(boxRounded).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
   });
 
+  it("should expand variant padding shorthands when the base carries side longhands", () => {
+    // StyleX side longhands (4000) always beat the padding shorthand (1000),
+    // so a variant keeping `padding` could never override base side longhands.
+    // The variant expands to sides — except sides whose base longhand was
+    // declared after the shorthand (padding-top here), which must keep winning.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: \${(props) => (props.big ? "8px" : "4px")};
+  padding-top: 2px;
+\`;
+
+export const App = () => (
+  <>
+    <Box big>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxBig = result.code.match(/boxBig:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxBig).toBeTruthy();
+    expect(boxBig).not.toMatch(/\bpadding:/);
+    expect(boxBig).toMatch(/paddingRight: 8/);
+    expect(boxBig).toMatch(/paddingBottom: 8/);
+    expect(boxBig).toMatch(/paddingLeft: 8/);
+    // padding-top: 2px is declared after the shorthand, so it wins for both
+    // variants and the big variant must not re-introduce a paddingTop.
+    expect(boxBig).not.toMatch(/paddingTop/);
+    expect(result.code).toMatch(/paddingTop: 2/);
+  });
+
+  it("should expand variant padding to all sides when a longhand precedes the shorthand", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding-top: 2px;
+  padding: \${(props) => (props.big ? "8px" : "4px")};
+\`;
+
+export const App = () => (
+  <>
+    <Box big>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxBig = result.code.match(/boxBig:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxBig).toBeTruthy();
+    expect(boxBig).toMatch(/paddingTop: 8/);
+    expect(boxBig).toMatch(/paddingRight: 8/);
+    expect(boxBig).toMatch(/paddingBottom: 8/);
+    expect(boxBig).toMatch(/paddingLeft: 8/);
+  });
+
   it("should expand multi-value border-radius inside media query maps", () => {
     const source = `
 import styled from "styled-components";
@@ -11727,7 +11801,12 @@ export const App = () => <Box $active>test</Box>;
     expect(result.code).toContain('":hover": 2');
   });
 
-  it("should seed logical pseudo maps from earlier conditional physical styles", () => {
+  it("should expand later logical axis overrides to physical sides when mixed with physical styles", () => {
+    // The axis shorthand (paddingInline, priority 2000) can never beat a side
+    // longhand (paddingRight, priority 4000) in StyleX, so the $b variant gets
+    // expanded to physical sides. Each variant keeps only its own values: with
+    // $a and $b, the default comes from $a's paddingRight and the hover value
+    // from $b's expanded sides; with $b alone there is no phantom default.
     const source = `
 import styled, { css } from "styled-components";
 
@@ -11755,8 +11834,10 @@ export const App = () => <Box $a $b>test</Box>;
       { adapter: { ...fixtureAdapter, usePhysicalProperties: true } },
     );
     expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingRight: 8");
     expect(result.code).toContain("paddingRight: {");
-    expect(result.code).toContain("default: 8");
+    expect(result.code).toContain("paddingLeft: {");
+    expect(result.code).not.toContain("paddingInline");
     expect(result.code).toContain('":hover": 2');
   });
 
