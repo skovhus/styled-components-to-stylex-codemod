@@ -79,6 +79,7 @@ import {
   collectPropsFromArrowFn,
   collectPropsFromArrowFnDestructured,
   getImportedStylexIdentifiers,
+  getNumericImportedStylexIdentifiers,
   hasFunctionParamReferenceInArrowFn,
   hasThemeAccessInArrowFn,
   hasThemeReferenceInExpression,
@@ -1596,7 +1597,12 @@ export function handleInterpolatedDeclaration(args: InterpolatedDeclarationConte
         addImport,
         resolveImportedValueExpr,
         resolveThemeValue,
-        numericIdentifiers: getImportedStylexIdentifiers(importMap, resolverImports),
+        numericIdentifiers: getNumericImportedStylexIdentifiers(
+          j,
+          filePath,
+          importMap,
+          resolverImports,
+        ),
         setStyleValue: (prop, value) => applyResolvedPropValue(prop, value, null),
       })
     ) {

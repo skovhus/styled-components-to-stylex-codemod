@@ -1,7 +1,7 @@
 import React from "react";
 import * as stylex from "@stylexjs/stylex";
 import { $zIndex } from "./tokens.stylex";
-import { PageSizeConstants } from "./lib/pageSizes.stylex";
+import { CardSizeConstants, PageSizeConstants } from "./lib/pageSizes.stylex";
 
 const PEEK_MAX_WIDTH = 380;
 
@@ -18,6 +18,7 @@ const styles = stylex.create({
     borderRadius: 8,
     padding: 6,
     maxWidth: PEEK_MAX_WIDTH,
+    width: `${CardSizeConstants.cardWidth}px`,
     minHeight: PageSizeConstants.listInitiativeRowHeight,
     position: "fixed",
     zIndex: $zIndex.modal,

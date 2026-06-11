@@ -13,6 +13,10 @@ import {
 } from "../utilities/stylex-numeric-values.js";
 import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import {
+  collectNumericStylexImportBindings,
+  type StylexImportBinding,
+} from "../utilities/stylex-numeric-imports.js";
+import {
   importSourceToAbsolutePath,
   importSourceToModuleSpecifier,
 } from "../utilities/import-source.js";
@@ -121,7 +125,7 @@ function normalizeResolvedNumericPxValues(ctx: TransformContext): void {
 }
 
 function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<string> {
-  const names = new Set<string>();
+  const importBindings: StylexImportBinding[] = [];
   ctx.root.find(ctx.j.ImportDeclaration).forEach((path) => {
     const sourceValue = (path.node.source as { value?: unknown }).value;
     if (typeof sourceValue !== "string" || !isStylexImportSource(sourceValue)) {
@@ -129,10 +133,20 @@ function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<str
     }
     for (const specifier of path.node.specifiers ?? []) {
       const localName = (specifier.local as { name?: string } | null | undefined)?.name;
-      if (localName) {
-        names.add(localName);
+      const importedName = importSpecifierExportName(specifier);
+      if (localName && importedName) {
+        importBindings.push({
+          localName,
+          importedName,
+          source: { kind: "specifier", value: sourceValue },
+        });
       }
     }
+  });
+  const names = collectNumericStylexImportBindings({
+    j: ctx.j,
+    filePath: ctx.file.path,
+    bindings: importBindings,
   });
   ctx.root.find(ctx.j.VariableDeclarator).forEach((path) => {
     if (!isImmutableTopLevelVariableDeclaratorPath(path)) {
@@ -148,6 +162,20 @@ function collectRootNumericConstantNames(ctx: TransformContext): ReadonlySet<str
     collectIdentifierPatternNames(node.id, names);
   });
   return names;
+}
+
+function importSpecifierExportName(specifier: unknown): string | null {
+  const node = specifier as {
+    type?: string;
+    imported?: { name?: string; value?: string } | null;
+  };
+  if (node.type === "ImportDefaultSpecifier") {
+    return "default";
+  }
+  if (node.type !== "ImportSpecifier") {
+    return null;
+  }
+  return node.imported?.name ?? node.imported?.value ?? null;
 }
 
 function isImmutableTopLevelVariableDeclaratorPath(path: { parentPath?: unknown }): boolean {
