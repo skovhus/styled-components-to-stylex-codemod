@@ -181,6 +181,32 @@ export const ContentViewContainer = Object.assign(SelectBase, { Option: SelectOp
     ).toBe(true);
   });
 
+  it("stays conservative for Object.assign member sources after literal properties", () => {
+    const source = `
+const SelectBase = (props) => <div>{props.children}</div>;
+const PlainOption = (props) => <div>{props.children}</div>;
+
+const StyledOptionRoot = styled.div\`
+  color: red;
+\`;
+const SelectOption = (props) => <StyledOptionRoot>{props.children}</StyledOptionRoot>;
+const styledMembers = {};
+styledMembers.Option = SelectOption;
+
+export const ContentViewContainer = Object.assign(SelectBase, { Option: PlainOption }, styledMembers);
+`;
+
+    expect(
+      exportedBindingDependsOnLocalNames({
+        source,
+        exportedName: "ContentViewContainer",
+        includeDefault: false,
+        localNames: new Set(["StyledOptionRoot"]),
+        memberPath: ["Option"],
+      }),
+    ).toBe(true);
+  });
+
   it("stays conservative when a static member assignment cannot be located", () => {
     const source = `
 const SelectBase = (props) => <div>{props.children}</div>;

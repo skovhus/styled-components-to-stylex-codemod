@@ -70,6 +70,11 @@ type ExportTargets = {
   nodes: AstNode[];
 };
 
+type StaticMemberValues = {
+  values: AstNode[];
+  hasUnknownSource: boolean;
+};
+
 /**
  * Dependency check for `Exported.Member` consumers: locate static member
  * assignments (`Root.Member = Value`, or `Member:` properties in the root's
@@ -88,10 +93,10 @@ function staticMemberDependsOnLocalNames(
   }
   const rootNames = expandAliasNamesBothWays(program, targets.localNames);
   const memberValues = collectStaticMemberValues(program, rootNames, memberName);
-  if (memberValues.length === 0) {
+  if (memberValues.hasUnknownSource || memberValues.values.length === 0) {
     return true;
   }
-  return memberValues.some((value) => nodeReferencesLocalNames(value, dependencyNames));
+  return memberValues.values.some((value) => nodeReferencesLocalNames(value, dependencyNames));
 }
 
 /**
@@ -123,8 +128,8 @@ function collectStaticMemberValues(
   program: AstNode,
   rootNames: ReadonlySet<string>,
   memberName: string,
-): AstNode[] {
-  const values: AstNode[] = [];
+): StaticMemberValues {
+  const result: StaticMemberValues = { values: [], hasUnknownSource: false };
   for (const stmt of programBody(program)) {
     if (stmt.type !== "ExpressionStatement") {
       continue;
@@ -135,17 +140,20 @@ function collectStaticMemberValues(
       memberName,
     );
     if (assignedValue) {
-      values.push(assignedValue);
+      result.values.push(assignedValue);
     }
   }
   for (const binding of localBindings(program)) {
     if (rootNames.has(binding.name)) {
-      values.push(
-        ...objectLiteralMemberValues(unwrapTransparentExpression(binding.node), memberName),
+      const bindingValues = objectLiteralMemberValues(
+        unwrapTransparentExpression(binding.node),
+        memberName,
       );
+      result.values.push(...bindingValues.values);
+      result.hasUnknownSource ||= bindingValues.hasUnknownSource;
     }
   }
-  return values;
+  return result;
 }
 
 /** Value assigned by a `Root.Member = Value` statement, if `expression` is one. */
@@ -170,34 +178,45 @@ function staticMemberAssignmentValue(
 }
 
 /** `Member:` property values in an object-literal or `Object.assign(...)` initializer. */
-function objectLiteralMemberValues(init: AstNode, memberName: string): AstNode[] {
-  const objectNodes: AstNode[] = [];
+function objectLiteralMemberValues(init: AstNode, memberName: string): StaticMemberValues {
+  const result: StaticMemberValues = { values: [], hasUnknownSource: false };
   if (init.type === "ObjectExpression") {
-    objectNodes.push(init);
+    collectObjectExpressionMemberValues(init, memberName, result);
   } else if (init.type === "CallExpression" && isObjectAssignCallee(init.callee as AstNode)) {
     for (const arg of astArray(init.arguments)) {
       if (arg.type === "ObjectExpression") {
-        objectNodes.push(arg);
+        collectObjectExpressionMemberValues(arg, memberName, result);
+      } else {
+        result.hasUnknownSource = true;
+        result.values = [];
       }
     }
   }
 
-  const values: AstNode[] = [];
-  for (const objectNode of objectNodes) {
-    for (const property of astArray(objectNode.properties)) {
-      if (
-        (property.type === "ObjectProperty" || property.type === "Property") &&
-        (property as { computed?: boolean }).computed !== true &&
-        nodeName(property.key as AstNode | undefined) === memberName
-      ) {
-        const value = property.value as AstNode | undefined;
-        if (value) {
-          values.push(value);
-        }
+  return result;
+}
+
+function collectObjectExpressionMemberValues(
+  objectNode: AstNode,
+  memberName: string,
+  result: StaticMemberValues,
+): void {
+  for (const property of astArray(objectNode.properties)) {
+    if (
+      (property.type === "ObjectProperty" || property.type === "Property") &&
+      (property as { computed?: boolean }).computed !== true &&
+      nodeName(property.key as AstNode | undefined) === memberName
+    ) {
+      const value = property.value as AstNode | undefined;
+      if (value) {
+        result.values = [value];
+        result.hasUnknownSource = false;
       }
+    } else if (property.type === "SpreadElement" || property.type === "SpreadProperty") {
+      result.hasUnknownSource = true;
+      result.values = [];
     }
   }
-  return values;
 }
 
 function isObjectAssignCallee(callee: AstNode | undefined): boolean {
