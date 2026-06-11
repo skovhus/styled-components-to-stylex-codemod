@@ -10715,6 +10715,29 @@ export const App = () => <Input readOnly value="test" />;
 });
 
 describe("shorthand/longhand normalization edge cases", () => {
+  it("should let later box shorthands reset earlier side longhands", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding-top: 8px;
+  padding: 4px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingTop: 4");
+    expect(result.code).toContain("paddingRight: 4");
+    expect(result.code).toContain("paddingBottom: 4");
+    expect(result.code).toContain("paddingLeft: 4");
+  });
+
   it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
     // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
     // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),

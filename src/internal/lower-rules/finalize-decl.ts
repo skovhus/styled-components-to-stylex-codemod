@@ -2814,27 +2814,40 @@ function resolveBoxShorthandConflicts(styleObj: Record<string, unknown>): void {
     }
 
     const entries = Object.entries(styleObj);
+    const shorthandIndex = entries.findIndex(([key]) => key === config.shorthand);
     const replacements: Record<string, unknown> = {
-      [config.top]: resolveBoxSideConflictValue(
+      [config.top]: resolveBoxSideConflictValue({
         shorthandVal,
-        styleObj[config.top],
-        styleObj[config.block],
-      ),
-      [config.right]: resolveBoxSideConflictValue(
+        shorthandIndex,
+        longhandVal: styleObj[config.top],
+        longhandIndex: entries.findIndex(([key]) => key === config.top),
+        axisVal: styleObj[config.block],
+        axisIndex: entries.findIndex(([key]) => key === config.block),
+      }),
+      [config.right]: resolveBoxSideConflictValue({
         shorthandVal,
-        styleObj[config.right],
-        styleObj[config.inline],
-      ),
-      [config.bottom]: resolveBoxSideConflictValue(
+        shorthandIndex,
+        longhandVal: styleObj[config.right],
+        longhandIndex: entries.findIndex(([key]) => key === config.right),
+        axisVal: styleObj[config.inline],
+        axisIndex: entries.findIndex(([key]) => key === config.inline),
+      }),
+      [config.bottom]: resolveBoxSideConflictValue({
         shorthandVal,
-        styleObj[config.bottom],
-        styleObj[config.block],
-      ),
-      [config.left]: resolveBoxSideConflictValue(
+        shorthandIndex,
+        longhandVal: styleObj[config.bottom],
+        longhandIndex: entries.findIndex(([key]) => key === config.bottom),
+        axisVal: styleObj[config.block],
+        axisIndex: entries.findIndex(([key]) => key === config.block),
+      }),
+      [config.left]: resolveBoxSideConflictValue({
         shorthandVal,
-        styleObj[config.left],
-        styleObj[config.inline],
-      ),
+        shorthandIndex,
+        longhandVal: styleObj[config.left],
+        longhandIndex: entries.findIndex(([key]) => key === config.left),
+        axisVal: styleObj[config.inline],
+        axisIndex: entries.findIndex(([key]) => key === config.inline),
+      }),
     };
 
     for (const key of Object.keys(styleObj)) {
@@ -2855,22 +2868,51 @@ function resolveBoxShorthandConflicts(styleObj: Record<string, unknown>): void {
   }
 }
 
-function resolveBoxSideConflictValue(
-  shorthandVal: unknown,
-  longhandVal: unknown,
-  axisVal: unknown,
-): unknown {
-  const baseValue = longhandVal ?? axisVal;
+function resolveBoxSideConflictValue(args: {
+  shorthandVal: unknown;
+  shorthandIndex: number;
+  longhandVal: unknown;
+  longhandIndex: number;
+  axisVal: unknown;
+  axisIndex: number;
+}): unknown {
+  const { shorthandVal, shorthandIndex, longhandVal, longhandIndex, axisVal, axisIndex } = args;
+  const base = latestIndexedValue([
+    { value: axisVal, index: axisIndex },
+    { value: longhandVal, index: longhandIndex },
+  ]);
   if (!isMediaOrPseudoMap(shorthandVal)) {
-    return baseValue ?? shorthandVal;
+    if (!base || shorthandIndex > base.index) {
+      return shorthandVal;
+    }
+    return base.value;
   }
-  const result: Record<string, unknown> = { default: baseValue ?? shorthandVal.default ?? null };
+  const defaultValue =
+    shorthandVal.default != null && (!base || shorthandIndex > base.index)
+      ? shorthandVal.default
+      : (base?.value ?? shorthandVal.default ?? null);
+  const result: Record<string, unknown> = { default: defaultValue };
   for (const [condition, conditionValue] of Object.entries(shorthandVal)) {
     if (condition !== "default" && conditionValue != null) {
       result[condition] = conditionValue;
     }
   }
   return result;
+}
+
+function latestIndexedValue(
+  candidates: Array<{ value: unknown; index: number }>,
+): { value: unknown; index: number } | null {
+  let latest: { value: unknown; index: number } | null = null;
+  for (const candidate of candidates) {
+    if (candidate.index < 0 || candidate.value === undefined) {
+      continue;
+    }
+    if (!latest || candidate.index > latest.index) {
+      latest = candidate;
+    }
+  }
+  return latest;
 }
 
 /**
