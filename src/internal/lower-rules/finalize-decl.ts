@@ -3173,14 +3173,7 @@ function baseSidesDeclaredAfterSnapshot(
   config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
 ): ReadonlySet<string> {
   const lateSides = new Set<string>();
-  const sidesByKey = new Map<string, string[]>([
-    [config.top, [config.top]],
-    [config.right, [config.right]],
-    [config.bottom, [config.bottom]],
-    [config.left, [config.left]],
-    [config.block, [config.top, config.bottom]],
-    [config.inline, [config.left, config.right]],
-  ]);
+  const sidesByKey = boxSidesByKey(config);
   for (const [key, value] of baseRawEntries) {
     const sides = sidesByKey.get(key);
     if (!sides || !declaredAfterSnapshot(snapshot, key, value)) {
@@ -3196,6 +3189,65 @@ function baseSidesDeclaredAfterSnapshot(
   return lateSides;
 }
 
+function boxSidesByKey(config: (typeof BOX_SHORTHAND_CONFLICTS)[number]): Map<string, string[]> {
+  return new Map<string, string[]>([
+    [config.top, [config.top]],
+    [config.right, [config.right]],
+    [config.bottom, [config.bottom]],
+    [config.left, [config.left]],
+    [config.block, [config.top, config.bottom]],
+    [config.inline, [config.left, config.right]],
+  ]);
+}
+
+/**
+ * Base side/axis values that exist only under conditions (nullish default).
+ * A variant's expanded shorthand side must keep these entries: pseudo/media
+ * condition classes target the same property, and a flat variant value would
+ * replace the base map entirely in `stylex.props()`.
+ */
+function conditionalBaseSides(
+  baseRawEntries: ReadonlyArray<readonly [string, unknown]>,
+  config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
+): ReadonlyMap<string, Record<string, unknown>> {
+  const conditionMaps = new Map<string, Record<string, unknown>>();
+  const sidesByKey = boxSidesByKey(config);
+  for (const [key, value] of baseRawEntries) {
+    const sides = sidesByKey.get(key);
+    if (!sides || !isMediaOrPseudoMap(value) || !hasNullishDefault(value)) {
+      continue;
+    }
+    for (const side of sides) {
+      conditionMaps.set(side, value);
+    }
+  }
+  return conditionMaps;
+}
+
+/**
+ * Merges base condition entries into a variant's expanded side value, keeping
+ * the variant in control of the default. Follows the same convention as
+ * computeMergedLonghand: condition entries win over the flat value.
+ */
+function mergeBaseConditionsIntoSideValue(
+  variantValue: unknown,
+  baseConditionMap: Record<string, unknown> | undefined,
+): unknown {
+  if (!baseConditionMap) {
+    return variantValue;
+  }
+  const merged: Record<string, unknown> = isMediaOrPseudoMap(variantValue)
+    ? { ...variantValue }
+    : { default: variantValue };
+  for (const [condition, conditionValue] of Object.entries(baseConditionMap)) {
+    if (condition === "default" || conditionValue == null || condition in merged) {
+      continue;
+    }
+    merged[condition] = conditionValue;
+  }
+  return merged;
+}
+
 /**
  * A base entry was (re)declared after the variant's snapshot when its key was
  * absent at snapshot time, or its value changed since — a redeclaration after
@@ -3206,7 +3258,35 @@ function declaredAfterSnapshot(
   key: string,
   value: unknown,
 ): boolean {
-  return !snapshot.has(key) || !Object.is(snapshot.get(key), value);
+  return !snapshot.has(key) || !styleValuesEquivalent(snapshot.get(key), value);
+}
+
+/**
+ * Structural equality for snapshot comparison: condition maps are compared by
+ * entries (snapshots clone them, and base merges may replace or mutate the map
+ * object), everything else by identity.
+ */
+function styleValuesEquivalent(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) {
+    return true;
+  }
+  if (!isPlainStyleValueMap(a) || !isPlainStyleValueMap(b)) {
+    return false;
+  }
+  const aEntries = Object.entries(a);
+  if (aEntries.length !== Object.keys(b).length) {
+    return false;
+  }
+  return aEntries.every(([key, value]) => key in b && styleValuesEquivalent(value, b[key]));
+}
+
+function isPlainStyleValueMap(value: unknown): value is Record<string, unknown> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type !== "string"
+  );
 }
 
 function harmonizeBoxShorthandExpansion(
@@ -3232,6 +3312,13 @@ function harmonizeBoxShorthandExpansion(
     const baseLateSides = options?.baseStyleObj
       ? lateSideOverrides.get(options.baseStyleObj)?.get(config.shorthand)
       : undefined;
+    const baseConditionalSides = options?.baseRawEntries
+      ? conditionalBaseSides(options.baseRawEntries, config)
+      : undefined;
+    const conditionalSidesFor = (
+      styleObj: Record<string, unknown>,
+    ): ReadonlyMap<string, Record<string, unknown>> | undefined =>
+      options?.inheritBaseLateSides?.has(styleObj) ? baseConditionalSides : undefined;
     const lateSidesFor = (styleObj: Record<string, unknown>): ReadonlySet<string> => {
       const localLateSides = lateSideOverrides.get(styleObj)?.get(config.shorthand);
       if (!options?.inheritBaseLateSides?.has(styleObj)) {
@@ -3257,7 +3344,7 @@ function harmonizeBoxShorthandExpansion(
     const targetLevel = levels.has("side") ? "side" : "axis";
     for (const obj of styleObjs) {
       if (targetLevel === "side") {
-        expandBoxLevelsToSides(obj, config, lateSidesFor(obj));
+        expandBoxLevelsToSides(obj, config, lateSidesFor(obj), conditionalSidesFor(obj));
       } else {
         expandBoxShorthandToAxis(obj, config, lateSidesFor(obj));
       }
@@ -3279,13 +3366,19 @@ function expandBoxLevelsToSides(
   styleObj: Record<string, unknown>,
   config: (typeof BOX_SHORTHAND_CONFLICTS)[number],
   lateSides: ReadonlySet<string>,
+  conditionalSides?: ReadonlyMap<string, Record<string, unknown>>,
 ): void {
   const hasSide = boxSideProps(config).some((prop) => prop in styleObj);
   const shorthandVal = styleObj[config.shorthand];
   const withoutLateSides = (
     replacements: ReadonlyArray<readonly [string, unknown]>,
   ): Array<readonly [string, unknown]> =>
-    replacements.filter(([sideProp]) => !lateSides.has(sideProp));
+    replacements
+      .filter(([sideProp]) => !lateSides.has(sideProp))
+      .map(([sideProp, value]) => [
+        sideProp,
+        mergeBaseConditionsIntoSideValue(value, conditionalSides?.get(sideProp)),
+      ]);
   if (shorthandVal !== undefined) {
     if (hasSide || config.block in styleObj || config.inline in styleObj) {
       return;
@@ -3530,6 +3623,7 @@ function harmonizeBorderRadiusExpansion(
     expandMultiValueBorderRadius(obj, {
       includeSingleValue: true,
       omitCorners: lateBaseCornersFor(obj, options),
+      mergeBaseConditionCorners: conditionalBaseCornersFor(obj, options),
     });
   }
 }
@@ -3566,9 +3660,34 @@ function lateBaseCornersFor(
   return lateCorners;
 }
 
+/** Conditional-only base corner maps a variant's expanded borderRadius must preserve. */
+function conditionalBaseCornersFor(
+  styleObj: Record<string, unknown>,
+  options?: HarmonizeShorthandOptions,
+): ReadonlyMap<string, Record<string, unknown>> | undefined {
+  if (!options?.inheritBaseLateSides?.has(styleObj) || !options.baseRawEntries) {
+    return undefined;
+  }
+  const conditionMaps = new Map<string, Record<string, unknown>>();
+  for (const [key, value] of options.baseRawEntries) {
+    if (!(BORDER_RADIUS_CORNER_PROPS as readonly string[]).includes(key)) {
+      continue;
+    }
+    if (!isMediaOrPseudoMap(value) || !hasNullishDefault(value)) {
+      continue;
+    }
+    conditionMaps.set(key, value);
+  }
+  return conditionMaps;
+}
+
 function expandMultiValueBorderRadius(
   styleObj: Record<string, unknown>,
-  options?: { includeSingleValue?: boolean; omitCorners?: ReadonlySet<string> },
+  options?: {
+    includeSingleValue?: boolean;
+    omitCorners?: ReadonlySet<string>;
+    mergeBaseConditionCorners?: ReadonlyMap<string, Record<string, unknown>>;
+  },
 ): void {
   const value = styleObj.borderRadius;
   if (value === undefined) {
@@ -3581,6 +3700,11 @@ function expandMultiValueBorderRadius(
   const next = expandBorderRadiusInStyleObject(styleObj, expanded, {
     omitCorners: options?.omitCorners,
   });
+  for (const [corner, conditionMap] of options?.mergeBaseConditionCorners ?? []) {
+    if (corner in next) {
+      next[corner] = mergeBaseConditionsIntoSideValue(next[corner], conditionMap);
+    }
+  }
   for (const key of Object.keys(styleObj)) {
     delete styleObj[key];
   }

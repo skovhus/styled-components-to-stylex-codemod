@@ -10891,6 +10891,130 @@ export const App = () => (
     expect(boxActive).toMatch(/borderBottomLeftRadius: 8/);
   });
 
+  it("should merge base pseudo longhands into variant shorthand expansion", () => {
+    // Base padding-top exists only under pseudo-classes (no default), with the
+    // :hover entry merged into the same condition map after the variant block.
+    // The variant's expanded paddingTop must carry its own default while
+    // preserving the base pseudo entries — pseudo selectors out-rank the
+    // variant class, and a flat paddingTop would drop them in stylex.props().
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  &:active {
+    padding-top: 5px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  &:hover {
+    padding-top: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/":active": 5/);
+    expect(boxActive).toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should merge media-only base longhands into variant shorthand expansion", () => {
+    // The media padding-top is redeclared into the same condition map after
+    // the variant block. The variant's expanded paddingTop must keep the media
+    // entry — a flat paddingTop would drop it in stylex.props() since both
+    // styles target the same property.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  @media (max-width: 600px) {
+    padding-top: 5px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  @media (max-width: 600px) {
+    padding-top: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+  });
+
+  it("should merge media-only base corners into variant border-radius expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  border-radius: 4px;
+  \${(p) => p.$active && css\`border-radius: 8px;\`}
+  @media (max-width: 600px) {
+    border-top-left-radius: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/borderTopLeftRadius: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/borderTopRightRadius: 8/);
+  });
+
   it("should keep later base longhands winning over earlier conditional css shorthands", () => {
     // Here `padding-top: 10px` appears after the conditional block, so it wins
     // for the top side even when $active — the variant must not emit paddingTop.

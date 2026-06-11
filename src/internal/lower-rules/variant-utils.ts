@@ -305,7 +305,12 @@ export const createVariantApplier = (args: {
       const snapshots =
         variantBaseKeySnapshots.get(decl) ?? new Map<string, ReadonlyMap<string, unknown>>();
       if (!snapshots.has(when)) {
-        snapshots.set(when, new Map(Object.entries(baseStyleObj)));
+        snapshots.set(
+          when,
+          new Map(
+            Object.entries(baseStyleObj).map(([key, value]) => [key, cloneSnapshotValue(value)]),
+          ),
+        );
         variantBaseKeySnapshots.set(decl, snapshots);
       }
     }
@@ -320,6 +325,25 @@ export const createVariantApplier = (args: {
 };
 
 // --- Non-exported helpers ---
+
+/**
+ * Clones plain condition-map values for snapshots so later in-place merges
+ * into the base style object cannot retroactively alter what the snapshot
+ * recorded. AST nodes are kept by reference — redeclarations replace them.
+ */
+function cloneSnapshotValue(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  if (typeof (value as { type?: unknown }).type === "string") {
+    return value;
+  }
+  const cloned: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    cloned[key] = cloneSnapshotValue(entryValue);
+  }
+  return cloned;
+}
 
 /**
  * Returns true if the string contains the given operator (`&&` or `||`)
