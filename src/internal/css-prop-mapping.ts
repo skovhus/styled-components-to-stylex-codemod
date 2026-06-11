@@ -3,6 +3,7 @@
  * Core concepts: background resolution and shorthand splitting.
  */
 import type { CssDeclarationIR, CssValue, CssValuePart } from "./css-ir.js";
+import { expandBorderRadiusShorthandValue } from "./css-border-radius.js";
 import { splitDirectionalProperty } from "./stylex-shorthands.js";
 import {
   isBackgroundImageValue,
@@ -249,6 +250,16 @@ export function cssDeclarationToStylexDeclarations(decl: CssDeclarationIR): Styl
     return borderShorthandToStylex(raw, "");
   }
 
+  if (prop === "border-radius" && decl.value.kind === "static") {
+    const expanded = borderRadiusShorthandToStylex(decl.valueRaw.trim());
+    if (expanded.length > 0) {
+      return expanded.map(({ prop, value }) => ({
+        prop,
+        value: { kind: "static", value },
+      }));
+    }
+  }
+
   // Handle directional border shorthands: border-top, border-right, border-bottom, border-left
   const borderDirectionMatch = prop.match(/^border-(top|right|bottom|left)$/);
   if (borderDirectionMatch) {
@@ -291,6 +302,19 @@ function normalizeGridLineSlashSpacing(stylexProp: string, value: CssValue): Css
     return value;
   }
   return { kind: "static", value: normalizeUnescapedSlashSpacing(value.value) };
+}
+
+function borderRadiusShorthandToStylex(raw: string): Array<{ prop: string; value: string }> {
+  const expanded = expandBorderRadiusShorthandValue(raw);
+  if (!expanded) {
+    return [];
+  }
+  return [
+    { prop: "borderTopLeftRadius", value: expanded.topLeft },
+    { prop: "borderTopRightRadius", value: expanded.topRight },
+    { prop: "borderBottomRightRadius", value: expanded.bottomRight },
+    { prop: "borderBottomLeftRadius", value: expanded.bottomLeft },
+  ];
 }
 
 function normalizeUnescapedSlashSpacing(value: string): string {

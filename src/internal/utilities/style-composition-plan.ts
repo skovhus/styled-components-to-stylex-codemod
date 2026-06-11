@@ -4,6 +4,7 @@
  */
 import type { StyledDecl } from "../transform-types.js";
 import type { TransformContext } from "../transform-context.js";
+import { getVariantSourceOrder } from "../lower-rules/variant-utils.js";
 
 export type StyleContributionSource =
   | "base"
@@ -26,6 +27,7 @@ export type StyleSequenceEntry = {
   contributes?: boolean;
   contributesDynamic?: boolean;
   source: StyleContributionSource;
+  sourceOrder?: number;
 };
 
 type OrderedTailEntry = {
@@ -246,6 +248,7 @@ function buildVariantAndStyleFnEntries(decl: StyledDecl): SequenceEntryGroup {
       patchable: true,
       contributes: false,
       source: "variant",
+      sourceOrder: getVariantSourceOrder(decl, when),
     } satisfies StyleSequenceEntry,
   }));
   const styleFnEntries = (decl.styleFnFromProps ?? []).map((styleFn) => ({
@@ -325,6 +328,7 @@ function buildVariantDimensionEntries(decl: StyledDecl): SequenceEntryGroup {
           patchable: true,
           contributes: false,
           source: "variant",
+          sourceOrder: dimension.sourceOrder,
         }) satisfies StyleSequenceEntry,
     );
     if (dimension.fallbackFnKey) {
@@ -332,6 +336,7 @@ function buildVariantDimensionEntries(decl: StyledDecl): SequenceEntryGroup {
         styleKey: dimension.fallbackFnKey,
         patchable: true,
         source: "styleFn",
+        sourceOrder: dimension.sourceOrder,
       });
     }
     if (dimension.sourceOrder === undefined) {

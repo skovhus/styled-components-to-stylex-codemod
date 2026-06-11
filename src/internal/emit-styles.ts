@@ -12,6 +12,7 @@ import {
 import { isJSDocBlockComment, lowerFirst } from "./utilities/string-utils.js";
 import { literalToAst, objectToAst } from "./transform/helpers.js";
 import type { TransformContext } from "./transform-context.js";
+import { expandStyleObjectShorthands } from "./lower-rules/style-object-normalization.js";
 import { findUncollectedStyledTemplateLoc } from "./utilities/uncollected-styled-template.js";
 import {
   assertValidImportSource,
@@ -552,7 +553,7 @@ export function emitStylesAndImports(ctx: TransformContext): { emptyStyleKeys: S
       "init",
       j.identifier(k),
       v && typeof v === "object" && !isAstNode(v)
-        ? objectToAst(j, v as Record<string, unknown>)
+        ? objectToAst(j, normalizeStyleObjectForEmission(v as Record<string, unknown>))
         : literalToAst(j, v),
     );
     const comments = styleKeyToComments.get(k);
@@ -760,7 +761,7 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
       "init",
       key,
       styles && typeof styles === "object" && !isAstNode(styles)
-        ? objectToAst(j, styles as Record<string, unknown>)
+        ? objectToAst(j, normalizeStyleObjectForEmission(styles as Record<string, unknown>))
         : literalToAst(j, styles),
     );
   });
@@ -775,6 +776,12 @@ function emitVariantDimensionDecl(j: any, dimension: VariantDimension): any {
   ]);
 
   return variantDecl;
+}
+
+function normalizeStyleObjectForEmission(
+  styleObj: Record<string, unknown>,
+): Record<string, unknown> {
+  return expandStyleObjectShorthands(styleObj);
 }
 
 /**

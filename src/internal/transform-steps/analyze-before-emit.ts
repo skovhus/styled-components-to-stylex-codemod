@@ -63,6 +63,7 @@ import { typeContainsPolymorphicAs } from "../utilities/polymorphic-as-detection
 import { addPropComments } from "../lower-rules/comments.js";
 import { buildRelationOverrideProperties } from "../lower-rules/relation-overrides.js";
 import { makeCssPropKey } from "../lower-rules/shared.js";
+import { renameVariantSourceOrderConditions } from "../lower-rules/variant-utils.js";
 import { wrappedComponentInterfaceFor } from "../utilities/wrapped-component-interface.js";
 import {
   propCommentMetadataToAstComments,
@@ -2519,6 +2520,7 @@ function applyTransientPropRenames(decl: StyledDecl, renames: Map<string, string
     }
     decl.variantSourceOrder = updated;
   }
+  renameVariantSourceOrderConditions(decl, (when) => renamePropsInWhenString(when, renames));
 
   if (decl.styleFnFromProps) {
     for (const sf of decl.styleFnFromProps) {
@@ -5027,6 +5029,12 @@ function validateSxRestrictedWrappedComponentStyles(
         if (!disallowedProperty) {
           continue;
         }
+        /**
+         * Keep this as a warning instead of bailing. Some component wrappers expose
+         * narrow style APIs (for example icon `color` props instead of raw `fill`
+         * styles), but the generated output is still localized and manually fixable
+         * by the migration author.
+         */
         ctx.warnings.push({
           severity: "warning",
           type: "Wrapped component sx prop does not accept generated StyleX property",

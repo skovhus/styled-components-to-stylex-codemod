@@ -11,6 +11,7 @@ import {
   type StyleContributionSource,
   type StyleSequenceEntry,
 } from "./style-composition-plan.js";
+import { getConditionSourceOrder } from "../lower-rules/condition-source-order.js";
 
 export type DefaultInference =
   | { kind: "static"; value: string | number | boolean | null }
@@ -25,6 +26,7 @@ export type PropertyShape =
       defaultValue: DefaultInference;
       conditionKeys: string[];
       staticConditions?: Record<string, StaticStyleValue>;
+      conditionSourceOrders?: Record<string, number>;
     }
   | { kind: "dynamic" };
 
@@ -67,6 +69,7 @@ export function patchFlatValueAgainstPriorPropertyShape(
   prop: string,
   earlier: PropertyShape,
   laterSource: StyleContributionSource = "mixin",
+  laterSourceOrder?: number,
 ): "patched" | "safe" | "bail" {
   if (earlier.kind !== "conditionalMap") {
     return "safe";
@@ -75,7 +78,11 @@ export function patchFlatValueAgainstPriorPropertyShape(
   if (current.kind !== "flat") {
     return "safe";
   }
-  const preservedConditions = staticConditionsPreservedByLaterFlat(earlier, laterSource);
+  const preservedConditions = staticConditionsPreservedByLaterFlat(
+    earlier,
+    laterSource,
+    laterSourceOrder,
+  );
   if (!preservedConditions) {
     return "bail";
   }
@@ -206,8 +213,13 @@ function patchConditionalDefaultsForSequence(args: {
             : source);
         contributionSource = patchTarget;
         if (
-          patchFlatValueAgainstPriorPropertyShape(patchTarget, prop, earlier, entry.source) !==
-          "bail"
+          patchFlatValueAgainstPriorPropertyShape(
+            patchTarget,
+            prop,
+            earlier,
+            entry.source,
+            entry.sourceOrder,
+          ) !== "bail"
         ) {
           continue;
         }
@@ -599,6 +611,7 @@ function inferPropertyShapeFromValue(value: unknown): PropertyShape {
     const defaultValue = value.default;
     const conditionKeys = Object.keys(value).filter(isStyleConditionKey);
     const staticConditions = readStaticConditionValues(value, conditionKeys);
+    const conditionSourceOrders = readConditionSourceOrders(value, conditionKeys);
     return {
       kind: "conditionalMap",
       defaultValue: isStaticStyleValue(defaultValue)
@@ -608,6 +621,7 @@ function inferPropertyShapeFromValue(value: unknown): PropertyShape {
         : { kind: "dynamic" },
       conditionKeys,
       ...(staticConditions ? { staticConditions } : {}),
+      ...(conditionSourceOrders ? { conditionSourceOrders } : {}),
     };
   }
   return { kind: "dynamic" };
@@ -631,14 +645,37 @@ function readStaticConditionValues(
   return conditions;
 }
 
+function readConditionSourceOrders(
+  value: Record<string, unknown>,
+  conditionKeys: readonly string[],
+): Record<string, number> | undefined {
+  const orders: Record<string, number> = {};
+  for (const key of conditionKeys) {
+    const sourceOrder = getConditionSourceOrder(value, key);
+    if (sourceOrder !== undefined) {
+      orders[key] = sourceOrder;
+    }
+  }
+  return Object.keys(orders).length ? orders : undefined;
+}
+
 function staticConditionsPreservedByLaterFlat(
   earlier: Extract<PropertyShape, { kind: "conditionalMap" }>,
   laterSource: StyleContributionSource,
+  laterSourceOrder: number | undefined,
 ): Record<string, StaticStyleValue> | undefined {
   const minSpecificity = conditionSpecificityNeededToOutrankFlatSource(laterSource);
-  const preservedKeys = earlier.conditionKeys.filter(
-    (key) => conditionSpecificity(key) > minSpecificity,
-  );
+  const preservedKeys = earlier.conditionKeys.filter((key) => {
+    const conditionSourceOrder = earlier.conditionSourceOrders?.[key];
+    if (
+      laterSourceOrder !== undefined &&
+      conditionSourceOrder !== undefined &&
+      conditionSourceOrder <= laterSourceOrder
+    ) {
+      return false;
+    }
+    return conditionSpecificity(key) > minSpecificity;
+  });
   if (preservedKeys.length === 0) {
     return {};
   }

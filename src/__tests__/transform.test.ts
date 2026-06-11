@@ -10715,6 +10715,766 @@ export const App = () => <Input readOnly value="test" />;
 });
 
 describe("shorthand/longhand normalization edge cases", () => {
+  it("should let later box shorthands reset earlier side longhands", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding-top: 8px;
+  padding: 4px;
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingTop: 4");
+    expect(result.code).toContain("paddingRight: 4");
+    expect(result.code).toContain("paddingBottom: 4");
+    expect(result.code).toContain("paddingLeft: 4");
+  });
+
+  it("should expand variant borderRadius when the base expands to corner longhands", () => {
+    // StyleX gives corner longhands (priority 4000) precedence over the
+    // borderRadius shorthand (priority 2000) regardless of application order.
+    // When the base styles expand a multi-value border-radius into corner
+    // longhands, a variant's single-value borderRadius must be expanded too,
+    // or the variant could never override the base.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div<{ rounded?: boolean }>\`
+  border-radius: \${(props) => (props.rounded ? "4px" : "16px 0")};
+  color: red;
+\`;
+
+export const App = () => (
+  <>
+    <Box rounded>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxRounded = result.code.match(/boxRounded:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxRounded).toBeTruthy();
+    expect(boxRounded).not.toMatch(/borderRadius:/);
+    expect(boxRounded).toMatch(/borderTopLeftRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderTopRightRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderBottomRightRadius: (?:"4px"|4)/);
+    expect(boxRounded).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
+  });
+
+  it("should let later conditional css shorthands reset earlier base longhands", () => {
+    // The conditional block appears after `padding-top: 10px` in source, so an
+    // active element's `padding: 8px` resets the top to 8px. The variant
+    // expansion must include paddingTop here — the base late-side suppression
+    // only applies to variants whose shorthand precedes the base longhand.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  padding: 4px;
+  padding-top: 10px;
+  \${(p) => p.$active && css\`padding: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: 8/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should keep redeclared base longhands winning over earlier conditional css shorthands", () => {
+    // padding-top exists before the conditional block but is redeclared after
+    // it — the later 10px declaration wins for active elements too, so the
+    // variant expansion must not emit paddingTop.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  padding-top: 5px;
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  padding-top: 10px;
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    expect(result.code).toMatch(/paddingTop: 10/);
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).not.toMatch(/paddingTop/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should keep later base corner overrides winning over conditional border-radius", () => {
+    // border-top-left-radius: 10px appears after the conditional block, so it
+    // wins for active elements too — the variant's borderRadius expansion must
+    // not emit borderTopLeftRadius.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  border-radius: 4px;
+  \${(p) => p.$active && css\`border-radius: 8px;\`}
+  border-top-left-radius: 10px;
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    expect(result.code).toMatch(/borderTopLeftRadius: 10/);
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).not.toMatch(/borderTopLeftRadius/);
+    expect(boxActive).toMatch(/borderTopRightRadius: 8/);
+    expect(boxActive).toMatch(/borderBottomRightRadius: 8/);
+    expect(boxActive).toMatch(/borderBottomLeftRadius: 8/);
+  });
+
+  it("should merge only later base pseudo longhands into variant shorthand expansion", () => {
+    // The :active entry appears before the variant block, so the variant's
+    // shorthand resets it. The :hover entry is added after the variant block,
+    // so the variant's expanded paddingTop must preserve it.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  &:active {
+    padding-top: 5px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  &:hover {
+    padding-top: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).not.toMatch(/":active": 5/);
+    expect(boxActive).toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should not merge earlier base pseudo longhands into variant shorthand expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  &:hover {
+    padding-top: 10px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: 8/);
+    expect(boxActive).not.toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+  });
+
+  it("should merge media-only base longhands into variant shorthand expansion", () => {
+    // The media padding-top is redeclared into the same condition map after
+    // the variant block. The variant's expanded paddingTop must keep the media
+    // entry — a flat paddingTop would drop it in stylex.props() since both
+    // styles target the same property.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  @media (max-width: 600px) {
+    padding-top: 5px;
+  }
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  @media (max-width: 600px) {
+    padding-top: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+  });
+
+  it("should merge overlapping later conditional base sides into variant shorthand expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  &:hover {
+    padding-top: 10px;
+  }
+  @media (max-width: 600px) {
+    padding-block: 12px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/paddingTop: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/":hover": 10/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 12/);
+    expect(boxActive).toMatch(/paddingBottom: \{/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+  });
+
+  it("should merge media-only base corners into variant border-radius expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  border-radius: 4px;
+  \${(p) => p.$active && css\`border-radius: 8px;\`}
+  @media (max-width: 600px) {
+    border-top-left-radius: 10px;
+  }
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/borderTopLeftRadius: \{/);
+    expect(boxActive).toMatch(/default: 8/);
+    expect(boxActive).toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/borderTopRightRadius: 8/);
+  });
+
+  it("should not merge earlier media-only base corners into variant border-radius expansion", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  border-radius: 4px;
+  @media (max-width: 600px) {
+    border-top-left-radius: 10px;
+  }
+  \${(p) => p.$active && css\`border-radius: 8px;\`}
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).toMatch(/borderTopLeftRadius: 8/);
+    expect(boxActive).not.toMatch(/"@media \(max-width: 600px\)": 10/);
+    expect(boxActive).toMatch(/borderTopRightRadius: 8/);
+  });
+
+  it("should keep later base longhands winning over earlier conditional css shorthands", () => {
+    // Here `padding-top: 10px` appears after the conditional block, so it wins
+    // for the top side even when $active — the variant must not emit paddingTop.
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ $active?: boolean }>\`
+  padding: 4px;
+  \${(p) => p.$active && css\`padding: 8px;\`}
+  padding-top: 10px;
+\`;
+
+export const App = () => (
+  <>
+    <Box $active>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxActive = result.code.match(/boxActive:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxActive).toBeTruthy();
+    expect(boxActive).not.toMatch(/paddingTop/);
+    expect(boxActive).toMatch(/paddingRight: 8/);
+    expect(boxActive).toMatch(/paddingBottom: 8/);
+    expect(boxActive).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should expand variant padding shorthands when the base carries side longhands", () => {
+    // StyleX side longhands (4000) always beat the padding shorthand (1000),
+    // so a variant keeping `padding` could never override base side longhands.
+    // The variant expands to sides — except sides whose base longhand was
+    // declared after the shorthand (padding-top here), which must keep winning.
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: \${(props) => (props.big ? "8px" : "4px")};
+  padding-top: 2px;
+\`;
+
+export const App = () => (
+  <>
+    <Box big>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxBig = result.code.match(/boxBig:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxBig).toBeTruthy();
+    expect(boxBig).not.toMatch(/\bpadding:/);
+    expect(boxBig).toMatch(/paddingRight: 8/);
+    expect(boxBig).toMatch(/paddingBottom: 8/);
+    expect(boxBig).toMatch(/paddingLeft: 8/);
+    // padding-top: 2px is declared after the shorthand, so it wins for both
+    // variants and the big variant must not re-introduce a paddingTop.
+    expect(boxBig).not.toMatch(/paddingTop/);
+    expect(result.code).toMatch(/paddingTop: 2/);
+  });
+
+  it("should expand variant padding to all sides when a longhand precedes the shorthand", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding-top: 2px;
+  padding: \${(props) => (props.big ? "8px" : "4px")};
+\`;
+
+export const App = () => (
+  <>
+    <Box big>a</Box>
+    <Box>b</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const boxBig = result.code.match(/boxBig:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(boxBig).toBeTruthy();
+    expect(boxBig).toMatch(/paddingTop: 8/);
+    expect(boxBig).toMatch(/paddingRight: 8/);
+    expect(boxBig).toMatch(/paddingBottom: 8/);
+    expect(boxBig).toMatch(/paddingLeft: 8/);
+  });
+
+  it("should expand multi-value border-radius inside media query maps", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px;
+  @media (max-width: 600px) {
+    border-radius: 4px 0;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    // The media override expands to corner longhands; the base single value
+    // must expand too so it stays overridable (corner longhands always beat
+    // the borderRadius shorthand in StyleX, regardless of application order),
+    // and the base value must fill each corner map's default slot.
+    expect(result.code).not.toMatch(/borderRadius:/);
+    expect(result.code).toMatch(/borderTopLeftRadius: \{/);
+    expect(result.code).toMatch(/borderTopRightRadius: \{/);
+    expect(result.code).toMatch(/default: (?:"8px"|8)/);
+    expect(result.code).not.toMatch(/default: null/);
+    expect(result.code).toMatch(/"@media \(max-width: 600px\)": (?:"4px"|4)/);
+    expect(result.code).toMatch(/"@media \(max-width: 600px\)": (?:"0"|0)/);
+  });
+
+  it("should preserve border radius shorthand and corner source order", () => {
+    const source = `
+import styled from "styled-components";
+
+const LaterCorner = styled.div\`
+  border-radius: 8px 4px;
+  border-top-left-radius: 2px;
+\`;
+
+const LaterShorthand = styled.div\`
+  border-top-left-radius: 2px;
+  border-radius: 8px 4px;
+\`;
+
+export const App = () => (
+  <>
+    <LaterCorner>corner</LaterCorner>
+    <LaterShorthand>shorthand</LaterShorthand>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const laterCorner = result.code.match(/laterCorner:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    const laterShorthand = result.code.match(/laterShorthand:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(laterCorner).toBeTruthy();
+    expect(laterShorthand).toBeTruthy();
+    expect(laterCorner).toMatch(/borderTopLeftRadius: 2/);
+    expect(laterCorner).toMatch(/borderTopRightRadius: (?:"4px"|4)/);
+    expect(laterCorner).toMatch(/borderBottomRightRadius: (?:"8px"|8)/);
+    expect(laterCorner).toMatch(/borderBottomLeftRadius: (?:"4px"|4)/);
+    expect(laterShorthand).toMatch(/borderTopLeftRadius: (?:"8px"|8)/);
+  });
+
+  it("should preserve shorthand defaults for conditional side overrides", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px;
+  &:hover {
+    padding-top: 8px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/paddingTop: \{/);
+    expect(box).toMatch(/default: 4/);
+    expect(box).toMatch(/":hover": 8/);
+  });
+
+  it("should merge conditional shorthand and longhand side maps", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px;
+  &:hover {
+    padding: 8px;
+  }
+  &:active {
+    padding-top: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/paddingTop: \{/);
+    expect(box).toMatch(/default: 4/);
+    expect(box).toMatch(/":hover": 8/);
+    expect(box).toMatch(/":active": 2/);
+    expect(box).not.toMatch(/default: \{/);
+  });
+
+  it("should keep late side overrides local to their own variant bucket", () => {
+    const source = `
+import styled, { css } from "styled-components";
+
+const Box = styled.div<{ active?: boolean; disabled?: boolean }>\`
+  padding: 4px;
+  \${(p) =>
+    p.active &&
+    css\`
+      padding: 8px;
+      padding-top: 10px;
+    \`}
+  \${(p) =>
+    p.disabled &&
+    css\`
+      padding: 12px;
+    \`}
+\`;
+
+export const App = () => (
+  <>
+    <Box>base</Box>
+    <Box active>active</Box>
+    <Box disabled>disabled</Box>
+  </>
+);
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const disabled = result.code.match(/boxDisabled:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(disabled).toBeTruthy();
+    expect(disabled).toMatch(/paddingTop: 12/);
+    expect(disabled).toMatch(/paddingRight: 12/);
+    expect(disabled).toMatch(/paddingBottom: 12/);
+    expect(disabled).toMatch(/paddingLeft: 12/);
+  });
+
+  it("should preserve radius defaults for conditional corner overrides", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px 4px;
+  &:hover {
+    border-top-left-radius: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/borderTopLeftRadius: \{/);
+    expect(box).toMatch(/default: (?:"8px"|8)/);
+    expect(box).toMatch(/":hover": (?:"2px"|2)/);
+  });
+
+  it("should preserve prior conditional radius entries when a later corner map is merged", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  border-radius: 8px;
+  &:hover {
+    border-radius: 4px;
+  }
+  &:active {
+    border-top-left-radius: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    expect(result.code).toMatch(/borderTopLeftRadius: \{/);
+    expect(result.code).toMatch(/default: (?:"8px"|8)/);
+    expect(result.code).toMatch(/":hover": (?:"4px"|4)/);
+    expect(result.code).toMatch(/":active": (?:"2px"|2)/);
+  });
+
   it("should expand 2-value physical conflict to 4 physical longhands, not logical", () => {
     // Regression: splitDirectionalProperty returns logical Block/Inline for 2-value shorthands
     // even when alwaysExpand is true, but when there's a physical conflict (e.g., marginBottom),
@@ -11497,7 +12257,12 @@ export const App = () => <Box $active>test</Box>;
     expect(result.code).toContain('":hover": 2');
   });
 
-  it("should seed logical pseudo maps from earlier conditional physical styles", () => {
+  it("should expand later logical axis overrides to physical sides when mixed with physical styles", () => {
+    // The axis shorthand (paddingInline, priority 2000) can never beat a side
+    // longhand (paddingRight, priority 4000) in StyleX, so the $b variant gets
+    // expanded to physical sides. Each variant keeps only its own values: with
+    // $a and $b, the default comes from $a's paddingRight and the hover value
+    // from $b's expanded sides; with $b alone there is no phantom default.
     const source = `
 import styled, { css } from "styled-components";
 
@@ -11525,8 +12290,10 @@ export const App = () => <Box $a $b>test</Box>;
       { adapter: { ...fixtureAdapter, usePhysicalProperties: true } },
     );
     expect(result.code).not.toBeNull();
+    expect(result.code).toContain("paddingRight: 8");
     expect(result.code).toContain("paddingRight: {");
-    expect(result.code).toContain("default: 8");
+    expect(result.code).toContain("paddingLeft: {");
+    expect(result.code).not.toContain("paddingInline");
     expect(result.code).toContain('":hover": 2');
   });
 

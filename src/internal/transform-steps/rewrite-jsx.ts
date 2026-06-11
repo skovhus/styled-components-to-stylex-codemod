@@ -897,12 +897,12 @@ export function rewriteJsxStep(ctx: TransformContext): StepResult {
             // Strip transient props only for intrinsic elements:
             // - Props starting with $ (original transient props)
             // - Props that were renamed from $-prefixed names (via transientPropRenames)
-            // For styled(Component), transient props should still reach the wrapped component
-            // (unless consumed by styleFnFromProps, which is handled above).
-            if (
-              (n.startsWith("$") || renamedTransientValues?.has(n)) &&
-              decl.base.kind === "intrinsic"
-            ) {
+            // The style-consuming paths above have already handled props that are
+            // needed for generated variants/style functions.
+            const shouldStripRenamedTransient =
+              renamedTransientValues?.has(n) &&
+              (decl.base.kind === "intrinsic" || styleFnProps.has(n) || variantProps.has(n));
+            if (n.startsWith("$") || shouldStripRenamedTransient) {
               return;
             }
             output.push(attr);

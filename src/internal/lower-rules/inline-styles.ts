@@ -3,7 +3,7 @@
  * Core concepts: prop extraction, conditional detection, and template assembly.
  */
 import type { JSCodeshift } from "jscodeshift";
-import type { ImportSpec } from "../../adapter.js";
+import type { ImportSource, ImportSpec } from "../../adapter.js";
 import {
   type ASTNodeRecord,
   cloneAstNode,
@@ -24,6 +24,11 @@ import {
   maybeOmitPxUnitFromStylexStyleValue,
   maybeOmitPxUnitFromStylexValue,
 } from "../utilities/stylex-numeric-values.js";
+import {
+  collectNumericStylexImportBindings,
+  type StylexImportBinding,
+} from "../utilities/stylex-numeric-imports.js";
+import { isStylexImportSource } from "../utilities/stylex-import-source.js";
 import { findInAst, isMemberExpression, mapAst, walkAst } from "./utils.js";
 
 export {
@@ -33,7 +38,10 @@ export {
   maybeOmitPxUnitFromStylexValue,
 };
 
-type StylexImportMapEntry = { source?: { value?: string } } | null | undefined;
+type StylexImportMapEntry =
+  | { importedName?: string; source?: ImportSource | { value?: string } }
+  | null
+  | undefined;
 
 export function getImportedStylexIdentifiers(
   importMap: ReadonlyMap<string, StylexImportMapEntry>,
@@ -41,12 +49,13 @@ export function getImportedStylexIdentifiers(
 ): Set<string> {
   const identifiers = new Set<string>();
   for (const [localName, importEntry] of importMap) {
-    if (importEntry?.source?.value?.includes(".stylex")) {
+    const sourceValue = importEntry?.source?.value;
+    if (typeof sourceValue === "string" && isStylexImportSource(sourceValue)) {
       identifiers.add(localName);
     }
   }
   for (const importSpec of resolverImports.values()) {
-    if (!importSpec.from.value.includes(".stylex")) {
+    if (!isStylexImportSource(importSpec.from.value)) {
       continue;
     }
     for (const name of importSpec.names) {
@@ -54,6 +63,41 @@ export function getImportedStylexIdentifiers(
     }
   }
   return identifiers;
+}
+
+export function getNumericImportedStylexIdentifiers(
+  j: JSCodeshift,
+  filePath: string,
+  importMap: ReadonlyMap<string, StylexImportMapEntry>,
+  resolverImports: ReadonlyMap<string, ImportSpec>,
+): Set<string> {
+  const bindings: StylexImportBinding[] = [];
+  for (const [localName, importEntry] of importMap) {
+    const source = importEntry?.source;
+    const sourceValue = source?.value;
+    const importedName = importEntry?.importedName;
+    if (!source || typeof sourceValue !== "string" || !importedName) {
+      continue;
+    }
+    bindings.push({
+      localName,
+      importedName,
+      source:
+        "kind" in source
+          ? (source as ImportSource)
+          : { kind: "specifier" as const, value: sourceValue },
+    });
+  }
+  for (const importSpec of resolverImports.values()) {
+    for (const name of importSpec.names) {
+      bindings.push({
+        localName: name.local ?? name.imported,
+        importedName: name.imported,
+        source: importSpec.from,
+      });
+    }
+  }
+  return collectNumericStylexImportBindings({ j, filePath, bindings });
 }
 
 // Build a template literal with static prefix/suffix around a dynamic expression.

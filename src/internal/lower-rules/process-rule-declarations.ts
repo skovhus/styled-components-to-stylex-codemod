@@ -49,6 +49,7 @@ export function processRuleDeclarations(args: RuleDeclarationContext): void {
   const { state } = ctx;
 
   for (const d of rule.declarations) {
+    ctx.setCurrentDeclarationSourceOrder(d.sourceOrder);
     // Dynamic property names (slot placeholders in property position) such as
     // `${CSS_VAR}: 100%;`. Try to resolve every placeholder in the property
     // name to a static string (e.g. via a top-level `const X = "--var"`). If

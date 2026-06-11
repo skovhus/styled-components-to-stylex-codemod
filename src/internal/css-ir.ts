@@ -34,6 +34,8 @@ export type CssDeclarationIR = {
    * This is preserved as a JS line comment on the corresponding StyleX object property.
    */
   trailingLineComment?: string;
+  /** Raw declaration/interpolation order from the original template, when recoverable. */
+  sourceOrder?: number;
 };
 
 export type CssRuleIR = {
@@ -199,6 +201,41 @@ export function normalizeStylisAstToIR(
     rules.push(created);
     return created;
   };
+
+  const recoveredSelectorAliases = (selector: string): string[] => {
+    const normalized = normalizeRecoveredSelector(selector);
+    const aliases = [normalized];
+    const withoutLeadingAmpersands = splitTopLevelSelectorList(normalized)
+      .map((part) => (part.startsWith("&") && part.length > 1 ? part.slice(1) : part))
+      .join(",");
+    if (withoutLeadingAmpersands && withoutLeadingAmpersands !== normalized) {
+      aliases.push(withoutLeadingAmpersands);
+    }
+    return aliases;
+  };
+
+  const findRecoveredRule = (selector: string, stack: string[]): CssRuleIR | undefined => {
+    const aliases = recoveredSelectorAliases(selector);
+    for (const alias of aliases) {
+      const rule = findRule(alias, stack);
+      if (rule) {
+        return rule;
+      }
+    }
+    for (const rule of rules) {
+      if (!sameArray(rule.atRuleStack, stack)) {
+        continue;
+      }
+      const normalizedRuleSelector = rule.selector.replace(/^(?:__SC_EXPR_\d+__\s*)+/, "").trim();
+      if (aliases.includes(normalizedRuleSelector)) {
+        return rule;
+      }
+    }
+    return undefined;
+  };
+
+  const ensureRecoveredRule = (selector: string, stack: string[]): CssRuleIR =>
+    findRecoveredRule(selector, stack) ?? ensureRule(normalizeRecoveredSelector(selector), stack);
 
   const visit = (node: Element | Element[] | undefined): void => {
     if (!node) {
@@ -372,6 +409,7 @@ export function normalizeStylisAstToIR(
     const selectorStack: string[] = [];
     const recoveryAtRuleStack: string[] = [];
     const rawDeclarationCountByRule = new WeakMap<CssRuleIR, number>();
+    let rawSourceOrder = 0;
 
     const recordRawDeclarations = (
       trimmed: string,
@@ -382,14 +420,19 @@ export function normalizeStylisAstToIR(
       if (!decls.length) {
         return;
       }
-      const targetRule = findRule(normalizeRecoveredSelector(selector), recoveryAtRules);
+      const targetRule = findRecoveredRule(selector, recoveryAtRules);
       if (!targetRule) {
         return;
       }
-      rawDeclarationCountByRule.set(
-        targetRule,
-        (rawDeclarationCountByRule.get(targetRule) ?? 0) + decls.length,
-      );
+      const rawDeclarationCount = rawDeclarationCountByRule.get(targetRule) ?? 0;
+      for (let i = 0; i < decls.length; i++) {
+        const targetDecl = targetRule.declarations[rawDeclarationCount + i];
+        if (targetDecl) {
+          targetDecl.sourceOrder ??= rawSourceOrder;
+        }
+        rawSourceOrder++;
+      }
+      rawDeclarationCountByRule.set(targetRule, rawDeclarationCount + decls.length);
     };
 
     const recoverPlaceholder = (
@@ -412,25 +455,34 @@ export function normalizeStylisAstToIR(
       // Stylis correctly places placeholders that are part of multi-value properties
       // (e.g. `background: linear-gradient(...), __SC_EXPR_1__`), so recovery would
       // create a duplicate property-less declaration for slots that are already placed.
-      const alreadyUsed = rules.some((r) =>
-        r.declarations.some((decl) => {
-          if (decl.value.kind !== "interpolated") {
-            return false;
+      const existingSlotDecl = (() => {
+        for (const r of rules) {
+          for (const decl of r.declarations) {
+            if (decl.value.kind !== "interpolated") {
+              continue;
+            }
+            if (
+              (decl.value.parts as Array<{ kind: string; slotId?: number }>).some(
+                (p) => p.kind === "slot" && p.slotId === mapped,
+              )
+            ) {
+              return decl;
+            }
           }
-          return (decl.value.parts as Array<{ kind: string; slotId?: number }>).some(
-            (p) => p.kind === "slot" && p.slotId === mapped,
-          );
-        }),
-      );
-      if (alreadyUsed) {
+        }
+        return null;
+      })();
+      if (existingSlotDecl) {
+        existingSlotDecl.sourceOrder ??= rawSourceOrder++;
         return false;
       }
-      const targetRule = ensureRule(normalizeRecoveredSelector(selector), recoveryAtRules);
+      const targetRule = ensureRecoveredRule(selector, recoveryAtRules);
       const decl: CssDeclarationIR = {
         property: "",
         value: { kind: "interpolated", parts: [{ kind: "slot", slotId: mapped }] },
         important: false,
         valueRaw: placeholder,
+        sourceOrder: rawSourceOrder++,
       };
       if (shouldPreserveRawDeclarationPosition) {
         const rawDeclarationCount = rawDeclarationCountByRule.get(targetRule) ?? 0;
