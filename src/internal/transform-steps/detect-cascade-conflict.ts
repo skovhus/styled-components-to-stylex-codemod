@@ -76,6 +76,10 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
 
     const baseIdent = decl.base.ident;
     const baseImportLocalName = rootLocalName(baseIdent);
+    // For `styled(Imported.Member)` the import resolves the root binding, but the
+    // wrapped component is the static member — carry the member path into every
+    // dependency check so a clean root cannot mask a styled-dependent member.
+    const baseMemberPath = baseIdent.split(".").slice(1);
 
     // Skip if the base is a locally defined styled-component (delegation handles it)
     if (localStyledNames.has(baseIdent) || localStyledNames.has(baseImportLocalName)) {
@@ -101,7 +105,12 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
     // Leaves-only mode: wrapping another leaf styled component from this transform run
     // is safe — both sides become StyleX; skip the conservative imported-styled bail.
     // Import paths omit extensions while prepass keys use resolved files — probe extensions.
-    if (ctx.options.transformMode === "leavesOnly" && ctx.options.globalLeafKeys?.size) {
+    // Leaf keys identify the root export only, so they cannot vouch for a static member.
+    if (
+      baseMemberPath.length === 0 &&
+      ctx.options.transformMode === "leavesOnly" &&
+      ctx.options.globalLeafKeys?.size
+    ) {
       if (
         globalLeafKeyExists(
           ctx.options.globalLeafKeys,
@@ -136,6 +145,7 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
             names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
           },
           definition.importedName,
+          baseMemberPath,
         ))
     ) {
       continue;
@@ -154,12 +164,15 @@ export function detectCascadeConflictStep(ctx: TransformContext): StepResult {
           names: unconvertedStyledDefinitionNames(styledDefinitions, transformedComponents),
         },
         definition.importedName,
+        baseMemberPath,
       )
     ) {
       continue;
     }
 
-    if (canSkipCascadeForStylexExport(ctx, styledDefinitions, definition.importedName)) {
+    if (
+      canSkipCascadeForStylexExport(ctx, styledDefinitions, definition.importedName, baseMemberPath)
+    ) {
       continue;
     }
 
@@ -345,13 +358,14 @@ function canSkipCascadeForStylexExport(
   ctx: TransformContext,
   styledDefinitions: StyledDefinitionFile,
   bindingName: string,
+  memberPath: readonly string[],
 ): boolean {
   return (
     componentExportExists(
       ctx.options.crossFileInfo?.stylexComponentFiles,
       styledDefinitions.path,
       bindingName,
-    ) && bindingIsIndependentOfStyledDefinitions(ctx, styledDefinitions, bindingName)
+    ) && bindingIsIndependentOfStyledDefinitions(ctx, styledDefinitions, bindingName, memberPath)
   );
 }
 
@@ -359,12 +373,14 @@ function bindingIsIndependentOfStyledDefinitions(
   ctx: TransformContext,
   styledDefinitions: StyledDefinitionFile,
   bindingName: string,
+  memberPath: readonly string[],
 ): boolean {
-  if (bindingDependsOnStyledDefinitions(styledDefinitions, bindingName)) {
+  if (bindingDependsOnStyledDefinitions(styledDefinitions, bindingName, memberPath)) {
     return false;
   }
   return !bindingDependsOnImportedStyledDefinitions({
     bindingName,
+    memberPath,
     sourcePath: styledDefinitions.path,
     styledDefFiles: ctx.options.crossFileInfo?.styledDefFiles,
     stylexComponentFiles: ctx.options.crossFileInfo?.stylexComponentFiles,
@@ -425,6 +441,7 @@ function transformedNamesForPath(
 function bindingDependsOnStyledDefinitions(
   styledDefinitions: StyledDefinitionFile,
   bindingName: string,
+  memberPath: readonly string[] = [],
 ): boolean {
   if (styledDefinitions.names.size === 0) {
     return false;
@@ -436,6 +453,7 @@ function bindingDependsOnStyledDefinitions(
         exportedName: bindingName,
         includeDefault: bindingName === "default",
         localNames: styledDefinitions.names,
+        memberPath,
       })
     : true;
 }
@@ -443,6 +461,7 @@ function bindingDependsOnStyledDefinitions(
 function bindingDependsOnImportedStyledDefinitions(args: {
   sourcePath: string;
   bindingName: string;
+  memberPath?: readonly string[];
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
@@ -469,6 +488,7 @@ function bindingDependsOnImportedStyledDefinitions(args: {
       exportedName: args.bindingName,
       includeDefault: args.bindingName === "default",
       localNames: importedStyledNames,
+      memberPath: args.memberPath ?? [],
     })
   );
 }
