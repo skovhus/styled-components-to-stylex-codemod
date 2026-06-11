@@ -554,6 +554,8 @@ function bindingDependsOnImportedStyledDefinitions(args: {
 
 function collectImportedStyledLocalNames(args: {
   sourcePath: string;
+  bindingName: string;
+  memberPath?: readonly string[];
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
   resolveModule: ModuleResolver | undefined;
@@ -562,7 +564,7 @@ function collectImportedStyledLocalNames(args: {
 }): Set<string> | null {
   const source = tryReadFile(args.sourcePath);
   const program = source ? parseProgram(source) : null;
-  if (!program) {
+  if (!source || !program) {
     return null;
   }
 
@@ -597,8 +599,17 @@ function collectImportedStyledLocalNames(args: {
     const styledDefinitions =
       (args.styledDefFiles && resolveStyledDefFile(resolvedPath, args.styledDefFiles)) ||
       scanFileForStyledDefs(resolvedPath, importEntry.importedName, args.resolveModule);
+    const memberPath = exportedMemberReferencesImportedRoot({
+      source,
+      bindingName: args.bindingName,
+      memberPath: args.memberPath ?? [],
+      localName,
+    })
+      ? args.memberPath
+      : undefined;
     recordImportedStyledNameIfNeeded(importedStyledNames, localName, {
       bindingName: importEntry.importedName,
+      memberPath,
       styledDefinitions,
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
@@ -611,11 +622,30 @@ function collectImportedStyledLocalNames(args: {
   return importedStyledNames;
 }
 
+function exportedMemberReferencesImportedRoot(args: {
+  source: string;
+  bindingName: string;
+  memberPath: readonly string[];
+  localName: string;
+}): boolean {
+  if (args.memberPath.length === 0) {
+    return false;
+  }
+  return exportedBindingDependsOnLocalNames({
+    source: args.source,
+    exportedName: args.bindingName,
+    includeDefault: args.bindingName === "default",
+    localNames: new Set([args.localName]),
+    memberPath: args.memberPath,
+  });
+}
+
 function recordImportedStyledNameIfNeeded(
   importedStyledNames: Set<string>,
   localName: string,
   args: {
     bindingName: string;
+    memberPath?: readonly string[];
     styledDefinitions: StyledDefinitionFile | undefined;
     styledDefFiles: Map<string, Set<string>> | undefined;
     stylexComponentFiles: Map<string, Set<string>> | undefined;
@@ -631,6 +661,7 @@ function recordImportedStyledNameIfNeeded(
 
 function importedBindingShouldCountAsStyled(args: {
   bindingName: string;
+  memberPath?: readonly string[];
   styledDefinitions: StyledDefinitionFile | undefined;
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
@@ -642,6 +673,7 @@ function importedBindingShouldCountAsStyled(args: {
     !!args.styledDefinitions &&
     !importedBindingIsIndependentStylex({
       bindingName: args.bindingName,
+      memberPath: args.memberPath,
       styledDefinitions: args.styledDefinitions,
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
@@ -654,6 +686,7 @@ function importedBindingShouldCountAsStyled(args: {
 
 function importedBindingIsIndependentStylex(args: {
   bindingName: string;
+  memberPath?: readonly string[];
   styledDefinitions: StyledDefinitionFile;
   styledDefFiles: Map<string, Set<string>> | undefined;
   stylexComponentFiles: Map<string, Set<string>> | undefined;
@@ -667,9 +700,14 @@ function importedBindingIsIndependentStylex(args: {
       args.styledDefinitions.path,
       args.bindingName,
     ) &&
-    !bindingDependsOnStyledDefinitions(args.styledDefinitions, args.bindingName) &&
+    !bindingDependsOnStyledDefinitions(
+      args.styledDefinitions,
+      args.bindingName,
+      args.memberPath ?? [],
+    ) &&
     !bindingDependsOnImportedStyledDefinitions({
       bindingName: args.bindingName,
+      memberPath: args.memberPath,
       sourcePath: args.styledDefinitions.path,
       styledDefFiles: args.styledDefFiles,
       stylexComponentFiles: args.stylexComponentFiles,
