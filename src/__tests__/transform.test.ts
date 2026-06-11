@@ -10882,6 +10882,40 @@ export const App = () => <Box>test</Box>;
     expect(box).toMatch(/":hover": 8/);
   });
 
+  it("should merge conditional shorthand and longhand side maps", () => {
+    const source = `
+import styled from "styled-components";
+
+const Box = styled.div\`
+  padding: 4px;
+  &:hover {
+    padding: 8px;
+  }
+  &:active {
+    padding-top: 2px;
+  }
+\`;
+
+export const App = () => <Box>test</Box>;
+`;
+    const result = transformWithWarnings(
+      { source, path: "test.tsx" },
+      { jscodeshift: j, j, stats: () => {}, report: () => {} },
+      { adapter: fixtureAdapter },
+    );
+    expect(result.code).not.toBeNull();
+    if (!result.code) {
+      throw new Error("Expected transform output");
+    }
+    const box = result.code.match(/box:\s*\{([\s\S]*?)\n  \}/)?.[1];
+    expect(box).toBeTruthy();
+    expect(box).toMatch(/paddingTop: \{/);
+    expect(box).toMatch(/default: 4/);
+    expect(box).toMatch(/":hover": 8/);
+    expect(box).toMatch(/":active": 2/);
+    expect(box).not.toMatch(/default: \{/);
+  });
+
   it("should preserve radius defaults for conditional corner overrides", () => {
     const source = `
 import styled from "styled-components";

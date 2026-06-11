@@ -2910,6 +2910,9 @@ function resolveBoxSideConflictValue(args: {
     shorthandVal.default != null && (!base || shorthandIndex > base.index)
       ? shorthandVal.default
       : (base?.value ?? shorthandVal.default ?? null);
+  if (base && base.index > shorthandIndex && isMediaOrPseudoMap(base.value)) {
+    return computeMergedLonghand(base.value, shorthandVal);
+  }
   const result: Record<string, unknown> = { default: defaultValue };
   for (const [condition, conditionValue] of Object.entries(shorthandVal)) {
     if (condition !== "default" && conditionValue != null) {
@@ -3239,6 +3242,9 @@ function shouldUseShorthandMapEntry(args: {
 }): boolean {
   const { key, longhandMap, shorthandMap, shorthandOverrides } = args;
   if (!shorthandOverrides) {
+    if (key === "default" && hasNullishDefault(longhandMap)) {
+      return true;
+    }
     return !(key in longhandMap);
   }
   if (key !== "default") {
